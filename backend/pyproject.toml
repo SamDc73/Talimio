@@ -13,7 +13,6 @@ ignore = [
     "E501",    # line too long (handled by formatter)
     "B008",    # do not perform function call in argument defaults (FastAPI uses this pattern)
     "A003",    # shadowing python builtins (common in FastAPI path operations)
-    "ARG001",  # unused function argument (FastAPI dependency injection may cause this)
     "RUF012",  # annotated with classvar (conflicts with Pydantic models)
     "D100",    # Missing docstring in public module
     "D104",    # Missing docstring in public package
@@ -26,8 +25,9 @@ ignore = [
     "INP001",   # implicit-namespace-package
     "PLR0913",  # too-many-arguments
     "PLC0206",  # dict-index-missing-items
+    "PLC0415",  # import-outside-top-level
     "S608",     # sql-injection-warning
-    "COM812",    # conflicts with Ruff’s formatter
+    "COM812",   # conflicts with Ruff’s formatter
     "PLR2004",  # magic-value-comparison (many are contextually appropriate)
     "TD002",    # missing-todo-author (common pattern in this codebase)
     "TD003",    # missing-todo-link (common pattern in this codebase)
@@ -36,6 +36,7 @@ ignore = [
     "FBT001",   # boolean-typed-positional-argument (often acceptable for internal APIs)
     "FBT002",   # boolean-default-positional-argument (often acceptable for internal APIs)
     "N815",     # variable should be lowercase (mixedCase in Pydantic models with aliases)
+    "E402"
 ]
 fixable = ["ALL"]
 
@@ -43,6 +44,7 @@ fixable = ["ALL"]
 "__init__.py" = ["F401", "D104"]
 "migrations/*" = ["E501", "I001"]
 "tests/*" = ["D100", "D103"]
+"src/ai/prompts.py" = ["W291", "W293"]  # Preserve formatting in prompt strings
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
@@ -115,29 +117,52 @@ dev = [
     "httpx>=0.28.1",
     "pytest>=8.3.5",
     "pytest-asyncio>=0.26.0",
+    "pytest-sugar>=1.0.0",
+]
+test = [
+    "playwright>=1.54.0",
+    "pytest-playwright>=0.7.0",
 ]
 
 [tool.ty.rules]
-# Only ignore unresolved imports due to environment issues
-unresolved-import = "ignore"
-
-# Enable strict type checking for better code quality
+# Ty rules configuration (valid as of 2025)
+# Note: Ty is still in early development and has fewer rules than mypy
 invalid-assignment = "error"
 invalid-argument-type = "error"
+invalid-return-type = "error"
 call-non-callable = "error"
+unresolved-reference = "error"
 conflicting-declarations = "error"
 duplicate-base = "error"
-invalid-return-type = "error"
+deprecated = "warn"
+division-by-zero = "error"
+unresolved-import = "warn"
 
-# Naming conventions: enforce snake_case in Python code
+[tool.ty.environment]
+root = [".", "src"]
+
+[tool.ty.terminal]
+error-on-warning = false
+output-format = "full"
+
 [tool.ruff.lint.pep8-naming]
-# Allow camelCase in Pydantic model instantiation (for aliases)
 classmethod-decorators = ["classmethod", "pydantic.validator", "pydantic.root_validator"]
 
-[tool.ty.src]
-root = "src"
 
 
+# Security scanning
+[tool.bandit]
+exclude_dirs = ["tests", "migrations"]
+
+
+# dead code detection
+[tool.vulture]
+exclude = ["migrations/", "tests/"]
+ignore_decorators = ["@app.route", "@router.get", "@router.post"]
+ignore_names = ["_*", "test_*"]
+make_whitelist = true
+min_confidence = 60
+sort_by_size = true
 
 [tool.codespell]
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file
