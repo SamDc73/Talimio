@@ -8,19 +8,18 @@ export const apiClient = {
 					Accept: "application/json",
 				},
 				...options,
-			});
+			})
 
 			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
+				throw new Error(`HTTP error! status: ${response.status}`)
 			}
 
-			return await response.json();
+			return await response.json()
 		} catch (error) {
-			console.error("API Request failed:", error);
 			if (options.fallbackData) {
-				return options.fallbackData;
+				return options.fallbackData
 			}
-			throw error;
+			throw error
 		}
 	},
 
@@ -34,19 +33,18 @@ export const apiClient = {
 				},
 				body: JSON.stringify(data),
 				...options,
-			});
+			})
 
 			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
+				throw new Error(`HTTP error! status: ${response.status}`)
 			}
 
-			return await response.json();
+			return await response.json()
 		} catch (error) {
-			console.error("API Request failed:", error);
 			if (options.fallbackData) {
-				return options.fallbackData;
+				return options.fallbackData
 			}
-			throw error;
+			throw error
 		}
 	},
-};
+}

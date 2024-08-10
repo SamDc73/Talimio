@@ -1,41 +1,42 @@
-import { motion } from "framer-motion";
-import { useMemo, useState } from "react";
-import ErrorBoundary from "@/components/ErrorBoundary";
-import RoadmapPromptModal from "@/features/roadmap/RoadmapPromptModal";
-import { useProgress } from "@/hooks/useProgress";
+import { motion } from "framer-motion"
+import { useState } from "react"
+
+import ErrorBoundary from "@/components/ErrorBoundary"
 
 // Radix UI component initialization
 
-import BaseCard from "@/components/cards/BaseCard";
-import { MainHeader } from "@/components/header/MainHeader";
-import CelebrationOverlay from "@/features/home/components/CelebrationOverlay";
-import ContentGrid from "@/features/home/components/ContentGrid";
-import { DialogsContainer } from "@/features/home/components/dialogs/DialogsContainer";
-import FABMenu from "@/features/home/components/FABMenu";
-import FilterBadges from "@/features/home/components/FilterBadges";
-import PinnedSection from "@/features/home/components/PinnedSection";
-import SearchBar from "@/features/home/components/SearchBar";
-import SkeletonGrid from "@/features/home/components/SkeletonGrid";
-import WelcomeHeader from "@/features/home/components/WelcomeHeader";
-import { useCelebration } from "@/features/home/hooks/useCelebration";
-import { useContentData } from "@/features/home/hooks/useContentData.jsx";
-import { useContentFilters } from "@/features/home/hooks/useContentFilters";
-import { useContentHandlers } from "@/features/home/hooks/useContentHandlers";
-import { useContentProgressSync } from "@/features/home/hooks/useContentProgressSync";
-import { useDialogStates } from "@/features/home/hooks/useDialogStates";
-import { usePinning } from "@/features/home/hooks/usePinning";
+import BaseCard from "@/components/cards/BaseCard"
+import { MainHeader } from "@/components/header/MainHeader"
+import CelebrationOverlay from "@/features/home/components/CelebrationOverlay"
+import ContentGrid from "@/features/home/components/ContentGrid"
+import { DialogsContainer } from "@/features/home/components/dialogs/DialogsContainer"
+import FabMenu from "@/features/home/components/FABMenu"
+import FilterBadges from "@/features/home/components/FilterBadges"
+import PinnedSection from "@/features/home/components/PinnedSection"
+import SearchBar from "@/features/home/components/SearchBar"
+import SkeletonGrid from "@/features/home/components/SkeletonGrid"
+import WelcomeHeader from "@/features/home/components/WelcomeHeader"
+import { useCelebration } from "@/features/home/hooks/useCelebration"
+import { useContentData } from "@/features/home/hooks/useContentData.jsx"
+import { useContentFilters } from "@/features/home/hooks/useContentFilters"
+import { useContentHandlers } from "@/features/home/hooks/useContentHandlers"
+import { useContentProgressSync } from "@/features/home/hooks/useContentProgressSync"
+import { useDialogStates } from "@/features/home/hooks/useDialogStates"
+import { usePinning } from "@/features/home/hooks/usePinning"
+import RoadmapPromptModal from "@/features/roadmap/RoadmapPromptModal"
+import { useProgress } from "@/hooks/useProgress"
 
 export default function HomePage() {
-	const [isGenerating, setIsGenerating] = useState(false);
-	const [isFabExpanded, setIsFabExpanded] = useState(false);
-	const [page, setPage] = useState(0);
-	const itemsPerPage = 20;
+	const [isGenerating, setIsGenerating] = useState(false)
+	const [isFabExpanded, setIsFabExpanded] = useState(false)
+	const [page, setPage] = useState(0)
+	const itemsPerPage = 20
 
 	// Use extracted hooks
-	const dialogs = useDialogStates();
-	const pinning = usePinning();
-	const celebration = useCelebration();
-	const filters = useContentFilters();
+	const dialogs = useDialogStates()
+	const pinning = usePinning()
+	const celebration = useCelebration()
+	const filters = useContentFilters()
 
 	// Use content data hook
 	const {
@@ -47,30 +48,22 @@ export default function HomePage() {
 		setSortOptions,
 		isLoading: contentLoading,
 		loadContentData,
-	} = useContentData(filters, pinning);
+	} = useContentData(filters, pinning)
 
 	// Extract visible content IDs (pagination-aware)
-	const visibleIds = useMemo(() => {
-		const filteredContent = filters.getFilteredAndSortedContent(contentItems);
-		const start = page * itemsPerPage;
-		const end = start + itemsPerPage;
-		return filteredContent.slice(start, end).map((item) => item.id);
-	}, [contentItems, filters, page]);
+	const filteredContent = filters.getFilteredAndSortedContent(contentItems)
+	const start = page * itemsPerPage
+	const end = start + itemsPerPage
+	const visibleIds = filteredContent.slice(start, end).map((item) => item.id)
 
 	// Load progress for visible items only
-	const { data: progressData, isLoading: progressLoading } =
-		useProgress(visibleIds);
+	const { data: progressData, isLoading: progressLoading } = useProgress(visibleIds)
 
 	// Merge content with progress
-	const contentWithProgress = useMemo(() => {
-		const filteredContent = filters.getFilteredAndSortedContent(contentItems);
-		const start = page * itemsPerPage;
-		const end = start + itemsPerPage;
-		return filteredContent.slice(start, end).map((item) => ({
-			...item,
-			progress: progressData?.[item.id] || item.progress || 0,
-		}));
-	}, [contentItems, progressData, filters, page]);
+	const contentWithProgress = filteredContent.slice(start, end).map((item) => ({
+		...item,
+		progress: progressData?.[item.id] || item.progress || 0,
+	}))
 
 	// Use content handlers hook
 	const {
@@ -91,34 +84,27 @@ export default function HomePage() {
 		setSortOptions,
 		loadContentData,
 		setIsGenerating,
-	});
+	})
 
 	// Use content progress sync hook for all content types
-	// Pass loadContentData to trigger backend refresh when progress updates
-	useContentProgressSync(setContentItems, loadContentData);
+	// Note: We don't pass loadContentData to prevent infinite loops
+	useContentProgressSync(setContentItems)
 
 	// Apply filters and sorting using extracted hook
-	const filteredAndSortedContent =
-		filters.getFilteredAndSortedContent(contentItems);
+	const filteredAndSortedContent = filters.getFilteredAndSortedContent(contentItems)
 
 	// Removed debug logging for performance
 
 	const getActiveFilterLabel = () => {
-		return (
-			filterOptions.find((option) => option.id === filters.activeFilter)
-				?.label || "All Content"
-		);
-	};
+		return filterOptions.find((option) => option.id === filters.activeFilter)?.label || "All Content"
+	}
 
 	const getActiveSortLabel = () => {
-		return (
-			sortOptions.find((option) => option.id === filters.activeSort)?.label ||
-			"Last Opened"
-		);
-	};
+		return sortOptions.find((option) => option.id === filters.activeSort)?.label || "Last Opened"
+	}
 
-	const unpinned = pinning.getUnpinnedItems(contentWithProgress);
-	const visible = filters.showAll ? unpinned : unpinned.slice(0, 3);
+	const unpinned = pinning.getUnpinnedItems(contentWithProgress)
+	const visible = filters.showAll ? unpinned : unpinned.slice(0, 3)
 
 	const renderCard = (item, i) => (
 		<BaseCard
@@ -132,14 +118,12 @@ export default function HomePage() {
 			onTagsUpdated={handleTagsUpdated}
 			onClick={() => handleCardClick(item)}
 		/>
-	);
+	)
 
-	const pinnedItems = pinning.getPinnedItems(contentWithProgress);
+	const pinnedItems = pinning.getPinnedItems(contentWithProgress)
 
 	// Total pages for pagination
-	const totalPages = Math.ceil(
-		(filteredAndSortedContent.length || 0) / itemsPerPage,
-	);
+	const totalPages = Math.ceil((filteredAndSortedContent.length || 0) / itemsPerPage)
 
 	// Show loading skeleton while content is loading
 	if (contentLoading) {
@@ -153,14 +137,12 @@ export default function HomePage() {
 					</div>
 				</div>
 			</div>
-		);
+		)
 	}
 
 	return (
 		<ErrorBoundary>
-			<CelebrationOverlay
-				active={celebration.shouldShowCelebration(unpinned)}
-			/>
+			<CelebrationOverlay active={celebration.shouldShowCelebration(unpinned)} />
 			<ErrorBoundary>
 				<div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
 					<MainHeader transparent />
@@ -175,19 +157,19 @@ export default function HomePage() {
 							isGenerating={isGenerating}
 							onGenerateCourse={handleGenerateCourse}
 							onYoutubeAdd={(query) => {
-								dialogs.setYoutubeUrl(query);
-								dialogs.setShowYoutubeDialog(true);
+								dialogs.setYoutubeUrl(query)
+								dialogs.setShowYoutubeDialog(true)
 							}}
 							onSetMode={(mode) => {
 								if (mode === "generate") {
-									filters.setIsGenerateMode(true);
-									filters.setIsYoutubeMode(false);
+									filters.setIsGenerateMode(true)
+									filters.setIsYoutubeMode(false)
 								} else if (mode === "youtube") {
-									filters.setIsYoutubeMode(true);
-									filters.setIsGenerateMode(false);
+									filters.setIsYoutubeMode(true)
+									filters.setIsGenerateMode(false)
 								} else {
-									filters.setIsGenerateMode(false);
-									filters.setIsYoutubeMode(false);
+									filters.setIsGenerateMode(false)
+									filters.setIsYoutubeMode(false)
 								}
 							}}
 							onGenerateRoadmap={() => dialogs.setShowRoadmapModal(true)}
@@ -221,10 +203,10 @@ export default function HomePage() {
 								onSortDirectionChange={filters.setSortDirection}
 								onTagFilterChange={filters.setTagFilter}
 								onResetAll={() => {
-									filters.setActiveFilter("all");
-									filters.setActiveSort("last-accessed");
-									filters.setSortDirection("desc");
-									filters.setTagFilter("");
+									filters.setActiveFilter("all")
+									filters.setActiveSort("last-accessed")
+									filters.setSortDirection("desc")
+									filters.setTagFilter("")
 								}}
 							/>
 						)}
@@ -234,10 +216,7 @@ export default function HomePage() {
 							animate={{ opacity: 1, y: 0 }}
 							transition={{ duration: 0.5, delay: 0.3 }}
 						>
-							<PinnedSection
-								pinnedItems={pinnedItems}
-								renderCard={renderCard}
-							/>
+							<PinnedSection pinnedItems={pinnedItems} renderCard={renderCard} />
 							<ContentGrid
 								isLoading={contentLoading}
 								filteredAndSortedContent={contentWithProgress}
@@ -248,7 +227,7 @@ export default function HomePage() {
 								onShowMoreToggle={() => filters.setShowAll(!filters.showAll)}
 								onGenerateCourse={() => filters.setIsGenerateMode(true)}
 								onUploadBook={() => {
-									dialogs.setShowUploadDialog(true);
+									dialogs.setShowUploadDialog(true)
 								}}
 								onAddYoutube={() => dialogs.setShowYoutubeDialog(true)}
 								onCreateFlashcards={() => dialogs.setShowFlashcardDialog(true)}
@@ -271,9 +250,7 @@ export default function HomePage() {
 										</span>
 										<button
 											type="button"
-											onClick={() =>
-												setPage(Math.min(totalPages - 1, page + 1))
-											}
+											onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
 											disabled={page >= totalPages - 1}
 											className="px-4 py-2 rounded-md bg-muted hover:bg-muted/80 disabled:opacity-50"
 										>
@@ -285,21 +262,20 @@ export default function HomePage() {
 						</motion.div>
 					</div>
 
-					<FABMenu
+					<FabMenu
 						isFabExpanded={isFabExpanded}
 						onToggleExpanded={() => setIsFabExpanded(!isFabExpanded)}
 						onGenerateCourse={() => {
-							filters.setIsGenerateMode(true);
+							filters.setIsGenerateMode(true)
 							// Focus on search input after a short delay
 							setTimeout(() => {
-								const searchInput =
-									document.querySelector('input[type="text"]');
-								if (searchInput) searchInput.focus();
-							}, 100);
+								const searchInput = document.querySelector('input[type="text"]')
+								if (searchInput) searchInput.focus()
+							}, 100)
 						}}
 						onGenerateRoadmap={() => dialogs.setShowRoadmapModal(true)}
 						onUploadBook={() => {
-							dialogs.setShowUploadDialog(true);
+							dialogs.setShowUploadDialog(true)
 						}}
 						onAddYoutube={() => dialogs.setShowYoutubeDialog(true)}
 						onCreateFlashcards={() => dialogs.setShowFlashcardDialog(true)}
@@ -320,5 +296,5 @@ export default function HomePage() {
 				</div>
 			</ErrorBoundary>
 		</ErrorBoundary>
-	);
+	)
 }

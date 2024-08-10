@@ -1,117 +1,117 @@
-import typescript from '@typescript-eslint/eslint-plugin'
-import tsParser from '@typescript-eslint/parser'
-import importPlugin from 'eslint-plugin-import'
-import promisePlugin from 'eslint-plugin-promise'
-import reactPlugin from 'eslint-plugin-react'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
-import sonarjs from 'eslint-plugin-sonarjs'
-import globals from 'globals'
-
-// Base configuration for all JavaScript files
-const baseConfig = {
-  plugins: {
-    import: importPlugin,
-    promise: promisePlugin,
-    react: reactPlugin,
-    'react-hooks': reactHooks,
-    'react-refresh': reactRefresh,
-    sonarjs: sonarjs,
-  },
-  languageOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    parserOptions: {
-      ecmaFeatures: { jsx: true },
-    },
-    globals: {
-      ...globals.browser,
-      ...globals.es2021,
-      ...globals.node,
-    },
-  },
-  settings: {
-    react: { version: 'detect' },
-    'import/resolver': {
-      node: true,
-    },
-  },
-  rules: {
-    // React rules
-    'react/react-in-jsx-scope': 'off',
-    'react-hooks/rules-of-hooks': 'error',
-    'react-hooks/exhaustive-deps': 'warn',
-    
-    // Import rules
-    'import/order': ['error', {
-      'groups': ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
-      'newlines-between': 'always',
-      'alphabetize': { order: 'asc' }
-    }],
-    
-    // SonarJS rules
-    'sonarjs/cognitive-complexity': ['error', 15],
-    'sonarjs/no-duplicate-string': 'error',
-    'sonarjs/no-identical-functions': 'error',
-    
-    // General rules
-    'no-unused-vars': ['warn', { 
-      vars: 'all',
-      args: 'after-used',
-      ignoreRestSiblings: true,
-    }],
-    'no-console': 'warn',
-  },
-}
+// Minimal ESLint config - only for what Biome can't handle
+import promisePlugin from "eslint-plugin-promise";
+import react from "eslint-plugin-react";
+import reactCompiler from "eslint-plugin-react-compiler";
+import reactHooks from "eslint-plugin-react-hooks";
+import reactRefresh from "eslint-plugin-react-refresh";
 
 export default [
-  // Ignore build files
-  { ignores: ['dist/**', 'node_modules/**'] },
-  
-  // JavaScript files
-  {
-    files: ['**/*.{js,jsx}'],
-    ...baseConfig,
-    languageOptions: {
-      ...baseConfig.languageOptions,
-      parser: tsParser,
-      parserOptions: {
-        ...baseConfig.languageOptions.parserOptions,
-        sourceType: 'module',
-      },
-    },
-  },
-  
-  // TypeScript files
-  {
-    files: ['**/*.{ts,tsx}'],
-    ...baseConfig,
-    languageOptions: {
-      ...baseConfig.languageOptions,
-      parser: tsParser,
-      parserOptions: {
-        ...baseConfig.languageOptions.parserOptions,
-      },
-    },
-    plugins: {
-      ...baseConfig.plugins,
-      '@typescript-eslint': typescript,
-    },
-    settings: {
-      ...baseConfig.settings,
-      'import/resolver': {
-        ...baseConfig.settings['import/resolver'],
-        typescript: true,
-      },
-    },
-    rules: {
-      ...baseConfig.rules,
-      '@typescript-eslint/explicit-function-return-type': 'error',
-      '@typescript-eslint/no-unused-vars': ['error', {
-        vars: 'all',
-        args: 'after-used',
-        ignoreRestSiblings: true,
-      }],
-    },
-  },
-]
+	// Ignore build outputs and third-party files
+	{
+		ignores: [
+			"dist/**",
+			"node_modules/**",
+			"build/**",
+			"coverage/**",
+			"public/pdf.worker.min.js", // Exclude minified third-party files
+			"**/*.min.js", // Exclude all minified files
+		],
+	},
+
+	// JavaScript files - stricter rules
+	{
+		files: ["**/*.js"],
+		languageOptions: {
+			ecmaVersion: 2024,
+			sourceType: "module",
+		},
+		rules: {
+			"no-nested-ternary": "error", // Strict for JS files
+		},
+	},
+
+	// JSX files - React-specific rules
+	{
+		files: ["**/*.jsx"],
+		languageOptions: {
+			ecmaVersion: 2024,
+			sourceType: "module",
+			parserOptions: {
+				ecmaFeatures: {
+					jsx: true,
+				},
+			},
+		},
+		plugins: {
+			promise: promisePlugin,
+			react: react,
+			"react-hooks": reactHooks,
+			"react-refresh": reactRefresh,
+			"react-compiler": reactCompiler,
+		},
+		settings: {
+			react: {
+				version: "19.1.1", // Specify React 19
+			},
+		},
+		rules: {
+			// Nested ternary - disabled for JSX files (handled by Biome for JS files)
+			"no-nested-ternary": "off", // Off for JSX - common React pattern
+			
+			// React Compiler - preparing for migration
+			"react-compiler/react-compiler": "error",
+
+			// React Hooks - essential for React development
+			"react-hooks/rules-of-hooks": "error",
+			"react-hooks/exhaustive-deps": "error", // Error for useEffect/useLayoutEffect only - critical for preventing race conditions
+			// Note: React 19 auto-memoizes useMemo/useCallback, so we don't check their deps
+
+			// React Refresh - ensure components can hot reload
+			"react-refresh/only-export-components": [
+				"warn",
+				{
+					allowConstantExport: true,
+				},
+			],
+
+			// Promise best practices - Biome doesn't have these
+			"promise/catch-or-return": "error",
+			"promise/no-return-wrap": "error",
+			"promise/param-names": "error",
+			"promise/always-return": "error",
+			"promise/no-nesting": "warn",
+			"promise/no-promise-in-callback": "warn",
+			"promise/no-callback-in-promise": "warn",
+
+			// React 19 specific rules
+			"react/jsx-uses-react": "off", // React 19 doesn't need React import
+			"react/react-in-jsx-scope": "off", // React 19 doesn't need React in scope
+			"react/no-unknown-property": ["error", { ignore: ["css", "tw"] }], // Allow CSS-in-JS
+			"react/prop-types": "off", // Use TypeScript/JSDoc instead
+			"react/display-name": "warn", // Helpful for debugging
+			"react/jsx-no-target-blank": "error", // Security: prevent reverse tabnabbing
+			
+			// Function component definition (prefer function declarations)
+			"react/function-component-definition": [
+				"error",
+				{
+					namedComponents: "function-declaration",
+					unnamedComponents: "function-expression"
+				}
+			],
+			"react/jsx-key": ["error", { checkFragmentShorthand: true }], // Ensure keys in lists
+			"react/no-children-prop": "error", // Use JSX children syntax
+			"react/void-dom-elements-no-children": "error", // No children on void elements
+			"react/jsx-no-duplicate-props": "error", // Prevent duplicate props
+			"react/jsx-no-undef": "error", // Prevent undefined components
+			"react/no-danger-with-children": "error", // Prevent dangerouslySetInnerHTML with children
+			"react/no-deprecated": "warn", // Warn about deprecated React APIs
+			"react/no-direct-mutation-state": "error", // Never mutate state directly
+			"react/no-find-dom-node": "error", // findDOMNode is deprecated
+			"react/no-is-mounted": "error", // isMounted is anti-pattern
+			"react/no-string-refs": "error", // String refs are legacy
+			"react/no-render-return-value": "error", // Don't use return value of ReactDOM.render
+			"react/require-render-return": "error" // Enforce return in render
+		},
+	},
+];

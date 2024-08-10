@@ -7,22 +7,15 @@
  * 3. RAG-enhanced course creation with multiple documents (new functionality)
  */
 
-import {
-	AlertCircle,
-	BookOpen,
-	FileText,
-	Sparkles,
-	Upload,
-	X,
-} from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { Button } from "../../components/button";
-import { useToast } from "../../hooks/use-toast";
-import { useCourseNavigation } from "../../utils/navigationUtils";
-import { useCourseService } from "./api/courseApi";
-import { useDocumentsService } from "./api/documentsApi";
-import { DocumentStatusSummary } from "./components/DocumentStatusBadge";
-import DocumentUploader from "./components/DocumentUploader";
+import { AlertCircle, BookOpen, FileText, Sparkles, Upload, X } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Button } from "../../components/button"
+import { useToast } from "../../hooks/use-toast"
+import { useCourseNavigation } from "../../utils/navigationUtils"
+import { useCourseService } from "./api/courseApi"
+import { useDocumentsService } from "./api/documentsApi"
+import { DocumentStatusSummary } from "./components/DocumentStatusBadge"
+import DocumentUploader from "./components/DocumentUploader"
 
 const CourseCreationModal = ({
 	isOpen,
@@ -31,304 +24,267 @@ const CourseCreationModal = ({
 	defaultPrompt = "",
 	defaultMode = "prompt", // "prompt", "document", or "rag"
 }) => {
-	const [creationMode, setCreationMode] = useState(defaultMode);
-	const [prompt, setPrompt] = useState(defaultPrompt);
-	const [isGenerating, setIsGenerating] = useState(false);
-	const [error, setError] = useState("");
+	const [_creationMode, _setCreationMode] = useState(defaultMode)
+	const [_prompt, _setPrompt] = useState(defaultPrompt)
+	const [_isGenerating, _setIsGenerating] = useState(false)
+	const [_error, setError] = useState("")
 
 	// Document upload states (legacy single document)
-	const [selectedFile, setSelectedFile] = useState(null);
-	const [courseTitle, setCourseTitle] = useState("");
-	const [courseDescription, setCourseDescription] = useState("");
-	const [isExtractingMetadata, setIsExtractingMetadata] = useState(false);
+	const [_selectedFile, setSelectedFile] = useState(null)
+	const [_courseTitle, setCourseTitle] = useState("")
+	const [_courseDescription, setCourseDescription] = useState("")
+	const [_isExtractingMetadata, setIsExtractingMetadata] = useState(false)
 
 	// RAG documents states (new multi-document support)
-	const [ragDocuments, setRagDocuments] = useState([]);
-	const [ragCourseTitle, setRagCourseTitle] = useState("");
-	const [ragCourseDescription, setRagCourseDescription] = useState("");
-	const [isUploadingDocuments, setIsUploadingDocuments] = useState(false);
+	const [ragDocuments, _setRagDocuments] = useState([])
+	const [ragCourseTitle, _setRagCourseTitle] = useState("")
+	const [_ragCourseDescription, _setRagCourseDescription] = useState("")
+	const [_isUploadingDocuments, setIsUploadingDocuments] = useState(false)
 
-	const [newCourseData, setNewCourseData] = useState(null);
+	const [newCourseData, _setNewCourseData] = useState(null)
 
-	const courseService = useCourseService();
-	const documentsService = useDocumentsService(newCourseData?.id);
-	const { goToCoursePreview } = useCourseNavigation();
-	const { toast } = useToast();
+	const courseService = useCourseService()
+	const documentsService = useDocumentsService(newCourseData?.id)
+	const { goToCoursePreview } = useCourseNavigation()
+	const { toast } = useToast()
 
 	useEffect(() => {
-		if (!newCourseData) return;
+		if (!newCourseData) return
 
 		const uploadAndFinish = async () => {
 			try {
 				const uploadResults = await documentsService.uploadMultipleDocuments(
-					ragDocuments.map((doc, index) => ({ ...doc, index })),
-				);
+					ragDocuments.map((doc, index) => ({ ...doc, index }))
+				)
 
 				if (uploadResults.errors.length > 0) {
 					toast({
 						title: "Some documents failed to upload",
 						description: `${uploadResults.results.length} documents uploaded successfully, ${uploadResults.errors.length} failed.`,
 						variant: "destructive",
-					});
-					console.warn("Document upload errors:", uploadResults.errors);
+					})
 				} else {
 					toast({
 						title: "Course Created with Documents!",
 						description: `"${ragCourseTitle}" has been created with ${ragDocuments.length} document(s).`,
-					});
+					})
 				}
 
-				if (onSuccess) onSuccess(newCourseData);
-				goToCoursePreview(newCourseData.id);
-				onClose();
+				if (onSuccess) onSuccess(newCourseData)
+				goToCoursePreview(newCourseData.id)
+				onClose()
 			} catch (err) {
-				console.error("RAG document upload failed:", err);
-				setError(
-					err.message || "Failed to upload documents. Please try again.",
-				);
+				setError(err.message || "Failed to upload documents. Please try again.")
 			} finally {
-				setIsUploadingDocuments(false);
+				setIsUploadingDocuments(false)
 			}
-		};
+		}
 
 		if (ragDocuments.length > 0) {
-			uploadAndFinish();
+			uploadAndFinish()
 		} else {
 			// No documents to upload, just finish
 			toast({
 				title: "Course Created!",
 				description: `"${ragCourseTitle}" has been created.`,
-			});
-			if (onSuccess) onSuccess(newCourseData);
-			goToCoursePreview(newCourseData.id);
-			onClose();
-			setIsUploadingDocuments(false);
+			})
+			if (onSuccess) onSuccess(newCourseData)
+			goToCoursePreview(newCourseData.id)
+			onClose()
+			setIsUploadingDocuments(false)
 		}
-	}, [
-		newCourseData,
-		documentsService,
-		goToCoursePreview,
-		onClose,
-		onSuccess,
-		ragDocuments,
-		ragCourseTitle,
-		toast,
-	]);
+	}, [newCourseData, documentsService, goToCoursePreview, onClose, onSuccess, ragDocuments, ragCourseTitle, toast])
 
 	// Handle file selection and metadata extraction
-	const handleFileChange = useCallback(
-		async (e) => {
-			const file = e.target.files?.[0];
-			if (!file) return;
+	const _handleFileChange = async (e) => {
+		const file = e.target.files?.[0]
+		if (!file) return
 
-			// Validate file type
-			const allowedTypes = ["application/pdf", "application/epub+zip"];
-			if (!allowedTypes.includes(file.type)) {
-				setError("Please select a PDF or EPUB file");
-				return;
+		// Validate file type
+		const allowedTypes = ["application/pdf", "application/epub+zip"]
+		if (!allowedTypes.includes(file.type)) {
+			setError("Please select a PDF or EPUB file")
+			return
+		}
+
+		setSelectedFile(file)
+		setIsExtractingMetadata(true)
+		setError("")
+
+		try {
+			// Extract metadata from the document using course service
+			const metadata = await courseService.extractDocumentMetadata(file)
+
+			// Pre-populate fields with extracted metadata
+			if (metadata.title) {
+				setCourseTitle(metadata.title)
+			}
+			if (metadata.description || metadata.summary) {
+				setCourseDescription(metadata.description || metadata.summary)
 			}
 
-			setSelectedFile(file);
-			setIsExtractingMetadata(true);
-			setError("");
+			toast({
+				title: "Document Analyzed",
+				description: "Course information has been extracted. You can edit if needed.",
+			})
+		} catch (_error) {
+			// If extraction fails, use filename as title
+			const titleFromFilename = file.name.replace(/\.[^/.]+$/, "")
+			setCourseTitle(titleFromFilename)
 
-			try {
-				// Extract metadata from the document using course service
-				const metadata = await courseService.extractDocumentMetadata(file);
-
-				// Pre-populate fields with extracted metadata
-				if (metadata.title) {
-					setCourseTitle(metadata.title);
-				}
-				if (metadata.description || metadata.summary) {
-					setCourseDescription(metadata.description || metadata.summary);
-				}
-
-				toast({
-					title: "Document Analyzed",
-					description:
-						"Course information has been extracted. You can edit if needed.",
-				});
-			} catch (error) {
-				console.error("Failed to extract metadata:", error);
-				// If extraction fails, use filename as title
-				const titleFromFilename = file.name.replace(/\.[^/.]+$/, "");
-				setCourseTitle(titleFromFilename);
-
-				toast({
-					title: "Metadata extraction failed",
-					description:
-						"Using filename as title. Please add description manually.",
-					variant: "destructive",
-				});
-			} finally {
-				setIsExtractingMetadata(false);
-			}
-		},
-		[courseService, toast],
-	);
+			toast({
+				title: "Metadata extraction failed",
+				description: "Using filename as title. Please add description manually.",
+				variant: "destructive",
+			})
+		} finally {
+			setIsExtractingMetadata(false)
+		}
+	}
 
 	// Handle RAG documents change
-	const handleRagDocumentsChange = useCallback(
-		(documents) => {
-			setRagDocuments(documents);
+	const handleRagDocumentsChange = (documents) => {
+		setRagDocuments(documents)
 
-			// Auto-suggest course title from first document if not set
-			if (!ragCourseTitle && documents.length > 0) {
-				setRagCourseTitle(documents[0].title || "New Course");
-			}
-		},
-		[ragCourseTitle],
-	);
+		// Auto-suggest course title from first document if not set
+		if (!ragCourseTitle && documents.length > 0) {
+			setRagCourseTitle(documents[0].title || "New Course")
+		}
+	}
 
 	// Handle RAG-enhanced course creation
 	const handleRagSubmit = async (e) => {
-		e.preventDefault();
+		e.preventDefault()
 
 		if (ragDocuments.length === 0 || !ragCourseTitle.trim()) {
-			setError("Please add at least one document and provide a course title");
-			return;
+			setError("Please add at least one document and provide a course title")
+			return
 		}
 
-		setIsUploadingDocuments(true);
-		setError("");
+		setIsUploadingDocuments(true)
+		setError("")
 
 		try {
 			// Step 1: Create the course with RAG enabled
 			const courseData = await courseService.createCourse({
-				prompt:
-					ragCourseDescription.trim() ||
-					`Create a course based on uploaded documents: ${ragCourseTitle}`,
+				prompt: ragCourseDescription.trim() || `Create a course based on uploaded documents: ${ragCourseTitle}`,
 				title: ragCourseTitle.trim(),
 				description: ragCourseDescription.trim(),
 				rag_enabled: true, // Auto-enable RAG when documents are present
-			});
+			})
 
 			if (!courseData?.id) {
-				throw new Error("Failed to create course - no response data");
+				throw new Error("Failed to create course - no response data")
 			}
 
-			setNewCourseData(courseData);
+			setNewCourseData(courseData)
 		} catch (err) {
-			console.error("RAG course creation failed:", err);
-			setError(
-				err.message ||
-					"Failed to create course with documents. Please try again.",
-			);
-			setIsUploadingDocuments(false);
+			setError(err.message || "Failed to create course with documents. Please try again.")
+			setIsUploadingDocuments(false)
 		}
-	};
+	}
 
 	// Handle prompt-based course creation
 	const handlePromptSubmit = async (e) => {
-		e.preventDefault();
+		e.preventDefault()
 
 		if (!prompt.trim()) {
-			setError("Please enter a description of what you want to learn");
-			return;
+			setError("Please enter a description of what you want to learn")
+			return
 		}
 
-		setIsGenerating(true);
-		setError("");
+		setIsGenerating(true)
+		setError("")
 
 		try {
 			const response = await courseService.createCourse({
 				prompt: prompt.trim(),
-			});
+			})
 
 			if (response?.id) {
-				if (onSuccess) onSuccess(response);
-				goToCoursePreview(response.id);
-				onClose();
+				if (onSuccess) onSuccess(response)
+				goToCoursePreview(response.id)
+				onClose()
 			} else {
-				throw new Error("Failed to create course - no response data");
+				throw new Error("Failed to create course - no response data")
 			}
 		} catch (err) {
-			console.error("Prompt-based course creation failed:", err);
-			setError(err.message || "Failed to create course. Please try again.");
+			setError(err.message || "Failed to create course. Please try again.")
 		} finally {
-			setIsGenerating(false);
+			setIsGenerating(false)
 		}
-	};
+	}
 
 	// Handle document-based course creation
 	const handleDocumentSubmit = async (e) => {
-		e.preventDefault();
+		e.preventDefault()
 
 		if (!selectedFile || !courseTitle.trim()) {
-			setError("Please select a file and provide a course title");
-			return;
+			setError("Please select a file and provide a course title")
+			return
 		}
 
-		setIsGenerating(true);
-		setError("");
+		setIsGenerating(true)
+		setError("")
 
 		try {
-			const formData = new FormData();
-			formData.append("file", selectedFile);
-			formData.append("title", courseTitle.trim());
-			formData.append("description", courseDescription.trim());
+			const formData = new FormData()
+			formData.append("file", selectedFile)
+			formData.append("title", courseTitle.trim())
+			formData.append("description", courseDescription.trim())
 
-			const courseData = await courseService.createCourseFromDocument(formData);
+			const courseData = await courseService.createCourseFromDocument(formData)
 
 			toast({
 				title: "Course Created!",
 				description: `"${courseTitle}" has been created from your document.`,
-			});
+			})
 
-			if (onSuccess) onSuccess(courseData);
-			goToCoursePreview(courseData.id);
-			onClose();
+			if (onSuccess) onSuccess(courseData)
+			goToCoursePreview(courseData.id)
+			onClose()
 		} catch (err) {
-			console.error("Document-based course creation failed:", err);
-
 			// Handle specific error cases
 			if (err.message?.includes("already exists")) {
 				toast({
 					title: "Duplicate Course",
 					description: "A course with this content already exists.",
 					variant: "destructive",
-				});
+				})
 			} else {
-				setError(
-					err.message ||
-						"Failed to create course from document. Please try again.",
-				);
+				setError(err.message || "Failed to create course from document. Please try again.")
 			}
 		} finally {
-			setIsGenerating(false);
+			setIsGenerating(false)
 		}
-	};
+	}
 
 	const handleClose = () => {
 		if (!isGenerating && !isExtractingMetadata && !isUploadingDocuments) {
 			// Reset all states
-			setPrompt("");
-			setSelectedFile(null);
-			setCourseTitle("");
-			setCourseDescription("");
-			setRagDocuments([]);
-			setRagCourseTitle("");
-			setRagCourseDescription("");
-			setError("");
-			setCreationMode(defaultMode);
-			onClose();
+			setPrompt("")
+			setSelectedFile(null)
+			setCourseTitle("")
+			setCourseDescription("")
+			setRagDocuments([])
+			setRagCourseTitle("")
+			setRagCourseDescription("")
+			setError("")
+			setCreationMode(defaultMode)
+			onClose()
 		}
-	};
+	}
 
-	const isProcessing =
-		isGenerating || isExtractingMetadata || isUploadingDocuments;
+	const isProcessing = isGenerating || isExtractingMetadata || isUploadingDocuments
 
-	if (!isOpen) return null;
+	if (!isOpen) return null
 
 	return (
 		<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
 			<div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
 				{/* Header */}
 				<div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-					<h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-						Create New Course
-					</h2>
+					<h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Create New Course</h2>
 					<button
 						type="button"
 						onClick={handleClose}
@@ -405,15 +361,12 @@ const CourseCreationModal = ({
 									rows={4}
 									maxLength={500}
 								/>
-								<div className="text-right text-xs text-gray-500 mt-1">
-									{prompt.length}/500 characters
-								</div>
+								<div className="text-right text-xs text-gray-500 mt-1">{prompt.length}/500 characters</div>
 							</div>
 							<div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
 								<p className="text-sm text-blue-700 dark:text-blue-300">
-									<strong>AI will create:</strong> A structured course with
-									modules and lessons tailored to your learning goals. You'll be
-									able to customize it before starting.
+									<strong>AI will create:</strong> A structured course with modules and lessons tailored to your
+									learning goals. You'll be able to customize it before starting.
 								</p>
 							</div>
 						</form>
@@ -432,25 +385,16 @@ const CourseCreationModal = ({
 											{selectedFile ? (
 												<>
 													<FileText className="w-8 h-8 mb-2 text-blue-500" />
-													<p className="text-sm text-gray-600 dark:text-gray-400">
-														{selectedFile.name}
-													</p>
-													<p className="text-xs text-gray-500">
-														({(selectedFile.size / 1024 / 1024).toFixed(1)} MB)
-													</p>
+													<p className="text-sm text-gray-600 dark:text-gray-400">{selectedFile.name}</p>
+													<p className="text-xs text-gray-500">({(selectedFile.size / 1024 / 1024).toFixed(1)} MB)</p>
 												</>
 											) : (
 												<>
 													<Upload className="w-8 h-8 mb-2 text-gray-400" />
 													<p className="text-sm text-gray-600 dark:text-gray-400">
-														<span className="font-semibold">
-															Click to upload
-														</span>{" "}
-														or drag and drop
+														<span className="font-semibold">Click to upload</span> or drag and drop
 													</p>
-													<p className="text-xs text-gray-500">
-														PDF or EPUB files only
-													</p>
+													<p className="text-xs text-gray-500">PDF or EPUB files only</p>
 												</>
 											)}
 										</div>
@@ -503,9 +447,8 @@ const CourseCreationModal = ({
 							</div>
 							<div className="mb-6 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
 								<p className="text-sm text-green-700 dark:text-green-300">
-									<strong>Document processing:</strong> Your document will be
-									analyzed to create a structured course with modules and
-									lessons based on the content.
+									<strong>Document processing:</strong> Your document will be analyzed to create a structured course
+									with modules and lessons based on the content.
 								</p>
 							</div>
 						</form>
@@ -573,11 +516,9 @@ const CourseCreationModal = ({
 							</div>
 							<div className="mb-6 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md">
 								<p className="text-sm text-purple-700 dark:text-purple-300">
-									<strong>RAG-Enhanced Course:</strong> Your documents will be
-									processed and integrated into an AI-powered course that can
-									answer questions and generate lessons based on your content.
-									Documents will be automatically searchable during lessons and
-									assistant conversations.
+									<strong>RAG-Enhanced Course:</strong> Your documents will be processed and integrated into an
+									AI-powered course that can answer questions and generate lessons based on your content. Documents will
+									be automatically searchable during lessons and assistant conversations.
 								</p>
 							</div>
 						</form>
@@ -598,9 +539,7 @@ const CourseCreationModal = ({
 						<div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
 							<div className="flex items-center space-x-2">
 								<div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-								<p className="text-sm text-blue-700 dark:text-blue-300">
-									Creating course and uploading documents...
-								</p>
+								<p className="text-sm text-blue-700 dark:text-blue-300">Creating course and uploading documents...</p>
 							</div>
 						</div>
 					)}
@@ -609,20 +548,13 @@ const CourseCreationModal = ({
 						<div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
 							<div className="flex items-center space-x-2">
 								<AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-								<p className="text-sm text-red-600 dark:text-red-400">
-									{error}
-								</p>
+								<p className="text-sm text-red-600 dark:text-red-400">{error}</p>
 							</div>
 						</div>
 					)}
 
 					<div className="flex justify-end space-x-3 pt-4">
-						<Button
-							type="button"
-							variant="outline"
-							onClick={handleClose}
-							disabled={isProcessing}
-						>
+						<Button type="button" variant="outline" onClick={handleClose} disabled={isProcessing}>
 							Cancel
 						</Button>
 						<Button
@@ -637,10 +569,8 @@ const CourseCreationModal = ({
 							disabled={
 								isProcessing ||
 								(creationMode === "prompt" && !prompt.trim()) ||
-								(creationMode === "document" &&
-									(!selectedFile || !courseTitle.trim())) ||
-								(creationMode === "rag" &&
-									(ragDocuments.length === 0 || !ragCourseTitle.trim()))
+								(creationMode === "document" && (!selectedFile || !courseTitle.trim())) ||
+								(creationMode === "rag" && (ragDocuments.length === 0 || !ragCourseTitle.trim()))
 							}
 							className="min-w-[120px]"
 						>
@@ -648,11 +578,7 @@ const CourseCreationModal = ({
 								<div className="flex items-center space-x-2">
 									<div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
 									<span>
-										{isExtractingMetadata
-											? "Analyzing..."
-											: isUploadingDocuments
-												? "Uploading..."
-												: "Creating..."}
+										{isExtractingMetadata ? "Analyzing..." : isUploadingDocuments ? "Uploading..." : "Creating..."}
 									</span>
 								</div>
 							) : (
@@ -663,7 +589,7 @@ const CourseCreationModal = ({
 				</div>
 			</div>
 		</div>
-	);
-};
+	)
+}
 
-export default CourseCreationModal;
+export default CourseCreationModal

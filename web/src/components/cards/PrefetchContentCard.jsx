@@ -1,20 +1,13 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/apiClient";
-import { BaseCard } from "./BaseCard";
+import { useQueryClient } from "@tanstack/react-query"
+import { api } from "@/lib/apiClient"
+import { BaseCard } from "./BaseCard"
 
 /**
  * Content card with hover prefetch optimization
  * Prefetches progress data on hover for instant loading
  */
-export function PrefetchContentCard({
-	id,
-	title,
-	description,
-	type,
-	children,
-	...props
-}) {
-	const queryClient = useQueryClient();
+export function PrefetchContentCard({ id, title, description, type, children, ...props }) {
+	const queryClient = useQueryClient()
 
 	const handleMouseEnter = () => {
 		// Prefetch progress data on hover
@@ -23,12 +16,12 @@ export function PrefetchContentCard({
 			queryFn: async () => {
 				const response = await api.post("/progress/batch", {
 					content_ids: [id],
-				});
-				return response || {};
+				})
+				return response || {}
 			},
 			staleTime: 30 * 1000, // 30 seconds
-		});
-	};
+		})
+	}
 
 	return (
 		<BaseCard onMouseEnter={handleMouseEnter} {...props}>
@@ -51,17 +44,11 @@ export function PrefetchContentCard({
 
 					{/* Title and description */}
 					<div>
-						<h3 className="text-lg font-semibold text-gray-900 mb-1">
-							{title}
-						</h3>
-						{description && (
-							<p className="text-sm text-gray-600 line-clamp-2">
-								{description}
-							</p>
-						)}
+						<h3 className="text-lg font-semibold text-gray-900 mb-1">{title}</h3>
+						{description && <p className="text-sm text-gray-600 line-clamp-2">{description}</p>}
 					</div>
 				</div>
 			)}
 		</BaseCard>
-	);
+	)
 }

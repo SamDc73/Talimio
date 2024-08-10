@@ -1,78 +1,70 @@
-import { motion } from "framer-motion";
-import { ArrowLeft, BookOpen, RefreshCw, Save, Target } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { Button } from "@/components/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/dialog";
-import { Input } from "@/components/input";
-import { Label } from "@/components/label";
-import { toast } from "@/hooks/use-toast";
-import { api } from "@/lib/apiClient";
+import { motion } from "framer-motion"
+import { ArrowLeft, BookOpen, RefreshCw, Save, Target } from "lucide-react"
+import { useEffect, useState } from "react"
+import { useLocation, useNavigate, useParams } from "react-router-dom"
+import { Button } from "@/components/button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/dialog"
+import { Input } from "@/components/input"
+import { Label } from "@/components/label"
+import { toast } from "@/hooks/use-toast"
+import { api } from "@/lib/apiClient"
 
 const CoursePreviewPage = () => {
-	const { courseId } = useParams();
-	const navigate = useNavigate();
-	const location = useLocation();
+	const { courseId } = useParams()
+	const navigate = useNavigate()
+	const location = useLocation()
 
 	// Get state from navigation (for new courses)
-	const isNew = location.state?.isNew || false;
-	const originalPrompt = location.state?.originalPrompt || "";
+	const isNew = location.state?.isNew || false
+	const originalPrompt = location.state?.originalPrompt || ""
 
 	// Loading and form states
-	const [isLoading, setIsLoading] = useState(true);
-	const [isSaving, setIsSaving] = useState(false);
-	const [isRegenerating, setIsRegenerating] = useState(false);
+	const [isLoading, setIsLoading] = useState(true)
+	const [isSaving, setIsSaving] = useState(false)
+	const [isRegenerating, setIsRegenerating] = useState(false)
 
 	// Data states
-	const [course, setCourse] = useState(null);
+	const [course, setCourse] = useState(null)
 	const [formData, setFormData] = useState({
 		title: "",
 		description: "",
 		tags: [],
-	});
+	})
 
 	// Load course data
 	useEffect(() => {
 		const loadCourse = async () => {
 			try {
-				setIsLoading(true);
-				const response = await api.get(`/courses/${courseId}`);
-				setCourse(response);
+				setIsLoading(true)
+				const response = await api.get(`/courses/${courseId}`)
+				setCourse(response)
 
 				// Parse tags from JSON string
-				let tags = [];
+				let tags = []
 				try {
-					tags = response.tags_json ? JSON.parse(response.tags_json) : [];
-				} catch (e) {
-					console.warn("Failed to parse tags:", e);
-				}
+					tags = response.tags_json ? JSON.parse(response.tags_json) : []
+				} catch (_e) {}
 
 				setFormData({
 					title: response.title,
 					description: response.description,
 					tags: tags,
-				});
-			} catch (error) {
-				console.error("Error loading course:", error);
+				})
+			} catch (_error) {
 				toast({
 					title: "Error",
 					description: "Failed to load course.",
 					variant: "destructive",
-				});
+				})
 			} finally {
-				setIsLoading(false);
+				setIsLoading(false)
 			}
-		};
+		}
 
 		if (courseId) {
-			loadCourse();
+			loadCourse()
 		}
-	}, [courseId]);
+	}, [courseId])
 
 	const handleSave = async () => {
 		if (!formData.title.trim()) {
@@ -80,51 +72,50 @@ const CoursePreviewPage = () => {
 				title: "Title Required",
 				description: "Please enter a title for your course.",
 				variant: "destructive",
-			});
-			return;
+			})
+			return
 		}
 
-		setIsSaving(true);
+		setIsSaving(true)
 
 		try {
 			await api.patch(`/courses/${courseId}`, {
 				title: formData.title,
 				description: formData.description,
-			});
+			})
 
 			toast({
 				title: "Course Updated!",
 				description: "Your course has been saved successfully.",
-			});
+			})
 
 			// Navigate to the course view
-			navigate(`/course/${courseId}`);
-		} catch (error) {
-			console.error("Error updating course:", error);
+			navigate(`/course/${courseId}`)
+		} catch (_error) {
 			toast({
 				title: "Save Failed",
 				description: "Failed to save course. Please try again.",
 				variant: "destructive",
-			});
+			})
 		} finally {
-			setIsSaving(false);
+			setIsSaving(false)
 		}
-	};
+	}
 
 	const handleRegenerate = async () => {
-		if (!originalPrompt) return;
+		if (!originalPrompt) return
 
-		setIsRegenerating(true);
+		setIsRegenerating(true)
 
 		try {
 			const response = await api.post("/courses", {
 				userPrompt: originalPrompt,
-			});
+			})
 
 			toast({
 				title: "Course Regenerated!",
 				description: "A new course has been generated.",
-			});
+			})
 
 			// Navigate to new course preview
 			navigate(`/course/preview/${response.id}`, {
@@ -133,24 +124,27 @@ const CoursePreviewPage = () => {
 					originalPrompt: originalPrompt,
 				},
 				replace: true,
-			});
-		} catch (error) {
-			console.error("Error regenerating course:", error);
+			})
+		} catch (_error) {
 			toast({
 				title: "Regeneration Failed",
 				description: "Failed to regenerate course. Please try again.",
 				variant: "destructive",
-			});
+			})
 		} finally {
-			setIsRegenerating(false);
+			setIsRegenerating(false)
 		}
-	};
+	}
 
 	// Loading state
 	if (isLoading) {
 		return (
 			<Dialog open={true} onOpenChange={() => navigate("/")}>
 				<DialogContent className="sm:max-w-4xl">
+					<DialogHeader>
+						<DialogTitle className="sr-only">Loading Course</DialogTitle>
+						<DialogDescription className="sr-only">Please wait while we load your course details</DialogDescription>
+					</DialogHeader>
 					<div className="flex items-center justify-center py-12">
 						<div className="text-center">
 							<div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
@@ -159,7 +153,7 @@ const CoursePreviewPage = () => {
 					</div>
 				</DialogContent>
 			</Dialog>
-		);
+		)
 	}
 
 	return (
@@ -172,11 +166,11 @@ const CoursePreviewPage = () => {
 						</div>
 						{isNew ? "Review Your Course" : "Edit Course"}
 					</DialogTitle>
-					<p className="text-muted-foreground text-sm">
+					<DialogDescription className="text-muted-foreground text-sm">
 						{isNew
 							? "Review and customize your AI-generated learning course before getting started"
 							: "Update your course details and settings"}
-					</p>
+					</DialogDescription>
 				</DialogHeader>
 
 				<div className="space-y-6">
@@ -189,9 +183,7 @@ const CoursePreviewPage = () => {
 							<Input
 								id="title"
 								value={formData.title}
-								onChange={(e) =>
-									setFormData({ ...formData, title: e.target.value })
-								}
+								onChange={(e) => setFormData({ ...formData, title: e.target.value })}
 								placeholder="Enter course title"
 								className="text-base"
 							/>
@@ -204,9 +196,7 @@ const CoursePreviewPage = () => {
 							<textarea
 								id="description"
 								value={formData.description}
-								onChange={(e) =>
-									setFormData({ ...formData, description: e.target.value })
-								}
+								onChange={(e) => setFormData({ ...formData, description: e.target.value })}
 								placeholder="Describe what this course covers"
 								rows={3}
 								className="w-full px-4 py-3 text-sm border border-input bg-background rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring transition-all resize-none placeholder:text-muted-foreground/60"
@@ -223,18 +213,13 @@ const CoursePreviewPage = () => {
 							</div>
 							<div className="bg-muted/30 rounded-lg p-4 space-y-2 max-h-48 overflow-y-auto">
 								{course.lessons.map((lesson, index) => (
-									<div
-										key={lesson.id}
-										className="flex items-start gap-3 text-sm"
-									>
+									<div key={lesson.id} className="flex items-start gap-3 text-sm">
 										<div className="flex-shrink-0 w-6 h-6 bg-cyan-100 text-cyan-700 rounded-full flex items-center justify-center text-xs font-medium mt-0.5">
 											{index + 1}
 										</div>
 										<div className="space-y-1">
 											<div className="font-medium">{lesson.title}</div>
-											<div className="text-muted-foreground text-xs leading-relaxed">
-												{lesson.description}
-											</div>
+											<div className="text-muted-foreground text-xs leading-relaxed">{lesson.description}</div>
 										</div>
 									</div>
 								))}
@@ -244,26 +229,14 @@ const CoursePreviewPage = () => {
 
 					{/* Action Buttons */}
 					<div className="flex gap-3 pt-4 border-t">
-						<Button
-							variant="outline"
-							onClick={() => navigate("/")}
-							className="flex-1"
-							disabled={isSaving}
-						>
+						<Button variant="outline" onClick={() => navigate("/")} className="flex-1" disabled={isSaving}>
 							<ArrowLeft className="h-4 w-4 mr-2" />
 							Back to Dashboard
 						</Button>
 
 						{isNew && originalPrompt && (
-							<Button
-								variant="outline"
-								onClick={handleRegenerate}
-								disabled={isRegenerating}
-								className="flex-1"
-							>
-								<RefreshCw
-									className={`h-4 w-4 mr-2 ${isRegenerating ? "animate-spin" : ""}`}
-								/>
+							<Button variant="outline" onClick={handleRegenerate} disabled={isRegenerating} className="flex-1">
+								<RefreshCw className={`h-4 w-4 mr-2 ${isRegenerating ? "animate-spin" : ""}`} />
 								Regenerate
 							</Button>
 						)}
@@ -274,11 +247,7 @@ const CoursePreviewPage = () => {
 							className="flex-1 bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white"
 						>
 							{isSaving ? (
-								<motion.div
-									className="flex items-center gap-2"
-									initial={{ opacity: 0 }}
-									animate={{ opacity: 1 }}
-								>
+								<motion.div className="flex items-center gap-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
 									<div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
 									Saving...
 								</motion.div>
@@ -293,7 +262,7 @@ const CoursePreviewPage = () => {
 				</div>
 			</DialogContent>
 		</Dialog>
-	);
-};
+	)
+}
 
-export default CoursePreviewPage;
+export default CoursePreviewPage

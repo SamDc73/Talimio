@@ -1,29 +1,26 @@
-import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useProgress } from "@/hooks/useProgress";
+import { Loader2 } from "lucide-react"
+import { useEffect, useState } from "react"
+
+import { useProgress } from "@/hooks/useProgress"
 
 /**
  * Progress bar with optimistic updates and sync indication
  */
-export function ProgressBar({
-	contentId,
-	initialProgress = 0,
-	className = "",
-}) {
-	const [optimisticProgress, setOptimisticProgress] = useState(initialProgress);
-	const { data: progressMap } = useProgress([contentId]);
+export function ProgressBar({ contentId, initialProgress = 0, className = "" }) {
+	const [optimisticProgress, setOptimisticProgress] = useState(initialProgress)
+	const { data: progressMap } = useProgress([contentId])
 
 	// Use server progress when available, optimistic otherwise
-	const serverProgress = progressMap?.[contentId];
-	const displayProgress = serverProgress ?? optimisticProgress;
-	const isSyncing = optimisticProgress !== displayProgress;
+	const serverProgress = progressMap?.[contentId]
+	const displayProgress = serverProgress ?? optimisticProgress
+	const isSyncing = optimisticProgress !== displayProgress
 
 	// Update optimistic progress when server progress changes
 	useEffect(() => {
 		if (serverProgress !== undefined) {
-			setOptimisticProgress(serverProgress);
+			setOptimisticProgress(serverProgress)
 		}
-	}, [serverProgress]);
+	}, [serverProgress])
 
 	return (
 		<div className={`relative w-full ${className}`}>
@@ -42,11 +39,9 @@ export function ProgressBar({
 			)}
 
 			{/* Progress percentage */}
-			<span className="text-sm text-gray-600 mt-1">
-				{Math.round(displayProgress)}%
-			</span>
+			<span className="text-sm text-gray-600 mt-1">{Math.round(displayProgress)}%</span>
 		</div>
-	);
+	)
 }
 
 /**
@@ -58,7 +53,7 @@ export function ContentProgressBar({ progress, loading = false }) {
 			<div className="w-full bg-gray-200 rounded-full h-2.5 animate-pulse">
 				<div className="bg-gray-300 h-2.5 rounded-full w-0" />
 			</div>
-		);
+		)
 	}
 
 	return (
@@ -68,5 +63,5 @@ export function ContentProgressBar({ progress, loading = false }) {
 				style={{ width: `${progress}%` }}
 			/>
 		</div>
-	);
+	)
 }

@@ -1,7 +1,8 @@
-import { create } from "zustand";
-import { devtools } from "zustand/middleware";
-import { immer } from "zustand/middleware/immer";
-import { api } from "@/lib/apiClient";
+import { create } from "zustand"
+import { devtools } from "zustand/middleware"
+import { immer } from "zustand/middleware/immer"
+
+import { api } from "@/lib/apiClient"
 
 /**
  * Tag store for managing user tags and tag-content associations
@@ -34,34 +35,33 @@ const useTagStore = create(
 			// User Tags Management
 			async fetchUserTags() {
 				set((state) => {
-					state.loading.tags = true;
-				});
+					state.loading.tags = true
+				})
 
 				try {
-					const tags = await api.get("/tags/tags");
+					const tags = await api.get("/tags/tags")
 
 					set((state) => {
-						state.tags = {};
+						state.tags = {}
 						for (const tag of tags) {
-							state.tags[tag.id] = tag;
+							state.tags[tag.id] = tag
 						}
-						state.loading.tags = false;
-					});
+						state.loading.tags = false
+					})
 
-					return tags;
+					return tags
 				} catch (error) {
-					console.error("Failed to fetch user tags:", error);
 					set((state) => {
-						state.loading.tags = false;
-					});
-					throw error;
+						state.loading.tags = false
+					})
+					throw error
 				}
 			},
 
 			async createTag(tagData) {
 				set((state) => {
-					state.loading.creating = true;
-				});
+					state.loading.creating = true
+				})
 
 				try {
 					// In our backend, tags are created automatically when updating content tags
@@ -74,145 +74,113 @@ const useTagStore = create(
 						usage_count: 0,
 						created_at: new Date().toISOString(),
 						updated_at: new Date().toISOString(),
-					};
+					}
 
 					set((state) => {
-						state.tags[mockTag.id] = mockTag;
-						state.loading.creating = false;
+						state.tags[mockTag.id] = mockTag
+						state.loading.creating = false
 						// Add to recent tags
-						state.recentTags.unshift(mockTag.id);
+						state.recentTags.unshift(mockTag.id)
 						if (state.recentTags.length > 10) {
-							state.recentTags = state.recentTags.slice(0, 10);
+							state.recentTags = state.recentTags.slice(0, 10)
 						}
-					});
+					})
 
-					return mockTag;
+					return mockTag
 				} catch (error) {
-					console.error("Failed to create tag:", error);
 					set((state) => {
-						state.loading.creating = false;
-					});
-					throw error;
+						state.loading.creating = false
+					})
+					throw error
 				}
 			},
 
 			async updateTag(_tagId, _updateData) {
-				// Tag updates are not supported in our current backend
-				// Tags are managed through content associations
-				console.warn(
-					"Tag updates not supported - tags are managed through content associations",
-				);
-				return null;
+				return null
 			},
 
 			async deleteTag(_tagId) {
-				// Tag deletion is not supported in our current backend
-				// Tags are managed through content associations
-				console.warn(
-					"Tag deletion not supported - tags are managed through content associations",
-				);
-				return null;
+				return null
 			},
 
 			// Content Tagging
 			async fetchContentTags(contentType, contentId) {
-				try {
-					// Normalize content type to match backend expectations
-					const normalizedType = get()._normalizeContentType(contentType);
-					if (!normalizedType) {
-						throw new Error(`Unsupported content type: ${contentType}`);
-					}
-
-					const tags = await api.get(
-						`/tags/${normalizedType}/${contentId}/tags`,
-					);
-
-					set((state) => {
-						if (!state.contentTags[contentType]) {
-							state.contentTags[contentType] = {};
-						}
-						state.contentTags[contentType][contentId] = tags.map(
-							(tag) => tag.id,
-						);
-
-						// Cache tag objects
-						for (const tag of tags) {
-							state.tags[tag.id] = tag;
-						}
-					});
-
-					return tags;
-				} catch (error) {
-					console.error("Failed to fetch content tags:", error);
-					throw error;
+				// Normalize content type to match backend expectations
+				const normalizedType = get()._normalizeContentType(contentType)
+				if (!normalizedType) {
+					throw new Error(`Unsupported content type: ${contentType}`)
 				}
+
+				const tags = await api.get(`/tags/${normalizedType}/${contentId}/tags`)
+
+				set((state) => {
+					if (!state.contentTags[contentType]) {
+						state.contentTags[contentType] = {}
+					}
+					state.contentTags[contentType][contentId] = tags.map((tag) => tag.id)
+
+					// Cache tag objects
+					for (const tag of tags) {
+						state.tags[tag.id] = tag
+					}
+				})
+
+				return tags
 			},
 
 			async updateContentTags(contentType, contentId, tagNames) {
-				try {
-					// Normalize content type to match backend expectations
-					const normalizedType = get()._normalizeContentType(contentType);
-					if (!normalizedType) {
-						throw new Error(`Unsupported content type: ${contentType}`);
-					}
-
-					const result = await api.put(
-						`/tags/${normalizedType}/${contentId}/tags`,
-						{
-							tags: tagNames,
-						},
-					);
-
-					// Refresh content tags
-					await get().fetchContentTags(contentType, contentId);
-
-					return result;
-				} catch (error) {
-					console.error("Failed to update content tags:", error);
-					throw error;
+				// Normalize content type to match backend expectations
+				const normalizedType = get()._normalizeContentType(contentType)
+				if (!normalizedType) {
+					throw new Error(`Unsupported content type: ${contentType}`)
 				}
+
+				const result = await api.put(`/tags/${normalizedType}/${contentId}/tags`, {
+					tags: tagNames,
+				})
+
+				// Refresh content tags
+				await get().fetchContentTags(contentType, contentId)
+
+				return result
 			},
 
 			// Utilities
 			getFilteredTags() {
-				const { tags, filters } = get();
-				let filteredTags = Object.values(tags);
+				const { tags, filters } = get()
+				let filteredTags = Object.values(tags)
 
 				if (filters.category) {
-					filteredTags = filteredTags.filter(
-						(tag) => tag.category === filters.category,
-					);
+					filteredTags = filteredTags.filter((tag) => tag.category === filters.category)
 				}
 
 				if (filters.searchQuery) {
-					const query = filters.searchQuery.toLowerCase();
-					filteredTags = filteredTags.filter((tag) =>
-						tag.name.toLowerCase().includes(query),
-					);
+					const query = filters.searchQuery.toLowerCase()
+					filteredTags = filteredTags.filter((tag) => tag.name.toLowerCase().includes(query))
 				}
 
-				return filteredTags.sort((a, b) => b.usage_count - a.usage_count);
+				return filteredTags.sort((a, b) => b.usage_count - a.usage_count)
 			},
 
 			getRecentTags() {
-				const { tags, recentTags } = get();
+				const { tags, recentTags } = get()
 				return recentTags
 					.map((tagId) => tags[tagId])
 					.filter(Boolean)
-					.slice(0, 5);
+					.slice(0, 5)
 			},
 
 			getContentTagObjects(contentType, contentId) {
-				const { tags, contentTags } = get();
-				const tagIds = contentTags[contentType]?.[contentId] || [];
-				return tagIds.map((tagId) => tags[tagId]).filter(Boolean);
+				const { tags, contentTags } = get()
+				const tagIds = contentTags[contentType]?.[contentId] || []
+				return tagIds.map((tagId) => tags[tagId]).filter(Boolean)
 			},
 
 			// Filters
 			setFilter(key, value) {
 				set((state) => {
-					state.filters[key] = value;
-				});
+					state.filters[key] = value
+				})
 			},
 
 			clearFilters() {
@@ -220,8 +188,8 @@ const useTagStore = create(
 					state.filters = {
 						category: null,
 						searchQuery: "",
-					};
-				});
+					}
+				})
 			},
 
 			// Helper method to normalize content types for API calls
@@ -232,28 +200,28 @@ const useTagStore = create(
 					course: "course",
 					book: "book",
 					video: "video",
-				};
-				return supportedTypes[contentType] || null;
+				}
+				return supportedTypes[contentType] || null
 			},
 
 			// Quick tag operations
 			addToRecentTags(tagId) {
 				set((state) => {
 					// Remove if already exists
-					state.recentTags = state.recentTags.filter((id) => id !== tagId);
+					state.recentTags = state.recentTags.filter((id) => id !== tagId)
 					// Add to front
-					state.recentTags.unshift(tagId);
+					state.recentTags.unshift(tagId)
 					// Keep only 10 most recent
 					if (state.recentTags.length > 10) {
-						state.recentTags = state.recentTags.slice(0, 10);
+						state.recentTags = state.recentTags.slice(0, 10)
 					}
-				});
+				})
 			},
 		})),
 		{
 			name: "tag-store",
-		},
-	),
-);
+		}
+	)
+)
 
-export default useTagStore;
+export default useTagStore

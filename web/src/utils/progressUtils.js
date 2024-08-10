@@ -9,7 +9,7 @@
  * @param {Object} progressData - Progress data to send
  */
 export function dispatchProgressUpdate(contentType, contentId, progressData) {
-	const eventName = `${contentType}ProgressUpdate`;
+	const eventName = `${contentType}ProgressUpdate`
 
 	window.dispatchEvent(
 		new CustomEvent(eventName, {
@@ -17,8 +17,8 @@ export function dispatchProgressUpdate(contentType, contentId, progressData) {
 				[`${contentType}Id`]: contentId,
 				...progressData,
 			},
-		}),
-	);
+		})
+	)
 }
 
 /**
@@ -27,15 +27,15 @@ export function dispatchProgressUpdate(contentType, contentId, progressData) {
  * @param {string} contentId - ID of the content
  */
 export function dispatchProgressRefresh(contentType, contentId) {
-	const eventName = `${contentType}ProgressRefresh`;
+	const eventName = `${contentType}ProgressRefresh`
 
 	window.dispatchEvent(
 		new CustomEvent(eventName, {
 			detail: {
 				[`${contentType}Id`]: contentId,
 			},
-		}),
-	);
+		})
+	)
 }
 
 /**
@@ -44,17 +44,16 @@ export function dispatchProgressRefresh(contentType, contentId) {
  * @returns {Object} Progress data with percentage, totalItems, completedItems
  */
 export function calculateProgressFromItems(items) {
-	const itemIds = Object.keys(items);
-	const totalItems = itemIds.length;
-	const completedItems = itemIds.filter((id) => items[id]).length;
-	const percentage =
-		totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+	const itemIds = Object.keys(items)
+	const totalItems = itemIds.length
+	const completedItems = itemIds.filter((id) => items[id]).length
+	const percentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0
 
 	return {
 		percentage,
 		totalItems,
 		completedItems,
-	};
+	}
 }
 
 /**
@@ -68,7 +67,7 @@ export function showErrorToast(toast, title, description) {
 		title,
 		description,
 		variant: "destructive",
-	});
+	})
 }
 
 /**
@@ -76,11 +75,7 @@ export function showErrorToast(toast, title, description) {
  * @param {Function} toast - Toast function from useToast hook
  */
 export function showSyncErrorToast(toast) {
-	showErrorToast(
-		toast,
-		"Sync Error",
-		"Progress saved locally but failed to sync to server",
-	);
+	showErrorToast(toast, "Sync Error", "Progress saved locally but failed to sync to server")
 }
 
 /**
@@ -89,31 +84,21 @@ export function showSyncErrorToast(toast) {
  * @param {Function} fn - Function to execute and measure
  * @returns {Promise} Result of the function
  */
-export async function trackPerformance(operation, fn) {
-	const startTime = performance.now();
+export async function trackPerformance(_operation, fn) {
+	const startTime = performance.now()
 
 	try {
-		const result = await fn();
-		const duration = performance.now() - startTime;
-
-		// Log performance metrics
-		console.debug(`[Performance] ${operation} took ${duration.toFixed(2)}ms`);
+		const result = await fn()
+		const duration = performance.now() - startTime
 
 		// You could send this to analytics here
 		if (duration > 1000) {
-			console.warn(
-				`[Performance] ${operation} is slow: ${duration.toFixed(2)}ms`,
-			);
 		}
 
-		return result;
+		return result
 	} catch (error) {
-		const duration = performance.now() - startTime;
-		console.error(
-			`[Performance] ${operation} failed after ${duration.toFixed(2)}ms`,
-			error,
-		);
-		throw error;
+		const _duration = performance.now() - startTime
+		throw error
 	}
 }
 
@@ -124,12 +109,12 @@ export async function trackPerformance(operation, fn) {
  * @returns {Function} Debounced function
  */
 export function debounce(fn, delay = 2000) {
-	let timeoutId;
+	let timeoutId
 
 	return function (...args) {
-		clearTimeout(timeoutId);
-		timeoutId = setTimeout(() => fn.apply(this, args), delay);
-	};
+		clearTimeout(timeoutId)
+		timeoutId = setTimeout(() => fn.apply(this, args), delay)
+	}
 }
 
 /**
@@ -138,18 +123,18 @@ export function debounce(fn, delay = 2000) {
  * @returns {Object} Object with completed and incomplete item arrays
  */
 export function batchProgressUpdates(updates) {
-	const completed = [];
-	const incomplete = [];
+	const completed = []
+	const incomplete = []
 
 	for (const { itemId, completed: isCompleted } of updates) {
 		if (isCompleted) {
-			completed.push(itemId);
+			completed.push(itemId)
 		} else {
-			incomplete.push(itemId);
+			incomplete.push(itemId)
 		}
 	}
 
-	return { completed, incomplete };
+	return { completed, incomplete }
 }
 
 /**
@@ -160,7 +145,7 @@ export function batchProgressUpdates(updates) {
  * @returns {string} Formatted progress string
  */
 export function formatProgress(percentage, completedItems, totalItems) {
-	return `${percentage}% (${completedItems}/${totalItems})`;
+	return `${percentage}% (${completedItems}/${totalItems})`
 }
 
 /**
@@ -176,7 +161,7 @@ export function isValidProgress(progress) {
 		typeof progress.completedItems === "number" &&
 		progress.items &&
 		typeof progress.items === "object"
-	);
+	)
 }
 
 /**
@@ -189,35 +174,35 @@ export function getEmptyProgress() {
 		totalItems: 0,
 		completedItems: 0,
 		items: {},
-	};
+	}
 }
 
 // Legacy functions for backward compatibility
 export function getVideoProgress(video, currentTime = null) {
 	if (currentTime !== null && video?.duration > 0) {
-		return Math.round((currentTime / video.duration) * 100);
+		return Math.round((currentTime / video.duration) * 100)
 	}
-	return Math.round(video?.progress || video?.completionPercentage || 0);
+	return Math.round(video?.progress || video?.completionPercentage || 0)
 }
 
 export function getBookProgress(book, progressStats = null) {
 	if (progressStats?.percentage > 0) {
-		return Math.round(progressStats.percentage);
+		return Math.round(progressStats.percentage)
 	}
-	return Math.round(book?.progressPercentage || 0);
+	return Math.round(book?.progressPercentage || 0)
 }
 
 export function formatProgressText(percentage, _type = "content") {
-	const rounded = Math.round(percentage);
-	return `${rounded}%`;
+	const rounded = Math.round(percentage)
+	return `${rounded}%`
 }
 
 export function isCompleted(percentage) {
-	return percentage >= 100;
+	return percentage >= 100
 }
 
 export function getProgressStatus(percentage) {
-	if (percentage >= 100) return "completed";
-	if (percentage > 0) return "in_progress";
-	return "not_started";
+	if (percentage >= 100) return "completed"
+	if (percentage > 0) return "in_progress"
+	return "not_started"
 }

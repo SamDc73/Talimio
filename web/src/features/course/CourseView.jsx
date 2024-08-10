@@ -8,7 +8,7 @@ import TrackView from "./views/track"
  * Simple course view component that renders ONLY the content,
  * no header or sidebar (those are rendered at App level).
  */
-export default function SimpleCourseView({ mode, modules, roadmapId }) {
+export default function CourseView({ mode, modules, roadmapId }) {
 	const { lessonId } = useParams()
 
 	// If viewing a lesson, show lesson view

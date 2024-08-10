@@ -1,13 +1,15 @@
-import { Maximize, MessageSquare, PanelLeft } from "lucide-react";
-import { memo } from "react";
-import { Link } from "react-router-dom";
-import { TooltipButton } from "@/components/TooltipButton";
-import { useChatSidebar } from "@/hooks/useChatSidebar";
-import { formatProgressText } from "@/utils/progressUtils";
-import { UserAvatarMenu } from "./MainHeader";
+import { Maximize, MessageSquare, PanelLeft } from "lucide-react"
+import { useEffect } from "react"
+import { Link } from "react-router-dom"
+import { TooltipButton } from "@/components/TooltipButton"
+import { useChatSidebar } from "@/hooks/useChatSidebar"
+import useAppStore from "@/stores/useAppStore"
+import { formatProgressText } from "@/utils/progressUtils"
+import { UserAvatarMenu } from "./MainHeader"
 
-export const BookHeader = memo(function BookHeader({
+export const BookHeader = function BookHeader({
 	book,
+	bookId, // Always use explicit bookId from parent
 	onToggleSidebar,
 	isSidebarOpen,
 	onZoomIn = () => {},
@@ -16,18 +18,24 @@ export const BookHeader = memo(function BookHeader({
 	zoomLevel = 100,
 	showZoomControls = false,
 }) {
-	const { toggleChat } = useChatSidebar();
+	const { toggleChat } = useChatSidebar()
 
-	// TEMPORARY: Disable useBookProgress to debug infinite loop
-	// const bookId = book?.id;
-	// const { progress, metadata } = useBookProgress(bookId);
-	// const currentPage = metadata?.currentPage || 1;
-	// const totalPages = metadata?.totalPages || book?.totalPages || 0;
+	// Use the bookId passed from parent component (BookViewer) which knows the URL param
+	// This ensures consistency across all components
+	const currentPage = useAppStore((state) => state.books?.readingState?.[bookId]?.currentPage || 1)
+	const storedTotalPages = useAppStore((state) => state.books?.readingState?.[bookId]?.totalPages)
+	const totalPages = storedTotalPages || book?.totalPages || 0
+	const progress = { percentage: totalPages ? Math.round((currentPage / totalPages) * 100) : 0 }
 
-	// Use fallback values for now
-	const progress = { percentage: 0 };
-	const currentPage = 1;
-	const totalPages = book?.totalPages || 0;
+	// Debug to understand why page isn't updating
+	useEffect(() => {
+		// Get the entire reading state to debug
+		const allReadingState = useAppStore.getState().books?.readingState
+
+		// Check if our bookId exists in the store
+		if (allReadingState && bookId) {
+		}
+	}, [bookId])
 
 	return (
 		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-border shadow-sm">
@@ -36,13 +44,7 @@ export const BookHeader = memo(function BookHeader({
 					{/* Logo Section */}
 					<div className="flex-shrink-0 mr-4">
 						<Link to="/" className="block">
-							<img
-								src="/logo.png"
-								alt="Talimio Logo"
-								width={32}
-								height={32}
-								className="object-contain"
-							/>
+							<img src="/logo.png" alt="Talimio Logo" width={32} height={32} className="object-contain" />
 						</Link>
 					</div>
 
@@ -51,9 +53,7 @@ export const BookHeader = memo(function BookHeader({
 
 					{/* Book Info Section */}
 					<div className="flex-1 min-w-0">
-						<h1 className="text-base font-semibold text-slate-800 truncate">
-							{book?.title || "Loading..."}
-						</h1>
+						<h1 className="text-base font-semibold text-slate-800 truncate">{book?.title || "Loading..."}</h1>
 						{book && (
 							<div className="flex items-center mt-1">
 								<div className="w-32 md:w-48 bg-slate-200 rounded-full h-1.5 overflow-hidden">
@@ -66,9 +66,7 @@ export const BookHeader = memo(function BookHeader({
 									{formatProgressText(progress.percentage)}
 								</span>
 								<span className="ml-3 text-xs text-slate-500">
-									{totalPages > 0 && currentPage > 0
-										? `Page ${currentPage} of ${totalPages}`
-										: book.author || ""}
+									{totalPages > 0 && currentPage > 0 ? `Page ${currentPage} of ${totalPages}` : book.author || ""}
 								</span>
 							</div>
 						)}
@@ -88,9 +86,7 @@ export const BookHeader = memo(function BookHeader({
 								>
 									<span className="text-sm font-medium">-</span>
 								</TooltipButton>
-								<span className="px-2 text-xs font-medium text-slate-600 min-w-[3rem] text-center">
-									{zoomLevel}%
-								</span>
+								<span className="px-2 text-xs font-medium text-slate-600 min-w-[3rem] text-center">{zoomLevel}%</span>
 								<TooltipButton
 									variant="ghost"
 									size="icon"
@@ -146,5 +142,5 @@ export const BookHeader = memo(function BookHeader({
 				</div>
 			</div>
 		</header>
-	);
-});
+	)
+}

@@ -10,4 +10,4 @@ export const ROADMAP_DEFAULTS = {
 		TASK: "task",
 		DECISION: "decision",
 	},
-};
+}

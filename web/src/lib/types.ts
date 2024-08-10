@@ -1,27 +1,27 @@
-type ContentType = "youtube" | "flashcards";
+type ContentType = "youtube" | "flashcards"
 
 interface ContentItem {
-	id: string;
-	type: ContentType;
-	title: string;
-	description: string;
-	lastAccessedDate: string;
-	createdDate: string;
-	progress: number;
-	tags: string[];
-	channelName?: string; // Optional for YouTube content
+	id: string
+	type: ContentType
+	title: string
+	description: string
+	lastAccessedDate: string
+	createdDate: string
+	progress: number
+	tags: string[]
+	channelName?: string // Optional for YouTube content
 }
 
 interface FilterOption {
-	id: string;
-	label: string;
-	icon: "Search" | "Youtube" | "Layers" | "BookOpen" | "FileText";
+	id: string
+	label: string
+	icon: "Search" | "Youtube" | "Layers" | "BookOpen" | "FileText"
 }
 
 interface SortOption {
-	id: string;
-	label: string;
-	icon: "Clock" | "CalendarDays" | "ArrowUpDown" | "FileText";
+	id: string
+	label: string
+	icon: "Clock" | "CalendarDays" | "ArrowUpDown" | "FileText"
 }
 
 // Export a value to make this a proper module
@@ -30,6 +30,6 @@ export const types = {
 	ContentItem,
 	FilterOption,
 	SortOption,
-} as const;
+} as const
 
-export type { ContentType, ContentItem, FilterOption, SortOption };
+export type { ContentType, ContentItem, FilterOption, SortOption }

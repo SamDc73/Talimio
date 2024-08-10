@@ -1,48 +1,48 @@
-import { forwardRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useState } from "react"
+import { useParams } from "react-router-dom"
 
-import RoadmapHeader from "@/components/header/RoadmapHeader";
-import { CourseSidebar } from "@/components/sidebar";
-import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore";
-import { useCourseNavigation } from "../../utils/navigationUtils";
-import { useOutlineData } from "./hooks/useOutlineData";
-import { useRoadmapState } from "./hooks/useRoadmapState";
-import DocumentsView from "./views/DocumentsView";
-import LessonView from "./views/LessonView";
-import OutlineView from "./views/outline";
-import TrackView from "./views/track";
+import RoadmapHeader from "@/components/header/RoadmapHeader"
+import { CourseSidebar } from "@/components/sidebar"
+import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
+import { useCourseNavigation } from "../../utils/navigationUtils"
+import { useOutlineData } from "./hooks/useOutlineData"
+import { useRoadmapState } from "./hooks/useRoadmapState"
+import DocumentsView from "./views/DocumentsView"
+import LessonView from "./views/LessonView"
+import OutlineView from "./views/outline"
+import TrackView from "./views/track"
 
 /**
  * Main container component for the Course feature
  * Handles switching between different views and lesson display
  */
-const CoursePage = forwardRef(({ roadmapId: propRoadmapId }, _ref) => {
-	const { courseId, lessonId } = useParams();
-	const roadmapId = propRoadmapId || courseId; // Support both props and URL params
+const CoursePage = ({ roadmapId: propRoadmapId, ref: _ref }) => {
+	const { courseId, lessonId } = useParams()
+	const roadmapId = propRoadmapId || courseId // Support both props and URL params
 
 	const { isLoading: roadmapLoading, roadmap } = useRoadmapState(
 		roadmapId,
-		() => {}, // No error handler needed for now
-	);
-	const { modules, isLoading: modulesLoading } = useOutlineData(roadmapId);
-	const isOpen = useAppStore(selectSidebarOpen);
-	const [mode, setMode] = useState("outline"); // Default to outline view
-	const { goToLesson } = useCourseNavigation();
+		() => {} // No error handler needed for now
+	)
+	const { modules, isLoading: modulesLoading } = useOutlineData(roadmapId)
+	const isOpen = useAppStore(selectSidebarOpen)
+	const [mode, setMode] = useState("outline") // Default to outline view
+	const { goToLesson } = useCourseNavigation()
 
-	const isLoading = roadmapLoading || modulesLoading;
-	const courseName = roadmap?.title || "Course";
+	const isLoading = roadmapLoading || modulesLoading
+	const courseName = roadmap?.title || "Course"
 
 	// Handle lesson click navigation
 	const handleLessonClick = (clickedLessonId) => {
-		goToLesson(roadmapId, clickedLessonId);
-	};
+		goToLesson(roadmapId, clickedLessonId)
+	}
 
 	if (isLoading) {
 		return (
 			<div className="w-screen h-screen flex items-center justify-center">
 				<div className="text-lg">Loading your course...</div>
 			</div>
-		);
+		)
 	}
 
 	if (!roadmapId) {
@@ -53,7 +53,7 @@ const CoursePage = forwardRef(({ roadmapId: propRoadmapId }, _ref) => {
 					<p className="text-gray-600 mb-4">No course ID provided.</p>
 				</div>
 			</div>
-		);
+		)
 	}
 
 	return (
@@ -61,19 +61,10 @@ const CoursePage = forwardRef(({ roadmapId: propRoadmapId }, _ref) => {
 			className={`roadmap-container ${isOpen ? "sidebar-open" : "sidebar-closed"}`}
 			style={{ margin: 0, padding: 0 }}
 		>
-			<RoadmapHeader
-				mode={mode}
-				onModeChange={setMode}
-				courseId={roadmapId}
-				courseName={courseName}
-			/>
+			<RoadmapHeader mode={mode} onModeChange={setMode} courseId={roadmapId} courseName={courseName} />
 
 			<div className="flex h-screen">
-				<CourseSidebar
-					modules={modules || []}
-					onLessonClick={handleLessonClick}
-					courseId={roadmapId}
-				/>
+				<CourseSidebar modules={modules || []} onLessonClick={handleLessonClick} courseId={roadmapId} />
 
 				{/* If viewing a lesson, show lesson view with same layout */}
 				{lessonId ? (
@@ -96,7 +87,7 @@ const CoursePage = forwardRef(({ roadmapId: propRoadmapId }, _ref) => {
 				) : null}
 			</div>
 		</div>
-	);
-});
+	)
+}
 
-export default CoursePage;
+export default CoursePage

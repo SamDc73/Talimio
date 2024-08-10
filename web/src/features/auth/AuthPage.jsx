@@ -1,71 +1,64 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
-import LoginForm from "./LoginForm";
-import PasswordResetForm from "./PasswordResetForm";
-import SignupForm from "./SignupForm";
+import { useEffect, useState } from "react"
+import { useNavigate, useSearchParams } from "react-router-dom"
+import { useAuth } from "@/hooks/useAuth"
+import LoginForm from "./LoginForm"
+import PasswordResetForm from "./PasswordResetForm"
+import SignupForm from "./SignupForm"
 
 const AuthPage = () => {
-	const [view, setView] = useState("login"); // "login", "signup", "reset"
-	const [error, setError] = useState("");
-	const [successMessage, setSuccessMessage] = useState("");
-	const navigate = useNavigate();
-	const [searchParams] = useSearchParams();
-	const authContext = useAuth();
-	const { login, signup, isAuthenticated } = authContext;
+	const [view, setView] = useState("login") // "login", "signup", "reset"
+	const [error, setError] = useState("")
+	const [successMessage, setSuccessMessage] = useState("")
+	const navigate = useNavigate()
+	const [searchParams] = useSearchParams()
+	const authContext = useAuth()
+	const { login, signup, isAuthenticated } = authContext
 
 	// Debug logging
-	useEffect(() => {
-		console.log("🔐 AuthPage - Auth context:", {
-			hasLogin: typeof login === "function",
-			hasSignup: typeof signup === "function",
-			isAuthenticated,
-			fullContext: authContext,
-		});
-	}, [login, signup, isAuthenticated, authContext]);
+	useEffect(() => {}, [])
 
 	// Get redirect URL from query params
-	const redirectUrl = searchParams.get("redirect") || "/";
+	const redirectUrl = searchParams.get("redirect") || "/"
 
 	// If already authenticated, redirect immediately
 	useEffect(() => {
 		if (isAuthenticated) {
-			navigate(redirectUrl);
+			navigate(redirectUrl)
 		}
-	}, [isAuthenticated, navigate, redirectUrl]);
+	}, [isAuthenticated, navigate, redirectUrl])
 
 	const handleLogin = async (email, password) => {
-		setError("");
-		setSuccessMessage("");
-		const result = await login(email, password);
+		setError("")
+		setSuccessMessage("")
+		const result = await login(email, password)
 
 		if (result.success) {
-			navigate(redirectUrl);
+			navigate(redirectUrl)
 		} else {
-			setError(result.error);
+			setError(result.error)
 		}
-	};
+	}
 
 	const handleSignup = async (email, password, username) => {
-		setError("");
-		setSuccessMessage("");
-		const result = await signup(email, password, username);
+		setError("")
+		setSuccessMessage("")
+		const result = await signup(email, password, username)
 
 		if (result.success) {
 			if (result.emailConfirmationRequired) {
-				setSuccessMessage(result.message);
+				setSuccessMessage(result.message)
 				// Optionally switch to login form after showing message
 				setTimeout(() => {
-					setView("login");
-					setSuccessMessage("");
-				}, 5000);
+					setView("login")
+					setSuccessMessage("")
+				}, 5000)
 			} else {
-				navigate(redirectUrl);
+				navigate(redirectUrl)
 			}
 		} else {
-			setError(result.error);
+			setError(result.error)
 		}
-	};
+	}
 
 	return (
 		<>
@@ -89,15 +82,11 @@ const AuthPage = () => {
 				/>
 			)}
 
-			{view === "signup" && (
-				<SignupForm onSignIn={() => setView("login")} onSubmit={handleSignup} />
-			)}
+			{view === "signup" && <SignupForm onSignIn={() => setView("login")} onSubmit={handleSignup} />}
 
-			{view === "reset" && (
-				<PasswordResetForm onBack={() => setView("login")} />
-			)}
+			{view === "reset" && <PasswordResetForm onBack={() => setView("login")} />}
 		</>
-	);
-};
+	)
+}
 
-export default AuthPage;
+export default AuthPage

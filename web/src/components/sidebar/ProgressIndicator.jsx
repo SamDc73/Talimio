@@ -1,4 +1,4 @@
-import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore";
+import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
 
 /**
  * Simple pill-style progress indicator component for sidebar
@@ -12,7 +12,7 @@ function ProgressIndicator({
 	variant = "default",
 	"data-testid": dataTestId,
 }) {
-	const isOpen = useAppStore(selectSidebarOpen);
+	const isOpen = useAppStore(selectSidebarOpen)
 
 	// Map variants to pill colors following the styling guide
 	const variantStyles = {
@@ -21,9 +21,9 @@ function ProgressIndicator({
 		book: "bg-blue-50 text-blue-600",
 		video: "bg-violet-50 text-violet-600",
 		flashcard: "bg-amber-50 text-amber-600",
-	};
+	}
 
-	const styleClass = variantStyles[variant] || variantStyles.default;
+	const styleClass = variantStyles[variant] || variantStyles.default
 
 	return (
 		<div
@@ -31,15 +31,12 @@ function ProgressIndicator({
 				isOpen ? "opacity-100" : "opacity-0"
 			}`}
 		>
-			<span
-				className={`${styleClass} text-xs font-semibold rounded-full px-3 py-1`}
-				data-testid={dataTestId}
-			>
+			<span className={`${styleClass} text-xs font-semibold rounded-full px-3 py-1`} data-testid={dataTestId}>
 				{progress}% {suffix}
 			</span>
 			{children}
 		</div>
-	);
+	)
 }
 
-export default ProgressIndicator;
+export default ProgressIndicator

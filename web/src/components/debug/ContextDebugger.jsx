@@ -1,30 +1,25 @@
-import { useEffect } from "react";
-import { useCurrentContext } from "../../hooks/useCurrentContext";
+import { useEffect } from "react"
+import { useCurrentContext } from "../../hooks/useCurrentContext"
 
 /**
  * Debug component to verify context is being properly detected and passed
  * Only renders in development mode
  */
 export function ContextDebugger() {
-	const context = useCurrentContext();
+	const context = useCurrentContext()
 
 	useEffect(() => {
 		if (process.env.NODE_ENV === "development" && context) {
-			console.log("[ContextDebugger] Current context:", {
-				type: context.contextType,
-				id: context.contextId,
-				meta: context.contextMeta,
-			});
 		}
-	}, [context]);
+	}, [context])
 
 	// Only show in development
 	if (process.env.NODE_ENV !== "development") {
-		return null;
+		return null
 	}
 
 	if (!context) {
-		return null;
+		return null
 	}
 
 	return (
@@ -34,5 +29,5 @@ export function ContextDebugger() {
 			<div>ID: {context.contextId}</div>
 			<div>Meta: {JSON.stringify(context.contextMeta)}</div>
 		</div>
-	);
+	)
 }

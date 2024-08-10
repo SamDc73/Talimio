@@ -2,7 +2,7 @@
  * Service for managing book chapters and their progress
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1"
 
 /**
  * Fetch chapters for a book
@@ -10,16 +10,27 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
  * @returns {Promise<Array>} Array of chapters
  */
 export async function getBookChapters(bookId) {
-	try {
-		const response = await fetch(`${API_BASE}/books/${bookId}/chapters`);
-		if (!response.ok) {
-			throw new Error(`Failed to fetch book chapters: ${response.statusText}`);
+	const headers = {}
+
+	// Add Supabase auth token if available
+	if (import.meta.env.VITE_ENABLE_AUTH === "true") {
+		const { supabase } = await import("../lib/supabase")
+		const {
+			data: { session },
+		} = await supabase.auth.getSession()
+		if (session?.access_token) {
+			headers.Authorization = `Bearer ${session.access_token}`
 		}
-		return await response.json();
-	} catch (error) {
-		console.error("Error fetching book chapters:", error);
-		throw error;
 	}
+
+	const response = await fetch(`${API_BASE}/books/${bookId}/chapters`, {
+		headers,
+		credentials: import.meta.env.VITE_ENABLE_AUTH === "false" ? "omit" : "include",
+	})
+	if (!response.ok) {
+		throw new Error(`Failed to fetch book chapters: ${response.statusText}`)
+	}
+	return await response.json()
 }
 
 /**
@@ -29,18 +40,11 @@ export async function getBookChapters(bookId) {
  * @returns {Promise<Object>} Chapter data
  */
 export async function getBookChapter(bookId, chapterId) {
-	try {
-		const response = await fetch(
-			`${API_BASE}/books/${bookId}/chapters/${chapterId}`,
-		);
-		if (!response.ok) {
-			throw new Error(`Failed to fetch chapter: ${response.statusText}`);
-		}
-		return await response.json();
-	} catch (error) {
-		console.error("Error fetching chapter:", error);
-		throw error;
+	const response = await fetch(`${API_BASE}/books/${bookId}/chapters/${chapterId}`)
+	if (!response.ok) {
+		throw new Error(`Failed to fetch chapter: ${response.statusText}`)
 	}
+	return await response.json()
 }
 
 /**
@@ -51,28 +55,18 @@ export async function getBookChapter(bookId, chapterId) {
  * @returns {Promise<Object>} Update response
  */
 export async function updateChapterStatus(bookId, chapterId, status) {
-	try {
-		const response = await fetch(
-			`${API_BASE}/books/${bookId}/chapters/${chapterId}/status`,
-			{
-				method: "PUT",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ status }),
-			},
-		);
+	const response = await fetch(`${API_BASE}/books/${bookId}/chapters/${chapterId}/status`, {
+		method: "PUT",
+		headers: {
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({ status }),
+	})
 
-		if (!response.ok) {
-			throw new Error(
-				`Failed to update chapter status: ${response.statusText}`,
-			);
-		}
-		return await response.json();
-	} catch (error) {
-		console.error("Error updating chapter status:", error);
-		throw error;
+	if (!response.ok) {
+		throw new Error(`Failed to update chapter status: ${response.statusText}`)
 	}
+	return await response.json()
 }
 
 /**
@@ -81,23 +75,15 @@ export async function updateChapterStatus(bookId, chapterId, status) {
  * @returns {Promise<Object>} Extraction response
  */
 export async function extractBookChapters(bookId) {
-	try {
-		const response = await fetch(
-			`${API_BASE}/books/${bookId}/extract-chapters`,
-			{
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-			},
-		);
+	const response = await fetch(`${API_BASE}/books/${bookId}/extract-chapters`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+		},
+	})
 
-		if (!response.ok) {
-			throw new Error(`Failed to extract chapters: ${response.statusText}`);
-		}
-		return await response.json();
-	} catch (error) {
-		console.error("Error extracting chapters:", error);
-		throw error;
+	if (!response.ok) {
+		throw new Error(`Failed to extract chapters: ${response.statusText}`)
 	}
+	return await response.json()
 }

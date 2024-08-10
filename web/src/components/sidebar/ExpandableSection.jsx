@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react"
 
 /**
  * Simple expandable section component with header and collapsible content
@@ -23,9 +23,9 @@ function ExpandableSection({
 		book: "border-blue-200 bg-blue-50/50",
 		video: "border-violet-200 bg-violet-50/50",
 		flashcard: "border-amber-200 bg-amber-50/50",
-	};
+	}
 
-	const activeStyle = variantColors[variant] || variantColors.default;
+	const activeStyle = variantColors[variant] || variantColors.default
 	const chevronColor =
 		variant === "course"
 			? "text-teal-600"
@@ -35,7 +35,7 @@ function ExpandableSection({
 					? "text-violet-600"
 					: variant === "flashcard"
 						? "text-amber-600"
-						: "text-emerald-600";
+						: "text-emerald-600"
 
 	return (
 		<div
@@ -62,11 +62,9 @@ function ExpandableSection({
 					/>
 				)}
 			</button>
-			{isExpanded && children && (
-				<div className="px-4 py-2 space-y-2">{children}</div>
-			)}
+			{isExpanded && children && <div className="px-4 py-2 space-y-2">{children}</div>}
 		</div>
-	);
+	)
 }
 
-export default ExpandableSection;
+export default ExpandableSection

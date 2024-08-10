@@ -1,86 +1,62 @@
-const API_BASE = "/api/v1";
-const REQUEST_TIMEOUT = 7000;
+const API_BASE = "/api/v1"
+const REQUEST_TIMEOUT = 7000
 
 async function fetchWithTimeout(url, options = {}) {
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+	const controller = new AbortController()
+	const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
 
 	try {
 		const response = await fetch(url, {
 			...options,
 			signal: controller.signal,
 			credentials: "include", // Include cookies for authentication
-		});
-		clearTimeout(timeout);
-		return response;
+		})
+		clearTimeout(timeout)
+		return response
 	} catch (error) {
-		clearTimeout(timeout);
+		clearTimeout(timeout)
 		if (error.name === "AbortError") {
-			throw new Error(`Request timeout after ${REQUEST_TIMEOUT}ms`);
+			throw new Error(`Request timeout after ${REQUEST_TIMEOUT}ms`)
 		}
-		throw error;
+		throw error
 	}
 }
 
 export async function updateBookChapterStatus(bookId, chapterId, status) {
-	try {
-		// Check if this is a ToC ID (like "toc_1_1_6") or a UUID
-		const isTocId = chapterId.startsWith("toc_");
+	// Check if this is a ToC ID (like "toc_1_1_6") or a UUID
+	const isTocId = chapterId.startsWith("toc_")
 
-		console.log(`📚 Updating chapter status:`, {
-			bookId,
-			chapterId,
-			status,
-			isTocId,
-			endpoint: isTocId ? "progress" : "chapters",
-		});
-
-		if (isTocId) {
-			// For ToC IDs, use the progress endpoint
-			const requestBody = {
-				tocProgress: {
-					[chapterId]: status === "completed",
-				},
-			};
-			console.log(`📚 Request body:`, requestBody);
-
-			const response = await fetchWithTimeout(
-				`${API_BASE}/books/${bookId}/progress`,
-				{
-					method: "PUT",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(requestBody),
-				},
-			);
-
-			if (!response.ok) {
-				throw new Error(
-					`Failed to update ToC progress: ${response.statusText}`,
-				);
-			}
-			const data = await response.json();
-			return data;
-		} else {
-			// For UUID chapters, use the chapters endpoint
-			const response = await fetchWithTimeout(
-				`${API_BASE}/books/${bookId}/chapters/${chapterId}/status`,
-				{
-					method: "PUT",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ status }),
-				},
-			);
-
-			if (!response.ok) {
-				throw new Error(
-					`Failed to update chapter status: ${response.statusText}`,
-				);
-			}
-			const data = await response.json();
-			return data;
+	if (isTocId) {
+		// For ToC IDs, use the progress endpoint
+		const requestBody = {
+			tocProgress: {
+				[chapterId]: status === "completed",
+			},
 		}
-	} catch (error) {
-		console.error("Error updating chapter status:", error);
-		throw error;
+
+		const response = await fetchWithTimeout(`${API_BASE}/books/${bookId}/progress`, {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(requestBody),
+		})
+
+		if (!response.ok) {
+			throw new Error(`Failed to update ToC progress: ${response.statusText}`)
+		}
+		const data = await response.json()
+		return data
+	} else {
+		// For UUID chapters, use the chapters endpoint
+		const response = await fetchWithTimeout(`${API_BASE}/books/${bookId}/chapters/${chapterId}/status`, {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ status }),
+		})
+
+		if (!response.ok) {
+			throw new Error(`Failed to update chapter status: ${response.statusText}`)
+		}
+		const data = await response.json()
+		return data
 	}
 }

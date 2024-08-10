@@ -1,98 +1,79 @@
-import { useCallback, useMemo, useRef } from "react";
-import { useProgress, useUpdateProgress } from "./useProgress";
+import { useRef } from "react"
+
+import { useProgress, useUpdateProgress } from "./useProgress"
 
 /**
  * Adapter hook for backward compatibility with video progress
  * Maps the new unified progress API to the old video-specific interface
  */
 export function useVideoProgress(videoId) {
-	// Memoize the contentIds array to prevent unnecessary re-queries
-	const contentIds = useMemo(() => (videoId ? [videoId] : []), [videoId]);
+	const contentIds = videoId ? [videoId] : []
 
-	const progressQuery = useProgress(contentIds);
-	const updateProgress = useUpdateProgress();
+	const progressQuery = useProgress(contentIds)
+	const updateProgress = useUpdateProgress()
 
 	// Use refs to store functions that don't need to trigger re-renders
-	const refetchRef = useRef(progressQuery.refetch);
-	refetchRef.current = progressQuery.refetch;
+	const refetchRef = useRef(progressQuery.refetch)
+	refetchRef.current = progressQuery.refetch
 
 	// Get the current progress data from the map
-	const currentProgress = progressQuery.data?.[videoId] || 0;
-	const rawMetadata = progressQuery.metadata?.[videoId] || {};
+	const currentProgress = progressQuery.data?.[videoId] || 0
+	const rawMetadata = progressQuery.metadata?.[videoId] || {}
 
 	// Extract values with defaults
-	const completedChapters = rawMetadata.completedChapters || {};
-	const totalChapters = rawMetadata.totalChapters || 0;
+	const completedChapters = rawMetadata.completedChapters || {}
+	const totalChapters = rawMetadata.totalChapters || 0
 
 	// Check if a specific chapter is completed
-	const isCompleted = useCallback(
-		(chapterId) => {
-			return completedChapters[chapterId] === true;
-		},
-		[completedChapters],
-	);
+	const isCompleted = (chapterId) => {
+		return completedChapters[chapterId] === true
+	}
 
 	// Toggle chapter completion
-	const toggleCompletion = useCallback(
-		async (chapterId, totalChaptersOverride) => {
-			const currentCompleted = completedChapters[chapterId] || false;
-			const newCompletedChapters = {
-				...completedChapters,
-				[chapterId]: !currentCompleted,
-			};
+	const toggleCompletion = async (chapterId, totalChaptersOverride) => {
+		const currentCompleted = completedChapters[chapterId] || false
+		const newCompletedChapters = {
+			...completedChapters,
+			[chapterId]: !currentCompleted,
+		}
 
-			// Use override if provided (from VideoSidebar which knows the actual chapter count)
-			const actualTotalChapters =
-				totalChaptersOverride ||
-				totalChapters ||
-				Object.keys(completedChapters).length;
+		// Use override if provided (from VideoSidebar which knows the actual chapter count)
+		const actualTotalChapters = totalChaptersOverride || totalChapters || Object.keys(completedChapters).length
 
-			// Calculate progress based on completed chapters
-			let newProgress = currentProgress;
-			if (actualTotalChapters && actualTotalChapters > 0) {
-				const completedCount =
-					Object.values(newCompletedChapters).filter(Boolean).length;
-				newProgress = Math.round((completedCount / actualTotalChapters) * 100);
-			}
+		// Calculate progress based on completed chapters
+		let newProgress = currentProgress
+		if (actualTotalChapters && actualTotalChapters > 0) {
+			const completedCount = Object.values(newCompletedChapters).filter(Boolean).length
+			newProgress = Math.round((completedCount / actualTotalChapters) * 100)
+		}
 
-			// Update both progress and metadata (only send necessary fields)
-			await updateProgress.mutateAsync({
-				contentId: videoId,
-				progress: newProgress,
-				metadata: {
-					content_type: "video",
-					completedChapters: newCompletedChapters,
-					totalChapters: actualTotalChapters,
-				},
-			});
+		// Update both progress and metadata (only send necessary fields)
+		await updateProgress.mutateAsync({
+			contentId: videoId,
+			progress: newProgress,
+			metadata: {
+				content_type: "video",
+				completedChapters: newCompletedChapters,
+				totalChapters: actualTotalChapters,
+			},
+		})
 
-			// Return the new state for immediate UI update
-			return !currentCompleted;
-		},
-		[
-			videoId,
-			currentProgress,
-			totalChapters,
-			completedChapters,
-			updateProgress,
-		],
-	);
+		// Return the new state for immediate UI update
+		return !currentCompleted
+	}
 
 	// Method to set total chapters (needed for progress calculation)
-	const setTotalChapters = useCallback(
-		async (newTotalChapters) => {
-			await updateProgress.mutateAsync({
-				contentId: videoId,
-				progress: currentProgress,
-				metadata: {
-					content_type: "video",
-					completedChapters,
-					totalChapters: newTotalChapters,
-				},
-			});
-		},
-		[videoId, currentProgress, completedChapters, updateProgress],
-	);
+	const setTotalChapters = async (newTotalChapters) => {
+		await updateProgress.mutateAsync({
+			contentId: videoId,
+			progress: currentProgress,
+			metadata: {
+				content_type: "video",
+				completedChapters,
+				totalChapters: newTotalChapters,
+			},
+		})
+	}
 
 	return {
 		progress: {
@@ -130,32 +111,29 @@ export function useVideoProgress(videoId) {
 					...metadata,
 				},
 			}),
-	};
+	}
 }
 
 /**
  * Hook for updating video-specific metadata along with progress
  */
 export function useVideoProgressWithPosition(videoId) {
-	const updateProgress = useUpdateProgress();
-	const { progress, isLoading, error } = useVideoProgress(videoId);
+	const updateProgress = useUpdateProgress()
+	const { progress, isLoading, error } = useVideoProgress(videoId)
 
-	const updateVideoProgress = useCallback(
-		(position, duration) => {
-			const progressPercentage = duration > 0 ? (position / duration) * 100 : 0;
+	const updateVideoProgress = (position, duration) => {
+		const progressPercentage = duration > 0 ? (position / duration) * 100 : 0
 
-			updateProgress.mutate({
-				contentId: videoId,
-				progress: progressPercentage,
-				metadata: {
-					content_type: "video",
-					position,
-					duration,
-				},
-			});
-		},
-		[updateProgress, videoId],
-	);
+		updateProgress.mutate({
+			contentId: videoId,
+			progress: progressPercentage,
+			metadata: {
+				content_type: "video",
+				position,
+				duration,
+			},
+		})
+	}
 
 	return {
 		progress: {
@@ -165,6 +143,6 @@ export function useVideoProgressWithPosition(videoId) {
 		isLoading,
 		error,
 		updateVideoProgress,
-		updatePosition: updateVideoProgress, // Use the same memoized function
-	};
+		updatePosition: updateVideoProgress, // Use the same function
+	}
 }

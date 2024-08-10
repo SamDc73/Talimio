@@ -50,7 +50,6 @@ export default function LessonPage() {
 				const lessonData = await fetchLessonById(lessonId)
 				setLesson(lessonData)
 			} catch (err) {
-				console.error("Error fetching lesson:", err)
 				setError(err.message || "Failed to load lesson")
 			} finally {
 				setLoading(false)

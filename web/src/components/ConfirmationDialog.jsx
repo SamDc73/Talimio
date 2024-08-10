@@ -1,13 +1,7 @@
-import { AlertTriangle } from "lucide-react";
-import { Button } from "@/components/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/dialog";
+import { AlertTriangle } from "lucide-react"
+
+import { Button } from "@/components/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/dialog"
 
 export function ConfirmationDialog({
 	open,
@@ -21,15 +15,15 @@ export function ConfirmationDialog({
 	itemName = "",
 }) {
 	const handleConfirm = (e) => {
-		e?.stopPropagation();
-		onConfirm();
-		onOpenChange(false);
-	};
+		e?.stopPropagation()
+		onConfirm()
+		onOpenChange(false)
+	}
 
 	const handleCancel = (e) => {
-		e?.stopPropagation();
-		onOpenChange(false);
-	};
+		e?.stopPropagation()
+		onOpenChange(false)
+	}
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -42,17 +36,14 @@ export function ConfirmationDialog({
 							</div>
 						)}
 						<div className="text-left">
-							<DialogTitle className="text-lg font-semibold text-gray-900">
-								{title}
-							</DialogTitle>
+							<DialogTitle className="text-lg font-semibold text-gray-900">{title}</DialogTitle>
 						</div>
 					</div>
 				</DialogHeader>
 				<DialogDescription className="text-sm text-gray-600 mt-2">
 					{itemName ? (
 						<>
-							{description} <span className="font-medium">"{itemName}"</span>{" "}
-							will be permanently removed.
+							{description} <span className="font-medium">"{itemName}"</span> will be permanently removed.
 						</>
 					) : (
 						description
@@ -62,15 +53,11 @@ export function ConfirmationDialog({
 					<Button variant="outline" onClick={handleCancel} className="flex-1">
 						{cancelText}
 					</Button>
-					<Button
-						variant={isDestructive ? "destructive" : "default"}
-						onClick={handleConfirm}
-						className="flex-1"
-					>
+					<Button variant={isDestructive ? "destructive" : "default"} onClick={handleConfirm} className="flex-1">
 						{confirmText}
 					</Button>
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>
-	);
+	)
 }

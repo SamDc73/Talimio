@@ -1,77 +1,71 @@
-import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
-import React, { useState } from "react";
+import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react"
+import React, { useState } from "react"
 
 const LoginForm = ({
-	onSignUp = () => console.log("Switch to signup"),
-	onForgotPassword = () => console.log("Switch to reset"),
-	onSubmit = async (email, password) => {
-		await new Promise((resolve) => setTimeout(resolve, 2000));
-		console.log("Login attempt:", { email, password });
+	onSignUp = () => {},
+	onForgotPassword = () => {},
+	onSubmit = async (_email, _password) => {
+		await new Promise((resolve) => setTimeout(resolve, 2000))
 	},
 }) => {
-	const [email, setEmail] = useState("");
-	const [password, setPassword] = useState("");
-	const [showPassword, setShowPassword] = useState(false);
-	const [isLoading, setIsLoading] = useState(false);
-	const [errors, setErrors] = useState({});
-	const [mounted, setMounted] = useState(false);
+	const [email, setEmail] = useState("")
+	const [password, setPassword] = useState("")
+	const [showPassword, setShowPassword] = useState(false)
+	const [isLoading, setIsLoading] = useState(false)
+	const [errors, setErrors] = useState({})
+	const [mounted, setMounted] = useState(false)
 
 	React.useEffect(() => {
-		setMounted(true);
-	}, []);
+		setMounted(true)
+	}, [])
 
 	const validateEmail = (email) => {
-		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-		return emailRegex.test(email);
-	};
+		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+		return emailRegex.test(email)
+	}
 
 	const validateForm = () => {
-		const newErrors = {};
+		const newErrors = {}
 
 		if (!email) {
-			newErrors.email = "Email is required";
+			newErrors.email = "Email is required"
 		} else if (!validateEmail(email)) {
-			newErrors.email = "Please enter a valid email address";
+			newErrors.email = "Please enter a valid email address"
 		}
 
 		if (!password) {
-			newErrors.password = "Password is required";
+			newErrors.password = "Password is required"
 		} else if (password.length < 6) {
-			newErrors.password = "Password must be at least 6 characters";
+			newErrors.password = "Password must be at least 6 characters"
 		}
 
-		setErrors(newErrors);
-		return Object.keys(newErrors).length === 0;
-	};
+		setErrors(newErrors)
+		return Object.keys(newErrors).length === 0
+	}
 
 	const handleSubmit = async (e) => {
-		e.preventDefault();
+		e.preventDefault()
 
-		if (!validateForm()) return;
+		if (!validateForm()) return
 
-		setIsLoading(true);
+		setIsLoading(true)
 		try {
-			await onSubmit(email, password);
-		} catch (error) {
-			console.error("Login failed:", error);
+			await onSubmit(email, password)
+		} catch (_error) {
 		} finally {
-			setIsLoading(false);
+			setIsLoading(false)
 		}
-	};
+	}
 
-	if (!mounted) return null;
+	if (!mounted) return null
 
 	return (
 		<div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-emerald-50 p-4">
 			<div className="w-full max-w-md bg-white rounded-2xl shadow-2xl shadow-emerald-100/50 border border-emerald-100 overflow-hidden transform transition-all duration-500 hover:shadow-xl hover:shadow-emerald-200/30 animate-slideUp">
 				{/* Header */}
 				<div className="px-8 pt-8 pb-6 text-center">
-					<h1 className="text-2xl font-bold text-foreground mb-2">
-						Welcome Back
-					</h1>
-					<p className="text-muted-foreground text-sm">
-						Sign in to your account to continue
-					</p>
+					<h1 className="text-2xl font-bold text-foreground mb-2">Welcome Back</h1>
+					<p className="text-muted-foreground text-sm">Sign in to your account to continue</p>
 				</div>
 
 				{/* Form */}
@@ -79,10 +73,7 @@ const LoginForm = ({
 					<form onSubmit={handleSubmit} className="space-y-6">
 						{/* Email Field */}
 						<div className="space-y-2">
-							<label
-								htmlFor="email"
-								className="block text-sm font-medium text-foreground"
-							>
+							<label htmlFor="email" className="block text-sm font-medium text-foreground">
 								Email Address
 							</label>
 							<div className="relative">
@@ -94,9 +85,8 @@ const LoginForm = ({
 									type="email"
 									value={email}
 									onChange={(e) => {
-										setEmail(e.target.value);
-										if (errors.email)
-											setErrors((prev) => ({ ...prev, email: undefined }));
+										setEmail(e.target.value)
+										if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }))
 									}}
 									className={`block w-full pl-10 pr-3 py-3 border rounded-xl text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
 										errors.email
@@ -106,19 +96,12 @@ const LoginForm = ({
 									placeholder="Enter your email"
 								/>
 							</div>
-							{errors.email && (
-								<p className="text-destructive text-xs mt-1 animate-fadeIn">
-									{errors.email}
-								</p>
-							)}
+							{errors.email && <p className="text-destructive text-xs mt-1 animate-fadeIn">{errors.email}</p>}
 						</div>
 
 						{/* Password Field */}
 						<div className="space-y-2">
-							<label
-								htmlFor="password"
-								className="block text-sm font-medium text-foreground"
-							>
+							<label htmlFor="password" className="block text-sm font-medium text-foreground">
 								Password
 							</label>
 							<div className="relative">
@@ -130,9 +113,8 @@ const LoginForm = ({
 									type={showPassword ? "text" : "password"}
 									value={password}
 									onChange={(e) => {
-										setPassword(e.target.value);
-										if (errors.password)
-											setErrors((prev) => ({ ...prev, password: undefined }));
+										setPassword(e.target.value)
+										if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }))
 									}}
 									className={`block w-full pl-10 pr-12 py-3 border rounded-xl text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
 										errors.password
@@ -146,18 +128,10 @@ const LoginForm = ({
 									onClick={() => setShowPassword(!showPassword)}
 									className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
 								>
-									{showPassword ? (
-										<EyeOff className="h-5 w-5" />
-									) : (
-										<Eye className="h-5 w-5" />
-									)}
+									{showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
 								</button>
 							</div>
-							{errors.password && (
-								<p className="text-destructive text-xs mt-1 animate-fadeIn">
-									{errors.password}
-								</p>
-							)}
+							{errors.password && <p className="text-destructive text-xs mt-1 animate-fadeIn">{errors.password}</p>}
 						</div>
 
 						{/* Forgot Password - Only show in multi-user mode */}
@@ -192,9 +166,7 @@ const LoginForm = ({
 						{/* Divider */}
 						<div className="relative flex items-center py-2">
 							<div className="flex-grow border-t border-border"></div>
-							<span className="flex-shrink mx-4 text-sm text-muted-foreground">
-								or
-							</span>
+							<span className="flex-shrink mx-4 text-sm text-muted-foreground">or</span>
 							<div className="flex-grow border-t border-border"></div>
 						</div>
 
@@ -203,12 +175,7 @@ const LoginForm = ({
 							type="button"
 							className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-border rounded-xl text-foreground font-medium hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all duration-200"
 						>
-							<svg
-								className="w-5 h-5"
-								viewBox="0 0 24 24"
-								role="img"
-								aria-label="Google logo"
-							>
+							<svg className="w-5 h-5" viewBox="0 0 24 24" role="img" aria-label="Google logo">
 								<path
 									fill="#4285F4"
 									d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -246,7 +213,7 @@ const LoginForm = ({
 				</div>
 			</div>
 		</div>
-	);
-};
+	)
+}
 
-export default LoginForm;
+export default LoginForm

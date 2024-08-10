@@ -1,4 +1,4 @@
-import { api } from "@/lib/apiClient";
+import { api } from "@/lib/apiClient"
 
 /**
  * Fetches course data with modules and lessons in a structured format
@@ -7,20 +7,14 @@ import { api } from "@/lib/apiClient";
  */
 export async function getCourseWithModules(courseId) {
 	if (!courseId) {
-		throw new Error("Course ID is required");
+		throw new Error("Course ID is required")
 	}
+	// Fetch the complete course data from the main course endpoint
+	// This includes modules and lessons in the response
+	const courseData = await api.get(`/courses/${courseId}`)
 
-	try {
-		// Fetch the complete course data from the main course endpoint
-		// This includes modules and lessons in the response
-		const courseData = await api.get(`/courses/${courseId}`);
+	// The API returns modules with nested lessons already structured
+	const modules = courseData.modules || []
 
-		// The API returns modules with nested lessons already structured
-		const modules = courseData.modules || [];
-
-		return { modules };
-	} catch (error) {
-		console.error("Error fetching course with modules:", error);
-		throw error;
-	}
+	return { modules }
 }

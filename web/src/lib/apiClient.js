@@ -1,38 +1,38 @@
 /**
  * Secure API client with authentication and security monitoring
  */
-import useAppStore from "../stores/useAppStore.js";
-import { securityMonitor } from "../utils/securityConfig.js";
+import useAppStore from "../stores/useAppStore.js"
+import { securityMonitor } from "../utils/securityConfig.js"
 
-const BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1";
+const BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1"
 
 // Auth headers not needed - using httpOnly cookies!
 
 // Token refresh state
-let isRefreshing = false;
-let refreshSubscribers = [];
+let isRefreshing = false
+let refreshSubscribers = []
 
 // Subscribe to token refresh completion
 const subscribeTokenRefresh = (callback) => {
-	refreshSubscribers.push(callback);
-};
+	refreshSubscribers.push(callback)
+}
 
 // Notify all subscribers when token refresh completes
 const onTokenRefreshed = () => {
-	refreshSubscribers.forEach((callback) => callback());
-	refreshSubscribers = [];
-};
+	refreshSubscribers.forEach((callback) => callback())
+	refreshSubscribers = []
+}
 
 // Refresh the access token
 const refreshToken = async () => {
 	if (isRefreshing) {
 		// Wait for the ongoing refresh to complete
 		return new Promise((resolve) => {
-			subscribeTokenRefresh(() => resolve());
-		});
+			subscribeTokenRefresh(() => resolve())
+		})
 	}
 
-	isRefreshing = true;
+	isRefreshing = true
 
 	try {
 		const response = await fetch(`${BASE_URL}/auth/refresh`, {
@@ -41,82 +41,70 @@ const refreshToken = async () => {
 			headers: {
 				"Content-Type": "application/json",
 			},
-		});
+		})
 
 		if (response.ok) {
-			onTokenRefreshed();
-			return true;
+			onTokenRefreshed()
+			return true
 		}
 
 		// Refresh failed - user needs to login again
-		return false;
-	} catch (error) {
-		console.error("Token refresh failed:", error);
-		return false;
+		return false
+	} catch (_error) {
+		return false
 	} finally {
-		isRefreshing = false;
+		isRefreshing = false
 	}
-};
+}
 
 // Helper function to handle API responses
 const handleResponse = async (response, endpoint, retryRequest) => {
 	if (!response.ok) {
-		let errorData;
+		let errorData
 		try {
-			errorData = await response.json();
+			errorData = await response.json()
 		} catch (_e) {
-			errorData = { message: response.statusText };
+			errorData = { message: response.statusText }
 		}
 
 		// Handle auth failures
 		if (response.status === 401 && !endpoint.includes("/auth/")) {
-			console.log("🚨 API: 401 Unauthorized - attempting token refresh");
-
-			const refreshSuccess = await refreshToken();
+			const refreshSuccess = await refreshToken()
 
 			if (refreshSuccess && retryRequest) {
-				console.log("✅ Token refreshed successfully, retrying request");
 				// Retry the original request
-				const retryResponse = await retryRequest();
-				return handleResponse(retryResponse, endpoint, null);
+				const retryResponse = await retryRequest()
+				return handleResponse(retryResponse, endpoint, null)
 			}
-
-			console.log("❌ Token refresh failed - clearing auth state");
 			// Clear user from store (cookies are cleared by server)
-			const { clearUser } = useAppStore.getState();
-			clearUser();
+			const { clearUser } = useAppStore.getState()
+			clearUser()
 			// Redirect to auth page if we're in an auth-enabled environment
-			const authEnabled = import.meta.env.VITE_ENABLE_AUTH === "true";
+			const authEnabled = import.meta.env.VITE_ENABLE_AUTH === "true"
 			if (authEnabled && window.location.pathname !== "/auth") {
-				console.log("🔄 Redirecting to /auth due to 401");
-				window.location.href = "/auth";
+				window.location.href = "/auth"
 			}
 		}
 
-		const error = new Error(
-			`API Error: ${response.status} ${errorData?.message || response.statusText}`,
-		);
-		error.status = response.status;
-		error.data = errorData;
-		throw error;
+		const error = new Error(`API Error: ${response.status} ${errorData?.message || response.statusText}`)
+		error.status = response.status
+		error.data = errorData
+		throw error
 	}
 
 	// Handle responses with no content
-	if (
-		response.status === 204 ||
-		response.headers.get("content-length") === "0"
-	) {
-		return null;
+	if (response.status === 204 || response.headers.get("content-length") === "0") {
+		return null
 	}
 
-	return response.json();
-};
+	return response.json()
+}
 
 // Security-enhanced request wrapper
 const secureRequest = async (method, endpoint, data = null, options = {}) => {
 	// Rate limiting check
 	if (!securityMonitor.trackApiRequest(endpoint)) {
-		throw new Error("Rate limit exceeded. Please try again later.");
+		throw new Error("Rate limit exceeded. Please try again later.")
 	}
 
 	const makeRequest = async () => {
@@ -128,39 +116,39 @@ const secureRequest = async (method, endpoint, data = null, options = {}) => {
 			},
 			credentials: "include", // Include httpOnly cookies
 			...options,
-		};
+		}
 
 		// Add body for non-GET requests
 		if (data && method !== "GET") {
-			requestOptions.body = JSON.stringify(data);
+			requestOptions.body = JSON.stringify(data)
 		}
 
-		return fetch(`${BASE_URL}${endpoint}`, requestOptions);
-	};
+		return fetch(`${BASE_URL}${endpoint}`, requestOptions)
+	}
 
-	const response = await makeRequest();
-	return handleResponse(response, endpoint, makeRequest);
-};
+	const response = await makeRequest()
+	return handleResponse(response, endpoint, makeRequest)
+}
 
 // Main API client
 export const api = {
 	async get(endpoint, options = {}) {
-		return secureRequest("GET", endpoint, null, options);
+		return secureRequest("GET", endpoint, null, options)
 	},
 
 	async post(endpoint, data = null, options = {}) {
-		return secureRequest("POST", endpoint, data, options);
+		return secureRequest("POST", endpoint, data, options)
 	},
 
 	async put(endpoint, data = null, options = {}) {
-		return secureRequest("PUT", endpoint, data, options);
+		return secureRequest("PUT", endpoint, data, options)
 	},
 
 	async patch(endpoint, data = null, options = {}) {
-		return secureRequest("PATCH", endpoint, data, options);
+		return secureRequest("PATCH", endpoint, data, options)
 	},
 
 	async delete(endpoint, options = {}) {
-		return secureRequest("DELETE", endpoint, null, options);
+		return secureRequest("DELETE", endpoint, null, options)
 	},
-};
+}

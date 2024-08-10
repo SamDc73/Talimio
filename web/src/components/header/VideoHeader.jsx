@@ -1,22 +1,17 @@
-import { MessageSquare, PanelRight } from "lucide-react";
-import { memo } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { TooltipButton } from "@/components/TooltipButton";
-import { useChatSidebar } from "@/hooks/useChatSidebar";
-import { useVideoProgress } from "@/hooks/useVideoProgress";
-import { formatProgressText } from "@/utils/progressUtils";
-import { UserAvatarMenu } from "./MainHeader";
+import { MessageSquare, PanelRight } from "lucide-react"
+import { Link, useNavigate } from "react-router-dom"
+import { TooltipButton } from "@/components/TooltipButton"
+import { useChatSidebar } from "@/hooks/useChatSidebar"
+import { useVideoProgress } from "@/hooks/useVideoProgress"
+import { formatProgressText } from "@/utils/progressUtils"
+import { UserAvatarMenu } from "./MainHeader"
 
-export const VideoHeader = memo(function VideoHeader({
-	video,
-	onToggleSidebar,
-	isSidebarOpen,
-}) {
-	const _navigate = useNavigate();
-	const { toggleChat } = useChatSidebar();
+export const VideoHeader = function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
+	const _navigate = useNavigate()
+	const { toggleChat } = useChatSidebar()
 
 	// Use chapter-based progress from the hook
-	const { progress } = useVideoProgress(video?.uuid);
+	const { progress } = useVideoProgress(video?.uuid)
 
 	return (
 		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-border shadow-sm">
@@ -25,13 +20,7 @@ export const VideoHeader = memo(function VideoHeader({
 					{/* Logo Section */}
 					<div className="flex-shrink-0 mr-4">
 						<Link to="/" className="block">
-							<img
-								src="/logo.png"
-								alt="Talimio Logo"
-								width={32}
-								height={32}
-								className="object-contain"
-							/>
+							<img src="/logo.png" alt="Talimio Logo" width={32} height={32} className="object-contain" />
 						</Link>
 					</div>
 
@@ -40,9 +29,7 @@ export const VideoHeader = memo(function VideoHeader({
 
 					{/* Video Info Section */}
 					<div className="flex-1 min-w-0">
-						<h1 className="text-base font-semibold text-slate-800 truncate">
-							{video?.title || "Loading..."}
-						</h1>
+						<h1 className="text-base font-semibold text-slate-800 truncate">{video?.title || "Loading..."}</h1>
 						{video && (
 							<div className="flex items-center mt-1">
 								<div className="w-32 md:w-48 bg-slate-200 rounded-full h-1.5 overflow-hidden">
@@ -54,9 +41,7 @@ export const VideoHeader = memo(function VideoHeader({
 								<span className="ml-2 text-xs font-medium text-slate-600">
 									{formatProgressText(progress.percentage)}
 								</span>
-								<span className="ml-3 text-xs text-slate-500">
-									{video.channelName || video.channel}
-								</span>
+								<span className="ml-3 text-xs text-slate-500">{video.channelName || video.channel}</span>
 							</div>
 						)}
 					</div>
@@ -99,5 +84,5 @@ export const VideoHeader = memo(function VideoHeader({
 				</div>
 			</div>
 		</header>
-	);
-});
+	)
+}

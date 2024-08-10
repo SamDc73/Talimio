@@ -61,7 +61,7 @@ export function useCourseContext() {
 		setLessonId(null)
 		setFetchingLesson(null)
 		setMode("outline") // Reset mode too
-	}, [location.pathname])
+	}, [location.pathname, fetchingLesson])
 
 	// Determine if we should show course layout
 	const showCourseLayout = courseId !== null

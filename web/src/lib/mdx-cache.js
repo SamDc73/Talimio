@@ -3,7 +3,7 @@
  * Stores compiled MDX components to prevent recompilation
  * React 19 compatible - no memoization needed
  */
-class MDXCache {
+class MdxCache {
 	constructor() {
 		this.cache = new Map()
 		this.compiling = new Map()
@@ -94,10 +94,9 @@ class MDXCache {
 }
 
 // Export singleton instance
-export const mdxCache = new MDXCache()
+export const mdxCache = new MdxCache()
 
 // For debugging in development
 if (process.env.NODE_ENV === "development") {
 	window.mdxCache = mdxCache
-	console.log("MDX Cache available at window.mdxCache")
 }

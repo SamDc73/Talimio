@@ -1,4 +1,4 @@
-import CompletionCheckbox from "../sidebar/CompletionCheckbox";
+import CompletionCheckbox from "../sidebar/CompletionCheckbox"
 
 /**
  * InteractiveListItem - Reusable pattern for list items with interactive elements
@@ -24,7 +24,7 @@ export function InteractiveListItem({
 	variant = "default",
 	className = "",
 }) {
-	const baseClasses = `flex items-center gap-3 ${isActive ? "bg-blue-50" : ""} ${className}`;
+	const baseClasses = `flex items-center gap-3 ${isActive ? "bg-blue-50" : ""} ${className}`
 
 	return (
 		<div className={baseClasses}>
@@ -33,21 +33,17 @@ export function InteractiveListItem({
 					asDiv={true} // Always true in this context to avoid nesting
 					isCompleted={checkbox.isCompleted}
 					onClick={(e) => {
-						e.stopPropagation();
-						onToggle?.();
+						e.stopPropagation()
+						onToggle?.()
 					}}
 					variant={variant}
 				/>
 			)}
-			<button
-				type="button"
-				onClick={onClick}
-				className="flex-1 text-left hover:underline"
-			>
+			<button type="button" onClick={onClick} className="flex-1 text-left hover:underline">
 				{children}
 			</button>
 		</div>
-	);
+	)
 }
 
-export default InteractiveListItem;
+export default InteractiveListItem

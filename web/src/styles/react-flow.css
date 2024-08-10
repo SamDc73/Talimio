@@ -2,14 +2,11 @@
 .react-flow__attribution,
 .react-flow__watermark,
 .react-flow__viewport > a[href*="xyflow"],
+.react-flow__viewport > div[style*="position: absolute"][style*="bottom: 0"][style*="right: 0"],
 .react-flow__viewport
-	> div[style*="position: absolute"][style*="bottom: 0"][style*="right: 0"],
-.react-flow__viewport
-	> div:last-child:not(.react-flow__nodes):not(.react-flow__edges):not(
-		.react-flow__background
-	):not(.react-flow__selection):not(.react-flow__controls):not(
-		.react-flow__minimap
-	) {
+	> div:last-child:not(.react-flow__nodes):not(.react-flow__edges):not(.react-flow__background):not(
+		.react-flow__selection
+	):not(.react-flow__controls):not(.react-flow__minimap) {
 	display: none;
 	opacity: 0;
 	visibility: hidden;

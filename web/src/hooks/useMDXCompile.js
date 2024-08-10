@@ -143,7 +143,7 @@ export function useMDXCompile(content) {
 		}
 
 		// Compile MDX
-		const compileMDX = async () => {
+		const compileMdx = async () => {
 			setIsLoading(true)
 
 			const compilationPromise = (async () => {
@@ -165,7 +165,7 @@ export function useMDXCompile(content) {
 					})
 
 					// Create a simple wrapper component
-					const MDXComponent = (props) => {
+					const MdxComponent = (props) => {
 						const ContentComponent = mdxModule.default
 
 						// Merge any exported components with the provided components
@@ -183,9 +183,9 @@ export function useMDXCompile(content) {
 					}
 
 					// Cache the component
-					mdxCache.set(content, MDXComponent)
+					mdxCache.set(content, MdxComponent)
 
-					return MDXComponent
+					return MdxComponent
 				} catch (err) {
 					// Simple error handling
 					let errorMessage = "Failed to compile MDX content"
@@ -203,7 +203,6 @@ export function useMDXCompile(content) {
 					mdxCache.compiling.delete(mdxCache.getKey(content))
 
 					if (process.env.NODE_ENV === "development") {
-						console.error("[useMDXCompile] Compilation error:", err)
 					}
 
 					throw new Error(errorMessage)
@@ -232,7 +231,7 @@ export function useMDXCompile(content) {
 				})
 		}
 
-		compileMDX()
+		compileMdx()
 
 		// Cleanup
 		return () => {

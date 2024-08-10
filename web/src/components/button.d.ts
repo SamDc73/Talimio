@@ -1,27 +1,14 @@
-import type {
-	ButtonHTMLAttributes,
-	ForwardRefExoticComponent,
-	ReactNode,
-	RefAttributes,
-} from "react";
+import type { ButtonHTMLAttributes, ForwardRefExoticComponent, ReactNode, RefAttributes } from "react"
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-	variant?:
-		| "default"
-		| "destructive"
-		| "outline"
-		| "secondary"
-		| "ghost"
-		| "link";
-	size?: "default" | "sm" | "lg" | "icon";
-	children?: ReactNode;
-	className?: string;
-	asChild?: boolean;
+	variant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link"
+	size?: "default" | "sm" | "lg" | "icon"
+	children?: ReactNode
+	className?: string
+	asChild?: boolean
 }
 
-declare const Button: ForwardRefExoticComponent<
-	ButtonProps & RefAttributes<HTMLButtonElement>
->;
+declare const Button: ForwardRefExoticComponent<ButtonProps & RefAttributes<HTMLButtonElement>>
 
-export { Button };
-export default Button;
+export { Button }
+export default Button

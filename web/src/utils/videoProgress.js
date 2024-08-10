@@ -9,8 +9,8 @@
  * @returns {number} Progress percentage (0-100)
  */
 export function calculateVideoProgress(currentTime, duration) {
-	if (!duration || duration <= 0) return 0;
-	return Math.round((currentTime / duration) * 100);
+	if (!duration || duration <= 0) return 0
+	return Math.round((currentTime / duration) * 100)
 }
 
 /**
@@ -19,17 +19,17 @@ export function calculateVideoProgress(currentTime, duration) {
  * @returns {string} Formatted duration string
  */
 export function formatDuration(seconds) {
-	if (!seconds || seconds < 0) return "0:00";
+	if (!seconds || seconds < 0) return "0:00"
 
-	const hours = Math.floor(seconds / 3600);
-	const minutes = Math.floor((seconds % 3600) / 60);
-	const secs = Math.floor(seconds % 60);
+	const hours = Math.floor(seconds / 3600)
+	const minutes = Math.floor((seconds % 3600) / 60)
+	const secs = Math.floor(seconds % 60)
 
 	if (hours > 0) {
-		return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+		return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
 	}
 
-	return `${minutes}:${secs.toString().padStart(2, "0")}`;
+	return `${minutes}:${secs.toString().padStart(2, "0")}`
 }
 
 /**
@@ -39,6 +39,6 @@ export function formatDuration(seconds) {
  * @returns {string} Progress display text like "5:30 / 10:00 (55%)"
  */
 export function getProgressDisplayText(currentTime, duration) {
-	const progress = calculateVideoProgress(currentTime, duration);
-	return `${formatDuration(currentTime)} / ${formatDuration(duration)} (${progress}%)`;
+	const progress = calculateVideoProgress(currentTime, duration)
+	return `${formatDuration(currentTime)} / ${formatDuration(duration)} (${progress}%)`
 }

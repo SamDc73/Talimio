@@ -1,49 +1,50 @@
-import { ChevronLeft, Mail } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { ChevronLeft, Mail } from "lucide-react"
+import { useEffect, useState } from "react"
+
+import { useAuth } from "@/hooks/useAuth"
 
 const PasswordResetForm = ({ onBack }) => {
-	const [email, setEmail] = useState("");
-	const [loading, setLoading] = useState(false);
-	const [error, setError] = useState("");
-	const [successMessage, setSuccessMessage] = useState("");
-	const { resetPassword } = useAuth();
+	const [email, setEmail] = useState("")
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState("")
+	const [successMessage, setSuccessMessage] = useState("")
+	const { resetPassword } = useAuth()
 
 	// Check if auth is enabled
-	const authEnabled = import.meta.env.VITE_ENABLE_AUTH === "true";
+	const authEnabled = import.meta.env.VITE_ENABLE_AUTH === "true"
 
 	useEffect(() => {
 		if (!authEnabled) {
-			setError("Password reset is not available in single-user mode");
+			setError("Password reset is not available in single-user mode")
 		}
-	}, []);
+	}, [])
 
 	const handleSubmit = async (e) => {
-		e.preventDefault();
+		e.preventDefault()
 
 		if (!authEnabled) {
-			setError("Password reset is not available in single-user mode");
-			return;
+			setError("Password reset is not available in single-user mode")
+			return
 		}
 
-		setError("");
-		setSuccessMessage("");
-		setLoading(true);
+		setError("")
+		setSuccessMessage("")
+		setLoading(true)
 
 		try {
-			const result = await resetPassword(email);
+			const result = await resetPassword(email)
 			if (result.success) {
-				setSuccessMessage("Password reset instructions sent to your email!");
-				setEmail("");
+				setSuccessMessage("Password reset instructions sent to your email!")
+				setEmail("")
 			} else {
-				setError(result.error || "Failed to send reset email");
+				setError(result.error || "Failed to send reset email")
 			}
 		} catch (_err) {
-			setError("An unexpected error occurred");
+			setError("An unexpected error occurred")
 		} finally {
-			setLoading(false);
+			setLoading(false)
 		}
-	};
+	}
 
 	return (
 		<div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -53,22 +54,15 @@ const PasswordResetForm = ({ onBack }) => {
 					<div className="text-center space-y-2">
 						<h1 className="text-2xl font-bold">Reset Password</h1>
 						<p className="text-muted-foreground">
-							Enter your email address and we'll send you instructions to reset
-							your password
+							Enter your email address and we'll send you instructions to reset your password
 						</p>
 					</div>
 
 					{/* Error/Success Messages */}
-					{error && (
-						<div className="bg-destructive/10 text-destructive px-4 py-2 rounded-md text-sm">
-							{error}
-						</div>
-					)}
+					{error && <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-md text-sm">{error}</div>}
 
 					{successMessage && (
-						<div className="bg-primary/10 text-primary px-4 py-2 rounded-md text-sm">
-							{successMessage}
-						</div>
+						<div className="bg-primary/10 text-primary px-4 py-2 rounded-md text-sm">{successMessage}</div>
 					)}
 
 					{/* Form */}
@@ -115,7 +109,7 @@ const PasswordResetForm = ({ onBack }) => {
 				</div>
 			</div>
 		</div>
-	);
-};
+	)
+}
 
-export default PasswordResetForm;
+export default PasswordResetForm

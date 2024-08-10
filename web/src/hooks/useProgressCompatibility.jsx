@@ -5,11 +5,11 @@
  * (course/module/lesson-based) progress systems during the migration period.
  */
 
-import { createContext, useContext, useEffect, useState } from "react";
-import { progressUtils, useCourseProgressSafe } from "./useCourseProgress";
-import { useProgressSafe } from "./useProgress";
+import { createContext, useContext, useEffect, useState } from "react"
+import { progressUtils, useCourseProgressSafe } from "./useCourseProgress"
+import { useProgressSafe } from "./useProgress"
 
-const ProgressCompatibilityContext = createContext(null);
+const ProgressCompatibilityContext = createContext(null)
 
 /**
  * Progress Compatibility Provider that can handle both systems
@@ -30,28 +30,26 @@ export function ProgressCompatibilityProvider({
 	useLegacyProgress = false,
 	mappings = {},
 }) {
-	const [activeSystem, setActiveSystem] = useState("auto");
-	const [migrationData, setMigrationData] = useState({});
+	const [activeSystem, setActiveSystem] = useState("auto")
+	const [migrationData, setMigrationData] = useState({})
 
 	// Determine which system to use
-	const shouldUseNewProgress =
-		useNewProgress || (!useLegacyProgress && courseId);
-	const shouldUseLegacyProgress =
-		useLegacyProgress || (!useNewProgress && roadmapId && !courseId);
+	const shouldUseNewProgress = useNewProgress || (!useLegacyProgress && courseId)
+	const shouldUseLegacyProgress = useLegacyProgress || (!useNewProgress && roadmapId && !courseId)
 
 	// Get both progress systems (safely)
-	const newProgress = useCourseProgressSafe();
-	const legacyProgress = useProgressSafe();
+	const newProgress = useCourseProgressSafe()
+	const legacyProgress = useProgressSafe()
 
 	useEffect(() => {
 		if (shouldUseNewProgress) {
-			setActiveSystem("new");
+			setActiveSystem("new")
 		} else if (shouldUseLegacyProgress) {
-			setActiveSystem("legacy");
+			setActiveSystem("legacy")
 		} else {
-			setActiveSystem("none");
+			setActiveSystem("none")
 		}
-	}, [shouldUseNewProgress, shouldUseLegacyProgress]);
+	}, [shouldUseNewProgress, shouldUseLegacyProgress])
 
 	/**
 	 * Unified progress interface that works with both systems
@@ -73,99 +71,89 @@ export function ProgressCompatibilityProvider({
 
 		// Loading and error states
 		isLoading:
-			activeSystem === "new"
-				? newProgress.isLoading
-				: activeSystem === "legacy"
-					? legacyProgress.isLoading
-					: false,
+			activeSystem === "new" ? newProgress.isLoading : activeSystem === "legacy" ? legacyProgress.isLoading : false,
 
-		error:
-			activeSystem === "new"
-				? newProgress.error
-				: activeSystem === "legacy"
-					? legacyProgress.error
-					: null,
+		error: activeSystem === "new" ? newProgress.error : activeSystem === "legacy" ? legacyProgress.error : null,
 
 		// Lesson completion checking (unified interface)
 		isLessonCompleted: (moduleId, lessonId) => {
 			if (activeSystem === "new") {
-				return newProgress.isLessonCompleted(moduleId, lessonId);
+				return newProgress.isLessonCompleted(moduleId, lessonId)
 			}
 			if (activeSystem === "legacy") {
 				// Convert new format to legacy nodeId
-				const nodeId = convertToLegacyNodeId(moduleId, lessonId, mappings);
-				return legacyProgress.isLessonCompleted(nodeId);
+				const nodeId = convertToLegacyNodeId(moduleId, lessonId, mappings)
+				return legacyProgress.isLessonCompleted(nodeId)
 			}
-			return false;
+			return false
 		},
 
 		// Lesson status getting (unified interface)
 		getLessonStatus: (moduleId, lessonId) => {
 			if (activeSystem === "new") {
-				return newProgress.getLessonStatus(moduleId, lessonId);
+				return newProgress.getLessonStatus(moduleId, lessonId)
 			}
 			if (activeSystem === "legacy") {
-				const nodeId = convertToLegacyNodeId(moduleId, lessonId, mappings);
-				const legacyStatus =
-					legacyProgress.lessonStatuses[nodeId] || "not_started";
-				return progressUtils.convertLegacyStatus(legacyStatus);
+				const nodeId = convertToLegacyNodeId(moduleId, lessonId, mappings)
+				const legacyStatus = legacyProgress.lessonStatuses[nodeId] || "not_started"
+				return progressUtils.convertLegacyStatus(legacyStatus)
 			}
-			return "not_started";
+			return "not_started"
 		},
 
 		// Lesson completion toggling (unified interface)
 		toggleLessonCompletion: async (moduleId, lessonId) => {
 			if (activeSystem === "new") {
-				return await newProgress.toggleLessonCompletion(moduleId, lessonId);
+				return await newProgress.toggleLessonCompletion(moduleId, lessonId)
 			}
 			if (activeSystem === "legacy") {
-				const nodeId = convertToLegacyNodeId(moduleId, lessonId, mappings);
-				return await legacyProgress.toggleLessonCompletion(nodeId);
+				const nodeId = convertToLegacyNodeId(moduleId, lessonId, mappings)
+				return await legacyProgress.toggleLessonCompletion(nodeId)
 			}
-			return Promise.resolve();
+			return Promise.resolve()
 		},
 
 		// Mark lesson as completed (unified interface)
 		markLessonCompleted: async (moduleId, lessonId) => {
 			if (activeSystem === "new") {
-				return await newProgress.markLessonCompleted(moduleId, lessonId);
+				return await newProgress.markLessonCompleted(moduleId, lessonId)
 			}
 			if (activeSystem === "legacy") {
-				const nodeId = convertToLegacyNodeId(moduleId, lessonId, mappings);
-				return await legacyProgress.toggleLessonCompletion(nodeId);
+				const nodeId = convertToLegacyNodeId(moduleId, lessonId, mappings)
+				return await legacyProgress.toggleLessonCompletion(nodeId)
 			}
-			return Promise.resolve();
+			return Promise.resolve()
 		},
 
 		// Mark lesson as in progress (unified interface)
 		markLessonInProgress: async (moduleId, lessonId) => {
 			if (activeSystem === "new") {
-				return await newProgress.markLessonInProgress(moduleId, lessonId);
+				return await newProgress.markLessonInProgress(moduleId, lessonId)
 			}
 			if (activeSystem === "legacy") {
 				// Legacy system doesn't have explicit "in progress" - just mark as not completed
-				return Promise.resolve();
+				return Promise.resolve()
 			}
-			return Promise.resolve();
+			return Promise.resolve()
 		},
 
 		// Get module progress (new system only)
 		getModuleProgress: (moduleId) => {
 			if (activeSystem === "new") {
-				return newProgress.getModuleProgress(moduleId);
+				return newProgress.getModuleProgress(moduleId)
 			}
-			return getDefaultModuleProgress();
+			return getDefaultModuleProgress()
 		},
 
 		// Refresh progress data
 		refreshProgress: async () => {
 			if (activeSystem === "new") {
-				return await newProgress.refreshProgress();
+				return await newProgress.refreshProgress()
 			}
 			if (activeSystem === "legacy") {
-				return await legacyProgress.fetchAllProgressData(roadmapId);
+				return await legacyProgress.fetchAllProgressData(roadmapId)
 			}
-			return Promise.resolve();
+			return Promise.resolve()
 		},
 
 		// Raw access to underlying systems (for migration purposes)
@@ -176,78 +164,61 @@ export function ProgressCompatibilityProvider({
 		migrationUtils: {
 			async migrateFromLegacyToNew() {
 				if (activeSystem !== "legacy" || !courseId) {
-					throw new Error(
-						"Migration only available from legacy system with valid courseId",
-					);
+					throw new Error("Migration only available from legacy system with valid courseId")
 				}
+				// Get legacy data
+				const legacyData = legacyProgress.lessonStatuses
 
-				try {
-					// Get legacy data
-					const legacyData = legacyProgress.lessonStatuses;
+				// Convert to new format
+				const migrationPromises = Object.entries(legacyData).map(async ([nodeId, status]) => {
+					const { moduleId, lessonId } = convertFromLegacyNodeId(nodeId, mappings)
+					if (moduleId && lessonId) {
+						const newStatus = progressUtils.convertLegacyStatus(status)
+						// Would need to call new progress API here
+						return { moduleId, lessonId, status: newStatus }
+					}
+					return null
+				})
 
-					// Convert to new format
-					const migrationPromises = Object.entries(legacyData).map(
-						async ([nodeId, status]) => {
-							const { moduleId, lessonId } = convertFromLegacyNodeId(
-								nodeId,
-								mappings,
-							);
-							if (moduleId && lessonId) {
-								const newStatus = progressUtils.convertLegacyStatus(status);
-								// Would need to call new progress API here
-								return { moduleId, lessonId, status: newStatus };
-							}
-							return null;
-						},
-					);
+				const migrationResults = await Promise.all(migrationPromises)
+				const validMigrations = migrationResults.filter(Boolean)
 
-					const migrationResults = await Promise.all(migrationPromises);
-					const validMigrations = migrationResults.filter(Boolean);
+				setMigrationData({
+					migratedCount: validMigrations.length,
+					totalCount: Object.keys(legacyData).length,
+					results: validMigrations,
+				})
 
-					setMigrationData({
-						migratedCount: validMigrations.length,
-						totalCount: Object.keys(legacyData).length,
-						results: validMigrations,
-					});
-
-					return validMigrations;
-				} catch (error) {
-					console.error("Progress migration failed:", error);
-					throw error;
-				}
+				return validMigrations
 			},
 
 			getMigrationData() {
-				return migrationData;
+				return migrationData
 			},
 		},
-	};
+	}
 
 	return (
-		<ProgressCompatibilityContext.Provider value={unifiedProgress}>
-			{children}
-		</ProgressCompatibilityContext.Provider>
-	);
+		<ProgressCompatibilityContext.Provider value={unifiedProgress}>{children}</ProgressCompatibilityContext.Provider>
+	)
 }
 
 /**
  * Hook to use the unified progress system
  */
 export function useUnifiedProgress() {
-	const context = useContext(ProgressCompatibilityContext);
+	const context = useContext(ProgressCompatibilityContext)
 	if (context === null) {
-		throw new Error(
-			"useUnifiedProgress must be used within a ProgressCompatibilityProvider",
-		);
+		throw new Error("useUnifiedProgress must be used within a ProgressCompatibilityProvider")
 	}
-	return context;
+	return context
 }
 
 /**
  * Safe version of the unified progress hook
  */
 export function useUnifiedProgressSafe() {
-	const context = useContext(ProgressCompatibilityContext);
+	const context = useContext(ProgressCompatibilityContext)
 	if (context === null) {
 		return {
 			activeSystem: "none",
@@ -267,13 +238,12 @@ export function useUnifiedProgressSafe() {
 			rawNewProgress: null,
 			rawLegacyProgress: null,
 			migrationUtils: {
-				migrateFromLegacyToNew: () =>
-					Promise.reject(new Error("No active progress system")),
+				migrateFromLegacyToNew: () => Promise.reject(new Error("No active progress system")),
 				getMigrationData: () => ({}),
 			},
-		};
+		}
 	}
-	return context;
+	return context
 }
 
 // Helper functions
@@ -286,7 +256,7 @@ function getDefaultProgress() {
 		totalLessons: 0,
 		completedLessons: 0,
 		progressPercentage: 0,
-	};
+	}
 }
 
 function getDefaultModuleProgress() {
@@ -295,57 +265,52 @@ function getDefaultModuleProgress() {
 		completedLessons: 0,
 		inProgressLessons: 0,
 		progressPercentage: 0,
-	};
+	}
 }
 
 function adaptLegacyProgressToCourse(legacyProgress) {
-	if (!legacyProgress) return getDefaultProgress();
+	if (!legacyProgress) return getDefaultProgress()
 
 	return {
 		totalModules: 1, // Legacy system treats roadmap as single module
 		completedModules: legacyProgress.progressPercentage === 100 ? 1 : 0,
-		inProgressModules:
-			legacyProgress.progressPercentage > 0 &&
-			legacyProgress.progressPercentage < 100
-				? 1
-				: 0,
+		inProgressModules: legacyProgress.progressPercentage > 0 && legacyProgress.progressPercentage < 100 ? 1 : 0,
 		totalLessons: legacyProgress.totalLessons || 0,
 		completedLessons: legacyProgress.completedLessons || 0,
 		progressPercentage: legacyProgress.progressPercentage || 0,
-	};
+	}
 }
 
 function convertToLegacyNodeId(moduleId, lessonId, mappings) {
 	// Check if we have a direct mapping
-	const mappingKey = `${moduleId}:${lessonId}`;
+	const mappingKey = `${moduleId}:${lessonId}`
 	if (mappings[mappingKey]) {
-		return mappings[mappingKey];
+		return mappings[mappingKey]
 	}
 
 	// Fallback: use lessonId as nodeId
-	return lessonId;
+	return lessonId
 }
 
 function convertFromLegacyNodeId(nodeId, mappings) {
 	// Check reverse mappings
 	for (const [newKey, legacyId] of Object.entries(mappings)) {
 		if (legacyId === nodeId) {
-			const [moduleId, lessonId] = newKey.split(":");
-			return { moduleId, lessonId };
+			const [moduleId, lessonId] = newKey.split(":")
+			return { moduleId, lessonId }
 		}
 	}
 
 	// Fallback: treat nodeId as lessonId with unknown moduleId
-	return { moduleId: null, lessonId: nodeId };
+	return { moduleId: null, lessonId: nodeId }
 }
 
 /**
  * Higher-order component to provide progress compatibility
  */
-export function withProgressCompatibility(Component, options = {}) {
+export function withProgressCompatibility(_component, options = {}) {
 	return function ProgressCompatibleComponent(props) {
-		const { courseId, roadmapId, useNewProgress, useLegacyProgress, mappings } =
-			{ ...options, ...props };
+		const { courseId, roadmapId, useNewProgress, useLegacyProgress, mappings } = { ...options, ...props }
 
 		return (
 			<ProgressCompatibilityProvider
@@ -355,39 +320,39 @@ export function withProgressCompatibility(Component, options = {}) {
 				useLegacyProgress={useLegacyProgress}
 				mappings={mappings}
 			>
-				<Component {...props} />
+				<component {...props} />
 			</ProgressCompatibilityProvider>
-		);
-	};
+		)
+	}
 }
 
 /**
  * Hook for automatic progress system detection
  */
 export function useProgressSystemDetection(context = {}) {
-	const { courseId, roadmapId, moduleId, nodeId } = context;
+	const { courseId, roadmapId, moduleId, nodeId } = context
 
 	const detection = {
 		hasNewContext: Boolean(courseId && moduleId),
 		hasLegacyContext: Boolean(roadmapId || nodeId),
 		recommendedSystem: null,
 		confidence: 0,
-	};
-
-	if (detection.hasNewContext && !detection.hasLegacyContext) {
-		detection.recommendedSystem = "new";
-		detection.confidence = 0.9;
-	} else if (detection.hasLegacyContext && !detection.hasNewContext) {
-		detection.recommendedSystem = "legacy";
-		detection.confidence = 0.9;
-	} else if (detection.hasNewContext && detection.hasLegacyContext) {
-		// Both contexts available - prefer new system
-		detection.recommendedSystem = "new";
-		detection.confidence = 0.7;
-	} else {
-		detection.recommendedSystem = "none";
-		detection.confidence = 0;
 	}
 
-	return detection;
+	if (detection.hasNewContext && !detection.hasLegacyContext) {
+		detection.recommendedSystem = "new"
+		detection.confidence = 0.9
+	} else if (detection.hasLegacyContext && !detection.hasNewContext) {
+		detection.recommendedSystem = "legacy"
+		detection.confidence = 0.9
+	} else if (detection.hasNewContext && detection.hasLegacyContext) {
+		// Both contexts available - prefer new system
+		detection.recommendedSystem = "new"
+		detection.confidence = 0.7
+	} else {
+		detection.recommendedSystem = "none"
+		detection.confidence = 0
+	}
+
+	return detection
 }

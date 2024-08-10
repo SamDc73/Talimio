@@ -1,22 +1,14 @@
-import { ContentProgressBar } from "@/components/progress/ProgressBar";
-import { useProgress } from "@/hooks/useProgress";
-import { BaseCard } from "./BaseCard";
+import { ContentProgressBar } from "@/components/progress/ProgressBar"
+import { useProgress } from "@/hooks/useProgress"
+import { BaseCard } from "./BaseCard"
 
 /**
  * Content card with progressive enhancement for progress loading
  * Starts with static data, enhances with live progress
  */
-export function EnhancedContentCard({
-	id,
-	title,
-	description,
-	type,
-	staticProgress = 0,
-	tags = [],
-	...props
-}) {
-	const { data: liveProgress, isLoading } = useProgress([id]);
-	const progress = liveProgress?.[id] ?? staticProgress;
+export function EnhancedContentCard({ id, title, description, type, staticProgress = 0, tags = [], ...props }) {
+	const { data: liveProgress, isLoading } = useProgress([id])
+	const progress = liveProgress?.[id] ?? staticProgress
 
 	return (
 		<BaseCard {...props}>
@@ -39,9 +31,7 @@ export function EnhancedContentCard({
 				{/* Title and description */}
 				<div>
 					<h3 className="text-lg font-semibold text-gray-900 mb-1">{title}</h3>
-					{description && (
-						<p className="text-sm text-gray-600 line-clamp-2">{description}</p>
-					)}
+					{description && <p className="text-sm text-gray-600 line-clamp-2">{description}</p>}
 				</div>
 
 				{/* Tags */}
@@ -64,5 +54,5 @@ export function EnhancedContentCard({
 				</div>
 			</div>
 		</BaseCard>
-	);
+	)
 }

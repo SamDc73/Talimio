@@ -1,47 +1,42 @@
-import { motion } from "framer-motion";
-import { Sparkles, Wand2 } from "lucide-react";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/dialog";
-import { toast } from "@/hooks/use-toast";
-import { api } from "@/lib/apiClient";
+import { motion } from "framer-motion"
+import { Sparkles, Wand2 } from "lucide-react"
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+
+import { Button } from "@/components/button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/dialog"
+import { toast } from "@/hooks/use-toast"
+import { api } from "@/lib/apiClient"
 
 const RoadmapPromptModal = ({ open, onOpenChange, onRoadmapCreated }) => {
-	const [prompt, setPrompt] = useState("");
-	const [isGenerating, setIsGenerating] = useState(false);
-	const navigate = useNavigate();
+	const [prompt, setPrompt] = useState("")
+	const [isGenerating, setIsGenerating] = useState(false)
+	const navigate = useNavigate()
 
 	const handleSubmit = async (e) => {
-		e.preventDefault();
+		e.preventDefault()
 
 		if (!prompt.trim()) {
 			toast({
 				title: "Prompt Required",
 				description: "Please describe what you want to learn.",
 				variant: "destructive",
-			});
-			return;
+			})
+			return
 		}
 
-		setIsGenerating(true);
+		setIsGenerating(true)
 
 		try {
 			// Generate roadmap with AI using the prompt
 			const response = await api.post("/courses/", {
 				prompt: prompt.trim(),
-			});
+			})
 
 			toast({
 				title: "Course Generated!",
 				description: "Review and customize your learning course.",
-			});
+			})
 
 			// Navigate to course preview page for editing
 			navigate(`/course/preview/${response.id}`, {
@@ -49,31 +44,30 @@ const RoadmapPromptModal = ({ open, onOpenChange, onRoadmapCreated }) => {
 					isNew: true,
 					originalPrompt: prompt.trim(),
 				},
-			});
+			})
 
 			if (onRoadmapCreated) {
-				onRoadmapCreated(response);
+				onRoadmapCreated(response)
 			}
-			onOpenChange(false);
-			setPrompt("");
-		} catch (error) {
-			console.error("Error generating course:", error);
+			onOpenChange(false)
+			setPrompt("")
+		} catch (_error) {
 			toast({
 				title: "Generation Failed",
 				description: "Failed to generate course. Please try again.",
 				variant: "destructive",
-			});
+			})
 		} finally {
-			setIsGenerating(false);
+			setIsGenerating(false)
 		}
-	};
+	}
 
 	const handleClose = () => {
 		if (!isGenerating) {
-			setPrompt("");
-			onOpenChange(false);
+			setPrompt("")
+			onOpenChange(false)
 		}
-	};
+	}
 
 	return (
 		<Dialog open={open} onOpenChange={handleClose}>
@@ -86,8 +80,7 @@ const RoadmapPromptModal = ({ open, onOpenChange, onRoadmapCreated }) => {
 						Generate Learning Course
 					</DialogTitle>
 					<DialogDescription className="text-muted-foreground text-sm">
-						Tell us what you want to learn, and AI will create a personalized
-						course for you
+						Tell us what you want to learn, and AI will create a personalized course for you
 					</DialogDescription>
 				</DialogHeader>
 
@@ -103,16 +96,12 @@ const RoadmapPromptModal = ({ open, onOpenChange, onRoadmapCreated }) => {
 								disabled={isGenerating}
 								maxLength={500}
 							/>
-							<div className="absolute bottom-3 right-3 text-xs text-muted-foreground">
-								{prompt.length}/500
-							</div>
+							<div className="absolute bottom-3 right-3 text-xs text-muted-foreground">{prompt.length}/500</div>
 						</div>
 
 						{/* Example prompts */}
 						<div className="space-y-2">
-							<p className="text-xs text-muted-foreground font-medium">
-								💡 Example prompts:
-							</p>
+							<p className="text-xs text-muted-foreground font-medium">💡 Example prompts:</p>
 							<div className="flex flex-wrap gap-2">
 								{[
 									"Learn React and build modern web apps",
@@ -136,13 +125,7 @@ const RoadmapPromptModal = ({ open, onOpenChange, onRoadmapCreated }) => {
 
 					{/* Action Buttons */}
 					<div className="flex gap-3 pt-4">
-						<Button
-							type="button"
-							variant="outline"
-							onClick={handleClose}
-							className="flex-1"
-							disabled={isGenerating}
-						>
+						<Button type="button" variant="outline" onClick={handleClose} className="flex-1" disabled={isGenerating}>
 							Cancel
 						</Button>
 						<Button
@@ -151,11 +134,7 @@ const RoadmapPromptModal = ({ open, onOpenChange, onRoadmapCreated }) => {
 							disabled={isGenerating || !prompt.trim()}
 						>
 							{isGenerating ? (
-								<motion.div
-									className="flex items-center gap-2"
-									initial={{ opacity: 0 }}
-									animate={{ opacity: 1 }}
-								>
+								<motion.div className="flex items-center gap-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
 									<motion.div
 										className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
 										animate={{ rotate: 360 }}
@@ -179,13 +158,12 @@ const RoadmapPromptModal = ({ open, onOpenChange, onRoadmapCreated }) => {
 					{/* Info note */}
 					<div className="text-xs text-muted-foreground text-center p-3 bg-muted/50 rounded-lg">
 						<Sparkles className="h-3 w-3 inline mr-1" />
-						AI will generate a title, tags, and learning path. You'll be able to
-						edit everything on the next page.
+						AI will generate a title, tags, and learning path. You'll be able to edit everything on the next page.
 					</div>
 				</form>
 			</DialogContent>
 		</Dialog>
-	);
-};
+	)
+}
 
-export default RoadmapPromptModal;
+export default RoadmapPromptModal

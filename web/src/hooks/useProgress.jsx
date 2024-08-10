@@ -1,228 +1,177 @@
-import {
-	createContext,
-	useCallback,
-	useContext,
-	useEffect,
-	useState,
-} from "react";
-import { updateLessonStatus } from "../services/progressService";
-import useAppStore from "../stores/useAppStore";
-import { getCourseWithModules } from "../utils/courseDetection";
-import { useToast } from "./use-toast";
+import { createContext, useContext, useEffect, useState } from "react"
 
-const ProgressContext = createContext(null);
+import { updateLessonStatus } from "../services/progressService"
+import useAppStore from "../stores/useAppStore"
+import { getCourseWithModules } from "../utils/courseDetection"
+
+import { useToast } from "./use-toast"
+
+const ProgressContext = createContext(null)
 
 export function ProgressProvider({ children, courseId, isCourseMode = false }) {
-	const [lessonStatuses, setLessonStatuses] = useState({});
+	const [lessonStatuses, setLessonStatuses] = useState({})
 	const [courseProgress, setCourseProgress] = useState({
 		totalLessons: 0,
 		completedLessons: 0,
 		progressPercentage: 0,
-	});
-	const [isLoading, setIsLoading] = useState(false);
-	const [error, setError] = useState(null);
-	const [_detectedCourseMode, setDetectedCourseMode] = useState(null);
-	const { toast } = useToast();
+	})
+	const [isLoading, setIsLoading] = useState(false)
+	const [error, setError] = useState(null)
+	const [_detectedCourseMode, setDetectedCourseMode] = useState(null)
+	const { toast } = useToast()
 
 	// Note: We use getCourseWithModules for consistent course data fetching
 
-	const fetchAllProgressData = useCallback(
-		async (currentCourseId) => {
-			if (!currentCourseId) {
-				console.log("ProgressProvider - no courseId provided, skipping fetch");
-				setLessonStatuses({});
-				setCourseProgress({
-					totalLessons: 0,
-					completedLessons: 0,
-					progressPercentage: 0,
-				});
-				return;
+	const fetchAllProgressData = async (currentCourseId) => {
+		if (!currentCourseId) {
+			setLessonStatuses({})
+			setCourseProgress({
+				totalLessons: 0,
+				completedLessons: 0,
+				progressPercentage: 0,
+			})
+			return
+		}
+		setIsLoading(true)
+		setError(null)
+
+		try {
+			// First, fetch course structure
+			const { modules } = await getCourseWithModules(currentCourseId)
+
+			// Store detected mode for use in other functions - always true for course API
+			const detectedMode = true
+			setDetectedCourseMode(detectedMode)
+
+			// Validate modules array
+			if (!Array.isArray(modules)) {
+				throw new Error(`Invalid modules data: expected array, got ${typeof modules}`)
 			}
 
-			console.log(
-				"ProgressProvider - starting data fetch for courseId:",
-				currentCourseId,
-				"isCourseMode:",
-				isCourseMode,
-			);
-			setIsLoading(true);
-			setError(null);
+			// Get lesson completion from Zustand store
+			const lessonCompletion = useAppStore.getState().getCourseLessonCompletion(currentCourseId) || {}
 
-			try {
-				// First, fetch course structure
-				const { modules } = await getCourseWithModules(currentCourseId);
+			// For course mode, we need to collect all lessons from all modules
+			let allLessons = []
+			if (detectedMode) {
+				// Course mode: flatten the hierarchy (modules -> lessons)
+				for (const module of modules) {
+					// Skip adding module itself as a lesson - we only track actual lessons
 
-				// Store detected mode for use in other functions - always true for course API
-				const detectedMode = true;
-				setDetectedCourseMode(detectedMode);
-
-				// Validate modules array
-				if (!Array.isArray(modules)) {
-					throw new Error(
-						`Invalid modules data: expected array, got ${typeof modules}`,
-					);
-				}
-
-				// Get lesson completion from Zustand store
-				const lessonCompletion =
-					useAppStore.getState().getCourseLessonCompletion(currentCourseId) ||
-					{};
-
-				// For course mode, we need to collect all lessons from all modules
-				let allLessons = [];
-				if (detectedMode) {
-					// Course mode: flatten the hierarchy (modules -> lessons)
-					for (const module of modules) {
-						// Skip adding module itself as a lesson - we only track actual lessons
-
-						// Add all sub-lessons with their status from store
-						if (module.lessons && Array.isArray(module.lessons)) {
-							for (const lesson of module.lessons) {
-								allLessons.push({
-									id: lesson.id,
-									status: lessonCompletion[lesson.id]
-										? "completed"
-										: "not_started",
-									title: lesson.title,
-								});
-							}
+					// Add all sub-lessons with their status from store
+					if (module.lessons && Array.isArray(module.lessons)) {
+						for (const lesson of module.lessons) {
+							allLessons.push({
+								id: lesson.id,
+								status: lessonCompletion[lesson.id] ? "completed" : "not_started",
+								title: lesson.title,
+							})
 						}
 					}
-				} else {
-					// Legacy mode: modules are the lessons
-					allLessons = modules.map((module) => ({
-						id: module.id,
-						status: lessonCompletion[module.id] ? "completed" : "not_started",
-						title: module.title,
-					}));
 				}
-
-				// Transform to lesson statuses format
-				const statusMap = {};
-				for (const lesson of allLessons) {
-					statusMap[lesson.id] = lesson.status;
-				}
-				setLessonStatuses(statusMap);
-
-				// Calculate progress from all lessons
-				const totalLessons = allLessons.length;
-				const completedLessons = allLessons.filter(
-					(lesson) => lesson.status === "completed",
-				).length;
-				const progressPercentage =
-					totalLessons > 0
-						? Math.round((completedLessons / totalLessons) * 100)
-						: 0;
-
-				const progressResponse = {
-					courseId: currentCourseId,
-					totalLessons: totalLessons,
-					completedLessons: completedLessons,
-					progressPercentage: progressPercentage,
-				};
-
-				console.log("ProgressProvider - progress response:", progressResponse);
-				setCourseProgress(progressResponse);
-			} catch (err) {
-				console.error("ProgressProvider - fetch error:", err);
-				setError(err);
-				toast({
-					title: "Error",
-					description: err.message || "Failed to fetch progress data",
-					variant: "destructive",
-				});
-			} finally {
-				setIsLoading(false);
+			} else {
+				// Legacy mode: modules are the lessons
+				allLessons = modules.map((module) => ({
+					id: module.id,
+					status: lessonCompletion[module.id] ? "completed" : "not_started",
+					title: module.title,
+				}))
 			}
-		},
-		[toast, isCourseMode],
-	);
+
+			// Transform to lesson statuses format
+			const statusMap = {}
+			for (const lesson of allLessons) {
+				statusMap[lesson.id] = lesson.status
+			}
+			setLessonStatuses(statusMap)
+
+			// Calculate progress from all lessons
+			const totalLessons = allLessons.length
+			const completedLessons = allLessons.filter((lesson) => lesson.status === "completed").length
+			const progressPercentage = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0
+
+			const progressResponse = {
+				courseId: currentCourseId,
+				totalLessons: totalLessons,
+				completedLessons: completedLessons,
+				progressPercentage: progressPercentage,
+			}
+			setCourseProgress(progressResponse)
+		} catch (err) {
+			setError(err)
+			toast({
+				title: "Error",
+				description: err.message || "Failed to fetch progress data",
+				variant: "destructive",
+			})
+		} finally {
+			setIsLoading(false)
+		}
+	}
 
 	useEffect(() => {
-		fetchAllProgressData(courseId);
-	}, [courseId, fetchAllProgressData]);
+		fetchAllProgressData(courseId)
+	}, [courseId, fetchAllProgressData])
 
-	const toggleLessonCompletion = useCallback(
-		async (lessonId, moduleId) => {
-			if (!courseId || !moduleId) return;
+	const toggleLessonCompletion = async (lessonId, moduleId) => {
+		if (!courseId || !moduleId) return
 
-			const originalLessonStatuses = { ...lessonStatuses };
-			const originalCourseProgress = { ...courseProgress };
+		const originalLessonStatuses = { ...lessonStatuses }
+		const originalCourseProgress = { ...courseProgress }
 
-			try {
-				const currentStatus = lessonStatuses[lessonId] || "not_started";
-				const newStatus =
-					currentStatus === "completed" ? "not_started" : "completed";
+		try {
+			const currentStatus = lessonStatuses[lessonId] || "not_started"
+			const newStatus = currentStatus === "completed" ? "not_started" : "completed"
 
-				// Update UI immediately
-				setLessonStatuses((prev) => ({
-					...prev,
-					[lessonId]: newStatus,
-				}));
+			// Update UI immediately
+			setLessonStatuses((prev) => ({
+				...prev,
+				[lessonId]: newStatus,
+			}))
 
-				// Update Zustand store for persistence
-				const isCompleted = newStatus === "completed";
-				useAppStore
-					.getState()
-					.setCourseLessonStatus(courseId, lessonId, isCompleted);
+			// Update Zustand store for persistence
+			const isCompleted = newStatus === "completed"
+			useAppStore.getState().setCourseLessonStatus(courseId, lessonId, isCompleted)
 
-				// Calculate client-side progress for immediate feedback
-				const completedDelta = newStatus === "completed" ? 1 : -1;
-				const newCompletedLessons = Math.max(
-					0,
-					courseProgress.completedLessons + completedDelta,
-				);
-				const newPercentage = Math.round(
-					(newCompletedLessons / courseProgress.totalLessons) * 100,
-				);
+			// Calculate client-side progress for immediate feedback
+			const completedDelta = newStatus === "completed" ? 1 : -1
+			const newCompletedLessons = Math.max(0, courseProgress.completedLessons + completedDelta)
+			const newPercentage = Math.round((newCompletedLessons / courseProgress.totalLessons) * 100)
 
-				setCourseProgress((prev) => ({
-					...prev,
-					completedLessons: newCompletedLessons,
-					progressPercentage: newPercentage,
-				}));
+			setCourseProgress((prev) => ({
+				...prev,
+				completedLessons: newCompletedLessons,
+				progressPercentage: newPercentage,
+			}))
 
-				// Update server in background without waiting
-				const updatePromise = updateLessonStatus(
-					courseId,
-					moduleId,
-					lessonId,
-					newStatus,
-				);
+			// Update server in background without waiting
+			const updatePromise = updateLessonStatus(courseId, moduleId, lessonId, newStatus)
 
-				updatePromise.catch((err) => {
-					console.error("Failed to update lesson status:", err);
-					// Revert on error
-					setLessonStatuses(originalLessonStatuses);
-					setCourseProgress(originalCourseProgress);
-					toast({
-						title: "Error updating lesson",
-						description:
-							"Failed to update lesson status. Your progress has been reverted.",
-						variant: "destructive",
-					});
-				});
-			} catch (err) {
-				setLessonStatuses(originalLessonStatuses);
-				setCourseProgress(originalCourseProgress);
+			updatePromise.catch((_err) => {
+				// Revert on error
+				setLessonStatuses(originalLessonStatuses)
+				setCourseProgress(originalCourseProgress)
 				toast({
 					title: "Error updating lesson",
-					description:
-						err.message ||
-						"Failed to update lesson status. Your progress has been reverted to the last saved state.",
+					description: "Failed to update lesson status. Your progress has been reverted.",
 					variant: "destructive",
-				});
-			}
-		},
-		[courseId, lessonStatuses, courseProgress, toast],
-	);
+				})
+			})
+		} catch (err) {
+			setLessonStatuses(originalLessonStatuses)
+			setCourseProgress(originalCourseProgress)
+			toast({
+				title: "Error updating lesson",
+				description:
+					err.message || "Failed to update lesson status. Your progress has been reverted to the last saved state.",
+				variant: "destructive",
+			})
+		}
+	}
 
-	const isLessonCompleted = useCallback(
-		(lessonId) => {
-			return lessonStatuses[lessonId] === "completed";
-		},
-		[lessonStatuses],
-	);
+	const isLessonCompleted = (lessonId) => {
+		return lessonStatuses[lessonId] === "completed"
+	}
 
 	const value = {
 		lessonStatuses,
@@ -232,26 +181,22 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 		toggleLessonCompletion,
 		isLessonCompleted,
 		fetchAllProgressData,
-	};
+	}
 
-	return (
-		<ProgressContext.Provider value={value}>
-			{children}
-		</ProgressContext.Provider>
-	);
+	return <ProgressContext.Provider value={value}>{children}</ProgressContext.Provider>
 }
 
 export function useProgress() {
-	const context = useContext(ProgressContext);
+	const context = useContext(ProgressContext)
 	if (context === null) {
-		throw new Error("useProgress must be used within a ProgressProvider");
+		throw new Error("useProgress must be used within a ProgressProvider")
 	}
-	return context;
+	return context
 }
 
 // Hook that safely uses progress context (returns null values if not in a provider)
 export function useProgressSafe() {
-	const context = useContext(ProgressContext);
+	const context = useContext(ProgressContext)
 	if (context === null) {
 		return {
 			courseProgress: null,
@@ -260,7 +205,7 @@ export function useProgressSafe() {
 			toggleLessonCompletion: () => {},
 			isLessonCompleted: () => false,
 			refreshProgress: () => Promise.resolve(),
-		};
+		}
 	}
-	return context;
+	return context
 }

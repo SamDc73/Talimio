@@ -1,16 +1,10 @@
-import {
-	Files,
-	FileText,
-	GitBranch,
-	MessageSquare,
-	PanelLeft,
-} from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { useChatSidebar } from "@/hooks/useChatSidebar";
-import { cn } from "../../lib/utils";
-import { TooltipButton } from "../TooltipButton";
-import { UserAvatarMenu } from "./MainHeader";
+import { Files, FileText, GitBranch, MessageSquare, PanelLeft } from "lucide-react"
+import { useState } from "react"
+import { Link } from "react-router-dom"
+import { useChatSidebar } from "@/hooks/useChatSidebar"
+import { cn } from "../../lib/utils"
+import { TooltipButton } from "../TooltipButton"
+import { UserAvatarMenu } from "./MainHeader"
 
 export function CourseHeader({
 	courseName,
@@ -20,9 +14,9 @@ export function CourseHeader({
 	isOpen = true,
 	toggleSidebar = () => {},
 }) {
-	const { toggleChat } = useChatSidebar();
+	const { toggleChat } = useChatSidebar()
 
-	const [_showFullTitle, _setShowFullTitle] = useState(false);
+	const [_showFullTitle, _setShowFullTitle] = useState(false)
 
 	return (
 		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-border shadow-sm">
@@ -31,13 +25,7 @@ export function CourseHeader({
 					{/* Logo Section */}
 					<div className="flex-shrink-0 mr-4">
 						<Link to="/" className="block">
-							<img
-								src="/logo.png"
-								alt="Talimio Logo"
-								width={32}
-								height={32}
-								className="object-contain"
-							/>
+							<img src="/logo.png" alt="Talimio Logo" width={32} height={32} className="object-contain" />
 						</Link>
 					</div>
 
@@ -46,9 +34,7 @@ export function CourseHeader({
 
 					{/* Course Info Section */}
 					<div className="flex-1 min-w-0">
-						<h1 className="text-base font-semibold text-foreground truncate">
-							{courseName}
-						</h1>
+						<h1 className="text-base font-semibold text-foreground truncate">{courseName}</h1>
 						<div className="flex items-center mt-1">
 							<div className="w-32 md:w-48 bg-muted rounded-full h-1.5 overflow-hidden">
 								<div
@@ -56,9 +42,7 @@ export function CourseHeader({
 									style={{ width: `${progress}%` }}
 								/>
 							</div>
-							<span className="ml-2 text-xs font-medium text-muted-foreground">
-								{progress}%
-							</span>
+							<span className="ml-2 text-xs font-medium text-muted-foreground">{progress}%</span>
 						</div>
 					</div>
 
@@ -67,9 +51,7 @@ export function CourseHeader({
 						<button
 							className={cn(
 								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
-								mode === "outline"
-									? "bg-white text-foreground shadow-sm"
-									: "text-slate-500 hover:text-slate-700",
+								mode === "outline" ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-slate-700"
 							)}
 							type="button"
 							onClick={() => mode !== "outline" && onModeChange("outline")}
@@ -81,9 +63,7 @@ export function CourseHeader({
 						<button
 							className={cn(
 								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
-								mode === "track"
-									? "bg-white text-foreground shadow-sm"
-									: "text-slate-500 hover:text-slate-700",
+								mode === "track" ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-slate-700"
 							)}
 							type="button"
 							onClick={() => mode !== "track" && onModeChange("track")}
@@ -95,9 +75,7 @@ export function CourseHeader({
 						<button
 							className={cn(
 								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
-								mode === "documents"
-									? "bg-white text-foreground shadow-sm"
-									: "text-slate-500 hover:text-slate-700",
+								mode === "documents" ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-slate-700"
 							)}
 							type="button"
 							onClick={() => mode !== "documents" && onModeChange("documents")}
@@ -117,17 +95,13 @@ export function CourseHeader({
 								size="icon"
 								className="h-8 w-8 rounded-full"
 								onClick={() => {
-									const modes = ["outline", "track", "documents"];
-									const currentIndex = modes.indexOf(mode);
-									const nextIndex = (currentIndex + 1) % modes.length;
-									onModeChange(modes[nextIndex]);
+									const modes = ["outline", "track", "documents"]
+									const currentIndex = modes.indexOf(mode)
+									const nextIndex = (currentIndex + 1) % modes.length
+									onModeChange(modes[nextIndex])
 								}}
 								tooltipContent={`Switch View (${
-									mode === "outline"
-										? "Track"
-										: mode === "track"
-											? "Documents"
-											: "Outline"
+									mode === "outline" ? "Track" : mode === "track" ? "Documents" : "Outline"
 								} next)`}
 							>
 								{mode === "outline" ? (
@@ -148,9 +122,7 @@ export function CourseHeader({
 							onClick={toggleSidebar}
 							tooltipContent={`${isOpen ? "Hide" : "Show"} sidebar`}
 						>
-							<PanelLeft
-								className={`h-4 w-4 transition-transform duration-300 ${isOpen ? "" : "rotate-180"}`}
-							/>
+							<PanelLeft className={`h-4 w-4 transition-transform duration-300 ${isOpen ? "" : "rotate-180"}`} />
 						</TooltipButton>
 
 						{/* Chat Button */}
@@ -172,5 +144,5 @@ export function CourseHeader({
 				</div>
 			</div>
 		</header>
-	);
+	)
 }

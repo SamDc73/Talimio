@@ -1,19 +1,25 @@
-import { useCallback, useEffect } from "react";
-import { useTextSelection } from "@/components/ui/GlobalTextSelectionTooltip";
+import { useEffect } from "react"
 
-export const useTextSelectionTooltip = (onHighlight, onAskAI) => {
-	const { setSelectionHandlers } = useTextSelection();
+import { useTextSelection } from "@/components/ui/GlobalTextSelectionTooltip"
 
-	// Memoize the handlers to prevent infinite loops
-	const memoizedOnHighlight = useCallback(onHighlight, []);
-	const memoizedOnAskAI = useCallback(onAskAI, []);
+/**
+ * Hook to register text selection handlers for a component.
+ * This enables the global text selection tooltip with custom actions.
+ *
+ * @param {Function} onHighlight - Handler for when user clicks "Highlight"
+ * @param {Function} onAskAi - Handler for when user clicks "Ask AI"
+ */
+export const useTextSelectionTooltip = (onHighlight, onAskAi) => {
+	const { setSelectionHandlers } = useTextSelection()
 
+	// Effect to sync handlers with the global tooltip
+	// Per React docs: Effects are for external system sync
 	useEffect(() => {
-		setSelectionHandlers(memoizedOnHighlight, memoizedOnAskAI);
+		setSelectionHandlers(onHighlight, onAskAi)
 
 		return () => {
-			// Clear handlers when component unmounts
-			setSelectionHandlers(null, null);
-		};
-	}, [memoizedOnHighlight, memoizedOnAskAI, setSelectionHandlers]);
-};
+			// Clear handlers when component unmounts to prevent memory leaks
+			setSelectionHandlers(null, null)
+		}
+	}, [onHighlight, onAskAi, setSelectionHandlers])
+}

@@ -5,7 +5,7 @@
  * and new course URLs, ensuring smooth transition and backward compatibility.
  */
 
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom"
 
 /**
  * Generate course URL based on the simplified course structure
@@ -14,14 +14,14 @@ import { useLocation, useNavigate } from "react-router-dom";
  * @returns {string} Course URL
  */
 export function generateCourseUrl(courseId, lessonId = null) {
-	if (!courseId) return "/";
+	if (!courseId) return "/"
 
 	// If lesson ID provided, use simplified lesson URL
 	if (lessonId) {
-		return `/lesson/${lessonId}`;
+		return `/lesson/${lessonId}`
 	}
 
-	return `/course/${courseId}`;
+	return `/course/${courseId}`
 }
 
 /**
@@ -30,8 +30,8 @@ export function generateCourseUrl(courseId, lessonId = null) {
  * @returns {string} Roadmap URL
  */
 export function generateRoadmapUrl(roadmapId) {
-	if (!roadmapId) return "/";
-	return `/roadmap/${roadmapId}`;
+	if (!roadmapId) return "/"
+	return `/roadmap/${roadmapId}`
 }
 
 /**
@@ -41,13 +41,13 @@ export function generateRoadmapUrl(roadmapId) {
  * @returns {string} Preview URL
  */
 export function generatePreviewUrl(courseId, useLegacyFormat = false) {
-	if (!courseId) return "/";
+	if (!courseId) return "/"
 
 	if (useLegacyFormat) {
-		return `/roadmap/preview/${courseId}`;
+		return `/roadmap/preview/${courseId}`
 	}
 
-	return `/course/preview/${courseId}`;
+	return `/course/preview/${courseId}`
 }
 
 /**
@@ -56,21 +56,21 @@ export function generatePreviewUrl(courseId, useLegacyFormat = false) {
  * @returns {string} Equivalent course URL
  */
 export function convertRoadmapToCourseUrl(roadmapUrl) {
-	if (!roadmapUrl) return "/";
+	if (!roadmapUrl) return "/"
 
 	// Handle preview URLs
-	const previewMatch = roadmapUrl.match(/^\/roadmap\/preview\/(.+)$/);
+	const previewMatch = roadmapUrl.match(/^\/roadmap\/preview\/(.+)$/)
 	if (previewMatch) {
-		return `/course/preview/${previewMatch[1]}`;
+		return `/course/preview/${previewMatch[1]}`
 	}
 
 	// Handle regular roadmap URLs
-	const roadmapMatch = roadmapUrl.match(/^\/roadmap\/(.+)$/);
+	const roadmapMatch = roadmapUrl.match(/^\/roadmap\/(.+)$/)
 	if (roadmapMatch) {
-		return `/course/${roadmapMatch[1]}`;
+		return `/course/${roadmapMatch[1]}`
 	}
 
-	return roadmapUrl; // Return as-is if not a roadmap URL
+	return roadmapUrl // Return as-is if not a roadmap URL
 }
 
 /**
@@ -79,21 +79,21 @@ export function convertRoadmapToCourseUrl(roadmapUrl) {
  * @returns {string} Equivalent roadmap URL
  */
 export function convertCourseToRoadmapUrl(courseUrl) {
-	if (!courseUrl) return "/";
+	if (!courseUrl) return "/"
 
 	// Handle preview URLs
-	const previewMatch = courseUrl.match(/^\/course\/preview\/(.+)$/);
+	const previewMatch = courseUrl.match(/^\/course\/preview\/(.+)$/)
 	if (previewMatch) {
-		return `/roadmap/preview/${previewMatch[1]}`;
+		return `/roadmap/preview/${previewMatch[1]}`
 	}
 
 	// Handle course URLs (strip module/lesson parts for roadmap compatibility)
-	const courseMatch = courseUrl.match(/^\/course\/([^/]+)/);
+	const courseMatch = courseUrl.match(/^\/course\/([^/]+)/)
 	if (courseMatch) {
-		return `/roadmap/${courseMatch[1]}`;
+		return `/roadmap/${courseMatch[1]}`
 	}
 
-	return courseUrl; // Return as-is if not a course URL
+	return courseUrl // Return as-is if not a course URL
 }
 
 /**
@@ -103,7 +103,7 @@ export function convertCourseToRoadmapUrl(courseUrl) {
  */
 export function parseNavigationPath(pathname) {
 	// Parse simplified lesson URLs: /lesson/{lessonId}
-	const lessonMatch = pathname.match(/^\/lesson\/([^/]+)$/);
+	const lessonMatch = pathname.match(/^\/lesson\/([^/]+)$/)
 	if (lessonMatch) {
 		return {
 			type: "lesson",
@@ -111,13 +111,11 @@ export function parseNavigationPath(pathname) {
 			moduleId: null,
 			lessonId: lessonMatch[1],
 			isPreview: false,
-		};
+		}
 	}
 
 	// Parse course URLs (simplified: /course/{courseId}/lesson/{lessonId})
-	const courseMatch = pathname.match(
-		/^\/course\/([^/]+)(?:\/lesson\/([^/]+))?$/,
-	);
+	const courseMatch = pathname.match(/^\/course\/([^/]+)(?:\/lesson\/([^/]+))?$/)
 	if (courseMatch) {
 		return {
 			type: "course",
@@ -125,11 +123,11 @@ export function parseNavigationPath(pathname) {
 			moduleId: null, // No longer in URL
 			lessonId: courseMatch[2] || null,
 			isPreview: false,
-		};
+		}
 	}
 
 	// Parse course preview URLs
-	const coursePreviewMatch = pathname.match(/^\/course\/preview\/(.+)$/);
+	const coursePreviewMatch = pathname.match(/^\/course\/preview\/(.+)$/)
 	if (coursePreviewMatch) {
 		return {
 			type: "course",
@@ -137,11 +135,11 @@ export function parseNavigationPath(pathname) {
 			moduleId: null,
 			lessonId: null,
 			isPreview: true,
-		};
+		}
 	}
 
 	// Parse legacy roadmap URLs
-	const roadmapMatch = pathname.match(/^\/roadmap\/(.+)$/);
+	const roadmapMatch = pathname.match(/^\/roadmap\/(.+)$/)
 	if (roadmapMatch) {
 		return {
 			type: "roadmap",
@@ -150,11 +148,11 @@ export function parseNavigationPath(pathname) {
 			moduleId: null,
 			lessonId: null,
 			isPreview: false,
-		};
+		}
 	}
 
 	// Parse legacy roadmap preview URLs
-	const roadmapPreviewMatch = pathname.match(/^\/roadmap\/preview\/(.+)$/);
+	const roadmapPreviewMatch = pathname.match(/^\/roadmap\/preview\/(.+)$/)
 	if (roadmapPreviewMatch) {
 		return {
 			type: "roadmap",
@@ -163,7 +161,7 @@ export function parseNavigationPath(pathname) {
 			moduleId: null,
 			lessonId: null,
 			isPreview: true,
-		};
+		}
 	}
 
 	// Default for non-course/roadmap URLs
@@ -173,17 +171,17 @@ export function parseNavigationPath(pathname) {
 		moduleId: null,
 		lessonId: null,
 		isPreview: false,
-	};
+	}
 }
 
 /**
  * Hook for course-aware navigation
  */
 export function useCourseNavigation() {
-	const navigate = useNavigate();
-	const location = useLocation();
+	const navigate = useNavigate()
+	const location = useLocation()
 
-	const currentPath = parseNavigationPath(location.pathname);
+	const currentPath = parseNavigationPath(location.pathname)
 
 	return {
 		// Current navigation state
@@ -191,78 +189,72 @@ export function useCourseNavigation() {
 
 		// Navigation functions
 		goToCourse: (courseId) => {
-			navigate(generateCourseUrl(courseId));
+			navigate(generateCourseUrl(courseId))
 		},
 
 		goToLesson: (_courseId, lessonId) => {
 			// Use simplified lesson URL pattern
-			navigate(`/lesson/${lessonId}`);
+			navigate(`/lesson/${lessonId}`)
 		},
 
 		goToCoursePreview: (courseId) => {
-			navigate(generatePreviewUrl(courseId));
+			navigate(generatePreviewUrl(courseId))
 		},
 
 		// Legacy navigation (for backward compatibility)
 		goToRoadmap: (roadmapId) => {
-			navigate(generateRoadmapUrl(roadmapId));
+			navigate(generateRoadmapUrl(roadmapId))
 		},
 
 		goToRoadmapPreview: (roadmapId) => {
-			navigate(generatePreviewUrl(roadmapId, true));
+			navigate(generatePreviewUrl(roadmapId, true))
 		},
 
 		// Smart navigation that uses current format preference
 		goToSmartCourse: (courseId, lessonId = null) => {
 			// If currently on a legacy roadmap URL and no lesson, continue using legacy format
 			if (currentPath.type === "roadmap" && !lessonId) {
-				navigate(generateRoadmapUrl(courseId));
+				navigate(generateRoadmapUrl(courseId))
 			} else {
-				navigate(generateCourseUrl(courseId, lessonId));
+				navigate(generateCourseUrl(courseId, lessonId))
 			}
 		},
 
 		// Utility functions
 		isOnCourse: (courseId) => {
-			return currentPath.courseId === courseId;
+			return currentPath.courseId === courseId
 		},
 
 		isOnLesson: (courseId, lessonId) => {
-			return (
-				currentPath.courseId === courseId && currentPath.lessonId === lessonId
-			);
+			return currentPath.courseId === courseId && currentPath.lessonId === lessonId
 		},
-	};
+	}
 }
 
 /**
  * Hook for generating breadcrumb navigation
  */
 export function useBreadcrumbNavigation() {
-	const location = useLocation();
-	const navigate = useNavigate();
+	const location = useLocation()
+	const navigate = useNavigate()
 
-	const currentPath = parseNavigationPath(location.pathname);
+	const currentPath = parseNavigationPath(location.pathname)
 
-	const generateBreadcrumbs = (
-		courseData,
-		_moduleData = null,
-		lessonData = null,
-	) => {
+	const generateBreadcrumbs = (courseData, _moduleData = null, lessonData = null) => {
 		const breadcrumbs = [
 			{
 				label: "Home",
 				path: "/",
 				isActive: false,
 			},
-		];
+		]
 
 		if (courseData) {
 			breadcrumbs.push({
 				label: courseData.title || "Course",
 				path: generateCourseUrl(courseData.id),
 				isActive: !currentPath.moduleId && !currentPath.lessonId,
-			});
+			})
 		}
 
 		if (lessonData && currentPath.lessonId) {
@@ -270,17 +262,17 @@ export function useBreadcrumbNavigation() {
 				label: lessonData.title || lessonData.slug || "Lesson",
 				path: generateCourseUrl(currentPath.courseId, lessonData.id),
 				isActive: true,
-			});
+			})
 		}
 
-		return breadcrumbs;
-	};
+		return breadcrumbs
+	}
 
 	return {
 		current: currentPath,
 		generateBreadcrumbs,
 		navigateTo: (path) => navigate(path),
-	};
+	}
 }
 
 /**
@@ -290,19 +282,19 @@ export function useBreadcrumbNavigation() {
  * @returns {string} URL for the content item
  */
 export function getContentUrl(item, type) {
-	if (!item || !item.id) return "/";
+	if (!item || !item.id) return "/"
 
 	switch (type) {
 		case "course":
-			return generateCourseUrl(item.id);
+			return generateCourseUrl(item.id)
 		case "roadmap":
-			return generateRoadmapUrl(item.id);
+			return generateRoadmapUrl(item.id)
 		case "book":
-			return `/books/${item.id}`;
+			return `/books/${item.id}`
 		case "video":
-			return `/videos/${item.id}`;
+			return `/videos/${item.id}`
 		default:
-			return "/";
+			return "/"
 	}
 }
 
@@ -313,8 +305,8 @@ export function getContentUrl(item, type) {
  * @returns {boolean} Whether the path matches
  */
 export function matchesPath(pattern, pathname = window.location.pathname) {
-	const regex = new RegExp(pattern.replace(/:\w+/g, "[^/]+"));
-	return regex.test(pathname);
+	const regex = new RegExp(pattern.replace(/:\w+/g, "[^/]+"))
+	return regex.test(pathname)
 }
 
 // Export utility functions for direct use
@@ -326,4 +318,4 @@ export {
 	convertRoadmapToCourseUrl as roadmapToCourse,
 	convertCourseToRoadmapUrl as courseToRoadmap,
 	getContentUrl as contentUrl,
-};
+}

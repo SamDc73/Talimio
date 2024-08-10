@@ -1,109 +1,100 @@
-import PropTypes from "prop-types";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react"
 
-import { getVideoTranscript } from "@/services/videosService";
-import "./VideoTranscript.css";
+import { getVideoTranscript } from "@/services/videosService"
+import "./VideoTranscript.css"
 
 const VideoTranscript = ({ videoId, currentTime, onSeek }) => {
-	const [transcript, setTranscript] = useState({ segments: [] });
-	const [loading, setLoading] = useState(false);
-	const [error, setError] = useState(null);
-	const [transcriptReady, _setTranscriptReady] = useState(false);
+	const [transcript, setTranscript] = useState({ segments: [] })
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState(null)
+	const [transcriptReady, setTranscriptReady] = useState(false)
 
-	const transcriptRef = useRef(null);
-	const activeLineRef = useRef(null);
+	const transcriptRef = useRef(null)
+	const activeLineRef = useRef(null)
 
 	// Fetch transcript when component mounts
 	useEffect(() => {
 		const loadTranscript = async () => {
-			if (!videoId) return;
+			if (!videoId) return
 
-			setLoading(true);
-			setError(null);
+			setLoading(true)
+			setError(null)
 
 			try {
-				const data = await getVideoTranscript(videoId);
-				setTranscript(data);
-			} catch (err) {
-				console.error("Failed to load transcript:", err);
-				setError("Failed to load transcript");
+				const data = await getVideoTranscript(videoId)
+				setTranscript(data)
+				setTranscriptReady(true) // Set ready when transcript loads
+			} catch (_err) {
+				setError("Failed to load transcript")
+				setTranscriptReady(false)
 			} finally {
-				setLoading(false);
+				setLoading(false)
 			}
-		};
+		}
 
-		loadTranscript();
-	}, [videoId]);
+		loadTranscript()
+	}, [videoId])
 
 	// Find active segment using a strict time check for better accuracy
-	const findActiveSegment = useCallback((time, segments) => {
-		if (!segments || segments.length === 0) return -1;
-		if (time < segments[0].startTime) return -1;
+	const findActiveSegment = (time, segments) => {
+		if (!segments || segments.length === 0) return -1
+		if (time < segments[0].startTime) return -1
 
 		// Find the first segment that strictly contains the current time
 		for (let i = 0; i < segments.length; i++) {
 			if (time >= segments[i].startTime && time < segments[i].endTime) {
-				return i;
+				return i
 			}
 		}
 
 		// If no segment is active, return -1
-		return -1;
-	}, []);
+		return -1
+	}
 
-	const activeCueIndex = findActiveSegment(
-		currentTime + 0.3,
-		transcript.segments,
-	);
+	const activeCueIndex = findActiveSegment(currentTime + 0.3, transcript.segments)
 
 	// Auto-scroll to active line
 	useEffect(() => {
-		if (
-			transcriptReady &&
-			activeCueIndex >= 0 &&
-			activeLineRef.current &&
-			transcriptRef.current
-		) {
-			const container = transcriptRef.current;
-			const activeLine = activeLineRef.current;
+		if (transcriptReady && activeCueIndex >= 0 && activeLineRef.current && transcriptRef.current) {
+			const container = transcriptRef.current
+			const activeLine = activeLineRef.current
 
 			// Calculate scroll position to center the active line
-			const containerHeight = container.clientHeight;
-			const lineTop = activeLine.offsetTop;
-			const lineHeight = activeLine.offsetHeight;
-			const scrollTo = lineTop - containerHeight / 2 + lineHeight / 2;
+			const containerHeight = container.clientHeight
+			const lineTop = activeLine.offsetTop
+			const lineHeight = activeLine.offsetHeight
+			const scrollTo = lineTop - containerHeight / 2 + lineHeight / 2
 
 			container.scrollTo({
 				top: scrollTo,
 				behavior: "smooth",
-			});
+			})
 		}
-	}, [activeCueIndex, transcriptReady]);
+	}, [activeCueIndex, transcriptReady])
 
 	const handleLineClick = (startTime) => {
-		console.log("Transcript line clicked, seeking to:", startTime);
 		if (onSeek) {
-			onSeek(startTime);
+			onSeek(startTime)
 		}
-	};
+	}
 
 	const formatTime = (seconds, includeHours = false) => {
-		const hours = Math.floor(seconds / 3600);
-		const mins = Math.floor((seconds % 3600) / 60);
-		const secs = Math.floor(seconds % 60);
+		const hours = Math.floor(seconds / 3600)
+		const mins = Math.floor((seconds % 3600) / 60)
+		const secs = Math.floor(seconds % 60)
 
 		if (includeHours || hours > 0) {
-			return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+			return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
 		}
-		return `${mins}:${secs.toString().padStart(2, "0")}`;
-	};
+		return `${mins}:${secs.toString().padStart(2, "0")}`
+	}
 
 	if (loading) {
 		return (
 			<div className="video-transcript loading">
 				<div className="transcript-loader">Loading transcript...</div>
 			</div>
-		);
+		)
 	}
 
 	if (error) {
@@ -111,17 +102,15 @@ const VideoTranscript = ({ videoId, currentTime, onSeek }) => {
 			<div className="video-transcript error">
 				<div className="transcript-error">{error}</div>
 			</div>
-		);
+		)
 	}
 
 	if (!transcript.segments || transcript.segments.length === 0) {
 		return (
 			<div className="video-transcript empty">
-				<div className="transcript-empty">
-					No transcript available for this video
-				</div>
+				<div className="transcript-empty">No transcript available for this video</div>
 			</div>
-		);
+		)
 	}
 
 	return (
@@ -140,14 +129,12 @@ const VideoTranscript = ({ videoId, currentTime, onSeek }) => {
 					>
 						{formatTime(currentTime, true)}
 					</span>
-					<span className="transcript-count">
-						{transcript.totalSegments} segments
-					</span>
+					<span className="transcript-count">{transcript.totalSegments} segments</span>
 				</div>
 			</div>
 			<div className="transcript-content">
 				{transcript.segments.map((segment, index) => {
-					const isActive = index === activeCueIndex;
+					const isActive = index === activeCueIndex
 
 					// Style for active segment
 					const activeStyle = {
@@ -156,7 +143,7 @@ const VideoTranscript = ({ videoId, currentTime, onSeek }) => {
 						padding: "12px 20px",
 						transition: "all 0.3s ease",
 						transform: "translateX(4px)",
-					};
+					}
 
 					const inactiveStyle = {
 						backgroundColor: "transparent",
@@ -164,7 +151,7 @@ const VideoTranscript = ({ videoId, currentTime, onSeek }) => {
 						padding: "12px 20px",
 						transform: "translateX(0)",
 						transition: "all 0.3s ease",
-					};
+					}
 
 					// Let's wrap in a div to test if button styles are the issue
 					return (
@@ -189,23 +176,15 @@ const VideoTranscript = ({ videoId, currentTime, onSeek }) => {
 									padding: "0",
 								}}
 							>
-								<span className="transcript-time">
-									{formatTime(segment.startTime)}
-								</span>
+								<span className="transcript-time">{formatTime(segment.startTime)}</span>
 								<span className="transcript-text">{segment.text}</span>
 							</button>
 						</div>
-					);
+					)
 				})}
 			</div>
 		</div>
-	);
-};
+	)
+}
 
-VideoTranscript.propTypes = {
-	videoId: PropTypes.string.isRequired,
-	currentTime: PropTypes.number.isRequired,
-	onSeek: PropTypes.func.isRequired,
-};
-
-export default VideoTranscript;
+export default VideoTranscript

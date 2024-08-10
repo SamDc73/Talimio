@@ -3,47 +3,41 @@ const LOG_LEVELS = {
 	INFO: 1,
 	WARN: 2,
 	ERROR: 3,
-};
+}
 
-const isDevelopment = import.meta.env.DEV;
-const currentLogLevel = isDevelopment ? LOG_LEVELS.DEBUG : LOG_LEVELS.WARN;
+const isDevelopment = import.meta.env.DEV
+const currentLogLevel = isDevelopment ? LOG_LEVELS.DEBUG : LOG_LEVELS.WARN
 
 const logger = {
-	debug: (...args) => {
+	debug: (..._args) => {
 		if (currentLogLevel <= LOG_LEVELS.DEBUG) {
-			console.log("[DEBUG]", ...args);
 		}
 	},
 
-	info: (...args) => {
+	info: (..._args) => {
 		if (currentLogLevel <= LOG_LEVELS.INFO) {
-			console.info("[INFO]", ...args);
 		}
 	},
 
-	warn: (...args) => {
+	warn: (..._args) => {
 		if (currentLogLevel <= LOG_LEVELS.WARN) {
-			console.warn("[WARN]", ...args);
 		}
 	},
 
-	error: (...args) => {
+	error: (..._args) => {
 		if (currentLogLevel <= LOG_LEVELS.ERROR) {
-			console.error("[ERROR]", ...args);
 		}
 	},
 
-	group: (label) => {
+	group: (_label) => {
 		if (isDevelopment) {
-			console.group(label);
 		}
 	},
 
 	groupEnd: () => {
 		if (isDevelopment) {
-			console.groupEnd();
 		}
 	},
-};
+}
 
-export default logger;
+export default logger

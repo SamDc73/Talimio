@@ -1,5 +1,5 @@
-const API_BASE = "/api/v1";
-const REQUEST_TIMEOUT = 10000; // 10 seconds
+const API_BASE = "/api/v1"
+const REQUEST_TIMEOUT = 10000 // 10 seconds
 
 /**
  * @typedef {Object} ContentItem
@@ -44,57 +44,60 @@ async function request(url, options = {}) {
 	const headers = {
 		"Content-Type": "application/json",
 		...options.headers,
-	};
+	}
 
-	// Authentication is handled via httpOnly cookies, no Bearer token needed
+	// Add Supabase auth token if available
+	if (import.meta.env.VITE_ENABLE_AUTH === "true") {
+		const { supabase } = await import("./supabase")
+		const {
+			data: { session },
+		} = await supabase.auth.getSession()
+		if (session?.access_token) {
+			headers.Authorization = `Bearer ${session.access_token}`
+		}
+	}
 
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+	const controller = new AbortController()
+	const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
 
 	try {
 		const response = await fetch(url, {
 			...options,
 			headers,
-			credentials:
-				import.meta.env.VITE_ENABLE_AUTH === "false" ? "omit" : "include",
+			credentials: import.meta.env.VITE_ENABLE_AUTH === "false" ? "omit" : "include",
 			signal: controller.signal,
-		});
-		clearTimeout(timeout);
+		})
+		clearTimeout(timeout)
 
 		if (!response.ok) {
-			const errorData = await response
-				.json()
-				.catch(() => ({ message: response.statusText }));
-			const error = new Error(errorData.message || "API request failed");
-			error.status = response.status;
-			error.data = errorData;
-			throw error;
+			const errorData = await response.json().catch(() => ({ message: response.statusText }))
+			const error = new Error(errorData.message || "API request failed")
+			error.status = response.status
+			error.data = errorData
+			throw error
 		}
 
 		if (response.status === 204) {
-			return null;
+			return null
 		}
 
-		return response.json();
+		return response.json()
 	} catch (error) {
-		clearTimeout(timeout);
+		clearTimeout(timeout)
 		if (error.name === "AbortError") {
-			throw new Error(`Request timeout after ${REQUEST_TIMEOUT}ms`);
+			throw new Error(`Request timeout after ${REQUEST_TIMEOUT}ms`)
 		}
-		throw error;
+		throw error
 	}
 }
 
 export const api = {
 	get: (url, options) => request(url, { ...options, method: "GET" }),
-	post: (url, body, options) =>
-		request(url, { ...options, method: "POST", body: JSON.stringify(body) }),
-	put: (url, body, options) =>
-		request(url, { ...options, method: "PUT", body: JSON.stringify(body) }),
-	patch: (url, body, options) =>
-		request(url, { ...options, method: "PATCH", body: JSON.stringify(body) }),
+	post: (url, body, options) => request(url, { ...options, method: "POST", body: JSON.stringify(body) }),
+	put: (url, body, options) => request(url, { ...options, method: "PUT", body: JSON.stringify(body) }),
+	patch: (url, body, options) => request(url, { ...options, method: "PATCH", body: JSON.stringify(body) }),
 	delete: (url, options) => request(url, { ...options, method: "DELETE" }),
-};
+}
 
 /**
  * Fetches content data from the API.
@@ -103,23 +106,18 @@ export const api = {
  */
 export async function fetchContentData(includeArchived = false) {
 	try {
-		let url = `${API_BASE}/content`;
+		let url = `${API_BASE}/content`
 		if (includeArchived) {
-			url += "?include_archived=true";
+			url += "?include_archived=true"
 		}
 
-		const data = await api.get(url);
+		const data = await api.get(url)
 
 		if (import.meta.env.VITE_DEBUG_MODE === "true") {
-			console.log("[DEBUG] Raw API response:", data);
 		}
 
 		return data.items.map((item) => {
 			if (import.meta.env.VITE_DEBUG_MODE === "true") {
-				console.log(`🔄 Processing item "${item.title}":`, {
-					type: item.type,
-					archived: item.archived,
-				});
 			}
 
 			const mappedItem = {
@@ -150,20 +148,14 @@ export async function fetchContentData(includeArchived = false) {
 					lessonCount: item.lessonCount,
 					completedLessons: item.completedLessons,
 				}),
-			};
+			}
 
 			if (import.meta.env.VITE_DEBUG_MODE === "true") {
-				console.log(`✅ Mapped item "${mappedItem.title}":`, {
-					type: mappedItem.type,
-					archived: mappedItem.archived,
-					id: mappedItem.id,
-				});
 			}
-			return mappedItem;
-		});
-	} catch (error) {
-		console.error("Error fetching content:", error);
-		return [];
+			return mappedItem
+		})
+	} catch (_error) {
+		return []
 	}
 }
 
@@ -179,18 +171,18 @@ export function processContentData(data) {
 		{ id: "video", label: "Videos", icon: "Youtube" },
 		{ id: "flashcards", label: "Flashcards", icon: "Layers" },
 		{ id: "book", label: "Books", icon: "FileText" },
-	];
+	]
 
 	const sortOptions = [
 		{ id: "last-accessed", label: "Last Opened", icon: "Clock" },
 		{ id: "created", label: "Date Created", icon: "CalendarDays" },
 		{ id: "progress", label: "Progress", icon: "ArrowUpDown" },
 		{ id: "title", label: "Title", icon: "FileText" },
-	];
+	]
 
 	return {
 		content: data,
 		filterOptions,
 		sortOptions,
-	};
+	}
 }

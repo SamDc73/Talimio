@@ -11,16 +11,16 @@ function ProgressCircle({ number, progress, variant = "default" }) {
 		book: "#2563eb", // blue-600
 		video: "#7c3aed", // violet-600
 		flashcard: "#d97706", // amber-600
-	};
+	}
 
-	const strokeColor = strokeColors[variant] || strokeColors.default;
+	const strokeColor = strokeColors[variant] || strokeColors.default
 
 	if (progress <= 0) {
 		return (
 			<div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">
 				<span className="text-sm text-zinc-600">{number}</span>
 			</div>
-		);
+		)
 	}
 
 	return (
@@ -34,15 +34,7 @@ function ProgressCircle({ number, progress, variant = "default" }) {
 				aria-label={`Progress: ${Math.round(progress)}%`}
 			>
 				<title>Progress indicator</title>
-				<circle
-					cx="16"
-					cy="16"
-					r="14"
-					strokeWidth="2.5"
-					fill="none"
-					stroke="#f4f4f5"
-					className="opacity-70"
-				/>
+				<circle cx="16" cy="16" r="14" strokeWidth="2.5" fill="none" stroke="#f4f4f5" className="opacity-70" />
 				<circle
 					cx="16"
 					cy="16"
@@ -59,7 +51,7 @@ function ProgressCircle({ number, progress, variant = "default" }) {
 				/>
 			</svg>
 		</div>
-	);
+	)
 }
 
-export default ProgressCircle;
+export default ProgressCircle

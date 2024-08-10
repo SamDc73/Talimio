@@ -1,20 +1,20 @@
-import { api } from "@/lib/apiClient";
+import { api } from "@/lib/apiClient"
 
 export const deleteApi = {
 	async deleteVideo(id) {
-		return this.deleteItem("youtube", id);
+		return this.deleteItem("youtube", id)
 	},
 
 	async deleteBook(id) {
-		return this.deleteItem("book", id);
+		return this.deleteItem("book", id)
 	},
 
 	async deleteCourse(id) {
-		return this.deleteItem("course", id);
+		return this.deleteItem("course", id)
 	},
 
 	async deleteFlashcardDeck(id) {
-		return this.deleteItem("flashcards", id);
+		return this.deleteItem("flashcards", id)
 	},
 
 	async deleteItem(itemType, id) {
@@ -27,24 +27,17 @@ export const deleteApi = {
 			flashcards: "flashcards",
 			course: "course",
 			roadmap: "course",
-		};
+		}
 
-		const contentType = contentTypeMap[itemType] || itemType;
-
-		console.log(
-			`🔍 deleteItem called with itemType: "${itemType}", mapped to: "${contentType}"`,
-		);
-		console.log(`📞 Will call: DELETE /api/v1/content/${contentType}/${id}`);
+		const contentType = contentTypeMap[itemType] || itemType
 
 		try {
-			const response = await api.delete(`/content/${contentType}/${id}`);
+			const response = await api.delete(`/content/${contentType}/${id}`)
 			// DELETE endpoints typically return 204 No Content, which is a success
-			return response;
+			return response
 		} catch (error) {
-			console.error(`Failed to delete ${itemType}:`, error);
-			const errorMsg =
-				error.response?.data?.detail || `Failed to delete ${itemType}`;
-			throw new Error(errorMsg);
+			const errorMsg = error.response?.data?.detail || `Failed to delete ${itemType}`
+			throw new Error(errorMsg)
 		}
 	},
-};
+}

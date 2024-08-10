@@ -1,9 +1,9 @@
 /**
  * Service for managing videos, chapters and their progress
  */
-import { api } from "@/lib/apiClient";
+import { api } from "@/lib/apiClient"
 
-const _API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
+const _API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1"
 
 /**
  * Get a video by ID (with authentication)
@@ -11,12 +11,7 @@ const _API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
  * @returns {Promise<Object>} Video data
  */
 export async function getVideo(videoId) {
-	try {
-		return await api.get(`/videos/${videoId}`);
-	} catch (error) {
-		console.error("Error fetching video:", error);
-		throw error;
-	}
+	return await api.get(`/videos/${videoId}`)
 }
 
 /**
@@ -25,12 +20,7 @@ export async function getVideo(videoId) {
  * @returns {Promise<Object>} Video details with chapters and transcript info
  */
 export async function getVideoDetails(videoId) {
-	try {
-		return await api.get(`/videos/${videoId}/details`);
-	} catch (error) {
-		console.error("Error fetching video details:", error);
-		throw error;
-	}
+	return await api.get(`/videos/${videoId}/details`)
 }
 
 /**
@@ -39,12 +29,7 @@ export async function getVideoDetails(videoId) {
  * @returns {Promise<Object>} Created video data
  */
 export async function createVideo(url) {
-	try {
-		return await api.post("/videos", { url });
-	} catch (error) {
-		console.error("Error creating video:", error);
-		throw error;
-	}
+	return await api.post("/videos", { url })
 }
 
 /**
@@ -53,14 +38,9 @@ export async function createVideo(url) {
  * @returns {Promise<Object>} Videos list response
  */
 export async function getVideos(params = {}) {
-	try {
-		const queryString = new URLSearchParams(params).toString();
-		const endpoint = queryString ? `/videos?${queryString}` : "/videos";
-		return await api.get(endpoint);
-	} catch (error) {
-		console.error("Error fetching videos:", error);
-		throw error;
-	}
+	const queryString = new URLSearchParams(params).toString()
+	const endpoint = queryString ? `/videos?${queryString}` : "/videos"
+	return await api.get(endpoint)
 }
 
 /**
@@ -69,12 +49,7 @@ export async function getVideos(params = {}) {
  * @returns {Promise<Object>} Transcript data
  */
 export async function getVideoTranscript(videoId) {
-	try {
-		return await api.get(`/videos/${videoId}/transcript`);
-	} catch (error) {
-		console.error("Error fetching transcript:", error);
-		throw error;
-	}
+	return await api.get(`/videos/${videoId}/transcript`)
 }
 
 /**
@@ -84,12 +59,11 @@ export async function getVideoTranscript(videoId) {
  */
 export async function getVideoChapters(videoId) {
 	try {
-		const chapters = await api.get(`/videos/${videoId}/chapters`);
-		return chapters || [];
-	} catch (error) {
-		console.error("Error fetching video chapters:", error);
+		const chapters = await api.get(`/videos/${videoId}/chapters`)
+		return chapters || []
+	} catch (_error) {
 		// Don't throw - return empty array so the sidebar can still render
-		return [];
+		return []
 	}
 }
 
@@ -100,12 +74,7 @@ export async function getVideoChapters(videoId) {
  * @returns {Promise<Object>} Chapter data
  */
 export async function getVideoChapter(videoId, chapterId) {
-	try {
-		return await api.get(`/videos/${videoId}/chapters/${chapterId}`);
-	} catch (error) {
-		console.error("Error fetching chapter:", error);
-		throw error;
-	}
+	return await api.get(`/videos/${videoId}/chapters/${chapterId}`)
 }
 
 /**
@@ -116,29 +85,24 @@ export async function getVideoChapter(videoId, chapterId) {
  * @returns {Promise<Object>} Update response
  */
 export async function updateVideoChapterStatus(videoId, chapterId, status) {
-	try {
-		// Check if this is a timestamp-based chapter ID (like "chapter-70")
-		const isTimestampId = chapterId.startsWith("chapter-");
+	// Check if this is a timestamp-based chapter ID (like "chapter-70")
+	const isTimestampId = chapterId.startsWith("chapter-")
 
-		if (isTimestampId) {
-			// For timestamp-based chapters, we can't update individual chapter status
-			// These are extracted from description and not stored in DB
-			// Return a mock success response
-			return {
-				success: true,
-				message: "Chapter status updated locally",
-				chapterId,
-				status,
-			};
-		} else {
-			// For UUID chapters, use the chapters endpoint
-			return await api.put(`/videos/${videoId}/chapters/${chapterId}/status`, {
-				status,
-			});
+	if (isTimestampId) {
+		// For timestamp-based chapters, we can't update individual chapter status
+		// These are extracted from description and not stored in DB
+		// Return a mock success response
+		return {
+			success: true,
+			message: "Chapter status updated locally",
+			chapterId,
+			status,
 		}
-	} catch (error) {
-		console.error("Error updating chapter status:", error);
-		throw error;
+	} else {
+		// For UUID chapters, use the chapters endpoint
+		return await api.put(`/videos/${videoId}/chapters/${chapterId}/status`, {
+			status,
+		})
 	}
 }
 
@@ -148,12 +112,7 @@ export async function updateVideoChapterStatus(videoId, chapterId, status) {
  * @returns {Promise<Object>} Extraction response
  */
 export async function extractVideoChapters(videoId) {
-	try {
-		return await api.post(`/videos/${videoId}/extract-chapters`);
-	} catch (error) {
-		console.error("Error extracting chapters:", error);
-		throw error;
-	}
+	return await api.post(`/videos/${videoId}/extract-chapters`)
 }
 
 /**
@@ -163,18 +122,9 @@ export async function extractVideoChapters(videoId) {
  * @param {number} totalChapters - Total number of chapters
  * @returns {Promise<Object>} Updated video data
  */
-export async function syncVideoChapterProgress(
-	videoId,
-	completedChapterIds,
-	totalChapters,
-) {
-	try {
-		return await api.post(`/videos/${videoId}/sync-chapter-progress`, {
-			completedChapterIds: completedChapterIds,
-			totalChapters: totalChapters,
-		});
-	} catch (error) {
-		console.error("Error syncing chapter progress:", error);
-		throw error;
-	}
+export async function syncVideoChapterProgress(videoId, completedChapterIds, totalChapters) {
+	return await api.post(`/videos/${videoId}/sync-chapter-progress`, {
+		completedChapterIds: completedChapterIds,
+		totalChapters: totalChapters,
+	})
 }

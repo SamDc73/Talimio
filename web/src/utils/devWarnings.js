@@ -1,4 +1,4 @@
-import React from "react";
+import React from "react"
 
 /**
  * Development-time utility to check for nested interactive elements
@@ -11,52 +11,35 @@ import React from "react";
  * @param {string[]} parentPath - Array of parent element types (for error reporting)
  */
 export function checkNestedInteractiveElements(element, parentPath = []) {
-	if (process.env.NODE_ENV !== "development") return;
+	if (process.env.NODE_ENV !== "development") return
 
 	// Interactive element types that shouldn't be nested
-	const interactiveElements = ["button", "a", "input", "select", "textarea"];
+	const interactiveElements = ["button", "a", "input", "select", "textarea"]
 
 	// Get element type as string
 	const getElementType = (el) => {
-		if (typeof el.type === "string") return el.type;
-		if (el.type?.displayName) return el.type.displayName;
-		if (el.type?.name) return el.type.name;
-		return "Component";
-	};
+		if (typeof el.type === "string") return el.type
+		if (el.type?.displayName) return el.type.displayName
+		if (el.type?.name) return el.type.name
+		return "Component"
+	}
 
-	const elementType = getElementType(element);
-	const isInteractive = interactiveElements.includes(elementType.toLowerCase());
+	const elementType = getElementType(element)
+	const isInteractive = interactiveElements.includes(elementType.toLowerCase())
 
 	// Check if we have nested interactive elements
-	if (
-		isInteractive &&
-		parentPath.some((parent) =>
-			interactiveElements.includes(parent.toLowerCase()),
-		)
-	) {
-		const parentInteractive = parentPath.find((parent) =>
-			interactiveElements.includes(parent.toLowerCase()),
-		);
-		console.error(
-			`⚠️ Nested interactive elements detected: <${elementType}> inside <${parentInteractive}>`,
-			"\n\nThis can cause:",
-			"\n• Accessibility issues (screen readers, keyboard navigation)",
-			"\n• React render loops and performance problems",
-			"\n• Unexpected event handling behavior",
-			"\n\nSolution: Restructure your components so interactive elements are siblings, not parent-child.",
-			"\n\nPath:",
-			[...parentPath, elementType].join(" > "),
-		);
+	if (isInteractive && parentPath.some((parent) => interactiveElements.includes(parent.toLowerCase()))) {
+		const _parentInteractive = parentPath.find((parent) => interactiveElements.includes(parent.toLowerCase()))
 	}
 
 	// Recursively check children
-	const newPath = isInteractive ? [...parentPath, elementType] : parentPath;
+	const newPath = isInteractive ? [...parentPath, elementType] : parentPath
 
 	React.Children.forEach(element.props?.children, (child) => {
 		if (React.isValidElement(child)) {
-			checkNestedInteractiveElements(child, newPath);
+			checkNestedInteractiveElements(child, newPath)
 		}
-	});
+	})
 }
 
 /**
@@ -68,27 +51,27 @@ export function checkNestedInteractiveElements(element, parentPath = []) {
  * @param {React.ComponentType} Component - Component to wrap
  * @returns {React.ComponentType} - Wrapped component
  */
-export function withInteractiveCheck(Component) {
+export function withInteractiveCheck(component) {
 	if (process.env.NODE_ENV !== "development") {
-		return Component;
+		return component
 	}
 
 	const WrappedComponent = (props) => {
-		const element = <Component {...props} />;
+		const element = <component {...props} />
 
 		// Check on mount and updates
 		React.useEffect(() => {
 			if (React.isValidElement(element)) {
-				checkNestedInteractiveElements(element);
+				checkNestedInteractiveElements(element)
 			}
-		});
+		})
 
-		return element;
-	};
+		return element
+	}
 
-	WrappedComponent.displayName = `withInteractiveCheck(${Component.displayName || Component.name || "Component"})`;
+	WrappedComponent.displayName = `withInteractiveCheck(${component.displayName || component.name || "Component"})`
 
-	return WrappedComponent;
+	return WrappedComponent
 }
 
 /**
@@ -104,14 +87,14 @@ export function withInteractiveCheck(Component) {
  */
 export function useInteractiveCheck() {
 	if (process.env.NODE_ENV !== "development") {
-		return (element) => element;
+		return (element) => element
 	}
 
 	// Return a function that immediately checks the element without using hooks
 	return (element) => {
 		if (React.isValidElement(element)) {
-			checkNestedInteractiveElements(element);
+			checkNestedInteractiveElements(element)
 		}
-		return element;
-	};
+		return element
+	}
 }

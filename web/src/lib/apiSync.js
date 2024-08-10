@@ -3,27 +3,27 @@
  * Handles debounced syncing, offline queue, and retry logic
  */
 
-import logger from "@/utils/logger";
+import logger from "@/utils/logger"
 
 // Debounce timers for different data types
-const syncTimers = new Map();
-const SYNC_DELAY = 2000; // 2 seconds - matches documentation
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000; // 1 second
+const syncTimers = new Map()
+const SYNC_DELAY = 2000 // 2 seconds - matches documentation
+const MAX_RETRIES = 3
+const RETRY_DELAY = 1000 // 1 second
 
 // Offline queue for failed syncs
-const offlineQueue = [];
-let isOnline = navigator.onLine;
+const offlineQueue = []
+let isOnline = navigator.onLine
 
 // Listen for online/offline events
 window.addEventListener("online", () => {
-	isOnline = true;
-	processOfflineQueue();
-});
+	isOnline = true
+	processOfflineQueue()
+})
 
 window.addEventListener("offline", () => {
-	isOnline = false;
-});
+	isOnline = false
+})
 
 /**
  * Main sync function with debouncing and retry logic
@@ -32,35 +32,35 @@ window.addEventListener("offline", () => {
  * @param {object} data - Data to sync
  */
 export async function syncToAPI(resourceType, resourceId, data) {
-	const syncKey = `${resourceType}:${resourceId}`;
+	const syncKey = `${resourceType}:${resourceId}`
 
 	// Clear existing timer
 	if (syncTimers.has(syncKey)) {
-		clearTimeout(syncTimers.get(syncKey));
+		clearTimeout(syncTimers.get(syncKey))
 	}
 
 	// Set new debounced timer
 	const timer = setTimeout(async () => {
-		await performSync(resourceType, resourceId, data);
-		syncTimers.delete(syncKey);
-	}, SYNC_DELAY);
+		await performSync(resourceType, resourceId, data)
+		syncTimers.delete(syncKey)
+	}, SYNC_DELAY)
 
-	syncTimers.set(syncKey, timer);
+	syncTimers.set(syncKey, timer)
 }
 
 /**
  * Immediately sync without debouncing
  */
 export async function syncImmediately(resourceType, resourceId, data) {
-	const syncKey = `${resourceType}:${resourceId}`;
+	const syncKey = `${resourceType}:${resourceId}`
 
 	// Cancel any pending debounced sync
 	if (syncTimers.has(syncKey)) {
-		clearTimeout(syncTimers.get(syncKey));
-		syncTimers.delete(syncKey);
+		clearTimeout(syncTimers.get(syncKey))
+		syncTimers.delete(syncKey)
 	}
 
-	return performSync(resourceType, resourceId, data);
+	return performSync(resourceType, resourceId, data)
 }
 
 /**
@@ -69,37 +69,33 @@ export async function syncImmediately(resourceType, resourceId, data) {
 async function performSync(resourceType, resourceId, data, retryCount = 0) {
 	// Check if online
 	if (!isOnline) {
-		queueForOfflineSync(resourceType, resourceId, data);
-		return;
+		queueForOfflineSync(resourceType, resourceId, data)
+		return
 	}
 
 	try {
-		const endpoint = buildEndpoint(resourceType, resourceId, data);
+		const endpoint = buildEndpoint(resourceType, resourceId, data)
 
 		// If no endpoint is available for this data type, skip sync
 		if (!endpoint) {
-			logger.info(
-				`No sync endpoint for ${resourceType}:${resourceId} with data:`,
-				data,
-			);
-			return { skipped: true };
+			logger.info(`No sync endpoint for ${resourceType}:${resourceId} with data:`, data)
+			return { skipped: true }
 		}
 
-		const method = determineMethod(resourceType, data);
+		const method = determineMethod(resourceType, data)
 
 		// Transform data for specific endpoint requirements
-		let requestData = data;
+		let requestData = data
 		if (resourceType === "books" && data.tocProgress) {
 			// For book ToC progress updates, wrap in progress format expected by backend
 			requestData = {
 				tocProgress: data.tocProgress,
-			};
+			}
 		} else if (resourceType === "videos" && data.progress) {
 			// For video progress updates, extract only the fields the backend expects
 			requestData = {
-				lastPosition:
-					data.progress.lastPosition || data.progress.currentTime || 0,
-			};
+				lastPosition: data.progress.lastPosition || data.progress.currentTime || 0,
+			}
 		} else if (
 			resourceType === "videos" &&
 			(data.progress ||
@@ -108,31 +104,31 @@ async function performSync(resourceType, resourceId, data, retryCount = 0) {
 				data.duration !== undefined)
 		) {
 			// Handle direct video progress data - filter to only valid backend fields
-			requestData = {};
+			requestData = {}
 			if (data.progress?.lastPosition !== undefined) {
-				requestData.lastPosition = data.progress.lastPosition;
+				requestData.lastPosition = data.progress.lastPosition
 			} else if (data.progress?.currentTime !== undefined) {
-				requestData.lastPosition = data.progress.currentTime;
+				requestData.lastPosition = data.progress.currentTime
 			} else if (data.lastPosition !== undefined) {
-				requestData.lastPosition = data.lastPosition;
+				requestData.lastPosition = data.lastPosition
 			} else if (data.currentTime !== undefined) {
-				requestData.lastPosition = data.currentTime;
+				requestData.lastPosition = data.currentTime
 			}
 			if (data.progress?.completionPercentage !== undefined) {
-				requestData.completionPercentage = data.progress.completionPercentage;
+				requestData.completionPercentage = data.progress.completionPercentage
 			} else if (data.completionPercentage !== undefined) {
-				requestData.completionPercentage = data.completionPercentage;
+				requestData.completionPercentage = data.completionPercentage
 			}
 		} else if (resourceType === "videos" && data.chapterStatus) {
 			// For chapter status updates, extract the status
 			requestData = {
 				status: data.chapterStatus.status,
-			};
+			}
 		} else if (resourceType === "preferences") {
 			// For preferences updates, wrap in expected format
 			requestData = {
 				preferences: data,
-			};
+			}
 		}
 
 		const response = await fetch(endpoint, {
@@ -141,29 +137,27 @@ async function performSync(resourceType, resourceId, data, retryCount = 0) {
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify(requestData),
-		});
+		})
 
 		if (!response.ok) {
-			throw new Error(`Sync failed: ${response.statusText}`);
+			throw new Error(`Sync failed: ${response.statusText}`)
 		}
 
-		logger.info(`Synced ${resourceType}:${resourceId}`);
-		return await response.json();
+		logger.info(`Synced ${resourceType}:${resourceId}`)
+		return await response.json()
 	} catch (error) {
-		logger.error(`Sync failed for ${resourceType}:${resourceId}:`, error);
+		logger.error(`Sync failed for ${resourceType}:${resourceId}:`, error)
 
 		// Retry logic
 		if (retryCount < MAX_RETRIES) {
-			logger.info(`Retrying sync (${retryCount + 1}/${MAX_RETRIES})...`);
-			await new Promise((resolve) =>
-				setTimeout(resolve, RETRY_DELAY * (retryCount + 1)),
-			);
-			return performSync(resourceType, resourceId, data, retryCount + 1);
+			logger.info(`Retrying sync (${retryCount + 1}/${MAX_RETRIES})...`)
+			await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)))
+			return performSync(resourceType, resourceId, data, retryCount + 1)
 		}
 
 		// Max retries reached, queue for offline sync
-		queueForOfflineSync(resourceType, resourceId, data);
-		throw error;
+		queueForOfflineSync(resourceType, resourceId, data)
+		throw error
 	}
 }
 
@@ -171,85 +165,73 @@ async function performSync(resourceType, resourceId, data, retryCount = 0) {
  * Build the API endpoint based on resource type and data
  */
 function buildEndpoint(resourceType, resourceId, data) {
-	const baseUrl = "/api/v1";
+	const baseUrl = "/api/v1"
 
 	switch (resourceType) {
 		case "books":
 			if (data.progress) {
-				return `${baseUrl}/books/${resourceId}/progress`;
+				return `${baseUrl}/books/${resourceId}/progress`
 			}
 			if (data.tocProgress || data.tocProgressBatch) {
-				// ToC progress updates go to the progress endpoint
-				console.log(
-					`📚 Syncing ToC progress for book ${resourceId}:`,
-					data.tocProgress,
-				);
-				return `${baseUrl}/books/${resourceId}/progress`;
+				return `${baseUrl}/books/${resourceId}/progress`
 			}
 			if (data.chapterStatus) {
 				// Only sync chapter status for actual UUID chapter IDs, not ToC section IDs
-				const chapterId = data.chapterStatus.chapterId;
+				const chapterId = data.chapterStatus.chapterId
 				if (chapterId?.startsWith("toc_")) {
 					// This is a ToC section ID, not a chapter UUID - skip sync
-					logger.debug(
-						`Skipping chapter status sync for ToC section: ${chapterId}`,
-					);
-					return null;
+					logger.debug(`Skipping chapter status sync for ToC section: ${chapterId}`)
+					return null
 				}
-				return `${baseUrl}/books/${resourceId}/chapters/${chapterId}/status`;
+				return `${baseUrl}/books/${resourceId}/chapters/${chapterId}/status`
 			}
 			// For now, ignore other book sync attempts (like epubLocation, etc.)
 			// These don't have backend endpoints yet
-			return null;
+			return null
 
 		case "videos":
 			if (data.progress) {
-				return `${baseUrl}/videos/${resourceId}/progress`;
+				return `${baseUrl}/videos/${resourceId}/progress`
 			}
 			if (data.chapterStatus) {
 				// Only sync chapter status for actual UUID chapter IDs, not description-based chapter IDs
-				const chapterId = data.chapterStatus.chapterId;
-				if (
-					chapterId &&
-					(chapterId.startsWith("chapter-") || chapterId.startsWith("toc_"))
-				) {
+				const chapterId = data.chapterStatus.chapterId
+				if (chapterId && (chapterId.startsWith("chapter-") || chapterId.startsWith("toc_"))) {
 					// This is a description-based chapter ID, not a UUID - skip sync
-					logger.debug(
-						`Skipping chapter status sync for description-based chapter: ${chapterId}`,
-					);
-					return null;
+					logger.debug(`Skipping chapter status sync for description-based chapter: ${chapterId}`)
+					return null
 				}
-				return `${baseUrl}/videos/${resourceId}/chapters/${chapterId}/status`;
+				return `${baseUrl}/videos/${resourceId}/chapters/${chapterId}/status`
 			}
 			// Ignore other video sync attempts
-			return null;
+			return null
 
 		case "preferences": {
 			// User preferences are now handled by auth context automatically
 			// The backend will use the effective user ID from the request
-			return `${baseUrl}/user/preferences`;
+			return `${baseUrl}/user/preferences`
 		}
 
 		case "roadmaps":
 			if (data.nodeStatus) {
-				return `${baseUrl}/roadmaps/${resourceId}/nodes/${data.nodeStatus.nodeId}/status`;
+				return `${baseUrl}/roadmaps/${resourceId}/nodes/${data.nodeStatus.nodeId}/status`
 			}
 			// Ignore other roadmap sync attempts
-			return null;
+			return null
 
 		case "courses":
 			if (data.lessonStatus) {
 				// For courses, we need to use the updateLessonStatus endpoint
 				// This is handled by progressService.js already, so we'll skip API sync
-				return null;
+				return null
 			}
 			// Ignore other course sync attempts
-			return null;
+			return null
 
 		default:
 			// Don't throw error for unknown types, just skip sync
-			logger.debug(`No sync handler for resource type: ${resourceType}`);
-			return null;
+			logger.debug(`No sync handler for resource type: ${resourceType}`)
+			return null
 	}
 }
 
@@ -259,26 +241,26 @@ function buildEndpoint(resourceType, resourceId, data) {
 function determineMethod(resourceType, data) {
 	// Video progress updates use PATCH
 	if (resourceType === "videos" && data.progress) {
-		return "PATCH";
+		return "PATCH"
 	}
 
 	// Other progress updates use POST
 	if (data.progress || data.nodeStatus || data.tocProgress) {
-		return "POST";
+		return "POST"
 	}
 
 	// Chapter status updates use PUT
 	if (data.chapterStatus) {
-		return "PUT";
+		return "PUT"
 	}
 
 	// Preferences use PUT
 	if (resourceType === "preferences") {
-		return "PUT";
+		return "PUT"
 	}
 
 	// Default to POST for all updates for now
-	return "POST";
+	return "POST"
 }
 
 /**
@@ -290,49 +272,48 @@ function queueForOfflineSync(resourceType, resourceId, data) {
 		resourceId,
 		data,
 		timestamp: Date.now(),
-	};
+	}
 
 	// Check if already queued (update if exists)
 	const existingIndex = offlineQueue.findIndex(
-		(item) =>
-			item.resourceType === resourceType && item.resourceId === resourceId,
-	);
+		(item) => item.resourceType === resourceType && item.resourceId === resourceId
+	)
 
 	if (existingIndex >= 0) {
-		offlineQueue[existingIndex] = queueItem;
+		offlineQueue[existingIndex] = queueItem
 	} else {
-		offlineQueue.push(queueItem);
+		offlineQueue.push(queueItem)
 	}
 
 	// Save queue to localStorage
-	localStorage.setItem("syncQueue", JSON.stringify(offlineQueue));
+	localStorage.setItem("syncQueue", JSON.stringify(offlineQueue))
 
-	logger.info(`Queued for offline sync: ${resourceType}:${resourceId}`);
+	logger.info(`Queued for offline sync: ${resourceType}:${resourceId}`)
 }
 
 /**
  * Process offline queue when back online
  */
 async function processOfflineQueue() {
-	if (offlineQueue.length === 0) return;
+	if (offlineQueue.length === 0) return
 
-	logger.info(`Processing ${offlineQueue.length} queued syncs...`);
+	logger.info(`Processing ${offlineQueue.length} queued syncs...`)
 
-	const queue = [...offlineQueue];
-	offlineQueue.length = 0; // Clear queue
+	const queue = [...offlineQueue]
+	offlineQueue.length = 0 // Clear queue
 
 	for (const item of queue) {
 		try {
-			await performSync(item.resourceType, item.resourceId, item.data);
+			await performSync(item.resourceType, item.resourceId, item.data)
 		} catch (error) {
-			logger.error("Failed to sync queued item:", item, error);
+			logger.error("Failed to sync queued item:", item, error)
 			// Re-queue failed items
-			queueForOfflineSync(item.resourceType, item.resourceId, item.data);
+			queueForOfflineSync(item.resourceType, item.resourceId, item.data)
 		}
 	}
 
 	// Update localStorage
-	localStorage.setItem("syncQueue", JSON.stringify(offlineQueue));
+	localStorage.setItem("syncQueue", JSON.stringify(offlineQueue))
 }
 
 /**
@@ -340,9 +321,9 @@ async function processOfflineQueue() {
  */
 function loadOfflineQueue() {
 	try {
-		const saved = localStorage.getItem("syncQueue");
+		const saved = localStorage.getItem("syncQueue")
 		if (saved) {
-			const queue = JSON.parse(saved);
+			const queue = JSON.parse(saved)
 
 			// Validate queue data - filter out corrupted entries
 			const validQueue = queue.filter((item) => {
@@ -352,26 +333,24 @@ function loadOfflineQueue() {
 					typeof item.resourceId === "string" &&
 					item.data &&
 					typeof item.data === "object"
-				);
-			});
+				)
+			})
 
 			if (validQueue.length !== queue.length) {
-				logger.info(
-					`Cleaned ${queue.length - validQueue.length} corrupted sync queue items`,
-				);
+				logger.info(`Cleaned ${queue.length - validQueue.length} corrupted sync queue items`)
 			}
 
-			offlineQueue.push(...validQueue);
+			offlineQueue.push(...validQueue)
 
 			// Process queue if online
 			if (isOnline) {
-				processOfflineQueue();
+				processOfflineQueue()
 			}
 		}
 	} catch (error) {
-		logger.error("Failed to load offline queue:", error);
+		logger.error("Failed to load offline queue:", error)
 		// Clear corrupted queue
-		localStorage.removeItem("syncQueue");
+		localStorage.removeItem("syncQueue")
 	}
 }
 
@@ -379,13 +358,13 @@ function loadOfflineQueue() {
  * Clear the offline sync queue (for debugging)
  */
 export function clearSyncQueue() {
-	offlineQueue.length = 0;
-	localStorage.removeItem("syncQueue");
-	logger.info("Sync queue cleared");
+	offlineQueue.length = 0
+	localStorage.removeItem("syncQueue")
+	logger.info("Sync queue cleared")
 }
 
 // Load queue on startup
-loadOfflineQueue();
+loadOfflineQueue()
 
 /**
  * Batch sync multiple updates at once
@@ -393,9 +372,9 @@ loadOfflineQueue();
 export async function batchSync(updates) {
 	if (!isOnline) {
 		for (const { resourceType, resourceId, data } of updates) {
-			queueForOfflineSync(resourceType, resourceId, data);
+			queueForOfflineSync(resourceType, resourceId, data)
 		}
-		return;
+		return
 	}
 
 	try {
@@ -405,20 +384,20 @@ export async function batchSync(updates) {
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({ updates }),
-		});
+		})
 
 		if (!response.ok) {
-			throw new Error(`Batch sync failed: ${response.statusText}`);
+			throw new Error(`Batch sync failed: ${response.statusText}`)
 		}
 
-		logger.info(`Batch synced ${updates.length} items`);
-		return await response.json();
+		logger.info(`Batch synced ${updates.length} items`)
+		return await response.json()
 	} catch (error) {
-		logger.error("Batch sync failed:", error);
+		logger.error("Batch sync failed:", error)
 
 		// Fall back to individual syncs
 		for (const update of updates) {
-			await performSync(update.resourceType, update.resourceId, update.data);
+			await performSync(update.resourceType, update.resourceId, update.data)
 		}
 	}
 }
@@ -429,14 +408,14 @@ export async function batchSync(updates) {
 export async function forceSyncAll() {
 	// Cancel all pending debounced syncs
 	for (const [key, timer] of syncTimers.entries()) {
-		clearTimeout(timer);
-		const [_resourceType, _resourceId] = key.split(":");
+		clearTimeout(timer)
+		const [_resourceType, _resourceId] = key.split(":")
 		// We don't have the data here, so this is more for cleanup
 	}
-	syncTimers.clear();
+	syncTimers.clear()
 
 	// Process offline queue
-	await processOfflineQueue();
+	await processOfflineQueue()
 }
 
 /**
@@ -447,5 +426,5 @@ export function getSyncStatus() {
 		isOnline,
 		pendingSyncs: syncTimers.size,
 		queuedSyncs: offlineQueue.length,
-	};
+	}
 }

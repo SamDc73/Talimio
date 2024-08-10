@@ -17,14 +17,8 @@ function SidebarItem({
 	// Validate that leftContent and rightContent are not buttons if onClick is provided
 	if (process.env.NODE_ENV === "development") {
 		if (onClick && leftContent?.type === "button") {
-			console.warn(
-				"SidebarItem: leftContent should not be a button when onClick is provided. Use asDiv prop.",
-			);
 		}
 		if (onClick && rightContent?.type === "button") {
-			console.warn(
-				"SidebarItem: rightContent should not be a button when onClick is provided. Use asDiv prop.",
-			);
 		}
 	}
 	// Map variants to colors following the styling guide
@@ -34,9 +28,9 @@ function SidebarItem({
 		book: "text-blue-600",
 		video: "text-violet-600",
 		flashcard: "text-amber-600",
-	};
+	}
 
-	const activeColor = variantColors[variant] || variantColors.default;
+	const activeColor = variantColors[variant] || variantColors.default
 
 	return (
 		<li className={`flex items-start gap-3 ${className}`}>
@@ -45,11 +39,7 @@ function SidebarItem({
 				type="button"
 				disabled={isLocked}
 				className={`text-left flex-1 min-w-0 ${
-					isCompleted
-						? `font-semibold ${activeColor}`
-						: isActive
-							? `font-semibold ${activeColor}`
-							: "text-zinc-800"
+					isCompleted ? `font-semibold ${activeColor}` : isActive ? `font-semibold ${activeColor}` : "text-zinc-800"
 				}`}
 				style={{
 					background: "none",
@@ -64,7 +54,7 @@ function SidebarItem({
 			</button>
 			{rightContent}
 		</li>
-	);
+	)
 }
 
-export default SidebarItem;
+export default SidebarItem
