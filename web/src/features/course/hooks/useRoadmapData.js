@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { useCourseService } from "../api/courseApi";
+import { useEffect, useState } from "react"
+import { useCourseService } from "../api/courseApi"
 
 /**
  * Common hook for fetching course data with module progress
@@ -9,49 +9,35 @@ import { useCourseService } from "../api/courseApi";
  * @returns {Object} - Object containing course data, modules, and utility functions
  */
 export function useRoadmapData(courseId) {
-	const [roadmap, setRoadmap] = useState(null);
-	const [nodes, setNodes] = useState([]);
-	const [isLoading, setIsLoading] = useState(false);
-	const [error, setError] = useState(null);
+	const [roadmap, setRoadmap] = useState(null)
+	const [nodes, setNodes] = useState([])
+	const [isLoading, setIsLoading] = useState(false)
+	const [error, setError] = useState(null)
 
 	// Use course service for all operations
-	const courseService = useCourseService(courseId);
+	const courseService = useCourseService(courseId)
 
 	// Fetch course basic info
 	const fetchRoadmap = useCallback(async () => {
 		if (!courseId) {
-			setRoadmap(null);
-			return;
+			setRoadmap(null)
+			return
 		}
-
-		try {
-			// Use course API
-			const data = await courseService.fetchCourse();
-			setRoadmap(data);
-		} catch (err) {
-			console.error("Failed to load course:", err);
-			throw err;
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [courseId, courseService.fetchCourse]); // Only depend on courseId
+		// Use course API
+		const data = await courseService.fetchCourse()
+		setRoadmap(data)
+	}, [courseId, courseService.fetchCourse]) // Only depend on courseId
 
 	// Fetch modules with progress
 	const fetchNodes = useCallback(async () => {
 		if (!courseId) {
-			setNodes([]);
-			return;
+			setNodes([])
+			return
 		}
-
-		try {
-			// Use course API
-			const moduleData = await courseService.fetchModules();
-			setNodes(moduleData || []);
-		} catch (err) {
-			console.error("Failed to load modules:", err);
-			throw err;
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [courseId, courseService.fetchModules]); // Only depend on courseId
+		// Use course API
+		const moduleData = await courseService.fetchModules()
+		setNodes(moduleData || [])
+	}, [courseId, courseService.fetchModules]) // Only depend on courseId
 
 	// Update module status optimistically
 	const updateNode = useCallback(
@@ -63,68 +49,54 @@ export function useRoadmapData(courseId) {
 						? {
 								...node,
 								status,
-								completionPercentage:
-									status === "completed"
-										? 100
-										: status === "in_progress"
-											? 50
-											: 0,
+								completionPercentage: status === "completed" ? 100 : status === "in_progress" ? 50 : 0,
 							}
-						: node,
-				),
-			);
+						: node
+				)
+			)
 
 			try {
 				// Use course API
-				await courseService.updateModule(nodeId, { status });
+				await courseService.updateModule(nodeId, { status })
 				// Refetch to ensure consistency
-				await fetchNodes();
+				await fetchNodes()
 			} catch (err) {
-				console.error("Failed to update module status:", err);
 				// Revert optimistic update on failure
-				await fetchNodes();
-				throw err;
+				await fetchNodes()
+				throw err
 			}
 		},
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[fetchNodes, courseService.updateModule], // Only depend on fetchNodes, not courseService
-	);
+		[fetchNodes, courseService.updateModule] // Only depend on fetchNodes, not courseService
+	)
 
 	// Main data fetching effect
 	useEffect(() => {
 		if (!courseId) {
-			setRoadmap(null);
-			setNodes([]);
-			return;
+			setRoadmap(null)
+			setNodes([])
+			return
 		}
 
 		async function fetchData() {
-			setIsLoading(true);
-			setError(null);
+			setIsLoading(true)
+			setError(null)
 			try {
-				await Promise.all([fetchRoadmap(), fetchNodes()]);
+				await Promise.all([fetchRoadmap(), fetchNodes()])
 			} catch (err) {
-				console.error("Failed to load course data:", err);
-				setError(err.message || "Failed to load course data");
-				setRoadmap(null);
-				setNodes([]);
+				setError(err.message || "Failed to load course data")
+				setRoadmap(null)
+				setNodes([])
 			} finally {
-				setIsLoading(false);
+				setIsLoading(false)
 			}
 		}
 
-		fetchData();
-	}, [courseId, fetchRoadmap, fetchNodes]);
+		fetchData()
+	}, [courseId, fetchRoadmap, fetchNodes])
 
 	// Calculate overall progress
 	const overallProgress =
-		nodes.length > 0
-			? Math.round(
-					(nodes.filter((n) => n.status === "completed").length /
-						nodes.length) *
-						100,
-				)
-			: 0;
+		nodes.length > 0 ? Math.round((nodes.filter((n) => n.status === "completed").length / nodes.length) * 100) : 0
 
 	return {
 		roadmap,
@@ -134,8 +106,8 @@ export function useRoadmapData(courseId) {
 		overallProgress,
 		updateNode,
 		refresh: () => {
-			fetchRoadmap();
-			fetchNodes();
+			fetchRoadmap()
+			fetchNodes()
 		},
-	};
+	}
 }

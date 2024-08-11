@@ -6,7 +6,7 @@
  * backward compatibility during the transition.
  */
 
-import { useCourseService } from "./courseApi";
+import { useCourseService } from "./courseApi"
 
 /**
  * Maps legacy roadmap data to course format
@@ -14,7 +14,7 @@ import { useCourseService } from "./courseApi";
  * @returns {Object} Course data in new format
  */
 export function mapRoadmapToCourse(roadmap) {
-	if (!roadmap) return null;
+	if (!roadmap) return null
 
 	return {
 		id: roadmap.id,
@@ -28,7 +28,7 @@ export function mapRoadmapToCourse(roadmap) {
 		createdAt: roadmap.created_at || roadmap.createdAt,
 		updatedAt: roadmap.updated_at || roadmap.updatedAt,
 		modules: roadmap.nodes ? roadmap.nodes.map(mapNodeToModule) : [],
-	};
+	}
 }
 
 /**
@@ -37,7 +37,7 @@ export function mapRoadmapToCourse(roadmap) {
  * @returns {Object} Module data in new format
  */
 export function mapNodeToModule(node) {
-	if (!node) return null;
+	if (!node) return null
 
 	return {
 		id: node.id,
@@ -49,11 +49,10 @@ export function mapNodeToModule(node) {
 		content: node.content || "",
 		order: node.order || 0,
 		status: node.status || "not_started",
-		completionPercentage:
-			node.completion_percentage || node.completionPercentage || 0,
+		completionPercentage: node.completion_percentage || node.completionPercentage || 0,
 		createdAt: node.created_at || node.createdAt,
 		updatedAt: node.updated_at || node.updatedAt,
-	};
+	}
 }
 
 /**
@@ -62,7 +61,7 @@ export function mapNodeToModule(node) {
  * @returns {Object} Legacy roadmap data
  */
 export function mapCourseToRoadmap(course) {
-	if (!course) return null;
+	if (!course) return null
 
 	return {
 		id: course.id,
@@ -76,7 +75,7 @@ export function mapCourseToRoadmap(course) {
 		created_at: course.createdAt,
 		updated_at: course.updatedAt,
 		nodes: course.modules ? course.modules.map(mapModuleToNode) : [],
-	};
+	}
 }
 
 /**
@@ -85,7 +84,7 @@ export function mapCourseToRoadmap(course) {
  * @returns {Object} Legacy node data
  */
 export function mapModuleToNode(module) {
-	if (!module) return null;
+	if (!module) return null
 
 	return {
 		id: module.id,
@@ -100,7 +99,7 @@ export function mapModuleToNode(module) {
 		completion_percentage: module.completionPercentage,
 		created_at: module.createdAt,
 		updated_at: module.updatedAt,
-	};
+	}
 }
 
 /**
@@ -109,7 +108,7 @@ export function mapModuleToNode(module) {
  * @param {string} id - The course/roadmap ID
  */
 export function useRoadmapCourseCompatibility(id = null) {
-	const courseService = useCourseService(id);
+	const courseService = useCourseService(id)
 
 	return {
 		// ========== NEW API METHODS ==========
@@ -121,16 +120,16 @@ export function useRoadmapCourseCompatibility(id = null) {
 		 * Fetch roadmap (returns data in legacy format)
 		 */
 		async fetchRoadmap() {
-			const course = await courseService.fetchCourse();
-			return mapCourseToRoadmap(course);
+			const course = await courseService.fetchCourse()
+			return mapCourseToRoadmap(course)
 		},
 
 		/**
 		 * Fetch roadmap nodes (returns modules in legacy format)
 		 */
 		async fetchRoadmapNodes() {
-			const modules = await courseService.fetchModules();
-			return modules ? modules.map(mapModuleToNode) : [];
+			const modules = await courseService.fetchModules()
+			return modules ? modules.map(mapModuleToNode) : []
 		},
 
 		/**
@@ -141,7 +140,7 @@ export function useRoadmapCourseCompatibility(id = null) {
 		async updateNodeStatus(nodeId, status) {
 			// For now, we'll use the module update API
 			// In the future, this might need more sophisticated mapping
-			return await courseService.updateModule(nodeId, { status });
+			return await courseService.updateModule(nodeId, { status })
 		},
 
 		/**
@@ -152,11 +151,11 @@ export function useRoadmapCourseCompatibility(id = null) {
 		async fetchNodeLesson(nodeId, lessonId = null) {
 			if (lessonId) {
 				// If we have a specific lesson ID, fetch it directly
-				return await courseService.fetchLesson(nodeId, lessonId);
+				return await courseService.fetchLesson(nodeId, lessonId)
 			}
 			// If no lesson ID, fetch all lessons for the module and return the first one
-			const lessons = await courseService.fetchLessons(nodeId);
-			return lessons && lessons.length > 0 ? lessons[0] : null;
+			const lessons = await courseService.fetchLessons(nodeId)
+			return lessons && lessons.length > 0 ? lessons[0] : null
 		},
 
 		// ========== UTILITY METHODS ==========
@@ -169,11 +168,11 @@ export function useRoadmapCourseCompatibility(id = null) {
 		convertToNewFormat(legacyData, type) {
 			switch (type) {
 				case "roadmap":
-					return mapRoadmapToCourse(legacyData);
+					return mapRoadmapToCourse(legacyData)
 				case "node":
-					return mapNodeToModule(legacyData);
+					return mapNodeToModule(legacyData)
 				default:
-					return legacyData;
+					return legacyData
 			}
 		},
 
@@ -185,24 +184,24 @@ export function useRoadmapCourseCompatibility(id = null) {
 		convertToLegacyFormat(newData, type) {
 			switch (type) {
 				case "course":
-					return mapCourseToRoadmap(newData);
+					return mapCourseToRoadmap(newData)
 				case "module":
-					return mapModuleToNode(newData);
+					return mapModuleToNode(newData)
 				default:
-					return newData;
+					return newData
 			}
 		},
 
 		// ========== COMBINED LOADING STATE ==========
 
 		get isLoading() {
-			return courseService.isLoading;
+			return courseService.isLoading
 		},
 
 		get error() {
-			return courseService.error;
+			return courseService.error
 		},
-	};
+	}
 }
 
 /**
@@ -214,7 +213,7 @@ export function shouldUseNewCourseAPI() {
 	// - Controlled by environment variable
 	// - Controlled by feature flag
 	// - Controlled by user preference
-	return true;
+	return true
 }
 
 /**
@@ -222,15 +221,15 @@ export function shouldUseNewCourseAPI() {
  * @param {string} id - The course/roadmap ID
  */
 export function useSmartCourseAPI(id = null) {
-	const courseService = useCourseService(id);
-	const roadmapCompatibilityService = useRoadmapCourseCompatibility(id);
+	const courseService = useCourseService(id)
+	const roadmapCompatibilityService = useRoadmapCourseCompatibility(id)
 
-	const useNewAPI = shouldUseNewCourseAPI();
+	const useNewApi = shouldUseNewCourseAPI()
 
-	if (useNewAPI) {
-		return courseService;
+	if (useNewApi) {
+		return courseService
 	}
-	return roadmapCompatibilityService;
+	return roadmapCompatibilityService
 }
 
 // Functions are already exported above individually

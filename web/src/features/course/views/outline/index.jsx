@@ -1,6 +1,6 @@
-import { useCourseProgress } from "../../../../hooks/useCourseProgress";
-import { useCourseNavigation } from "../../../../utils/navigationUtils";
-import OutlineNode from "../../components/navigation/OutlineNode";
+import { useCourseProgress } from "../../../../hooks/useCourseProgress"
+import { useCourseNavigation } from "../../../../utils/navigationUtils"
+import OutlineNode from "../../components/navigation/OutlineNode"
 
 /**
  * OutlineView renders the full roadmap outline, with all modules and their lessons
@@ -14,23 +14,17 @@ function OutlineView({ roadmapId, modules = [] }) {
 		progress: courseProgress,
 		toggleCompletion: toggleLessonCompletion,
 		isCompleted,
-	} = useCourseProgress(roadmapId);
-	const { goToLesson } = useCourseNavigation();
+	} = useCourseProgress(roadmapId)
+	const { goToLesson } = useCourseNavigation()
 
 	const handleLessonClick = async (_moduleIdx, _lessonIdx, lessonId) => {
 		try {
 			if (!lessonId) {
-				console.error("Lesson ID is missing:", lessonId);
-				return;
+				return
 			}
-
-			// Navigate to the lesson using simplified URL routing
-			console.log("Navigating to lesson:", roadmapId, lessonId);
-			goToLesson(roadmapId, lessonId);
-		} catch (err) {
-			console.error("Error handling lesson click:", err);
-		}
-	};
+			goToLesson(roadmapId, lessonId)
+		} catch (_err) {}
+	}
 
 	if (!modules || modules.length === 0) {
 		return (
@@ -40,7 +34,7 @@ function OutlineView({ roadmapId, modules = [] }) {
 			>
 				<p>No outline content available for this roadmap.</p>
 			</div>
-		);
+		)
 	}
 
 	return (
@@ -51,9 +45,7 @@ function OutlineView({ roadmapId, modules = [] }) {
 						key={module.id || idx}
 						module={module}
 						index={idx}
-						onLessonClick={(lessonIdx, lessonId) =>
-							handleLessonClick(idx, lessonIdx, lessonId)
-						}
+						onLessonClick={(lessonIdx, lessonId) => handleLessonClick(idx, lessonIdx, lessonId)}
 						isLessonCompleted={isCompleted}
 						toggleLessonCompletion={toggleLessonCompletion}
 						courseProgress={courseProgress}
@@ -61,7 +53,7 @@ function OutlineView({ roadmapId, modules = [] }) {
 				))}
 			</div>
 		</div>
-	);
+	)
 }
 
-export default OutlineView;
+export default OutlineView

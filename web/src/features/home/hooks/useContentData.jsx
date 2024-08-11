@@ -1,37 +1,26 @@
-import {
-	ArrowUpDown,
-	BookOpen,
-	CalendarDays,
-	Clock,
-	FileText,
-	Layers,
-	Search,
-	Youtube,
-} from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { useToast } from "@/hooks/use-toast";
-import { processContentData } from "@/lib/api";
-import { api } from "@/lib/apiClient";
-export function useContentData(filters, pinning) {
-	const [contentItems, setContentItems] = useState([]);
-	const [filterOptions, setFilterOptions] = useState([]);
-	const [sortOptions, setSortOptions] = useState([]);
-	const [isLoading, setIsLoading] = useState(true);
-	const { toast } = useToast();
+import { ArrowUpDown, BookOpen, CalendarDays, Clock, FileText, Layers, Search, Youtube } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
 
-	// Load content data function - memoized with useCallback to prevent recreating on every render
+import { useToast } from "@/hooks/use-toast"
+import { processContentData } from "@/lib/api"
+import { api } from "@/lib/apiClient"
+export function useContentData(filters, _pinning) {
+	const [contentItems, setContentItems] = useState([])
+	const [filterOptions, setFilterOptions] = useState([])
+	const [sortOptions, setSortOptions] = useState([])
+	const [isLoading, setIsLoading] = useState(true)
+	const { toast } = useToast()
+
+	// Load content data function - memoized to prevent infinite loops
 	const loadContentData = useCallback(async () => {
-		setIsLoading(true);
+		setIsLoading(true)
 		try {
 			// Include archived content if we're showing archived or all content
-			const includeArchived =
-				filters.archiveFilter === "archived" || filters.archiveFilter === "all";
+			const includeArchived = filters.archiveFilter === "archived" || filters.archiveFilter === "all"
 			// Loading content data based on archive filter
 
 			// Fetch data using the correct cookie-based API client
-			const response = await api.get(
-				includeArchived ? "/content?include_archived=true" : "/content",
-			);
+			const response = await api.get(includeArchived ? "/content?include_archived=true" : "/content")
 
 			// Transform the raw API response to match the expected format
 			const data = (response.items || []).map((item) => {
@@ -63,17 +52,13 @@ export function useContentData(filters, pinning) {
 						lessonCount: item.lessonCount,
 						completedLessons: item.completedLessons,
 					}),
-				};
-				return mappedItem;
-			});
+				}
+				return mappedItem
+			})
 
 			// Process the API data
 
-			const {
-				content,
-				filterOptions: options,
-				sortOptions: sortOpts,
-			} = processContentData(data);
+			const { content, filterOptions: options, sortOptions: sortOpts } = processContentData(data)
 
 			// Content processed successfully
 
@@ -84,19 +69,17 @@ export function useContentData(filters, pinning) {
 				// Add mock due dates and states for demonstration
 				dueDate:
 					Math.random() > 0.7
-						? new Date(
-								Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000,
-							).toISOString()
+						? new Date(Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000).toISOString()
 						: null,
 				isPaused: Math.random() > 0.9,
 				// For flashcards, map the existing fields
 				totalCards: item.cardCount,
 				due: item.dueCount || Math.floor(Math.random() * 10),
 				overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
-			}));
+			}))
 
 			// Set content items without fetching progress (React Query will handle it)
-			setContentItems(transformedContent);
+			setContentItems(transformedContent)
 
 			// Map the filter options with their icons
 			setFilterOptions(
@@ -104,26 +87,26 @@ export function useContentData(filters, pinning) {
 					const getIcon = () => {
 						switch (option.icon) {
 							case "Search":
-								return <Search className="h-4 w-4 mr-2" />;
+								return <Search className="h-4 w-4 mr-2" />
 							case "BookOpen":
-								return <BookOpen className="h-4 w-4 mr-2" />;
+								return <BookOpen className="h-4 w-4 mr-2" />
 							case "FileText":
-								return <FileText className="h-4 w-4 mr-2" />;
+								return <FileText className="h-4 w-4 mr-2" />
 							case "Youtube":
-								return <Youtube className="h-4 w-4 mr-2" />;
+								return <Youtube className="h-4 w-4 mr-2" />
 							case "Layers":
-								return <Layers className="h-4 w-4 mr-2" />;
+								return <Layers className="h-4 w-4 mr-2" />
 							default:
-								return <Search className="h-4 w-4 mr-2" />;
+								return <Search className="h-4 w-4 mr-2" />
 						}
-					};
+					}
 
 					return {
 						...option,
 						icon: getIcon(),
-					};
-				}),
-			);
+					}
+				})
+			)
 
 			// Map the sort options with their icons
 			setSortOptions(
@@ -131,43 +114,42 @@ export function useContentData(filters, pinning) {
 					const getIcon = () => {
 						switch (option.icon) {
 							case "Clock":
-								return <Clock className="h-4 w-4 mr-2" />;
+								return <Clock className="h-4 w-4 mr-2" />
 							case "CalendarDays":
-								return <CalendarDays className="h-4 w-4 mr-2" />;
+								return <CalendarDays className="h-4 w-4 mr-2" />
 							case "ArrowUpDown":
-								return <ArrowUpDown className="h-4 w-4 mr-2" />;
+								return <ArrowUpDown className="h-4 w-4 mr-2" />
 							case "FileText":
-								return <FileText className="h-4 w-4 mr-2" />;
+								return <FileText className="h-4 w-4 mr-2" />
 							default:
-								return <Clock className="h-4 w-4 mr-2" />;
+								return <Clock className="h-4 w-4 mr-2" />
 						}
-					};
+					}
 
 					return {
 						...option,
 						icon: getIcon(),
-					};
-				}),
-			);
+					}
+				})
+			)
 
-			// Initialize pins state
-			pinning.initializePins(transformedContent);
-		} catch (error) {
-			console.error("Error loading content data:", error);
+			// Don't initialize pins here - it causes re-renders
+			// Pins should be initialized elsewhere
+		} catch (_error) {
 			toast({
 				title: "Error",
 				description: "Failed to load content. Please refresh the page.",
 				variant: "destructive",
-			});
+			})
 		} finally {
-			setIsLoading(false);
+			setIsLoading(false)
 		}
-	}, [filters.archiveFilter, toast, pinning.initializePins]);
+	}, [filters.archiveFilter, toast]) // Only depend on archiveFilter to prevent loops
 
 	// Fetch content data on component mount and when archive filter changes
 	useEffect(() => {
-		loadContentData();
-	}, [loadContentData]);
+		loadContentData()
+	}, [loadContentData]) // Now properly memoized with correct dependencies
 
 	// Removed event listeners that caused race condition
 	// These events are now handled by useContentProgressSync hook
@@ -181,5 +163,5 @@ export function useContentData(filters, pinning) {
 		setSortOptions,
 		isLoading,
 		loadContentData,
-	};
+	}
 }

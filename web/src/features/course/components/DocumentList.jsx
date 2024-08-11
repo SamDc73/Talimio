@@ -22,23 +22,18 @@ import {
 	MoreVertical,
 	Search,
 	Trash2,
-} from "lucide-react";
-import { useMemo, useState } from "react";
-import { Button } from "../../../components/button";
-import { Card } from "../../../components/card";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "../../../components/drop-menu";
-import { Input } from "../../../components/input";
+} from "lucide-react"
+import { useState } from "react"
+import { Button } from "../../../components/button"
+import { Card } from "../../../components/card"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../../components/drop-menu"
+import { Input } from "../../../components/input"
 import DocumentStatusBadge, {
 	DocumentStatusSummary,
 	isDocumentFailed,
 	isDocumentProcessing,
 	isDocumentReady,
-} from "./DocumentStatusBadge";
+} from "./DocumentStatusBadge"
 
 const DocumentList = ({
 	documents = [],
@@ -53,24 +48,24 @@ const DocumentList = ({
 	showSorting = true,
 	className = "",
 }) => {
-	const [searchTerm, setSearchTerm] = useState("");
-	const [statusFilter, setStatusFilter] = useState("all");
-	const [sortBy, setSortBy] = useState("created_at");
-	const [sortOrder, setSortOrder] = useState("desc");
+	const [searchTerm, setSearchTerm] = useState("")
+	const [statusFilter, setStatusFilter] = useState("all")
+	const [sortBy, setSortBy] = useState("created_at")
+	const [sortOrder, setSortOrder] = useState("desc")
 
 	// Filter and sort documents
 	const filteredDocuments = useMemo(() => {
-		let filtered = documents;
+		let filtered = documents
 
 		// Apply search filter
 		if (searchTerm.trim()) {
-			const search = searchTerm.toLowerCase();
+			const search = searchTerm.toLowerCase()
 			filtered = filtered.filter(
 				(doc) =>
 					doc.title?.toLowerCase().includes(search) ||
 					doc.document_type?.toLowerCase().includes(search) ||
-					doc.url?.toLowerCase().includes(search),
-			);
+					doc.url?.toLowerCase().includes(search)
+			)
 		}
 
 		// Apply status filter
@@ -78,86 +73,82 @@ const DocumentList = ({
 			filtered = filtered.filter((doc) => {
 				switch (statusFilter) {
 					case "ready":
-						return isDocumentReady(doc);
+						return isDocumentReady(doc)
 					case "processing":
-						return isDocumentProcessing(doc);
+						return isDocumentProcessing(doc)
 					case "failed":
-						return isDocumentFailed(doc);
+						return isDocumentFailed(doc)
 					default:
-						return true;
+						return true
 				}
-			});
+			})
 		}
 
 		// Apply sorting
 		filtered.sort((a, b) => {
-			let aValue = a[sortBy];
-			let bValue = b[sortBy];
+			let aValue = a[sortBy]
+			let bValue = b[sortBy]
 
 			// Handle date sorting
 			if (sortBy.includes("_at")) {
-				aValue = new Date(aValue);
-				bValue = new Date(bValue);
+				aValue = new Date(aValue)
+				bValue = new Date(bValue)
 			}
 
 			// Handle string sorting
 			if (typeof aValue === "string" && typeof bValue === "string") {
-				aValue = aValue.toLowerCase();
-				bValue = bValue.toLowerCase();
+				aValue = aValue.toLowerCase()
+				bValue = bValue.toLowerCase()
 			}
 
 			if (sortOrder === "asc") {
-				return aValue > bValue ? 1 : -1;
+				return aValue > bValue ? 1 : -1
 			} else {
-				return aValue < bValue ? 1 : -1;
+				return aValue < bValue ? 1 : -1
 			}
-		});
+		})
 
-		return filtered;
-	}, [documents, searchTerm, statusFilter, sortBy, sortOrder]);
+		return filtered
+	}, [documents, searchTerm, statusFilter, sortBy, sortOrder])
 
 	// Get file type icon
 	const getFileTypeIcon = (doc) => {
 		if (doc.document_type === "url") {
-			return <Link2 className="w-5 h-5 text-green-500" />;
+			return <Link2 className="w-5 h-5 text-green-500" />
 		}
-		return <FileText className="w-5 h-5 text-blue-500" />;
-	};
+		return <FileText className="w-5 h-5 text-blue-500" />
+	}
 
 	// Format file size
 	const formatFileSize = (bytes) => {
-		if (!bytes) return "Unknown size";
-		const k = 1024;
-		const sizes = ["Bytes", "KB", "MB", "GB"];
-		const i = Math.floor(Math.log(bytes) / Math.log(k));
-		return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
-	};
+		if (!bytes) return "Unknown size"
+		const k = 1024
+		const sizes = ["Bytes", "KB", "MB", "GB"]
+		const i = Math.floor(Math.log(bytes) / Math.log(k))
+		return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`
+	}
 
 	// Format date
 	const formatDate = (dateString) => {
-		if (!dateString) return "Unknown";
-		return new Date(dateString).toLocaleDateString();
-	};
+		if (!dateString) return "Unknown"
+		return new Date(dateString).toLocaleDateString()
+	}
 
 	// Handle sort change
 	const handleSort = (field) => {
 		if (sortBy === field) {
-			setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+			setSortOrder(sortOrder === "asc" ? "desc" : "asc")
 		} else {
-			setSortBy(field);
-			setSortOrder("desc");
+			setSortBy(field)
+			setSortOrder("desc")
 		}
-	};
+	}
 
 	// Get sort icon
 	const getSortIcon = (field) => {
-		if (sortBy !== field) return null;
-		return sortOrder === "asc" ? (
-			<ArrowUp className="w-4 h-4" />
-		) : (
-			<ArrowDown className="w-4 h-4" />
-		);
-	};
+		if (sortBy !== field) return null
+		return sortOrder === "asc" ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />
+	}
 
 	if (isLoading) {
 		return (
@@ -167,7 +158,7 @@ const DocumentList = ({
 					<p className="text-gray-600">Loading documents...</p>
 				</div>
 			</Card>
-		);
+		)
 	}
 
 	return (
@@ -227,15 +218,13 @@ const DocumentList = ({
 					{searchTerm || statusFilter !== "all" ? (
 						<div className="p-8 text-center">
 							<FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-							<p className="text-gray-600 mb-2">
-								No documents match your criteria
-							</p>
+							<p className="text-gray-600 mb-2">No documents match your criteria</p>
 							<Button
 								variant="outline"
 								size="sm"
 								onClick={() => {
-									setSearchTerm("");
-									setStatusFilter("all");
+									setSearchTerm("")
+									setStatusFilter("all")
 								}}
 							>
 								Clear filters
@@ -297,9 +286,7 @@ const DocumentList = ({
 											{getSortIcon("created_at")}
 										</button>
 									</div>
-									{showActions && (
-										<div className="col-span-1 text-right">Actions</div>
-									)}
+									{showActions && <div className="col-span-1 text-right">Actions</div>}
 								</div>
 							</div>
 						)}
@@ -312,22 +299,16 @@ const DocumentList = ({
 										{/* Document Info */}
 										<div className="col-span-5">
 											<div className="flex items-center space-x-3">
-												<div className="flex-shrink-0">
-													{getFileTypeIcon(doc)}
-												</div>
+												<div className="flex-shrink-0">{getFileTypeIcon(doc)}</div>
 												<div className="min-w-0 flex-1">
 													<p className="text-sm font-medium text-gray-900 truncate">
 														{doc.title || "Untitled Document"}
 													</p>
 													{doc.document_type === "url" && doc.url && (
-														<p className="text-xs text-gray-500 truncate">
-															{doc.url}
-														</p>
+														<p className="text-xs text-gray-500 truncate">{doc.url}</p>
 													)}
 													{doc.file_path && doc.size && (
-														<p className="text-xs text-gray-500">
-															{formatFileSize(doc.size)}
-														</p>
+														<p className="text-xs text-gray-500">{formatFileSize(doc.size)}</p>
 													)}
 												</div>
 											</div>
@@ -335,9 +316,7 @@ const DocumentList = ({
 
 										{/* Type */}
 										<div className="col-span-2">
-											<span className="text-sm text-gray-600 capitalize">
-												{doc.document_type || "Unknown"}
-											</span>
+											<span className="text-sm text-gray-600 capitalize">{doc.document_type || "Unknown"}</span>
 										</div>
 
 										{/* Status */}
@@ -364,17 +343,13 @@ const DocumentList = ({
 													</DropdownMenuTrigger>
 													<DropdownMenuContent align="end">
 														{isDocumentReady(doc) && onViewDocument && (
-															<DropdownMenuItem
-																onClick={() => onViewDocument(doc)}
-															>
+															<DropdownMenuItem onClick={() => onViewDocument(doc)}>
 																<Eye className="w-4 h-4 mr-2" />
 																View
 															</DropdownMenuItem>
 														)}
 														{doc.file_path && onDownloadDocument && (
-															<DropdownMenuItem
-																onClick={() => onDownloadDocument(doc)}
-															>
+															<DropdownMenuItem onClick={() => onDownloadDocument(doc)}>
 																<Download className="w-4 h-4 mr-2" />
 																Download
 															</DropdownMenuItem>
@@ -400,7 +375,7 @@ const DocumentList = ({
 				</Card>
 			)}
 		</div>
-	);
-};
+	)
+}
 
-export default DocumentList;
+export default DocumentList

@@ -1,105 +1,88 @@
-import { Loader2, Tag as TagIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { Button } from "../../../components/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogHeader,
-	DialogTitle,
-} from "../../../components/dialog";
-import { useToast } from "../../../hooks/use-toast";
-import useTagStore from "../../../stores/useTagStore";
-import { TagList } from "./Tag";
-import TagInput from "./TagInput";
+import { Loader2, Tag as TagIcon } from "lucide-react"
+import { useEffect, useState } from "react"
+
+import { Button } from "../../../components/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../components/dialog"
+import { useToast } from "../../../hooks/use-toast"
+import useTagStore from "../../../stores/useTagStore"
+
+import { TagList } from "./Tag"
+import TagInput from "./TagInput"
 
 /**
  * Modal for editing tags on content items
  */
-const TagEditModal = ({
-	open,
-	onOpenChange,
-	contentType,
-	contentId,
-	contentTitle = "",
-	onTagsUpdated,
-}) => {
-	const [currentTags, setCurrentTags] = useState([]);
-	const [isLoading, setIsLoading] = useState(false);
-	const [isSaving, setIsSaving] = useState(false);
+const TagEditModal = ({ open, onOpenChange, contentType, contentId, contentTitle = "", onTagsUpdated }) => {
+	const [currentTags, setCurrentTags] = useState([])
+	const [isLoading, setIsLoading] = useState(false)
+	const [isSaving, setIsSaving] = useState(false)
 
-	const {
-		fetchContentTags,
-		updateContentTags,
-		fetchUserTags,
-		getContentTagObjects,
-	} = useTagStore();
+	const { fetchContentTags, updateContentTags, fetchUserTags, getContentTagObjects } = useTagStore()
 
-	const { toast } = useToast();
+	const { toast } = useToast()
 
-	const loadContentTags = useCallback(async () => {
-		setIsLoading(true);
+	const loadContentTags = async () => {
+		setIsLoading(true)
 		try {
-			const tags = await fetchContentTags(contentType, contentId);
-			setCurrentTags(tags);
-		} catch (error) {
-			console.error("Failed to load content tags:", error);
+			const tags = await fetchContentTags(contentType, contentId)
+			setCurrentTags(tags)
+		} catch (_error) {
 			toast({
 				title: "Error",
 				description: "Failed to load tags. Please try again.",
 				variant: "destructive",
-			});
+			})
 		} finally {
-			setIsLoading(false);
+			setIsLoading(false)
 		}
-	}, [fetchContentTags, contentType, contentId, toast]);
+	}
 
 	// Load content tags when modal opens
 	useEffect(() => {
 		if (open && contentType && contentId) {
-			loadContentTags();
+			loadContentTags()
 			// Also ensure we have user tags loaded
-			fetchUserTags();
+			fetchUserTags()
 		}
-	}, [open, contentType, contentId, fetchUserTags, loadContentTags]);
+	}, [open, contentType, contentId, fetchUserTags, loadContentTags])
 
 	const handleSave = async () => {
-		setIsSaving(true);
+		setIsSaving(true)
 		try {
-			const tagNames = currentTags.map((tag) => tag.name);
-			await updateContentTags(contentType, contentId, tagNames);
+			const tagNames = currentTags.map((tag) => tag.name)
+			await updateContentTags(contentType, contentId, tagNames)
 
 			toast({
 				title: "Tags Updated",
 				description: `Tags for "${contentTitle}" have been updated successfully.`,
-			});
+			})
 
 			// Notify parent component that tags were updated
 			if (onTagsUpdated) {
-				onTagsUpdated(contentId, contentType, tagNames);
+				onTagsUpdated(contentId, contentType, tagNames)
 			}
 
-			onOpenChange(false);
-		} catch (error) {
-			console.error("Failed to save tags:", error);
+			onOpenChange(false)
+		} catch (_error) {
 			toast({
 				title: "Error",
 				description: "Failed to save tags. Please try again.",
 				variant: "destructive",
-			});
+			})
 		} finally {
-			setIsSaving(false);
+			setIsSaving(false)
 		}
-	};
+	}
 
 	const handleCancel = () => {
 		// Reset to original tags
-		const originalTags = getContentTagObjects(contentType, contentId);
-		setCurrentTags(originalTags);
-		onOpenChange(false);
-	};
+		const originalTags = getContentTagObjects(contentType, contentId)
+		setCurrentTags(originalTags)
+		onOpenChange(false)
+	}
 
 	if (!contentType || !contentId) {
-		return null;
+		return null
 	}
 
 	return (
@@ -110,35 +93,27 @@ const TagEditModal = ({
 						<TagIcon className="h-5 w-5" />
 						Edit Tags
 					</DialogTitle>
-					{contentTitle && (
-						<p className="text-sm text-gray-600 mt-1">for "{contentTitle}"</p>
-					)}
+					{contentTitle && <p className="text-sm text-gray-600 mt-1">for "{contentTitle}"</p>}
 				</DialogHeader>
 
 				<div className="space-y-4 py-4">
 					{isLoading ? (
 						<div className="flex items-center justify-center py-8">
 							<Loader2 className="h-6 w-6 animate-spin" />
-							<span className="ml-2 text-sm text-gray-600">
-								Loading tags...
-							</span>
+							<span className="ml-2 text-sm text-gray-600">Loading tags...</span>
 						</div>
 					) : (
 						<>
 							{/* Current tags display */}
 							{currentTags.length > 0 ? (
 								<div>
-									<div className="text-sm font-medium text-gray-700 mb-2 block">
-										Current Tags
-									</div>
+									<div className="text-sm font-medium text-gray-700 mb-2 block">Current Tags</div>
 									<TagList tags={currentTags} variant="default" size="medium" />
 								</div>
 							) : (
 								<div className="text-center py-4 text-gray-500">
 									<div className="text-sm">This item has no tags yet</div>
-									<div className="text-xs mt-1">
-										Start typing below to add tags
-									</div>
+									<div className="text-xs mt-1">Start typing below to add tags</div>
 								</div>
 							)}
 
@@ -168,19 +143,10 @@ const TagEditModal = ({
 
 				{/* Actions */}
 				<div className="flex justify-end gap-2 pt-4 border-t">
-					<Button
-						type="button"
-						variant="outline"
-						onClick={handleCancel}
-						disabled={isSaving}
-					>
+					<Button type="button" variant="outline" onClick={handleCancel} disabled={isSaving}>
 						Cancel
 					</Button>
-					<Button
-						type="button"
-						onClick={handleSave}
-						disabled={isSaving || isLoading}
-					>
+					<Button type="button" onClick={handleSave} disabled={isSaving || isLoading}>
 						{isSaving ? (
 							<>
 								<Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -193,7 +159,7 @@ const TagEditModal = ({
 				</div>
 			</DialogContent>
 		</Dialog>
-	);
-};
+	)
+}
 
-export default TagEditModal;
+export default TagEditModal

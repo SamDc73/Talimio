@@ -1,15 +1,15 @@
-import { useCallback, useState } from "react";
-import { useToast } from "@/hooks/use-toast";
-import { fetchLesson } from "../api/lessonsApi";
+import { useState } from "react"
+import { useToast } from "@/hooks/use-toast"
+import { fetchLesson } from "../api/lessonsApi"
 
 /**
  *  lesson viewer hook
  */
 export function useLessonViewer(courseId) {
-	const [lesson, setLesson] = useState(null);
-	const [isLoading, setIsLoading] = useState(false);
-	const [error, setError] = useState(null);
-	const { toast } = useToast();
+	const [lesson, setLesson] = useState(null)
+	const [isLoading, setIsLoading] = useState(false)
+	const [error, setError] = useState(null)
+	const { toast } = useToast()
 
 	/**
 	 * Load a lesson by ID, generate if needed
@@ -17,29 +17,53 @@ export function useLessonViewer(courseId) {
 	const loadLesson = useCallback(
 		async (lessonId) => {
 			if (!courseId || !lessonId) {
-				setError("Missing required IDs");
-				return;
+				setError("Missing required IDs")
+				return
 			}
 
-			setIsLoading(true);
-			setError(null);
+			setIsLoading(true)
+			setError(null)
 
 			try {
-				const lessonData = await fetchLesson(courseId, lessonId);
-				setLesson(lessonData);
+				const lessonData = await fetchLesson(courseId, lessonId)
+
+				// Check if content is actually available
+				if (!lessonData?.md_source && !lessonData?.content) {
+					setError(
+						"Lesson content is not available. The system is attempting to generate it. Please try again in a moment."
+					)
+					toast({
+						title: "Content Generation in Progress",
+						description: "The lesson content is being generated. Please refresh the page in a few seconds.",
+						variant: "default",
+					})
+				} else {
+					setLesson(lessonData)
+				}
 			} catch (err) {
-				setError(err.message);
+				// Provide more specific error messages based on status
+				let errorMessage = err.message || "Failed to load lesson"
+
+				if (err.message?.includes("503") || err.message?.includes("Service Unavailable")) {
+					errorMessage = "The lesson generation service is temporarily unavailable. Please try again in a few moments."
+				} else if (err.message?.includes("500")) {
+					errorMessage = "An unexpected error occurred while loading the lesson. Please try refreshing the page."
+				} else if (err.message?.includes("404")) {
+					errorMessage = "Lesson not found. Please check if the lesson exists."
+				}
+
+				setError(errorMessage)
 				toast({
-					title: "Error",
-					description: err.message,
+					title: "Error Loading Lesson",
+					description: errorMessage,
 					variant: "destructive",
-				});
+				})
 			} finally {
-				setIsLoading(false);
+				setIsLoading(false)
 			}
 		},
-		[courseId, toast],
-	);
+		[courseId, toast]
+	)
 
 	/**
 	 * Generate a new lesson (requires moduleId, so disabled for now)
@@ -49,16 +73,16 @@ export function useLessonViewer(courseId) {
 			title: "Feature not available",
 			description: "Lesson generation requires module selection",
 			variant: "destructive",
-		});
-	}, [toast]);
+		})
+	}, [toast])
 
 	/**
 	 * Clear the current lesson
 	 */
 	const clearLesson = useCallback(() => {
-		setLesson(null);
-		setError(null);
-	}, []);
+		setLesson(null)
+		setError(null)
+	}, [])
 
 	return {
 		lesson,
@@ -67,5 +91,5 @@ export function useLessonViewer(courseId) {
 		loadLesson,
 		createLesson,
 		clearLesson,
-	};
+	}
 }

@@ -1,7 +1,7 @@
-import { AnimatePresence, motion } from "framer-motion";
-import { BookOpen, Layers, Plus, Sparkles, Youtube } from "lucide-react";
-import { Button } from "@/components/button";
-import { TooltipButton } from "@/components/TooltipButton";
+import { AnimatePresence, motion } from "framer-motion"
+import { BookOpen, Layers, Plus, Sparkles, Youtube } from "lucide-react"
+import { Button } from "@/components/button"
+import { TooltipButton } from "@/components/TooltipButton"
 
 export default function FABMenu({
 	isFabExpanded,
@@ -26,8 +26,8 @@ export default function FABMenu({
 							variant="secondary"
 							className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
 							onClick={() => {
-								onGenerateRoadmap();
-								onToggleExpanded();
+								onGenerateRoadmap()
+								onToggleExpanded()
 							}}
 							tooltipContent="Generate Course"
 							tooltipSide="left"
@@ -38,8 +38,8 @@ export default function FABMenu({
 							variant="secondary"
 							className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
 							onClick={() => {
-								onUploadBook();
-								onToggleExpanded();
+								onUploadBook()
+								onToggleExpanded()
 							}}
 							tooltipContent="Upload Book"
 							tooltipSide="left"
@@ -50,8 +50,8 @@ export default function FABMenu({
 							variant="secondary"
 							className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
 							onClick={() => {
-								onAddYoutube();
-								onToggleExpanded();
+								onAddYoutube()
+								onToggleExpanded()
 							}}
 							tooltipContent="Add YouTube Video"
 							tooltipSide="left"
@@ -62,8 +62,8 @@ export default function FABMenu({
 							variant="secondary"
 							className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
 							onClick={() => {
-								onCreateFlashcards();
-								onToggleExpanded();
+								onCreateFlashcards()
+								onToggleExpanded()
 							}}
 							tooltipContent="Create Flashcards"
 							tooltipSide="left"
@@ -73,19 +73,11 @@ export default function FABMenu({
 					</motion.div>
 				)}
 			</AnimatePresence>
-			<Button
-				className="rounded-full h-16 w-16 shadow-lg"
-				onClick={onToggleExpanded}
-			>
-				<motion.div
-					animate={{ rotate: isFabExpanded ? 45 : 0 }}
-					transition={{ duration: 0.3 }}
-				>
-					<Plus
-						className={`h-8 w-8 transition-transform duration-300 ${isFabExpanded ? "rotate-45" : ""}`}
-					/>
+			<Button className="rounded-full h-16 w-16 shadow-lg" onClick={onToggleExpanded}>
+				<motion.div animate={{ rotate: isFabExpanded ? 45 : 0 }} transition={{ duration: 0.3 }}>
+					<Plus className={`h-8 w-8 transition-transform duration-300 ${isFabExpanded ? "rotate-45" : ""}`} />
 				</motion.div>
 			</Button>
 		</div>
-	);
+	)
 }

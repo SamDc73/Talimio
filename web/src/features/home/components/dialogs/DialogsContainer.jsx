@@ -1,13 +1,8 @@
-import { BookUploadDialog } from "./BookUploadDialog";
-import { FlashcardDialog } from "./FlashcardDialog";
-import { YouTubeDialog } from "./YouTubeDialog";
+import { BookUploadDialog } from "./BookUploadDialog"
+import { FlashcardDialog } from "./FlashcardDialog"
+import { YouTubeDialog } from "./YouTubeDialog"
 
-export function DialogsContainer({
-	dialogs,
-	onBookUploaded,
-	onVideoAdded,
-	onDeckCreated,
-}) {
+export function DialogsContainer({ dialogs, onBookUploaded, onVideoAdded, onDeckCreated }) {
 	return (
 		<>
 			<BookUploadDialog
@@ -28,5 +23,5 @@ export function DialogsContainer({
 				onDeckCreated={onDeckCreated}
 			/>
 		</>
-	);
+	)
 }

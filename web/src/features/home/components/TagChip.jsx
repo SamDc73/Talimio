@@ -3,27 +3,21 @@ const TagChip = ({ tag, contentType }) => {
 	const getTagClasses = (type) => {
 		switch (type) {
 			case "course":
-				return "bg-teal-50 text-teal-600";
+				return "bg-teal-50 text-teal-600"
 			case "book":
-				return "bg-blue-50 text-blue-600";
+				return "bg-blue-50 text-blue-600"
 			case "video":
 			case "youtube":
-				return "bg-violet-50 text-violet-600";
+				return "bg-violet-50 text-violet-600"
 			case "flashcard":
 			case "flashcards":
-				return "bg-amber-50 text-amber-600";
+				return "bg-amber-50 text-amber-600"
 			default:
-				return "bg-muted text-muted-foreground";
+				return "bg-muted text-muted-foreground"
 		}
-	};
+	}
 
-	return (
-		<div
-			className={`text-xs font-medium px-2 py-1 rounded-full ${getTagClasses(contentType)}`}
-		>
-			{tag}
-		</div>
-	);
-};
+	return <div className={`text-xs font-medium px-2 py-1 rounded-full ${getTagClasses(contentType)}`}>{tag}</div>
+}
 
-export default TagChip;
+export default TagChip

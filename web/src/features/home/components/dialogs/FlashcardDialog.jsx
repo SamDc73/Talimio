@@ -1,94 +1,85 @@
-import { useState } from "react";
-import { Button } from "@/components/button";
-import { Input } from "@/components/input";
-import { Label } from "@/components/label";
-import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetFooter,
-	SheetHeader,
-	SheetTitle,
-} from "@/components/sheet";
-import { useToast } from "@/hooks/use-toast";
-import { api } from "@/lib/apiClient";
+import { useState } from "react"
+
+import { Button } from "@/components/button"
+import { Input } from "@/components/input"
+import { Label } from "@/components/label"
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/sheet"
+import { useToast } from "@/hooks/use-toast"
+import { api } from "@/lib/apiClient"
 
 export function FlashcardDialog({ open, onOpenChange, onDeckCreated }) {
-	const { toast } = useToast();
-	const [newDeckTitle, setNewDeckTitle] = useState("");
-	const [newDeckDescription, setNewDeckDescription] = useState("");
-	const [newCards, setNewCards] = useState("");
+	const { toast } = useToast()
+	const [newDeckTitle, setNewDeckTitle] = useState("")
+	const [newDeckDescription, setNewDeckDescription] = useState("")
+	const [newCards, setNewCards] = useState("")
 
 	const handleCreateDeck = async () => {
-		if (!newDeckTitle.trim()) return;
+		if (!newDeckTitle.trim()) return
 
 		try {
 			// Create the deck first
 			const deckResponse = await api.post("/flashcards", {
 				title: newDeckTitle,
 				description: newDeckDescription || "",
-			});
+			})
 
 			// If cards were provided, add them to the deck
 			if (newCards.trim()) {
-				const cards = newCards.split("\n").filter((line) => line.trim());
+				const cards = newCards.split("\n").filter((line) => line.trim())
 				const cardData = cards.map((line) => {
-					const [front, back] = line.split("|").map((s) => s.trim());
-					return { front: front || line, back: back || "" };
-				});
+					const [front, back] = line.split("|").map((s) => s.trim())
+					return { front: front || line, back: back || "" }
+				})
 
 				if (cardData.length > 0) {
 					await api.post(`/flashcards/${deckResponse.id}/cards`, {
 						cards: cardData,
-					});
+					})
 				}
 			}
 
 			toast({
 				title: "Deck Created!",
 				description: `"${deckResponse.title}" has been created successfully.`,
-			});
+			})
 
 			// Reset form
-			setNewDeckTitle("");
-			setNewDeckDescription("");
-			setNewCards("");
+			setNewDeckTitle("")
+			setNewDeckDescription("")
+			setNewCards("")
 
 			// Close dialog and notify parent
-			onOpenChange(false);
+			onOpenChange(false)
 			if (onDeckCreated) {
-				onDeckCreated(deckResponse);
+				onDeckCreated(deckResponse)
 			}
-		} catch (error) {
-			console.error("Failed to create deck:", error);
+		} catch (_error) {
 			toast({
 				title: "Error",
 				description: "Failed to create flashcard deck. Please try again.",
 				variant: "destructive",
-			});
+			})
 		}
-	};
+	}
 
 	const handleClose = () => {
-		setNewDeckTitle("");
-		setNewDeckDescription("");
-		setNewCards("");
-		onOpenChange(false);
-	};
+		setNewDeckTitle("")
+		setNewDeckDescription("")
+		setNewCards("")
+		onOpenChange(false)
+	}
 
 	return (
 		<Sheet open={open} onOpenChange={handleClose}>
 			<SheetContent side="bottom" className="sm:max-w-lg mx-auto">
 				<SheetHeader>
 					<SheetTitle>Create a New Flashcard Deck</SheetTitle>
-					<SheetDescription>
-						Create a new deck of flashcards to start studying.
-					</SheetDescription>
+					<SheetDescription>Create a new deck of flashcards to start studying.</SheetDescription>
 				</SheetHeader>
 				<div className="py-4">
 					<div className="grid gap-4">
 						<div className="grid gap-2">
-							<Label htmlFor="deck-title">Deck Title</Label>
+							<Label for="deck-title">Deck Title</Label>
 							<Input
 								id="deck-title"
 								value={newDeckTitle}
@@ -97,7 +88,7 @@ export function FlashcardDialog({ open, onOpenChange, onDeckCreated }) {
 							/>
 						</div>
 						<div className="grid gap-2">
-							<Label htmlFor="deck-description">Description</Label>
+							<Label for="deck-description">Description</Label>
 							<Input
 								id="deck-description"
 								value={newDeckDescription}
@@ -106,7 +97,7 @@ export function FlashcardDialog({ open, onOpenChange, onDeckCreated }) {
 							/>
 						</div>
 						<div className="grid gap-2">
-							<Label htmlFor="new-cards">Cards (Front | Back)</Label>
+							<Label for="new-cards">Cards (Front | Back)</Label>
 							<textarea
 								id="new-cards"
 								value={newCards}
@@ -128,5 +119,5 @@ useEffect | Hook for side effects"
 				</SheetFooter>
 			</SheetContent>
 		</Sheet>
-	);
+	)
 }

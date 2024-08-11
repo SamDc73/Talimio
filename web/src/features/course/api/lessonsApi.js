@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_BASE || "/api/v1";
+const BASE = import.meta.env.VITE_API_BASE || "/api/v1"
 
 // Removed findModuleIdForLesson as it's no longer needed in the simplified backend
 // where modules ARE lessons
@@ -8,18 +8,21 @@ const BASE = import.meta.env.VITE_API_BASE || "/api/v1";
  */
 export async function fetchLesson(courseId, lessonId) {
 	if (!courseId || !lessonId) {
-		throw new Error("Course ID and Lesson ID are required");
+		throw new Error("Course ID and Lesson ID are required")
 	}
 
 	// In the simplified backend, modules ARE lessons, so we use the simplified endpoint
 	// that treats lesson_id as a module/node ID
-	const res = await fetch(
-		`${BASE}/courses/${courseId}/lessons/${lessonId}?generate=true`,
-	);
+	const url = `${BASE}/courses/${courseId}/lessons/${lessonId}?generate=true`
+
+	const res = await fetch(url)
 	if (!res.ok) {
-		throw new Error(`Failed to fetch lesson: ${res.status}`);
+		throw new Error(`Failed to fetch lesson: ${res.status}`)
 	}
-	return res.json();
+
+	const data = await res.json()
+
+	return data
 }
 
 /**
@@ -28,15 +31,15 @@ export async function fetchLesson(courseId, lessonId) {
  */
 export async function fetchLessonById(lessonId) {
 	if (!lessonId) {
-		throw new Error("Lesson ID is required");
+		throw new Error("Lesson ID is required")
 	}
 
 	// Use the dedicated endpoint that finds lessons by ID alone
-	const res = await fetch(`${BASE}/content/lessons/${lessonId}`);
+	const res = await fetch(`${BASE}/content/lessons/${lessonId}?generate=true`)
 	if (!res.ok) {
-		throw new Error(`Failed to fetch lesson: ${res.status}`);
+		throw new Error(`Failed to fetch lesson: ${res.status}`)
 	}
-	return res.json();
+	return res.json()
 }
 
 /**
@@ -44,18 +47,16 @@ export async function fetchLessonById(lessonId) {
  */
 export async function fetchLessonFull(courseId, moduleId, lessonId) {
 	if (!courseId || !moduleId || !lessonId) {
-		throw new Error("Course ID, Module ID, and Lesson ID are required");
+		throw new Error("Course ID, Module ID, and Lesson ID are required")
 	}
 
 	// The backend endpoint accepts the module_id in the path but actually uses lesson_id
 	// In our simplified system, modules ARE lessons, so lesson_id is what matters
-	const res = await fetch(
-		`${BASE}/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}?generate=true`,
-	);
+	const res = await fetch(`${BASE}/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}?generate=true`)
 	if (!res.ok) {
-		throw new Error(`Failed to fetch lesson: ${res.status}`);
+		throw new Error(`Failed to fetch lesson: ${res.status}`)
 	}
-	return res.json();
+	return res.json()
 }
 
 /**
@@ -63,16 +64,14 @@ export async function fetchLessonFull(courseId, moduleId, lessonId) {
  */
 export async function fetchLessons(courseId, moduleId) {
 	if (!courseId || !moduleId) {
-		throw new Error("Course ID and Module ID are required");
+		throw new Error("Course ID and Module ID are required")
 	}
 
-	const res = await fetch(
-		`${BASE}/courses/${courseId}/modules/${moduleId}/lessons`,
-	);
+	const res = await fetch(`${BASE}/courses/${courseId}/modules/${moduleId}/lessons`)
 	if (!res.ok) {
-		throw new Error(`Failed to fetch lessons: ${res.status}`);
+		throw new Error(`Failed to fetch lessons: ${res.status}`)
 	}
-	return res.json();
+	return res.json()
 }
 
 /**
@@ -80,18 +79,15 @@ export async function fetchLessons(courseId, moduleId) {
  */
 export async function generateLesson(courseId, moduleId) {
 	if (!courseId || !moduleId) {
-		throw new Error("Course ID and Module ID are required");
+		throw new Error("Course ID and Module ID are required")
 	}
 
-	const res = await fetch(
-		`${BASE}/courses/${courseId}/modules/${moduleId}/lessons`,
-		{
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-		},
-	);
+	const res = await fetch(`${BASE}/courses/${courseId}/modules/${moduleId}/lessons`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+	})
 	if (!res.ok) {
-		throw new Error(`Failed to generate lesson: ${res.status}`);
+		throw new Error(`Failed to generate lesson: ${res.status}`)
 	}
-	return res.json();
+	return res.json()
 }

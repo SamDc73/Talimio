@@ -7,5 +7,5 @@ export default function SkeletonGrid({ count = 6 }) {
 				</div>
 			))}
 		</>
-	);
+	)
 }

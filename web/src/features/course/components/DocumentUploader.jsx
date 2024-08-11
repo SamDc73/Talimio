@@ -9,19 +9,12 @@
  * - Error handling and validation
  */
 
-import {
-	AlertCircle,
-	CheckCircle2,
-	FileText,
-	Link2,
-	Upload,
-	X,
-} from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "../../../components/button";
-import { Card } from "../../../components/card";
-import { Input } from "../../../components/input";
-import { Label } from "../../../components/label";
+import { AlertCircle, CheckCircle2, FileText, Link2, Upload, X } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { Button } from "../../../components/button"
+import { Card } from "../../../components/card"
+import { Input } from "../../../components/input"
+import { Label } from "../../../components/label"
 
 const DocumentUploader = ({
 	onDocumentsChange,
@@ -30,14 +23,14 @@ const DocumentUploader = ({
 	disabled = false,
 	showPreview = true,
 }) => {
-	const [documents, setDocuments] = useState(initialDocuments);
-	const [dragActive, setDragActive] = useState(false);
-	const [urlInput, setUrlInput] = useState("");
-	const [urlTitle, setUrlTitle] = useState("");
-	const [isExtractingTitle, setIsExtractingTitle] = useState(false);
-	const [justAdded, setJustAdded] = useState(false);
-	const fileInputRef = useRef(null);
-	const documentsRef = useRef(null);
+	const [documents, setDocuments] = useState(initialDocuments)
+	const [dragActive, setDragActive] = useState(false)
+	const [urlInput, setUrlInput] = useState("")
+	const [urlTitle, setUrlTitle] = useState("")
+	const [isExtractingTitle, setIsExtractingTitle] = useState(false)
+	const [justAdded, setJustAdded] = useState(false)
+	const fileInputRef = useRef(null)
+	const documentsRef = useRef(null)
 
 	// Auto-scroll to documents when they're added
 	useEffect(() => {
@@ -45,30 +38,30 @@ const DocumentUploader = ({
 			documentsRef.current.scrollIntoView({
 				behavior: "smooth",
 				block: "start",
-			});
-			setJustAdded(false);
+			})
+			setJustAdded(false)
 		}
-	}, [justAdded]);
+	}, [justAdded])
 
 	// Notify parent of document changes
 	const updateDocuments = useCallback(
 		(newDocuments) => {
-			const wasEmpty = documents.length === 0;
-			setDocuments(newDocuments);
-			onDocumentsChange?.(newDocuments);
+			const wasEmpty = documents.length === 0
+			setDocuments(newDocuments)
+			onDocumentsChange?.(newDocuments)
 
 			// Trigger auto-scroll if documents were just added
 			if (wasEmpty && newDocuments.length > 0) {
-				setJustAdded(true);
+				setJustAdded(true)
 			}
 		},
-		[onDocumentsChange, documents.length],
-	);
+		[onDocumentsChange, documents.length]
+	)
 
 	// Handle file selection
 	const handleFiles = useCallback(
 		(files) => {
-			if (disabled) return;
+			if (disabled) return
 
 			const newDocuments = Array.from(files).map((file, index) => ({
 				id: `file-${Date.now()}-${index}`,
@@ -77,128 +70,123 @@ const DocumentUploader = ({
 				title: file.name.replace(/\.[^/.]+$/, ""), // Remove extension
 				size: file.size,
 				status: "pending",
-			}));
+			}))
 
-			const totalDocuments = documents.length + newDocuments.length;
+			const totalDocuments = documents.length + newDocuments.length
 			if (totalDocuments > maxFiles) {
-				alert(
-					`Maximum ${maxFiles} documents allowed. Please remove some documents first.`,
-				);
-				return;
+				alert(`Maximum ${maxFiles} documents allowed. Please remove some documents first.`)
+				return
 			}
 
-			updateDocuments([...documents, ...newDocuments]);
+			updateDocuments([...documents, ...newDocuments])
 		},
-		[documents, maxFiles, disabled, updateDocuments],
-	);
+		[documents, maxFiles, disabled, updateDocuments]
+	)
 
 	// Handle drag and drop
 	const handleDrag = useCallback((e) => {
-		e.preventDefault();
-		e.stopPropagation();
+		e.preventDefault()
+		e.stopPropagation()
 		if (e.type === "dragenter" || e.type === "dragover") {
-			setDragActive(true);
+			setDragActive(true)
 		} else if (e.type === "dragleave") {
-			setDragActive(false);
+			setDragActive(false)
 		}
-	}, []);
+	}, [])
 
 	const handleDrop = useCallback(
 		(e) => {
-			e.preventDefault();
-			e.stopPropagation();
-			setDragActive(false);
+			e.preventDefault()
+			e.stopPropagation()
+			setDragActive(false)
 
-			if (disabled) return;
+			if (disabled) return
 
 			const files = Array.from(e.dataTransfer.files).filter(
-				(file) =>
-					file.type === "application/pdf" ||
-					file.name.toLowerCase().endsWith(".pdf"),
-			);
+				(file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+			)
 
 			if (files.length === 0) {
-				alert("Please drop only PDF files.");
-				return;
+				alert("Please drop only PDF files.")
+				return
 			}
 
-			handleFiles(files);
+			handleFiles(files)
 		},
-		[disabled, handleFiles],
-	);
+		[disabled, handleFiles]
+	)
 
 	// Handle file input click
 	const handleFileInputClick = () => {
 		if (!disabled) {
-			fileInputRef.current?.click();
+			fileInputRef.current?.click()
 		}
-	};
+	}
 
 	const handleFileInputChange = (e) => {
 		if (e.target.files?.length > 0) {
-			handleFiles(e.target.files);
-			e.target.value = ""; // Reset input
+			handleFiles(e.target.files)
+			e.target.value = "" // Reset input
 		}
-	};
+	}
 
 	// Extract title from URL
 	const extractTitle = async (url) => {
-		setIsExtractingTitle(true);
+		setIsExtractingTitle(true)
 		try {
-			const formData = new FormData();
-			formData.append("url", url);
+			const formData = new FormData()
+			formData.append("url", url)
 
 			const response = await fetch("/api/v1/extract-title", {
 				method: "POST",
 				body: formData,
-			});
+			})
 
-			const data = await response.json();
-			const title = data.title || "Untitled Document";
-			setUrlTitle(title);
-			return title;
-		} catch (error) {
-			console.error("Failed to extract title:", error);
-			const title = "Untitled Document";
-			setUrlTitle(title);
-			return title;
+			const data = await response.json()
+			const title = data.title || "Untitled Document"
+			setUrlTitle(title)
+			return title
+		} catch (_error) {
+			const title = "Untitled Document"
+			setUrlTitle(title)
+			return title
 		} finally {
-			setIsExtractingTitle(false);
+			setIsExtractingTitle(false)
 		}
-	};
+	}
 
 	// Handle URL input change
 	const handleUrlInputChange = (e) => {
-		const url = e.target.value;
-		setUrlInput(url);
+		const url = e.target.value
+		setUrlInput(url)
 
 		// Clear title when URL is cleared
 		if (!url.trim()) {
-			setUrlTitle("");
+			setUrlTitle("")
 		}
-	};
+	}
 
 	// Handle URL document addition
 	const handleAddUrl = async () => {
-		if (!urlInput.trim() || disabled || isExtractingTitle) return;
+		if (!urlInput.trim() || disabled || isExtractingTitle) return
 
 		try {
-			new URL(urlInput); // Validate URL
+			new URL(urlInput) // Validate URL
 		} catch {
-			alert("Please enter a valid URL.");
-			return;
+			alert("Please enter a valid URL.")
+			return
 		}
 
 		if (documents.length >= maxFiles) {
-			alert(`Maximum ${maxFiles} documents allowed.`);
-			return;
+			alert(`Maximum ${maxFiles} documents allowed.`)
+			return
 		}
 
 		// Extract title if not already done
-		let finalTitle = urlTitle;
+		let finalTitle = urlTitle
 		if (!finalTitle) {
 			// Wait for title extraction to complete and get the returned title
-			finalTitle = await extractTitle(urlInput.trim());
+			finalTitle = await extractTitle(urlInput.trim())
 		}
 
 		const newDocument = {
@@ -207,54 +195,48 @@ const DocumentUploader = ({
 			url: urlInput.trim(),
 			title: finalTitle,
 			status: "pending",
-		};
+		}
 
-		updateDocuments([...documents, newDocument]);
-		setUrlInput("");
-		setUrlTitle("");
-	};
+		updateDocuments([...documents, newDocument])
+		setUrlInput("")
+		setUrlTitle("")
+	}
 
 	// Remove document
 	const removeDocument = (documentId) => {
-		if (disabled) return;
-		updateDocuments(documents.filter((doc) => doc.id !== documentId));
-	};
+		if (disabled) return
+		updateDocuments(documents.filter((doc) => doc.id !== documentId))
+	}
 
 	// Update document title
 	const updateDocumentTitle = (documentId, newTitle) => {
-		if (disabled) return;
-		updateDocuments(
-			documents.map((doc) =>
-				doc.id === documentId ? { ...doc, title: newTitle } : doc,
-			),
-		);
-	};
+		if (disabled) return
+		updateDocuments(documents.map((doc) => (doc.id === documentId ? { ...doc, title: newTitle } : doc)))
+	}
 
 	// Format file size
 	const formatFileSize = (bytes) => {
-		if (bytes === 0) return "0 Bytes";
-		const k = 1024;
-		const sizes = ["Bytes", "KB", "MB", "GB"];
-		const i = Math.floor(Math.log(bytes) / Math.log(k));
-		return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
-	};
+		if (bytes === 0) return "0 Bytes"
+		const k = 1024
+		const sizes = ["Bytes", "KB", "MB", "GB"]
+		const i = Math.floor(Math.log(bytes) / Math.log(k))
+		return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`
+	}
 
 	// Get status icon
 	const getStatusIcon = (status) => {
 		switch (status) {
 			case "completed":
 			case "embedded":
-				return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+				return <CheckCircle2 className="w-4 h-4 text-green-500" />
 			case "failed":
-				return <AlertCircle className="w-4 h-4 text-red-500" />;
+				return <AlertCircle className="w-4 h-4 text-red-500" />
 			case "processing":
-				return (
-					<div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-				);
+				return <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
 			default:
-				return <FileText className="w-4 h-4 text-gray-400" />;
+				return <FileText className="w-4 h-4 text-gray-400" />
 		}
-	};
+	}
 
 	return (
 		<div className="space-y-4">
@@ -268,19 +250,13 @@ const DocumentUploader = ({
 						<div className="flex items-center justify-between mb-4">
 							<div className="flex items-center space-x-2">
 								<div className="w-2 h-2 bg-green-500 rounded-full"></div>
-								<span className="text-sm font-semibold text-green-900 dark:text-green-100">
-									Ready to Upload
-								</span>
+								<span className="text-sm font-semibold text-green-900 dark:text-green-100">Ready to Upload</span>
 								<span className="text-xs bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 px-2 py-0.5 rounded-full font-medium">
 									{documents.length}
 								</span>
 							</div>
 							<div className="text-xs text-green-600/80 dark:text-green-400/80 font-medium">
-								{(
-									documents.reduce((acc, doc) => acc + (doc.size || 0), 0) /
-									1024 /
-									1024
-								).toFixed(1)}
+								{(documents.reduce((acc, doc) => acc + (doc.size || 0), 0) / 1024 / 1024).toFixed(1)}
 								MB total
 							</div>
 						</div>
@@ -292,17 +268,13 @@ const DocumentUploader = ({
 									className="group flex items-center space-x-4 p-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-lg border border-white/50 dark:border-gray-700/50 hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm transition-all duration-200"
 									style={{ animationDelay: `${index * 50}ms` }}
 								>
-									<div className="flex-shrink-0 w-6 flex justify-center">
-										{getStatusIcon(doc.status)}
-									</div>
+									<div className="flex-shrink-0 w-6 flex justify-center">{getStatusIcon(doc.status)}</div>
 
 									<div className="flex-1 min-w-0">
 										<Input
 											type="text"
 											value={doc.title}
-											onChange={(e) =>
-												updateDocumentTitle(doc.id, e.target.value)
-											}
+											onChange={(e) => updateDocumentTitle(doc.id, e.target.value)}
 											disabled={disabled}
 											className="text-sm font-medium border-0 bg-transparent p-0 focus:ring-0 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 hover:bg-gray-50/50 dark:hover:bg-gray-700/50 rounded px-1 -mx-1 transition-colors"
 											placeholder="Enter document title"
@@ -320,9 +292,7 @@ const DocumentUploader = ({
 											)}
 
 											{doc.type === "url" && (
-												<span className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-48">
-													{doc.url}
-												</span>
+												<span className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-48">{doc.url}</span>
 											)}
 										</div>
 									</div>
@@ -364,18 +334,12 @@ const DocumentUploader = ({
 					onDragOver={handleDrag}
 					onDrop={handleDrop}
 				>
-					<Upload
-						className={`mx-auto ${documents.length > 0 ? "h-8 w-8" : "h-12 w-12"} text-gray-400 mb-2`}
-					/>
-					<p
-						className={`${documents.length > 0 ? "text-base" : "text-lg"} font-medium text-gray-900 mb-2`}
-					>
+					<Upload className={`mx-auto ${documents.length > 0 ? "h-8 w-8" : "h-12 w-12"} text-gray-400 mb-2`} />
+					<p className={`${documents.length > 0 ? "text-base" : "text-lg"} font-medium text-gray-900 mb-2`}>
 						{documents.length > 0 ? "Add More PDFs" : "Upload PDF Documents"}
 					</p>
 					{documents.length === 0 && (
-						<p className="text-sm text-gray-600 mb-4">
-							Drag and drop PDF files here, or click to browse
-						</p>
+						<p className="text-sm text-gray-600 mb-4">Drag and drop PDF files here, or click to browse</p>
 					)}
 					<Button
 						type="button"
@@ -403,9 +367,7 @@ const DocumentUploader = ({
 			{/* URL Input - Compact when documents exist */}
 			<Card className={documents.length > 0 ? "border-gray-200" : ""}>
 				<div className={documents.length > 0 ? "p-3" : "p-4"}>
-					<Label
-						className={`${documents.length > 0 ? "text-xs" : "text-sm"} font-medium text-gray-900 mb-3 block`}
-					>
+					<Label className={`${documents.length > 0 ? "text-xs" : "text-sm"} font-medium text-gray-900 mb-3 block`}>
 						Add Article from URL
 					</Label>
 					<div className="space-y-3">
@@ -419,16 +381,14 @@ const DocumentUploader = ({
 								className="w-full"
 								onBlur={() => {
 									if (urlInput.trim() && !urlTitle) {
-										extractTitle(urlInput.trim());
+										extractTitle(urlInput.trim())
 									}
 								}}
 							/>
 							{urlTitle && (
 								<div className="flex items-center space-x-2 p-2 bg-gray-50 dark:bg-gray-800 rounded">
 									<FileText className="w-4 h-4 text-gray-500" />
-									<span className="text-sm text-gray-700 dark:text-gray-300 flex-1 truncate">
-										{urlTitle}
-									</span>
+									<span className="text-sm text-gray-700 dark:text-gray-300 flex-1 truncate">{urlTitle}</span>
 								</div>
 							)}
 						</div>
@@ -458,7 +418,7 @@ const DocumentUploader = ({
 				</div>
 			</Card>
 		</div>
-	);
-};
+	)
+}
 
-export default DocumentUploader;
+export default DocumentUploader

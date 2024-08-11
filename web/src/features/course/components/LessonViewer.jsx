@@ -5,25 +5,22 @@ import { cn } from "@/lib/utils"
 import { ContentRenderer } from "./ContentRenderer"
 import "./LessonViewer.css"
 
-// Define stable handlers outside component to prevent recreating them
-const handleHighlight = (text) => {
-	console.log("Highlight in lesson:", text)
-	// Add highlight functionality here in the future
-}
-
-const handleAskAI = (text) => {
-	console.log("Ask AI about lesson text:", text)
-	// Add AI functionality here in the future
-}
-
 /**
  * Simplified lesson viewer component
  */
 export function LessonViewer({ lesson, isLoading, error, onBack, onMarkComplete, onRegenerate, isDarkMode = false }) {
-	// Set up text selection handlers for lessons with stable references
-	useTextSelectionTooltip(handleHighlight, handleAskAI)
-	// Loading state - keep component mounted, just show loading overlay
-	if (isLoading && !lesson) {
+	// Set up text selection handlers for lessons
+	useTextSelectionTooltip(
+		(_text) => {
+			// Add highlight functionality here in the future
+		},
+		(_text) => {
+			// Add AI functionality here in the future
+		}
+	)
+
+	// Loading state
+	if (isLoading) {
 		return (
 			<div className="h-[calc(100vh-4rem)] overflow-y-auto w-full">
 				<div className="flex flex-col items-center justify-center min-h-full text-zinc-500">
@@ -38,32 +35,14 @@ export function LessonViewer({ lesson, isLoading, error, onBack, onMarkComplete,
 	if (error) {
 		return (
 			<div className="h-[calc(100vh-4rem)] overflow-y-auto w-full">
-				<div className="flex flex-col items-center justify-center min-h-full">
-					<div className="max-w-3xl mx-auto p-6 bg-amber-50 rounded-lg border border-amber-200">
-						<h2 className="text-xl font-semibold mb-4 text-amber-900">Unable to Load Lesson Content</h2>
-						<p className="mb-4 text-amber-800">{error}</p>
-						<div className="flex gap-3">
-							<Button
-								onClick={() => window.location.reload()}
-								variant="default"
-								className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700"
-							>
-								<RotateCcw className="w-4 h-4" />
-								Retry
-							</Button>
-							<Button onClick={onBack} variant="outline" className="flex items-center gap-2">
-								<ArrowLeft className="w-4 h-4" />
-								Back
-							</Button>
-						</div>
-						<div className="mt-4 text-sm text-amber-700">
-							<p>If this problem persists, it may be due to:</p>
-							<ul className="list-disc list-inside mt-2 space-y-1">
-								<li>AI service temporarily unavailable</li>
-								<li>Network connectivity issues</li>
-								<li>Content generation taking longer than expected</li>
-							</ul>
-						</div>
+				<div className="flex flex-col items-center justify-center min-h-full text-red-600">
+					<div className="max-w-3xl mx-auto p-6 bg-red-50 rounded-lg border border-red-200">
+						<h2 className="text-xl font-semibold mb-4">Error loading lesson</h2>
+						<p className="mb-4">{error}</p>
+						<Button onClick={onBack} variant="outline" className="flex items-center gap-2">
+							<ArrowLeft className="w-4 h-4" />
+							Back
+						</Button>
 					</div>
 				</div>
 			</div>

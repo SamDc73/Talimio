@@ -1,12 +1,4 @@
-import {
-	Calendar,
-	Clock,
-	FileText,
-	Layers,
-	Sparkles,
-	TimerOff,
-	Youtube,
-} from "lucide-react";
+import { Calendar, Clock, FileText, Layers, Sparkles, TimerOff, Youtube } from "lucide-react"
 
 export const VARIANTS = {
 	course: {
@@ -45,7 +37,7 @@ export const VARIANTS = {
 		badge: "bg-course/10 text-course-text",
 		grad: "from-course to-course-accent",
 	},
-};
+}
 
 export const STATES = [
 	{
@@ -67,7 +59,6 @@ export const STATES = [
 		bg: "bg-upcoming/10",
 		txt: "text-upcoming-text",
 		icon: Calendar,
-		msg: (d) =>
-			`Next check‑in ${d.toLocaleDateString("en-US", { weekday: "long" })}`,
+		msg: (d) => `Next check‑in ${d.toLocaleDateString("en-US", { weekday: "long" })}`,
 	},
-];
+]

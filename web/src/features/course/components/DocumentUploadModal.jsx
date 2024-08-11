@@ -9,34 +9,28 @@
  * - Error handling and retry options
  */
 
-import { AlertTriangle, CheckCircle2, X } from "lucide-react";
-import { useCallback, useState } from "react";
-import { Button } from "../../../components/button";
-import { useToast } from "../../../hooks/use-toast";
-import { useDocumentsService } from "../api/documentsApi";
-import { DocumentStatusProgress } from "./DocumentStatusBadge";
-import DocumentUploader from "./DocumentUploader";
+import { AlertTriangle, CheckCircle2, X } from "lucide-react"
+import { useState } from "react"
+import { Button } from "../../../components/button"
+import { useToast } from "../../../hooks/use-toast"
+import { useDocumentsService } from "../api/documentsApi"
+import { DocumentStatusProgress } from "./DocumentStatusBadge"
+import DocumentUploader from "./DocumentUploader"
 
-const DocumentUploadModal = ({
-	isOpen,
-	onClose,
-	courseId,
-	onDocumentsUploaded = null,
-	maxFiles = 5,
-}) => {
-	const [documents, setDocuments] = useState([]);
-	const [isUploading, setIsUploading] = useState(false);
-	const [uploadResults, setUploadResults] = useState(null);
-	const [_uploadProgress, setUploadProgress] = useState({});
+const DocumentUploadModal = ({ isOpen, onClose, courseId, onDocumentsUploaded = null, maxFiles = 5 }) => {
+	const [documents, setDocuments] = useState([])
+	const [isUploading, setIsUploading] = useState(false)
+	const [uploadResults, setUploadResults] = useState(null)
+	const [_uploadProgress, setUploadProgress] = useState({})
 
-	const documentsService = useDocumentsService(courseId);
-	const { toast } = useToast();
+	const documentsService = useDocumentsService(courseId)
+	const { toast } = useToast()
 
 	// Handle document changes from uploader
 	const handleDocumentsChange = useCallback((newDocuments) => {
-		setDocuments(newDocuments);
-		setUploadResults(null); // Clear previous results
-	}, []);
+		setDocuments(newDocuments)
+		setUploadResults(null) // Clear previous results
+	}, [])
 
 	// Handle upload process
 	const handleUpload = async () => {
@@ -45,142 +39,126 @@ const DocumentUploadModal = ({
 				title: "No documents to upload",
 				description: "Please add at least one document.",
 				variant: "destructive",
-			});
-			return;
+			})
+			return
 		}
 
-		setIsUploading(true);
-		setUploadResults(null);
+		setIsUploading(true)
+		setUploadResults(null)
 
 		try {
 			// Update document status to processing for UI feedback
 			const processingDocs = documents.map((doc) => ({
 				...doc,
 				status: "processing",
-			}));
-			setDocuments(processingDocs);
+			}))
+			setDocuments(processingDocs)
 
 			// Upload documents
-			const results = await documentsService.uploadMultipleDocuments(
-				documents.map((doc, index) => ({ ...doc, index })),
-			);
+			const results = await documentsService.uploadMultipleDocuments(documents.map((doc, index) => ({ ...doc, index })))
 
-			setUploadResults(results);
+			setUploadResults(results)
 
 			// Update document status based on results
 			const updatedDocs = documents.map((doc) => {
-				const result = results.results.find(
-					(r) => r.originalIndex === doc.index,
-				);
-				const error = results.errors.find((e) => e.originalIndex === doc.index);
+				const result = results.results.find((r) => r.originalIndex === doc.index)
+				const error = results.errors.find((e) => e.originalIndex === doc.index)
 
 				if (result) {
-					return { ...doc, status: "embedded", id: result.id };
+					return { ...doc, status: "embedded", id: result.id }
 				} else if (error) {
-					return { ...doc, status: "failed", error: error.error };
+					return { ...doc, status: "failed", error: error.error }
 				}
-				return doc;
-			});
+				return doc
+			})
 
-			setDocuments(updatedDocs);
+			setDocuments(updatedDocs)
 
 			// Show success/error toast
 			if (results.errors.length === 0) {
 				toast({
 					title: "Documents uploaded successfully!",
 					description: `${results.results.length} document(s) have been added to the course.`,
-				});
+				})
 
 				// Auto-close modal after successful upload
 				setTimeout(() => {
-					handleClose();
-				}, 2000);
+					handleClose()
+				}, 2000)
 			} else if (results.results.length === 0) {
 				toast({
 					title: "All uploads failed",
 					description: "Please check the documents and try again.",
 					variant: "destructive",
-				});
+				})
 			} else {
 				toast({
 					title: "Partial upload success",
 					description: `${results.results.length} uploaded, ${results.errors.length} failed.`,
 					variant: "destructive",
-				});
+				})
 			}
 
 			// Notify parent component
 			if (onDocumentsUploaded && results.results.length > 0) {
-				onDocumentsUploaded(results.results);
+				onDocumentsUploaded(results.results)
 			}
 		} catch (error) {
-			console.error("Upload failed:", error);
-
 			// Update all documents to failed status
 			const failedDocs = documents.map((doc) => ({
 				...doc,
 				status: "failed",
 				error: error.message || "Upload failed",
-			}));
-			setDocuments(failedDocs);
+			}))
+			setDocuments(failedDocs)
 
 			toast({
 				title: "Upload failed",
-				description:
-					error.message || "Failed to upload documents. Please try again.",
+				description: error.message || "Failed to upload documents. Please try again.",
 				variant: "destructive",
-			});
+			})
 		} finally {
-			setIsUploading(false);
+			setIsUploading(false)
 		}
-	};
+	}
 
 	// Handle modal close
 	const handleClose = () => {
 		if (!isUploading) {
-			setDocuments([]);
-			setUploadResults(null);
-			setUploadProgress({});
-			onClose();
+			setDocuments([])
+			setUploadResults(null)
+			setUploadProgress({})
+			onClose()
 		}
-	};
+	}
 
 	// Handle retry for failed documents
 	const handleRetryFailed = () => {
-		const failedDocs = documents.filter((doc) => doc.status === "failed");
+		const failedDocs = documents.filter((doc) => doc.status === "failed")
 		if (failedDocs.length > 0) {
 			// Reset failed documents to pending
 			const resetDocs = documents.map((doc) =>
-				doc.status === "failed"
-					? { ...doc, status: "pending", error: undefined }
-					: doc,
-			);
-			setDocuments(resetDocs);
-			setUploadResults(null);
+				doc.status === "failed" ? { ...doc, status: "pending", error: undefined } : doc
+			)
+			setDocuments(resetDocs)
+			setUploadResults(null)
 		}
-	};
+	}
 
-	if (!isOpen) return null;
+	if (!isOpen) return null
 
-	const hasDocuments = documents.length > 0;
-	const hasFailedDocuments = documents.some((doc) => doc.status === "failed");
-	const hasSuccessfulDocuments = documents.some(
-		(doc) => doc.status === "embedded",
-	);
+	const hasDocuments = documents.length > 0
+	const hasFailedDocuments = documents.some((doc) => doc.status === "failed")
+	const hasSuccessfulDocuments = documents.some((doc) => doc.status === "embedded")
 	const allCompleted =
-		documents.length > 0 &&
-		documents.every(
-			(doc) => doc.status === "embedded" || doc.status === "failed",
-		);
+		documents.length > 0 && documents.every((doc) => doc.status === "embedded" || doc.status === "failed")
 
 	return (
 		<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
 			<div className="bg-white dark:bg-gray-800 rounded-lg max-w-3xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
 				{/* Header */}
 				<div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-					<h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-						Add Documents to Course
-					</h2>
+					<h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Add Documents to Course</h2>
 					<button
 						type="button"
 						onClick={handleClose}
@@ -207,23 +185,14 @@ const DocumentUploadModal = ({
 					{/* Upload Progress */}
 					{isUploading && documents.length > 0 && (
 						<div className="mb-6 space-y-3">
-							<h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
-								Upload Progress
-							</h3>
+							<h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Upload Progress</h3>
 							{documents.map((doc) => (
-								<div
-									key={doc.id}
-									className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3"
-								>
+								<div key={doc.id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
 									<div className="flex items-center justify-between mb-2">
-										<span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-											{doc.title}
-										</span>
+										<span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{doc.title}</span>
 									</div>
 									<DocumentStatusProgress status={doc.status} />
-									{doc.error && (
-										<p className="text-xs text-red-600 mt-1">{doc.error}</p>
-									)}
+									{doc.error && <p className="text-xs text-red-600 mt-1">{doc.error}</p>}
 								</div>
 							))}
 						</div>
@@ -237,8 +206,7 @@ const DocumentUploadModal = ({
 									<div className="flex items-center space-x-2">
 										<CheckCircle2 className="w-5 h-5 text-green-600" />
 										<p className="text-sm font-medium text-green-800 dark:text-green-300">
-											{uploadResults.results.length} document(s) uploaded
-											successfully
+											{uploadResults.results.length} document(s) uploaded successfully
 										</p>
 									</div>
 								</div>
@@ -254,10 +222,7 @@ const DocumentUploadModal = ({
 									</div>
 									<div className="space-y-1">
 										{uploadResults.errors.map((error, index) => (
-											<p
-												key={`${error.document.title}-${index}`}
-												className="text-xs text-red-700 dark:text-red-400"
-											>
+											<p key={`${error.document.title}-${index}`} className="text-xs text-red-700 dark:text-red-400">
 												• {error.document.title}: {error.error}
 											</p>
 										))}
@@ -271,9 +236,8 @@ const DocumentUploadModal = ({
 					{!isUploading && !uploadResults && (
 						<div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
 							<p className="text-sm text-blue-700 dark:text-blue-300">
-								<strong>Document Integration:</strong> Uploaded documents will
-								be processed and integrated into the course's RAG system, making
-								them searchable during lessons and assistant conversations.
+								<strong>Document Integration:</strong> Uploaded documents will be processed and integrated into the
+								course's RAG system, making them searchable during lessons and assistant conversations.
 							</p>
 						</div>
 					)}
@@ -281,12 +245,7 @@ const DocumentUploadModal = ({
 
 				{/* Actions */}
 				<div className="flex justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700">
-					<Button
-						type="button"
-						variant="outline"
-						onClick={handleClose}
-						disabled={isUploading}
-					>
+					<Button type="button" variant="outline" onClick={handleClose} disabled={isUploading}>
 						{allCompleted && hasSuccessfulDocuments ? "Close" : "Cancel"}
 					</Button>
 
@@ -321,7 +280,7 @@ const DocumentUploadModal = ({
 				</div>
 			</div>
 		</div>
-	);
-};
+	)
+}
 
-export default DocumentUploadModal;
+export default DocumentUploadModal

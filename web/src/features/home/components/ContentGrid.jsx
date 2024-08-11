@@ -1,8 +1,8 @@
-import { AnimatePresence } from "framer-motion";
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
-import { Button } from "@/components/button";
-import EmptyState from "./EmptyState";
-import SkeletonGrid from "./SkeletonGrid";
+import { AnimatePresence } from "framer-motion"
+import { Check, ChevronDown, ChevronUp } from "lucide-react"
+import { Button } from "@/components/button"
+import EmptyState from "./EmptyState"
+import SkeletonGrid from "./SkeletonGrid"
 
 export default function ContentGrid({
 	isLoading,
@@ -24,9 +24,7 @@ export default function ContentGrid({
 				{isLoading ? (
 					<SkeletonGrid count={6} />
 				) : filteredAndSortedContent.length > 0 ? (
-					<AnimatePresence mode="popLayout">
-						{visible.map(renderCard)}
-					</AnimatePresence>
+					<AnimatePresence mode="popLayout">{visible.map(renderCard)}</AnimatePresence>
 				) : (
 					<EmptyState
 						onGenerateCourse={onGenerateCourse}
@@ -39,11 +37,7 @@ export default function ContentGrid({
 
 			{!isLoading && unpinned.length > 3 && (
 				<div className="mt-6 text-center">
-					<Button
-						variant="outline"
-						onClick={onShowMoreToggle}
-						className="h-10 min-w-[120px] flex items-center gap-2"
-					>
+					<Button variant="outline" onClick={onShowMoreToggle} className="h-10 min-w-[120px] flex items-center gap-2">
 						{showAll ? (
 							<>
 								<ChevronUp className="h-4 w-4" />
@@ -64,14 +58,10 @@ export default function ContentGrid({
 					<div className="inline-block bg-emerald-50 p-4 rounded-full mb-4">
 						<Check className="h-8 w-8 text-emerald-600" />
 					</div>
-					<h3 className="text-xl font-display font-bold text-emerald-700 mb-2">
-						All Caught Up!
-					</h3>
-					<p className="text-muted-foreground">
-						You've completed all your learning tasks. Great job!
-					</p>
+					<h3 className="text-xl font-display font-bold text-emerald-700 mb-2">All Caught Up!</h3>
+					<p className="text-muted-foreground">You've completed all your learning tasks. Great job!</p>
 				</div>
 			)}
 		</>
-	);
+	)
 }

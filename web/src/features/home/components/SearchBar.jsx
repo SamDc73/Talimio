@@ -1,8 +1,8 @@
-import { motion } from "framer-motion";
-import { Search, Sparkles, X, Youtube } from "lucide-react";
-import { Button } from "@/components/button";
-import { Input } from "@/components/input";
-import FilterPopover from "./FilterPopover";
+import { motion } from "framer-motion"
+import { Search, Sparkles, X, Youtube } from "lucide-react"
+import { Button } from "@/components/button"
+import { Input } from "@/components/input"
+import FilterPopover from "./FilterPopover"
 
 const SearchBar = ({
 	searchQuery,
@@ -39,11 +39,7 @@ const SearchBar = ({
 				<div className="flex items-center">
 					<div
 						className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${
-							isGenerateMode
-								? "bg-course/10"
-								: isYoutubeMode
-									? "bg-video/10"
-									: ""
+							isGenerateMode ? "bg-course/10" : isYoutubeMode ? "bg-video/10" : ""
 						}`}
 					>
 						{isGenerateMode ? (
@@ -67,12 +63,7 @@ const SearchBar = ({
 							onChange={(e) => setSearchQuery(e.target.value)}
 						/>
 						{searchQuery && (
-							<Button
-								variant="ghost"
-								size="icon"
-								onClick={() => setSearchQuery("")}
-								className="h-8 w-8"
-							>
+							<Button variant="ghost" size="icon" onClick={() => setSearchQuery("")} className="h-8 w-8">
 								<X className="h-4 w-4" />
 							</Button>
 						)}
@@ -82,12 +73,7 @@ const SearchBar = ({
 						{isGenerateMode ? (
 							<>
 								<div className="h-8 w-px bg-border" />
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={() => onSetMode(null)}
-									className="text-muted-foreground"
-								>
+								<Button variant="ghost" size="sm" onClick={() => onSetMode(null)} className="text-muted-foreground">
 									Cancel
 								</Button>
 								<Button
@@ -102,20 +88,15 @@ const SearchBar = ({
 						) : isYoutubeMode ? (
 							<>
 								<div className="h-8 w-px bg-border" />
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={() => onSetMode(null)}
-									className="text-muted-foreground"
-								>
+								<Button variant="ghost" size="sm" onClick={() => onSetMode(null)} className="text-muted-foreground">
 									Cancel
 								</Button>
 								<Button
 									size="sm"
 									onClick={() => {
 										if (searchQuery.trim()) {
-											onYoutubeAdd(searchQuery);
-											onSetMode(null);
+											onYoutubeAdd(searchQuery)
+											onSetMode(null)
 										}
 									}}
 									disabled={!searchQuery.trim()}
@@ -155,7 +136,7 @@ const SearchBar = ({
 				</div>
 			</div>
 		</motion.div>
-	);
-};
+	)
+}
 
-export default SearchBar;
+export default SearchBar

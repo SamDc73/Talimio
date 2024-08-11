@@ -56,10 +56,10 @@
 }
 
 /* Inline code styling */
-.markdown-content code,
-p > code {
+p > code,
+.markdown-content code {
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-	background-color: #eff1f5;
+	background-color: var(--muted);
 	padding: 0.2rem 0.4rem;
 	border-radius: 0.25rem;
 	font-size: 0.875rem;
@@ -67,7 +67,7 @@ p > code {
 
 /* Styles for code blocks */
 .markdown-content pre {
-	background-color: #f1f5f9;
+	background-color: var(--muted);
 	padding: 1rem;
 	border-radius: 0.5rem;
 	overflow-x: auto;
@@ -83,12 +83,12 @@ p > code {
 }
 
 .markdown-content a {
-	color: #10b981;
+	color: hsl(142.1 76.2% 36.3%);
 	text-decoration: underline;
 }
 
 .markdown-content a:hover {
-	color: #059669;
+	color: hsl(142.1 76.2% 46.3%);
 }
 
 .markdown-content strong {
@@ -96,6 +96,14 @@ p > code {
 }
 
 .markdown-content em {
+	font-style: italic;
+}
+
+.markdown-content blockquote {
+	border-left: 3px solid hsl(142.1 76.2% 36.3%);
+	padding-left: 1rem;
+	margin: 1rem 0;
+	color: var(--muted-foreground);
 	font-style: italic;
 }
 
@@ -116,36 +124,37 @@ p > code {
 /* Style for highlighted lines */
 .code-block-wrapper [data-highlighted-line] {
 	background-color: rgba(30, 102, 245, 0.1);
-	/* Catppuccin Latte blue with opacity */
 	border-left: 2px solid #1e66f5;
-	/* Catppuccin Latte blue */
 }
 
 /* Style for highlighted words */
 .code-block-wrapper [data-highlighted-chars] {
 	background-color: rgba(30, 102, 245, 0.2);
-	/* Catppuccin Latte blue with opacity */
 	border-radius: 0.25rem;
 	padding: 0.1rem 0.2rem;
 	margin: 0 -0.2rem;
 }
 
-/* Force language badge visibility */
-.language-badge {
+/* Language Badge */
+.language-badge,
+pre[data-language]::before,
+div pre[data-language]::before,
+.prose pre[data-language]::before {
+	content: attr(data-language) !important;
 	position: absolute !important;
 	top: 0 !important;
 	right: 0 !important;
-	background-color: #10b981 !important;
+	background-color: hsl(142.1 76.2% 36.3%) !important;
 	color: white !important;
 	padding: 0.375rem 0.75rem !important;
 	font-size: 0.75rem !important;
 	font-weight: bold !important;
 	border-bottom-left-radius: 0.375rem !important;
-	z-index: 50 !important;
-	user-select: none !important;
-	box-shadow:
-		0 4px 6px -1px rgba(0, 0, 0, 0.1),
-		0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+	z-index: 999 !important;
+	text-transform: uppercase !important;
+	display: block !important;
+	opacity: 1 !important;
+	visibility: visible !important;
 }
 
 /* Style for rehype-pretty-code figure wrapper */
@@ -159,23 +168,50 @@ pre[data-language] {
 	position: relative !important;
 }
 
-/* Add language display using CSS when data-language attribute is present */
-pre[data-language]::before,
-div pre[data-language]::before,
-.prose pre[data-language]::before {
-	content: attr(data-language) !important;
-	position: absolute !important;
-	top: 0 !important;
-	right: 0 !important;
-	background-color: #10b981 !important;
-	color: white !important;
-	padding: 0.375rem 0.75rem !important;
-	font-size: 0.75rem !important;
-	font-weight: bold !important;
-	border-bottom-left-radius: 0.375rem !important;
-	z-index: 999 !important;
-	text-transform: uppercase !important;
-	display: block !important;
-	opacity: 1 !important;
-	visibility: visible !important;
+/* Mobile Responsive */
+@media (max-width: 768px) {
+	.lesson-header-content {
+		padding: 1rem;
+		gap: 1rem;
+	}
+
+	.lesson-title {
+		font-size: 1rem;
+	}
+
+	.lesson-content {
+		padding: 2rem 1rem;
+	}
+
+	.lesson-back-button span {
+		display: none;
+	}
+
+	.lesson-actions {
+		flex-shrink: 0;
+	}
+}
+
+/* Print Styles */
+@media print {
+	.lesson-header {
+		position: static;
+		border-bottom: 2px solid #000;
+		margin-bottom: 2rem;
+	}
+
+	.lesson-back-button,
+	.lesson-actions {
+		display: none;
+	}
+
+	.lesson-content-wrapper {
+		overflow: visible;
+		background: white;
+	}
+
+	.lesson-content {
+		max-width: 100%;
+		padding: 0;
+	}
 }

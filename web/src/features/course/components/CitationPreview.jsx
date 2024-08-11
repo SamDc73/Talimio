@@ -9,26 +9,16 @@
  * - Highlighting of relevant document sections
  */
 
-import { ChevronRight, ExternalLink, Eye, FileText, Link2 } from "lucide-react";
-import { useEffect, useRef } from "react";
-import { Button } from "../../../components/button";
-import { Card } from "../../../components/card";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "../../../components/tooltip";
+import { ChevronRight, ExternalLink, Eye, FileText, Link2 } from "lucide-react"
+import { useEffect, useRef } from "react"
+import { Button } from "../../../components/button"
+import { Card } from "../../../components/card"
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/tooltip"
 
 /**
  * InlineCitation - Small clickable citation number
  */
-export const InlineCitation = ({
-	citationNumber,
-	document,
-	excerpt,
-	onClick,
-	className = "",
-}) => {
+export const InlineCitation = ({ citationNumber, document, excerpt, onClick, className = "" }) => {
 	return (
 		<Tooltip delayDuration={300}>
 			<TooltipTrigger asChild>
@@ -57,19 +47,15 @@ export const InlineCitation = ({
 						) : (
 							<FileText className="w-4 h-4 text-blue-500" />
 						)}
-						<span className="text-sm font-medium truncate">
-							{document.title}
-						</span>
+						<span className="text-sm font-medium truncate">{document.title}</span>
 					</div>
-					{excerpt && (
-						<p className="text-xs text-gray-600 line-clamp-3">"{excerpt}"</p>
-					)}
+					{excerpt && <p className="text-xs text-gray-600 line-clamp-3">"{excerpt}"</p>}
 					<p className="text-xs text-gray-500">Click to view full context</p>
 				</div>
 			</TooltipContent>
 		</Tooltip>
-	);
-};
+	)
+}
 
 /**
  * CitationCard - Expanded citation view for sidebars
@@ -82,7 +68,7 @@ export const CitationCard = ({
 	showActions = true,
 	className = "",
 }) => {
-	const { document, excerpt, similarity_score } = citation;
+	const { document, excerpt, similarity_score } = citation
 
 	return (
 		<Card className={`p-4 ${className}`}>
@@ -101,9 +87,7 @@ export const CitationCard = ({
 						) : (
 							<FileText className="w-4 h-4 text-blue-500" />
 						)}
-						<h4 className="text-sm font-medium text-gray-900 truncate">
-							{document.title}
-						</h4>
+						<h4 className="text-sm font-medium text-gray-900 truncate">{document.title}</h4>
 						{similarity_score && (
 							<span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
 								{Math.round(similarity_score * 100)}% match
@@ -123,33 +107,21 @@ export const CitationCard = ({
 						{document.document_type === "url" && document.source_url && (
 							<p className="truncate">Source: {document.source_url}</p>
 						)}
-						{document.crawl_date && (
-							<p>
-								Processed: {new Date(document.crawl_date).toLocaleDateString()}
-							</p>
-						)}
+						{document.crawl_date && <p>Processed: {new Date(document.crawl_date).toLocaleDateString()}</p>}
 					</div>
 
 					{/* Actions */}
 					{showActions && (
 						<div className="flex items-center space-x-2 mt-3">
 							{onViewExcerpt && (
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => onViewExcerpt(citation)}
-								>
+								<Button variant="outline" size="sm" onClick={() => onViewExcerpt(citation)}>
 									<Eye className="w-4 h-4 mr-1" />
 									View Context
 								</Button>
 							)}
 
 							{onViewDocument && (
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => onViewDocument(document)}
-								>
+								<Button variant="outline" size="sm" onClick={() => onViewDocument(document)}>
 									<ExternalLink className="w-4 h-4 mr-1" />
 									Open Document
 								</Button>
@@ -159,8 +131,8 @@ export const CitationCard = ({
 				</div>
 			</div>
 		</Card>
-	);
-};
+	)
+}
 
 /**
  * CitationSidebar - Collapsible sidebar showing all citations
@@ -183,17 +155,10 @@ export const CitationSidebar = ({
 		>
 			{/* Toggle Button */}
 			<div className="flex-shrink-0 border-b border-gray-200 p-3">
-				<Button
-					variant="ghost"
-					size="sm"
-					onClick={onToggle}
-					className="w-full justify-between"
-				>
+				<Button variant="ghost" size="sm" onClick={onToggle} className="w-full justify-between">
 					{isOpen ? (
 						<>
-							<span className="text-sm font-medium">
-								Sources ({citations.length})
-							</span>
+							<span className="text-sm font-medium">Sources ({citations.length})</span>
 							<ChevronRight className="w-4 h-4 rotate-180" />
 						</>
 					) : (
@@ -227,42 +192,34 @@ export const CitationSidebar = ({
 				</div>
 			)}
 		</div>
-	);
-};
+	)
+}
 
 /**
  * CitationModal - Full-screen modal for viewing citation context
  */
-export const CitationModal = ({
-	citation,
-	isOpen,
-	onClose,
-	onViewDocument,
-}) => {
-	const modalRef = useRef(null);
+export const CitationModal = ({ citation, isOpen, onClose, onViewDocument }) => {
+	const modalRef = useRef(null)
 
 	// Close on escape key
 	useEffect(() => {
 		const handleEscape = (e) => {
-			if (e.key === "Escape") onClose();
-		};
+			if (e.key === "Escape") onClose()
+		}
 
 		if (isOpen) {
-			document.addEventListener("keydown", handleEscape);
-			return () => document.removeEventListener("keydown", handleEscape);
+			document.addEventListener("keydown", handleEscape)
+			return () => document.removeEventListener("keydown", handleEscape)
 		}
-	}, [isOpen, onClose]);
+	}, [isOpen, onClose])
 
-	if (!isOpen || !citation) return null;
+	if (!isOpen || !citation) return null
 
-	const { document: citationDocument, excerpt } = citation;
+	const { document: citationDocument, excerpt } = citation
 
 	return (
 		<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-			<div
-				ref={modalRef}
-				className="bg-white rounded-lg max-w-4xl w-full mx-4 shadow-xl max-h-[90vh] overflow-hidden"
-			>
+			<div ref={modalRef} className="bg-white rounded-lg max-w-4xl w-full mx-4 shadow-xl max-h-[90vh] overflow-hidden">
 				{/* Header */}
 				<div className="flex items-center justify-between p-6 border-b border-gray-200">
 					<div className="flex items-center space-x-3">
@@ -272,23 +229,16 @@ export const CitationModal = ({
 							<FileText className="w-6 h-6 text-blue-500" />
 						)}
 						<div>
-							<h2 className="text-lg font-semibold text-gray-900">
-								{citationDocument.title}
-							</h2>
+							<h2 className="text-lg font-semibold text-gray-900">{citationDocument.title}</h2>
 							{citationDocument.source_url && (
-								<p className="text-sm text-gray-600 truncate">
-									{citationDocument.source_url}
-								</p>
+								<p className="text-sm text-gray-600 truncate">{citationDocument.source_url}</p>
 							)}
 						</div>
 					</div>
 
 					<div className="flex items-center space-x-2">
 						{onViewDocument && (
-							<Button
-								variant="outline"
-								onClick={() => onViewDocument(citationDocument)}
-							>
+							<Button variant="outline" onClick={() => onViewDocument(citationDocument)}>
 								<ExternalLink className="w-4 h-4 mr-2" />
 								Open Document
 							</Button>
@@ -302,9 +252,7 @@ export const CitationModal = ({
 				{/* Content */}
 				<div className="p-6 overflow-y-auto max-h-[70vh]">
 					<div className="prose prose-sm max-w-none">
-						<h3 className="text-base font-medium text-gray-900 mb-4">
-							Relevant Excerpt
-						</h3>
+						<h3 className="text-base font-medium text-gray-900 mb-4">Relevant Excerpt</h3>
 
 						{excerpt ? (
 							<blockquote className="text-gray-700 border-l-4 border-blue-200 pl-4 py-2 bg-blue-50 rounded-r">
@@ -312,35 +260,24 @@ export const CitationModal = ({
 							</blockquote>
 						) : (
 							<p className="text-gray-500 italic">
-								No specific excerpt available. This document was referenced in
-								the context.
+								No specific excerpt available. This document was referenced in the context.
 							</p>
 						)}
 
 						{/* Document Metadata */}
 						<div className="mt-6 p-4 bg-gray-50 rounded-lg">
-							<h4 className="text-sm font-medium text-gray-900 mb-2">
-								Document Information
-							</h4>
+							<h4 className="text-sm font-medium text-gray-900 mb-2">Document Information</h4>
 							<dl className="grid grid-cols-2 gap-2 text-sm">
 								<dt className="font-medium text-gray-600">Type:</dt>
-								<dd className="text-gray-900 capitalize">
-									{citationDocument.document_type}
-								</dd>
+								<dd className="text-gray-900 capitalize">{citationDocument.document_type}</dd>
 
 								<dt className="font-medium text-gray-600">Status:</dt>
-								<dd className="text-gray-900 capitalize">
-									{citationDocument.status}
-								</dd>
+								<dd className="text-gray-900 capitalize">{citationDocument.status}</dd>
 
 								{citationDocument.crawl_date && (
 									<>
 										<dt className="font-medium text-gray-600">Processed:</dt>
-										<dd className="text-gray-900">
-											{new Date(
-												citationDocument.crawl_date,
-											).toLocaleDateString()}
-										</dd>
+										<dd className="text-gray-900">{new Date(citationDocument.crawl_date).toLocaleDateString()}</dd>
 									</>
 								)}
 							</dl>
@@ -349,29 +286,29 @@ export const CitationModal = ({
 				</div>
 			</div>
 		</div>
-	);
-};
+	)
+}
 
 /**
  * Helper function to parse text with inline citations
  * Converts [1], [2] patterns to InlineCitation components
  */
 export const parseCitationsInText = (text, citations = [], onCitationClick) => {
-	if (!text || citations.length === 0) return text;
+	if (!text || citations.length === 0) return text
 
 	// Regular expression to find citation patterns like [1], [2], etc.
-	const citationRegex = /\[(\d+)\]/g;
-	const parts = [];
-	let lastIndex = 0;
-	let match = citationRegex.exec(text);
+	const citationRegex = /\[(\d+)\]/g
+	const parts = []
+	let lastIndex = 0
+	let match = citationRegex.exec(text)
 
 	while (match !== null) {
-		const citationNumber = parseInt(match[1], 10);
-		const citation = citations[citationNumber - 1]; // Arrays are 0-indexed
+		const citationNumber = parseInt(match[1], 10)
+		const citation = citations[citationNumber - 1] // Arrays are 0-indexed
 
 		// Add text before citation
 		if (match.index > lastIndex) {
-			parts.push(text.slice(lastIndex, match.index));
+			parts.push(text.slice(lastIndex, match.index))
 		}
 
 		// Add citation component
@@ -383,24 +320,24 @@ export const parseCitationsInText = (text, citations = [], onCitationClick) => {
 					document={citation.document}
 					excerpt={citation.excerpt}
 					onClick={onCitationClick}
-				/>,
-			);
+				/>
+			)
 		} else {
 			// Fallback for missing citations
-			parts.push(`[${citationNumber}]`);
+			parts.push(`[${citationNumber}]`)
 		}
 
-		lastIndex = match.index + match[0].length;
-		match = citationRegex.exec(text);
+		lastIndex = match.index + match[0].length
+		match = citationRegex.exec(text)
 	}
 
 	// Add remaining text
 	if (lastIndex < text.length) {
-		parts.push(text.slice(lastIndex));
+		parts.push(text.slice(lastIndex))
 	}
 
-	return parts;
-};
+	return parts
+}
 
 export default {
 	InlineCitation,
@@ -408,4 +345,4 @@ export default {
 	CitationSidebar,
 	CitationModal,
 	parseCitationsInText,
-};
+}

@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion } from "framer-motion"
 
 export default function WelcomeHeader() {
 	return (
@@ -12,9 +12,8 @@ export default function WelcomeHeader() {
 				Welcome Back!
 			</h1>
 			<p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-				Ready to continue your journey? Pick up where you left off or explore
-				something new today.
+				Ready to continue your journey? Pick up where you left off or explore something new today.
 			</p>
 		</motion.div>
-	);
+	)
 }

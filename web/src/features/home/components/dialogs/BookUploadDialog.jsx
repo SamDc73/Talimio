@@ -1,137 +1,126 @@
-import { useState } from "react";
-import { Button } from "@/components/button";
-import { Input } from "@/components/input";
-import { Label } from "@/components/label";
-import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetFooter,
-	SheetHeader,
-	SheetTitle,
-} from "@/components/sheet";
-import { useToast } from "@/hooks/use-toast";
+import { useState } from "react"
+
+import { Button } from "@/components/button"
+import { Input } from "@/components/input"
+import { Label } from "@/components/label"
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/sheet"
+import { useToast } from "@/hooks/use-toast"
 
 export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
-	const { toast } = useToast();
-	const [selectedFile, setSelectedFile] = useState(null);
-	const [bookTitle, setBookTitle] = useState("");
-	const [bookAuthor, setBookAuthor] = useState("");
-	const [isExtractingMetadata, setIsExtractingMetadata] = useState(false);
-	const [isUploadingBook, setIsUploadingBook] = useState(false);
+	const { toast } = useToast()
+	const [selectedFile, setSelectedFile] = useState(null)
+	const [bookTitle, setBookTitle] = useState("")
+	const [bookAuthor, setBookAuthor] = useState("")
+	const [isExtractingMetadata, setIsExtractingMetadata] = useState(false)
+	const [isUploadingBook, setIsUploadingBook] = useState(false)
 
 	const handleFileChange = async (e) => {
-		const file = e.target.files?.[0];
+		const file = e.target.files?.[0]
 		if (file) {
-			setSelectedFile(file);
-			setIsExtractingMetadata(true);
+			setSelectedFile(file)
+			setIsExtractingMetadata(true)
 
 			// Extract metadata from the file
 			try {
-				const formData = new FormData();
-				formData.append("file", file);
+				const formData = new FormData()
+				formData.append("file", file)
 
 				const response = await fetch("/api/v1/books/extract-metadata", {
 					method: "POST",
 					body: formData,
-				});
+				})
 
 				if (!response.ok) {
-					throw new Error(`HTTP error! status: ${response.status}`);
+					throw new Error(`HTTP error! status: ${response.status}`)
 				}
 
-				const metadata = await response.json();
+				const metadata = await response.json()
 
 				if (metadata.title) {
-					setBookTitle(metadata.title);
+					setBookTitle(metadata.title)
 				}
 				if (metadata.author) {
-					setBookAuthor(metadata.author);
+					setBookAuthor(metadata.author)
 				}
-			} catch (error) {
-				console.error("Failed to extract metadata:", error);
+			} catch (_error) {
 				toast({
 					title: "Error extracting metadata",
 					description: "Please enter the book details manually.",
 					variant: "destructive",
-				});
+				})
 			} finally {
-				setIsExtractingMetadata(false);
+				setIsExtractingMetadata(false)
 			}
 		}
-	};
+	}
 
 	const handleUpload = async () => {
-		if (!selectedFile || !bookTitle.trim() || !bookAuthor.trim()) return;
+		if (!selectedFile || !bookTitle.trim() || !bookAuthor.trim()) return
 
-		setIsUploadingBook(true);
+		setIsUploadingBook(true)
 		try {
-			const formData = new FormData();
-			formData.append("file", selectedFile);
-			formData.append("title", bookTitle);
-			formData.append("author", bookAuthor);
-			formData.append("tags", JSON.stringify([]));
+			const formData = new FormData()
+			formData.append("file", selectedFile)
+			formData.append("title", bookTitle)
+			formData.append("author", bookAuthor)
+			formData.append("tags", JSON.stringify([]))
 
 			const response = await fetch("/api/v1/books", {
 				method: "POST",
 				body: formData,
-			});
+			})
 
 			if (!response.ok) {
-				const errorData = await response.json();
+				const errorData = await response.json()
 				if (response.status === 409) {
 					// Duplicate file error
 					toast({
 						title: "Book Already Exists",
-						description:
-							errorData.detail || "This book is already in your library.",
+						description: errorData.detail || "This book is already in your library.",
 						variant: "destructive",
-					});
+					})
 				} else {
-					throw new Error(
-						errorData.detail || `HTTP error! status: ${response.status}`,
-					);
+					throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
 				}
-				return;
+				return
 			}
 
-			const newBook = await response.json();
+			const newBook = await response.json()
 
 			toast({
 				title: "Book Added!",
 				description: `"${newBook.title}" has been added to your library.`,
-			});
+			})
 
 			// Reset form
-			setSelectedFile(null);
-			setBookTitle("");
-			setBookAuthor("");
+			setSelectedFile(null)
+			setBookTitle("")
+			setBookAuthor("")
 
 			// Close dialog and notify parent
-			onOpenChange(false);
+			onOpenChange(false)
 			if (onBookUploaded) {
-				onBookUploaded(newBook);
+				onBookUploaded(newBook)
 			}
 		} catch (error) {
-			console.error("Upload failed:", error);
 			toast({
 				title: "Upload Failed",
 				description: error.message || "Something went wrong. Please try again.",
 				variant: "destructive",
-			});
+			})
 		} finally {
-			setIsUploadingBook(false);
+			setIsUploadingBook(false)
 		}
-	};
+	}
 
 	const handleClose = () => {
 		if (!isUploadingBook) {
-			setSelectedFile(null);
-			setBookTitle("");
-			setBookAuthor("");
-			onOpenChange(false);
+			setSelectedFile(null)
+			setBookTitle("")
+			setBookAuthor("")
+			onOpenChange(false)
 		}
-	};
+	}
 
 	return (
 		<Sheet open={open} onOpenChange={handleClose}>
@@ -146,24 +135,17 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 				)}
 				<SheetHeader>
 					<SheetTitle>Upload a Book</SheetTitle>
-					<SheetDescription>
-						Upload a PDF to start learning from it.
-					</SheetDescription>
+					<SheetDescription>Upload a PDF to start learning from it.</SheetDescription>
 				</SheetHeader>
 				<div className="py-4">
 					<div className="grid gap-4">
 						<div className="grid gap-2">
-							<Label htmlFor="book-file">Book File</Label>
-							<Input
-								id="book-file"
-								type="file"
-								accept=".pdf"
-								onChange={handleFileChange}
-							/>
+							<Label for="book-file">Book File</Label>
+							<Input id="book-file" type="file" accept=".pdf" onChange={handleFileChange} />
 						</div>
 						{selectedFile && (
 							<div className="grid gap-2">
-								<Label htmlFor="book-title">Title</Label>
+								<Label for="book-title">Title</Label>
 								<Input
 									id="book-title"
 									value={bookTitle}
@@ -175,7 +157,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 						)}
 						{selectedFile && (
 							<div className="grid gap-2">
-								<Label htmlFor="book-author">Author</Label>
+								<Label for="book-author">Author</Label>
 								<Input
 									id="book-author"
 									value={bookAuthor}
@@ -191,14 +173,11 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 					<Button variant="outline" onClick={handleClose}>
 						Cancel
 					</Button>
-					<Button
-						onClick={handleUpload}
-						disabled={!selectedFile || !bookTitle || !bookAuthor}
-					>
+					<Button onClick={handleUpload} disabled={!selectedFile || !bookTitle || !bookAuthor}>
 						Upload
 					</Button>
 				</SheetFooter>
 			</SheetContent>
 		</Sheet>
-	);
+	)
 }

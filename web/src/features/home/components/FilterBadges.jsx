@@ -1,7 +1,8 @@
-import { motion } from "framer-motion";
-import { X } from "lucide-react";
-import { Badge } from "@/components/badge";
-import { Button } from "@/components/button";
+import { motion } from "framer-motion"
+import { X } from "lucide-react"
+
+import { Badge } from "@/components/badge"
+import { Button } from "@/components/button"
 
 export default function FilterBadges({
 	activeFilter,
@@ -19,10 +20,7 @@ export default function FilterBadges({
 	onResetAll,
 }) {
 	const hasActiveFilters =
-		activeFilter !== "all" ||
-		activeSort !== "last-accessed" ||
-		sortDirection !== "desc" ||
-		tagFilter;
+		activeFilter !== "all" || activeSort !== "last-accessed" || sortDirection !== "desc" || tagFilter
 
 	return (
 		<motion.div
@@ -117,5 +115,5 @@ export default function FilterBadges({
 				</Button>
 			)}
 		</motion.div>
-	);
+	)
 }
