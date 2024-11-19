@@ -4,8 +4,9 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..api.schemas import RoadmapCreate, RoadmapUpdate
-from ..domain.models import Roadmap
+from src.domain.exceptions.base import ResourceNotFoundException
+from ..api.schemas import NodeCreate, NodeUpdate, RoadmapCreate, RoadmapUpdate
+from ..domain.models import Node, Roadmap
 
 
 logger = logging.getLogger(__name__)
@@ -100,3 +101,85 @@ class RoadmapService:
         await self._session.delete(roadmap)
         await self._session.commit()
         return True
+
+
+    async def create_node(self, roadmap_id: UUID, data: NodeCreate) -> Node:
+        """Create a new node in a roadmap."""
+        # Verify roadmap exists
+        roadmap = await self.get_roadmap(roadmap_id)
+        if not roadmap:
+            msg = "Roadmap"
+            raise ResourceNotFoundException(msg, str(roadmap_id))
+
+        # Create node
+        node = Node(
+            roadmap_id=roadmap_id,
+            title=data.title,
+            description=data.description,
+            content=data.content,
+            order=data.order,
+        )
+
+        # Add prerequisites if any
+        if data.prerequisite_ids:
+            prerequisites = await self._get_nodes_by_ids(data.prerequisite_ids)
+            node.prerequisites.extend(prerequisites)
+
+        # Set initial status based on prerequisites
+        node.status = "available" if not data.prerequisite_ids else "locked"
+
+        self._session.add(node)
+        await self._session.commit()
+        await self._session.refresh(node)
+
+        return node
+
+    async def update_node(
+        self, roadmap_id: UUID, node_id: UUID, data: NodeUpdate,
+    ) -> Node | None:
+        """Update an existing node."""
+        node = await self._get_node(roadmap_id, node_id)
+        if not node:
+            return None
+
+        # Update fields if provided
+        if data.title is not None:
+            node.title = data.title
+        if data.description is not None:
+            node.description = data.description
+        if data.content is not None:
+            node.content = data.content
+        if data.order is not None:
+            node.order = data.order
+        if data.prerequisite_ids is not None:
+            prerequisites = await self._get_nodes_by_ids(data.prerequisite_ids)
+            node.prerequisites = prerequisites
+
+        await self._session.commit()
+        await self._session.refresh(node)
+        return node
+
+    async def delete_node(self, roadmap_id: UUID, node_id: UUID) -> bool:
+        """Delete a node from a roadmap."""
+        node = await self._get_node(roadmap_id, node_id)
+        if not node:
+            return False
+
+        await self._session.delete(node)
+        await self._session.commit()
+        return True
+
+    async def _get_node(self, roadmap_id: UUID, node_id: UUID) -> Node | None:
+        """Get a node by ID and verify it belongs to the specified roadmap."""
+        query = select(Node).where(
+            Node.id == node_id,
+            Node.roadmap_id == roadmap_id,
+        )
+        result = await self._session.execute(query)
+        return result.scalar_one_or_none()
+
+    async def _get_nodes_by_ids(self, node_ids: list[UUID]) -> list[Node]:
+        """Get multiple nodes by their IDs."""
+        query = select(Node).where(Node.id.in_(node_ids))
+        result = await self._session.execute(query)
+        return list(result.scalars().all())

@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/v1/roadmaps", tags=["roadmaps"])
     "",
     response_model=RoadmapsListResponse,
     summary="List all roadmaps",
+    description="Retrieve a paginated list of roadmaps with optional filtering",
 )
 async def list_roadmaps(
     session: AsyncSession = Depends(get_db_session),
@@ -33,7 +34,7 @@ async def list_roadmaps(
     )
 
     return RoadmapsListResponse(
-        items=[RoadmapResponse.model_validate(r) for r in roadmaps],
+        items=[RoadmapResponse.from_orm(r) for r in roadmaps],
         total=total,
         page=page,
         pages=(total + limit - 1) // limit,
@@ -44,6 +45,7 @@ async def list_roadmaps(
     "",
     response_model=RoadmapResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Create new roadmap",
 )
 async def create_roadmap(
     data: RoadmapCreate,
@@ -52,12 +54,13 @@ async def create_roadmap(
     """Create a new roadmap."""
     service = RoadmapService(session)
     roadmap = await service.create_roadmap(data)
-    return RoadmapResponse.model_validate(roadmap)
+    return RoadmapResponse.from_orm(roadmap)
 
 
 @router.get(
     "/{roadmap_id}",
     response_model=RoadmapResponse,
+    summary="Get roadmap by ID",
 )
 async def get_roadmap(
     roadmap_id: UUID,
@@ -71,12 +74,13 @@ async def get_roadmap(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Roadmap not found",
         )
-    return RoadmapResponse.model_validate(roadmap)
+    return RoadmapResponse.from_orm(roadmap)
 
 
 @router.put(
     "/{roadmap_id}",
     response_model=RoadmapResponse,
+    summary="Update roadmap",
 )
 async def update_roadmap(
     roadmap_id: UUID,
@@ -91,12 +95,13 @@ async def update_roadmap(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Roadmap not found",
         )
-    return RoadmapResponse.model_validate(roadmap)
+    return RoadmapResponse.from_orm(roadmap)
 
 
 @router.delete(
     "/{roadmap_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete roadmap",
 )
 async def delete_roadmap(
     roadmap_id: UUID,

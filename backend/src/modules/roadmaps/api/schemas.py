@@ -75,3 +75,55 @@ class RoadmapNotFound(DomainException):
 
     def __init__(self, roadmap_id: UUID) -> None:
         super().__init__(f"Roadmap with ID {roadmap_id} not found")
+
+
+class NodeBase(BaseModel):
+    """Base schema for node data."""
+
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str = Field(..., min_length=1)
+    content: str | None = None
+    order: int = Field(default=0, ge=0)
+    prerequisite_ids: list[UUID] = Field(default_factory=list)
+
+
+class NodeCreate(NodeBase):
+    """Schema for creating a node."""
+
+    roadmap_id: UUID
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "title": "Python Basics",
+                "description": "Learn Python fundamentals",
+                "content": "# Python Basics\n\nIn this module...",
+                "order": 1,
+                "prerequisite_ids": [],
+                "roadmap_id": "123e4567-e89b-12d3-a456-426614174000",
+            },
+        }
+
+
+class NodeUpdate(BaseModel):
+    """Schema for updating a node."""
+
+    title: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = Field(None, min_length=1)
+    content: str | None = None
+    order: int | None = Field(None, ge=0)
+    prerequisite_ids: list[UUID] | None = None
+
+
+class NodeResponse(NodeBase):
+    """Schema for node response."""
+
+    id: UUID
+    status: str
+    roadmap_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    prerequisites: list["NodeResponse"] = []
+
+    class Config:
+        from_attributes = True
