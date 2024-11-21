@@ -3,10 +3,10 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.domain.exceptions.base import ResourceNotFoundException
-from ..api.schemas import NodeCreate, NodeUpdate, RoadmapCreate, RoadmapUpdate
-from ..domain.models import Node, Roadmap
+
+from roadmaps.api.schemas import NodeCreate, NodeUpdate, RoadmapCreate, RoadmapUpdate
+from roadmaps.domain.models import Node, Roadmap
 
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,6 @@ class RoadmapService:
     async def get_roadmaps(
         self,
         *,
-        user_id: UUID | None = None,
         search: str | None = None,
         page: int = 1,
         limit: int = 10,

@@ -1,9 +1,11 @@
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..application.services import RoadmapService
+from roadmaps.application.services import RoadmapService
+
 from .dependencies import LimitParam, PageParam, get_db_session
 from .schemas import RoadmapCreate, RoadmapResponse, RoadmapsListResponse, RoadmapUpdate
 
@@ -13,14 +15,13 @@ router = APIRouter(prefix="/api/v1/roadmaps", tags=["roadmaps"])
 
 @router.get(
     "",
-    response_model=RoadmapsListResponse,
     summary="List all roadmaps",
     description="Retrieve a paginated list of roadmaps with optional filtering",
 )
 async def list_roadmaps(
-    session: AsyncSession = Depends(get_db_session),
-    user_id: UUID | None = Query(None, description="Filter roadmaps by user"),
-    search: str | None = Query(None, description="Search term for roadmap title/description"),
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    user_id: Annotated[UUID | None, Query(None, description="Filter roadmaps by user")],
+    search: Annotated[str | None, Query(None, description="Search term for roadmap title/description")],
     page: PageParam = 1,
     limit: LimitParam = 10,
 ) -> RoadmapsListResponse:
@@ -43,13 +44,12 @@ async def list_roadmaps(
 
 @router.post(
     "",
-    response_model=RoadmapResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create new roadmap",
 )
 async def create_roadmap(
     data: RoadmapCreate,
-    session: AsyncSession = Depends(get_db_session),
+    session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> RoadmapResponse:
     """Create a new roadmap."""
     service = RoadmapService(session)
@@ -59,12 +59,11 @@ async def create_roadmap(
 
 @router.get(
     "/{roadmap_id}",
-    response_model=RoadmapResponse,
     summary="Get roadmap by ID",
 )
 async def get_roadmap(
     roadmap_id: UUID,
-    session: AsyncSession = Depends(get_db_session),
+    session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> RoadmapResponse:
     """Get a single roadmap by ID."""
     service = RoadmapService(session)
@@ -79,13 +78,12 @@ async def get_roadmap(
 
 @router.put(
     "/{roadmap_id}",
-    response_model=RoadmapResponse,
     summary="Update roadmap",
 )
 async def update_roadmap(
     roadmap_id: UUID,
     data: RoadmapUpdate,
-    session: AsyncSession = Depends(get_db_session),
+    session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> RoadmapResponse:
     """Update an existing roadmap."""
     service = RoadmapService(session)
@@ -105,7 +103,7 @@ async def update_roadmap(
 )
 async def delete_roadmap(
     roadmap_id: UUID,
-    session: AsyncSession = Depends(get_db_session),
+    session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> None:
     """Delete a roadmap."""
     service = RoadmapService(session)

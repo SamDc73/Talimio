@@ -1,4 +1,4 @@
-class DomainException(Exception):
+class DomainError(Exception):
     """Base exception class for all domain-specific exceptions."""
 
     def __init__(self, message: str) -> None:
@@ -6,12 +6,12 @@ class DomainException(Exception):
         super().__init__(self.message)
 
 
-class RoadmapException(DomainException):
+class RoadmapError(DomainError):
     """Base exception class for roadmap-related exceptions."""
 
 
 
-class ResourceNotFoundException(DomainException):
+class ResourceNotFoundError(DomainError):
     """Exception raised when a requested resource is not found."""
 
     def __init__(self, resource_type: str, resource_id: str) -> None:

@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import ClassVar
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -140,7 +141,7 @@ class NodeCreate(NodeBase):
     roadmap_id: UUID
 
     class Config:
-        json_schema_extra = {
+        json_schema_extra: ClassVar[dict] = {
             "example": {
                 "title": "Python Basics",
                 "description": "Learn Python fundamentals",

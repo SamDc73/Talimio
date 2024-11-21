@@ -34,7 +34,7 @@ def create_app() -> FastAPI:
     )
 
     @app.get("/health")
-    async def health_check():
+    async def health_check() -> dict[str, str]:
         return {"status": "healthy"}
 
     app.include_router(roadmaps_router)

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import ClassVar
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -17,7 +18,7 @@ class RoadmapCreate(RoadmapBase):
     """Schema for creating a roadmap."""
 
     class Config:
-        json_schema_extra = {
+        json_schema_extra: ClassVar[dict] = {
             "example": {
                 "title": "Machine Learning Engineer Roadmap",
                 "description": "Complete roadmap to become an ML engineer",
@@ -47,7 +48,7 @@ class RoadmapResponse(RoadmapBase):
 
     class Config:
         from_attributes = True
-        json_schema_extra = {
+        json_schema_extra: ClassVar[dict] = {
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174000",
                 "title": "Machine Learning Engineer Roadmap",
@@ -93,7 +94,7 @@ class NodeCreate(NodeBase):
     roadmap_id: UUID
 
     class Config:
-        json_schema_extra = {
+        json_schema_extra: ClassVar[dict] = {
             "example": {
                 "title": "Python Basics",
                 "description": "Learn Python fundamentals",
