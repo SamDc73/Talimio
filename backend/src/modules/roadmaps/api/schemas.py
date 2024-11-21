@@ -3,7 +3,7 @@ from typing import ClassVar
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-from src.domain.exceptions.base import DomainException
+from src.domain.exceptions.base import DomainError
 
 
 class RoadmapBase(BaseModel):
@@ -71,7 +71,7 @@ class RoadmapsListResponse(BaseModel):
 
 
 
-class RoadmapNotFound(DomainException):
+class RoadmapNotFoundError(DomainError):
     """Raised when roadmap is not found."""
 
     def __init__(self, roadmap_id: UUID) -> None:
