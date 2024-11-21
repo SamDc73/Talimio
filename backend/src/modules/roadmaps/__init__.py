@@ -1,4 +1,4 @@
-from .api.schemas import (
+from src.modules.roadmaps.api.schemas import (
     NodeBase,
     NodeCreate,
     NodeResponse,
@@ -8,7 +8,7 @@ from .api.schemas import (
     RoadmapResponse,
     RoadmapUpdate,
 )
-from .domain.models import Node, Roadmap
+from src.modules.roadmaps.domain.models import Node, Roadmap
 
 
 __all__ = [

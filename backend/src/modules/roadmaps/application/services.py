@@ -3,10 +3,9 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.domain.exceptions.base import ResourceNotFoundException
-
-from roadmaps.api.schemas import NodeCreate, NodeUpdate, RoadmapCreate, RoadmapUpdate
-from roadmaps.domain.models import Node, Roadmap
+from src.domain.exceptions.base import ResourceNotFoundError
+from src.modules.roadmaps.api.schemas import NodeCreate, NodeUpdate, RoadmapCreate, RoadmapUpdate
+from src.modules.roadmaps.domain.models import Node, Roadmap
 
 
 logger = logging.getLogger(__name__)
@@ -108,7 +107,7 @@ class RoadmapService:
         roadmap = await self.get_roadmap(roadmap_id)
         if not roadmap:
             msg = "Roadmap"
-            raise ResourceNotFoundException(msg, str(roadmap_id))
+            raise ResourceNotFoundError(msg, str(roadmap_id))
 
         # Create node
         node = Node(

@@ -3,11 +3,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from roadmaps.application.services import RoadmapService
-
-from .dependencies import LimitParam, PageParam, get_db_session
-from .schemas import RoadmapCreate, RoadmapResponse, RoadmapsListResponse, RoadmapUpdate
+from src.modules.roadmaps.api.dependencies import LimitParam, PageParam, get_db_session
+from src.modules.roadmaps.api.schemas import RoadmapCreate, RoadmapResponse, RoadmapsListResponse, RoadmapUpdate
+from src.modules.roadmaps.application.services import RoadmapService
 
 
 router = APIRouter(prefix="/api/v1/roadmaps", tags=["roadmaps"])
@@ -20,8 +18,8 @@ router = APIRouter(prefix="/api/v1/roadmaps", tags=["roadmaps"])
 )
 async def list_roadmaps(
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: Annotated[UUID | None, Query(None, description="Filter roadmaps by user")],
-    search: Annotated[str | None, Query(None, description="Search term for roadmap title/description")],
+    user_id: Annotated[UUID | None, Query(description="Filter roadmaps by user")] = None,
+    search: Annotated[str | None, Query(description="Search term for roadmap title/description")] = None,
     page: PageParam = 1,
     limit: LimitParam = 10,
 ) -> RoadmapsListResponse:

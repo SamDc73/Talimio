@@ -1,10 +1,9 @@
-# src/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config.settings import get_settings
-from .modules.roadmaps.api.router import router as roadmaps_router
-from .shared.infrastructure.database import Base, engine
+from src.config.settings import get_settings
+from src.modules.roadmaps.api.router import router as roadmaps_router
+from src.shared.infrastructure.database import Base, engine
 
 
 async def create_tables() -> None:
