@@ -3,7 +3,6 @@ from typing import ClassVar
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-from src.domain.exceptions.base import DomainError
 
 
 class RoadmapBase(BaseModel):
@@ -28,53 +27,11 @@ class RoadmapCreate(RoadmapBase):
 
 
 class RoadmapUpdate(BaseModel):
-    """Schema for updating a roadmap.
-
-    Note: We don't inherit from RoadmapBase to allow optional fields.
-    """
+    """Schema for updating a roadmap."""
 
     title: str | None = Field(None, min_length=1, max_length=200)
     description: str | None = Field(None, min_length=1)
     skill_level: str | None = Field(None, pattern="^(beginner|intermediate|advanced)$")
-
-
-class RoadmapResponse(RoadmapBase):
-    """Schema for roadmap response."""
-
-    id: UUID
-    created_at: datetime
-    updated_at: datetime
-    nodes: list["NodeResponse"] = []
-
-    class Config:
-        from_attributes = True
-        json_schema_extra: ClassVar[dict] = {
-            "example": {
-                "title": "Machine Learning Engineer Roadmap",
-                "description": "Complete roadmap to become an ML engineer",
-                "skill_level": "beginner",
-                "id": "123e4567-e89b-12d3-a456-426614174000",
-                "created_at": "2024-01-01T00:00:00",
-                "updated_at": "2024-01-01T00:00:00",
-                "nodes": [],
-            },
-        }
-
-
-class RoadmapsListResponse(BaseModel):
-    """Schema for paginated roadmaps list."""
-
-    items: list[RoadmapResponse]
-    total: int
-    page: int
-    pages: int
-
-
-class RoadmapNotFoundError(DomainError):
-    """Raised when roadmap is not found."""
-
-    def __init__(self, roadmap_id: UUID) -> None:
-        super().__init__(f"Roadmap with ID {roadmap_id} not found")
 
 
 class NodeBase(BaseModel):
@@ -124,6 +81,18 @@ class NodeResponse(NodeBase):
     created_at: datetime
     updated_at: datetime
     prerequisites: list["NodeResponse"] = []
+
+    class Config:
+        from_attributes = True
+
+
+class RoadmapResponse(RoadmapBase):
+    """Schema for roadmap response."""
+
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    nodes: list[NodeResponse] = []
 
     class Config:
         from_attributes = True
