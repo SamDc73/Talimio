@@ -8,9 +8,6 @@ asyncpg>=0.29.0
 psycopg2-binary>=2.9.9
 alembic>=1.13.1
 
-# SurrealDB
-git+https://github.com/surrealdb/surrealdb.py.git
-
 # Settings & Validation
 pydantic>=2.5.0
 pydantic-settings>=2.1.0

@@ -17,9 +17,14 @@ node_prerequisites = Table(
     Base.metadata,
     Column("node_id", SA_UUID(as_uuid=True), ForeignKey("nodes.id"), primary_key=True),
     Column(
-        "prerequisite_id", SA_UUID(as_uuid=True), ForeignKey("nodes.id"), primary_key=True,
+        "prerequisite_id",
+        SA_UUID(as_uuid=True),
+        ForeignKey("nodes.id"),
+        primary_key=True,
     ),
 )
+
+
 class Roadmap(Base):
     """Roadmap model."""
 
@@ -151,7 +156,6 @@ class NodeCreate(NodeBase):
                 "roadmap_id": "123e4567-e89b-12d3-a456-426614174000",
             },
         }
-
 
 
 # To handle forward references
