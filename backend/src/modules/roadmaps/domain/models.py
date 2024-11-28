@@ -1,11 +1,9 @@
 import uuid
 from datetime import datetime
-from typing import ClassVar
+from typing import ClassVar, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-
-# Define the association table for prerequisites
 from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Table
 from sqlalchemy.dialects.postgresql import UUID as SA_UUID
 from sqlalchemy.orm import relationship
@@ -33,7 +31,7 @@ class Roadmap(Base):
     id = Column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String, nullable=False)
     description = Column(String)
-    skill_level = Column(
+    skill_level: Literal["beginner", "intermediate", "advanced"] = Column(
         Enum("beginner", "intermediate", "advanced", name="skill_level_enum"),
         nullable=False,
     )
@@ -108,7 +106,7 @@ class RoadmapBase(BaseModel):
     """Base schema for a roadmap."""
 
     id: UUID
-    name: str
+    title: str
     description: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -120,14 +118,14 @@ class RoadmapBase(BaseModel):
 class RoadmapCreate(BaseModel):
     """Schema for creating a roadmap."""
 
-    name: str = Field(..., min_length=1, max_length=100)
+    title: str = Field(..., min_length=1, max_length=100)
     description: str | None = Field(None, max_length=500)
 
 
 class RoadmapUpdate(BaseModel):
     """Schema for updating a roadmap."""
 
-    name: str | None = Field(None, min_length=1, max_length=100)
+    title: str | None = Field(None, min_length=1, max_length=100)
     description: str | None = Field(None, max_length=500)
 
 
