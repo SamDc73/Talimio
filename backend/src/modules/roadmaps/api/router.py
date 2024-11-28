@@ -18,7 +18,6 @@ router = APIRouter(prefix="/api/v1/roadmaps", tags=["roadmaps"])
 )
 async def list_roadmaps(
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: Annotated[UUID | None, Query(description="Filter roadmaps by user")] = None,
     search: Annotated[str | None, Query(description="Search term for roadmap title/description")] = None,
     page: PageParam = 1,
     limit: LimitParam = 10,
@@ -26,14 +25,13 @@ async def list_roadmaps(
     """Get a paginated list of roadmaps with optional filtering."""
     service = RoadmapService(session)
     roadmaps, total = await service.get_roadmaps(
-        user_id=user_id,
         search=search,
         page=page,
         limit=limit,
     )
 
     return RoadmapsListResponse(
-        items=[RoadmapResponse.from_orm(r) for r in roadmaps],
+        items=[RoadmapResponse.model_validate(r) for r in roadmaps],
         total=total,
         page=page,
         pages=(total + limit - 1) // limit,

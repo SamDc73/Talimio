@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from src.domain.exceptions.base import ResourceNotFoundError
 from src.modules.roadmaps.api.schemas import NodeCreate, NodeUpdate, RoadmapCreate, RoadmapUpdate
 from src.modules.roadmaps.domain.models import Node, Roadmap
@@ -29,8 +30,6 @@ class RoadmapService:
 
         Parameters
         ----------
-        user_id : Optional[UUID]
-            Filter by user ID
         search : Optional[str]
             Search term for title/description
         page : int
@@ -47,14 +46,16 @@ class RoadmapService:
 
         if search:
             query = query.filter(
-                Roadmap.title.ilike(f"%{search}%") |
-                Roadmap.description.ilike(f"%{search}%"),
+                Roadmap.title.ilike(f"%{search}%") | Roadmap.description.ilike(f"%{search}%"),
             )
 
         # Get total count
-        total = await self._session.scalar(
-            select(func.count()).select_from(query.subquery()),
-        ) or 0
+        total = (
+            await self._session.scalar(
+                select(func.count()).select_from(query.subquery()),
+            )
+            or 0
+        )
 
         # Apply pagination
         query = query.offset((page - 1) * limit).limit(limit)
@@ -63,11 +64,35 @@ class RoadmapService:
 
         return list(roadmaps), total
 
-    async def get_roadmap(self, roadmap_id: UUID) -> Roadmap | None:
-        """Get a single roadmap by ID."""
-        query = select(Roadmap).where(Roadmap.id == roadmap_id)
+    async def get_roadmap(self, roadmap_id: UUID) -> Roadmap:
+        """
+        Get roadmap by ID.
+
+        Parameters
+        ----------
+        roadmap_id : UUID
+            Roadmap ID
+
+        Returns
+        -------
+        Roadmap
+            Roadmap instance
+
+        Raises
+        ------
+        ResourceNotFoundError
+            If roadmap not found
+        """
+        query = select(Roadmap).where(Roadmap.id == roadmap_id).options(selectinload(Roadmap.nodes))
+
         result = await self._session.execute(query)
-        return result.scalar_one_or_none()
+        roadmap = result.scalar_one_or_none()
+
+        if roadmap is None:
+            msg = f"Roadmap with ID {roadmap_id} not found"
+            raise ResourceNotFoundError(msg)
+
+        return roadmap
 
     async def create_roadmap(self, data: RoadmapCreate) -> Roadmap:
         """Create a new roadmap."""
@@ -99,7 +124,6 @@ class RoadmapService:
         await self._session.delete(roadmap)
         await self._session.commit()
         return True
-
 
     async def create_node(self, roadmap_id: UUID, data: NodeCreate) -> Node:
         """Create a new node in a roadmap."""
@@ -133,14 +157,23 @@ class RoadmapService:
         return node
 
     async def update_node(
-        self, roadmap_id: UUID, node_id: UUID, data: NodeUpdate,
+        self,
+        roadmap_id: UUID,
+        node_id: UUID,
+        data: NodeUpdate,
     ) -> Node | None:
         """Update an existing node."""
-        node = await self._get_node(roadmap_id, node_id)
+        stmt = select(Node).where(
+            Node.id == node_id,
+            Node.roadmap_id == roadmap_id,
+        )
+        result = await self._session.execute(stmt)
+        node = result.scalar_one_or_none()
+
         if not node:
             return None
 
-        # Update fields if provided
+        # Update fields if provided using model instance
         if data.title is not None:
             node.title = data.title
         if data.description is not None:
@@ -150,8 +183,12 @@ class RoadmapService:
         if data.order is not None:
             node.order = data.order
         if data.prerequisite_ids is not None:
+            # Get all requested prerequisite nodes
             prerequisites = await self._get_nodes_by_ids(data.prerequisite_ids)
-            node.prerequisites = prerequisites
+
+            # Clear existing prerequisites and add new ones
+            node.prerequisites.clear()
+            node.prerequisites.extend(prerequisites)
 
         await self._session.commit()
         await self._session.refresh(node)

@@ -11,8 +11,12 @@ class Settings(BaseSettings):
     # Database Settings
     DATABASE_URL: str = "sqlite:///./test.db"
 
+    # OpenAI Settings
+    openai_api_key: str | None = None
+
     class Config:
         env_file = ".env"
+        extra = "allow"  # Allow extra fields from environment
 
 def get_settings() -> Settings:
     """Get settings instance."""

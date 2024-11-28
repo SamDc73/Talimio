@@ -27,7 +27,6 @@ class RoadmapCreate(RoadmapBase):
         }
 
 
-
 class RoadmapUpdate(BaseModel):
     """Schema for updating a roadmap.
 
@@ -45,17 +44,19 @@ class RoadmapResponse(RoadmapBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+    nodes: list["NodeResponse"] = []
 
     class Config:
         from_attributes = True
         json_schema_extra: ClassVar[dict] = {
             "example": {
-                "id": "123e4567-e89b-12d3-a456-426614174000",
                 "title": "Machine Learning Engineer Roadmap",
                 "description": "Complete roadmap to become an ML engineer",
                 "skill_level": "beginner",
-                "created_at": "2024-01-01T00:00:00Z",
-                "updated_at": "2024-01-01T00:00:00Z",
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "created_at": "2024-01-01T00:00:00",
+                "updated_at": "2024-01-01T00:00:00",
+                "nodes": [],
             },
         }
 
@@ -67,8 +68,6 @@ class RoadmapsListResponse(BaseModel):
     total: int
     page: int
     pages: int
-
-
 
 
 class RoadmapNotFoundError(DomainError):
