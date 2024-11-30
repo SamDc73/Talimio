@@ -1,0 +1,35 @@
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+
+class ProgressBase(BaseModel):
+    """Base schema for progress data."""
+
+    status: str = Field(..., pattern="^(not_started|in_progress|completed)$")
+
+
+class ProgressCreate(ProgressBase):
+    """Schema for creating progress."""
+
+    user_id: UUID
+    node_id: UUID
+
+
+class ProgressUpdate(ProgressBase):
+    """Schema for updating progress."""
+
+
+
+class ProgressResponse(ProgressBase):
+    """Schema for progress response."""
+
+    id: UUID
+    user_id: UUID
+    node_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

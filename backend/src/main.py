@@ -1,17 +1,47 @@
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env from project root (parent of backend directory)
+ROOT_DIR = Path(__file__).parent.parent.parent
+ENV_PATH = ROOT_DIR / ".env"
+load_dotenv(ENV_PATH)
+
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config.settings import get_settings
-from src.modules.roadmaps.api.router import router as roadmaps_router
-from src.shared.infrastructure.database import Base, engine
+from src.database.core import Base
+from src.database.session import engine
+from src.progress.router import router as progress_router
+from src.roadmaps.router import router as roadmaps_router
+from src.users.router import router as users_router
+
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 async def create_tables() -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """Create database tables."""
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception as e:
+        logger.exception(f"Failed to create tables: {e}")
+        raise
+
 
 def create_app() -> FastAPI:
-    settings = get_settings()
+    """Create and configure FastAPI application."""
+    try:
+        settings = get_settings()
+    except Exception as e:
+        logger.exception(f"Failed to load settings: {e}")
+        raise
 
     app = FastAPI(
         title="Learning Roadmap API",
@@ -20,10 +50,7 @@ def create_app() -> FastAPI:
         debug=settings.DEBUG,
     )
 
-    @app.on_event("startup")
-    async def startup() -> None:
-        await create_tables()
-
+    # Add CORS middleware
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -32,16 +59,33 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Register health check endpoint
     @app.get("/health")
     async def health_check() -> dict[str, str]:
+        """Health check endpoint."""
         return {"status": "healthy"}
 
+    # Register routers
     app.include_router(roadmaps_router)
+    app.include_router(users_router)
+    app.include_router(progress_router)
+
+    # Register startup event
+    @app.on_event("startup")
+    async def startup() -> None:
+        """Run startup tasks."""
+        try:
+            await create_tables()
+        except Exception as e:
+            logger.exception(f"Startup failed: {e}")
+            raise
 
     return app
+
 
 app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="127.0.0.1", port=8000)
