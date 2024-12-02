@@ -1,11 +1,11 @@
 from datetime import datetime
-from typing import ClassVar
+from typing import Any, ClassVar
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel as PydanticBaseModel, Field
 
 
-class RoadmapBase(BaseModel):
+class RoadmapBase(PydanticBaseModel):  # type: ignore[misc]
     """Base schema for roadmap data."""
 
     title: str = Field(..., min_length=1, max_length=200)
@@ -17,7 +17,7 @@ class RoadmapCreate(RoadmapBase):
     """Schema for creating a roadmap."""
 
     class Config:
-        json_schema_extra: ClassVar[dict] = {
+        json_schema_extra: ClassVar[dict[str, Any]] = {
             "example": {
                 "title": "Machine Learning Engineer Roadmap",
                 "description": "Complete roadmap to become an ML engineer",
@@ -26,7 +26,7 @@ class RoadmapCreate(RoadmapBase):
         }
 
 
-class RoadmapUpdate(BaseModel):
+class RoadmapUpdate(PydanticBaseModel):  # type: ignore[misc]
     """Schema for updating a roadmap."""
 
     title: str | None = Field(None, min_length=1, max_length=200)
@@ -34,7 +34,7 @@ class RoadmapUpdate(BaseModel):
     skill_level: str | None = Field(None, pattern="^(beginner|intermediate|advanced)$")
 
 
-class NodeBase(BaseModel):
+class NodeBase(PydanticBaseModel):  # type: ignore[misc]
     """Base schema for node data."""
 
     title: str = Field(..., min_length=1, max_length=200)
@@ -50,7 +50,7 @@ class NodeCreate(NodeBase):
     roadmap_id: UUID
 
     class Config:
-        json_schema_extra: ClassVar[dict] = {
+        json_schema_extra: ClassVar[dict[str, Any]] = {
             "example": {
                 "title": "Python Basics",
                 "description": "Learn Python fundamentals",
@@ -62,7 +62,7 @@ class NodeCreate(NodeBase):
         }
 
 
-class NodeUpdate(BaseModel):
+class NodeUpdate(PydanticBaseModel):  # type: ignore[misc]
     """Schema for updating a node."""
 
     title: str | None = Field(None, min_length=1, max_length=200)
@@ -85,7 +85,6 @@ class NodeResponse(NodeBase):
     class Config:
         from_attributes = True
 
-
 class RoadmapResponse(RoadmapBase):
     """Schema for roadmap response."""
 
@@ -98,7 +97,7 @@ class RoadmapResponse(RoadmapBase):
         from_attributes = True
 
 
-class RoadmapsListResponse(BaseModel):
+class RoadmapsListResponse(PydanticBaseModel):  # type: ignore[misc]
     """Schema for paginated roadmaps response."""
 
     items: list[RoadmapResponse]

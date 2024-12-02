@@ -142,7 +142,7 @@ class RoadmapService:
         Parameters
         ----------
         roadmap_id : UUID
-            Roadmap ID
+            Roadmap ID to delete
 
         Raises
         ------
@@ -150,17 +150,20 @@ class RoadmapService:
             If roadmap not found
         """
         roadmap = await self.get_roadmap(roadmap_id)
+        if not roadmap:
+            msg = "Roadmap"
+            raise ResourceNotFoundError(msg, str(roadmap_id))
+
         await self._session.delete(roadmap)
         await self._session.commit()
 
     async def create_node(self, roadmap_id: UUID, data: NodeCreate) -> Node:
-        """
-        Create a new node in a roadmap.
+        """Create a new node.
 
         Parameters
         ----------
         roadmap_id : UUID
-            Roadmap ID
+            ID of the roadmap this node belongs to
         data : NodeCreate
             Node creation data
 
@@ -171,32 +174,38 @@ class RoadmapService:
 
         Raises
         ------
-        ResourceNotFoundError
-            If roadmap not found
         ValidationError
             If prerequisites are invalid
         """
         # Verify roadmap exists
-        await self.get_roadmap(roadmap_id)
+        roadmap = await self.get_roadmap(roadmap_id)
+        if not roadmap:
+            msg = f"Roadmap {roadmap_id} not found"
+            raise ValidationError(msg)
 
-        # Create node
+        # Create node instance
         node = Node(
             roadmap_id=roadmap_id,
             title=data.title,
             description=data.description,
             content=data.content,
             order=data.order,
-            status="available",  # Default status
         )
+        node.set_status("available")  # Default status
 
-        # Add prerequisites if any
+        # Handle prerequisites if any
         if data.prerequisite_ids:
             prerequisites = await self._get_nodes_by_ids(data.prerequisite_ids)
             if len(prerequisites) != len(data.prerequisite_ids):
                 msg = "One or more prerequisite nodes not found"
                 raise ValidationError(msg)
+
+            if any(p.roadmap_id != roadmap_id for p in prerequisites):
+                msg = "All prerequisites must belong to the same roadmap"
+                raise ValidationError(msg)
+
             node.prerequisites.extend(prerequisites)
-            node.status = "locked"  # Lock node if it has prerequisites
+            node.set_status("locked")  # Node is locked if it has prerequisites
 
         self._session.add(node)
         await self._session.commit()
@@ -250,10 +259,10 @@ class RoadmapService:
                     raise ValidationError(msg)
                 node.prerequisites.clear()
                 node.prerequisites.extend(prerequisites)
-                node.status = "locked"
+                node.set_status("locked")
             else:
                 node.prerequisites.clear()
-                node.status = "available"
+                node.set_status("available")
 
         # Update remaining fields
         for key, value in update_data.items():

@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -12,7 +12,11 @@ from src.progress.service import ProgressService
 router = APIRouter(prefix="/api/v1/progress", tags=["progress"])
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    response_model_exclude_none=True,
+)  # type: ignore[misc]
 async def create_progress(
     data: ProgressCreate,
     session: DbSession,
@@ -21,15 +25,18 @@ async def create_progress(
     service = ProgressService(session)
     try:
         progress = await service.create_progress(data)
+        return cast(ProgressResponse, ProgressResponse.model_validate(progress))
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
-    return ProgressResponse.model_validate(progress)
 
 
-@router.get("/{progress_id}")
+@router.get(
+    "/{progress_id}",
+    response_model_exclude_none=True,
+)  # type: ignore[misc]
 async def get_progress(
     progress_id: UUID,
     session: DbSession,
@@ -38,15 +45,18 @@ async def get_progress(
     service = ProgressService(session)
     try:
         progress = await service.get_progress(progress_id)
+        return cast(ProgressResponse, ProgressResponse.model_validate(progress))
     except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         ) from e
-    return ProgressResponse.model_validate(progress)
 
 
-@router.get("/user/{user_id}")
+@router.get(
+    "/user/{user_id}",
+    response_model_exclude_none=True,
+)  # type: ignore[misc]
 async def get_user_progress(
     user_id: UUID,
     session: DbSession,
@@ -61,16 +71,18 @@ async def get_user_progress(
             page=page,
             limit=limit,
         )
+        return [cast(ProgressResponse, ProgressResponse.model_validate(p)) for p in progress_records]
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
 
-    return [ProgressResponse.model_validate(p) for p in progress_records]
 
-
-@router.put("/{progress_id}")
+@router.put(
+    "/{progress_id}",
+    response_model_exclude_none=True,
+)  # type: ignore[misc]
 async def update_progress(
     progress_id: UUID,
     data: ProgressUpdate,
@@ -80,16 +92,20 @@ async def update_progress(
     service = ProgressService(session)
     try:
         progress = await service.update_progress(progress_id, data)
+        return cast(ProgressResponse, ProgressResponse.model_validate(progress))
     except (ResourceNotFoundError, ValidationError) as e:
         status_code = status.HTTP_404_NOT_FOUND if isinstance(e, ResourceNotFoundError) else status.HTTP_400_BAD_REQUEST
         raise HTTPException(
             status_code=status_code,
             detail=str(e),
         ) from e
-    return ProgressResponse.model_validate(progress)
 
 
-@router.delete("/{progress_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{progress_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)  # type: ignore[misc]
 async def delete_progress(
     progress_id: UUID,
     session: DbSession,

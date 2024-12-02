@@ -1,10 +1,10 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel as PydanticBaseModel, Field
 
 
-class ProgressBase(BaseModel):
+class ProgressBase(PydanticBaseModel):  # type: ignore[misc]
     """Base schema for progress data."""
 
     status: str = Field(..., pattern="^(not_started|in_progress|completed)$")
@@ -19,7 +19,6 @@ class ProgressCreate(ProgressBase):
 
 class ProgressUpdate(ProgressBase):
     """Schema for updating progress."""
-
 
 
 class ProgressResponse(ProgressBase):

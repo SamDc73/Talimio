@@ -1,14 +1,13 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel as PydanticBaseModel
 
 
-class UserBase(BaseModel):
+class UserBase(PydanticBaseModel):  # type: ignore[misc]
     """Base schema for user data."""
 
-    # Change email to regular str
-    email: str  # Changed from EmailStr
+    email: str
     name: str
 
 
@@ -17,11 +16,10 @@ class UserCreate(UserBase):
 
 
 
-class UserUpdate(BaseModel):
+class UserUpdate(PydanticBaseModel):  # type: ignore[misc]
     """Schema for updating a user."""
 
-    # Change email to regular str
-    email: str | None = None  # Changed from EmailStr
+    email: str | None = None
     name: str | None = None
 
 

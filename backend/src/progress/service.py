@@ -161,8 +161,14 @@ class ProgressService:
         progress = await self.get_progress(progress_id)
 
         # Validate status transition
-        if data.status and not self._is_valid_status_transition(progress.status, data.status):
-            msg = f"Invalid status transition from {progress.status} to {data.status}"
+        progress = await self.get_progress(progress_id)
+
+        # Get the current status as string
+        current_status = str(progress.status) if progress.status else "not_started"
+
+        # Validate status transition
+        if data.status and not self._is_valid_status_transition(current_status, data.status):
+            msg = f"Invalid status transition from {current_status} to {data.status}"
             raise ValidationError(msg)
 
         # Update fields
@@ -224,6 +230,18 @@ class ProgressService:
         - not_started -> in_progress
         - in_progress -> completed
         - completed -> in_progress (for revision)
+
+        Parameters
+        ----------
+        current : str
+            Current status
+        new : str
+            New status
+
+        Returns
+        -------
+        bool
+            Whether the transition is valid
         """
         valid_transitions = {
             "not_started": ["in_progress"],

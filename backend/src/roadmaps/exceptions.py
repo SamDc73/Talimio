@@ -3,7 +3,7 @@ from uuid import UUID
 from src.core.exceptions import ResourceNotFoundError
 
 
-class RoadmapNotFound(ResourceNotFoundError):
+class RoadmapNotFoundError(ResourceNotFoundError):
     """Exception raised when a roadmap is not found."""
 
     def __init__(self, roadmap_id: UUID) -> None:

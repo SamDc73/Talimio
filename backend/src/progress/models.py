@@ -8,7 +8,7 @@ from sqlalchemy.orm import relationship
 from src.database.core import Base
 
 
-class Progress(Base):
+class Progress(Base):  # type: ignore[misc]
     """Progress model for tracking user progress on roadmap nodes."""
 
     __tablename__ = "progress"

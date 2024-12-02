@@ -1,11 +1,17 @@
-from typing import Annotated
+from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from src.core.exceptions import ResourceNotFoundError
 from src.database.session import DbSession
 from src.roadmaps.dependencies import LimitParam, PageParam
-from src.roadmaps.schemas import RoadmapCreate, RoadmapResponse, RoadmapsListResponse, RoadmapUpdate
+from src.roadmaps.schemas import (
+    RoadmapCreate,
+    RoadmapResponse,
+    RoadmapsListResponse,
+    RoadmapUpdate,
+)
 from src.roadmaps.service import RoadmapService
 
 
@@ -16,12 +22,12 @@ router = APIRouter(prefix="/api/v1/roadmaps", tags=["roadmaps"])
     "",
     summary="List all roadmaps",
     description="Retrieve a paginated list of roadmaps with optional filtering",
-)
+)  # type: ignore[misc]
 async def list_roadmaps(
     session: DbSession,
     search: Annotated[str | None, Query(description="Search term for roadmap title/description")] = None,
-    page: PageParam = 1,  # Default set here
-    limit: LimitParam = 10,  # Default set here
+    page: PageParam = 1,
+    limit: LimitParam = 10,
 ) -> RoadmapsListResponse:
     """Get a paginated list of roadmaps with optional filtering."""
     service = RoadmapService(session)
@@ -42,7 +48,7 @@ async def list_roadmaps(
     "",
     status_code=status.HTTP_201_CREATED,
     summary="Create new roadmap",
-)
+)  # type: ignore[misc]
 async def create_roadmap(
     data: RoadmapCreate,
     session: DbSession,
@@ -50,13 +56,12 @@ async def create_roadmap(
     """Create a new roadmap."""
     service = RoadmapService(session)
     roadmap = await service.create_roadmap(data)
-    return RoadmapResponse.model_validate(roadmap)
+    return cast(RoadmapResponse, RoadmapResponse.model_validate(roadmap))
 
 
 @router.get(
     "/{roadmap_id}",
-    summary="Get roadmap by ID",
-)
+)  # type: ignore[misc]
 async def get_roadmap(
     roadmap_id: UUID,
     session: DbSession,
@@ -69,13 +74,12 @@ async def get_roadmap(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Roadmap not found",
         )
-    return RoadmapResponse.model_validate(roadmap)
+    return cast(RoadmapResponse, RoadmapResponse.model_validate(roadmap))
 
 
 @router.put(
     "/{roadmap_id}",
-    summary="Update roadmap",
-)
+)  # type: ignore[misc]
 async def update_roadmap(
     roadmap_id: UUID,
     data: RoadmapUpdate,
@@ -89,22 +93,22 @@ async def update_roadmap(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Roadmap not found",
         )
-    return RoadmapResponse.model_validate(roadmap)
-
+    return cast(RoadmapResponse, RoadmapResponse.model_validate(roadmap))
 
 @router.delete(
     "/{roadmap_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete roadmap",
-)
+)  # type: ignore[misc]
 async def delete_roadmap(
     roadmap_id: UUID,
     session: DbSession,
 ) -> None:
     """Delete a roadmap."""
     service = RoadmapService(session)
-    if not await service.delete_roadmap(roadmap_id):
+    try:
+        await service.delete_roadmap(roadmap_id)
+    except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Roadmap not found",
+            detail=str(e),
         )
