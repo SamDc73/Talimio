@@ -64,17 +64,30 @@ class ModelManager:
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-            return response.choices[0].message.content
         except Exception:
             self._logger.exception("Error getting completion from LiteLLM")
             return None
+        else:
+            content: str = response.choices[0].message.content
+            return content
+
+    def _raise_roadmap_error() -> None:
+        raise RoadmapGenerationError
+
+
+    def _raise_node_error() -> None:
+        raise NodeCustomizationError
+
+
+    def _raise_exercise_error() -> None:
+        raise ExerciseGenerationError
 
     async def generate_roadmap_content(
         self,
         title: str,
         skill_level: str,
         description: str,
-    ) -> dict:
+    ) -> dict[str, str | datetime]:
         """Generate initial roadmap content structure."""
         try:
             messages = [
@@ -151,7 +164,7 @@ class ModelManager:
         node_id: UUID,
         topic: str,
         difficulty: str,
-    ) -> list[dict[str, str | int]]:
+    ) -> list[dict[str, str]]:
         """Generate practice exercises for a node."""
         if not validate_uuid(node_id):
             msg = "Invalid node ID"
@@ -184,9 +197,8 @@ class ModelManager:
 
             content = await self._get_completion(messages)
             if not content:
-                self._raise_exercise_generation_error()
-            if content is None:
-                self._raise_exercise_generation_error()
+                raise ExerciseGenerationError
+
             return self._parse_exercises(content)
 
         except Exception as err:
@@ -194,10 +206,6 @@ class ModelManager:
             if isinstance(err, AIError):
                 raise
             raise ExerciseGenerationError from err
-
-    def _raise_exercise_generation_error(self) -> None:
-        """Raise ExerciseGenerationError."""
-        raise ExerciseGenerationError
 
     def _parse_exercises(self, content: str) -> list[dict[str, str]]:
         """Parse exercise content into structured format."""

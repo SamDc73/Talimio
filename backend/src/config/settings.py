@@ -1,10 +1,10 @@
 import os
 from functools import lru_cache
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings as PydanticBaseSettings, SettingsConfigDict
 
 
-class Settings(BaseSettings):
+class Settings(PydanticBaseSettings):  # type: ignore[misc]
     """Application settings."""
 
     # API Settings

@@ -5,6 +5,7 @@ from src.roadmaps.schemas import (
     NodeUpdate,
     RoadmapCreate,
     RoadmapResponse,
+    RoadmapsListResponse,
     RoadmapUpdate,
 )
 
@@ -18,4 +19,5 @@ __all__ = [
     "RoadmapCreate",
     "RoadmapResponse",
     "RoadmapUpdate",
+    "RoadmapsListResponse",
 ]

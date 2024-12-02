@@ -1,14 +1,7 @@
-import os
-from pathlib import Path
-from dotenv import load_dotenv
-
-# Load .env from project root (parent of backend directory)
-ROOT_DIR = Path(__file__).parent.parent.parent
-ENV_PATH = ROOT_DIR / ".env"
-load_dotenv(ENV_PATH)
-
 import logging
+from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -18,6 +11,12 @@ from src.database.session import engine
 from src.progress.router import router as progress_router
 from src.roadmaps.router import router as roadmaps_router
 from src.users.router import router as users_router
+
+
+# Load .env from project root (parent of backend directory)
+ROOT_DIR = Path(__file__).parent.parent.parent
+ENV_PATH = ROOT_DIR / ".env"
+load_dotenv(ENV_PATH)
 
 
 # Setup logging
@@ -60,10 +59,10 @@ def create_app() -> FastAPI:
     )
 
     # Register health check endpoint
-    @app.get("/health")
+    @app.get("/health")  # type: ignore[misc]
     async def health_check() -> dict[str, str]:
         """Health check endpoint."""
-        return {"status": "healthy"}
+        return {"status": "healthy"}  # Added explicit return
 
     # Register routers
     app.include_router(roadmaps_router)
@@ -71,7 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(progress_router)
 
     # Register startup event
-    @app.on_event("startup")
+    @app.on_event("startup")  # type: ignore[misc]
     async def startup() -> None:
         """Run startup tasks."""
         try:
