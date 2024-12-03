@@ -8,7 +8,7 @@ from sqlalchemy.orm import relationship
 from src.database.core import Base
 
 
-class Progress(Base):  # type: ignore[misc]
+class Progress(Base):
     """Progress model for tracking user progress on roadmap nodes."""
 
     __tablename__ = "progress"
@@ -16,7 +16,7 @@ class Progress(Base):  # type: ignore[misc]
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     node_id = Column(UUID(as_uuid=True), ForeignKey("nodes.id"), nullable=False)
-    status = Column(String, nullable=False, default="not_started")  # not_started, in_progress, completed
+    status = Column(String, nullable=False, default="not_started")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

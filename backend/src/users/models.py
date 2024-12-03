@@ -8,7 +8,7 @@ from sqlalchemy.orm import relationship
 from src.database.core import Base
 
 
-class User(Base):  # type: ignore[misc]
+class User(Base):
     """User model."""
 
     __tablename__ = "users"
@@ -18,4 +18,10 @@ class User(Base):  # type: ignore[misc]
     name = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    progress = relationship("Progress", back_populates="user")
+
+    # Relationships
+    progress = relationship("Progress", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+
+    def __repr__(self) -> str:
+        """Return string representation of the user."""
+        return f"<User(id={self.id}, email={self.email}, name={self.name})>"
