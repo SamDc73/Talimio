@@ -13,7 +13,7 @@ from src.roadmaps.router import router as roadmaps_router
 from src.users.router import router as users_router
 
 
-# Load .env from project root (parent of backend directory)
+# Load .env from project root (parent of backend directory)``
 ROOT_DIR = Path(__file__).parent.parent.parent
 ENV_PATH = ROOT_DIR / ".env"
 load_dotenv(ENV_PATH)
@@ -70,11 +70,14 @@ def create_app() -> FastAPI:
     app.include_router(progress_router)
 
     # Register startup event
-    @app.on_event("startup")  # type: ignore[misc]
+    @app.on_event("startup")
     async def startup() -> None:
         """Run startup tasks."""
         try:
-            await create_tables()
+            # Just create tables that don't exist yet
+            async with engine.begin() as conn:
+                # create_all is safe as it only creates missing tables
+                await conn.run_sync(Base.metadata.create_all)
         except Exception as e:
             logger.exception(f"Startup failed: {e}")
             raise
