@@ -191,7 +191,7 @@ class RoadmapService:
             content=data.content,
             order=data.order,
         )
-        node.set_status("available")  # Default status
+        node.set_status("not_started")  # Default status
 
         # Handle prerequisites if any
         if data.prerequisite_ids:
@@ -205,7 +205,7 @@ class RoadmapService:
                 raise ValidationError(msg)
 
             node.prerequisites.extend(prerequisites)
-            node.set_status("locked")  # Node is locked if it has prerequisites
+            node.set_status("not_started")  # Node starts as not_started even with prerequisites
 
         self._session.add(node)
         await self._session.commit()
@@ -259,10 +259,8 @@ class RoadmapService:
                     raise ValidationError(msg)
                 node.prerequisites.clear()
                 node.prerequisites.extend(prerequisites)
-                node.set_status("locked")
             else:
                 node.prerequisites.clear()
-                node.set_status("available")
 
         # Update remaining fields
         for key, value in update_data.items():

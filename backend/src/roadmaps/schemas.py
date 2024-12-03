@@ -80,10 +80,33 @@ class NodeResponse(NodeBase):
     roadmap_id: UUID
     created_at: datetime
     updated_at: datetime
-    prerequisites: list["NodeResponse"] = []
+    prerequisite_ids: list[UUID] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def model_validate(cls, obj: Any) -> "NodeResponse":
+        """Custom validation to handle prerequisites."""
+        if hasattr(obj, "prerequisites"):
+            # Extract prerequisite IDs from the relationship
+            prerequisite_ids = [p.id for p in obj.prerequisites]
+            # Create a copy of the object's dict
+            obj_dict = {
+                "id": obj.id,
+                "title": obj.title,
+                "description": obj.description,
+                "content": obj.content,
+                "order": obj.order,
+                "status": obj.status,
+                "roadmap_id": obj.roadmap_id,
+                "created_at": obj.created_at,
+                "updated_at": obj.updated_at,
+                "prerequisite_ids": prerequisite_ids,
+            }
+            return super().model_validate(obj_dict)
+        return super().model_validate(obj)
+
 
 class RoadmapResponse(RoadmapBase):
     """Schema for roadmap response."""

@@ -3,10 +3,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from src.core.exceptions import ResourceNotFoundError
+from src.core.exceptions import ResourceNotFoundError, ValidationError
 from src.database.session import DbSession
 from src.roadmaps.dependencies import LimitParam, PageParam
 from src.roadmaps.schemas import (
+    NodeCreate,
+    NodeResponse,
+    NodeUpdate,
     RoadmapCreate,
     RoadmapResponse,
     RoadmapsListResponse,
@@ -36,6 +39,12 @@ async def list_roadmaps(
         page=page,
         limit=limit,
     )
+    
+    # Ensure relationships are loaded before validation
+    for roadmap in roadmaps:
+        await session.refresh(roadmap, ["nodes"])
+        for node in roadmap.nodes:
+            await session.refresh(node, ["prerequisites"])
 
     return RoadmapsListResponse(
         items=[RoadmapResponse.model_validate(r) for r in roadmaps],
@@ -56,11 +65,15 @@ async def create_roadmap(
     """Create a new roadmap."""
     service = RoadmapService(session)
     roadmap = await service.create_roadmap(data)
-    return cast(RoadmapResponse, RoadmapResponse.model_validate(roadmap))
+    
+    # Ensure nodes are loaded before validation
+    await session.refresh(roadmap, ["nodes"])
+    return RoadmapResponse.model_validate(roadmap)
 
 
 @router.get(
     "/{roadmap_id}",
+    responses={404: {"description": "Roadmap not found"}},
 )  # type: ignore[misc]
 async def get_roadmap(
     roadmap_id: UUID,
@@ -68,13 +81,18 @@ async def get_roadmap(
 ) -> RoadmapResponse:
     """Get a single roadmap by ID."""
     service = RoadmapService(session)
-    roadmap = await service.get_roadmap(roadmap_id)
-    if not roadmap:
+    try:
+        roadmap = await service.get_roadmap(roadmap_id)
+        # Ensure relationships are loaded before validation
+        await session.refresh(roadmap, ["nodes"])
+        for node in roadmap.nodes:
+            await session.refresh(node, ["prerequisites"])
+        return RoadmapResponse.model_validate(roadmap)
+    except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Roadmap not found",
-        )
-    return cast(RoadmapResponse, RoadmapResponse.model_validate(roadmap))
+            detail=str(e),
+        ) from e
 
 
 @router.put(
@@ -111,4 +129,101 @@ async def delete_roadmap(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
+        ) from e
+
+
+@router.post(
+    "/{roadmap_id}/nodes",
+    status_code=status.HTTP_201_CREATED,
+    responses={404: {"description": "Roadmap not found"}},
+)  # type: ignore[misc]
+async def create_node(
+    roadmap_id: UUID,
+    data: NodeCreate,
+    session: DbSession,
+) -> NodeResponse:
+    """Create a new node in a roadmap."""
+    if data.roadmap_id != roadmap_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Roadmap ID in path must match roadmap_id in request body",
         )
+    
+    service = RoadmapService(session)
+    try:
+        node = await service.create_node(roadmap_id, data)
+        await session.refresh(node, ["prerequisites"])
+        return NodeResponse.model_validate(node)
+    except (ResourceNotFoundError, ValidationError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND if isinstance(e, ResourceNotFoundError) else status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+
+@router.put(
+    "/{roadmap_id}/nodes/{node_id}",
+    responses={404: {"description": "Roadmap or node not found"}},
+)  # type: ignore[misc]
+async def update_node(
+    roadmap_id: UUID,
+    node_id: UUID,
+    data: NodeUpdate,
+    session: DbSession,
+) -> NodeResponse:
+    """Update a node in a roadmap."""
+    service = RoadmapService(session)
+    try:
+        node = await service.update_node(roadmap_id, node_id, data)
+        await session.refresh(node, ["prerequisites"])
+        return NodeResponse.model_validate(node)
+    except (ResourceNotFoundError, ValidationError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND if isinstance(e, ResourceNotFoundError) else status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+
+@router.delete(
+    "/{roadmap_id}/nodes/{node_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={404: {"description": "Roadmap or node not found"}},
+)  # type: ignore[misc]
+async def delete_node(
+    roadmap_id: UUID,
+    node_id: UUID,
+    session: DbSession,
+) -> None:
+    """Delete a node from a roadmap."""
+    service = RoadmapService(session)
+    try:
+        await service.delete_node(roadmap_id, node_id)
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+
+
+@router.get(
+    "/{roadmap_id}/nodes/{node_id}",
+    responses={404: {"description": "Roadmap or node not found"}},
+)  # type: ignore[misc]
+async def get_node(
+    roadmap_id: UUID,
+    node_id: UUID,
+    session: DbSession,
+) -> NodeResponse:
+    """Get a single node from a roadmap."""
+    service = RoadmapService(session)
+    try:
+        node = await service._get_node(roadmap_id, node_id)
+        if not node:
+            raise ResourceNotFoundError("Node", str(node_id))
+        await session.refresh(node, ["prerequisites"])
+        return NodeResponse.model_validate(node)
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e

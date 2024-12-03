@@ -2,10 +2,12 @@ import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from src.config.settings import get_settings
+from src.core.exceptions import ResourceNotFoundError
 from src.database.core import Base
 from src.database.session import engine
 from src.progress.router import router as progress_router
@@ -13,7 +15,7 @@ from src.roadmaps.router import router as roadmaps_router
 from src.users.router import router as users_router
 
 
-# Load .env from project root (parent of backend directory)``
+# Load .env from project root (parent of backend directory)
 ROOT_DIR = Path(__file__).parent.parent.parent
 ENV_PATH = ROOT_DIR / ".env"
 load_dotenv(ENV_PATH)
@@ -57,6 +59,16 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Add exception handlers
+    @app.exception_handler(ResourceNotFoundError)
+    async def resource_not_found_handler(
+        request: Request, exc: ResourceNotFoundError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": str(exc)},
+        )
 
     # Register health check endpoint
     @app.get("/health")  # type: ignore[misc]
