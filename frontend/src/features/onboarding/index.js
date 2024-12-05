@@ -1,4 +1,4 @@
-import { OnboardingFlow as OnboardingComponent } from './index.jsx';
+import { OnboardingFlow } from './index.jsx';
 import { useOnboarding } from './useOnboarding';
 import { useOnboardingState } from './useOnboardingState';
 
@@ -11,7 +11,5 @@ export const STORAGE_KEYS = {
 export {
   useOnboarding,
   useOnboardingState,
+  OnboardingFlow
 };
-
-// Export the main component as OnboardingFlow
-export const OnboardingFlow = OnboardingComponent;

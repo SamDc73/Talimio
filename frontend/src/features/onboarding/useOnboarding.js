@@ -1,21 +1,38 @@
 import { useApi } from '@/hooks/useApi';
+import { useState } from 'react';
+import { STORAGE_KEYS } from '@/features/onboarding';
 import { MOCK_ONBOARDING_DATA } from '@/lib/mock-data/onboarding';
 
 export function useOnboarding() {
+  const [topic, setTopic] = useState('');
+
   const {
-    data: preferences,
-    error,
-    isLoading,
+    execute: fetchQuestions
+  } = useApi('/api/v1/onboarding/questions', {
+    method: 'POST',
+  });
+
+  const {
     execute: savePreferences
   } = useApi('/api/onboarding', {
     method: 'POST',
     fallbackData: MOCK_ONBOARDING_DATA.defaultAnswers
   });
 
+  const getQuestions = async (topic) => {
+    try {
+      const response = await fetchQuestions({ topic });
+      return response.questions || [];  // Ensure we always return an array
+    } catch (error) {
+      console.error('Failed to fetch questions:', error);
+      return [];
+    }
+  };
+
   const submitOnboarding = async (answers) => {
     try {
       const response = await savePreferences(answers);
-      localStorage.setItem('userPreferences', JSON.stringify(response));
+      localStorage.setItem(STORAGE_KEYS.USER_PREFERENCES, JSON.stringify(response));
       return response;
     } catch (error) {
       console.error('Failed to save onboarding preferences:', error);
@@ -23,22 +40,22 @@ export function useOnboarding() {
         ...MOCK_ONBOARDING_DATA.defaultAnswers,
         ...answers
       };
-      localStorage.setItem('userPreferences', JSON.stringify(fallbackResponse));
+      localStorage.setItem(STORAGE_KEYS.USER_PREFERENCES, JSON.stringify(fallbackResponse));
       return fallbackResponse;
     }
   };
 
   const resetOnboarding = () => {
-    localStorage.removeItem('userPreferences');
+    localStorage.removeItem(STORAGE_KEYS.USER_PREFERENCES);
+    setTopic('');
     return true;
   };
 
   return {
-    preferences,
-    error,
-    isLoading,
+    topic,
+    setTopic,
+    getQuestions,
     submitOnboarding,
-    resetOnboarding,
-    questions: MOCK_ONBOARDING_DATA.questions
+    resetOnboarding
   };
 }
