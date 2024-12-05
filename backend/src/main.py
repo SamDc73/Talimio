@@ -1,6 +1,8 @@
+import asyncio
 import logging
 from pathlib import Path
 
+from asyncpg.exceptions import ConnectionDoesNotExistError
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +12,7 @@ from src.config.settings import get_settings
 from src.core.exceptions import ResourceNotFoundError
 from src.database.core import Base
 from src.database.session import engine
+from src.onboarding.router import router as onboarding_router
 from src.progress.router import router as progress_router
 from src.roadmaps.router import router as roadmaps_router
 from src.users.router import router as users_router
@@ -46,8 +49,8 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="Learning Roadmap API",
-        description="API for an AI-powered learning roadmap platform",
-        version="1.0.0",
+        description="API for managing learning roadmaps",
+        version="0.1.0",
         debug=settings.DEBUG,
     )
 
@@ -80,19 +83,33 @@ def create_app() -> FastAPI:
     app.include_router(roadmaps_router)
     app.include_router(users_router)
     app.include_router(progress_router)
+    app.include_router(onboarding_router)
 
     # Register startup event
     @app.on_event("startup")
     async def startup() -> None:
         """Run startup tasks."""
-        try:
-            # Just create tables that don't exist yet
-            async with engine.begin() as conn:
-                # create_all is safe as it only creates missing tables
-                await conn.run_sync(Base.metadata.create_all)
-        except Exception as e:
-            logger.exception(f"Startup failed: {e}")
-            raise
+        max_retries = 5
+        retry_delay = 1  # seconds
+
+        for attempt in range(max_retries):
+            try:
+                async with engine.begin() as conn:
+                    await conn.run_sync(Base.metadata.create_all)
+                break  # Success - exit the retry loop
+
+            except ConnectionDoesNotExistError as e:
+                if attempt == max_retries - 1:  # Last attempt
+                    logger.exception(f"Startup failed after {max_retries} attempts: {e}")
+                    raise
+
+                logger.warning(f"Database connection attempt {attempt + 1} failed, retrying in {retry_delay}s...")
+                await asyncio.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+
+            except Exception as e:
+                logger.exception(f"Startup failed with unexpected error: {e}")
+                raise
 
     return app
 
@@ -102,4 +119,4 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8080)

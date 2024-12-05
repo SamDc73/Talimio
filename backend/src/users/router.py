@@ -87,3 +87,23 @@ async def delete_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         ) from e
+
+
+@router.get("/onboarding/questions")
+async def get_onboarding_questions() -> list[dict[str, str | list[str]]]:
+    """Get onboarding questions configuration."""
+    return [
+        {"id": "name", "title": "Welcome! What's your name?", "type": "text", "placeholder": "Enter your name"},
+        {
+            "id": "role",
+            "title": "What best describes your role?",
+            "type": "select",
+            "options": ["Developer", "Designer", "Product Manager", "Business Analyst", "Other"],
+        },
+        {
+            "id": "useCase",
+            "title": "How do you plan to use this tool?",
+            "type": "select",
+            "options": ["Process Mapping", "System Architecture", "Workflow Design", "Organization Charts", "Other"],
+        },
+    ]
