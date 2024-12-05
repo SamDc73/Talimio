@@ -39,7 +39,7 @@ async def list_roadmaps(
         page=page,
         limit=limit,
     )
-    
+
     # Ensure relationships are loaded before validation
     for roadmap in roadmaps:
         await session.refresh(roadmap, ["nodes"])
@@ -53,6 +53,7 @@ async def list_roadmaps(
         pages=(total + limit - 1) // limit,
     )
 
+
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
@@ -65,7 +66,7 @@ async def create_roadmap(
     """Create a new roadmap."""
     service = RoadmapService(session)
     roadmap = await service.create_roadmap(data)
-    
+
     # Ensure nodes are loaded before validation
     await session.refresh(roadmap, ["nodes"])
     return RoadmapResponse.model_validate(roadmap)
@@ -113,6 +114,7 @@ async def update_roadmap(
         )
     return cast(RoadmapResponse, RoadmapResponse.model_validate(roadmap))
 
+
 @router.delete(
     "/{roadmap_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -148,7 +150,7 @@ async def create_node(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Roadmap ID in path must match roadmap_id in request body",
         )
-    
+
     service = RoadmapService(session)
     try:
         node = await service.create_node(roadmap_id, data)
@@ -156,7 +158,9 @@ async def create_node(
         return NodeResponse.model_validate(node)
     except (ResourceNotFoundError, ValidationError) as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND if isinstance(e, ResourceNotFoundError) else status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_404_NOT_FOUND
+            if isinstance(e, ResourceNotFoundError)
+            else status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
 
@@ -179,7 +183,9 @@ async def update_node(
         return NodeResponse.model_validate(node)
     except (ResourceNotFoundError, ValidationError) as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND if isinstance(e, ResourceNotFoundError) else status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_404_NOT_FOUND
+            if isinstance(e, ResourceNotFoundError)
+            else status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
 

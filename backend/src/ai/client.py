@@ -47,7 +47,7 @@ class ModelManager:
             raise ValidationError(msg)
 
         os.environ["OPENAI_API_KEY"] = self.api_key
-        self.model = "gpt-4o"
+        self.model = "gpt-4"
         self._logger = logging.getLogger(__name__)
 
     async def _get_completion(
