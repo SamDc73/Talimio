@@ -1,11 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useOnboarding } from './useOnboarding';
 
-export const useOnboardingState = ({ onComplete }) => {
-  const { submitOnboarding, questions } = useOnboarding();
+export const useOnboardingState = ({ onComplete, topic }) => {
+  const { submitOnboarding, getOnboardingQuestions, questions: initialQuestions } = useOnboarding();
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState({});
   const [currentAnswer, setCurrentAnswer] = useState('');
+  const [questions, setQuestions] = useState(initialQuestions || []);
+
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      if (topic) {
+        const fetchedQuestions = await getOnboardingQuestions(topic);
+        setQuestions(fetchedQuestions);
+      }
+    };
+    fetchQuestions();
+  }, [topic, getOnboardingQuestions]);
 
   const progress = ((currentStep + 1) / questions.length) * 100;
   const currentQuestion = questions[currentStep];
