@@ -1,6 +1,8 @@
 import React from 'react';
-import { Input } from "@/components/input";
+
 import { serializeGraphState } from '../roadmap/roadmapUtils';
+
+import { Input } from "@/components/input";
 
 export const TextInput = ({ value, onChange, placeholder }) => (
   <Input

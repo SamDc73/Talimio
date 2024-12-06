@@ -1,5 +1,5 @@
-import { Box, Tag, Calendar } from "lucide-react";
 import { format } from 'date-fns';
+import { Box, Tag, Calendar } from "lucide-react";
 
 export const NodeProperties = ({ node }) => {
   if (!node?.data) return null;

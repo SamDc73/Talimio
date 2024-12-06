@@ -1,7 +1,8 @@
+import { Loader2, Wand2 } from "lucide-react";
 import React, { useState } from 'react';
+
 import { Button } from "@/components/button";
 import { Input } from "@/components/input";
-import { Loader2, Wand2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ROADMAP_DEFAULTS } from '@/lib/constants';
 

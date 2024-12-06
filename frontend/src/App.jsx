@@ -1,9 +1,9 @@
-import React, { useRef } from 'react';
+import { useRef } from 'react';
+
 import '@xyflow/react/dist/style.css';
-import RoadmapFlow from './features/roadmap';
-import { OnboardingFlow } from './features/onboarding/index.jsx';
-import SettingsMenu from './components/settings-menu';
 import { Toaster } from './components/toaster';
+import { OnboardingFlow } from './features/onboarding/index.jsx';
+import RoadmapFlow from './features/roadmap';
 import { useToast } from './hooks/use-toast';
 import { useAppState } from './hooks/useAppState';
 
@@ -31,10 +31,6 @@ export default function App() {
   return (
     <div className="app-container">
       <RoadmapFlow ref={flowRef} />
-      <SettingsMenu
-        onResetOnboarding={handleResetOnboarding}
-        onResetFlow={handleResetFlow}
-      />
       <OnboardingFlow
         isOpen={showOnboarding}
         onComplete={handleOnboardingComplete}

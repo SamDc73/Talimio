@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
+
+import { STORAGE_KEYS } from '@/features/onboarding';
 import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { useToast } from '@/hooks/use-toast';
-import { STORAGE_KEYS } from '@/features/onboarding';
 
 export const useAppState = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
