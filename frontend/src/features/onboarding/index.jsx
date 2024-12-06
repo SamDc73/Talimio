@@ -1,10 +1,12 @@
 import React, { useState } from "react";
-import { Progress } from "@/components/progress";
+
+import { OptionCards } from "./OptionCards";
+import { TextInput } from "./TextInput";
+import { useOnboarding } from "./useOnboarding";
+
 import { Button } from "@/components/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/dialog";
-import { TextInput } from "./TextInput";
-import { OptionCards } from "./OptionCards";
-import { useOnboarding } from "./useOnboarding";
+import { Progress } from "@/components/progress";
 
 export const OnboardingFlow = ({ isOpen, onComplete }) => {
   const { topic, setTopic, getQuestions, submitOnboarding } = useOnboarding();

@@ -1,6 +1,7 @@
-import { useApi } from '@/hooks/useApi';
 import { useState } from 'react';
+
 import { STORAGE_KEYS } from '@/features/onboarding';
+import { useApi } from '@/hooks/useApi';
 import { MOCK_ONBOARDING_DATA } from '@/lib/mock-data/onboarding';
 
 export function useOnboarding() {

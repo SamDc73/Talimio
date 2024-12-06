@@ -1,14 +1,17 @@
-import React, { useState, useEffect, useCallback } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { ReactFlow, Controls, MiniMap, Background } from "@xyflow/react";
-import { useRoadmapState } from "./useRoadmapState";
+import { X } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+
 import { DecisionNode } from "./DecisionNode";
-import { TaskNode } from "./TaskNode";
-import { NodeProperties } from "./NodeProperties";
 import { NodeConnections } from "./NodeConnections";
 import { NodeGenerationForm } from "./NodeGenerationForm";
+import { NodeProperties } from "./NodeProperties";
+import { TaskNode } from "./TaskNode";
 import { calculateNodePosition, createEdge } from "./roadmapUtils";
-import * as Dialog from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
+import { useRoadmapState } from "./useRoadmapState";
+
+
 import { useToast } from "@/hooks/use-toast";
 import { MOCK_ROADMAP_DATA } from "@/lib/mock-data/roadmap";
 

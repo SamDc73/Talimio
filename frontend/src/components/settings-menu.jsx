@@ -1,3 +1,5 @@
+import { Settings, RotateCcw, Sun, Moon, Laptop, Trash2 } from "lucide-react";
+
 import { Button } from "@/components/button";
 import {
   DropdownMenu,
@@ -10,7 +12,6 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/dropdown-menu";
-import { Settings, RotateCcw, Sun, Moon, Laptop, Trash2 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 
 const SettingsMenu = ({ onResetOnboarding, onResetFlow }) => {

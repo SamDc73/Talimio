@@ -1,9 +1,11 @@
-import { useCallback, useState } from 'react';
 import { useNodesState, useEdgesState, addEdge } from '@xyflow/react';
+import { useCallback, useState } from 'react';
+
 import { calculateNodePosition, createEdge, serializeGraphState } from './roadmapUtils';
+
 import { useApi } from '@/hooks/useApi';
-import { MOCK_ROADMAP_DATA } from '@/lib/mock-data/roadmap';
 import { NodeGenerator } from '@/lib/mock-data/node-generator';
+import { MOCK_ROADMAP_DATA } from '@/lib/mock-data/roadmap';
 
 export const useRoadmapState = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(MOCK_ROADMAP_DATA.nodes);
