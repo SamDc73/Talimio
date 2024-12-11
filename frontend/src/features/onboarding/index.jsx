@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Progress } from "@/components/progress";
 
 export const OnboardingFlow = ({ isOpen, onComplete }) => {
-  const { topic, setTopic, getQuestions, submitOnboarding } = useOnboarding();
+  const { topic, setTopic, getQuestions } = useOnboarding();
   const [step, setStep] = useState(0);
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
@@ -39,20 +39,36 @@ export const OnboardingFlow = ({ isOpen, onComplete }) => {
   };
 
   const handleComplete = async () => {
-    const finalAnswers = {
-      topic,
-      answers,
-    };
-    await submitOnboarding(finalAnswers);
-    const roadmap = await fetchRoadmapAfterOnboarding(finalAnswers.roadmapId);
-    onComplete(finalAnswers, roadmap);
+    if (isLoading) return;
+
+    setIsLoading(true);
+    try {
+      const finalAnswers = {
+        topic,
+        skill_level: answers[currentQuestion?.question]?.toLowerCase() || "beginner",
+        answers,
+      };
+      await onComplete(finalAnswers);
+    } catch (error) {
+      console.error("Error completing onboarding:", error);
+      toast({
+        title: "Error",
+        description: "Failed to complete onboarding. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const currentQuestion = questions[step - 1];
   const progress = step === 0 ? 33 : (step / questions.length) * 66 + 33;
 
+  // Prevent dialog from closing while loading
+  const preventClose = isLoading ? true : undefined;
+
   return (
-    <Dialog open={isOpen}>
+    <Dialog open={isOpen} onOpenChange={preventClose ? undefined : onComplete}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>{step === 0 ? "What would you like to learn?" : currentQuestion?.question}</DialogTitle>
@@ -75,7 +91,7 @@ export const OnboardingFlow = ({ isOpen, onComplete }) => {
 
         <DialogFooter>
           {step > 0 && (
-            <Button variant="outline" onClick={() => setStep((prev) => prev - 1)}>
+            <Button variant="outline" onClick={() => setStep((prev) => prev - 1)} disabled={isLoading}>
               Back
             </Button>
           )}
@@ -96,5 +112,3 @@ export const OnboardingFlow = ({ isOpen, onComplete }) => {
     </Dialog>
   );
 };
-
-export default OnboardingFlow;
