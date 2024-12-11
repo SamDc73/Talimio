@@ -23,7 +23,7 @@ export const useAppState = () => {
     }
   };
 
-  const handleOnboardingComplete = (answers) => {
+  const handleOnboardingComplete = async (answers, roadmap) => {
     setUserPreferences(answers);
     setShowOnboarding(false);
     toast({
@@ -45,7 +45,10 @@ export const useAppState = () => {
   return {
     showOnboarding,
     userPreferences,
-    handleOnboardingComplete,
+    handleOnboardingComplete: (answers, roadmap) => {
+      handleOnboardingComplete(answers);
+      initializeRoadmap(roadmap);
+    },
     handleResetOnboarding,
   };
 };

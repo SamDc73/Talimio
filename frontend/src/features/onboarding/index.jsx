@@ -44,7 +44,8 @@ export const OnboardingFlow = ({ isOpen, onComplete }) => {
       answers,
     };
     await submitOnboarding(finalAnswers);
-    onComplete(finalAnswers);
+    const roadmap = await fetchRoadmapAfterOnboarding(finalAnswers.roadmapId);
+    onComplete(finalAnswers, roadmap);
   };
 
   const currentQuestion = questions[step - 1];
