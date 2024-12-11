@@ -84,24 +84,41 @@ class RoadmapService:
         return roadmap
 
     async def create_roadmap(self, data: RoadmapCreate) -> Roadmap:
-        """
-        Create a new roadmap.
-
-        Parameters
-        ----------
-        data : RoadmapCreate
-            Roadmap creation data
-
-        Returns
-        -------
-        Roadmap
-            Created roadmap instance
-        """
-        logger.info("Creating new roadmap: %s", data.title)
+        """Create a new roadmap with initial nodes."""
         roadmap = Roadmap(**data.model_dump())
         self._session.add(roadmap)
+        await self._session.flush()  # Get the roadmap ID
+
+        # Create initial nodes
+        initial_nodes = [
+            Node(
+                roadmap_id=roadmap.id,
+                title=f"Introduction to {data.title}",
+                description="Getting started with the basics",
+                content="Fundamentals and core concepts",
+                order=0,
+                status="not_started",
+            ),
+            Node(
+                roadmap_id=roadmap.id,
+                title="Core Concepts",
+                description=f"Essential concepts in {data.title}",
+                content="Key principles and foundational knowledge",
+                order=1,
+                status="not_started",
+            ),
+            Node(
+                roadmap_id=roadmap.id,
+                title="Advanced Topics",
+                description=f"Advanced concepts in {data.title}",
+                content="Advanced techniques and applications",
+                order=2,
+                status="not_started",
+            ),
+        ]
+
+        self._session.add_all(initial_nodes)
         await self._session.commit()
-        logger.info("Created roadmap with ID: %s", roadmap.id)
         return roadmap
 
     async def update_roadmap(self, roadmap_id: UUID, data: RoadmapUpdate) -> Roadmap:
