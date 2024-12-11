@@ -1,93 +1,92 @@
-import { useNodesState, useEdgesState, addEdge } from '@xyflow/react';
-import { useCallback, useState } from 'react';
-
-import { calculateNodePosition, createEdge, serializeGraphState } from './roadmapUtils';
-
-import { useApi } from '@/hooks/useApi';
-import { NodeGenerator } from '@/lib/mock-data/node-generator';
-import { MOCK_ROADMAP_DATA } from '@/lib/mock-data/roadmap';
+import { useNodesState, useEdgesState } from '@xyflow/react';
+import { useCallback, useState, useRef, useEffect } from 'react';  // Added useRef import
 
 export const useRoadmapState = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasInitialized, setHasInitialized] = useState(false);
+  const requestRef = useRef(null);
 
-  const {
-    data: roadmapData,
-    error: roadmapError,
-    isLoading: isLoadingRoadmap,
-    execute: fetchRoadmap
-  } = useApi('/api/v1/roadmaps');
-
-  const handleConnect = useCallback(
-    (params) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges]
-  );
-
-  const handleNodeDragStop = useCallback(
-    (event, node) => {
-      console.log('Node position updated:', node);
-    },
-    []
-  );
-
-  const generateNodesFromContext = useCallback(async (sourceNodeId, count = 1) => {
-    const sourceNode = nodes.find(n => n.id === sourceNodeId);
-    if (!sourceNode) return;
-
-    try {
-      const graphContext = serializeGraphState(nodes, edges);
-      const generatedNodes = NodeGenerator.generateNodes(sourceNode, count, graphContext);
-
-      const positionedNodes = generatedNodes.map((node, index) => ({
-        ...node,
-        position: calculateNodePosition(sourceNode, index)
-      }));
-
-      const newEdges = positionedNodes.map(node =>
-        createEdge(sourceNodeId, node.id)
-      );
-
-      setNodes(nodes => [...nodes, ...positionedNodes]);
-      setEdges(edges => [...edges, ...newEdges]);
-
-      return positionedNodes;
-    } catch (error) {
-      console.error('Failed to generate nodes:', error);
-      return [];
-    }
-  }, [nodes, edges, setNodes, setEdges]);
+  const handleConnect = useCallback((params) => {
+    setEdges((eds) => addEdge(params, eds));
+  }, [setEdges]);
 
   const initializeRoadmap = useCallback(async (roadmapId) => {
+    console.log("initializeRoadmap called with:", roadmapId); // Debug log
+    if (!roadmapId || hasInitialized || isLoading) {
+      console.log("Early return:", { hasRoadmapId: !!roadmapId, hasInitialized, isLoading }); // Debug log
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      if (!roadmapId) {
-        // If no roadmap ID, return null to trigger onboarding
-        return null;
+      const response = await fetch(`http://localhost:8080/api/v1/roadmaps/${roadmapId}`);
+      console.log("API response:", response.status); // Debug log
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const response = await fetchRoadmap(`/api/v1/roadmaps/${roadmapId}`);
-      if (response) {
-        setNodes(response.nodes || []);
-        setEdges(response.edges || []);
-        return response;
+      const roadmap = await response.json();
+      console.log("Roadmap data:", roadmap); // Debug log
+
+      if (roadmap?.nodes?.length > 0) {
+        const flowNodes = roadmap.nodes.map((node) => ({
+          id: node.id,
+          type: 'default',
+          position: {
+            x: node.order * 250,
+            y: 100 + (node.order % 2) * 100
+          },
+          data: {
+            label: node.title,
+            description: node.description,
+            content: node.content,
+            status: node.status,
+          },
+        }));
+
+        console.log("Created flowNodes:", flowNodes); // Debug log
+
+        // Create edges between consecutive nodes
+        const flowEdges = flowNodes.slice(0, -1).map((node, index) => ({
+          id: `e${node.id}-${flowNodes[index + 1].id}`,
+          source: node.id,
+          target: flowNodes[index + 1].id,
+          type: 'smoothstep',
+        }));
+
+        console.log("Created flowEdges:", flowEdges); // Debug log
+
+        setNodes(flowNodes);
+        setEdges(flowEdges);
+        setHasInitialized(true);
       }
-      return null;
     } catch (error) {
       console.error('Failed to initialize roadmap:', error);
-      return null;
+      throw error;
+    } finally {
+      setIsLoading(false);
     }
-  }, [fetchRoadmap, setNodes, setEdges]);
-  
+  }, [setNodes, setEdges, hasInitialized, isLoading]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (requestRef.current) {
+        requestRef.current.abort();
+      }
+    };
+  }, []);
+
   return {
     nodes,
     edges,
-    roadmapData,
-    roadmapError,
-    isLoadingRoadmap,
+    isLoading,
     onNodesChange,
     onEdgesChange,
     handleConnect,
-    handleNodeDragStop,
-    initializeRoadmap,
-    generateNodesFromContext
+    initializeRoadmap
   };
 };

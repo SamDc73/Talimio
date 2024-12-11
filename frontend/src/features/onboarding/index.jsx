@@ -7,6 +7,7 @@ import { useOnboarding } from "./useOnboarding";
 import { Button } from "@/components/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/dialog";
 import { Progress } from "@/components/progress";
+import { useToast } from "@/hooks/use-toast";
 
 export const OnboardingFlow = ({ isOpen, onComplete }) => {
   const { topic, setTopic, getQuestions } = useOnboarding();
@@ -14,6 +15,7 @@ export const OnboardingFlow = ({ isOpen, onComplete }) => {
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
 
   const handleTopicSubmit = async () => {
     if (!topic) return;
@@ -26,6 +28,11 @@ export const OnboardingFlow = ({ isOpen, onComplete }) => {
       }
     } catch (error) {
       console.error("Error fetching questions:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch questions. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -43,11 +50,16 @@ export const OnboardingFlow = ({ isOpen, onComplete }) => {
 
     setIsLoading(true);
     try {
+      const skillLevel = answers[currentQuestion?.question]?.toLowerCase();
+      const mappedSkillLevel =
+        skillLevel === "advanced" ? "advanced" : skillLevel === "intermediate" ? "intermediate" : "beginner";
+
       const finalAnswers = {
         topic,
-        skill_level: answers[currentQuestion?.question]?.toLowerCase() || "beginner",
+        skill_level: mappedSkillLevel,
         answers,
       };
+
       await onComplete(finalAnswers);
     } catch (error) {
       console.error("Error completing onboarding:", error);

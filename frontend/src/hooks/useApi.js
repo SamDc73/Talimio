@@ -36,7 +36,13 @@ export function useApi(defaultEndpoint, options = {}) {
       setData(response);
       return response;
     } catch (err) {
+      console.error('API Error:', err);
       setError(err);
+
+      if (err.status === 422) {
+        throw new Error(`Validation error: ${err.data?.detail?.[0]?.msg || 'Invalid input'}`);
+      }
+
       if (options.fallbackData) {
         console.warn('Using fallback data due to API error:', err);
         const fallbackResult = typeof options.fallbackData === 'function'
@@ -45,6 +51,7 @@ export function useApi(defaultEndpoint, options = {}) {
         setData(fallbackResult);
         return fallbackResult;
       }
+
       throw err;
     } finally {
       setIsLoading(false);
