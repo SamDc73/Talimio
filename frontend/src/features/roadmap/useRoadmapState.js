@@ -57,8 +57,11 @@ export const useRoadmapState = () => {
     }
   }, [nodes, edges, setNodes, setEdges]);
 
-  const initializeRoadmap = useCallback(async (roadmap = MOCK_ROADMAP_DATA) => {
+  const initializeRoadmap = useCallback(async (roadmap) => {
     try {
+      if (!roadmap) {
+        roadmap = MOCK_ROADMAP_DATA;
+      }
       setNodes(roadmap.nodes);
       setEdges(roadmap.edges);
       return roadmap;
