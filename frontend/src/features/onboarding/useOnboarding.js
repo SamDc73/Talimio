@@ -49,6 +49,16 @@ export function useOnboarding() {
     }
   };
 
+  const fetchRoadmapAfterOnboarding = async (roadmapId) => {
+    try {
+      const response = await fetchRoadmap({ params: { roadmap_id: roadmapId } });
+      return response;
+    } catch (error) {
+      console.error('Failed to fetch roadmap:', error);
+      return null;
+    }
+  };
+
   const resetOnboarding = () => {
     localStorage.removeItem(STORAGE_KEYS.USER_PREFERENCES);
     setTopic('');
@@ -60,6 +70,7 @@ export function useOnboarding() {
     setTopic,
     getQuestions,
     submitOnboarding,
-    resetOnboarding
+    resetOnboarding,
+    fetchRoadmapAfterOnboarding
   };
 }
