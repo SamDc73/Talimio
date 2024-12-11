@@ -8,23 +8,23 @@ import { NodeConnections } from "./NodeConnections";
 import { NodeGenerationForm } from "./NodeGenerationForm";
 import { NodeProperties } from "./NodeProperties";
 import { TaskNode } from "./TaskNode";
-import { calculateNodePosition, createEdge } from "./roadmapUtils";
 import { useRoadmapState } from "./useRoadmapState";
-
-
 import { useToast } from "@/hooks/use-toast";
-import { MOCK_ROADMAP_DATA } from "@/lib/mock-data/roadmap";
 
-const RoadmapFlow = React.forwardRef((props, ref) => {
+const RoadmapFlow = React.forwardRef(({ roadmapId, onError }, ref) => {
   const {
     nodes,
     edges,
+    isLoadingRoadmap,
+    roadmapError,
+    initializeRoadmap,
     onNodesChange,
     onEdgesChange,
     handleConnect,
     handleNodeDragStop,
-    initializeRoadmap,
     generateNodesFromContext,
+    setNodes,
+    setEdges,
   } = useRoadmapState();
 
   const [selectedNode, setSelectedNode] = useState(null);
@@ -34,21 +34,85 @@ const RoadmapFlow = React.forwardRef((props, ref) => {
   const flowRef = React.useRef(null);
 
   useEffect(() => {
-    initializeRoadmap();
-  }, []);
+    const loadRoadmap = async () => {
+      if (!roadmapId) {
+        console.error("No roadmap ID provided");
+        onError?.();
+        return;
+      }
+
+      try {
+        const roadmap = await initializeRoadmap(roadmapId);
+
+        // Add better validation
+        if (!roadmap || !roadmap.id || !Array.isArray(roadmap.nodes)) {
+          console.error("Invalid roadmap data:", roadmap);
+          onError?.();
+          return;
+        }
+
+        // Transform nodes for ReactFlow
+        const flowNodes = roadmap.nodes.map((node) => ({
+          id: node.id,
+          type: "default",
+          position: {
+            x: node.order * 200,
+            y: 100 + Math.random() * 50,
+          },
+          data: {
+            label: node.title,
+            description: node.description,
+            content: node.content,
+            status: node.status,
+          },
+        }));
+
+        setNodes(flowNodes);
+
+        // Only set edges if there are nodes
+        if (roadmap.nodes.length > 0) {
+          const flowEdges = roadmap.nodes.flatMap((node) =>
+            (node.prerequisite_ids || []).map((preId) => ({
+              id: `e${preId}-${node.id}`,
+              source: preId,
+              target: node.id,
+              type: "smoothstep",
+            }))
+          );
+          setEdges(flowEdges);
+        }
+      } catch (error) {
+        console.error("Error loading roadmap:", error);
+        onError?.();
+      }
+    };
+
+    loadRoadmap();
+  }, [roadmapId, initializeRoadmap, onError, setNodes, setEdges]);
 
   React.useImperativeHandle(ref, () => ({
     resetFlow: initializeRoadmap,
   }));
 
+  if (isLoadingRoadmap) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center">
+        <div className="text-lg">Loading your roadmap...</div>
+      </div>
+    );
+  }
+
+  if (roadmapError || !nodes.length) {
+    return null;
+  }
+
   const handleNodeClick = useCallback((_, node) => {
-    console.log('Node clicked:', node);
+    console.log("Node clicked:", node);
     setSelectedNode(node);
     setIsDialogOpen(true);
   }, []);
 
   const handleDialogOpenChange = useCallback((open) => {
-    console.log('Dialog open state changed:', open);
     setIsDialogOpen(open);
     if (!open) {
       setSelectedNode(null);
@@ -77,7 +141,7 @@ const RoadmapFlow = React.forwardRef((props, ref) => {
       console.error("Failed to generate nodes:", error);
       toast({
         title: "Error",
-        description: "Failed to generate nodes. Using demo data.",
+        description: "Failed to generate nodes.",
         variant: "destructive",
       });
     } finally {

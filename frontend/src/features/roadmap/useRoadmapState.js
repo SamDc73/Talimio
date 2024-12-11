@@ -8,15 +8,15 @@ import { NodeGenerator } from '@/lib/mock-data/node-generator';
 import { MOCK_ROADMAP_DATA } from '@/lib/mock-data/roadmap';
 
 export const useRoadmapState = () => {
-  const [nodes, setNodes, onNodesChange] = useNodesState(MOCK_ROADMAP_DATA.nodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(MOCK_ROADMAP_DATA.edges);
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   const {
     data: roadmapData,
     error: roadmapError,
     isLoading: isLoadingRoadmap,
     execute: fetchRoadmap
-  } = useApi('/api/roadmap', { fallbackData: MOCK_ROADMAP_DATA });
+  } = useApi('/api/v1/roadmaps');
 
   const handleConnect = useCallback(
     (params) => setEdges((eds) => addEdge(params, eds)),
@@ -57,22 +57,26 @@ export const useRoadmapState = () => {
     }
   }, [nodes, edges, setNodes, setEdges]);
 
-  const initializeRoadmap = useCallback(async (roadmap) => {
+  const initializeRoadmap = useCallback(async (roadmapId) => {
     try {
-      if (!roadmap) {
-        roadmap = MOCK_ROADMAP_DATA;
+      if (!roadmapId) {
+        // If no roadmap ID, return null to trigger onboarding
+        return null;
       }
-      setNodes(roadmap.nodes);
-      setEdges(roadmap.edges);
-      return roadmap;
+
+      const response = await fetchRoadmap(`/api/v1/roadmaps/${roadmapId}`);
+      if (response) {
+        setNodes(response.nodes || []);
+        setEdges(response.edges || []);
+        return response;
+      }
+      return null;
     } catch (error) {
       console.error('Failed to initialize roadmap:', error);
-      setNodes(MOCK_ROADMAP_DATA.nodes);
-      setEdges(MOCK_ROADMAP_DATA.edges);
-      return MOCK_ROADMAP_DATA;
+      return null;
     }
-  }, [setNodes, setEdges]);
-
+  }, [fetchRoadmap, setNodes, setEdges]);
+  
   return {
     nodes,
     edges,

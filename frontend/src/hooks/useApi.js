@@ -1,8 +1,7 @@
 import { useState, useCallback } from 'react';
-
 import { apiClient } from '../lib/services';
 
-export function useApi(endpoint, options = {}) {
+export function useApi(defaultEndpoint, options = {}) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -11,22 +10,27 @@ export function useApi(endpoint, options = {}) {
     try {
       setIsLoading(true);
       setError(null);
+
+      const url = customOptions.url || defaultEndpoint;
       const method = customOptions.method || options.method || 'GET';
       const requestOptions = { ...options, ...customOptions };
 
       let response;
       switch (method.toUpperCase()) {
+        case 'GET':
+          response = await apiClient.get(url, requestOptions);
+          break;
         case 'POST':
-          response = await apiClient.post(endpoint, body, requestOptions);
+          response = await apiClient.post(url, body, requestOptions);
           break;
         case 'PUT':
-          response = await apiClient.put(endpoint, body, requestOptions);
+          response = await apiClient.put(url, body, requestOptions);
           break;
         case 'DELETE':
-          response = await apiClient.delete(endpoint, requestOptions);
+          response = await apiClient.delete(url, requestOptions);
           break;
         default:
-          response = await apiClient.get(endpoint, requestOptions);
+          response = await apiClient.get(url, requestOptions);
       }
 
       setData(response);
@@ -45,18 +49,12 @@ export function useApi(endpoint, options = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, [endpoint, options]);
+  }, [defaultEndpoint, options]);
 
   return {
     data,
     error,
     isLoading,
-    execute,
-    setData,
-    reset: () => {
-      setData(null);
-      setError(null);
-      setIsLoading(false);
-    }
+    execute
   };
 }
