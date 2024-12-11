@@ -4,8 +4,6 @@ import { STORAGE_KEYS } from '@/features/onboarding';
 import { useApi } from '@/hooks/useApi';
 import { MOCK_ONBOARDING_DATA } from '@/lib/mock-data/onboarding';
 
-import { useApi } from '@/hooks/useApi';
-
 export function useOnboarding() {
   const { execute: fetchRoadmap } = useApi('/api/v1/roadmaps', { method: 'GET' });
   const [topic, setTopic] = useState('');
