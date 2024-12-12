@@ -1,4 +1,4 @@
-from src.roadmaps.models import Node, Roadmap
+from src.roadmaps.models import Node, Roadmap, node_prerequisites
 from src.roadmaps.schemas import (
     NodeCreate,
     NodeResponse,
@@ -20,4 +20,5 @@ __all__ = [
     "RoadmapResponse",
     "RoadmapUpdate",
     "RoadmapsListResponse",
+    "node_prerequisites",
 ]

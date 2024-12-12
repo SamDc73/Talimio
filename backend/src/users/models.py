@@ -19,9 +19,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationships
-    progress = relationship("Progress", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
-
-    def __repr__(self) -> str:
-        """Return string representation of the user."""
-        return f"<User(id={self.id}, email={self.email}, name={self.name})>"
+    # Fix the relationship
+    progress_records = relationship(  # Changed from 'progress' to 'progress_records'
+        "Progress", back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
