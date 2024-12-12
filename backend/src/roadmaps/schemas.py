@@ -16,7 +16,13 @@ class RoadmapBase(PydanticBaseModel):  # type: ignore[misc]
 class RoadmapCreate(RoadmapBase):
     """Schema for creating a roadmap."""
 
+    title: str
+    description: str
+    skill_level: str = Field(..., pattern="^(beginner|intermediate|advanced)$")
+
     class Config:
+        """Configuration for the RoadmapCreate schema."""
+
         json_schema_extra: ClassVar[dict[str, Any]] = {
             "example": {
                 "title": "Machine Learning Engineer Roadmap",

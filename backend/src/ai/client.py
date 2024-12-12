@@ -1,7 +1,7 @@
+import json
 import logging
 import os
 from collections.abc import Sequence
-from datetime import datetime, timezone
 from uuid import UUID
 
 from litellm import acompletion
@@ -37,7 +37,7 @@ class ExerciseGenerationError(AIError):
 
 
 class ModelManager:
-    """Manage AI model interactions for the learning roadmap platform using LiteLLM."""
+    """Manage AI model interactions for the learning roadmap platform."""
 
     def __init__(self) -> None:
         self.settings = get_settings()
@@ -50,114 +50,110 @@ class ModelManager:
         self.model = "gpt-4o"
         self._logger = logging.getLogger(__name__)
 
-    async def _get_completion(
-        self,
-        messages: Sequence[dict[str, str]],
-        temperature: float = 0.7,
-        max_tokens: int = 1000,
-    ) -> str | None:
-        """Get completion from LiteLLM."""
+    async def _get_completion(self, messages: Sequence[dict[str, str]], format_json: bool = True) -> str | dict:
+        """Get completion from AI model."""
         try:
+            if format_json:
+                messages = [*list(messages), {"role": "system", "content": "Always respond with valid JSON only, no additional text"}]
+
             response = await acompletion(
                 model=self.model,
                 messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
+                temperature=0.7,
+                max_tokens=2000,
             )
-        except Exception:
-            self._logger.exception("Error getting completion from LiteLLM")
-            return None
-        else:
+
             content: str = response.choices[0].message.content
+
+            if format_json:
+                # Clean up JSON response
+                content = content.strip()
+                if content.startswith("```json"):
+                    content = content[7:]
+                if content.startswith("```"):
+                    content = content[3:]
+                if content.endswith("```"):
+                    content = content[:-3]
+                return json.loads(content.strip())
+
             return content
 
-    def _raise_roadmap_error() -> None:
-        raise RoadmapGenerationError
+        except Exception as e:
+            self._logger.exception("Error getting completion from AI")
+            raise AIError(f"Failed to generate content: {e!s}") from e
 
+    async def generate_onboarding_questions(self, topic: str) -> list[dict]:
+        """Generate personalized onboarding questions."""
+        prompt = f"""For someone wanting to learn {topic}, create 5 questions to understand their:
+        1. Current experience level with {topic}
+        2. Learning goals
+        3. Preferred learning style
+        4. Available time commitment
+        5. Related skills/background
 
-    def _raise_node_error() -> None:
-        raise NodeCustomizationError
+        Format as JSON array:
+        [
+            {{
+                "question": "What is your current experience with {topic}?",
+                "options": ["Complete Beginner", "Some Basic Knowledge", "Intermediate", "Advanced"]
+            }}
+        ]"""
 
+        messages = [
+            {"role": "system", "content": "You are an expert curriculum designer."},
+            {"role": "user", "content": prompt},
+        ]
 
-    def _raise_exercise_error() -> None:
-        raise ExerciseGenerationError
+        return await self._get_completion(messages)
 
     async def generate_roadmap_content(
         self,
         title: str,
         skill_level: str,
         description: str,
-    ) -> dict[str, str | datetime]:
-        """Generate initial roadmap content structure."""
-        try:
-            messages = [
-                {
-                    "role": "system",
-                    "content": "You are an expert curriculum designer helping create learning roadmaps.",
-                },
-                {
-                    "role": "user",
-                    "content": f"""Create a learning roadmap for:
-                    Title: {title}
-                    Skill Level: {skill_level}
-                    Description: {description}
+    ) -> list[dict[str, str | int]]:
+        """Generate initial core topics for the learning path."""
+        prompt = f"""Create a foundational learning path for {title} at {skill_level} level.
+        Generate 3-4 core topics that form the essential foundation.
+        For each topic provide:
+        {{
+            "title": "Main topic name",
+            "description": "Brief overview",
+            "content": "Learning objectives and key points",
+            "order": "Sequential number (0-3)",
+            "prerequisites": [] # Empty for initial nodes
+        }}
 
-                    Generate a structured learning path with key topics and prerequisites.""",
-                },
-            ]
+        Focus on core/fundamental concepts that would be required before moving to more advanced topics.
+        Organize them in a logical learning sequence.
+        """
 
-            content = await self._get_completion(messages)
-            if not content:
-                raise RoadmapGenerationError
-
-            return {
-                "content": content,
-                "created_at": datetime.now(tz=timezone.utc),
-            }
-
-        except Exception as err:
-            self._logger.exception("Error generating roadmap content")
-            if isinstance(err, AIError):
-                raise
-            raise RoadmapGenerationError from err
-
-    async def customize_node_content(
-        self,
-        node_id: UUID,
-        user_skill_level: str,
-        content: str,
-    ) -> str:
-        """Customize node content based on user's skill level."""
-        if not validate_uuid(node_id):
-            msg = "Invalid node ID"
-            raise ValidationError(msg)
+        messages = [
+            {"role": "system", "content": "You are a curriculum design expert."},
+            {"role": "user", "content": prompt},
+        ]
 
         try:
-            messages = [
-                {
-                    "role": "system",
-                    "content": "You are an expert tutor adapting content to different skill levels.",
-                },
-                {
-                    "role": "user",
-                    "content": f"""Customize this content for a {user_skill_level} level learner:
+            response = await self._get_completion(messages)
 
-                    {content}
+            # Ensure proper formatting of node data
+            validated_nodes = []
+            for i, node in enumerate(response):
+                validated_nodes.append(
+                    {
+                        "title": str(node.get("title", f"Topic {i+1}")),
+                        "description": str(node.get("description", "")),
+                        "content": str(node.get("content", "")),
+                        "order": i,
+                        "prerequisite_ids": [],  # Start with no prerequisites
+                    }
+                )
 
-                    Adjust the depth and complexity accordingly while maintaining the core concepts.""",
-                },
-            ]
+            return validated_nodes
 
-            customized_content = await self._get_completion(messages)
-            if not customized_content:
-                raise NodeCustomizationError
-            return customized_content
-
-        except Exception as err:
-            self._logger.exception("Error customizing node content")
-            if isinstance(err, AIError):
-                raise
-            raise NodeCustomizationError from err
+        except Exception as e:
+            logger.exception("Error generating roadmap content")
+            raise RoadmapGenerationError() from e
 
     async def generate_practice_exercises(
         self,
@@ -170,69 +166,20 @@ class ModelManager:
             msg = "Invalid node ID"
             raise ValidationError(msg)
 
-        try:
-            messages = [
-                {
-                    "role": "system",
-                    "content": "You are an expert at creating educational exercises.",
-                },
-                {
-                    "role": "user",
-                    "content": f"""Create 3 practice exercises for:
-                    Topic: {topic}
-                    Difficulty: {difficulty}
+        prompt = f"""Create 3 practice exercises for:
+        Topic: {topic}
+        Difficulty: {difficulty}
 
-                    Include problem statement and solution for each exercise.
-                    Format each exercise as:
+        Include problem statement and solution for each exercise.
+        Format as JSON array with 'problem' and 'solution' for each exercise."""
 
-                    Exercise 1:
-                    [Problem]
-
-                    Solution:
-                    [Solution]
-
-                    (and so on for exercises 2 and 3)""",
-                },
-            ]
-
-            content = await self._get_completion(messages)
-            if not content:
-                raise ExerciseGenerationError
-
-            return self._parse_exercises(content)
-
-        except Exception as err:
-            self._logger.exception("Error generating exercises")
-            if isinstance(err, AIError):
-                raise
-            raise ExerciseGenerationError from err
-
-    def _parse_exercises(self, content: str) -> list[dict[str, str]]:
-        """Parse exercise content into structured format."""
-        exercises = []
-        current_exercise: dict[str, str] = {}
-
-        for original_line in content.split("\n"):
-            cleaned_line = original_line.strip()
-            if cleaned_line.startswith("Exercise"):
-                if current_exercise:
-                    exercises.append(current_exercise)
-                current_exercise = {"problem": ""}
-            elif cleaned_line.startswith("Solution"):
-                current_exercise["solution"] = ""
-            elif "problem" in current_exercise:
-                if "solution" not in current_exercise:
-                    current_exercise["problem"] += cleaned_line + "\n"
-                else:
-                    current_exercise["solution"] += cleaned_line + "\n"
-
-        if current_exercise:
-            exercises.append(current_exercise)
-
-        return [
-            {
-                "problem": ex["problem"].strip(),
-                "solution": ex["solution"].strip(),
-            }
-            for ex in exercises
+        messages = [
+            {"role": "system", "content": "You are an expert at creating educational exercises."},
+            {"role": "user", "content": prompt},
         ]
+
+        try:
+            return await self._get_completion(messages)
+        except Exception as e:
+            self._logger.exception("Error generating exercises")
+            raise ExerciseGenerationError() from e

@@ -8,6 +8,8 @@ from sqlalchemy.orm import relationship
 from src.database.core import Base
 
 
+__all__ = ["Node", "Roadmap", "node_prerequisites"]
+
 # Association table for node prerequisites
 node_prerequisites = Table(
     "node_prerequisites",
@@ -47,7 +49,7 @@ class Roadmap(Base):
         onupdate=datetime.utcnow,
     )
 
-    # Relationships
+    # Fix the relationship definition
     nodes = relationship(
         "Node",
         back_populates="roadmap",
@@ -71,33 +73,24 @@ class Node(Base):
         ForeignKey("roadmaps.id", ondelete="CASCADE"),
         nullable=False,
     )
-    status = Column(
-        String(20),
-        nullable=False,
-        default="not_started",
-    )
+    status = Column(String(20), nullable=False, default="not_started")
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-    )
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationships
+    # Fix the relationships
     roadmap = relationship("Roadmap", back_populates="nodes")
-    progress = relationship(
-        "Progress",
-        back_populates="node",
-        cascade="all, delete-orphan",
-        lazy="selectin",
-    )
     prerequisites = relationship(
         "Node",
         secondary=node_prerequisites,
         primaryjoin=id == node_prerequisites.c.node_id,
         secondaryjoin=id == node_prerequisites.c.prerequisite_id,
         backref="dependents",
+        lazy="selectin",
+    )
+    progress_records = relationship(  # Changed from 'progress' to 'progress_records'
+        "Progress",
+        back_populates="node",
+        cascade="all, delete-orphan",
         lazy="selectin",
     )
 

@@ -9,7 +9,7 @@ from src.database.core import Base
 
 
 class Progress(Base):
-    """Progress model for tracking user progress on roadmap nodes."""
+    """Progress model."""
 
     __tablename__ = "progress"
 
@@ -20,6 +20,6 @@ class Progress(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationships
-    user = relationship("User", back_populates="progress")
-    node = relationship("Node", back_populates="progress")
+    # Fix the relationships
+    user = relationship("User", back_populates="progress_records")  # Changed 'progress' to 'progress_records'
+    node = relationship("Node", back_populates="progress_records")  # Changed 'progress' to 'progress_records'
