@@ -1,4 +1,3 @@
-import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings as PydanticBaseSettings, SettingsConfigDict
@@ -12,13 +11,13 @@ class Settings(PydanticBaseSettings):  # type: ignore[misc]
     ENVIRONMENT: str = "development"
 
     # Database Settings
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "")  # Provide a default empty string
+    DATABASE_URL: str
 
     # OpenAI Settings
     openai_api_key: str | None = None
 
     model_config = SettingsConfigDict(
-        env_file=(".env", ".env.local"),  # Try multiple env files
+        env_file=("../.env", "../.env.local"),
         env_file_encoding="utf-8",
         extra="allow",
         case_sensitive=True,

@@ -1,17 +1,23 @@
 # Core
-fastapi>=0.109.0
-uvicorn>=0.27.0
+fastapi
+uvicorn
 
 # Database
-sqlalchemy>=2.0.0
-asyncpg>=0.29.0
-psycopg2-binary>=2.9.9
-alembic>=1.13.1
-
-# SurrealDB
-git+https://github.com/surrealdb/surrealdb.py.git
+sqlalchemy
+asyncpg
+psycopg2-binary
+alembic
 
 # Settings & Validation
-pydantic>=2.5.0
-pydantic-settings>=2.1.0
-python-dotenv>=1.0.0
+pydantic
+pydantic-settings
+python-dotenv
+
+# AI
+litellm
+
+
+# Dev
+uv
+ruff
+mypy

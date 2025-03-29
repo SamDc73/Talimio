@@ -64,6 +64,7 @@ class Node(Base):
     __tablename__ = "nodes"
 
     id = Column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    label_id = Column(String(50), nullable=True, index=True)  # Added label_id field
     title = Column(String(200), nullable=False)
     description = Column(String, nullable=False)
     content = Column(String, nullable=True)

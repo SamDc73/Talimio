@@ -1,18 +1,31 @@
 import os
 from logging.config import fileConfig
 
+from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
-from src.modules.roadmaps.domain.models import Base  # Import your models
 
 from alembic import context
+from src.database.core import Base
 
+
+# Construct absolute path to the project root .env file
+# __file__ is the path to this env.py script
+# os.path.dirname(__file__) gives the directory containing env.py (backend/alembic)
+# os.path.abspath(os.path.join(..., '..', '..')) goes up two levels to the project root
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+dotenv_path = os.path.join(project_root, '.env')
+print(f"Attempting to load .env from: {dotenv_path}") # Add print for debugging
+load_dotenv(dotenv_path=dotenv_path)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
 # Get the database URL from environment variables and convert it to use psycopg2
-db_url = os.getenv("DATABASE_URL").replace("+asyncpg", "")
+db_url_env = os.getenv("DATABASE_URL")
+if not db_url_env:
+    raise ValueError("DATABASE_URL environment variable is not set or empty")
+db_url = db_url_env.replace("+asyncpg", "")
 config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.
