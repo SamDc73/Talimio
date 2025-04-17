@@ -68,19 +68,17 @@ class ModelManager:
             if format_json:
                 # Clean up JSON response
                 content = content.strip()
-                if content.startswith("```json"):
-                    content = content[7:]
-                if content.startswith("```"):
-                    content = content[3:]
-                if content.endswith("```"):
-                    content = content[:-3]
+                content = content.removeprefix("```json")
+                content = content.removeprefix("```")
+                content = content.removesuffix("```")
                 return json.loads(content.strip())
 
             return content
 
         except Exception as e:
             self._logger.exception("Error getting completion from AI")
-            raise AIError(f"Failed to generate content: {e!s}") from e
+            msg = f"Failed to generate content: {e!s}"
+            raise AIError(msg) from e
 
     async def generate_onboarding_questions(self, topic: str) -> list[dict]:
         """Generate personalized onboarding questions."""
@@ -146,14 +144,14 @@ class ModelManager:
                         "content": str(node.get("content", "")),
                         "order": i,
                         "prerequisite_ids": [],  # Start with no prerequisites
-                    }
+                    },
                 )
 
             return validated_nodes
 
         except Exception as e:
             logger.exception("Error generating roadmap content")
-            raise RoadmapGenerationError() from e
+            raise RoadmapGenerationError from e
 
     async def generate_practice_exercises(
         self,
@@ -182,4 +180,4 @@ class ModelManager:
             return await self._get_completion(messages)
         except Exception as e:
             self._logger.exception("Error generating exercises")
-            raise ExerciseGenerationError() from e
+            raise ExerciseGenerationError from e

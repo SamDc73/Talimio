@@ -1,9 +1,9 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, String
+from sqlalchemy import DateTime, String
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.core import Base
 
@@ -13,13 +13,17 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email = Column(String, unique=True, nullable=False)
-    name = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    name: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Fix the relationship
-    progress_records = relationship(  # Changed from 'progress' to 'progress_records'
-        "Progress", back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    # Relationship to progress records
+    progress_records: Mapped[list["Progress"]] = relationship(
+        "Progress", back_populates="user", cascade="all, delete-orphan", lazy="selectin",
+    )
+    # Relationship to owned roadmaps
+    roadmaps: Mapped[list["Roadmap"]] = relationship(
+        "Roadmap", back_populates="owner", cascade="all, delete-orphan", lazy="selectin",
     )

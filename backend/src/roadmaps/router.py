@@ -112,7 +112,7 @@ async def update_roadmap(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Roadmap not found",
         )
-    return cast(RoadmapResponse, RoadmapResponse.model_validate(roadmap))
+    return cast("RoadmapResponse", RoadmapResponse.model_validate(roadmap))
 
 
 @router.delete(
@@ -225,7 +225,8 @@ async def get_node(
     try:
         node = await service._get_node(roadmap_id, node_id)
         if not node:
-            raise ResourceNotFoundError("Node", str(node_id))
+            msg = "Node"
+            raise ResourceNotFoundError(msg, str(node_id))
         await session.refresh(node, ["prerequisites"])
         return NodeResponse.model_validate(node)
     except ResourceNotFoundError as e:

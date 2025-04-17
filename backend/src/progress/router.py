@@ -25,7 +25,7 @@ async def create_progress(
     service = ProgressService(session)
     try:
         progress = await service.create_progress(data)
-        return cast(ProgressResponse, ProgressResponse.model_validate(progress))
+        return cast("ProgressResponse", ProgressResponse.model_validate(progress))
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -45,7 +45,7 @@ async def get_progress(
     service = ProgressService(session)
     try:
         progress = await service.get_progress(progress_id)
-        return cast(ProgressResponse, ProgressResponse.model_validate(progress))
+        return cast("ProgressResponse", ProgressResponse.model_validate(progress))
     except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -71,7 +71,7 @@ async def get_user_progress(
             page=page,
             limit=limit,
         )
-        return [cast(ProgressResponse, ProgressResponse.model_validate(p)) for p in progress_records]
+        return [cast("ProgressResponse", ProgressResponse.model_validate(p)) for p in progress_records]
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -92,7 +92,7 @@ async def update_progress(
     service = ProgressService(session)
     try:
         progress = await service.update_progress(progress_id, data)
-        return cast(ProgressResponse, ProgressResponse.model_validate(progress))
+        return cast("ProgressResponse", ProgressResponse.model_validate(progress))
     except (ResourceNotFoundError, ValidationError) as e:
         status_code = status.HTTP_404_NOT_FOUND if isinstance(e, ResourceNotFoundError) else status.HTTP_400_BAD_REQUEST
         raise HTTPException(

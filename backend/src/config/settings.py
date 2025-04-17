@@ -17,7 +17,7 @@ class Settings(PydanticBaseSettings):  # type: ignore[misc]
     openai_api_key: str | None = None
 
     model_config = SettingsConfigDict(
-        env_file=("../.env", "../.env.local"),
+        env_file=(".env", ".env.local"),
         env_file_encoding="utf-8",
         extra="allow",
         case_sensitive=True,

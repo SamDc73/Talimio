@@ -66,7 +66,7 @@ def create_app() -> FastAPI:
     # Add exception handlers
     @app.exception_handler(ResourceNotFoundError)
     async def resource_not_found_handler(
-        request: Request, exc: ResourceNotFoundError
+        request: Request, exc: ResourceNotFoundError,
     ) -> JSONResponse:
         return JSONResponse(
             status_code=404,
