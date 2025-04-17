@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, ForwardRef
 from uuid import UUID
 
 from pydantic import BaseModel as PydanticBaseModel, Field
 
+NodeResponse = ForwardRef('NodeResponse')
 
 class RoadmapBase(PydanticBaseModel):  # type: ignore[misc]
     """Base schema for roadmap data."""
@@ -48,6 +49,7 @@ class NodeBase(PydanticBaseModel):  # type: ignore[misc]
     content: str | None = None
     order: int = Field(default=0, ge=0)
     prerequisite_ids: list[UUID] = Field(default_factory=list)
+    parent_id: UUID | None = Field(None, description="Parent node ID if this is a sub-node.")
 
 
 class NodeCreate(NodeBase):
@@ -64,6 +66,7 @@ class NodeCreate(NodeBase):
                 "order": 1,
                 "prerequisite_ids": [],
                 "roadmap_id": "123e4567-e89b-12d3-a456-426614174000",
+                "parent_id": None,
             },
         }
 
@@ -76,6 +79,7 @@ class NodeUpdate(PydanticBaseModel):  # type: ignore[misc]
     content: str | None = None
     order: int | None = Field(None, ge=0)
     prerequisite_ids: list[UUID] | None = None
+    parent_id: UUID | None = Field(None, description="Parent node ID if this is a sub-node.")
 
 
 class NodeResponse(NodeBase):
@@ -87,17 +91,18 @@ class NodeResponse(NodeBase):
     created_at: datetime
     updated_at: datetime
     prerequisite_ids: list[UUID] = Field(default_factory=list)
+    children: list[NodeResponse] = Field(default_factory=list, description="Child nodes (sub-nodes)")
 
     class Config:
         from_attributes = True
 
     @classmethod
     def model_validate(cls, obj: Any) -> "NodeResponse":
-        """Custom validation to handle prerequisites."""
-        if hasattr(obj, "prerequisites"):
-            # Extract prerequisite IDs from the relationship
-            prerequisite_ids = [p.id for p in obj.prerequisites]
-            # Create a copy of the object's dict
+        """Custom validation to handle prerequisites and children recursively."""
+        if hasattr(obj, "prerequisites") or hasattr(obj, "children"):
+            prerequisite_ids = [p.id for p in getattr(obj, "prerequisites", [])]
+            children_objs = getattr(obj, "children", [])
+            children = [cls.model_validate(child) for child in children_objs] if children_objs else []
             obj_dict = {
                 "id": obj.id,
                 "title": obj.title,
@@ -109,6 +114,8 @@ class NodeResponse(NodeBase):
                 "created_at": obj.created_at,
                 "updated_at": obj.updated_at,
                 "prerequisite_ids": prerequisite_ids,
+                "parent_id": getattr(obj, "parent_id", None),
+                "children": children,
             }
             return super().model_validate(obj_dict)
         return super().model_validate(obj)
