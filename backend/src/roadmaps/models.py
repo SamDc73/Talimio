@@ -9,25 +9,25 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database.core import Base
 
 
-__all__ = ["Node", "Roadmap", "node_prerequisites"]
+__all__ = ["Node", "Roadmap"]
 
-# Association table for node prerequisites
-node_prerequisites = Table(
-    "node_prerequisites",
-    Base.metadata,
-    Column(
-        "node_id",
-        SA_UUID(as_uuid=True),
-        ForeignKey("nodes.id", ondelete="CASCADE"),
-        primary_key=True,
-    ),
-    Column(
-        "prerequisite_id",
-        SA_UUID(as_uuid=True),
-        ForeignKey("nodes.id", ondelete="CASCADE"),
-        primary_key=True,
-    ),
-)
+# Association table for node prerequisites (removed, not needed for simple hierarchy)
+# node_prerequisites = Table(
+#     "node_prerequisites",
+#     Base.metadata,
+#     Column(
+#         "node_id",
+#         SA_UUID(as_uuid=True),
+#         ForeignKey("nodes.id", ondelete="CASCADE"),
+#         primary_key=True,
+#     ),
+#     Column(
+#         "prerequisite_id",
+#         SA_UUID(as_uuid=True),
+#         ForeignKey("nodes.id", ondelete="CASCADE"),
+#         primary_key=True,
+#     ),
+# )
 
 
 class Roadmap(Base):
@@ -105,14 +105,15 @@ class Node(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    prerequisites: Mapped[list["Node"]] = relationship(
-        "Node",
-        secondary=node_prerequisites,
-        primaryjoin=id == node_prerequisites.c.node_id,
-        secondaryjoin=id == node_prerequisites.c.prerequisite_id,
-        backref="dependents",
-        lazy="selectin",
-    )
+    # Remove prerequisites relationship (no longer needed)
+    # prerequisites: Mapped[list["Node"]] = relationship(
+    #     "Node",
+    #     secondary=node_prerequisites,
+    #     primaryjoin=id == node_prerequisites.c.node_id,
+    #     secondaryjoin=id == node_prerequisites.c.prerequisite_id,
+    #     backref="dependents",
+    #     lazy="selectin",
+    # )
     progress_records: Mapped[list["Progress"]] = relationship(
         "Progress",
         back_populates="node",
