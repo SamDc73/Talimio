@@ -37,13 +37,15 @@ class OnboardingService:
             questions = []
             for q in questions_data:
                 if not isinstance(q, dict) or "question" not in q or "options" not in q:
-                    raise ValueError("Each question must have 'question' and 'options' fields")
+                    msg = "Each question must have 'question' and 'options' fields"
+                    raise ValueError(msg)
 
                 questions.append(
-                    OnboardingQuestion(question=q["question"], type="multiple_choice", options=q["options"])
+                    OnboardingQuestion(question=q["question"], type="multiple_choice", options=q["options"]),
                 )
 
             return OnboardingQuestions(questions=questions)
 
         except Exception as e:
-            raise ValueError(f"Failed to generate questions: {e}") from e
+            msg = f"Failed to generate questions: {e}"
+            raise ValueError(msg) from e

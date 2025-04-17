@@ -61,7 +61,7 @@ class RoadmapService:
         try:
             # Generate initial nodes
             nodes_data = await self.ai_client.generate_roadmap_content(
-                title=data.title, skill_level=data.skill_level, description=data.description
+                title=data.title, skill_level=data.skill_level, description=data.description,
             )
 
             # Create nodes sequentially
@@ -109,7 +109,7 @@ class RoadmapService:
         try:
             # Generate node content using AI
             node_content = await self.ai_client.generate_node_content(
-                roadmap_id=roadmap_id, current_node=data.title, progress_level=roadmap.skill_level
+                roadmap_id=roadmap_id, current_node=data.title, progress_level=roadmap.skill_level,
             )
 
             # Create node with AI-generated content
@@ -210,7 +210,7 @@ class RoadmapService:
         try:
             # Generate content for new nodes
             next_nodes_content = await self.ai_client.generate_node_content(
-                roadmap_id=roadmap_id, current_node=current_node.title, progress_level=roadmap.skill_level
+                roadmap_id=roadmap_id, current_node=current_node.title, progress_level=roadmap.skill_level,
             )
 
             # Create new nodes

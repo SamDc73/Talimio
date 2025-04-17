@@ -24,7 +24,7 @@ async def create_user(
     service = UserService(session)
     try:
         user = await service.create_user(data)
-        return cast(UserResponse, UserResponse.model_validate(user))
+        return cast("UserResponse", UserResponse.model_validate(user))
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -43,7 +43,7 @@ async def get_user(
     service = UserService(session)
     try:
         user = await service.get_user(user_id)
-        return cast(UserResponse, UserResponse.model_validate(user))
+        return cast("UserResponse", UserResponse.model_validate(user))
     except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -63,7 +63,7 @@ async def update_user(
     service = UserService(session)
     try:
         user = await service.update_user(user_id, data)
-        return cast(UserResponse, UserResponse.model_validate(user))
+        return cast("UserResponse", UserResponse.model_validate(user))
     except (ResourceNotFoundError, ValidationError) as e:
         status_code = status.HTTP_404_NOT_FOUND if isinstance(e, ResourceNotFoundError) else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=str(e)) from e

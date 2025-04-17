@@ -8,7 +8,6 @@ router = APIRouter(prefix="/api/v1/onboarding", tags=["onboarding"])
 
 @router.post(
     "/questions",
-    response_model=OnboardingQuestions,
     summary="Generate onboarding questions",
     description="Generate personalized onboarding questions based on the learning topic",
 )
@@ -22,5 +21,5 @@ async def generate_onboarding_questions(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            detail=str(e),
         ) from e
