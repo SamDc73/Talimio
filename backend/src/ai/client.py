@@ -1,7 +1,9 @@
 import json
 import logging
 import os
+import re
 from collections.abc import Sequence
+from typing import Any
 from uuid import UUID
 
 from litellm import acompletion
@@ -54,23 +56,23 @@ class ModelManager:
         """Get completion from AI model."""
         try:
             if format_json:
-                messages = [*list(messages), {"role": "system", "content": "Always respond with valid JSON only, no additional text"}]
+                messages = [*list(messages), {"role": "system", "content": "Always respond with valid JSON only, no additional text or markdown, and do not wrap in code fences"}]
 
             response = await acompletion(
                 model=self.model,
                 messages=messages,
                 temperature=0.7,
-                max_tokens=2000,
+                max_tokens=8000,
             )
 
             content: str = response.choices[0].message.content
 
             if format_json:
-                # Clean up JSON response
+                # Clean up JSON response and strip code fences
                 content = content.strip()
-                content = content.removeprefix("```json")
-                content = content.removeprefix("```")
-                content = content.removesuffix("```")
+                # Remove any Markdown code fences
+                content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.IGNORECASE)
+                content = re.sub(r"\s*```$", "", content, flags=re.IGNORECASE)
                 return json.loads(content.strip())
 
             return content
@@ -109,22 +111,61 @@ class ModelManager:
         title: str,
         skill_level: str,
         description: str,
-    ) -> list[dict[str, str | int]]:
-        """Generate initial core topics for the learning path."""
-        prompt = f"""Create a foundational learning path for {title} at {skill_level} level.
-        Generate 3-4 core topics that form the essential foundation.
-        For each topic provide:
-        {{
-            "title": "Main topic name",
-            "description": "Brief overview",
-            "content": "Learning objectives and key points",
-            "order": "Sequential number (0-3)",
-            "prerequisites": [] # Empty for initial nodes
-        }}
+    ) -> list[dict[str, Any]]:
+        """Generate a detailed hierarchical roadmap as JSON."""
+        prompt = f"""
+You are a curriculum design expert. Generate a hierarchical learning path as a pure JSON array for the new roadmap:
+  Title: {title}
+  Description: {description}
+  Skill Level: {skill_level}
+Requirements:
+ - Exactly 4 core topics (level 1)
+ - Each core topic must have exactly 3 subtopics (level 2)
+ - Each subtopic must have exactly 2 sub-subtopics (level 3)
+Use this exact node schema and follow the example structure:
 
-        Focus on core/fundamental concepts that would be required before moving to more advanced topics.
-        Organize them in a logical learning sequence.
-        """
+Example output:
+[
+  {{
+    "title": "Core Topic 1",
+    "description": "Overview of Core Topic 1",
+    "content": "Key learning objectives...",
+    "order": 0,
+    "prerequisite_ids": [],
+    "children": [
+      {{
+        "title": "Subtopic 1.1",
+        "description": "Overview of Subtopic 1.1",
+        "content": "Objectives...",
+        "order": 0,
+        "prerequisite_ids": [],
+        "children": [
+          {{
+            "title": "Sub-subtopic 1.1.1",
+            "description": "Details of Sub-subtopic 1.1.1",
+            "content": "Objectives...",
+            "order": 0,
+            "prerequisite_ids": [],
+            "children": []
+          }},
+          {{
+            "title": "Sub-subtopic 1.1.2",
+            "description": "Details of Sub-subtopic 1.1.2",
+            "content": "Objectives...",
+            "order": 1,
+            "prerequisite_ids": [],
+            "children": []
+          }}
+        ]
+      }},
+      {{ "title": "Subtopic 1.2", "description": "...", "content": "...", "order": 1, "prerequisite_ids": [], "children": [/* 2 sub-subtopics */] }},
+      {{ "title": "Subtopic 1.3", "description": "...", "content": "...", "order": 2, "prerequisite_ids": [], "children": [/* 2 sub-subtopics */] }}
+    ]
+  }},
+  ... (repeat for Core Topics 2-4)
+]
+Return ONLY the JSON array with no additional commentary.
+"""
 
         messages = [
             {"role": "system", "content": "You are a curriculum design expert."},
@@ -144,13 +185,14 @@ class ModelManager:
                         "content": str(node.get("content", "")),
                         "order": i,
                         "prerequisite_ids": [],  # Start with no prerequisites
+                        "children": node.get("children", []),
                     },
                 )
 
             return validated_nodes
 
         except Exception as e:
-            logger.exception("Error generating roadmap content")
+            self._logger.exception("Error generating roadmap content")
             raise RoadmapGenerationError from e
 
     async def generate_practice_exercises(
@@ -181,3 +223,29 @@ class ModelManager:
         except Exception as e:
             self._logger.exception("Error generating exercises")
             raise ExerciseGenerationError from e
+
+    async def generate_node_content(
+        self,
+        roadmap_id: UUID,
+        current_node: str,
+        progress_level: str,
+    ) -> dict[str, Any]:
+        """Generate customized content for a new node."""
+        if not validate_uuid(roadmap_id):
+            raise ValidationError("Invalid roadmap ID")
+        prompt = f"""You are a curriculum design expert. For the existing roadmap (ID: {roadmap_id}) at skill level {progress_level}, generate content for the next node titled '{current_node}'. Return a pure JSON object with keys: title, description, content, prerequisites (list of existing node titles that should be prerequisites, may be empty). Format as JSON only."""
+        messages = [
+            {"role": "system", "content": "You are an expert curriculum designer."},
+            {"role": "user", "content": prompt},
+        ]
+        try:
+            response = await self._get_completion(messages)
+            return {
+                "title": str(response.get("title", current_node)),
+                "description": str(response.get("description", "")),
+                "content": str(response.get("content", "")),
+                "prerequisites": response.get("prerequisites", []),
+            }
+        except Exception as e:
+            self._logger.exception("Error generating node content")
+            raise NodeCustomizationError from e
