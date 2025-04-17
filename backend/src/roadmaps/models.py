@@ -105,15 +105,9 @@ class Node(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    # Remove prerequisites relationship (no longer needed)
-    # prerequisites: Mapped[list["Node"]] = relationship(
-    #     "Node",
-    #     secondary=node_prerequisites,
-    #     primaryjoin=id == node_prerequisites.c.node_id,
-    #     secondaryjoin=id == node_prerequisites.c.prerequisite_id,
-    #     backref="dependents",
-    #     lazy="selectin",
-    # )
+    # --- REMOVE ALL REFERENCES TO PREREQUISITES ---
+    # If any code tries to access node.prerequisites, it should raise AttributeError
+    # or be removed from the codebase.
     progress_records: Mapped[list["Progress"]] = relationship(
         "Progress",
         back_populates="node",
