@@ -4,7 +4,9 @@ from uuid import UUID
 
 from pydantic import BaseModel as PydanticBaseModel, Field
 
-NodeResponse = ForwardRef('NodeResponse')
+
+NodeResponse = ForwardRef("NodeResponse")
+
 
 class RoadmapBase(PydanticBaseModel):  # type: ignore[misc]
     """Base schema for roadmap data."""
@@ -131,6 +133,15 @@ class RoadmapResponse(RoadmapBase):
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def model_validate(cls, obj: Any) -> "RoadmapResponse":
+        """Custom validation to ensure only root nodes are at the top level."""
+        validated_obj = super().model_validate(obj)
+        if isinstance(validated_obj, cls) and validated_obj.nodes:
+            # Filter nodes to keep only those without a parent_id
+            validated_obj.nodes = [node for node in validated_obj.nodes if node.parent_id is None]
+        return validated_obj
 
 
 class RoadmapsListResponse(PydanticBaseModel):  # type: ignore[misc]

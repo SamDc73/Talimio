@@ -10,6 +10,7 @@ from src.database.pagination import Paginator
 from src.database.session import DbSession
 from src.roadmaps.models import Node, Roadmap
 from src.roadmaps.schemas import NodeCreate, NodeUpdate, RoadmapCreate, RoadmapUpdate
+from fastapi import HTTPException
 
 
 logger = logging.getLogger(__name__)
@@ -61,20 +62,13 @@ class RoadmapService:
         try:
             # Generate initial nodes
             nodes_data = await self.ai_client.generate_roadmap_content(
-                title=data.title, skill_level=data.skill_level, description=data.description,
+                title=data.title,
+                skill_level=data.skill_level,
+                description=data.description,
             )
 
-            # Create nodes sequentially
-            for node_data in nodes_data:
-                node = Node(
-                    roadmap_id=roadmap.id,
-                    title=node_data["title"],
-                    description=node_data["description"],
-                    content=node_data["content"],
-                    order=node_data["order"],
-                    status="not_started",
-                )
-                self._session.add(node)
+            # Recursively create nodes and nested children with proper parent IDs
+            await self._create_nodes_recursive(nodes_data, roadmap.id)
 
             await self._session.commit()
             return roadmap
@@ -82,6 +76,31 @@ class RoadmapService:
         except Exception as e:
             await self._session.rollback()
             raise HTTPException(status_code=500, detail=str(e))
+
+    async def _create_nodes_recursive(
+        self,
+        nodes_data: list[dict],
+        roadmap_id: UUID,
+        parent_id: UUID | None = None,
+    ) -> None:
+        """Recursively create nodes and their children, preserving hierarchy."""
+        for idx, node_data in enumerate(nodes_data):
+            node = Node(
+                roadmap_id=roadmap_id,
+                title=node_data.get("title", f"Topic {idx + 1}"),
+                description=node_data.get("description", ""),
+                content=node_data.get("content"),
+                order=node_data.get("order", idx),
+                parent_id=parent_id,
+                status="not_started",
+            )
+            self._session.add(node)
+            # Flush to generate node.id for children
+            await self._session.flush()
+            # Recurse into children if any
+            children = node_data.get("children") or []
+            if children:
+                await self._create_nodes_recursive(children, roadmap_id, parent_id=node.id)
 
     async def update_roadmap(self, roadmap_id: UUID, data: RoadmapUpdate) -> Roadmap:
         """Update an existing roadmap."""
@@ -109,7 +128,9 @@ class RoadmapService:
         try:
             # Generate node content using AI
             node_content = await self.ai_client.generate_node_content(
-                roadmap_id=roadmap_id, current_node=data.title, progress_level=roadmap.skill_level,
+                roadmap_id=roadmap_id,
+                current_node=data.title,
+                progress_level=roadmap.skill_level,
             )
 
             # Create node with AI-generated content
@@ -210,7 +231,9 @@ class RoadmapService:
         try:
             # Generate content for new nodes
             next_nodes_content = await self.ai_client.generate_node_content(
-                roadmap_id=roadmap_id, current_node=current_node.title, progress_level=roadmap.skill_level,
+                roadmap_id=roadmap_id,
+                current_node=current_node.title,
+                progress_level=roadmap.skill_level,
             )
 
             # Create new nodes
@@ -247,11 +270,12 @@ class RoadmapService:
 
         # Mark the target node in the JSON tree (add a 'target': true flag)
         def mark_target(node: dict) -> None:
-            if node['id'] == str(node_id):
-                node['target'] = True
-            for child in node.get('children', []):
+            if node["id"] == str(node_id):
+                node["target"] = True
+            for child in node.get("children", []):
                 mark_target(child)
-        for node in roadmap_json.get('nodes', []):
+
+        for node in roadmap_json.get("nodes", []):
             mark_target(node)
 
         # Build prompt for LLM
@@ -264,6 +288,7 @@ class RoadmapService:
         llm_response = await self.ai_client.get_completion(prompt)
         # Parse LLM response (expecting a JSON array)
         import json
+
         try:
             sub_nodes = json.loads(llm_response)
             if not isinstance(sub_nodes, list):
