@@ -2,10 +2,13 @@ from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
+from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 
 from src.core.exceptions import ResourceNotFoundError, ValidationError
 from src.database.session import DbSession
 from src.roadmaps.dependencies import LimitParam, PageParam
+from src.roadmaps.models import Node, Roadmap
 from src.roadmaps.schemas import (
     NodeCreate,
     NodeResponse,
@@ -42,9 +45,13 @@ async def list_roadmaps(
 
     # Ensure relationships are loaded before validation
     for roadmap in roadmaps:
-        await session.refresh(roadmap, ["nodes"])
-        for node in roadmap.nodes:
-            await session.refresh(node, ["prerequisites"])
+        query = (
+            select(Roadmap)
+            .options(selectinload(Roadmap.nodes).selectinload(Node.children))
+            .where(Roadmap.id == roadmap.id)
+        )
+        result = await session.execute(query)
+        RoadmapResponse.model_validate(result.scalars().first())
 
     return RoadmapsListResponse(
         items=[RoadmapResponse.model_validate(r) for r in roadmaps],
@@ -67,9 +74,12 @@ async def create_roadmap(
     service = RoadmapService(session)
     roadmap = await service.create_roadmap(data)
 
-    # Ensure nodes are loaded before validation
-    await session.refresh(roadmap, ["nodes"])
-    return RoadmapResponse.model_validate(roadmap)
+    # Ensure nodes and their children are loaded before validation
+    query = (
+        select(Roadmap).options(selectinload(Roadmap.nodes).selectinload(Node.children)).where(Roadmap.id == roadmap.id)
+    )
+    result = await session.execute(query)
+    return RoadmapResponse.model_validate(result.scalars().first())
 
 
 @router.get(
@@ -85,10 +95,13 @@ async def get_roadmap(
     try:
         roadmap = await service.get_roadmap(roadmap_id)
         # Ensure relationships are loaded before validation
-        await session.refresh(roadmap, ["nodes"])
-        for node in roadmap.nodes:
-            await session.refresh(node, ["prerequisites"])
-        return RoadmapResponse.model_validate(roadmap)
+        query = (
+            select(Roadmap)
+            .options(selectinload(Roadmap.nodes).selectinload(Node.children))
+            .where(Roadmap.id == roadmap.id)
+        )
+        result = await session.execute(query)
+        return RoadmapResponse.model_validate(result.scalars().first())
     except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -154,7 +167,6 @@ async def create_node(
     service = RoadmapService(session)
     try:
         node = await service.create_node(roadmap_id, data)
-        await session.refresh(node, ["prerequisites"])
         return NodeResponse.model_validate(node)
     except (ResourceNotFoundError, ValidationError) as e:
         raise HTTPException(
@@ -179,7 +191,6 @@ async def update_node(
     service = RoadmapService(session)
     try:
         node = await service.update_node(roadmap_id, node_id, data)
-        await session.refresh(node, ["prerequisites"])
         return NodeResponse.model_validate(node)
     except (ResourceNotFoundError, ValidationError) as e:
         raise HTTPException(
@@ -227,7 +238,6 @@ async def get_node(
         if not node:
             msg = "Node"
             raise ResourceNotFoundError(msg, str(node_id))
-        await session.refresh(node, ["prerequisites"])
         return NodeResponse.model_validate(node)
     except ResourceNotFoundError as e:
         raise HTTPException(
