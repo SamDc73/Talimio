@@ -234,3 +234,24 @@ async def get_node(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         ) from e
+
+
+@router.post(
+    "/{roadmap_id}/nodes/{node_id}/generate-sub-nodes",
+    summary="Generate sub-nodes for a node using LLM",
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_sub_nodes(
+    roadmap_id: UUID,
+    node_id: UUID,
+    session: DbSession,
+) -> list[NodeResponse]:
+    """
+    Generate sub-nodes for a node using LLM, providing the full roadmap tree as context.
+    """
+    service = RoadmapService(session)
+    try:
+        nodes = await service.generate_sub_nodes(roadmap_id, node_id)
+        return [NodeResponse.model_validate(n) for n in nodes]
+    except (ResourceNotFoundError, ValidationError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
