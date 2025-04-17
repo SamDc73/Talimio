@@ -235,3 +235,58 @@ class RoadmapService:
             await self._session.rollback()
             logger.exception("Failed to generate next nodes")
             raise ValidationError(str(e)) from e
+
+    async def generate_sub_nodes(self, roadmap_id: UUID, node_id: UUID) -> list[Node]:
+        """
+        Generate sub-nodes for a given node using LLM, providing the full roadmap tree as context.
+        """
+        # Fetch the full roadmap with all nodes (nested)
+        roadmap = await self.get_roadmap(roadmap_id)
+        # Serialize the full roadmap tree
+        roadmap_json = RoadmapResponse.model_validate(roadmap).model_dump()
+
+        # Mark the target node in the JSON tree (add a 'target': true flag)
+        def mark_target(node: dict) -> None:
+            if node['id'] == str(node_id):
+                node['target'] = True
+            for child in node.get('children', []):
+                mark_target(child)
+        for node in roadmap_json.get('nodes', []):
+            mark_target(node)
+
+        # Build prompt for LLM
+        prompt = (
+            "Given the following roadmap structure in JSON, generate 2-3 appropriate sub-nodes for the node marked with 'target': true. "
+            "Each sub-node should have a title and description. Respond with a JSON array of objects with 'title' and 'description'.\n"
+            f"Roadmap JSON:\n{roadmap_json}"
+        )
+        # Call LLM
+        llm_response = await self.ai_client.get_completion(prompt)
+        # Parse LLM response (expecting a JSON array)
+        import json
+        try:
+            sub_nodes = json.loads(llm_response)
+            if not isinstance(sub_nodes, list):
+                raise ValueError("LLM did not return a list")
+        except Exception as e:
+            raise ValidationError(f"Failed to parse LLM response: {e}")
+
+        # Insert new nodes as children of the target node
+        parent_node = await self._get_node(roadmap_id, node_id)
+        if not parent_node:
+            raise ResourceNotFoundError("Node", str(node_id))
+        new_nodes = []
+        for i, data in enumerate(sub_nodes):
+            node = Node(
+                roadmap_id=roadmap_id,
+                title=data["title"],
+                description=data["description"],
+                content=None,
+                order=len(parent_node.children) + i,
+                status="not_started",
+                parent_id=parent_node.id,
+            )
+            self._session.add(node)
+            new_nodes.append(node)
+        await self._session.commit()
+        return new_nodes
