@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel as PydanticBaseModel, Field
 
 
-NodeResponse = ForwardRef("NodeResponse")
+# Removed ForwardRef definition here
 
 
 class RoadmapBase(PydanticBaseModel):  # type: ignore[misc]
@@ -93,34 +93,13 @@ class NodeResponse(NodeBase):
     created_at: datetime
     updated_at: datetime
     prerequisite_ids: list[UUID] = Field(default_factory=list)
-    children: list[NodeResponse] = Field(default_factory=list, description="Child nodes (sub-nodes)")
+    # Use string literal for recursive type hint
+    children: list["NodeResponse"] = Field(default_factory=list, description="Child nodes (sub-nodes)")
 
     class Config:
         from_attributes = True
 
-    @classmethod
-    def model_validate(cls, obj: Any) -> "NodeResponse":
-        """Custom validation to handle prerequisites and children recursively."""
-        if hasattr(obj, "prerequisites") or hasattr(obj, "children"):
-            prerequisite_ids = [p.id for p in getattr(obj, "prerequisites", [])]
-            children_objs = getattr(obj, "children", [])
-            children = [cls.model_validate(child) for child in children_objs] if children_objs else []
-            obj_dict = {
-                "id": obj.id,
-                "title": obj.title,
-                "description": obj.description,
-                "content": obj.content,
-                "order": obj.order,
-                "status": obj.status,
-                "roadmap_id": obj.roadmap_id,
-                "created_at": obj.created_at,
-                "updated_at": obj.updated_at,
-                "prerequisite_ids": prerequisite_ids,
-                "parent_id": getattr(obj, "parent_id", None),
-                "children": children,
-            }
-            return super().model_validate(obj_dict)
-        return super().model_validate(obj)
+    # Removed custom model_validate. Relying on from_attributes=True.
 
 
 class RoadmapResponse(RoadmapBase):
@@ -134,14 +113,7 @@ class RoadmapResponse(RoadmapBase):
     class Config:
         from_attributes = True
 
-    @classmethod
-    def model_validate(cls, obj: Any) -> "RoadmapResponse":
-        """Custom validation to ensure only root nodes are at the top level."""
-        validated_obj = super().model_validate(obj)
-        if isinstance(validated_obj, cls) and validated_obj.nodes:
-            # Filter nodes to keep only those without a parent_id
-            validated_obj.nodes = [node for node in validated_obj.nodes if node.parent_id is None]
-        return validated_obj
+    # Removed custom model_validate. Relying on from_attributes=True.
 
 
 class RoadmapsListResponse(PydanticBaseModel):  # type: ignore[misc]

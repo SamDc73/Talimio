@@ -11,7 +11,7 @@ import { useRoadmapState } from "./useRoadmapState";
 
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogClose } from "@/components/dialog";
 
-const RoadmapFlow = React.memo(({ roadmapId, onError }) => {
+const RoadmapFlow = React.memo(React.forwardRef(({ roadmapId, onError }, ref) => { // Added React.forwardRef and ref parameter
   const { nodes, edges, isLoading, onNodesChange, onEdgesChange, handleConnect, initializeRoadmap } = useRoadmapState();
 
   const [selectedNode, setSelectedNode] = useState(null);
@@ -102,7 +102,7 @@ const RoadmapFlow = React.memo(({ roadmapId, onError }) => {
       </Dialog>
     </div>
   );
-});
+})); // Close forwardRef
 
 RoadmapFlow.displayName = "RoadmapFlow";
 
