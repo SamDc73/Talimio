@@ -1,16 +1,16 @@
 import { useNodesState, useEdgesState, addEdge } from '@xyflow/react'; // Added addEdge import
 import { useCallback, useState, useRef, useEffect } from 'react';  // Added useRef import
 import dagre from '@dagrejs/dagre';
-import { getCenteredBranchingLayout } from './centeredBranchingLayout';
 
 // --- Dagre Layout Helper ---
 const NODE_WIDTH = 250; // Adjust based on your node styling
-const NODE_HEIGHT = 50; // Adjust based on your node styling
+const NODE_HEIGHT = 100; // Increased height for better spacing
 
 const getLayoutedElements = (apiNodes, direction = 'TB') => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 50, ranksep: 70 }); // Add spacing options
+  // Increased ranksep for more vertical space, nodesep for horizontal
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 70, ranksep: 100 });
 
   const uniqueApiNodes = new Map(); // Store unique nodes by ID
   const processedNodeIds = new Set(); // Track IDs added to dagre
@@ -39,19 +39,23 @@ const getLayoutedElements = (apiNodes, direction = 'TB') => {
             id: edgeId,
             source: parentId,
             target: node.id,
-            type: 'smoothstep',
+            type: 'smoothstep', // Using smoothstep for potentially better edge routing
           });
         }
       }
 
-      // Recurse for children
-      if (node.children && node.children.length > 0) {
+      // Recurse for children if they exist and are an array
+      if (Array.isArray(node.children) && node.children.length > 0) {
         processApiNodes(node.children, node.id);
       }
     });
   };
 
-  processApiNodes(apiNodes); // Start processing from root nodes
+  // Find root nodes (nodes without a parent_id or whose parent_id is not in the list)
+  const allNodeIds = new Set(apiNodes.map(n => n.id));
+  const rootNodes = apiNodes.filter(node => !node.parent_id || !allNodeIds.has(node.parent_id));
+
+  processApiNodes(rootNodes);
 
   dagre.layout(dagreGraph);
 
@@ -64,7 +68,7 @@ const getLayoutedElements = (apiNodes, direction = 'TB') => {
     }
     return {
       id: apiNode.id,
-      type: apiNode.type || 'default',
+      type: apiNode.type || (Array.isArray(apiNode.children) && apiNode.children.length > 0 ? 'decision' : 'task'),
       position: {
         x: nodeWithPosition.x - NODE_WIDTH / 2,
         y: nodeWithPosition.y - NODE_HEIGHT / 2,
@@ -72,10 +76,8 @@ const getLayoutedElements = (apiNodes, direction = 'TB') => {
       data: {
         label: apiNode.title,
         description: apiNode.description,
-        content: apiNode.content,
-        status: apiNode.status,
+        ...apiNode
       },
-      parentId: apiNode.parent_id,
     };
   }).filter(Boolean); // Filter out any nulls from safety check
 
@@ -87,7 +89,6 @@ const getLayoutedElements = (apiNodes, direction = 'TB') => {
 
   return { nodes: reactFlowNodes, edges: filteredEdges };
 };
-// --- End Dagre Layout Helper ---
 
 
 // Removed old layout constants
@@ -104,49 +105,60 @@ export const useRoadmapState = () => {
 
   // Removed old processNodes function
   const initializeRoadmap = useCallback(async (roadmapId) => {
-    console.log("initializeRoadmap called with:", roadmapId); // Debug log
+    console.log("initializeRoadmap called with:", roadmapId);
     if (!roadmapId || hasInitialized || isLoading) {
-      console.log("Early return:", { hasRoadmapId: !!roadmapId, hasInitialized, isLoading }); // Debug log
+      console.log("Early return:", { hasRoadmapId: !!roadmapId, hasInitialized, isLoading });
       return;
     }
 
     setIsLoading(true);
     try {
+      // Consider using AbortController for fetch requests
       const response = await fetch(`http://localhost:8080/api/v1/roadmaps/${roadmapId}`);
-      console.log("API response:", response.status); // Debug log
+      console.log("API response status:", response.status);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const roadmap = await response.json();
-      console.log("Roadmap data:", roadmap); // Debug log
+      console.log("Roadmap data fetched:", roadmap);
 
       if (roadmap?.nodes?.length > 0) {
-        // Use centered branching layout for vertical center with left/right children
-        const { nodes: layoutedNodes, edges: layoutedEdges } = getCenteredBranchingLayout(roadmap.nodes);
+        // Use Dagre layout function directly
+        const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(roadmap.nodes, 'TB');
 
-        console.log("Layouted flowNodes:", layoutedNodes); // Debug log
-        console.log("Layouted flowEdges:", layoutedEdges); // Debug log
+        console.log("Layouted Dagre nodes:", layoutedNodes);
+        console.log("Layouted Dagre edges:", layoutedEdges);
 
         setNodes(layoutedNodes);
         setEdges(layoutedEdges);
+        setHasInitialized(true); // Mark as initialized after successful layout
+      } else {
+        console.log("No nodes found in roadmap data.");
+        // Optionally clear state if roadmap is empty
+        setNodes([]);
+        setEdges([]);
         setHasInitialized(true);
       }
     } catch (error) {
-      console.error('Failed to initialize roadmap:', error);
-      throw error;
+      // Handle fetch or layout errors
+      if (error.name !== 'AbortError') {
+          console.error('Failed to initialize roadmap:', error);
+          // Optionally trigger an error state or notification
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [setNodes, setEdges, hasInitialized, isLoading]); // Removed processNodes dependency
+  }, [setNodes, setEdges, hasInitialized, isLoading]); // Dependencies for useCallback
 
-  // Cleanup on unmount
+  // Cleanup on unmount (example if using AbortController)
   useEffect(() => {
+    const controller = new AbortController();
+    // Pass controller.signal to fetch if implemented
+
     return () => {
-      if (requestRef.current) {
-        requestRef.current.abort();
-      }
+      controller.abort();
     };
   }, []);
 
