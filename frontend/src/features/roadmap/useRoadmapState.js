@@ -1,6 +1,7 @@
 import { useNodesState, useEdgesState, addEdge } from '@xyflow/react'; // Added addEdge import
 import { useCallback, useState, useRef, useEffect } from 'react';  // Added useRef import
 import dagre from '@dagrejs/dagre';
+import { getCenteredBranchingLayout } from './centeredBranchingLayout';
 
 // --- Dagre Layout Helper ---
 const NODE_WIDTH = 250; // Adjust based on your node styling
@@ -122,8 +123,8 @@ export const useRoadmapState = () => {
       console.log("Roadmap data:", roadmap); // Debug log
 
       if (roadmap?.nodes?.length > 0) {
-        // Use Dagre to calculate layout
-        const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(roadmap.nodes);
+        // Use centered branching layout for vertical center with left/right children
+        const { nodes: layoutedNodes, edges: layoutedEdges } = getCenteredBranchingLayout(roadmap.nodes);
 
         console.log("Layouted flowNodes:", layoutedNodes); // Debug log
         console.log("Layouted flowEdges:", layoutedEdges); // Debug log
