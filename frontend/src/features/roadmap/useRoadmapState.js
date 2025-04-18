@@ -1,6 +1,95 @@
-import { useNodesState, useEdgesState } from '@xyflow/react';
+import { useNodesState, useEdgesState, addEdge } from '@xyflow/react'; // Added addEdge import
 import { useCallback, useState, useRef, useEffect } from 'react';  // Added useRef import
+import dagre from '@dagrejs/dagre';
 
+// --- Dagre Layout Helper ---
+const NODE_WIDTH = 250; // Adjust based on your node styling
+const NODE_HEIGHT = 50; // Adjust based on your node styling
+
+const getLayoutedElements = (apiNodes, direction = 'TB') => {
+  const dagreGraph = new dagre.graphlib.Graph();
+  dagreGraph.setDefaultEdgeLabel(() => ({}));
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 50, ranksep: 70 }); // Add spacing options
+
+  const uniqueApiNodes = new Map(); // Store unique nodes by ID
+  const processedNodeIds = new Set(); // Track IDs added to dagre
+  const reactFlowEdges = []; // Edges for React Flow
+
+  // Recursive function to traverse API nodes and add unique ones to Dagre graph
+  const processApiNodes = (nodes, parentId = null) => {
+    nodes.forEach((node) => {
+      // Process this node only if its ID hasn't been seen before
+      if (!processedNodeIds.has(node.id)) {
+        processedNodeIds.add(node.id);
+        uniqueApiNodes.set(node.id, node); // Store unique node data
+        dagreGraph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+      } else {
+        // Log if we encounter an ID again in the hierarchy (might indicate backend issue)
+        // console.warn(`Node ID ${node.id} encountered again in hierarchy, skipping add to dagre graph.`);
+      }
+
+      // Add edge regardless of whether the node was already processed (edge connects existing nodes)
+      if (parentId) {
+        // Ensure edge doesn't already exist (simple check)
+        const edgeId = `e${parentId}-${node.id}`;
+        if (!reactFlowEdges.some(e => e.id === edgeId)) {
+          dagreGraph.setEdge(parentId, node.id);
+          reactFlowEdges.push({
+            id: edgeId,
+            source: parentId,
+            target: node.id,
+            type: 'smoothstep',
+          });
+        }
+      }
+
+      // Recurse for children
+      if (node.children && node.children.length > 0) {
+        processApiNodes(node.children, node.id);
+      }
+    });
+  };
+
+  processApiNodes(apiNodes); // Start processing from root nodes
+
+  dagre.layout(dagreGraph);
+
+  // Map unique layouted nodes back to React Flow format
+  const reactFlowNodes = Array.from(uniqueApiNodes.values()).map((apiNode) => {
+    const nodeWithPosition = dagreGraph.node(apiNode.id);
+    if (!nodeWithPosition) {
+      console.warn(`Dagre layout information missing for node ID: ${apiNode.id}`);
+      return null; // Should not happen if added correctly, but safety check
+    }
+    return {
+      id: apiNode.id,
+      type: apiNode.type || 'default',
+      position: {
+        x: nodeWithPosition.x - NODE_WIDTH / 2,
+        y: nodeWithPosition.y - NODE_HEIGHT / 2,
+      },
+      data: {
+        label: apiNode.title,
+        description: apiNode.description,
+        content: apiNode.content,
+        status: apiNode.status,
+      },
+      parentId: apiNode.parent_id,
+    };
+  }).filter(Boolean); // Filter out any nulls from safety check
+
+  // Filter edges again just in case (source/target might not be in uniqueApiNodes if data is inconsistent)
+  const finalNodeIds = new Set(reactFlowNodes.map(n => n.id));
+  const filteredEdges = reactFlowEdges.filter(edge =>
+    finalNodeIds.has(edge.source) && finalNodeIds.has(edge.target)
+  );
+
+  return { nodes: reactFlowNodes, edges: filteredEdges };
+};
+// --- End Dagre Layout Helper ---
+
+
+// Removed old layout constants
 export const useRoadmapState = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -12,6 +101,7 @@ export const useRoadmapState = () => {
     setEdges((eds) => addEdge(params, eds));
   }, [setEdges]);
 
+  // Removed old processNodes function
   const initializeRoadmap = useCallback(async (roadmapId) => {
     console.log("initializeRoadmap called with:", roadmapId); // Debug log
     if (!roadmapId || hasInitialized || isLoading) {
@@ -32,35 +122,14 @@ export const useRoadmapState = () => {
       console.log("Roadmap data:", roadmap); // Debug log
 
       if (roadmap?.nodes?.length > 0) {
-        const flowNodes = roadmap.nodes.map((node) => ({
-          id: node.id,
-          type: 'default',
-          position: {
-            x: node.order * 250,
-            y: 100 + (node.order % 2) * 100
-          },
-          data: {
-            label: node.title,
-            description: node.description,
-            content: node.content,
-            status: node.status,
-          },
-        }));
+        // Use Dagre to calculate layout
+        const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(roadmap.nodes);
 
-        console.log("Created flowNodes:", flowNodes); // Debug log
+        console.log("Layouted flowNodes:", layoutedNodes); // Debug log
+        console.log("Layouted flowEdges:", layoutedEdges); // Debug log
 
-        // Create edges between consecutive nodes
-        const flowEdges = flowNodes.slice(0, -1).map((node, index) => ({
-          id: `e${node.id}-${flowNodes[index + 1].id}`,
-          source: node.id,
-          target: flowNodes[index + 1].id,
-          type: 'smoothstep',
-        }));
-
-        console.log("Created flowEdges:", flowEdges); // Debug log
-
-        setNodes(flowNodes);
-        setEdges(flowEdges);
+        setNodes(layoutedNodes);
+        setEdges(layoutedEdges);
         setHasInitialized(true);
       }
     } catch (error) {
@@ -69,7 +138,7 @@ export const useRoadmapState = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [setNodes, setEdges, hasInitialized, isLoading]);
+  }, [setNodes, setEdges, hasInitialized, isLoading]); // Removed processNodes dependency
 
   // Cleanup on unmount
   useEffect(() => {
