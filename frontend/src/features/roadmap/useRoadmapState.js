@@ -2,11 +2,138 @@ import { useNodesState, useEdgesState, addEdge } from '@xyflow/react'; // Added 
 import { useCallback, useState, useRef, useEffect } from 'react';  // Added useRef import
 import dagre from '@dagrejs/dagre';
 
-// --- Dagre Layout Helper ---
-const NODE_WIDTH = 250; // Adjust based on your node styling
-const NODE_HEIGHT = 100; // Increased height for better spacing
+// --- Layout Helpers ---
+const NODE_WIDTH = 220; // Width matching our CSS width in node components
+const NODE_HEIGHT = 80; // Height matching our CSS height in node components
+const VERTICAL_SPACING = 180; // Increased vertical space between nodes for better separation
+const HORIZONTAL_INDENTATION = 100; // Horizontal indentation for child nodes
+const SIBLING_SPACING = 60; // Increased spacing between siblings
 
-const getLayoutedElements = (apiNodes, direction = 'TB') => {
+// Duolingo-style vertical layout with intuitive parent-child relationships
+const getVerticalTreeLayout = (apiNodes) => {
+  const uniqueApiNodes = new Map(); // Store unique nodes by ID
+  const processedNodeIds = new Set(); // Track IDs we've seen
+  const reactFlowEdges = []; // Edges for React Flow
+  
+  // First pass - collect all unique nodes and build parent-child relationships
+  const nodeRelationships = new Map(); // Maps node IDs to arrays of child IDs
+  
+  // Process nodes to establish parent-child relationships
+  apiNodes.forEach(node => {
+    uniqueApiNodes.set(node.id, node);
+    
+    if (node.parent_id) {
+      // Add this node as a child of its parent
+      if (!nodeRelationships.has(node.parent_id)) {
+        nodeRelationships.set(node.parent_id, []);
+      }
+      nodeRelationships.get(node.parent_id).push(node.id);
+    }
+    
+    // Also process any children in the nested structure
+    if (Array.isArray(node.children) && node.children.length > 0) {
+      node.children.forEach(child => {
+        if (!nodeRelationships.has(node.id)) {
+          nodeRelationships.set(node.id, []);
+        }
+        nodeRelationships.get(node.id).push(child.id);
+        
+        // Also add the child to uniqueApiNodes if not already there
+        if (!uniqueApiNodes.has(child.id)) {
+          uniqueApiNodes.set(child.id, child);
+        }
+      });
+    }
+  });
+  
+  // Find root nodes (nodes without a parent_id or whose parent_id is not in our node list)
+  const allNodeIds = new Set(apiNodes.map(n => n.id));
+  const rootNodes = apiNodes
+    .filter(node => !node.parent_id || !allNodeIds.has(node.parent_id))
+    .map(node => node.id);
+  
+  // Position tracking
+  let currentY = 50; // Starting Y position
+  const nodePositions = new Map(); // Maps node IDs to {x, y} positions
+  
+  // Recursive function to position a node and all its children
+  const positionNodeAndChildren = (nodeId, level = 0, parentX = 0) => {
+    if (processedNodeIds.has(nodeId)) return 0; // Skip if already processed
+    
+    processedNodeIds.add(nodeId);
+    const node = uniqueApiNodes.get(nodeId);
+    
+    // Calculate X position - indent children based on their level
+    // For root nodes, place them in the center of a default width
+    // For child nodes, indent them relative to their parent
+    const centerX = 600; // Default center point (works for both client and server)
+    const x = level === 0 ? centerX - (NODE_WIDTH / 2) : parentX + HORIZONTAL_INDENTATION;
+    
+    // Store the position
+    nodePositions.set(nodeId, { x, y: currentY });
+    
+    // Move down for next node
+    currentY += VERTICAL_SPACING;
+    
+    // Position all children of this node
+    const childIds = nodeRelationships.get(nodeId) || [];
+    let lastChildY = 0;
+    
+    childIds.forEach((childId, index) => {
+      // Create the edge from parent to child
+      reactFlowEdges.push({
+        id: `e${nodeId}-${childId}`,
+        source: nodeId,
+        target: childId,
+        type: 'smoothstep',
+      });
+      
+      // Position this child and its descendants
+      const childHeight = positionNodeAndChildren(childId, level + 1, x);
+      lastChildY = childHeight > 0 ? childHeight : lastChildY;
+      
+      // Add extra spacing between siblings
+      if (index < childIds.length - 1) {
+        currentY += SIBLING_SPACING;
+      }
+    });
+    
+    // Return the bottom-most Y coordinate in this branch
+    return lastChildY > 0 ? lastChildY : currentY;
+  };
+  
+  // Position all root nodes and their descendants
+  rootNodes.forEach(rootId => {
+    positionNodeAndChildren(rootId);
+  });
+  
+  // Create the React Flow nodes with their calculated positions
+  const reactFlowNodes = Array.from(uniqueApiNodes.values()).map(apiNode => {
+    const position = nodePositions.get(apiNode.id);
+    
+    // Skip nodes we didn't position (shouldn't happen with proper data)
+    if (!position) {
+      console.warn(`Position missing for node ID: ${apiNode.id}`);
+      return null;
+    }
+    
+    return {
+      id: apiNode.id,
+      type: apiNode.type || (nodeRelationships.has(apiNode.id) && nodeRelationships.get(apiNode.id).length > 0 ? 'decision' : 'task'),
+      position,
+      data: {
+        label: apiNode.title,
+        description: apiNode.description,
+        ...apiNode
+      },
+    };
+  }).filter(Boolean);
+  
+  return { nodes: reactFlowNodes, edges: reactFlowEdges };
+};
+
+// Keep the original Dagre layout as a fallback
+const getDagreLayout = (apiNodes, direction = 'TB') => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   // Increased ranksep for more vertical space, nodesep for horizontal
@@ -88,6 +215,11 @@ const getLayoutedElements = (apiNodes, direction = 'TB') => {
   );
 
   return { nodes: reactFlowNodes, edges: filteredEdges };
+};
+
+// Main layout function that uses the vertical tree layout
+const getLayoutedElements = (apiNodes) => {
+  return getVerticalTreeLayout(apiNodes);
 };
 
 
