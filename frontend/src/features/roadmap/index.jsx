@@ -1,5 +1,5 @@
 import { ReactFlow, Controls, MiniMap, Background } from "@xyflow/react";
-import React, { useState, useEffect, useCallback, useRef } from "react"; // Added useRef
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"; // Added useMemo
 import { X } from "lucide-react";
 
 import { DecisionNode } from "./DecisionNode";
@@ -11,12 +11,36 @@ import { useRoadmapState } from "./useRoadmapState";
 
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogClose } from "@/components/dialog";
 
+// Custom edge style for a more Duolingo-like appearance
+const edgeOptions = {
+  type: 'smoothstep',
+  style: {
+    strokeWidth: 3,
+    stroke: '#22c55e', // emerald-500
+  },
+  markerEnd: {
+    type: 'arrow',
+    width: 20,
+    height: 20,
+    color: '#22c55e',
+  },
+  animated: true,
+};
+
 const RoadmapFlow = React.memo(React.forwardRef(({ roadmapId, onError }, ref) => { // Added React.forwardRef and ref parameter
   const { nodes, edges, isLoading, onNodesChange, onEdgesChange, handleConnect, initializeRoadmap } = useRoadmapState();
 
   const [selectedNode, setSelectedNode] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const initializedRef = useRef(false); // Track initialization
+
+  // Apply the edge style to all edges
+  const styledEdges = useMemo(() => {
+    return edges.map((edge) => ({
+      ...edge,
+      ...edgeOptions
+    }));
+  }, [edges]);
 
   useEffect(() => {
     if (!roadmapId || initializedRef.current) return;
@@ -64,18 +88,28 @@ const RoadmapFlow = React.memo(React.forwardRef(({ roadmapId, onError }, ref) =>
       <div className="reactflow-wrapper absolute inset-0">
         <ReactFlow
           nodes={nodes}
-          edges={edges}
+          edges={styledEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={handleConnect}
           onNodeClick={handleNodeClick}
           nodeTypes={nodeTypes}
+          defaultEdgeOptions={edgeOptions}
           fitView
           className="bg-background"
+          minZoom={0.2}
+          maxZoom={1.5}
+          snapToGrid={true}
+          snapGrid={[15, 15]}
         >
           <Background variant="dots" gap={12} size={1} />
           <Controls />
-          <MiniMap />
+          <MiniMap 
+            nodeStrokeWidth={3}
+            nodeColor={(node) => {
+              return node.type === 'decision' ? '#f59e0b' : '#10b981';
+            }}
+          />
         </ReactFlow>
       </div>
 
@@ -83,7 +117,7 @@ const RoadmapFlow = React.memo(React.forwardRef(({ roadmapId, onError }, ref) =>
         <DialogContent className="sm:max-w-[425px]">
           {selectedNode && (
             <>
-              <DialogTitle>{selectedNode.data?.label || "Node Properties"}</DialogTitle>
+              <DialogTitle>{selectedNode.data?.label || selectedNode.data?.title || "Node Properties"}</DialogTitle>
               <DialogDescription>{selectedNode.data?.description || "View and edit node properties"}</DialogDescription>
 
               <div className="mt-6 space-y-6">
