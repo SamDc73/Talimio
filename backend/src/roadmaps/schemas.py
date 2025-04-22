@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, ClassVar, ForwardRef
+from typing import Any, ClassVar, ForwardRef, List, Dict
 from uuid import UUID
 
 from pydantic import BaseModel as PydanticBaseModel, Field
@@ -108,12 +108,35 @@ class RoadmapResponse(RoadmapBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
-    nodes: list[NodeResponse] = []
+    nodes: list[NodeResponse] = []  # Will be overridden in model_validate
 
     class Config:
         from_attributes = True
 
-    # Removed custom model_validate. Relying on from_attributes=True.
+    @classmethod
+    def model_validate(cls, obj):
+        # Patch: Build pure nested nodes for 'nodes' field
+        roadmap = super().model_validate(obj)
+        # Only use root nodes in top-level nodes
+        all_nodes = getattr(obj, "nodes", [])
+        nested = build_nested_nodes(all_nodes)
+        roadmap.nodes = nested
+        return roadmap
+
+
+def build_nested_nodes(all_nodes: List["Node"], parent_id=None) -> List[Dict[str, Any]]:
+    """
+    Recursively build a pure nested node structure for serialization.
+    Each node appears only once, as either a root or a child.
+    """
+    nested = []
+    for node in all_nodes:
+        if getattr(node, "parent_id", None) == parent_id:
+            node_dict = NodeResponse.model_validate(node).model_dump()
+            # Recursively add children
+            node_dict["children"] = build_nested_nodes(all_nodes, parent_id=node.id)
+            nested.append(node_dict)
+    return nested
 
 
 class RoadmapsListResponse(PydanticBaseModel):  # type: ignore[misc]

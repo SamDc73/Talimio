@@ -4,9 +4,10 @@ import { Card, CardContent } from "@/components/card";
 
 export const OptionCards = ({ options, value, onChange }) => (
   <div className="grid gap-2">
-    {options.map((option) => (
+    {options.map((option, idx) => (
+      // Using a combination of option and index as the key to avoid duplicate key warning
       <Card
-        key={option}
+        key={option + '-' + idx}
         className={`cursor-pointer transition-colors hover:bg-muted ${
           value === option ? 'border-primary' : ''
         }`}

@@ -106,6 +106,20 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'TB') => 
   return { nodes: processedNodes, edges };
 };
 
+// Utility: Check for duplicates in an array
+function findDuplicates(arr: string[]): string[] {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const id of arr) {
+    if (seen.has(id)) {
+      duplicates.add(id);
+    } else {
+      seen.add(id);
+    }
+  }
+  return Array.from(duplicates);
+}
+
 // Transform roadmap data into React Flow nodes and edges
 const createNodesAndEdges = (roadmap: Roadmap | null) => {
   if (!roadmap) return { nodes: [], edges: [] };
@@ -113,20 +127,8 @@ const createNodesAndEdges = (roadmap: Roadmap | null) => {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
 
-  // Helper function to process nodes recursively
-  const processNode = (
-    node: RoadmapNode,
-    level: number,
-    parentX: number | null = null,
-    horizontalLayout: boolean = false,
-    siblingCount: number = 0,
-    siblingIndex: number = 0
-  ) => {
-    // Determine if this node's children should be horizontal
-    const useHorizontalLayout = shouldDisplayHorizontally(node);
-
-    // Create React Flow node
-    const flowNode: Node = {
+  function traverse(node: RoadmapNode, parentId: string | null, level: number) {
+    nodes.push({
       id: node.id,
       data: {
         label: node.title,
@@ -134,102 +136,66 @@ const createNodesAndEdges = (roadmap: Roadmap | null) => {
         status: node.status,
         level,
         parentId: node.parent_id,
-        horizontalLayout,
-        parentX,
-        siblings: siblingCount,
-        siblingIndex,
-        totalSiblings: siblingCount
       },
-      position: { x: 0, y: 0 }, // Initial position, will be calculated by layout
-      type: 'default'
-    };
+      position: { x: 0, y: 0 },
+      type: 'default',
+    });
 
-    nodes.push(flowNode);
-
-    // Create edge from parent if exists
-    if (node.parent_id) {
+    if (parentId) {
       edges.push({
-        id: `edge-${node.parent_id}-${node.id}`,
-        source: node.parent_id,
+        id: `edge-${parentId}-${node.id}`,
+        source: parentId,
         target: node.id,
         type: 'smoothstep',
       });
     }
 
-    // Process children
     if (node.children && node.children.length > 0) {
-      const totalChildren = node.children.length;
-      node.children.forEach((child, index) => {
-        processNode(
-          child,
-          level + 1,
-          null,  // Will be calculated after layout
-          useHorizontalLayout,
-          totalChildren,
-          index
-        );
-      });
+      node.children.forEach(child => traverse(child, node.id, level + 1));
     }
-  };
+  }
 
-  // Start processing from top-level nodes
-  roadmap.nodes.forEach((node, index) => {
-    processNode(node, 0);
-  });
+  roadmap.nodes.forEach(root => traverse(root, null, 0));
 
   return { nodes, edges };
 };
 
-// Custom function to apply layout for specific cases
+// Custom function to apply a simple tree layout so all siblings are visible
 const applyCustomLayout = (nodes: Node[], edges: Edge[]) => {
-  // Apply dagre layout first to get general positions
-  const { nodes: layoutedNodes } = getLayoutedElements(nodes, edges);
-
-  // Create a map for quick node lookup
-  const nodeMap = new Map<string, Node>();
-  layoutedNodes.forEach(node => nodeMap.set(node.id, node));
-
-  // Find parent nodes
-  const parentChildMap = new Map<string, Node[]>();
-
-  // Group children by parent
-  layoutedNodes.forEach(node => {
-    if (node.data && node.data.parentId) {
-      if (!parentChildMap.has(node.data.parentId)) {
-        parentChildMap.set(node.data.parentId, []);
-      }
-      parentChildMap.get(node.data.parentId)?.push(node);
+  // Build a map of parentId -> children
+  const childrenMap = new Map<string | null, Node[]>();
+  nodes.forEach(node => {
+    const parentId = node.data.parentId || null;
+    if (!childrenMap.has(parentId)) {
+      childrenMap.set(parentId, []);
     }
+    childrenMap.get(parentId)?.push(node);
   });
 
-  // Apply horizontal layout for specific parents
-  const horizontalGroups = [
-    "fc7bb19f-2cc7-4b6e-be70-82b79d1f4711", // "What is FastAPI?"
-    "6ed84bb3-26da-4a07-b157-dea761373a6e"  // "FastAPI vs Other Frameworks"
-  ];
+  // Recursive layout assignment
+  let yStep = 150;
+  let xStep = 220;
+  let maxX = 0;
 
-  horizontalGroups.forEach(parentId => {
-    const children = parentChildMap.get(parentId) || [];
-    if (children.length < 2) return;
-
-    const parent = nodeMap.get(parentId);
-    if (!parent) return;
-
-    // Calculate center position based on parent
-    const parentX = parent.position.x + NODE_WIDTH / 2;
-    const parentY = parent.position.y + NODE_HEIGHT + VERTICAL_GAP;
-
-    // Position children horizontally
-    children.forEach((child, index) => {
-      const offset = (index - (children.length - 1) / 2) * HORIZONTAL_GAP;
-      child.position = {
-        x: parentX + offset - NODE_WIDTH / 2,
-        y: parentY
-      };
+  function layout(node: Node, depth: number, x: number) {
+    node.position = { x, y: depth * yStep };
+    maxX = Math.max(maxX, x);
+    const children = childrenMap.get(node.id) || [];
+    if (children.length === 0) return;
+    // Space children horizontally
+    let startX = x - ((children.length - 1) * xStep) / 2;
+    children.forEach((child, idx) => {
+      layout(child, depth + 1, startX + idx * xStep);
     });
+  }
+
+  // Layout all root nodes
+  const roots = childrenMap.get(null) || [];
+  roots.forEach((root, i) => {
+    layout(root, 0, i * xStep * 2);
   });
 
-  return { nodes: layoutedNodes, edges };
+  return { nodes, edges };
 };
 
 const RoadmapFlow = ({ roadmapData }: { roadmapData: Roadmap | null }) => {
@@ -253,13 +219,16 @@ const RoadmapFlow = ({ roadmapData }: { roadmapData: Roadmap | null }) => {
   }, [nodes, edges, setNodes, setEdges]);
 
   return (
-    <div style={{ width: '100%', height: '800px' }}>
+    <div style={{ width: '100%', height: '800px', overflow: 'auto' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         fitView
+        zoomOnScroll={false}
+        panOnScroll={false}
+        preventScrolling={false}
       >
         <Background />
         <Controls />
