@@ -85,7 +85,7 @@ const RoadmapFlow = React.memo(React.forwardRef(({ roadmapId, onError }, ref) =>
 
   return (
     <div className="w-screen h-screen relative">
-      <div className="reactflow-wrapper absolute inset-0">
+      <div className="flex-grow h-full w-full" ref={ref}>
         <ReactFlow
           nodes={nodes}
           edges={styledEdges}
@@ -96,6 +96,10 @@ const RoadmapFlow = React.memo(React.forwardRef(({ roadmapId, onError }, ref) =>
           nodeTypes={nodeTypes}
           defaultEdgeOptions={edgeOptions}
           fitView
+          zoomOnScroll={false} // Disable zoom on simple scroll
+          panOnScroll={true} // Enable panning with scroll wheel
+          zoomActivationKeyCode={'Control'} // Require Ctrl for zoom with scroll
+          preventScrolling={false} // Allow page scroll when mouse is over the pane
           className="bg-background"
           minZoom={0.2}
           maxZoom={1.5}
