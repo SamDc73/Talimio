@@ -44,10 +44,10 @@ class UserService:
 
         try:
             await self._session.commit()
-        except IntegrityError:
+        except IntegrityError as e:
             await self._session.rollback()
             msg = f"User with email {data.email} already exists"
-            raise ValidationError(msg)
+            raise ValidationError(msg) from e
 
         logger.info("Created user with ID: %s", user.id)
         return user
@@ -132,10 +132,10 @@ class UserService:
 
         try:
             await self._session.commit()
-        except IntegrityError:
+        except IntegrityError as e:
             await self._session.rollback()
             msg = f"User with email {data.email} already exists"
-            raise ValidationError(msg)
+            raise ValidationError(msg) from e
 
         return user
 

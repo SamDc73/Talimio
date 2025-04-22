@@ -21,9 +21,15 @@ class User(Base):
 
     # Relationship to progress records
     progress_records: Mapped[list["Progress"]] = relationship(
-        "Progress", back_populates="user", cascade="all, delete-orphan", lazy="selectin",
+        "Progress",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
     # Relationship to owned roadmaps
     roadmaps: Mapped[list["Roadmap"]] = relationship(
-        "Roadmap", back_populates="owner", cascade="all, delete-orphan", lazy="selectin",
+        "Roadmap",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )

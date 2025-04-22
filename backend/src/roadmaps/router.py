@@ -1,4 +1,4 @@
-from typing import Annotated, cast
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -125,7 +125,7 @@ async def update_roadmap(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Roadmap not found",
         )
-    return cast("RoadmapResponse", RoadmapResponse.model_validate(roadmap))
+    return RoadmapResponse.model_validate(roadmap)
 
 
 @router.delete(
@@ -234,10 +234,12 @@ async def get_node(
     """Get a single node from a roadmap."""
     service = RoadmapService(session)
     try:
-        node = await service._get_node(roadmap_id, node_id)
-        if not node:
+        node = await service.get_node(roadmap_id, node_id)
+        def _raise_resource_not_found() -> None:
             msg = "Node"
             raise ResourceNotFoundError(msg, str(node_id))
+        if not node:
+            _raise_resource_not_found()
         return NodeResponse.model_validate(node)
     except ResourceNotFoundError as e:
         raise HTTPException(
@@ -256,9 +258,7 @@ async def generate_sub_nodes(
     node_id: UUID,
     session: DbSession,
 ) -> list[NodeResponse]:
-    """
-    Generate sub-nodes for a node using LLM, providing the full roadmap tree as context.
-    """
+    """Generate sub-nodes for a node using LLM, providing the full roadmap tree as context."""
     service = RoadmapService(session)
     try:
         nodes = await service.generate_sub_nodes(roadmap_id, node_id)

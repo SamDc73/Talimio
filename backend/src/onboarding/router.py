@@ -6,6 +6,7 @@ from src.onboarding.service import OnboardingService
 
 router = APIRouter(prefix="/api/v1/onboarding", tags=["onboarding"])
 
+
 @router.post(
     "/questions",
     summary="Generate onboarding questions",

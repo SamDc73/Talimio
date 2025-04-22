@@ -15,7 +15,6 @@ class UserCreate(UserBase):
     """Schema for creating a user."""
 
 
-
 class UserUpdate(PydanticBaseModel):  # type: ignore[misc]
     """Schema for updating a user."""
 
