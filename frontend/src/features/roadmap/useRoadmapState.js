@@ -138,11 +138,11 @@ const getVerticalTreeLayout = (apiNodes) => {
 
     // Adjust currentY after processing all children of this node
     if (useHorizontalLayout && childIds.length > 0) {
-       // After a horizontal row, move Y down by the height of the tallest branch processed in that row
-       currentY = horizontalRowY + maxChildBranchHeight;
+      // After a horizontal row, move Y down by the height of the tallest branch processed in that row
+      currentY = horizontalRowY + maxChildBranchHeight;
     } else if (childIds.length === 0) {
-       // If it's a leaf node, the height is just its own height + spacing
-       return NODE_HEIGHT + VERTICAL_SPACING;
+      // If it's a leaf node, the height is just its own height + spacing
+      return NODE_HEIGHT + VERTICAL_SPACING;
     }
     // If vertical layout, currentY is already correctly positioned by the last child's branch
 
@@ -185,12 +185,12 @@ const getVerticalTreeLayout = (apiNodes) => {
     if (uniqueApiNodes.has(parentId)) {
       children.forEach(childId => {
         if (uniqueApiNodes.has(childId)) {
-           reactFlowEdges.push({
-              id: `e${parentId}-${childId}`,
-              source: parentId,
-              target: childId,
-              type: 'smoothstep',
-           });
+          reactFlowEdges.push({
+            id: `e${parentId}-${childId}`,
+            source: parentId,
+            target: childId,
+            type: 'smoothstep',
+          });
         }
       });
     }
