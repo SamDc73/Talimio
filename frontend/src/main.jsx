@@ -12,5 +12,5 @@ createRoot(document.getElementById("root")).render(
       {/* Wrap App with BrowserRouter */}
       <App />
     </BrowserRouter>
-  </StrictMode>
+  </StrictMode>,
 );

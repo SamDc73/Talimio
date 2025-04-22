@@ -1,6 +1,6 @@
-import { ReactFlow, Controls, MiniMap, Background } from "@xyflow/react";
-import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"; // Added useMemo
+import { Background, Controls, MiniMap, ReactFlow } from "@xyflow/react";
 import { X } from "lucide-react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"; // Added useMemo
 
 import { DecisionNode } from "./DecisionNode";
 import { NodeConnections } from "./NodeConnections";
@@ -9,7 +9,7 @@ import { NodeProperties } from "./NodeProperties";
 import { TaskNode } from "./TaskNode";
 import { useRoadmapState } from "./useRoadmapState";
 
-import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogClose } from "@/components/dialog";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/dialog";
 
 // Custom edge style for a more Duolingo-like appearance
 const edgeOptions = {

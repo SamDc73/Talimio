@@ -1,4 +1,4 @@
-import { Settings, RotateCcw, Sun, Moon, Laptop, Trash2 } from "lucide-react";
+import { Laptop, Moon, RotateCcw, Settings, Sun, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/button";
 import {
@@ -7,10 +7,10 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
 } from "@/components/dropdown-menu";
 import { useTheme } from "@/hooks/useTheme";
 

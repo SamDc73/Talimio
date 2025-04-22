@@ -1,11 +1,11 @@
 import React, { useRef } from "react";
-import { Routes, Route, useParams, Navigate } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import "@xyflow/react/dist/style.css";
 
+import SettingsMenu from "./components/settings-menu";
 import { Toaster } from "./components/toaster";
 import { OnboardingFlow } from "./features/onboarding";
 import RoadmapFlow from "./features/roadmap";
-import SettingsMenu from "./components/settings-menu";
 import { useAppState } from "./hooks/useAppState";
 
 function RoadmapPage() {

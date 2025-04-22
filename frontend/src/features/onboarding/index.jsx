@@ -112,8 +112,8 @@ export const OnboardingFlow = ({ isOpen, onComplete }) => {
               step === 0
                 ? handleTopicSubmit
                 : step === questions.length
-                ? handleComplete
-                : () => setStep((prev) => prev + 1)
+                  ? handleComplete
+                  : () => setStep((prev) => prev + 1)
             }
             disabled={isLoading || (step === 0 ? !topic : !answers[currentQuestion?.question])}
           >

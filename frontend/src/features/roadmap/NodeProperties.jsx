@@ -1,5 +1,5 @@
-import { format } from 'date-fns';
-import { Box, Tag, Calendar } from "lucide-react";
+import { format } from "date-fns";
+import { Box, Calendar, Tag } from "lucide-react";
 
 export const NodeProperties = ({ node }) => {
   if (!node?.data) return null;
@@ -11,12 +11,12 @@ export const NodeProperties = ({ node }) => {
         <div className="flex items-center text-sm">
           <Box className="h-4 w-4 mr-2" />
           <span className="text-muted-foreground">Type:</span>
-          <span className="ml-2">{node.data.metadata?.type || 'default'}</span>
+          <span className="ml-2">{node.data.metadata?.type || "default"}</span>
         </div>
         <div className="flex items-center text-sm">
           <Tag className="h-4 w-4 mr-2" />
           <span className="text-muted-foreground">Category:</span>
-          <span className="ml-2">{node.data.metadata?.category || 'none'}</span>
+          <span className="ml-2">{node.data.metadata?.category || "none"}</span>
         </div>
         {node.data.metadata?.generation && (
           <>
