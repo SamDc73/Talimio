@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from "react";
 
-import { useOnboarding } from './useOnboarding';
+import { useOnboarding } from "./useOnboarding";
 
 export const useOnboardingState = ({ onComplete, topic }) => {
   const { submitOnboarding, getOnboardingQuestions, questions: initialQuestions } = useOnboarding();
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [currentAnswer, setCurrentAnswer] = useState('');
+  const [currentAnswer, setCurrentAnswer] = useState("");
   const [questions, setQuestions] = useState(initialQuestions || []);
 
   useEffect(() => {
@@ -29,7 +29,7 @@ export const useOnboardingState = ({ onComplete, topic }) => {
 
     const updatedAnswers = {
       ...answers,
-      [currentQuestion.id]: currentAnswer
+      [currentQuestion.id]: currentAnswer,
     };
 
     if (isLastStep) {
@@ -37,18 +37,18 @@ export const useOnboardingState = ({ onComplete, topic }) => {
         const result = await submitOnboarding(updatedAnswers);
         onComplete(result);
       } catch (error) {
-        console.error('Onboarding failed:', error);
+        console.error("Onboarding failed:", error);
       }
     } else {
       setAnswers(updatedAnswers);
-      setCurrentStep(prev => prev + 1);
-      setCurrentAnswer('');
+      setCurrentStep((prev) => prev + 1);
+      setCurrentAnswer("");
     }
   };
 
   const handleBack = () => {
-    setCurrentStep(prev => prev - 1);
-    setCurrentAnswer(answers[questions[currentStep - 1].id] || '');
+    setCurrentStep((prev) => prev - 1);
+    setCurrentAnswer(answers[questions[currentStep - 1].id] || "");
   };
 
   return {

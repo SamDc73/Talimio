@@ -1,10 +1,10 @@
 import { Loader2, Wand2 } from "lucide-react";
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
 import { Button } from "@/components/button";
 import { Input } from "@/components/input";
 import { useToast } from "@/hooks/use-toast";
-import { ROADMAP_DEFAULTS } from '@/lib/constants';
+import { ROADMAP_DEFAULTS } from "@/lib/constants";
 
 export const NodeGenerationForm = ({ onGenerate }) => {
   const [count, setCount] = useState(1);
@@ -39,15 +39,21 @@ export const NodeGenerationForm = ({ onGenerate }) => {
           min="1"
           max={ROADMAP_DEFAULTS.MAX_GENERATED_NODES}
           value={count}
-          onChange={(e) => setCount(parseInt(e.target.value) || 1)}
+          onChange={(e) => setCount(Number.parseInt(e.target.value) || 1)}
           className="w-20"
           disabled={isGenerating}
         />
         <Button onClick={handleGenerate} disabled={isGenerating}>
           {isGenerating ? (
-            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating</>
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Generating
+            </>
           ) : (
-            <><Wand2 className="mr-2 h-4 w-4" />Generate</>
+            <>
+              <Wand2 className="mr-2 h-4 w-4" />
+              Generate
+            </>
           )}
         </Button>
       </div>

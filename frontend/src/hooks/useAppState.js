@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
-import { STORAGE_KEYS } from '@/features/onboarding';
-import { useOnboarding } from '@/features/onboarding/useOnboarding';
-import { useToast } from '@/hooks/use-toast';
+import { useCallback, useEffect, useState } from "react";
+
+import { STORAGE_KEYS } from "@/features/onboarding";
+import { useOnboarding } from "@/features/onboarding/useOnboarding";
+import { useToast } from "@/hooks/use-toast";
 
 export const useAppState = () => {
   const [showOnboarding, setShowOnboarding] = useState(true);
@@ -22,7 +23,7 @@ export const useAppState = () => {
           setShowOnboarding(false);
         }
       } catch (error) {
-        console.error('Failed to parse saved roadmap:', error);
+        console.error("Failed to parse saved roadmap:", error);
         handleResetOnboarding();
       }
     }
@@ -43,7 +44,7 @@ export const useAppState = () => {
   const handleOnboardingComplete = async (answers) => {
     if (isLoading) return;
 
-    console.log('Starting onboarding completion with answers:', answers);
+    console.log("Starting onboarding completion with answers:", answers);
     setIsLoading(true);
 
     try {
@@ -51,24 +52,24 @@ export const useAppState = () => {
       const roadmapData = {
         title: answers.topic ? `${answers.topic} Learning Path` : "",
         description: answers.topic ? `A personalized learning path for ${answers.topic}` : "",
-        skill_level: String(answers.skill_level || 'beginner').toLowerCase() // Make sure it's a string
+        skill_level: String(answers.skill_level || "beginner").toLowerCase(), // Make sure it's a string
       };
 
-      console.log('Sending roadmap creation request:', roadmapData);
+      console.log("Sending roadmap creation request:", roadmapData);
 
       // Create roadmap
-      const response = await fetch('http://localhost:8080/api/v1/roadmaps', {
-        method: 'POST',
+      const response = await fetch("http://localhost:8080/api/v1/roadmaps", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify(roadmapData)
+        body: JSON.stringify(roadmapData),
       });
 
       // Log response details
-      console.log('Roadmap creation response status:', response.status);
+      console.log("Roadmap creation response status:", response.status);
       const responseText = await response.text();
-      console.log('Roadmap creation response:', responseText);
+      console.log("Roadmap creation response:", responseText);
 
       if (!response.ok) {
         throw new Error(`Failed to create roadmap: ${response.status} - ${responseText}`);
@@ -78,20 +79,20 @@ export const useAppState = () => {
       try {
         newRoadmap = JSON.parse(responseText);
       } catch (e) {
-        console.error('Failed to parse roadmap response:', e);
-        throw new Error('Invalid response from server');
+        console.error("Failed to parse roadmap response:", e);
+        throw new Error("Invalid response from server");
       }
 
-      console.log('Created roadmap:', newRoadmap);
+      console.log("Created roadmap:", newRoadmap);
 
       // Save preferences
       const preferences = {
         ...answers,
         roadmapId: newRoadmap.id,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       };
 
-      console.log('Saving preferences:', preferences);
+      console.log("Saving preferences:", preferences);
       localStorage.setItem(STORAGE_KEYS.USER_PREFERENCES, JSON.stringify(preferences));
 
       // Update state
@@ -104,14 +105,13 @@ export const useAppState = () => {
       });
 
       return newRoadmap;
-
     } catch (error) {
-      console.error('Failed to complete onboarding:', error);
+      console.error("Failed to complete onboarding:", error);
 
       toast({
         title: "Error",
         description: error.message || "Failed to create roadmap. Please try again.",
-        variant: "destructive"
+        variant: "destructive",
       });
 
       // Reset state on error
@@ -119,7 +119,6 @@ export const useAppState = () => {
       setShowOnboarding(true);
 
       throw error;
-
     } finally {
       setIsLoading(false);
     }
@@ -130,6 +129,6 @@ export const useAppState = () => {
     currentRoadmapId,
     isLoading,
     handleOnboardingComplete,
-    handleResetOnboarding
+    handleResetOnboarding,
   };
 };

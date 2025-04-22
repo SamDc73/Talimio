@@ -1,14 +1,9 @@
-import React from 'react';
+import React from "react";
 
-import { serializeGraphState } from '../roadmap/roadmapUtils';
+import { serializeGraphState } from "../roadmap/roadmapUtils";
 
 import { Input } from "@/components/input";
 
 export const TextInput = ({ value, onChange, placeholder }) => (
-  <Input
-    value={value}
-    onChange={(e) => onChange(e.target.value)}
-    placeholder={placeholder}
-    className="w-full"
-  />
+  <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full" />
 );
