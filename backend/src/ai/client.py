@@ -52,11 +52,17 @@ class ModelManager:
         self.model = "gpt-4o"
         self._logger = logging.getLogger(__name__)
 
-    async def _get_completion(self, messages: Sequence[dict[str, str]], format_json: bool = True) -> str | dict:
+    async def _get_completion(self, messages: Sequence[dict[str, str]], *, format_json: bool = True) -> str | dict:
         """Get completion from AI model."""
         try:
             if format_json:
-                messages = [*list(messages), {"role": "system", "content": "Always respond with valid JSON only, no additional text or markdown, and do not wrap in code fences"}]
+                messages = [
+                    *list(messages),
+                    {
+                        "role": "system",
+                        "content": "Always respond with valid JSON only, no additional text or markdown, and do not wrap in code fences",
+                    },
+                ]
 
             response = await acompletion(
                 model=self.model,
@@ -73,9 +79,9 @@ class ModelManager:
                 # Remove any Markdown code fences
                 content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.IGNORECASE)
                 content = re.sub(r"\s*```$", "", content, flags=re.IGNORECASE)
-                return json.loads(content.strip())
-
-            return content
+            else:
+                return content
+            return json.loads(content.strip())
 
         except Exception as e:
             self._logger.exception("Error getting completion from AI")
@@ -180,7 +186,7 @@ Return ONLY the JSON array with no additional commentary.
             for i, node in enumerate(response):
                 validated_nodes.append(
                     {
-                        "title": str(node.get("title", f"Topic {i+1}")),
+                        "title": str(node.get("title", f"Topic {i + 1}")),
                         "description": str(node.get("description", "")),
                         "content": str(node.get("content", "")),
                         "order": i,
@@ -189,11 +195,11 @@ Return ONLY the JSON array with no additional commentary.
                     },
                 )
 
-            return validated_nodes
-
         except Exception as e:
             self._logger.exception("Error generating roadmap content")
             raise RoadmapGenerationError from e
+        else:
+            return validated_nodes
 
     async def generate_practice_exercises(
         self,
@@ -232,7 +238,8 @@ Return ONLY the JSON array with no additional commentary.
     ) -> dict[str, Any]:
         """Generate customized content for a new node."""
         if not validate_uuid(roadmap_id):
-            raise ValidationError("Invalid roadmap ID")
+            msg = "Invalid roadmap ID"
+            raise ValidationError(msg)
         prompt = f"""You are a curriculum design expert. For the existing roadmap (ID: {roadmap_id}) at skill level {progress_level}, generate content for the next node titled '{current_node}'. Return a pure JSON object with keys: title, description, content, prerequisites (list of existing node titles that should be prerequisites, may be empty). Format as JSON only."""
         messages = [
             {"role": "system", "content": "You are an expert curriculum designer."},

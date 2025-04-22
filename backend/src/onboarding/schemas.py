@@ -10,11 +10,13 @@ class OnboardingQuestion(BaseModel):
     type: Literal["multiple_choice", "text"] = "multiple_choice"
     options: list[str] | None = None
 
+
 class OnboardingResponse(BaseModel):
     """Schema for user's response to an onboarding question."""
 
     question: str
     answer: str
+
 
 class OnboardingRequest(BaseModel):
     """Schema for initiating the onboarding process."""
@@ -33,6 +35,7 @@ class OnboardingRequest(BaseModel):
                 "topic": "machine learning",
             },
         }
+
 
 class OnboardingQuestions(BaseModel):
     """Schema for the list of onboarding questions."""

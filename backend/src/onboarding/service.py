@@ -1,3 +1,4 @@
+
 from src.ai.client import ModelManager
 from src.onboarding.schemas import OnboardingQuestion, OnboardingQuestions
 
@@ -31,15 +32,17 @@ class OnboardingService:
         ]
 
         try:
-            questions_data = await self.ai_client._get_completion(messages)
+            questions_data = await self.ai_client.get_completion(messages)
 
             # Validate and transform the data
             questions = []
+            def _raise_invalid_question() -> None:
+                msg = "Each question must have 'question' and 'options' fields"
+                raise ValueError(msg)
+
             for q in questions_data:
                 if not isinstance(q, dict) or "question" not in q or "options" not in q:
-                    msg = "Each question must have 'question' and 'options' fields"
-                    raise ValueError(msg)
-
+                    _raise_invalid_question()
                 questions.append(
                     OnboardingQuestion(question=q["question"], type="multiple_choice", options=q["options"]),
                 )

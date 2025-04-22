@@ -1,6 +1,7 @@
 import logging
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -9,8 +10,7 @@ from src.core.exceptions import ResourceNotFoundError, ValidationError
 from src.database.pagination import Paginator
 from src.database.session import DbSession
 from src.roadmaps.models import Node, Roadmap
-from src.roadmaps.schemas import NodeCreate, NodeUpdate, RoadmapCreate, RoadmapUpdate
-from fastapi import HTTPException
+from src.roadmaps.schemas import NodeCreate, NodeUpdate, RoadmapCreate, RoadmapResponse, RoadmapUpdate
 
 
 logger = logging.getLogger(__name__)
@@ -70,12 +70,12 @@ class RoadmapService:
             # Recursively create nodes and nested children with proper parent IDs
             await self._create_nodes_recursive(nodes_data, roadmap.id)
 
-            await self._session.commit()
-            return roadmap
-
         except Exception as e:
             await self._session.rollback()
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        else:
+            await self._session.commit()
+            return roadmap
 
     async def _create_nodes_recursive(
         self,
@@ -149,14 +149,14 @@ class RoadmapService:
                 node.prerequisites.extend(prerequisites)
 
             self._session.add(node)
-            await self._session.commit()
-            await self._session.refresh(node)
-            return node
-
         except Exception as e:
             await self._session.rollback()
             logger.exception("Failed to create node with AI content")
             raise ValidationError(str(e)) from e
+        else:
+            await self._session.commit()
+            await self._session.refresh(node)
+            return node
 
     async def update_node(self, roadmap_id: UUID, node_id: UUID, data: NodeUpdate) -> Node:
         """Update an existing node."""
@@ -250,19 +250,16 @@ class RoadmapService:
                 node.prerequisites.append(current_node)
                 self._session.add(node)
                 new_nodes.append(node)
-
-            await self._session.commit()
-            return new_nodes
-
         except Exception as e:
             await self._session.rollback()
             logger.exception("Failed to generate next nodes")
             raise ValidationError(str(e)) from e
+        else:
+            await self._session.commit()
+            return new_nodes
 
     async def generate_sub_nodes(self, roadmap_id: UUID, node_id: UUID) -> list[Node]:
-        """
-        Generate sub-nodes for a given node using LLM, providing the full roadmap tree as context.
-        """
+        """Generate sub-nodes for a given node using LLM, providing the full roadmap tree as context."""
         # Fetch the full roadmap with all nodes (nested)
         roadmap = await self.get_roadmap(roadmap_id)
         # Serialize the full roadmap tree
@@ -289,17 +286,22 @@ class RoadmapService:
         # Parse LLM response (expecting a JSON array)
         import json
 
+        def _raise_type_error() -> None:
+            msg = "LLM did not return a list"
+            raise TypeError(msg)
         try:
             sub_nodes = json.loads(llm_response)
             if not isinstance(sub_nodes, list):
-                raise ValueError("LLM did not return a list")
+                _raise_type_error()
         except Exception as e:
-            raise ValidationError(f"Failed to parse LLM response: {e}")
+            msg = f"Failed to parse LLM response: {e}"
+            raise ValidationError(msg) from e
 
         # Insert new nodes as children of the target node
         parent_node = await self._get_node(roadmap_id, node_id)
         if not parent_node:
-            raise ResourceNotFoundError("Node", str(node_id))
+            msg = "Node"
+            raise ResourceNotFoundError(msg, str(node_id))
         new_nodes = []
         for i, data in enumerate(sub_nodes):
             node = Node(
@@ -315,3 +317,30 @@ class RoadmapService:
             new_nodes.append(node)
         await self._session.commit()
         return new_nodes
+
+    async def get_roadmap_json(self, roadmap_id: UUID) -> dict:
+        roadmap = await self.get_roadmap(roadmap_id)
+        # Serialize the full roadmap tree
+        return RoadmapResponse.model_validate(roadmap).model_dump()
+        # Mark the target node in the JSON tree (add a 'target': true flag)
+
+    async def _create_nodes_recursive(
+        self, parent_node: Node, nodes_data: list[dict], roadmap_id: UUID,
+    ) -> list[Node]:
+        sub_nodes = nodes_data
+        if not isinstance(sub_nodes, list):
+            msg = "LLM did not return a list"
+            raise TypeError(msg)
+        try:
+            # Insert new nodes as children of the target node
+            new_nodes = []
+            for node_data in sub_nodes:
+                node = Node(**node_data, roadmap_id=roadmap_id, parent_id=parent_node.id)
+                self._session.add(node)
+                new_nodes.append(node)
+        except Exception as e:
+            msg = f"Failed to parse LLM response: {e}"
+            raise ValidationError(msg) from e
+        else:
+            await self._session.commit()
+            return new_nodes

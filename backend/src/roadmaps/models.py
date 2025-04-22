@@ -1,8 +1,12 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Table
+
+if TYPE_CHECKING:
+    from .models import Node, Progress, Roadmap, User
+
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID as SA_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,7 +55,9 @@ class Roadmap(Base):
     )
     # Add user_id foreign key for roadmap ownership
     user_id: Mapped[uuid.UUID | None] = mapped_column(
-        SA_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+        SA_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     # Relationship to User (owner)
@@ -83,11 +89,18 @@ class Node(Base):
     )
     # Add parent_id for hierarchy (nullable FK to nodes.id)
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
-        SA_UUID(as_uuid=True), ForeignKey("nodes.id", ondelete="SET NULL"), nullable=True,
+        SA_UUID(as_uuid=True),
+        ForeignKey("nodes.id", ondelete="SET NULL"),
+        nullable=True,
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_started")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
 
     # Relationships
     roadmap: Mapped["Roadmap"] = relationship("Roadmap", back_populates="nodes")

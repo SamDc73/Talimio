@@ -1,8 +1,12 @@
 from datetime import datetime
-from typing import Any, ClassVar, ForwardRef, List, Dict
+from typing import TYPE_CHECKING, Any, ClassVar
 from uuid import UUID
 
 from pydantic import BaseModel as PydanticBaseModel, Field
+
+
+if TYPE_CHECKING:
+    from .models import Node
 
 
 # Removed ForwardRef definition here
@@ -114,19 +118,20 @@ class RoadmapResponse(RoadmapBase):
         from_attributes = True
 
     @classmethod
-    def model_validate(cls, obj):
+    def model_validate(cls, obj: object) -> "RoadmapResponse":
         # Patch: Build pure nested nodes for 'nodes' field
         roadmap = super().model_validate(obj)
         # Only use root nodes in top-level nodes
         all_nodes = getattr(obj, "nodes", [])
-        nested = build_nested_nodes(all_nodes)
+        nested = [NodeResponse.model_validate(node) for node in all_nodes if getattr(node, "parent_id", None) is None]
         roadmap.nodes = nested
         return roadmap
 
 
-def build_nested_nodes(all_nodes: List["Node"], parent_id=None) -> List[Dict[str, Any]]:
+def build_nested_nodes(all_nodes: list["Node"], parent_id: object = None) -> list[dict[str, Any]]:
     """
     Recursively build a pure nested node structure for serialization.
+
     Each node appears only once, as either a root or a child.
     """
     nested = []

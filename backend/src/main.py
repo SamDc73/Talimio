@@ -34,8 +34,8 @@ async def create_tables() -> None:
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-    except Exception as e:
-        logger.exception(f"Failed to create tables: {e}")
+    except Exception:
+        logger.exception("Failed to create tables")
         raise
 
 
@@ -43,8 +43,8 @@ def create_app() -> FastAPI:
     """Create and configure FastAPI application."""
     try:
         settings = get_settings()
-    except Exception as e:
-        logger.exception(f"Failed to load settings: {e}")
+    except Exception:
+        logger.exception("Failed to load settings")
         raise
 
     app = FastAPI(
@@ -66,7 +66,7 @@ def create_app() -> FastAPI:
     # Add exception handlers
     @app.exception_handler(ResourceNotFoundError)
     async def resource_not_found_handler(
-        request: Request,
+        _request: Request,
         exc: ResourceNotFoundError,
     ) -> JSONResponse:
         return JSONResponse(
@@ -99,17 +99,19 @@ def create_app() -> FastAPI:
                     await conn.run_sync(Base.metadata.create_all)
                 break  # Success - exit the retry loop
 
-            except ConnectionDoesNotExistError as e:
+            except ConnectionDoesNotExistError:
                 if attempt == max_retries - 1:  # Last attempt
-                    logger.exception(f"Startup failed after {max_retries} attempts: {e}")
+                    logger.exception("Startup failed after %d attempts", max_retries)
                     raise
 
-                logger.warning(f"Database connection attempt {attempt + 1} failed, retrying in {retry_delay}s...")
+                logger.warning(
+                    "Database connection attempt %d failed, retrying in %ds...", attempt + 1, retry_delay,
+                )
                 await asyncio.sleep(retry_delay)
                 retry_delay *= 2  # Exponential backoff
 
-            except Exception as e:
-                logger.exception(f"Startup failed with unexpected error: {e}")
+            except Exception:
+                logger.exception("Startup failed with unexpected error")
                 raise
 
     return app
