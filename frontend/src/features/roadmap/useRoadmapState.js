@@ -34,43 +34,56 @@ const shouldUseHorizontalLayout = (node, childIds, allNodes) => {
 // Duolingo-style vertical layout with intuitive parent-child relationships
 const getVerticalTreeLayout = (apiNodes) => {
   const uniqueApiNodes = new Map(); // Store unique nodes by ID
-  const processedNodeIds = new Set(); // Track IDs we've seen
-  const reactFlowEdges = []; // Edges for React Flow
-
-  // First pass - collect all unique nodes and build parent-child relationships
   const nodeRelationships = new Map(); // Maps node IDs to arrays of child IDs
+  const processedNodeIds = new Set(); // Track IDs we've seen (used in positioning)
+  // Edges will be created later based on nodeRelationships
 
-  // Process nodes to establish parent-child relationships
-  apiNodes.forEach(node => {
-    uniqueApiNodes.set(node.id, node);
+  // --- MODIFICATION START: Use iterative traversal for nested nodes ---
+  const stack = [...apiNodes.map(node => ({ node, parentId: node.parent_id || null }))];
 
-    if (node.parent_id) {
-      // Add this node as a child of its parent
-      if (!nodeRelationships.has(node.parent_id)) {
-        nodeRelationships.set(node.parent_id, []);
+  while (stack.length > 0) {
+    const { node, parentId } = stack.pop();
+
+    // Add node if not already processed/added
+    if (!uniqueApiNodes.has(node.id)) {
+      // Ensure parent_id from the stack context is stored, preferring it over node.parent_id
+      // as the stack provides the correct hierarchical parent during traversal.
+      uniqueApiNodes.set(node.id, { ...node, parent_id: parentId });
+    } else {
+      // If node exists (e.g., was a root node initially), update its parent_id if found via traversal
+      const existingNode = uniqueApiNodes.get(node.id);
+      if (!existingNode.parent_id && parentId) {
+        existingNode.parent_id = parentId;
       }
-      nodeRelationships.get(node.parent_id).push(node.id);
     }
 
-    // Also process any children in the nested structure
+    // Establish parent-child relationship using the parentId from the stack context
+    if (parentId) {
+      if (!nodeRelationships.has(parentId)) {
+        nodeRelationships.set(parentId, []);
+      }
+      // Avoid adding duplicate children relationships
+      if (!nodeRelationships.get(parentId).includes(node.id)) {
+        nodeRelationships.get(parentId).push(node.id);
+      }
+    }
+
+    // Add children from the JSON structure to the stack for processing
     if (Array.isArray(node.children) && node.children.length > 0) {
-      node.children.forEach(child => {
-        if (!nodeRelationships.has(node.id)) {
-          nodeRelationships.set(node.id, []);
-        }
-        nodeRelationships.get(node.id).push(child.id);
-
-        // Also add the child to uniqueApiNodes if not already there
-        if (!uniqueApiNodes.has(child.id)) {
-          uniqueApiNodes.set(child.id, child);
-        }
-      });
+      // Add children in reverse order to maintain original order when popped
+      for (let i = node.children.length - 1; i >= 0; i--) {
+        const child = node.children[i];
+        // Pass the current node's id as the parentId for the child
+        stack.push({ node: child, parentId: node.id });
+      }
     }
-  });
+  }
+  // --- MODIFICATION END ---
 
-  // Find root nodes (nodes without a parent_id or whose parent_id is not in our node list)
-  const allNodeIds = new Set(apiNodes.map(n => n.id));
-  const rootNodes = apiNodes
+
+  // Find root nodes (nodes without a parent_id or whose parent_id is not in our fully populated node list)
+  const allNodeIds = new Set(uniqueApiNodes.keys()); // Use keys from the map after full traversal
+  const rootNodes = Array.from(uniqueApiNodes.values())
     .filter(node => !node.parent_id || !allNodeIds.has(node.parent_id))
     .map(node => node.id);
 
@@ -84,83 +97,59 @@ const getVerticalTreeLayout = (apiNodes) => {
 
     processedNodeIds.add(nodeId);
     const node = uniqueApiNodes.get(nodeId);
+    if (!node) return 0; // Should not happen, but safety check
 
-    // Calculate X position - indent children based on their level
-    // For root nodes, place them in the center of a default width
-    // For child nodes, indent them relative to their parent
-    const centerX = 600; // Default center point (works for both client and server)
-    const x = level === 0 ? centerX - (NODE_WIDTH / 2) : parentX + HORIZONTAL_INDENTATION;
+    // Calculate X position
+    const x = parentX + (level * HORIZONTAL_INDENTATION);
+    const y = currentY;
+    nodePositions.set(nodeId, { x, y });
 
-    // Store the position
-    nodePositions.set(nodeId, { x, y: currentY });
+    // Increment Y position for the next node at this level or the start of the next branch
+    currentY += NODE_HEIGHT + VERTICAL_SPACING;
 
-    // Move down for next node
-    currentY += VERTICAL_SPACING;
-
-    // Position all children of this node
     const childIds = nodeRelationships.get(nodeId) || [];
-    let lastChildY = 0;
-
-    // Check if this parent node should have its children arranged horizontally
-    // We already have the node variable defined above, so we don't need to declare it again
     const useHorizontalLayout = shouldUseHorizontalLayout(node, childIds, uniqueApiNodes);
 
-    // If using horizontal layout, calculate the starting X position to center the children
-    let startX = x;
-    if (useHorizontalLayout && childIds.length > 1) {
-      // Calculate position so children are centered around parent
-      // For even number of children, we want them evenly distributed left and right
-      // For odd number, the middle child should be directly below the parent
+    let startX = x; // Default start X for children (vertical layout)
+    if (useHorizontalLayout && childIds.length > 0) {
+      // Calculate starting X for horizontal layout
       const totalWidth = (childIds.length - 1) * HORIZONTAL_SIBLING_SPACING;
       startX = x - (totalWidth / 2);
     }
 
-    // Save the original Y position for horizontal layouts
-    const horizontalRowY = currentY;
+    const horizontalRowY = currentY; // Save Y for horizontal layout row
+
+    let maxChildBranchHeight = 0; // Track height of the tallest child branch
 
     childIds.forEach((childId, index) => {
-      // Create the edge from parent to child
-      reactFlowEdges.push({
-        id: `e${nodeId}-${childId}`,
-        source: nodeId,
-        target: childId,
-        type: 'smoothstep',
-      });
-
       // For horizontal layout, position children side-by-side
       if (useHorizontalLayout) {
-        // Reset Y to the horizontal row position for each sibling
-        currentY = horizontalRowY;
-
-        // Calculate the horizontal position for this child
+        currentY = horizontalRowY; // Reset Y for each sibling in the row
         const childX = startX + (index * HORIZONTAL_SIBLING_SPACING);
-
-        // Store position for this specific child
-        nodePositions.set(childId, { x: childX, y: currentY });
-
-        // Move down after positioning this node
-        currentY += VERTICAL_SPACING;
-
-        // Position this child's descendants
-        const childHeight = positionNodeAndChildren(childId, level + 1, childX);
-        lastChildY = Math.max(childHeight, lastChildY);
-      }
-      // For vertical layout (default), use the original logic
-      else {
-        // Position this child and its descendants
-        const childHeight = positionNodeAndChildren(childId, level + 1, x);
-        lastChildY = childHeight > 0 ? childHeight : lastChildY;
-
-        // Add extra spacing between siblings
-        if (index < childIds.length - 1) {
-          currentY += SIBLING_SPACING;
-        }
+        const childBranchHeight = positionNodeAndChildren(childId, level + 1, childX);
+        maxChildBranchHeight = Math.max(maxChildBranchHeight, childBranchHeight);
+      } else {
+        // For vertical layout, position children below, indented
+        const childBranchHeight = positionNodeAndChildren(childId, level + 1, x);
+        maxChildBranchHeight = Math.max(maxChildBranchHeight, childBranchHeight);
+        // currentY is already incremented by the recursive call
       }
     });
 
-    // Return the bottom-most Y coordinate in this branch
-    return lastChildY > 0 ? lastChildY : currentY;
+    // Adjust currentY after processing all children of this node
+    if (useHorizontalLayout && childIds.length > 0) {
+       // After a horizontal row, move Y down by the height of the tallest branch processed in that row
+       currentY = horizontalRowY + maxChildBranchHeight;
+    } else if (childIds.length === 0) {
+       // If it's a leaf node, the height is just its own height + spacing
+       return NODE_HEIGHT + VERTICAL_SPACING;
+    }
+    // If vertical layout, currentY is already correctly positioned by the last child's branch
+
+    // Return the total height used by this node and its descendants branch
+    return 0; // Simplified return
   };
+
 
   // Position all root nodes and their descendants
   rootNodes.forEach(rootId => {
@@ -171,15 +160,15 @@ const getVerticalTreeLayout = (apiNodes) => {
   const reactFlowNodes = Array.from(uniqueApiNodes.values()).map(apiNode => {
     const position = nodePositions.get(apiNode.id);
 
-    // Skip nodes we didn't position (shouldn't happen with proper data)
     if (!position) {
-      console.warn(`Position missing for node ID: ${apiNode.id}`);
-      return null;
+      console.warn(`Position missing for node ID: ${apiNode.id}. Node might be disconnected or data inconsistent.`);
+      return null; // Skip nodes that couldn't be positioned
     }
 
     return {
       id: apiNode.id,
-      type: apiNode.type || (nodeRelationships.has(apiNode.id) && nodeRelationships.get(apiNode.id).length > 0 ? 'decision' : 'task'),
+      // Determine type based on whether it has children in the relationship map
+      type: nodeRelationships.has(apiNode.id) && nodeRelationships.get(apiNode.id).length > 0 ? 'decision' : 'task',
       position,
       data: {
         label: apiNode.title,
@@ -187,7 +176,26 @@ const getVerticalTreeLayout = (apiNodes) => {
         ...apiNode
       },
     };
-  }).filter(Boolean);
+  }).filter(Boolean); // Filter out any null nodes
+
+
+  // --- ADJUST EDGE CREATION: Create edges based on the final nodeRelationships map ---
+  const reactFlowEdges = [];
+  nodeRelationships.forEach((children, parentId) => {
+    if (uniqueApiNodes.has(parentId)) {
+      children.forEach(childId => {
+        if (uniqueApiNodes.has(childId)) {
+           reactFlowEdges.push({
+              id: `e${parentId}-${childId}`,
+              source: parentId,
+              target: childId,
+              type: 'smoothstep',
+           });
+        }
+      });
+    }
+  });
+  // --- END ADJUST EDGE CREATION ---
 
   return { nodes: reactFlowNodes, edges: reactFlowEdges };
 };
@@ -196,29 +204,21 @@ const getVerticalTreeLayout = (apiNodes) => {
 const getDagreLayout = (apiNodes, direction = 'TB') => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
-  // Increased ranksep for more vertical space, nodesep for horizontal
   dagreGraph.setGraph({ rankdir: direction, nodesep: 70, ranksep: 100 });
 
   const uniqueApiNodes = new Map(); // Store unique nodes by ID
   const processedNodeIds = new Set(); // Track IDs added to dagre
   const reactFlowEdges = []; // Edges for React Flow
 
-  // Recursive function to traverse API nodes and add unique ones to Dagre graph
   const processApiNodes = (nodes, parentId = null) => {
     nodes.forEach((node) => {
-      // Process this node only if its ID hasn't been seen before
       if (!processedNodeIds.has(node.id)) {
         processedNodeIds.add(node.id);
-        uniqueApiNodes.set(node.id, node); // Store unique node data
+        uniqueApiNodes.set(node.id, node);
         dagreGraph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
-      } else {
-        // Log if we encounter an ID again in the hierarchy (might indicate backend issue)
-        // console.warn(`Node ID ${node.id} encountered again in hierarchy, skipping add to dagre graph.`);
       }
 
-      // Add edge regardless of whether the node was already processed (edge connects existing nodes)
       if (parentId) {
-        // Ensure edge doesn't already exist (simple check)
         const edgeId = `e${parentId}-${node.id}`;
         if (!reactFlowEdges.some(e => e.id === edgeId)) {
           dagreGraph.setEdge(parentId, node.id);
@@ -226,19 +226,17 @@ const getDagreLayout = (apiNodes, direction = 'TB') => {
             id: edgeId,
             source: parentId,
             target: node.id,
-            type: 'smoothstep', // Using smoothstep for potentially better edge routing
+            type: 'smoothstep',
           });
         }
       }
 
-      // Recurse for children if they exist and are an array
       if (Array.isArray(node.children) && node.children.length > 0) {
         processApiNodes(node.children, node.id);
       }
     });
   };
 
-  // Find root nodes (nodes without a parent_id or whose parent_id is not in the list)
   const allNodeIds = new Set(apiNodes.map(n => n.id));
   const rootNodes = apiNodes.filter(node => !node.parent_id || !allNodeIds.has(node.parent_id));
 
@@ -246,12 +244,11 @@ const getDagreLayout = (apiNodes, direction = 'TB') => {
 
   dagre.layout(dagreGraph);
 
-  // Map unique layouted nodes back to React Flow format
   const reactFlowNodes = Array.from(uniqueApiNodes.values()).map((apiNode) => {
     const nodeWithPosition = dagreGraph.node(apiNode.id);
     if (!nodeWithPosition) {
       console.warn(`Dagre layout information missing for node ID: ${apiNode.id}`);
-      return null; // Should not happen if added correctly, but safety check
+      return null;
     }
     return {
       id: apiNode.id,
@@ -266,9 +263,8 @@ const getDagreLayout = (apiNodes, direction = 'TB') => {
         ...apiNode
       },
     };
-  }).filter(Boolean); // Filter out any nulls from safety check
+  }).filter(Boolean);
 
-  // Filter edges again just in case (source/target might not be in uniqueApiNodes if data is inconsistent)
   const finalNodeIds = new Set(reactFlowNodes.map(n => n.id));
   const filteredEdges = reactFlowEdges.filter(edge =>
     finalNodeIds.has(edge.source) && finalNodeIds.has(edge.target)
@@ -282,8 +278,6 @@ const getLayoutedElements = (apiNodes) => {
   return getVerticalTreeLayout(apiNodes);
 };
 
-
-// Removed old layout constants
 export const useRoadmapState = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -295,7 +289,6 @@ export const useRoadmapState = () => {
     setEdges((eds) => addEdge(params, eds));
   }, [setEdges]);
 
-  // Removed old processNodes function
   const initializeRoadmap = useCallback(async (roadmapId) => {
     console.log("initializeRoadmap called with:", roadmapId);
     if (!roadmapId || hasInitialized || isLoading) {
@@ -305,7 +298,6 @@ export const useRoadmapState = () => {
 
     setIsLoading(true);
     try {
-      // Consider using AbortController for fetch requests
       const response = await fetch(`http://localhost:8080/api/v1/roadmaps/${roadmapId}`);
       console.log("API response status:", response.status);
 
@@ -317,7 +309,6 @@ export const useRoadmapState = () => {
       console.log("Roadmap data fetched:", roadmap);
 
       if (roadmap?.nodes?.length > 0) {
-        // Use Dagre layout function directly
         const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(roadmap.nodes, 'TB');
 
         console.log("Layouted Dagre nodes:", layoutedNodes);
@@ -325,29 +316,24 @@ export const useRoadmapState = () => {
 
         setNodes(layoutedNodes);
         setEdges(layoutedEdges);
-        setHasInitialized(true); // Mark as initialized after successful layout
+        setHasInitialized(true);
       } else {
         console.log("No nodes found in roadmap data.");
-        // Optionally clear state if roadmap is empty
         setNodes([]);
         setEdges([]);
         setHasInitialized(true);
       }
     } catch (error) {
-      // Handle fetch or layout errors
       if (error.name !== 'AbortError') {
         console.error('Failed to initialize roadmap:', error);
-        // Optionally trigger an error state or notification
       }
     } finally {
       setIsLoading(false);
     }
-  }, [setNodes, setEdges, hasInitialized, isLoading]); // Dependencies for useCallback
+  }, [setNodes, setEdges, hasInitialized, isLoading]);
 
-  // Cleanup on unmount (example if using AbortController)
   useEffect(() => {
     const controller = new AbortController();
-    // Pass controller.signal to fetch if implemented
 
     return () => {
       controller.abort();
