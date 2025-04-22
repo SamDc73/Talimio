@@ -18,9 +18,9 @@ from src.roadmaps.router import router as roadmaps_router
 from src.users.router import router as users_router
 
 
-# Load .env from project root (parent of backend directory)
-ROOT_DIR = Path(__file__).parent.parent.parent
-ENV_PATH = ROOT_DIR / ".env"
+# Load .env from backend directory (parent of src)
+BACKEND_DIR = Path(__file__).parent.parent
+ENV_PATH = BACKEND_DIR / ".env"
 load_dotenv(ENV_PATH)
 
 
@@ -66,7 +66,8 @@ def create_app() -> FastAPI:
     # Add exception handlers
     @app.exception_handler(ResourceNotFoundError)
     async def resource_not_found_handler(
-        request: Request, exc: ResourceNotFoundError,
+        request: Request,
+        exc: ResourceNotFoundError,
     ) -> JSONResponse:
         return JSONResponse(
             status_code=404,
