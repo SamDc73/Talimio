@@ -2,7 +2,6 @@ import React, { useRef } from "react";
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import "@xyflow/react/dist/style.css";
 
-import SettingsMenu from "./components/settings-menu";
 import { Toaster } from "./components/toaster";
 import { OnboardingFlow } from "./features/onboarding";
 import RoadmapFlow from "./features/roadmap";
@@ -64,8 +63,7 @@ export default function App() {
         {/* Optional: Catch-all route for invalid paths */}
         <Route path="*" element={<div>404 - Page Not Found</div>} />
       </Routes>
-      {/* Keep Toaster and SettingsMenu outside the Routes to be persistent */}
-      <SettingsMenu onResetOnboarding={handleResetOnboarding} onResetFlow={() => flowRef.current?.resetFlow?.()} />
+      {/* Keep Toaster outside the Routes to be persistent */}
       <Toaster />
     </div>
   );
