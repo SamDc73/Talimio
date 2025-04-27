@@ -17,15 +17,17 @@ function OutlineView({ roadmapId }) { // Accept roadmapId as a prop
   const { modules, isLoading, error } = useOutlineData(roadmapId);
 
   // Handler for lesson clicks (optional, can be expanded)
-  const handleLessonClick = (moduleIdx, lessonIdx) => {
+  const handleLessonClick = (moduleIdx, lessonIdx, lessonId) => {
     // For now, just log. You can expand this to navigate, show details, etc.
-    // console.log(`Module ${moduleIdx + 1}, Lesson ${lessonIdx + 1} clicked.`);
+    // console.log(`Module ${moduleIdx + 1}, Lesson ${lessonIdx + 1} (ID: ${lessonId}) clicked.`);
+    // Potentially navigate to a lesson view here, passing module/lesson IDs
   };
 
   // Handle loading state
   if (isLoading) {
     return (
-      <div className="max-w-3xl mx-auto py-10 text-center text-zinc-500">
+      // Use a similar loading style
+      <div className="flex items-center justify-center min-h-[calc(100vh-4rem)] text-zinc-500">
         Loading outline...
       </div>
     );
@@ -34,7 +36,7 @@ function OutlineView({ roadmapId }) { // Accept roadmapId as a prop
   // Handle error state
   if (error) {
     return (
-      <div className="max-w-3xl mx-auto py-10 text-center text-red-600">
+      <div className="flex items-center justify-center min-h-[calc(100vh-4rem)] text-red-600">
         Error loading outline: {error}
       </div>
     );
@@ -43,22 +45,41 @@ function OutlineView({ roadmapId }) { // Accept roadmapId as a prop
   // Handle empty state
   if (!modules || modules.length === 0) {
     return (
-      <div className="max-w-3xl mx-auto py-10 text-center text-zinc-500">
+      <div className="flex items-center justify-center min-h-[calc(100vh-4rem)] text-zinc-500">
         No outline content available for this roadmap.
       </div>
     );
   }
 
-  // TODO: Get the actual roadmap title from the data if needed, instead of hardcoding
-  const courseTitle = "Roadmap Outline"; // Placeholder, consider fetching title
+  // TODO: Fetch the actual roadmap title dynamically if available
+  const courseTitle = "Roadmap Outline"; // Placeholder title
 
   return (
-    <div className="max-w-3xl mx-auto py-10 px-4 sm:px-6 lg:px-8"> {/* Added padding */} 
-      <h1 className="text-3xl font-bold mb-8 text-zinc-900">{courseTitle}</h1>
-      {/* Render each module as an OutlineItem */}
-      {modules.map((module, idx) => (
-        <OutlineItem key={module.id} module={module} index={idx} onLessonClick={handleLessonClick} />
-      ))}
+    <div className="flex-1 p-4 md:p-6 lg:p-8">
+      <div className="max-w-4xl mx-auto">
+        {/* Header Section - Mimicking the style from UI-update.txt */}
+        <div className="flex items-center justify-between mb-8">
+            <div> {/* Removed motion.div as framer-motion isn't explicitly included */}
+                <h1 className="text-2xl font-bold text-zinc-900 mb-1">{courseTitle}</h1>
+                {/* Optional: Add a subtitle like in the example */}
+                {/* <p className="text-zinc-500 flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                    Building Modern APIs
+                </p> */}
+            </div>
+        </div>
+
+        {/* Render each module using OutlineItem */}
+        {/* The wrapping div is implicitly handled by mapping over modules */}
+        {modules.map((module, idx) => (
+          <OutlineItem
+            key={module.id || idx}
+            module={module}
+            index={idx}
+            onLessonClick={(lessonIdx, lessonId) => handleLessonClick(idx, lessonIdx, lessonId)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
