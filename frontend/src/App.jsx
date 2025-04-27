@@ -3,67 +3,57 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import "@xyflow/react/dist/style.css";
 
 import { Toaster } from "./components/toaster";
+import { SidebarProvider } from "./features/roadmap/SidebarContext";
 import { OnboardingFlow } from "./features/onboarding";
 import RoadmapFlow from "./features/roadmap";
+import Sidebar from "./features/roadmap/sidebar";
 import { useAppState } from "./hooks/useAppState";
+import { useOutlineData } from "./features/roadmap/useOutlineData";
 
 function RoadmapPage() {
   const { roadmapId } = useParams();
   const flowRef = useRef(null);
   const { handleResetOnboarding } = useAppState();
+  const { modules, isLoading } = useOutlineData(roadmapId);
 
   if (!roadmapId) {
-    // This case might not be strictly necessary if the route always provides one,
-    // but good for robustness.
     console.warn("RoadmapPage rendered without roadmapId, redirecting.");
     return <Navigate to="/" replace />;
   }
 
-  console.log("RoadmapPage render, roadmapId:", roadmapId);
+  if (isLoading) {
+    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
 
   return (
-    <>
-      <RoadmapFlow ref={flowRef} roadmapId={roadmapId} onError={handleResetOnboarding} />
-      {/* SettingsMenu moved to App level */}
-    </>
+    <SidebarProvider>
+      <div className="h-screen">
+        <RoadmapFlow ref={flowRef} roadmapId={roadmapId} onError={handleResetOnboarding} />
+      </div>
+    </SidebarProvider>
   );
 }
 
 export default function App() {
-  const { showOnboarding, currentRoadmapId, handleOnboardingComplete, handleResetOnboarding } = useAppState();
-  const flowRef = useRef(null); // Keep ref for potential root-level actions if needed
+  const { showOnboarding, currentRoadmapId, handleOnboardingComplete } = useAppState();
 
-  console.log("App render:", { showOnboarding, currentRoadmapId });
-
-  // Render routes directly. Onboarding is handled within the root route.
   return (
     <div className="app-container">
       <Routes>
-        {/* Route for displaying a specific roadmap */}
         <Route path="/roadmap/:roadmapId" element={<RoadmapPage />} />
-
-        {/* Root route logic */}
         <Route
           path="/"
           element={
             showOnboarding ? (
-              // If onboarding is needed (no roadmap in localStorage), show it.
               <OnboardingFlow isOpen={true} onComplete={handleOnboardingComplete} />
             ) : currentRoadmapId ? (
-              // If onboarding is done and we have a stored ID, redirect to it.
               <Navigate to={`/roadmap/${currentRoadmapId}`} replace />
             ) : (
-              // Fallback if onboarding is done but no ID is stored (should ideally not happen often)
-              // Could redirect to onboarding again or show an error/selection page.
-              <div>Error: No roadmap selected. Please reset.</div>
+              <div>No roadmap selected</div>
             )
           }
         />
-
-        {/* Optional: Catch-all route for invalid paths */}
-        <Route path="*" element={<div>404 - Page Not Found</div>} />
       </Routes>
-      {/* Keep Toaster outside the Routes to be persistent */}
       <Toaster />
     </div>
   );

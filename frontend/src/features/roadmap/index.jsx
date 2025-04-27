@@ -1,8 +1,10 @@
 import { Background, Controls, MiniMap, ReactFlow } from "@xyflow/react";
 import { X } from "lucide-react";
-import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"; // Added useMemo
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 import { DecisionNode } from "./DecisionNode";
+import { useOutlineData } from "./useOutlineData";
+import Sidebar from "./sidebar";
 import { NodeConnections } from "./NodeConnections";
 import { NodeGenerationForm } from "./NodeGenerationForm";
 import { NodeProperties } from "./NodeProperties";
@@ -13,12 +15,11 @@ import OutlineView from "./OutlineView";
 
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/dialog";
 
-// Custom edge style for a more Duolingo-like appearance
 const edgeOptions = {
   type: "smoothstep",
   style: {
     strokeWidth: 3,
-    stroke: "#22c55e", // emerald-500
+    stroke: "#22c55e",
   },
   markerEnd: {
     type: "arrow",
@@ -29,15 +30,15 @@ const edgeOptions = {
   animated: true,
 };
 
-const RoadmapFlow = ({ roadmapId, onError, ref }) => {
-  const { nodes, edges, isLoading, onNodesChange, onEdgesChange, handleConnect, initializeRoadmap, roadmap } = useRoadmapState();
+const RoadmapFlow = ({ roadmapId, onError }) => {
+  const { nodes, edges, onNodesChange, onEdgesChange, handleConnect, initializeRoadmap, roadmap } = useRoadmapState();
+  const { modules, isLoading } = useOutlineData(roadmapId);
 
   const [selectedNode, setSelectedNode] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const initializedRef = useRef(false); // Track initialization
-  const [mode, setMode] = useState("visual"); // "visual" or "outline"
+  const initializedRef = useRef(false);
+  const [mode, setMode] = useState("visual");
 
-  // Apply the edge style to all edges
   const styledEdges = useMemo(() => {
     return edges.map((edge) => ({
       ...edge,
@@ -67,8 +68,7 @@ const RoadmapFlow = ({ roadmapId, onError, ref }) => {
     }
   }, []);
 
-  // Use the root roadmap title if available, fallback to 'Course'
-  const courseName = roadmap?.title || "Course";
+  const courseName = roadmap?.title || "Learn FastAPI";
 
   if (isLoading) {
     return (
@@ -88,76 +88,76 @@ const RoadmapFlow = ({ roadmapId, onError, ref }) => {
   };
 
   const childNodes = edges.filter((edge) => edge.source === selectedNode?.id).map((edge) => edge.target);
-
-  const getProgress = () => 42; // Replace with real calculation
+  const getProgress = () => 42;
   const progress = getProgress();
 
   return (
-    <div>
+    <>
       <RoadmapHeader mode={mode} onModeChange={setMode} progress={progress} courseName={courseName} />
-      <div>
+
+      <div className="flex h-[calc(100vh-4rem)]">
+        <Sidebar modules={modules || []} onLessonClick={() => {}} />
         {mode === "outline" ? (
-          <OutlineView roadmapId={roadmapId} />
+          <div className="flex flex-1">
+            <OutlineView roadmapId={roadmapId} />
+          </div>
         ) : (
-          <div className="w-screen h-screen relative">
-            {/* Dynamic Roadmap Header */}
-            <div className="flex-grow h-full w-full" ref={ref}>
-              <ReactFlow
-                nodes={nodes}
-                edges={styledEdges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={handleConnect}
-                onNodeClick={handleNodeClick}
-                nodeTypes={nodeTypes}
-                defaultEdgeOptions={edgeOptions}
-                fitView
-                zoomOnScroll={false} // Disable zoom on simple scroll
-                panOnScroll={true} // Enable panning with scroll wheel
-                zoomActivationKeyCode={"Control"} // Require Ctrl for zoom with scroll
-                preventScrolling={false} // Allow page scroll when mouse is over the pane
-                className="bg-background"
-                minZoom={0.2}
-                maxZoom={1.5}
-                snapToGrid={true}
-                snapGrid={[15, 15]}
-              >
-                <Background variant="dots" gap={12} size={1} />
-                <Controls />
-                <MiniMap
-                  nodeStrokeWidth={3}
-                  nodeColor={(node) => {
-                    return node.type === "decision" ? "#f59e0b" : "#10b981";
-                  }}
-                />
-              </ReactFlow>
-            </div>
-
-            <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
-              <DialogContent className="sm:max-w-[425px]">
-                {selectedNode && (
-                  <>
-                    <DialogTitle>{selectedNode.data?.label || selectedNode.data?.title || "Node Properties"}</DialogTitle>
-                    <DialogDescription>{selectedNode.data?.description || "View and edit node properties"}</DialogDescription>
-
-                    <div className="mt-6 space-y-6">
-                      <NodeProperties node={selectedNode} />
-                      <NodeConnections childNodes={childNodes} />
-                      <NodeGenerationForm nodeId={selectedNode.id} />
-                    </div>
-
-                    <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-                      <X className="h-4 w-4" />
-                      <span className="sr-only">Close</span>
-                    </DialogClose>
-                  </>
-                )}
-              </DialogContent>
-            </Dialog>
+          <div className="flex-1 relative">
+            <ReactFlow
+              nodes={nodes}
+              edges={styledEdges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={handleConnect}
+              onNodeClick={handleNodeClick}
+              nodeTypes={nodeTypes}
+              defaultEdgeOptions={edgeOptions}
+              fitView
+              zoomOnScroll={false}
+              panOnScroll={true}
+              zoomActivationKeyCode={"Control"}
+              preventScrolling={false}
+              className="bg-background"
+              minZoom={0.2}
+              maxZoom={1.5}
+              snapToGrid={true}
+              snapGrid={[15, 15]}
+            >
+              <Background variant="dots" gap={12} size={1} />
+              <Controls />
+              <MiniMap
+                nodeStrokeWidth={3}
+                nodeColor={(node) => {
+                  return node.type === "decision" ? "#f59e0b" : "#10b981";
+                }}
+              />
+            </ReactFlow>
           </div>
         )}
       </div>
-    </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="sm:max-w-[425px]">
+          {selectedNode && (
+            <>
+              <DialogTitle>{selectedNode.data?.label || selectedNode.data?.title || "Node Properties"}</DialogTitle>
+              <DialogDescription>{selectedNode.data?.description || "View and edit node properties"}</DialogDescription>
+
+              <div className="mt-6 space-y-6">
+                <NodeProperties node={selectedNode} />
+                <NodeConnections childNodes={childNodes} />
+                <NodeGenerationForm nodeId={selectedNode.id} />
+              </div>
+
+              <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </DialogClose>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
