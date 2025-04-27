@@ -5,8 +5,10 @@ import { PanelLeft, Layout, FileText } from "lucide-react";
  * RoadmapHeader component displays the course title, a progress bar, and a visually accurate collapse button.
  * @param {Object} props
  * @param {string} props.courseName - The name of the course to display in the header.
+ * @param {string} props.mode - Current mode ("visual" or "outline")
+ * @param {function} props.onModeChange - Function to change mode
  */
-function RoadmapHeader({ courseName }) {
+function RoadmapHeader({ courseName, mode, onModeChange }) {
   // Placeholder progress value
   const progress = 3;
 
@@ -31,22 +33,22 @@ function RoadmapHeader({ courseName }) {
             {/* Mode toggle buttons (to the left of progress bar) */}
             <div className="flex items-center gap-2">
               <button
-                className="flex items-center px-2 py-1 rounded-md text-sm font-medium bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-default"
-                style={{ minWidth: 32 }}
+                className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${mode === 'visual' ? 'bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default' : 'text-zinc-400 bg-zinc-100 border-zinc-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 cursor-pointer'}`}
                 type="button"
-                tabIndex={-1}
-                aria-disabled="true"
+                onClick={() => mode !== 'visual' && onModeChange('visual')}
+                aria-pressed={mode === 'visual'}
+                tabIndex={0}
               >
                 <Layout className="w-4 h-4 mr-1" /> Visual
               </button>
               <button
-                className="flex items-center px-2 py-1 rounded-md text-sm font-medium text-zinc-400 bg-zinc-100 border border-zinc-200 cursor-not-allowed opacity-60"
-                style={{ minWidth: 32 }}
+                className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${mode === 'outline' ? 'bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default' : 'text-zinc-400 bg-zinc-100 border-zinc-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 cursor-pointer'}`}
                 type="button"
-                tabIndex={-1}
-                aria-disabled="true"
+                onClick={() => mode !== 'outline' && onModeChange('outline')}
+                aria-pressed={mode === 'outline'}
+                tabIndex={0}
               >
-                <FileText className="w-4 h-4 mr-1" /> List view
+                <FileText className="w-4 h-4 mr-1" /> Outline view
               </button>
             </div>
             {/* Progress bar */}
