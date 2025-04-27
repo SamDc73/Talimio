@@ -8,6 +8,7 @@ import { NodeGenerationForm } from "./NodeGenerationForm";
 import { NodeProperties } from "./NodeProperties";
 import { TaskNode } from "./TaskNode";
 import { useRoadmapState } from "./useRoadmapState";
+import RoadmapHeader from "./RoadmapHeader";
 
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/dialog";
 
@@ -28,7 +29,7 @@ const edgeOptions = {
 };
 
 const RoadmapFlow = ({ roadmapId, onError, ref }) => {
-  const { nodes, edges, isLoading, onNodesChange, onEdgesChange, handleConnect, initializeRoadmap } = useRoadmapState();
+  const { nodes, edges, isLoading, onNodesChange, onEdgesChange, handleConnect, initializeRoadmap, roadmap } = useRoadmapState();
 
   const [selectedNode, setSelectedNode] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -64,6 +65,9 @@ const RoadmapFlow = ({ roadmapId, onError, ref }) => {
     }
   }, []);
 
+  // Use the root roadmap title if available, fallback to 'Course'
+  const courseName = roadmap?.title || "Course";
+
   if (isLoading) {
     return (
       <div className="w-screen h-screen flex items-center justify-center">
@@ -85,6 +89,8 @@ const RoadmapFlow = ({ roadmapId, onError, ref }) => {
 
   return (
     <div className="w-screen h-screen relative">
+      {/* Dynamic Roadmap Header */}
+      <RoadmapHeader courseName={courseName} />
       <div className="flex-grow h-full w-full" ref={ref}>
         <ReactFlow
           nodes={nodes}

@@ -283,12 +283,14 @@ export const useRoadmapState = () => {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [roadmap, setRoadmap] = useState(null);
   const requestRef = useRef(null);
 
   const handleConnect = useCallback((params) => setEdges((eds) => addEdge(params, eds)), [setEdges]);
 
   const updateRoadmapState = useCallback(
     (roadmap) => {
+      setRoadmap(roadmap);
       if (roadmap?.nodes?.length > 0) {
         const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(roadmap.nodes);
         setNodes(layoutedNodes);
@@ -341,5 +343,6 @@ export const useRoadmapState = () => {
     onEdgesChange,
     handleConnect,
     initializeRoadmap,
+    roadmap,
   };
 };
