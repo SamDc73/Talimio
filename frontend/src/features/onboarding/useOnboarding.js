@@ -2,7 +2,6 @@ import { useState } from "react";
 
 import { STORAGE_KEYS } from "@/features/onboarding";
 import { useApi } from "@/hooks/useApi";
-import { MOCK_ONBOARDING_DATA } from "@/lib/mock-data/onboarding";
 
 export function useOnboarding() {
   const { execute: fetchRoadmap } = useApi("/api/v1/roadmaps", {
@@ -16,7 +15,6 @@ export function useOnboarding() {
 
   const { execute: savePreferences } = useApi("/api/onboarding", {
     method: "POST",
-    fallbackData: MOCK_ONBOARDING_DATA.defaultAnswers,
   });
 
   const getQuestions = async (topic) => {
@@ -36,10 +34,7 @@ export function useOnboarding() {
       return response;
     } catch (error) {
       console.error("Failed to save onboarding preferences:", error);
-      const fallbackResponse = {
-        ...MOCK_ONBOARDING_DATA.defaultAnswers,
-        ...answers,
-      };
+      const fallbackResponse = answers;
       localStorage.setItem(STORAGE_KEYS.USER_PREFERENCES, JSON.stringify(fallbackResponse));
       return fallbackResponse;
     }
