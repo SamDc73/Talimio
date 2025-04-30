@@ -38,6 +38,13 @@ class ExerciseGenerationError(AIError):
         super().__init__("Failed to generate exercises")
 
 
+class LessonGenerationError(AIError):
+    """Exception raised when lesson generation fails."""
+
+    def __init__(self) -> None:
+        super().__init__("Failed to generate lesson content")
+
+
 class ModelManager:
     """Manage AI model interactions for the learning roadmap platform."""
 
@@ -256,3 +263,63 @@ Return ONLY the JSON array with no additional commentary.
         except Exception as e:
             self._logger.exception("Error generating node content")
             raise NodeCustomizationError from e
+
+
+async def create_lesson_body(node_meta: dict[str, Any]) -> str:
+    """
+    Generate a comprehensive lesson in Markdown format based on node metadata.
+
+    Args:
+        node_meta: Dictionary containing metadata about the node, including title,
+                  description, and any other relevant information.
+
+    Returns
+    -------
+        str: Markdown-formatted lesson content.
+
+    Raises
+    ------
+        LessonGenerationError: If lesson generation fails.
+    """
+    try:
+        # Initialize the model manager
+        model_manager = ModelManager()
+
+        # Extract node information
+        node_title = node_meta.get("title", "")
+        node_description = node_meta.get("description", "")
+        skill_level = node_meta.get("skill_level", "beginner")
+
+        # Create prompt for lesson generation
+        prompt = f"""
+        Create a comprehensive lesson on "{node_title}".
+
+        Description: {node_description}
+        Skill Level: {skill_level}
+
+        The lesson should include:
+        1. A clear introduction explaining the topic and its importance
+        2. Core concepts explained in detail with examples
+        3. Practical applications or exercises
+        4. Summary of key points
+        5. Additional resources for further learning
+
+        Format the content in Markdown with proper headings, code blocks, and formatting.
+        """
+
+        messages = [
+            {"role": "system", "content": "You are an expert educator creating high-quality learning materials."},
+            {"role": "user", "content": prompt},
+        ]
+
+        # Get completion without JSON formatting
+        markdown_content = await model_manager._get_completion(messages, format_json=False)
+
+        if not isinstance(markdown_content, str):
+            raise LessonGenerationError()
+
+        return markdown_content
+
+    except Exception as e:
+        logging.exception("Error generating lesson content")
+        raise LessonGenerationError() from e

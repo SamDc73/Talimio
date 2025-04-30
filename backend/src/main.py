@@ -12,6 +12,7 @@ from src.config.settings import get_settings
 from src.core.exceptions import ResourceNotFoundError
 from src.database.core import Base
 from src.database.session import engine
+from src.lessons import router as lessons_router
 from src.onboarding.router import router as onboarding_router
 from src.progress.router import router as progress_router
 from src.roadmaps.router import router as roadmaps_router
@@ -75,16 +76,17 @@ def create_app() -> FastAPI:
         )
 
     # Register health check endpoint
-    @app.get("/health")  # type: ignore[misc]
+    @app.get("/health")
     async def health_check() -> dict[str, str]:
         """Health check endpoint."""
-        return {"status": "healthy"}  # Added explicit return
+        return {"status": "healthy"}
 
     # Register routers
     app.include_router(roadmaps_router)
     app.include_router(users_router)
     app.include_router(progress_router)
     app.include_router(onboarding_router)
+    app.include_router(lessons_router)
 
     # Register startup event
     @app.on_event("startup")
@@ -105,7 +107,9 @@ def create_app() -> FastAPI:
                     raise
 
                 logger.warning(
-                    "Database connection attempt %d failed, retrying in %ds...", attempt + 1, retry_delay,
+                    "Database connection attempt %d failed, retrying in %ds...",
+                    attempt + 1,
+                    retry_delay,
                 )
                 await asyncio.sleep(retry_delay)
                 retry_delay *= 2  # Exponential backoff
