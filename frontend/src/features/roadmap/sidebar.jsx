@@ -41,7 +41,7 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
 
   const handleToggleModule = (moduleId) => {
     setExpandedModules((prev) =>
-      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId],
+      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId]
     );
   };
 
@@ -56,25 +56,30 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
   const totalModules = modules.length;
   const progress = totalModules ? Math.round((completedModulesCount / totalModules) * 100) : 0;
 
-  // --- Conditional Rendering based on Context ---
-  if (!isOpen) {
-    return null; // Don't render anything if the sidebar should be closed
-  }
-
-  // --- Sidebar Layout & Styling (Dynamic: All Modules) ---
+  // --- Sidebar Layout & Styling with Animation ---
   return (
     <aside
-      className="fixed-sidebar w-[320px] flex flex-col bg-white border-r border-zinc-200"
-      style={{ boxShadow: "0 4px 20px rgba(0, 0, 0, 0.05)" }}
+      className={`fixed-sidebar flex flex-col bg-white border-r border-zinc-200 transition-all duration-300 ease-in-out ${
+        isOpen ? "w-[320px] opacity-100 translate-x-0" : "w-0 opacity-0 -translate-x-full"
+      }`}
+      style={{ boxShadow: isOpen ? "0 4px 20px rgba(0, 0, 0, 0.05)" : "none" }}
     >
       {/* Progress Pill */}
-      <div className="flex items-center gap-2 px-4 pt-20">
+      <div
+        className={`flex items-center gap-2 px-4 pt-20 transition-opacity duration-300 ${
+          isOpen ? "opacity-100" : "opacity-0"
+        }`}
+      >
         <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full px-3 py-1">
           {progress}% Completed
         </span>
       </div>
       {/* Module Navigation List - Dynamic rendering of all modules */}
-      <nav className="flex-1 p-3 space-y-4 overflow-y-auto">
+      <nav
+        className={`flex-1 p-3 space-y-4 overflow-y-auto transition-opacity duration-300 ${
+          isOpen ? "opacity-100" : "opacity-0"
+        }`}
+      >
         {modules.map((module) => {
           const moduleComplete = isModuleCompleted(module);
           const isExpanded = expandedModules.includes(module.id);
@@ -117,8 +122,8 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
                             isLessonComplete
                               ? "font-semibold text-emerald-700"
                               : isActive
-                                ? "font-semibold text-emerald-700"
-                                : "text-zinc-800"
+                              ? "font-semibold text-emerald-700"
+                              : "text-zinc-800"
                           }`}
                           style={{
                             background: "none",

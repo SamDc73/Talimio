@@ -96,12 +96,9 @@ body,
 /* Hide ReactFlow attribution and any watermarks */
 .react-flow__attribution,
 .react-flow__watermark,
-.react-flow__viewport > a[href*="xyflow"],
-.react-flow__viewport > div[style*="position: absolute"][style*="bottom: 0"][style*="right: 0"],
-.react-flow__viewport
-  > div:last-child:not(.react-flow__nodes):not(.react-flow__edges):not(.react-flow__background):not(
-    .react-flow__selection
-  ):not(.react-flow__controls):not(.react-flow__minimap) {
+.react-flow__viewport>a[href*="xyflow"],
+.react-flow__viewport>div[style*="position: absolute"][style*="bottom: 0"][style*="right: 0"],
+.react-flow__viewport>div:last-child:not(.react-flow__nodes):not(.react-flow__edges):not(.react-flow__background):not(.react-flow__selection):not(.react-flow__controls):not(.react-flow__minimap) {
   display: none !important;
   opacity: 0 !important;
   visibility: hidden !important;
@@ -162,4 +159,15 @@ body,
   /* Width of sidebar */
   margin-top: 0;
   padding-bottom: 2rem;
+}
+
+/* Sidebar animation styles */
+.sidebar-open .main-content {
+  margin-left: 320px;
+  transition: margin-left 0.3s ease-in-out;
+}
+
+.sidebar-closed .main-content {
+  margin-left: 0;
+  transition: margin-left 0.3s ease-in-out;
 }

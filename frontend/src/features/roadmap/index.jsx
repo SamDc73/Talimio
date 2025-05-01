@@ -12,6 +12,7 @@ import { TaskNode } from "./TaskNode";
 import Sidebar from "./sidebar";
 import { useOutlineData } from "./useOutlineData";
 import { useRoadmapState } from "./useRoadmapState";
+import { useSidebar } from "./SidebarContext";
 
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/dialog";
 
@@ -33,6 +34,7 @@ const edgeOptions = {
 const RoadmapFlow = ({ roadmapId, onError }) => {
   const { nodes, edges, onNodesChange, onEdgesChange, handleConnect, initializeRoadmap, roadmap } = useRoadmapState();
   const { modules, isLoading } = useOutlineData(roadmapId);
+  const { isOpen } = useSidebar();
 
   const [selectedNode, setSelectedNode] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -92,17 +94,20 @@ const RoadmapFlow = ({ roadmapId, onError }) => {
   const progress = getProgress();
 
   return (
-    <div className="roadmap-container" style={{ margin: 0, padding: 0 }}>
+    <div
+      className={`roadmap-container ${isOpen ? "sidebar-open" : "sidebar-closed"}`}
+      style={{ margin: 0, padding: 0 }}
+    >
       <RoadmapHeader mode={mode} onModeChange={setMode} progress={progress} courseName={courseName} />
 
       <div className="flex h-screen">
         <Sidebar modules={modules || []} onLessonClick={() => {}} />
         {mode === "outline" ? (
-          <div className="flex flex-1 main-content">
+          <div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
             <OutlineView roadmapId={roadmapId} />
           </div>
         ) : (
-          <div className="flex-1 relative main-content">
+          <div className="flex-1 relative main-content transition-all duration-300 ease-in-out">
             <ReactFlow
               nodes={nodes}
               edges={styledEdges}
