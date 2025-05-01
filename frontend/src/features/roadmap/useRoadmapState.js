@@ -47,6 +47,7 @@ const processNode = (node, parentId, uniqueApiNodes, nodeRelationships) => {
       nodeRelationships.set(parentId, []);
     }
     if (!nodeRelationships.get(parentId).includes(node.id)) {
+      // Add the node to the parent's children array
       nodeRelationships.get(parentId).push(node.id);
     }
   }
@@ -93,10 +94,17 @@ const calculateNodePosition = (
 
   nodePositions.set(nodeId, { x, y });
 
-  const childIds = nodeRelationships.get(nodeId) || [];
+  let childIds = nodeRelationships.get(nodeId) || [];
   if (childIds.length === 0) {
     return { height: NODE_HEIGHT + VERTICAL_SPACING };
   }
+
+  // Sort child IDs by their order property in the original nodes
+  childIds = childIds.slice().sort((a, b) => {
+    const nodeA = uniqueApiNodes.get(a);
+    const nodeB = uniqueApiNodes.get(b);
+    return (nodeA?.order ?? 0) - (nodeB?.order ?? 0);
+  });
 
   const useHorizontalLayout = shouldUseHorizontalLayout(node, childIds, uniqueApiNodes);
 
@@ -159,7 +167,10 @@ const getVerticalTreeLayout = (apiNodes) => {
     processNode(node, parentId, uniqueApiNodes, nodeRelationships);
 
     if (Array.isArray(node.children) && node.children.length > 0) {
-      for (const child of node.children.reverse()) {
+      // Sort children by their order property before processing
+      const sortedChildren = [...node.children].sort((a, b) => a.order - b.order);
+      // Process in reverse order for the stack (so they get popped in the correct order)
+      for (const child of sortedChildren.reverse()) {
         stack.push({ node: child, parentId: node.id });
       }
     }
@@ -169,6 +180,8 @@ const getVerticalTreeLayout = (apiNodes) => {
   const allNodeIds = new Set(uniqueApiNodes.keys());
   const rootNodes = Array.from(uniqueApiNodes.values())
     .filter((node) => !node.parent_id || !allNodeIds.has(node.parent_id))
+    // Sort root nodes by their order property
+    .sort((a, b) => a.order - b.order)
     .map((node) => node.id);
 
   const nodePositions = new Map();
@@ -178,6 +191,19 @@ const getVerticalTreeLayout = (apiNodes) => {
 
   // Create the React Flow nodes
   const reactFlowNodes = Array.from(uniqueApiNodes.values())
+    // Sort nodes by their order property to ensure consistent ordering
+    .sort((a, b) => {
+      // First sort by parent_id to group siblings together
+      if (a.parent_id !== b.parent_id) {
+        // If one has no parent, it should come first
+        if (!a.parent_id) return -1;
+        if (!b.parent_id) return 1;
+        // Otherwise sort by parent_id
+        return a.parent_id.localeCompare(b.parent_id);
+      }
+      // Then sort siblings by their order property
+      return a.order - b.order;
+    })
     .map((apiNode) => createReactFlowNode(apiNode, nodePositions, nodeRelationships))
     .filter(Boolean);
 
@@ -185,7 +211,14 @@ const getVerticalTreeLayout = (apiNodes) => {
   const reactFlowEdges = [];
   for (const [parentId, children] of nodeRelationships) {
     if (uniqueApiNodes.has(parentId)) {
-      for (const childId of children) {
+      // Sort children by their order property
+      const sortedChildren = [...children].sort((a, b) => {
+        const nodeA = uniqueApiNodes.get(a);
+        const nodeB = uniqueApiNodes.get(b);
+        return (nodeA?.order ?? 0) - (nodeB?.order ?? 0);
+      });
+
+      for (const childId of sortedChildren) {
         if (uniqueApiNodes.has(childId)) {
           reactFlowEdges.push({
             id: `e${parentId}-${childId}`,
@@ -274,7 +307,9 @@ const getDagreLayout = (apiNodes, direction = "TB") => {
 
 // Main layout function that uses the vertical tree layout
 const getLayoutedElements = (apiNodes) => {
-  return getVerticalTreeLayout(apiNodes);
+  // Sort the top-level nodes by their order property before processing
+  const sortedApiNodes = [...apiNodes].sort((a, b) => a.order - b.order);
+  return getVerticalTreeLayout(sortedApiNodes);
 };
 
 export const useRoadmapState = () => {
