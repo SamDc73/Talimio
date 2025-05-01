@@ -30,4 +30,6 @@ class UserResponse(UserBase):
     updated_at: datetime
 
     class Config:
+        """Configuration for Pydantic model to support ORM model conversion."""
+
         from_attributes = True

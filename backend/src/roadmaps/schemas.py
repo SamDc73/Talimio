@@ -64,6 +64,8 @@ class NodeCreate(NodeBase):
     roadmap_id: UUID
 
     class Config:
+        """Configuration for Pydantic model with JSON schema example."""
+
         json_schema_extra: ClassVar[dict[str, Any]] = {
             "example": {
                 "title": "Python Basics",
@@ -101,6 +103,8 @@ class NodeResponse(NodeBase):
     children: list["NodeResponse"] = Field(default_factory=list, description="Child nodes (sub-nodes)")
 
     class Config:
+        """Configuration for Pydantic model to support ORM model conversion."""
+
         from_attributes = True
 
     # Removed custom model_validate. Relying on from_attributes=True.
@@ -115,10 +119,35 @@ class RoadmapResponse(RoadmapBase):
     nodes: list[NodeResponse] = []  # Will be overridden in model_validate
 
     class Config:
+        """Configuration for Pydantic model to support ORM model conversion."""
+
         from_attributes = True
 
     @classmethod
-    def model_validate(cls, obj: object) -> "RoadmapResponse":
+    def model_validate(
+        cls,
+        obj: object,
+        *,
+        strict: bool | None = False,
+        from_attributes: bool | None = False,
+        context: dict | None = None,
+        by_alias: bool | None = False,
+        by_name: bool | None = False,
+    ) -> "RoadmapResponse":
+        """Validate and convert database model to Pydantic model with nested structure.
+
+        Args:
+            obj: Database model object to validate
+            strict: If True, strict validation is performed
+            from_attributes: Whether to extract data from object attributes
+            context: Additional context for validation
+            by_alias: Whether to use alias names
+            by_name: Whether to match fields by name instead of alias
+
+        Returns
+        -------
+            RoadmapResponse: Validated response model with properly nested nodes
+        """
         # Patch: Build pure nested nodes for 'nodes' field
         roadmap = super().model_validate(obj)
         # Only use root nodes in top-level nodes

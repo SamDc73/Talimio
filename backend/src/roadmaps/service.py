@@ -54,9 +54,16 @@ class RoadmapService:
         return roadmap
 
     async def create_roadmap(self, data: RoadmapCreate) -> Roadmap:
-        """
-        Create a new roadmap with foundational nodes.
+        """Create a new roadmap with foundational nodes.
+
         Adds detailed logging and clearer error handling for debugging.
+
+        Args:
+            data: Roadmap creation data
+
+        Returns
+        -------
+            Roadmap: Created roadmap instance
         """
         roadmap = Roadmap(title=data.title, description=data.description, skill_level=data.skill_level)
         self._session.add(roadmap)
@@ -330,6 +337,15 @@ class RoadmapService:
         return new_nodes
 
     async def get_roadmap_json(self, roadmap_id: UUID) -> dict:
+        """Get a roadmap serialized to JSON format.
+
+        Args:
+            roadmap_id: UUID of the roadmap to serialize
+
+        Returns
+        -------
+            dict: JSON serialized roadmap with full node tree
+        """
         roadmap = await self.get_roadmap(roadmap_id)
         # Serialize the full roadmap tree
         return RoadmapResponse.model_validate(roadmap).model_dump()
