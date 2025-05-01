@@ -1,11 +1,17 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.core import Base
+
+
+if TYPE_CHECKING:
+    from src.progress.models import Progress
+    from src.roadmaps.models import Roadmap
 
 
 class User(Base):

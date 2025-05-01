@@ -4,7 +4,8 @@ from typing import TYPE_CHECKING, Optional
 
 
 if TYPE_CHECKING:
-    from .models import Node, Progress, Roadmap, User
+    from src.progress.models import Progress
+    from src.users.models import User
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID as SA_UUID
@@ -14,24 +15,6 @@ from src.database.core import Base
 
 
 __all__ = ["Node", "Roadmap"]
-
-# Association table for node prerequisites (removed, not needed for simple hierarchy)
-# node_prerequisites = Table(
-#     "node_prerequisites",
-#     Base.metadata,
-#     Column(
-#         "node_id",
-#         SA_UUID(as_uuid=True),
-#         ForeignKey("nodes.id", ondelete="CASCADE"),
-#         primary_key=True,
-#     ),
-#     Column(
-#         "prerequisite_id",
-#         SA_UUID(as_uuid=True),
-#         ForeignKey("nodes.id", ondelete="CASCADE"),
-#         primary_key=True,
-#     ),
-# )
 
 
 class Roadmap(Base):
