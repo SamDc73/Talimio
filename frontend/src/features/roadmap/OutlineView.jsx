@@ -50,7 +50,7 @@ function OutlineView({ roadmapId }) {
           title: lesson.title,
           description: lesson.description || "",
           skill_level: module.skill_level || "beginner",
-        }
+        },
       );
     } catch (err) {
       console.error("Error handling lesson click:", err);
