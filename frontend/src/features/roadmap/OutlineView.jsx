@@ -50,7 +50,7 @@ function OutlineView({ roadmapId }) {
           title: lesson.title,
           description: lesson.description || "",
           skill_level: module.skill_level || "beginner",
-        },
+        }
       );
     } catch (err) {
       console.error("Error handling lesson click:", err);
@@ -66,16 +66,24 @@ function OutlineView({ roadmapId }) {
   // Handle loading state
   if (isLoading) {
     return (
-      // Use a similar loading style
-      <div className="flex items-center justify-center min-h-[calc(100vh-4rem)] text-zinc-500">Loading outline...</div>
+      <div
+        className="fixed inset-0 flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] text-zinc-500"
+        style={{ marginLeft: 0, paddingTop: "4rem" }}
+      >
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500 mb-4" />
+        <p>Loading outline...</p>
+      </div>
     );
   }
 
   // Handle error state
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-[calc(100vh-4rem)] text-red-600">
-        Error loading outline: {error}
+      <div
+        className="fixed inset-0 flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] text-red-600"
+        style={{ marginLeft: 0, paddingTop: "4rem" }}
+      >
+        <p>Error loading outline: {error}</p>
       </div>
     );
   }
@@ -83,8 +91,11 @@ function OutlineView({ roadmapId }) {
   // Handle empty state
   if (!modules || modules.length === 0) {
     return (
-      <div className="flex items-center justify-center min-h-[calc(100vh-4rem)] text-zinc-500">
-        No outline content available for this roadmap.
+      <div
+        className="fixed inset-0 flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] text-zinc-500"
+        style={{ marginLeft: 0, paddingTop: "4rem" }}
+      >
+        <p>No outline content available for this roadmap.</p>
       </div>
     );
   }
