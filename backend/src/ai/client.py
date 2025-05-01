@@ -282,17 +282,14 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> str:
         LessonGenerationError: If lesson generation fails.
     """
     try:
-        # Initialize the model manager
-        model_manager = ModelManager()
-
         # Extract node information
         node_title = node_meta.get("title", "")
         node_description = node_meta.get("description", "")
         skill_level = node_meta.get("skill_level", "beginner")
 
-        # Create prompt for lesson generation
+        # Create a more detailed prompt for lesson generation
         prompt = f"""
-        Create a comprehensive lesson on "{node_title}".
+        Create a comprehensive, detailed lesson on "{node_title}".
 
         Description: {node_description}
         Skill Level: {skill_level}
@@ -304,20 +301,42 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> str:
         4. Summary of key points
         5. Additional resources for further learning
 
+        Important requirements:
+        - Write a complete, in-depth lesson with substantial content (at least 1000 words)
+        - Include code examples where appropriate
+        - Use proper Markdown formatting with headings (##, ###), lists, code blocks, etc.
+        - Organize content with clear section headings
+        - Include practical exercises or challenges
+        - Provide real-world examples and applications
+
         Format the content in Markdown with proper headings, code blocks, and formatting.
         """
 
         messages = [
-            {"role": "system", "content": "You are an expert educator creating high-quality learning materials."},
+            {
+                "role": "system",
+                "content": "You are an expert educator creating high-quality, comprehensive learning materials. Your lessons are detailed, well-structured, and include practical examples and exercises.",
+            },
             {"role": "user", "content": prompt},
         ]
 
-        # Get completion without JSON formatting
-        markdown_content = await model_manager._get_completion(messages, format_json=False)
+        logging.info(f"Generating lesson for '{node_title}' with skill level '{skill_level}'")
 
-        if not isinstance(markdown_content, str):
+        # Get completion without JSON formatting
+        response = await acompletion(
+            model="gpt-4o",
+            messages=messages,
+            temperature=0.7,
+            max_tokens=8000,
+        )
+
+        markdown_content = response.choices[0].message.content
+
+        if not isinstance(markdown_content, str) or len(markdown_content.strip()) < 100:
+            logging.error(f"Invalid or too short lesson content received: {markdown_content[:100]}...")
             raise LessonGenerationError()
 
+        logging.info(f"Successfully generated lesson content ({len(markdown_content)} characters)")
         return markdown_content
 
     except Exception as e:
