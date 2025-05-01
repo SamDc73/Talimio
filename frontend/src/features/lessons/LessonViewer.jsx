@@ -69,11 +69,49 @@ export function LessonViewer({ lesson, isLoading, error, onBack }) {
 
       {/* Lesson content */}
       <div className="prose prose-emerald max-w-none">
-        {/* Use dangerouslySetInnerHTML only if you have sanitized the content or trust the source */}
-        <div
-          className="markdown-content"
-          dangerouslySetInnerHTML={{ __html: convertMarkdownToHtml(lesson.md_source) }}
-        />
+        <div className="markdown-content">
+          {lesson.md_source.split("\n").map((line, index) => {
+            // Headers
+            const key = `${index}-${line.slice(0, 40)}`; // Create unique key from index and content
+            if (line.startsWith("# ")) {
+              return <h1 key={key}>{line.slice(2)}</h1>;
+            }
+            if (line.startsWith("## ")) {
+              return <h2 key={key}>{line.slice(3)}</h2>;
+            }
+            if (line.startsWith("### ")) {
+              return <h3 key={key}>{line.slice(4)}</h3>;
+            }
+
+            // Lists
+            if (line.trim().startsWith("* ")) {
+              return (
+                <ul key={key}>
+                  <li>{line.trim().slice(2)}</li>
+                </ul>
+              );
+            }
+            if (/^\d+\.\s/.test(line.trim())) {
+              return (
+                <ol key={key}>
+                  <li>{line.trim().replace(/^\d+\.\s/, "")}</li>
+                </ol>
+              );
+            }
+
+            // Code blocks (simple case)
+            if (line.trim().startsWith("```") || line.trim().endsWith("```")) {
+              return null; // Skip code block delimiters
+            }
+
+            // Regular paragraph (non-empty lines)
+            if (line.trim()) {
+              return <p key={key}>{line}</p>;
+            }
+
+            return null; // Skip empty lines
+          })}
+        </div>
       </div>
     </div>
   );

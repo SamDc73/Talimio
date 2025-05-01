@@ -27,7 +27,7 @@ function OutlineItem({ module, index, onLessonClick }) {
     let total = 0;
     let completed = 0;
 
-    items.forEach((item) => {
+    for (const item of items) {
       // Only count items that look like lessons (have a title and status)
       if (item && typeof item.title === "string" && typeof item.status === "string") {
         total += 1;
@@ -41,7 +41,7 @@ function OutlineItem({ module, index, onLessonClick }) {
           completed += subCompleted;
         }
       }
-    });
+    }
     return [total, completed];
   };
 
@@ -49,95 +49,86 @@ function OutlineItem({ module, index, onLessonClick }) {
   const progress = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
   const isModuleCompleted = progress === 100 && totalLessons > 0; // Determine module completion based on progress
 
-  // Helper to render lessons recursively (for sub-lessons) - Updated styling
-  const renderLessons = (lessons, depth = 0, parentIndexStr = "") => (
-    // Removed outer div, applying spacing directly to lesson items
-    <>
-      {(lessons || []).map((lesson, idx) => {
-        const currentLessonIndexStr = parentIndexStr ? `${parentIndexStr}.${idx + 1}` : `${idx + 1}`;
-        const isCompleted = lesson.status === "completed";
-        // Unique key using lesson id or index
-        const lessonKey = lesson.id ?? `${moduleId}-lesson-${depth}-${idx}`;
+  // Component for a single lesson item
+  const LessonItem = ({ lesson, idx, depth, parentIndexStr, onLessonClick }) => {
+    const currentLessonIndexStr = parentIndexStr ? `${parentIndexStr}.${idx + 1}` : `${idx + 1}`;
+    const isCompleted = lesson.status === "completed";
+    const lessonKey = lesson.id ?? `${moduleId}-lesson-${depth}-${idx}`;
 
-        return (
-          <div
-            key={lessonKey}
-            className={`space-y-3 ${depth > 0 ? "ml-6 mt-3 border-l-2 border-emerald-100/50 pl-4 pt-3" : "mt-3"}`}
-          >
-            {/* Lesson Item Container - Mimics styles from */}
-            <div
-              // Removed motion.div as framer-motion isn't explicitly included
-              className={cn(
-                "flex items-center justify-between p-4 transition-all border rounded-lg",
-                isCompleted
-                  ? "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-100" // Completed style [cite: 404]
-                  : "bg-white border-zinc-200 hover:border-emerald-200 hover:bg-emerald-50/30", // Default style [cite: 408]
-              )}
-            >
-              {/* Left side: Icon/Number and Title */}
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                {" "}
-                {/* Added flex-1 and min-w-0 for text truncation */}
-                {/* Icon/Number - Mimics styles from [cite: 405, 409] */}
-                {isCompleted ? (
-                  <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
-                ) : (
-                  <div
-                    className={cn(
-                      "flex items-center justify-center w-5 h-5 rounded-full text-xs font-medium shrink-0",
-                      "bg-zinc-100 text-zinc-700", // Default number style [cite: 409]
-                      // Add locked style if applicable: 'bg-zinc-100 text-zinc-400'
-                    )}
-                  >
-                    {currentLessonIndexStr}
-                  </div>
-                )}
-                {/* Title and Optional Description */}
-                <div className="flex flex-col min-w-0">
-                  {" "}
-                  {/* Added min-w-0 for text truncation */}
-                  <span
-                    className={cn(
-                      "font-medium truncate", // Added truncate
-                      isCompleted ? "text-zinc-800" : "text-zinc-800",
-                      // Add locked style if applicable: 'text-zinc-400'
-                    )}
-                  >
-                    {lesson.title}
-                  </span>
-                  {lesson.description && (
-                    <span className="text-sm text-zinc-500 truncate">{lesson.description}</span> // Added truncate
-                  )}
-                </div>
-              </div>
-              {/* Right side: Button */}
-              <button
-                type="button"
-                // Pass lesson index and ID (if available) to handler
-                onClick={() => onLessonClick?.(idx, lesson.id)}
-                // Mimic button styles from [cite: 406, 410]
+    return (
+      <div
+        key={lessonKey}
+        className={`space-y-3 ${depth > 0 ? "ml-6 mt-3 border-l-2 border-emerald-100/50 pl-4 pt-3" : "mt-3"}`}
+      >
+        <div
+          className={cn(
+            "flex items-center justify-between p-4 transition-all border rounded-lg",
+            isCompleted
+              ? "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-100"
+              : "bg-white border-zinc-200 hover:border-emerald-200 hover:bg-emerald-50/30",
+          )}
+        >
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            {isCompleted ? (
+              <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <div
                 className={cn(
-                  "flex items-center gap-1 px-3 py-1.5 text-sm font-medium transition-colors rounded-md shrink-0 ml-2", // Added shrink-0 and ml-2
-                  isCompleted
-                    ? "text-white bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600" // Completed button [cite: 406]
-                    : "text-emerald-700 bg-emerald-100 hover:bg-emerald-200", // Default button [cite: 410]
-                  // Add locked style if applicable: 'text-zinc-500 bg-zinc-100 cursor-not-allowed'
+                  "flex items-center justify-center w-5 h-5 rounded-full text-xs font-medium shrink-0",
+                  "bg-zinc-100 text-zinc-700",
                 )}
-                // Add disabled attribute if lesson is locked
               >
-                {isCompleted ? "View" : "Start"}
-                <ArrowRight className="w-4 h-4" />
-              </button>
+                {currentLessonIndexStr}
+              </div>
+            )}
+            <div className="flex flex-col min-w-0">
+              <span className={cn("font-medium truncate", "text-zinc-800")}>{lesson.title}</span>
+              {lesson.description && <span className="text-sm text-zinc-500 truncate">{lesson.description}</span>}
             </div>
-            {/* Render nested lessons if any */}
-            {lesson.lessons &&
-              lesson.lessons.length > 0 &&
-              renderLessons(lesson.lessons, depth + 1, currentLessonIndexStr)}
           </div>
-        );
-      })}
-    </>
-  );
+          <button
+            type="button"
+            onClick={() => onLessonClick?.(idx, lesson.id)}
+            className={cn(
+              "flex items-center gap-1 px-3 py-1.5 text-sm font-medium transition-colors rounded-md shrink-0 ml-2",
+              isCompleted
+                ? "text-white bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600"
+                : "text-emerald-700 bg-emerald-100 hover:bg-emerald-200",
+            )}
+          >
+            {isCompleted ? "View" : "Start"}
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+        {lesson.lessons?.length > 0 && (
+          <LessonList
+            lessons={lesson.lessons}
+            depth={depth + 1}
+            parentIndexStr={currentLessonIndexStr}
+            onLessonClick={onLessonClick}
+          />
+        )}
+      </div>
+    );
+  };
+
+  // Component for the list of lessons
+  const LessonList = ({ lessons, depth = 0, parentIndexStr = "", onLessonClick }) => {
+    return (
+      <>
+        {(lessons || []).map((lesson, idx) => (
+          <LessonItem
+            key={lesson.id ?? `${moduleId}-lesson-${depth}-${idx}`}
+            lesson={lesson}
+            idx={idx}
+            depth={depth}
+            parentIndexStr={parentIndexStr}
+            onLessonClick={onLessonClick}
+          />
+        ))}
+      </>
+    );
+  };
 
   return (
     // Module Card Container - Mimics styles from [cite: 397, 412]
@@ -146,14 +137,10 @@ function OutlineItem({ module, index, onLessonClick }) {
       className="p-6 mb-8 bg-white border border-zinc-200 rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden"
     >
       {/* Module Header Section - Mimics styles from [cite: 398, 413] */}
-      <div
-        className="flex items-center gap-2 mb-4 cursor-pointer select-none"
+      <button
+        type="button"
+        className="flex items-center gap-2 mb-4 w-full text-left"
         onClick={() => setExpanded((e) => !e)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") setExpanded((val) => !val);
-        }}
-        role="button"
-        tabIndex={0}
         aria-expanded={expanded}
         aria-controls={`module-content-${moduleId}`}
       >
@@ -182,7 +169,7 @@ function OutlineItem({ module, index, onLessonClick }) {
         )}
         {/* Expand/Collapse Chevron (Optional, can be added if needed) */}
         {/* <ChevronRight className={cn("w-5 h-5 transition-transform shrink-0 ml-2", expanded ? "rotate-90 text-emerald-600" : "text-zinc-400")} /> */}
-      </div>
+      </button>
 
       {/* Progress Section - Mimics styles from [cite: 403, 417] */}
       <div className="flex items-center gap-2 mb-4">
@@ -211,7 +198,7 @@ function OutlineItem({ module, index, onLessonClick }) {
           <div className="space-y-3">
             {" "}
             {/* Ensure spacing between lessons */}
-            {renderLessons(module.lessons || [])}
+            <LessonList lessons={module.lessons || []} onLessonClick={onLessonClick} />
           </div>
         )}
       </div>
