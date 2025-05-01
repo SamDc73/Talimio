@@ -20,16 +20,53 @@ async def create_lesson_endpoint(node_id: str) -> LessonResponse:
     """Generate a new lesson for a given node in the roadmap."""
     import logging
 
+    from sqlalchemy import select
+
+    from src.database.session import async_session_maker
+    from src.roadmaps.models import Node
+
     try:
-        # Create a default request
+        node_uuid = UUID(node_id)
+        
+        # Default metadata if we can't get node info
+        node_meta = {
+            "title": "Learning Topic",
+            "description": "A comprehensive lesson on this topic",
+            "skill_level": "beginner",
+        }
+        
+        # Try to fetch node information from the database
+        try:
+            async with async_session_maker() as session:
+                # Query the node
+                query = select(Node).where(Node.id == node_uuid)
+                result = await session.execute(query)
+                node = result.scalar_one_or_none()
+
+                if node:
+                    # Use actual node data if available
+                    node_meta = {
+                        "title": node.title,
+                        "description": node.description,
+                        "skill_level": "beginner",  # Default if not available from node
+                        "content": node.content or "",  # Additional context for the lesson
+                    }
+                    
+                    # Try to get skill level from the roadmap
+                    if hasattr(node, "roadmap") and node.roadmap:
+                        node_meta["skill_level"] = node.roadmap.skill_level
+                    
+                    logging.info(f"Found node in database: {node.title}")
+                else:
+                    logging.warning(f"Node {node_id} not found in database, using default metadata")
+        except Exception as db_error:
+            logging.warning(f"Error fetching node data: {db_error}. Using default metadata.")
+        
+        # Create the lesson request
         request = LessonCreateRequest(
-            course_id=UUID(node_id),
+            course_id=node_uuid,
             slug=f"lesson-{node_id}",
-            node_meta={
-                "title": "Learning Topic",
-                "description": "A comprehensive lesson on this topic",
-                "skill_level": "beginner",
-            },
+            node_meta=node_meta,
         )
 
         logging.info(f"Generating lesson for node {node_id} with metadata: {request.node_meta}")
