@@ -69,6 +69,8 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
+    margin-top: 0 !important;
+    padding-top: 0 !important;
   }
 
   h1,
@@ -85,9 +87,10 @@
 html,
 body,
 #root {
-  margin: 0;
-  padding: 0;
+  margin: 0 !important;
+  padding: 0 !important;
   width: 100%;
+  overflow-x: hidden;
 }
 
 /* Hide ReactFlow attribution */
@@ -100,10 +103,43 @@ body,
   width: 100%;
   height: 100vh;
   position: relative;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
 }
 
 .reactflow-wrapper {
   width: 100%;
   height: 100%;
   position: absolute;
+}
+
+/* Fixed header and sidebar styles */
+.fixed-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  margin: 0;
+  padding: 0;
+}
+
+.fixed-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  overflow-y: auto;
+  z-index: 20;
+}
+
+/* Main content area with proper padding for fixed elements */
+.main-content {
+  padding-top: 4rem;
+  /* 64px for header height */
+  margin-left: 320px;
+  /* Width of sidebar */
+  margin-top: 0;
+  padding-bottom: 2rem;
 }

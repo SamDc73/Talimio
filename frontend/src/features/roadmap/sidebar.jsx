@@ -37,11 +37,11 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
     // if (!isOpen) {
     //   setExpandedModules([]);
     // }
-  }, [isOpen, modules]); // Rerun when isOpen or modules change
+  }, [isOpen, modules, expandedModules.length]); // Rerun when isOpen, modules, or expandedModules.length change
 
   const handleToggleModule = (moduleId) => {
     setExpandedModules((prev) =>
-      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId],
+      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId]
     );
   };
 
@@ -64,11 +64,11 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
   // --- Sidebar Layout & Styling (Dynamic: All Modules) ---
   return (
     <aside
-      className="sticky top-0 z-20 h-screen w-[320px] flex flex-col bg-white border-r border-zinc-200"
+      className="fixed-sidebar w-[320px] flex flex-col bg-white border-r border-zinc-200"
       style={{ boxShadow: "0 4px 20px rgba(0, 0, 0, 0.05)" }}
     >
       {/* Progress Pill */}
-      <div className="flex items-center gap-2 px-4 pt-4">
+      <div className="flex items-center gap-2 px-4 pt-20">
         <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full px-3 py-1">
           {progress}% Completed
         </span>
@@ -90,7 +90,9 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
               >
                 {module.title}
                 <ChevronRight
-                  className={`w-5 h-5 text-zinc-400 transition-transform duration-200 ${isExpanded ? "rotate-90 text-emerald-600" : "rotate-0"}`}
+                  className={`w-5 h-5 text-zinc-400 transition-transform duration-200 ${
+                    isExpanded ? "rotate-90 text-emerald-600" : "rotate-0"
+                  }`}
                 />
               </button>
               {/* Steps List - Lessons */}
@@ -111,7 +113,13 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
                         </span>
                         <button
                           type="button"
-                          className={`text-left ${isLessonComplete ? "font-semibold text-emerald-700" : isActive ? "font-semibold text-emerald-700" : "text-zinc-800"}`}
+                          className={`text-left ${
+                            isLessonComplete
+                              ? "font-semibold text-emerald-700"
+                              : isActive
+                              ? "font-semibold text-emerald-700"
+                              : "text-zinc-800"
+                          }`}
                           style={{
                             background: "none",
                             border: "none",
