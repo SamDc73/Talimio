@@ -93,9 +93,26 @@ body,
   overflow-x: hidden;
 }
 
-/* Hide ReactFlow attribution */
-.react-flow__attribution {
-  display: none;
+/* Hide ReactFlow attribution and any watermarks */
+.react-flow__attribution,
+.react-flow__watermark,
+.react-flow__viewport>a[href*="xyflow"],
+.react-flow__viewport>div[style*="position: absolute"][style*="bottom: 0"][style*="right: 0"],
+.react-flow__viewport>div:last-child:not(.react-flow__nodes):not(.react-flow__edges):not(.react-flow__background):not(.react-flow__selection):not(.react-flow__controls):not(.react-flow__minimap) {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Position React Flow controls and minimap */
+.react-flow__controls {
+  box-shadow: 0 0 2px 1px rgba(0, 0, 0, 0.08);
+}
+
+.react-flow__minimap {
+  background-color: rgba(255, 255, 255, 0.8);
+  border-radius: 5px;
 }
 
 /* React Flow Styles */

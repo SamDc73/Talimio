@@ -122,15 +122,10 @@ const RoadmapFlow = ({ roadmapId, onError }) => {
               maxZoom={1.5}
               snapToGrid={true}
               snapGrid={[15, 15]}
+              proOptions={{ hideAttribution: true }}
             >
               <Background variant="dots" gap={12} size={1} />
-              <Controls />
-              <MiniMap
-                nodeStrokeWidth={3}
-                nodeColor={(node) => {
-                  return node.type === "decision" ? "#f59e0b" : "#10b981";
-                }}
-              />
+              <Controls position="bottom-right" />
             </ReactFlow>
           </div>
         )}
