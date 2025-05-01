@@ -3,12 +3,12 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import "@xyflow/react/dist/style.css";
 
 import { Toaster } from "./components/toaster";
-import { SidebarProvider } from "./features/roadmap/SidebarContext";
 import { OnboardingFlow } from "./features/onboarding";
 import RoadmapFlow from "./features/roadmap";
+import { SidebarProvider } from "./features/roadmap/SidebarContext";
 import Sidebar from "./features/roadmap/sidebar";
-import { useAppState } from "./hooks/useAppState";
 import { useOutlineData } from "./features/roadmap/useOutlineData";
+import { useAppState } from "./hooks/useAppState";
 
 function RoadmapPage() {
   const { roadmapId } = useParams();

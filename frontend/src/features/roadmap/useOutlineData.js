@@ -1,7 +1,7 @@
 // useOutlineData.js
 // Loads and normalizes the roadmap data for Outline mode
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from "react";
 
 /**
  * Fetches and normalizes roadmap data for the outline view.
@@ -30,41 +30,39 @@ export function useOutlineData(roadmapId) {
         const data = await res.json();
 
         if (!data || !data.nodes) {
-          console.warn('API response missing nodes');
+          console.warn("API response missing nodes");
           setModules([]);
           return;
         }
 
         // Create a map of all nodes for easy lookup
-        const nodeMap = new Map(data.nodes.map(node => [node.id, node]));
+        const nodeMap = new Map(data.nodes.map((node) => [node.id, node]));
 
         // Recursive function to normalize a node and all its children
         const normalizeNode = (node) => ({
           id: node.id,
-          title: node.title || 'Untitled',
-          description: node.description || '',
+          title: node.title || "Untitled",
+          description: node.description || "",
           order: node.order || 0,
-          status: node.status || 'not_started',
+          status: node.status || "not_started",
           // Recursively normalize all children (if any)
           lessons: node.children
-            ? node.children
-                .sort((a, b) => (a.order || 0) - (b.order || 0))
-                .map(child => normalizeNode(child))
-            : []
+            ? node.children.sort((a, b) => (a.order || 0) - (b.order || 0)).map((child) => normalizeNode(child))
+            : [],
         });
 
         // Find root nodes (those without parent_id)
-        const rootNodes = data.nodes.filter(node => !node.parent_id);
+        const rootNodes = data.nodes.filter((node) => !node.parent_id);
 
         // Process and sort root nodes
         const normalizedModules = rootNodes
-          .map(node => normalizeNode(node))
+          .map((node) => normalizeNode(node))
           .sort((a, b) => (a.order || 0) - (b.order || 0));
 
         setModules(normalizedModules);
       } catch (err) {
-        console.error('Failed to load or parse roadmap data:', err);
-        setError(err.message || 'Failed to load data');
+        console.error("Failed to load or parse roadmap data:", err);
+        setError(err.message || "Failed to load data");
         setModules([]);
       } finally {
         setIsLoading(false);

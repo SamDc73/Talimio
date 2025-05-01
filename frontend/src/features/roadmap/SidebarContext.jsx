@@ -18,7 +18,7 @@ export function SidebarProvider({ children }) {
       isOpen,
       toggleSidebar, // Now toggleSidebar has a stable reference
     }),
-    [isOpen, toggleSidebar] // Include toggleSidebar in dependencies
+    [isOpen, toggleSidebar], // Include toggleSidebar in dependencies
   );
 
   return <SidebarContext.Provider value={value}>{children}</SidebarContext.Provider>;
