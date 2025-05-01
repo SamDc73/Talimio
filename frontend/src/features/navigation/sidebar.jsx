@@ -1,50 +1,65 @@
-import { cn } from "@/lib/utils"; // Assuming this utility exists
-import { CheckCircle, ChevronRight, Circle, Lock } from "lucide-react";
-import React, { useState, useEffect } from "react";
-import { useSidebar } from "./SidebarContext"; // Re-added import
+import { CheckCircle, ChevronRight, Circle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useSidebar } from "./SidebarContext";
 
-// --- Data Type Definitions (Kept from original code) ---
 /**
- * @typedef {Object} Lesson
- * @property {string} id
- * @property {string} title
- * @property {string} status // 'completed', 'locked', 'active', etc.
+ * @typedef {Object} Lesson - Course lesson with completion status
+ * @property {string} id - Unique identifier
+ * @property {string} title - Lesson title
+ * @property {string} status - Status: 'completed', 'locked', or 'active'
  *
- * @typedef {Object} Module
- * @property {string} id
- * @property {string} title
- * @property {string} status // 'completed', etc.
- * @property {Lesson[]} lessons
+ * @typedef {Object} Module - Course module containing lessons
+ * @property {string} id - Unique identifier
+ * @property {string} title - Module title
+ * @property {string} status - Module status
+ * @property {Lesson[]} lessons - Array of lessons in this module
  */
 
-// Renamed component to avoid potential conflicts if keeping the original
-function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId = null }) {
-  // --- Context Integration ---
-  const { isOpen } = useSidebar(); // Get visibility state from context
+/**
+ * Course navigation sidebar that displays a hierarchical view of modules and lessons
+ *
+ * Features:
+ * - Collapsible module sections with expand/collapse functionality
+ * - Visual indicators for lesson completion status
+ * - Progress tracking for overall course completion
+ * - Responsive design that can be toggled via SidebarContext
+ * - Auto-expands first module when sidebar opens
+ *
+ * @param {Object} props
+ * @param {Module[]} props.modules - Array of course modules to display
+ * @param {Function} props.onLessonClick - Callback when lesson is clicked, receives (moduleId, lessonId)
+ * @param {string|null} props.activeLessonId - Currently active lesson ID for highlighting
+ */
+function Sidebar({ modules = [], onLessonClick, activeLessonId = null }) {
+  // Get sidebar visibility state from context
+  const { isOpen } = useSidebar();
 
-  // --- State and Logic (Kept from previous version) ---
+  // Track which modules are expanded
   const [expandedModules, setExpandedModules] = useState(() => {
-    // Initialize with the first module expanded if modules exist and sidebar is open
     return isOpen && modules.length > 0 ? [modules[0].id] : [];
   });
 
-  // Effect to handle initial expansion when sidebar opens/modules load
+  // Auto-expand first module when sidebar opens
   useEffect(() => {
     if (isOpen && modules.length > 0 && expandedModules.length === 0) {
       setExpandedModules([modules[0].id]);
     }
-    // Optional: Collapse all when sidebar closes (if desired)
-    // if (!isOpen) {
-    //   setExpandedModules([]);
-    // }
-  }, [isOpen, modules, expandedModules.length]); // Rerun when isOpen, modules, or expandedModules.length change
+  }, [isOpen, modules, expandedModules.length]);
 
   const handleToggleModule = (moduleId) => {
     setExpandedModules((prev) =>
-      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId]
+      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId],
     );
   };
 
+  /**
+   * Determines if a module is completed based on either:
+   * 1. Module has explicit "completed" status
+   * 2. All lessons within module are marked as completed
+   *
+   * @param {Module} module - The module to check
+   * @returns {boolean} True if module is considered complete
+   */
   const isModuleCompleted = (module) => {
     return (
       module.status === "completed" ||
@@ -52,11 +67,10 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
     );
   };
 
+  // Calculate overall progress percentage
   const completedModulesCount = modules?.filter(isModuleCompleted).length || 0;
   const totalModules = modules.length;
   const progress = totalModules ? Math.round((completedModulesCount / totalModules) * 100) : 0;
-
-  // --- Sidebar Layout & Styling with Animation ---
   return (
     <aside
       className={`fixed-sidebar flex flex-col bg-white border-r border-zinc-200 transition-all duration-300 ease-in-out ${
@@ -64,7 +78,7 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
       }`}
       style={{ boxShadow: isOpen ? "0 4px 20px rgba(0, 0, 0, 0.05)" : "none" }}
     >
-      {/* Progress Pill */}
+      {/* Progress indicator showing overall course completion percentage */}
       <div
         className={`flex items-center gap-2 px-4 pt-20 transition-opacity duration-300 ${
           isOpen ? "opacity-100" : "opacity-0"
@@ -74,18 +88,18 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
           {progress}% Completed
         </span>
       </div>
-      {/* Module Navigation List - Dynamic rendering of all modules */}
+      {/* Scrollable module list with expandable lesson sections */}
       <nav
         className={`flex-1 p-3 space-y-4 overflow-y-auto transition-opacity duration-300 ${
           isOpen ? "opacity-100" : "opacity-0"
         }`}
       >
         {modules.map((module) => {
-          const moduleComplete = isModuleCompleted(module);
+          // Check if this module is expanded
           const isExpanded = expandedModules.includes(module.id);
           return (
             <div key={module.id} className="rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
-              {/* Section Header */}
+              {/* Module header with expand/collapse toggle */}
               <button
                 type="button"
                 onClick={() => handleToggleModule(module.id)}
@@ -100,7 +114,7 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
                   }`}
                 />
               </button>
-              {/* Steps List - Lessons */}
+              {/* Module lessons with completion status indicators */}
               {isExpanded && (
                 <ol className="px-4 py-2 space-y-2">
                   {module.lessons.map((lesson) => {
@@ -122,8 +136,8 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
                             isLessonComplete
                               ? "font-semibold text-emerald-700"
                               : isActive
-                              ? "font-semibold text-emerald-700"
-                              : "text-zinc-800"
+                                ? "font-semibold text-emerald-700"
+                                : "text-zinc-800"
                           }`}
                           style={{
                             background: "none",
@@ -149,4 +163,4 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
   );
 }
 
-export default UpdatedSidebarWithContext;
+export default Sidebar;

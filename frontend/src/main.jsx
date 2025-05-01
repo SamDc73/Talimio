@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom"; // Import BrowserRouter
 
-import "./features/roadmap/reset.css"; // Import reset CSS first
+import "./features/navigation/reset.css"; // Import reset CSS first
 import "./index.css";
 import App from "./App";
 
