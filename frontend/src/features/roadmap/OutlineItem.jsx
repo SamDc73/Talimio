@@ -3,8 +3,8 @@
 // Mimics the styling of module cards in UI-update.txt
 // Type hints are in comments for clarity
 
+import { ArrowRight, CheckCircle } from "lucide-react"; // Using lucide-react as in UI-update.txt
 import React, { useState } from "react";
-import { CheckCircle, ArrowRight } from "lucide-react"; // Using lucide-react as in UI-update.txt
 
 // Helper function for class names (optional, but good practice)
 const cn = (...classes) => classes.filter(Boolean).join(" ");
@@ -71,7 +71,7 @@ function OutlineItem({ module, index, onLessonClick }) {
                 "flex items-center justify-between p-4 transition-all border rounded-lg",
                 isCompleted
                   ? "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-100" // Completed style [cite: 404]
-                  : "bg-white border-zinc-200 hover:border-emerald-200 hover:bg-emerald-50/30" // Default style [cite: 408]
+                  : "bg-white border-zinc-200 hover:border-emerald-200 hover:bg-emerald-50/30", // Default style [cite: 408]
               )}
             >
               {/* Left side: Icon/Number and Title */}
@@ -85,7 +85,7 @@ function OutlineItem({ module, index, onLessonClick }) {
                   <div
                     className={cn(
                       "flex items-center justify-center w-5 h-5 rounded-full text-xs font-medium shrink-0",
-                      "bg-zinc-100 text-zinc-700" // Default number style [cite: 409]
+                      "bg-zinc-100 text-zinc-700", // Default number style [cite: 409]
                       // Add locked style if applicable: 'bg-zinc-100 text-zinc-400'
                     )}
                   >
@@ -99,7 +99,7 @@ function OutlineItem({ module, index, onLessonClick }) {
                   <span
                     className={cn(
                       "font-medium truncate", // Added truncate
-                      isCompleted ? "text-zinc-800" : "text-zinc-800"
+                      isCompleted ? "text-zinc-800" : "text-zinc-800",
                       // Add locked style if applicable: 'text-zinc-400'
                     )}
                   >
@@ -120,7 +120,7 @@ function OutlineItem({ module, index, onLessonClick }) {
                   "flex items-center gap-1 px-3 py-1.5 text-sm font-medium transition-colors rounded-md shrink-0 ml-2", // Added shrink-0 and ml-2
                   isCompleted
                     ? "text-white bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600" // Completed button [cite: 406]
-                    : "text-emerald-700 bg-emerald-100 hover:bg-emerald-200" // Default button [cite: 410]
+                    : "text-emerald-700 bg-emerald-100 hover:bg-emerald-200", // Default button [cite: 410]
                   // Add locked style if applicable: 'text-zinc-500 bg-zinc-100 cursor-not-allowed'
                 )}
                 // Add disabled attribute if lesson is locked
@@ -163,7 +163,7 @@ function OutlineItem({ module, index, onLessonClick }) {
             "flex items-center justify-center w-7 h-7 rounded-full text-xs font-medium transition-all duration-300 shrink-0",
             isModuleCompleted
               ? "bg-emerald-500 text-white hover:bg-emerald-600" // Completed style [cite: 399]
-              : "bg-zinc-100 text-zinc-700" // Default style [cite: 413]
+              : "bg-zinc-100 text-zinc-700", // Default style [cite: 413]
           )}
         >
           {isModuleCompleted ? <CheckCircle className="w-4 h-4" /> : index + 1}
@@ -193,7 +193,7 @@ function OutlineItem({ module, index, onLessonClick }) {
           <div
             className="h-full bg-emerald-500 rounded-full transition-all duration-500"
             style={{ width: `${progress}%` }}
-          ></div>
+          />
         </div>
       </div>
 
@@ -203,7 +203,7 @@ function OutlineItem({ module, index, onLessonClick }) {
         id={`module-content-${moduleId}`}
         className={cn(
           "transition-all duration-300 ease-in-out overflow-hidden",
-          expanded ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0" // Basic expand/collapse
+          expanded ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0", // Basic expand/collapse
         )}
         style={{ transitionProperty: "max-height, opacity" }} // Explicit transitions
       >

@@ -1,7 +1,7 @@
+import { cn } from "@/lib/utils"; // Assuming this utility exists
+import { CheckCircle, ChevronRight, Circle, Lock } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { useSidebar } from "./SidebarContext"; // Re-added import
-import { CheckCircle, ChevronRight, Circle, Lock } from "lucide-react";
-import { cn } from "@/lib/utils"; // Assuming this utility exists
 
 // --- Data Type Definitions (Kept from original code) ---
 /**
@@ -41,7 +41,7 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
 
   const handleToggleModule = (moduleId) => {
     setExpandedModules((prev) =>
-      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId]
+      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId],
     );
   };
 
@@ -79,10 +79,7 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
           const moduleComplete = isModuleCompleted(module);
           const isExpanded = expandedModules.includes(module.id);
           return (
-            <div
-              key={module.id}
-              className="rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden"
-            >
+            <div key={module.id} className="rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
               {/* Section Header */}
               <button
                 type="button"
@@ -92,7 +89,9 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
                 aria-expanded={isExpanded}
               >
                 {module.title}
-                <ChevronRight className={`w-5 h-5 text-zinc-400 transition-transform duration-200 ${isExpanded ? "rotate-90 text-emerald-600" : "rotate-0"}`} />
+                <ChevronRight
+                  className={`w-5 h-5 text-zinc-400 transition-transform duration-200 ${isExpanded ? "rotate-90 text-emerald-600" : "rotate-0"}`}
+                />
               </button>
               {/* Steps List - Lessons */}
               {isExpanded && (
@@ -113,7 +112,12 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
                         <button
                           type="button"
                           className={`text-left ${isLessonComplete ? "font-semibold text-emerald-700" : isActive ? "font-semibold text-emerald-700" : "text-zinc-800"}`}
-                          style={{ background: "none", border: "none", padding: 0, cursor: isLocked ? "not-allowed" : "pointer" }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            cursor: isLocked ? "not-allowed" : "pointer",
+                          }}
                           disabled={isLocked}
                           onClick={() => !isLocked && onLessonClick?.(module.id, lesson.id)}
                         >

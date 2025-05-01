@@ -1,5 +1,5 @@
+import { FileText, Layout, PanelLeft } from "lucide-react";
 import React from "react";
-import { PanelLeft, Layout, FileText } from "lucide-react";
 
 /**
  * RoadmapHeader component displays the course title, a progress bar, and a visually accurate collapse button.
@@ -33,19 +33,19 @@ function RoadmapHeader({ courseName, mode, onModeChange }) {
             {/* Mode toggle buttons (to the left of progress bar) */}
             <div className="flex items-center gap-2">
               <button
-                className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${mode === 'visual' ? 'bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default' : 'text-zinc-400 bg-zinc-100 border-zinc-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 cursor-pointer'}`}
+                className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${mode === "visual" ? "bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default" : "text-zinc-400 bg-zinc-100 border-zinc-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 cursor-pointer"}`}
                 type="button"
-                onClick={() => mode !== 'visual' && onModeChange('visual')}
-                aria-pressed={mode === 'visual'}
+                onClick={() => mode !== "visual" && onModeChange("visual")}
+                aria-pressed={mode === "visual"}
                 tabIndex={0}
               >
                 <Layout className="w-4 h-4 mr-1" /> Visual
               </button>
               <button
-                className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${mode === 'outline' ? 'bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default' : 'text-zinc-400 bg-zinc-100 border-zinc-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 cursor-pointer'}`}
+                className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${mode === "outline" ? "bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default" : "text-zinc-400 bg-zinc-100 border-zinc-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 cursor-pointer"}`}
                 type="button"
-                onClick={() => mode !== 'outline' && onModeChange('outline')}
-                aria-pressed={mode === 'outline'}
+                onClick={() => mode !== "outline" && onModeChange("outline")}
+                aria-pressed={mode === "outline"}
                 tabIndex={0}
               >
                 <FileText className="w-4 h-4 mr-1" /> Outline view
