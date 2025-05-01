@@ -1,5 +1,5 @@
 import { CheckCircle, ChevronRight, Circle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSidebar } from "./SidebarContext";
 
 /**
@@ -23,7 +23,7 @@ import { useSidebar } from "./SidebarContext";
  * - Visual indicators for lesson completion status
  * - Progress tracking for overall course completion
  * - Responsive design that can be toggled via SidebarContext
- * - Auto-expands first module when sidebar opens
+ * - First module expanded by default, but users can collapse all modules if desired
  *
  * @param {Object} props
  * @param {Module[]} props.modules - Array of course modules to display
@@ -34,17 +34,11 @@ function Sidebar({ modules = [], onLessonClick, activeLessonId = null }) {
   // Get sidebar visibility state from context
   const { isOpen } = useSidebar();
 
-  // Track which modules are expanded
+  // Track which modules are expanded - first one expanded by default
   const [expandedModules, setExpandedModules] = useState(() => {
+    // Only expand the first module by default if there are modules and the sidebar is open
     return isOpen && modules.length > 0 ? [modules[0].id] : [];
   });
-
-  // Auto-expand first module when sidebar opens
-  useEffect(() => {
-    if (isOpen && modules.length > 0 && expandedModules.length === 0) {
-      setExpandedModules([modules[0].id]);
-    }
-  }, [isOpen, modules, expandedModules.length]);
 
   const handleToggleModule = (moduleId) => {
     setExpandedModules((prev) =>
