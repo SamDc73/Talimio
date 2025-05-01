@@ -41,7 +41,7 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
 
   const handleToggleModule = (moduleId) => {
     setExpandedModules((prev) =>
-      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId]
+      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId],
     );
   };
 
@@ -117,8 +117,8 @@ function UpdatedSidebarWithContext({ modules = [], onLessonClick, activeLessonId
                             isLessonComplete
                               ? "font-semibold text-emerald-700"
                               : isActive
-                              ? "font-semibold text-emerald-700"
-                              : "text-zinc-800"
+                                ? "font-semibold text-emerald-700"
+                                : "text-zinc-800"
                           }`}
                           style={{
                             background: "none",

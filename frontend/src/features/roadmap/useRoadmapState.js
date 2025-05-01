@@ -154,64 +154,50 @@ const layoutNodes = (rootNodes, nodePositions, uniqueApiNodes, nodeRelationships
   }
 };
 
-// Duolingo-style vertical layout with intuitive parent-child relationships
-const getVerticalTreeLayout = (apiNodes) => {
+// Helper functions for node processing
+const processNodeStack = (apiNodes) => {
   const uniqueApiNodes = new Map();
   const nodeRelationships = new Map();
-
-  // Use iterative traversal for nested nodes
-  const stack = [...apiNodes.map((node) => ({ node, parentId: node.parent_id || null }))];
+  const stack = apiNodes.map((node) => ({ node, parentId: node.parent_id || null }));
 
   while (stack.length > 0) {
     const { node, parentId } = stack.pop();
     processNode(node, parentId, uniqueApiNodes, nodeRelationships);
 
     if (Array.isArray(node.children) && node.children.length > 0) {
-      // Sort children by their order property before processing
-      const sortedChildren = [...node.children].sort((a, b) => a.order - b.order);
-      // Process in reverse order for the stack (so they get popped in the correct order)
-      for (const child of sortedChildren.reverse()) {
+      const sortedChildren = [...node.children].sort((a, b) => a.order - b.order).reverse();
+      for (const child of sortedChildren) {
         stack.push({ node: child, parentId: node.id });
       }
     }
   }
 
-  // Find root nodes
+  return { uniqueApiNodes, nodeRelationships };
+};
+
+const findRootNodes = (uniqueApiNodes) => {
   const allNodeIds = new Set(uniqueApiNodes.keys());
-  const rootNodes = Array.from(uniqueApiNodes.values())
+  return Array.from(uniqueApiNodes.values())
     .filter((node) => !node.parent_id || !allNodeIds.has(node.parent_id))
-    // Sort root nodes by their order property
     .sort((a, b) => a.order - b.order)
     .map((node) => node.id);
+};
 
-  const nodePositions = new Map();
+const sortNodesByHierarchy = (nodes) => {
+  return nodes.sort((a, b) => {
+    if (a.parent_id !== b.parent_id) {
+      if (!a.parent_id) return -1;
+      if (!b.parent_id) return 1;
+      return a.parent_id.localeCompare(b.parent_id);
+    }
+    return a.order - b.order;
+  });
+};
 
-  // Position all nodes
-  layoutNodes(rootNodes, nodePositions, uniqueApiNodes, nodeRelationships);
-
-  // Create the React Flow nodes
-  const reactFlowNodes = Array.from(uniqueApiNodes.values())
-    // Sort nodes by their order property to ensure consistent ordering
-    .sort((a, b) => {
-      // First sort by parent_id to group siblings together
-      if (a.parent_id !== b.parent_id) {
-        // If one has no parent, it should come first
-        if (!a.parent_id) return -1;
-        if (!b.parent_id) return 1;
-        // Otherwise sort by parent_id
-        return a.parent_id.localeCompare(b.parent_id);
-      }
-      // Then sort siblings by their order property
-      return a.order - b.order;
-    })
-    .map((apiNode) => createReactFlowNode(apiNode, nodePositions, nodeRelationships))
-    .filter(Boolean);
-
-  // Create edges based on the nodeRelationships
-  const reactFlowEdges = [];
+const createEdges = (nodeRelationships, uniqueApiNodes) => {
+  const edges = [];
   for (const [parentId, children] of nodeRelationships) {
     if (uniqueApiNodes.has(parentId)) {
-      // Sort children by their order property
       const sortedChildren = [...children].sort((a, b) => {
         const nodeA = uniqueApiNodes.get(a);
         const nodeB = uniqueApiNodes.get(b);
@@ -220,7 +206,7 @@ const getVerticalTreeLayout = (apiNodes) => {
 
       for (const childId of sortedChildren) {
         if (uniqueApiNodes.has(childId)) {
-          reactFlowEdges.push({
+          edges.push({
             id: `e${parentId}-${childId}`,
             source: parentId,
             target: childId,
@@ -230,79 +216,125 @@ const getVerticalTreeLayout = (apiNodes) => {
       }
     }
   }
+  return edges;
+};
+
+// Duolingo-style vertical layout with intuitive parent-child relationships
+const getVerticalTreeLayout = (apiNodes) => {
+  // Process nodes and build relationships
+  const { uniqueApiNodes, nodeRelationships } = processNodeStack(apiNodes);
+
+  // Find and sort root nodes
+  const rootNodes = findRootNodes(uniqueApiNodes);
+
+  // Calculate node positions
+  const nodePositions = new Map();
+  layoutNodes(rootNodes, nodePositions, uniqueApiNodes, nodeRelationships);
+
+  // Create and sort React Flow nodes
+  const reactFlowNodes = sortNodesByHierarchy(Array.from(uniqueApiNodes.values()))
+    .map((apiNode) => createReactFlowNode(apiNode, nodePositions, nodeRelationships))
+    .filter(Boolean);
+
+  // Create edges
+  const reactFlowEdges = createEdges(nodeRelationships, uniqueApiNodes);
 
   return { nodes: reactFlowNodes, edges: reactFlowEdges };
 };
 
+// Helper functions for Dagre layout processing
+const initializeDagreGraph = (direction = "TB") => {
+  const graph = new dagre.graphlib.Graph();
+  graph.setDefaultEdgeLabel(() => ({}));
+  graph.setGraph({ rankdir: direction, nodesep: 70, ranksep: 100 });
+  return graph;
+};
+
+const setupDagreNode = (node, dagreGraph) => {
+  dagreGraph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+  return node;
+};
+
+const createEdge = (parentId, nodeId) => ({
+  id: `e${parentId}-${nodeId}`,
+  source: parentId,
+  target: nodeId,
+  type: "smoothstep",
+});
+
+const determineNodeType = (node) =>
+  node.type || (Array.isArray(node.children) && node.children.length > 0 ? "decision" : "task");
+
+const createFlowNode = (apiNode, nodeWithPosition) => ({
+  id: apiNode.id,
+  type: determineNodeType(apiNode),
+  position: {
+    x: nodeWithPosition.x - NODE_WIDTH / 2,
+    y: nodeWithPosition.y - NODE_HEIGHT / 2,
+  },
+  data: {
+    label: apiNode.title,
+    description: apiNode.description,
+    ...apiNode,
+  },
+});
+
 // Keep the original Dagre layout as a fallback
 const getDagreLayout = (apiNodes, direction = "TB") => {
-  const dagreGraph = new dagre.graphlib.Graph();
-  dagreGraph.setDefaultEdgeLabel(() => ({}));
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 70, ranksep: 100 });
-
+  const dagreGraph = initializeDagreGraph(direction);
   const uniqueApiNodes = new Map();
   const processedNodeIds = new Set();
-  const reactFlowEdges = [];
+  const edges = new Set();
 
-  const processApiNodes = (nodes, parentId = null) => {
-    for (const node of nodes) {
-      if (!processedNodeIds.has(node.id)) {
-        processedNodeIds.add(node.id);
-        uniqueApiNodes.set(node.id, node);
-        dagreGraph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+  const addNodeAndEdges = (node, parentId = null) => {
+    if (!processedNodeIds.has(node.id)) {
+      processedNodeIds.add(node.id);
+      uniqueApiNodes.set(node.id, node);
+      setupDagreNode(node, dagreGraph);
+    }
+
+    if (parentId) {
+      const edgeId = `e${parentId}-${node.id}`;
+      if (!edges.has(edgeId)) {
+        dagreGraph.setEdge(parentId, node.id);
+        edges.add(edgeId);
       }
+    }
 
-      if (parentId) {
-        const edgeId = `e${parentId}-${node.id}`;
-        if (!reactFlowEdges.some((e) => e.id === edgeId)) {
-          dagreGraph.setEdge(parentId, node.id);
-          reactFlowEdges.push({
-            id: edgeId,
-            source: parentId,
-            target: node.id,
-            type: "smoothstep",
-          });
-        }
-      }
-
-      if (Array.isArray(node.children) && node.children.length > 0) {
-        processApiNodes(node.children, node.id);
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        addNodeAndEdges(child, node.id);
       }
     }
   };
 
   const rootNodes = apiNodes.filter((node) => !node.parent_id);
-  processApiNodes(rootNodes);
+  for (const node of rootNodes) {
+    addNodeAndEdges(node);
+  }
 
   dagre.layout(dagreGraph);
 
-  const reactFlowNodes = [];
-  for (const apiNode of uniqueApiNodes.values()) {
-    const nodeWithPosition = dagreGraph.node(apiNode.id);
-    if (!nodeWithPosition) {
-      console.warn(`Dagre layout information missing for node ID: ${apiNode.id}`);
-      continue;
-    }
-
-    reactFlowNodes.push({
-      id: apiNode.id,
-      type: apiNode.type || (Array.isArray(apiNode.children) && apiNode.children.length > 0 ? "decision" : "task"),
-      position: {
-        x: nodeWithPosition.x - NODE_WIDTH / 2,
-        y: nodeWithPosition.y - NODE_HEIGHT / 2,
-      },
-      data: {
-        label: apiNode.title,
-        description: apiNode.description,
-        ...apiNode,
-      },
-    });
-  }
+  const reactFlowNodes = Array.from(uniqueApiNodes.values())
+    .map((apiNode) => {
+      const nodeWithPosition = dagreGraph.node(apiNode.id);
+      if (!nodeWithPosition) {
+        console.warn(`Dagre layout information missing for node ID: ${apiNode.id}`);
+        return null;
+      }
+      return createFlowNode(apiNode, nodeWithPosition);
+    })
+    .filter(Boolean);
 
   const finalNodeIds = new Set(reactFlowNodes.map((n) => n.id));
-  const filteredEdges = reactFlowEdges.filter((edge) => finalNodeIds.has(edge.source) && finalNodeIds.has(edge.target));
+  const reactFlowEdges = Array.from(edges)
+    .map((edgeId) => {
+      const [, parentId, nodeId] = edgeId.match(/^e(.*)-(.*)$/);
+      return createEdge(parentId, nodeId);
+    })
+    .filter((edge) => finalNodeIds.has(edge.source) && finalNodeIds.has(edge.target));
 
-  return { nodes: reactFlowNodes, edges: filteredEdges };
+  return { nodes: reactFlowNodes, edges: reactFlowEdges };
 };
 
 // Main layout function that uses the vertical tree layout
