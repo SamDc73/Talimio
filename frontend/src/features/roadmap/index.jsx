@@ -92,17 +92,17 @@ const RoadmapFlow = ({ roadmapId, onError }) => {
   const progress = getProgress();
 
   return (
-    <>
+    <div className="roadmap-container" style={{ margin: 0, padding: 0 }}>
       <RoadmapHeader mode={mode} onModeChange={setMode} progress={progress} courseName={courseName} />
 
-      <div className="flex h-[calc(100vh-4rem)]">
+      <div className="flex h-screen">
         <Sidebar modules={modules || []} onLessonClick={() => {}} />
         {mode === "outline" ? (
-          <div className="flex flex-1">
+          <div className="flex flex-1 main-content">
             <OutlineView roadmapId={roadmapId} />
           </div>
         ) : (
-          <div className="flex-1 relative">
+          <div className="flex-1 relative main-content">
             <ReactFlow
               nodes={nodes}
               edges={styledEdges}
@@ -157,7 +157,7 @@ const RoadmapFlow = ({ roadmapId, onError }) => {
           )}
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 };
 

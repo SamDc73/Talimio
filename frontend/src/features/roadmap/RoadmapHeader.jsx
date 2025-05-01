@@ -13,8 +13,8 @@ function RoadmapHeader({ courseName, mode, onModeChange }) {
   const progress = 3;
 
   return (
-    <header className="sticky top-0 z-40 backdrop-blur-md bg-white/80 border-b border-zinc-200">
-      <div className="flex items-center h-16 w-full">
+    <header className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md bg-white/80 border-b border-zinc-200">
+      <div className="flex items-center h-16 w-full max-w-[100vw]">
         <div className="ml-4">
           <button
             className="p-2 text-zinc-500 bg-white rounded-md hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-200"
