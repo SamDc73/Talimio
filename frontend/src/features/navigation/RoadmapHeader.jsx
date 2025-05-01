@@ -1,17 +1,25 @@
 import { FileText, Layout, PanelLeft } from "lucide-react";
-import React from "react";
 import { useSidebar } from "./SidebarContext";
 
 /**
- * RoadmapHeader component displays the course title, a progress bar, and a toggle button for the sidebar.
+ * Application header component that provides navigation controls and course progress
+ *
+ * Features:
+ * - Collapsible sidebar toggle
+ * - Course title display with gradient styling
+ * - View mode toggle between visual and outline representations
+ * - Progress bar showing course completion percentage
+ *
+ * The header stays fixed at the top and includes a subtle blur effect for better readability
+ * when content scrolls underneath.
+ *
  * @param {Object} props
- * @param {string} props.courseName - The name of the course to display in the header.
- * @param {string} props.mode - Current mode ("visual" or "outline")
- * @param {function} props.onModeChange - Function to change mode
- * @param {number} [props.progress] - Optional progress percentage (0-100)
+ * @param {string} props.courseName - Course title to display in the header
+ * @param {string} props.mode - Current view mode ("visual" for flowchart or "outline" for text)
+ * @param {function} props.onModeChange - Callback handler for mode toggle changes
+ * @param {number} [props.progress=3] - Course completion percentage (0-100)
  */
 function RoadmapHeader({ courseName, mode, onModeChange, progress = 3 }) {
-  // Get sidebar state and toggle function from context
   const { isOpen, toggleSidebar } = useSidebar();
 
   return (
@@ -33,7 +41,7 @@ function RoadmapHeader({ courseName, mode, onModeChange, progress = 3 }) {
             {courseName}
           </h1>
           <div className="flex items-center gap-4 ml-8 pr-12">
-            {/* Mode toggle buttons (to the left of progress bar) */}
+            {/* View mode toggle - switches between visual flowchart and outline text views */}
             <div className="flex items-center gap-2">
               <button
                 className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${
@@ -62,7 +70,7 @@ function RoadmapHeader({ courseName, mode, onModeChange, progress = 3 }) {
                 <FileText className="w-4 h-4 mr-1" /> Outline view
               </button>
             </div>
-            {/* Progress bar */}
+            {/* Animated progress bar with percentage indicator */}
             <div className="flex items-center gap-2">
               <div className="relative w-32 h-2 bg-zinc-200 rounded-full overflow-hidden">
                 <div

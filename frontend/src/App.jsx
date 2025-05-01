@@ -3,10 +3,10 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import "@xyflow/react/dist/style.css";
 
 import { Toaster } from "./components/toaster";
+import { SidebarProvider } from "./features/navigation/SidebarContext";
+import Sidebar from "./features/navigation/sidebar";
 import { OnboardingFlow } from "./features/onboarding";
 import RoadmapFlow from "./features/roadmap";
-import { SidebarProvider } from "./features/roadmap/SidebarContext";
-import Sidebar from "./features/roadmap/sidebar";
 import { useOutlineData } from "./features/roadmap/useOutlineData";
 import { useAppState } from "./hooks/useAppState";
 

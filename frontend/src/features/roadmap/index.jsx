@@ -2,17 +2,17 @@ import { Background, Controls, MiniMap, ReactFlow } from "@xyflow/react";
 import { X } from "lucide-react";
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
+import RoadmapHeader from "../navigation/RoadmapHeader";
+import { useSidebar } from "../navigation/SidebarContext";
+import Sidebar from "../navigation/sidebar";
 import { DecisionNode } from "./DecisionNode";
 import { NodeConnections } from "./NodeConnections";
 import { NodeGenerationForm } from "./NodeGenerationForm";
 import { NodeProperties } from "./NodeProperties";
 import OutlineView from "./OutlineView";
-import RoadmapHeader from "./RoadmapHeader";
 import { TaskNode } from "./TaskNode";
-import Sidebar from "./sidebar";
 import { useOutlineData } from "./useOutlineData";
 import { useRoadmapState } from "./useRoadmapState";
-import { useSidebar } from "./SidebarContext";
 
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/dialog";
 
