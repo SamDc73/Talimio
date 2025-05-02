@@ -124,20 +124,69 @@ class ModelManager:
         title: str,
         skill_level: str,
         description: str,
+        *,
+        min_core_topics: int = 4,
+        max_core_topics: int = 14,
+        sub_min: int = 3,
+        sub_max: int = 13,
     ) -> list[dict[str, Any]]:
-        """Generate a detailed hierarchical roadmap as JSON."""
-        prompt = f"""
-You are a curriculum design expert. Generate a hierarchical learning path as a pure JSON array for the new roadmap:
-  Title: {title}
-  Description: {description}
-  Skill Level: {skill_level}
-Requirements:
- - Exactly 4 core topics (level 1)
- - Each core topic must have exactly 3 subtopics (level 2)
- - Each subtopic must have exactly 2 sub-subtopics (level 3)
-Use this exact node schema and follow the example structure:
+        """Generate a detailed hierarchical roadmap as JSON.
 
-Example output:
+        Args:
+            title: The title of the roadmap
+            skill_level: The skill level (beginner, intermediate, advanced)
+            description: Description of the roadmap
+            min_core_topics: Minimum number of core topics (default: 4)
+            max_core_topics: Maximum number of core topics (default: 4)
+            sub_min: Minimum number of subtopics per core topic (default: 3)
+            sub_max: Maximum number of subtopics per core topic (default: 3)
+
+        The output JSON follows JSON Schema Draft-07 format as specified in the template.
+        """
+        if min_core_topics > max_core_topics:
+            raise ValidationError("min_core_topics cannot be greater than max_core_topics")
+        if sub_min > sub_max:
+            raise ValidationError("sub_min cannot be greater than sub_max")
+        prompt = f"""
+You are *CurriculumArchitect 9000*.
+Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdown, no commentary.
+
+### Parameters
+- Title: {title}
+- Description: {description}
+- Learner Level: {skill_level}  (beginner | intermediate | advanced)
+
+### Output rules
+1. Output ONLY a JSON array that validates against the schema below.
+2. Core topics: min {min_core_topics}, max {max_core_topics}.
+3. Each core topic gets {sub_min}-{sub_max} subtopics.
+4. Keep the `children` field (level 3) present but **empty**.
+5. Set `order` fields so siblings start at 0 and increment.
+6. Never wrap the JSON in back-ticks, markdown, or prose.
+7. All prerequisite_ids must be empty arrays ([]) for compatibility.
+
+### JSON Schema (draft-07)
+{{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {{
+    "type": "object",
+    "required": ["title","description","content","order","prerequisite_ids","children"],
+    "properties": {{
+      "title": {{ "type": "string" }},
+      "description": {{ "type": "string" }},
+      "content": {{ "type": "string" }},
+      "order": {{ "type": "integer", "minimum": 0 }},
+      "prerequisite_ids": {{ "type": "array", "items": {{ "type": "string" }} }},
+      "children": {{
+        "type": "array",
+        "items": {{ "$ref": "#" }}
+      }}
+    }}
+  }}
+}}
+
+### Example (trimmed)
 [
   {{
     "title": "Core Topic 1",
@@ -152,32 +201,14 @@ Example output:
         "content": "Objectives...",
         "order": 0,
         "prerequisite_ids": [],
-        "children": [
-          {{
-            "title": "Sub-subtopic 1.1.1",
-            "description": "Details of Sub-subtopic 1.1.1",
-            "content": "Objectives...",
-            "order": 0,
-            "prerequisite_ids": [],
-            "children": []
-          }},
-          {{
-            "title": "Sub-subtopic 1.1.2",
-            "description": "Details of Sub-subtopic 1.1.2",
-            "content": "Objectives...",
-            "order": 1,
-            "prerequisite_ids": [],
-            "children": []
-          }}
-        ]
+        "children": []
       }},
-      {{ "title": "Subtopic 1.2", "description": "...", "content": "...", "order": 1, "prerequisite_ids": [], "children": [/* 2 sub-subtopics */] }},
-      {{ "title": "Subtopic 1.3", "description": "...", "content": "...", "order": 2, "prerequisite_ids": [], "children": [/* 2 sub-subtopics */] }}
+      {{ "title": "Subtopic 1.2", "description": "...", "content": "...", "order": 1, "prerequisite_ids": [], "children": [] }},
+      {{ "title": "Subtopic 1.3", "description": "...", "content": "...", "order": 2, "prerequisite_ids": [], "children": [] }}
     ]
   }},
   ... (repeat for Core Topics 2-4)
 ]
-Return ONLY the JSON array with no additional commentary.
 """
 
         messages = [
