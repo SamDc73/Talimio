@@ -65,7 +65,10 @@ class RoadmapService:
         -------
             Roadmap: Created roadmap instance
         """
-        roadmap = Roadmap(title=data.title, description=data.description, skill_level=data.skill_level)
+        roadmap = Roadmap()
+        roadmap.title = data.title
+        roadmap.description = data.description
+        roadmap.skill_level = data.skill_level
         self._session.add(roadmap)
         await self._session.flush()
 
@@ -103,15 +106,14 @@ class RoadmapService:
     ) -> None:
         """Recursively create nodes and their children, preserving hierarchy."""
         for idx, node_data in enumerate(nodes_data):
-            node = Node(
-                roadmap_id=roadmap_id,
-                title=node_data.get("title", f"Topic {idx + 1}"),
-                description=node_data.get("description", ""),
-                content=node_data.get("content"),
-                order=node_data.get("order", idx),
-                parent_id=parent_id,
-                status="not_started",
-            )
+            node = Node()
+            node.roadmap_id = roadmap_id
+            node.title = node_data.get("title", f"Topic {idx + 1}")
+            node.description = node_data.get("description", "")
+            node.content = node_data.get("content")
+            node.order = node_data.get("order", idx)
+            node.parent_id = parent_id
+            node.status = "not_started"
             self._session.add(node)
             # Flush to generate node.id for children
             await self._session.flush()
@@ -152,19 +154,13 @@ class RoadmapService:
             )
 
             # Create node with AI-generated content
-            node = Node(
-                roadmap_id=roadmap_id,
-                title=node_content["title"],
-                description=node_content["description"],
-                content=node_content["content"],
-                order=data.order,
-                status="not_started",
-            )
-
-            # Handle prerequisites if any
-            if node_content.get("prerequisites"):
-                prerequisites = await self._get_nodes_by_titles(roadmap_id, node_content["prerequisites"])
-                node.prerequisites.extend(prerequisites)
+            node = Node()
+            node.roadmap_id = roadmap_id
+            node.title = node_content.get("title", "")
+            node.description = node_content.get("description", "")
+            node.content = node_content.get("content")
+            node.order = data.order
+            node.status = "not_started"
 
             self._session.add(node)
         except Exception as e:
@@ -185,18 +181,9 @@ class RoadmapService:
 
         update_data = data.model_dump(exclude_unset=True)
 
-        # Handle prerequisites separately
+        # Remove prerequisite_ids from update data as the feature is removed
         if "prerequisite_ids" in update_data:
-            prerequisite_ids = update_data.pop("prerequisite_ids")
-            if prerequisite_ids:
-                prerequisites = await self._get_nodes_by_ids(prerequisite_ids)
-                if len(prerequisites) != len(prerequisite_ids):
-                    msg = "One or more prerequisite nodes not found"
-                    raise ValidationError(msg)
-                node.prerequisites.clear()
-                node.prerequisites.extend(prerequisites)
-            else:
-                node.prerequisites.clear()
+            update_data.pop("prerequisite_ids")
 
         # Update remaining fields
         for key, value in update_data.items():
@@ -205,6 +192,10 @@ class RoadmapService:
         await self._session.commit()
         await self._session.refresh(node)
         return node
+
+    async def get_node(self, roadmap_id: UUID, node_id: UUID) -> Node | None:
+        """Get a single node from a roadmap."""
+        return await self._get_node(roadmap_id, node_id)
 
     async def delete_node(self, roadmap_id: UUID, node_id: UUID) -> None:
         """Delete a node from a roadmap."""
@@ -255,17 +246,24 @@ class RoadmapService:
             )
 
             # Create new nodes
-            new_nodes = []
-            for content in next_nodes_content:
-                node = Node(
-                    roadmap_id=roadmap_id,
-                    title=content["title"],
-                    description=content["description"],
-                    content=content["content"],
-                    order=current_node.order + 1,
-                    status="not_started",
-                )
-                node.prerequisites.append(current_node)
+            new_nodes: list[Node] = []
+            # Ensure next_nodes_content is a list of dictionaries
+            next_nodes_content_list = (
+                [next_nodes_content] if not isinstance(next_nodes_content, list)
+                else next_nodes_content
+            )
+
+            for content in next_nodes_content_list:
+                if not isinstance(content, dict):
+                    continue
+
+                node = Node()
+                node.roadmap_id = roadmap_id
+                node.title = content.get("title", "")
+                node.description = content.get("description", "")
+                node.content = content.get("content")
+                node.order = current_node.order + 1
+                node.status = "not_started"
                 self._session.add(node)
                 new_nodes.append(node)
         except Exception as e:
@@ -284,23 +282,29 @@ class RoadmapService:
         roadmap_json = RoadmapResponse.model_validate(roadmap).model_dump()
 
         # Mark the target node in the JSON tree (add a 'target': true flag)
-        def mark_target(node: dict) -> None:
-            if node["id"] == str(node_id):
-                node["target"] = True
-            for child in node.get("children", []):
+        def mark_target(node_dict: dict) -> None:
+            if str(node_dict.get("id")) == str(node_id):
+                node_dict["target"] = True
+            for child in node_dict.get("children", []):
                 mark_target(child)
 
-        for node in roadmap_json.get("nodes", []):
-            mark_target(node)
+        for node_dict in roadmap_json.get("nodes", []):
+            mark_target(node_dict)
 
-        # Build prompt for LLM
-        prompt = (
-            "Given the following roadmap structure in JSON, generate 2-3 appropriate sub-nodes for the node marked with 'target': true. "
-            "Each sub-node should have a title and description. Respond with a JSON array of objects with 'title' and 'description'.\n"
-            f"Roadmap JSON:\n{roadmap_json}"
-        )
+        # Convert prompt to expected format
+        prompt_data = [{
+            "role": "system",
+            "content": (
+                "Given the following roadmap structure in JSON, generate 2-3 appropriate sub-nodes for the node marked with 'target': true. "
+                "Each sub-node should have a title and description. Respond with a JSON array of objects with 'title' and 'description'."
+            ),
+        }, {
+            "role": "user",
+            "content": f"Roadmap JSON:\n{roadmap_json}",
+        }]
+
         # Call LLM
-        llm_response = await self.ai_client.get_completion(prompt)
+        llm_response = await self.ai_client._get_completion(prompt_data)  # noqa: SLF001
         # Parse LLM response (expecting a JSON array)
         import json
 
@@ -308,7 +312,7 @@ class RoadmapService:
             msg = "LLM did not return a list"
             raise TypeError(msg)
         try:
-            sub_nodes = json.loads(llm_response)
+            sub_nodes = json.loads(llm_response) if isinstance(llm_response, str) else llm_response
             if not isinstance(sub_nodes, list):
                 _raise_type_error()
         except Exception as e:
@@ -322,15 +326,14 @@ class RoadmapService:
             raise ResourceNotFoundError(msg, str(node_id))
         new_nodes = []
         for i, data in enumerate(sub_nodes):
-            node = Node(
-                roadmap_id=roadmap_id,
-                title=data["title"],
-                description=data["description"],
-                content=None,
-                order=len(parent_node.children) + i,
-                status="not_started",
-                parent_id=parent_node.id,
-            )
+            node = Node()
+            node.roadmap_id = roadmap_id
+            node.title = data.get("title", "")
+            node.description = data.get("description", "")
+            node.content = None
+            node.order = len(parent_node.children) + i
+            node.status = "not_started"
+            node.parent_id = parent_node.id
             self._session.add(node)
             new_nodes.append(node)
         await self._session.commit()

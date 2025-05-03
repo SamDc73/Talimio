@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api/v1/roadmaps", tags=["roadmaps"])
     "",
     summary="List all roadmaps",
     description="Retrieve a paginated list of roadmaps with optional filtering",
-)  # type: ignore[misc]
+)
 async def list_roadmaps(
     session: DbSession,
     search: Annotated[str | None, Query(description="Search term for roadmap title/description")] = None,
@@ -65,7 +65,7 @@ async def list_roadmaps(
     "",
     status_code=status.HTTP_201_CREATED,
     summary="Create new roadmap",
-)  # type: ignore[misc]
+)
 async def create_roadmap(
     data: RoadmapCreate,
     session: DbSession,
@@ -85,7 +85,7 @@ async def create_roadmap(
 @router.get(
     "/{roadmap_id}",
     responses={404: {"description": "Roadmap not found"}},
-)  # type: ignore[misc]
+)
 async def get_roadmap(
     roadmap_id: UUID,
     session: DbSession,
@@ -111,7 +111,7 @@ async def get_roadmap(
 
 @router.put(
     "/{roadmap_id}",
-)  # type: ignore[misc]
+)
 async def update_roadmap(
     roadmap_id: UUID,
     data: RoadmapUpdate,
@@ -131,7 +131,7 @@ async def update_roadmap(
 @router.delete(
     "/{roadmap_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-)  # type: ignore[misc]
+)
 async def delete_roadmap(
     roadmap_id: UUID,
     session: DbSession,
@@ -151,7 +151,7 @@ async def delete_roadmap(
     "/{roadmap_id}/nodes",
     status_code=status.HTTP_201_CREATED,
     responses={404: {"description": "Roadmap not found"}},
-)  # type: ignore[misc]
+)
 async def create_node(
     roadmap_id: UUID,
     data: NodeCreate,
@@ -180,7 +180,7 @@ async def create_node(
 @router.put(
     "/{roadmap_id}/nodes/{node_id}",
     responses={404: {"description": "Roadmap or node not found"}},
-)  # type: ignore[misc]
+)
 async def update_node(
     roadmap_id: UUID,
     node_id: UUID,
@@ -205,7 +205,7 @@ async def update_node(
     "/{roadmap_id}/nodes/{node_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     responses={404: {"description": "Roadmap or node not found"}},
-)  # type: ignore[misc]
+)
 async def delete_node(
     roadmap_id: UUID,
     node_id: UUID,
@@ -225,7 +225,7 @@ async def delete_node(
 @router.get(
     "/{roadmap_id}/nodes/{node_id}",
     responses={404: {"description": "Roadmap or node not found"}},
-)  # type: ignore[misc]
+)
 async def get_node(
     roadmap_id: UUID,
     node_id: UUID,
@@ -235,9 +235,11 @@ async def get_node(
     service = RoadmapService(session)
     try:
         node = await service.get_node(roadmap_id, node_id)
+
         def _raise_resource_not_found() -> None:
             msg = "Node"
             raise ResourceNotFoundError(msg, str(node_id))
+
         if not node:
             _raise_resource_not_found()
         return NodeResponse.model_validate(node)

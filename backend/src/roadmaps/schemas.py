@@ -128,11 +128,11 @@ class RoadmapResponse(RoadmapBase):
         cls,
         obj: object,
         *,
-        strict: bool | None = False,
-        from_attributes: bool | None = False,
-        context: dict | None = None,
-        by_alias: bool | None = False,
-        by_name: bool | None = False,
+        _strict: bool | None = False,
+        _from_attributes: bool | None = False,
+        _context: dict | None = None,
+        _by_alias: bool | None = False,
+        _by_name: bool | None = False,
     ) -> "RoadmapResponse":
         """Validate and convert database model to Pydantic model with nested structure.
 
@@ -173,7 +173,7 @@ def build_nested_nodes(all_nodes: list["Node"], parent_id: object = None) -> lis
     return nested
 
 
-class RoadmapsListResponse(PydanticBaseModel):  # type: ignore[misc]
+class RoadmapsListResponse(PydanticBaseModel):
     """Schema for paginated roadmaps response."""
 
     items: list[RoadmapResponse]
