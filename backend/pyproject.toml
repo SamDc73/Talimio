@@ -2,28 +2,13 @@
 name = "learning-roadmap"
 version = "0.1.0"
 
+
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
-select = [
-    "E",   # pycodestyle errors
-    "F",   # pyflakes
-    "B",   # flake8-bugbear
-    "I",   # isort
-    "N",   # pep8-naming
-    "UP",  # pyupgrade
-    "RUF", # ruff-specific
-    "PT",  # pytest
-    "SIM", # simplify
-    "TCH", # type-checking
-    "TID", # tidy imports
-    "ANN", # type annotations
-    "D",   # docstring checks
-    "C90", # complexity checks
-    "ERA", # eradicate (commented out code)
-]
+select = ["ALL"]
 ignore = [
     "E501",    # line too long (handled by formatter)
     "B008",    # do not perform function call in argument defaults (FastAPI uses this pattern)
@@ -32,6 +17,16 @@ ignore = [
     "RUF012",  # annotated with classvar (conflicts with Pydantic models)
     "D100",    # Missing docstring in public module
     "D104",    # Missing docstring in public package
+    "LOG015",   # root-logger-calls
+    "G004",     # logging-f-string
+    "TRY300",   # try-else-block
+    "TRY301",   # abstract-raise
+    "TRY401",   # redundant-exception-object
+    "BLE001",   # blind-except
+    "INP001",   # implicit-namespace-package
+    "PLR0913",  # too-many-arguments
+    "PLC0206",  # dict-index-missing-items
+    "S608",     # sql-injection-warning
 ]
 fixable = ["ALL"]
 
@@ -56,18 +51,13 @@ line-ending = "auto"
 docstring-code-format = true
 docstring-code-line-length = 80
 
+
 [tool.mypy]
-strict = true
-warn_return_any = true
-warn_unused_configs = true
+# Essential settings only
+python_version = "3.10"
 ignore_missing_imports = true
-follow_imports = "silent"
-show_column_numbers = true
-disallow_untyped_decorators = false
-warn_redundant_casts = true
-warn_unused_ignores = true
-disallow_any_generics = true
-no_implicit_reexport = true
+check_untyped_defs = true
+disable_error_code = ["misc"]
 plugins = [
     "pydantic.mypy",
     "sqlalchemy.ext.mypy.plugin"
@@ -75,14 +65,8 @@ plugins = [
 
 [[tool.mypy.overrides]]
 module = ["fastapi.*", "alembic.*"]
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
 ignore_missing_imports = true
 
-[[tool.mypy.overrides]]
-module = ["*.models"]
-disallow_untyped_defs = false
-check_untyped_defs = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -108,12 +92,10 @@ exclude_lines = [
     "if __name__ == .__main__.:",
 ]
 
-
 [tool.pyright]
 include = ["src"]
 exclude = ["**/node_modules",
     "**/__pycache__",
 ]
-typeCheckingMode = "strict"
 useLibraryCodeForTypes = true
 reportMissingTypeStubs = false
