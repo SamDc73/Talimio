@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
@@ -29,7 +29,7 @@ async def generate_lesson(request: LessonCreateRequest) -> LessonResponse:
         # Generate the lesson content using AI
         md_source = await create_lesson_body(request.node_meta)
         lesson_id = uuid4()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Prepare lesson data
         lesson_data = {
@@ -47,7 +47,7 @@ async def generate_lesson(request: LessonCreateRequest) -> LessonResponse:
             if result:
                 return LessonResponse(**result)
         except Exception as db_error:
-            logging.error(f"Database error: {db_error!s}")
+            logging.exception(f"Database error: {db_error!s}")
             logging.info("Using fallback mechanism to return lesson without database storage")
 
         # Fallback: Return the lesson even if database storage failed
@@ -160,7 +160,7 @@ async def get_lesson(lesson_id: UUID) -> LessonResponse:
     except Exception as e:
         logging.exception(f"Unexpected error when retrieving lesson {lesson_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve lesson: {e!s}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve lesson: {e!s}",
         ) from e
 
 
@@ -232,7 +232,7 @@ async def get_node_lessons(node_id: str) -> list[LessonResponse]:
     except Exception as e:
         logging.exception(f"Unexpected error when retrieving lessons for node {node_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve lessons: {e!s}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve lessons: {e!s}",
         ) from e
 
 
@@ -265,12 +265,12 @@ async def update_lesson(lesson_id: UUID, request: LessonUpdateRequest) -> Lesson
         except Exception as e:
             logging.exception(f"Database error when checking if lesson {lesson_id} exists")
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to check if lesson exists: {e!s}"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to check if lesson exists: {e!s}",
             ) from e
 
         # Prepare update data
         update_data = request.model_dump(exclude_unset=True)
-        update_data["updated_at"] = datetime.now(timezone.utc)
+        update_data["updated_at"] = datetime.now(UTC)
 
         try:
             result = await LessonDAO.update(lesson_id, update_data)
@@ -282,7 +282,7 @@ async def update_lesson(lesson_id: UUID, request: LessonUpdateRequest) -> Lesson
         except Exception as e:
             logging.exception(f"Database error when updating lesson {lesson_id}")
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update lesson: {e!s}"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update lesson: {e!s}",
             ) from e
     except HTTPException:
         raise
@@ -315,7 +315,7 @@ async def delete_lesson(lesson_id: UUID) -> None:
         except Exception as e:
             logging.exception(f"Database error when checking if lesson {lesson_id} exists")
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to check if lesson exists: {e!s}"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to check if lesson exists: {e!s}",
             ) from e
 
         # Try to delete the lesson
@@ -328,7 +328,7 @@ async def delete_lesson(lesson_id: UUID) -> None:
         except Exception as e:
             logging.exception(f"Database error when deleting lesson {lesson_id}")
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete lesson: {e!s}"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete lesson: {e!s}",
             ) from e
     except HTTPException:
         raise

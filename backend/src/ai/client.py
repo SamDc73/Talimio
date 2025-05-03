@@ -144,9 +144,11 @@ class ModelManager:
         The output JSON follows JSON Schema Draft-07 format as specified in the template.
         """
         if min_core_topics > max_core_topics:
-            raise ValidationError("min_core_topics cannot be greater than max_core_topics")
+            msg = "min_core_topics cannot be greater than max_core_topics"
+            raise ValidationError(msg)
         if sub_min > sub_max:
-            raise ValidationError("sub_min cannot be greater than sub_max")
+            msg = "sub_min cannot be greater than sub_max"
+            raise ValidationError(msg)
         prompt = f"""
 You are *CurriculumArchitect 9000*.
 Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdown, no commentary.
@@ -365,11 +367,11 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> str:
 
         if not isinstance(markdown_content, str) or len(markdown_content.strip()) < 100:
             logging.error(f"Invalid or too short lesson content received: {markdown_content[:100]}...")
-            raise LessonGenerationError()
+            raise LessonGenerationError
 
         logging.info(f"Successfully generated lesson content ({len(markdown_content)} characters)")
         return markdown_content
 
     except Exception as e:
         logging.exception("Error generating lesson content")
-        raise LessonGenerationError() from e
+        raise LessonGenerationError from e

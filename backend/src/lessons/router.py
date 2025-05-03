@@ -15,7 +15,7 @@ from .service import (
 router = APIRouter(prefix="/api/v1", tags=["lessons"])
 
 
-@router.post("/nodes/{node_id}/lessons", response_model=LessonResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/nodes/{node_id}/lessons", status_code=status.HTTP_201_CREATED)
 async def create_lesson_endpoint(node_id: str) -> LessonResponse:
     """Generate a new lesson for a given node in the roadmap."""
     import logging
@@ -27,14 +27,14 @@ async def create_lesson_endpoint(node_id: str) -> LessonResponse:
 
     try:
         node_uuid = UUID(node_id)
-        
+
         # Default metadata if we can't get node info
         node_meta = {
             "title": "Learning Topic",
             "description": "A comprehensive lesson on this topic",
             "skill_level": "beginner",
         }
-        
+
         # Try to fetch node information from the database
         try:
             async with async_session_maker() as session:
@@ -51,17 +51,17 @@ async def create_lesson_endpoint(node_id: str) -> LessonResponse:
                         "skill_level": "beginner",  # Default if not available from node
                         "content": node.content or "",  # Additional context for the lesson
                     }
-                    
+
                     # Try to get skill level from the roadmap
                     if hasattr(node, "roadmap") and node.roadmap:
                         node_meta["skill_level"] = node.roadmap.skill_level
-                    
+
                     logging.info(f"Found node in database: {node.title}")
                 else:
                     logging.warning(f"Node {node_id} not found in database, using default metadata")
         except Exception as db_error:
             logging.warning(f"Error fetching node data: {db_error}. Using default metadata.")
-        
+
         # Create the lesson request
         request = LessonCreateRequest(
             course_id=node_uuid,
@@ -79,19 +79,19 @@ async def create_lesson_endpoint(node_id: str) -> LessonResponse:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.get("/nodes/{node_id}/lessons", response_model=list[LessonResponse])
+@router.get("/nodes/{node_id}/lessons")
 async def list_node_lessons_endpoint(node_id: str) -> list[LessonResponse]:
     """List all lessons for a given node."""
     return await get_node_lessons(node_id)
 
 
-@router.get("/lessons/{lesson_id}", response_model=LessonResponse)
+@router.get("/lessons/{lesson_id}")
 async def get_lesson_endpoint(lesson_id: UUID) -> LessonResponse:
     """Retrieve a specific lesson."""
     return await get_lesson(lesson_id)
 
 
-@router.patch("/lessons/{lesson_id}", response_model=LessonResponse)
+@router.patch("/lessons/{lesson_id}")
 async def update_lesson_endpoint(lesson_id: UUID, request: LessonUpdateRequest) -> LessonResponse:
     """Update a specific lesson."""
     return await update_lesson(lesson_id, request)
