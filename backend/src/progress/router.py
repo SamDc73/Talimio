@@ -13,10 +13,38 @@ router = APIRouter(prefix="/api/v1/progress", tags=["progress"])
 
 
 @router.post(
+    "/node/{node_id}",
+    response_model_exclude_none=True,
+)
+async def update_node_progress(
+    node_id: UUID,
+    session: DbSession,
+    node_status: Annotated[str, Query(regex="^(not_started|in_progress|completed)$")],
+    user_id: Annotated[UUID | None, Query()] = None,
+) -> ProgressResponse:
+    """Update or create progress for a node."""
+    service = ProgressService(session)
+    try:
+        # Create progress data
+        if not user_id:
+            msg = "user_id is required"
+            raise ValidationError(msg)
+
+        data = ProgressCreate(node_id=node_id, status=node_status, user_id=user_id)
+        progress = await service.create_progress(data)
+        return cast("ProgressResponse", ProgressResponse.model_validate(progress))
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+
+@router.post(
     "",
     status_code=status.HTTP_201_CREATED,
     response_model_exclude_none=True,
-)  # type: ignore[misc]
+)
 async def create_progress(
     data: ProgressCreate,
     session: DbSession,
@@ -36,7 +64,7 @@ async def create_progress(
 @router.get(
     "/{progress_id}",
     response_model_exclude_none=True,
-)  # type: ignore[misc]
+)
 async def get_progress(
     progress_id: UUID,
     session: DbSession,
@@ -56,7 +84,7 @@ async def get_progress(
 @router.get(
     "/user/{user_id}",
     response_model_exclude_none=True,
-)  # type: ignore[misc]
+)
 async def get_user_progress(
     user_id: UUID,
     session: DbSession,
@@ -79,10 +107,31 @@ async def get_user_progress(
         ) from e
 
 
+@router.get(
+    "/user/{user_id}/node/{node_id}",
+    response_model_exclude_none=True,
+)
+async def get_user_node_progress(
+    user_id: UUID,
+    node_id: UUID,
+    session: DbSession,
+) -> ProgressResponse:
+    """Get progress for a specific user and node."""
+    service = ProgressService(session)
+    try:
+        progress = await service.get_progress_by_user_and_node(user_id, node_id)
+        return cast("ProgressResponse", ProgressResponse.model_validate(progress))
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+
+
 @router.put(
     "/{progress_id}",
     response_model_exclude_none=True,
-)  # type: ignore[misc]
+)
 async def update_progress(
     progress_id: UUID,
     data: ProgressUpdate,
@@ -105,7 +154,7 @@ async def update_progress(
     "/{progress_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     response_model=None,
-)  # type: ignore[misc]
+)
 async def delete_progress(
     progress_id: UUID,
     session: DbSession,

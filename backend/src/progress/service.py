@@ -40,23 +40,24 @@ class ProgressService:
         ValidationError
             If user or node doesn't exist
         """
-        # Verify user exists
-        user = await self._get_user(data.user_id)
-        if not user:
-            msg = f"User {data.user_id} not found"
-            raise ValidationError(msg)
-
         # Verify node exists
         node = await self._get_node(data.node_id)
         if not node:
             msg = f"Node {data.node_id} not found"
             raise ValidationError(msg)
 
-        # Check if progress already exists
-        existing = await self._get_progress_by_user_and_node(data.user_id, data.node_id)
-        if existing:
-            msg = "Progress record already exists for this user and node"
-            raise ValidationError(msg)
+        # If user_id is provided, verify user exists
+        if data.user_id:
+            user = await self._get_user(data.user_id)
+            if not user:
+                msg = f"User {data.user_id} not found"
+                raise ValidationError(msg)
+
+            # Check if progress already exists for this user
+            existing = await self._get_progress_by_user_and_node(data.user_id, data.node_id)
+            if existing:
+                msg = "Progress record already exists for this user and node"
+                raise ValidationError(msg)
 
         progress = Progress(**data.model_dump())
         self._session.add(progress)
@@ -158,9 +159,7 @@ class ProgressService:
         ValidationError
             If status is invalid
         """
-        progress = await self.get_progress(progress_id)
-
-        # Validate status transition
+        # Get the progress record
         progress = await self.get_progress(progress_id)
 
         # Get the current status as string
@@ -221,6 +220,37 @@ class ProgressService:
         )
         result = await self._session.execute(query)
         return result.scalar_one_or_none()
+
+    async def get_progress_by_user_and_node(
+        self,
+        user_id: UUID,
+        node_id: UUID,
+    ) -> Progress:
+        """
+        Get progress record by user and node IDs.
+
+        Parameters
+        ----------
+        user_id : UUID
+            User ID
+        node_id : UUID
+            Node ID
+
+        Returns
+        -------
+        Progress
+            Progress instance
+
+        Raises
+        ------
+        ResourceNotFoundError
+            If progress record not found
+        """
+        progress = await self._get_progress_by_user_and_node(user_id, node_id)
+        if not progress:
+            msg = f"Progress record not found for user {user_id} and node {node_id}"
+            raise ResourceNotFoundError(msg, f"{user_id}_{node_id}")
+        return progress
 
     def _is_valid_status_transition(self, current: str, new: str) -> bool:
         """

@@ -13,7 +13,7 @@ class ProgressBase(PydanticBaseModel):  # type: ignore[misc]
 class ProgressCreate(ProgressBase):
     """Schema for creating progress."""
 
-    user_id: UUID
+    user_id: UUID | None = None
     node_id: UUID
 
 
