@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -28,7 +28,7 @@ class LessonDAO:
             logging.info(f"Connecting to database at {host}:{port}/{dbname}")
             return await asyncpg.connect(connection_string)
         except Exception as e:
-            logging.error(f"Failed to connect to database: {e!s}")
+            logging.exception(f"Failed to connect to database: {e!s}")
             raise
 
     @staticmethod
@@ -107,7 +107,7 @@ class LessonDAO:
 
             # Always update the updated_at timestamp
             set_clauses.append("updated_at = $" + str(param_counter))
-            params.append(datetime.now(timezone.utc))
+            params.append(datetime.now(UTC))
 
             query = f"""
                 UPDATE lesson

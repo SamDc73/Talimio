@@ -22,7 +22,7 @@ async def create_lesson_table() -> None:
                 WHERE table_schema = 'public'
                 AND table_name = 'lesson'
             )
-            """
+            """,
         )
 
         if not table_exists:
@@ -38,7 +38,7 @@ async def create_lesson_table() -> None:
                     created_at TIMESTAMPTZ DEFAULT now(),
                     updated_at TIMESTAMPTZ DEFAULT now()
                 )
-                """
+                """,
             )
             logging.info("Lesson table created successfully.")
         else:

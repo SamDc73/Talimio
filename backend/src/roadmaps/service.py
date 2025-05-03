@@ -78,7 +78,7 @@ class RoadmapService:
             )
             logger.info(f"Successfully generated node data: {nodes_data}")
         except Exception as e:
-            logger.error(f"AI client failed to generate roadmap content: {e}")
+            logger.exception(f"AI client failed to generate roadmap content: {e}")
             await self._session.rollback()
             raise HTTPException(status_code=500, detail=f"AI generation failed: {e}") from e
 
@@ -87,7 +87,7 @@ class RoadmapService:
             logger.info(f"Creating nodes in DB for roadmap '{roadmap.id}'")
             await self._create_nodes_recursive(nodes_data, roadmap.id)
         except Exception as e:
-            logger.error(f"Failed to create nodes in DB: {e}")
+            logger.exception(f"Failed to create nodes in DB: {e}")
             await self._session.rollback()
             raise HTTPException(status_code=500, detail=f"Node creation failed: {e}") from e
         else:
