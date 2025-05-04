@@ -1,5 +1,5 @@
 import { CheckCircle, ChevronRight, Circle } from "lucide-react";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useSidebar } from "./SidebarContext";
 
 /**
@@ -35,6 +35,9 @@ function Sidebar({ modules = [], onLessonClick, activeLessonId = null }) {
   const { isOpen } = useSidebar();
 
   // Track which modules are expanded - first one expanded by default
+  // Track which lessons have been clicked but not yet completed
+  const [clickedLessons, setClickedLessons] = useState(new Set());
+
   const [expandedModules, setExpandedModules] = useState(() => {
     // Only expand the first module by default if there are modules and the sidebar is open
     return isOpen && modules.length > 0 ? [modules[0].id] : [];
@@ -97,11 +100,53 @@ function Sidebar({ modules = [], onLessonClick, activeLessonId = null }) {
               <button
                 type="button"
                 onClick={() => handleToggleModule(module.id)}
-                className="flex items-center justify-between w-full px-4 py-3 text-left font-semibold text-base text-zinc-900 border-b border-zinc-100 rounded-t-2xl focus:outline-none"
+                className="flex items-center gap-3 justify-between w-full px-4 py-3 text-left font-semibold text-base text-zinc-900 border-b border-zinc-100 rounded-t-2xl focus:outline-none"
                 style={{ background: "#fff" }}
                 aria-expanded={isExpanded}
               >
-                {module.title}
+                <div className="flex items-center gap-3">
+                  <div className="relative flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">
+                      <span className="text-sm text-zinc-600">{modules.indexOf(module) + 1}</span>
+                    </div>
+                    {/* Progress circle */}
+                    {/* Only show progress circle if there's any progress */}
+                    {module.lessons.length > 0 &&
+                     module.lessons.some(l => l.status === 'completed' || clickedLessons.has(l.id)) && (
+                      <svg
+                        className="absolute top-0 left-0 w-8 h-8 -rotate-90"
+                        role="img"
+                        aria-label={`Module progress: ${Math.round((module.lessons.filter(l => l.status === 'completed' || clickedLessons.has(l.id)).length / module.lessons.length) * 100)}%`}
+                      >
+                        <title>Module progress indicator</title>
+                        <circle
+                          cx="16"
+                          cy="16"
+                          r="14"
+                          strokeWidth="2.5"
+                          fill="none"
+                          stroke="#f4f4f5"
+                          className="opacity-70"
+                        />
+                        <circle
+                          cx="16"
+                          cy="16"
+                          r="14"
+                          strokeWidth="2.5"
+                          fill="none"
+                          stroke="#10b981"
+                          strokeLinecap="round"
+                          strokeDasharray={`${(module.lessons.filter(l => l.status === 'completed' || clickedLessons.has(l.id)).length / module.lessons.length) * 87.96} 87.96`}
+                          className="transition-all duration-300"
+                          style={{
+                            filter: "drop-shadow(0 1px 1px rgb(0 0 0 / 0.05))"
+                          }}
+                        />
+                      </svg>
+                    )}
+                  </div>
+                  <span>{module.title}</span>
+                </div>
                 <ChevronRight
                   className={`w-5 h-5 text-zinc-400 transition-transform duration-200 ${
                     isExpanded ? "rotate-90 text-emerald-600" : "rotate-0"
@@ -117,13 +162,33 @@ function Sidebar({ modules = [], onLessonClick, activeLessonId = null }) {
                     const isActive = lesson.id === activeLessonId;
                     return (
                       <li key={lesson.id} className="flex items-start gap-3">
-                        <span className="mt-0.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!isLessonComplete) {
+                              setClickedLessons(prev => {
+                                const next = new Set(prev);
+                                if (next.has(lesson.id)) {
+                                  next.delete(lesson.id);
+                                } else {
+                                  next.add(lesson.id);
+                                }
+                                return next;
+                              });
+                            }
+                          }}
+                          className="mt-0.5 transition-all duration-200 hover:scale-110"
+                          disabled={isLocked}
+                        >
                           {isLessonComplete ? (
                             <CheckCircle className="w-5 h-5 text-emerald-500" />
+                          ) : clickedLessons.has(lesson.id) ? (
+                            <CheckCircle className="w-5 h-5 text-emerald-400" />
                           ) : (
-                            <Circle className="w-5 h-5 text-zinc-300" />
+                            <Circle className={`w-5 h-5 ${isLocked ? 'text-zinc-200' : 'text-zinc-300 hover:text-emerald-300'}`} />
                           )}
-                        </span>
+                        </button>
                         <button
                           type="button"
                           className={`text-left ${
