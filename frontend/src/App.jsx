@@ -9,6 +9,7 @@ import { OnboardingFlow } from "./features/onboarding";
 import RoadmapFlow from "./features/roadmap";
 import { useOutlineData } from "./features/roadmap/useOutlineData";
 import { useAppState } from "./hooks/useAppState";
+import { CodeBlockTest } from "@/components/code-block-test";
 
 function RoadmapPage() {
   const { roadmapId } = useParams();
@@ -41,6 +42,7 @@ export default function App() {
     <div className="app-container">
       <Routes>
         <Route path="/roadmap/:roadmapId" element={<RoadmapPage />} />
+        <Route path="/code-test" element={<CodeBlockTest />} />
         <Route
           path="/"
           element={
