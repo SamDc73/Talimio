@@ -57,7 +57,7 @@ function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
                 aria-pressed={mode === "visual"}
                 tabIndex={0}
               >
-                <Layout className="w-4 h-4 mr-1" /> Visual
+                <Layout className="w-4 h-4 mr-1" /> {mode === "visual" ? "Visual" : "Visual View"}
               </button>
               <button
                 className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${
@@ -70,7 +70,7 @@ function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
                 aria-pressed={mode === "outline"}
                 tabIndex={0}
               >
-                <FileText className="w-4 h-4 mr-1" /> Outline view
+                <FileText className="w-4 h-4 mr-1" /> {mode === "outline" ? "Outline" : "Outline View"}
               </button>
             </div>
             {/* Animated progress bar with percentage indicator */}
