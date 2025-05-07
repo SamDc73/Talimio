@@ -5,6 +5,7 @@
 import React, { useState } from "react";
 import { LessonViewer } from "../lessons/LessonViewer";
 import { useLessonViewer } from "../lessons/useLessonViewer";
+import { useProgress } from "../../hooks/useProgress";
 import OutlineItem from "./OutlineItem";
 import { useOutlineData } from "./useOutlineData";
 
@@ -24,6 +25,9 @@ function OutlineView({ roadmapId }) {
 
   // Use our lesson viewer hook
   const { lesson, isLoading: lessonLoading, error: lessonError, getOrGenerateLesson, clearLesson } = useLessonViewer();
+
+  // Use progress hook to get lesson completion status
+  const { lessonStatuses, courseProgress, toggleLessonCompletion, isLessonCompleted } = useProgress(roadmapId);
 
   // Handler for lesson clicks - now will either view or generate a lesson
   const handleLessonClick = async (moduleIdx, lessonIdx, lessonId) => {
@@ -50,7 +54,7 @@ function OutlineView({ roadmapId }) {
           title: lesson.title,
           description: lesson.description || "",
           skill_level: module.skill_level || "beginner",
-        },
+        }
       );
     } catch (err) {
       console.error("Error handling lesson click:", err);
@@ -131,6 +135,9 @@ function OutlineView({ roadmapId }) {
             module={module}
             index={idx}
             onLessonClick={(lessonIdx, lessonId) => handleLessonClick(idx, lessonIdx, lessonId)}
+            isLessonCompleted={isLessonCompleted}
+            toggleLessonCompletion={toggleLessonCompletion}
+            courseProgress={courseProgress}
           />
         ))}
       </div>

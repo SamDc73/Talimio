@@ -14,24 +14,28 @@ const cn = (...classes) => classes.filter(Boolean).join(" ");
  * @param {Object} props.module - The module object (with lessons)
  * @param {number} props.index - The module index (for numbering)
  * @param {Function} [props.onLessonClick] - Optional handler for lesson click
+ * @param {Function} [props.isLessonCompleted] - Function to check if a lesson is completed
+ * @param {Function} [props.toggleLessonCompletion] - Function to toggle lesson completion status
+ * @param {Object} [props.courseProgress] - Course progress data
  * @returns {JSX.Element}
  */
-function OutlineItem({ module, index, onLessonClick }) {
+function OutlineItem({ module, index, onLessonClick, isLessonCompleted, toggleLessonCompletion, courseProgress }) {
   // Use index + 1 for module ID if module.id is not present
   const moduleId = module.id ?? index + 1;
   // Keep track of expanded state based on module ID
-  const [expanded, setExpanded] = useState(false); // Start collapsed by default
+  const [expanded, setExpanded] = useState(index === 0); // First module expanded by default
 
-  // Calculate completed lessons (including nested ones) - Keep existing logic
+  // Calculate completed lessons (including nested ones) - Updated to use isLessonCompleted
   const countLessons = (items) => {
     let total = 0;
     let completed = 0;
 
     for (const item of items) {
-      // Only count items that look like lessons (have a title and status)
-      if (item && typeof item.title === "string" && typeof item.status === "string") {
+      // Only count items that look like lessons (have a title)
+      if (item && typeof item.title === "string") {
         total += 1;
-        if (item.status === "completed") {
+        // Use isLessonCompleted function if available, otherwise fall back to status check
+        if (isLessonCompleted?.(item.id) || item.status === "completed" || item.status === "done") {
           completed += 1;
         }
         // Recursively count nested lessons if they exist
@@ -52,7 +56,7 @@ function OutlineItem({ module, index, onLessonClick }) {
   // Component for a single lesson item
   const LessonItem = ({ lesson, idx, depth, parentIndexStr, onLessonClick }) => {
     const currentLessonIndexStr = parentIndexStr ? `${parentIndexStr}.${idx + 1}` : `${idx + 1}`;
-    const isCompleted = lesson.status === "completed";
+    const isCompleted = isLessonCompleted?.(lesson.id) || lesson.status === "completed" || lesson.status === "done";
     const lessonKey = lesson.id ?? `${moduleId}-lesson-${depth}-${idx}`;
 
     return (
@@ -64,8 +68,8 @@ function OutlineItem({ module, index, onLessonClick }) {
           className={cn(
             "flex items-center justify-between p-4 transition-all border rounded-lg",
             isCompleted
-              ? "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-100"
-              : "bg-white border-zinc-200 hover:border-emerald-200 hover:bg-emerald-50/30",
+              ? "bg-emerald-50 border-emerald-100"
+              : "bg-white border-zinc-200 hover:border-emerald-200 hover:bg-emerald-50/30"
           )}
         >
           <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -75,7 +79,7 @@ function OutlineItem({ module, index, onLessonClick }) {
               <div
                 className={cn(
                   "flex items-center justify-center w-5 h-5 rounded-full text-xs font-medium shrink-0",
-                  "bg-zinc-100 text-zinc-700",
+                  "bg-zinc-100 text-zinc-700"
                 )}
               >
                 {currentLessonIndexStr}
@@ -92,8 +96,8 @@ function OutlineItem({ module, index, onLessonClick }) {
             className={cn(
               "flex items-center gap-1 px-3 py-1.5 text-sm font-medium transition-colors rounded-md shrink-0 ml-2",
               isCompleted
-                ? "text-white bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600"
-                : "text-emerald-700 bg-emerald-100 hover:bg-emerald-200",
+                ? "text-white bg-emerald-500 hover:bg-emerald-600"
+                : "text-emerald-700 bg-emerald-100 hover:bg-emerald-200"
             )}
           >
             {isCompleted ? "View" : "Start"}
@@ -150,7 +154,7 @@ function OutlineItem({ module, index, onLessonClick }) {
             "flex items-center justify-center w-7 h-7 rounded-full text-xs font-medium transition-all duration-300 shrink-0",
             isModuleCompleted
               ? "bg-emerald-500 text-white hover:bg-emerald-600" // Completed style [cite: 399]
-              : "bg-zinc-100 text-zinc-700", // Default style [cite: 413]
+              : "bg-zinc-100 text-zinc-700" // Default style [cite: 413]
           )}
         >
           {isModuleCompleted ? <CheckCircle className="w-4 h-4" /> : index + 1}
@@ -190,7 +194,7 @@ function OutlineItem({ module, index, onLessonClick }) {
         id={`module-content-${moduleId}`}
         className={cn(
           "transition-all duration-300 ease-in-out overflow-hidden",
-          expanded ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0", // Basic expand/collapse
+          expanded ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0" // Basic expand/collapse
         )}
         style={{ transitionProperty: "max-height, opacity" }} // Explicit transitions
       >
