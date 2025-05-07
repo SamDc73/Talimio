@@ -20,29 +20,29 @@ class AIError(DomainError):
 class RoadmapGenerationError(AIError):
     """Exception raised when roadmap generation fails."""
 
-    def __init__(self) -> None:
-        super().__init__("Failed to generate roadmap content")
+    def __init__(self, msg: str = "Failed to generate roadmap content") -> None:
+        super().__init__(msg)
 
 
 class NodeCustomizationError(AIError):
     """Exception raised when node customization fails."""
 
-    def __init__(self) -> None:
-        super().__init__("Failed to customize node content")
+    def __init__(self, msg: str = "Failed to customize node content") -> None:
+        super().__init__(msg)
 
 
 class ExerciseGenerationError(AIError):
     """Exception raised when exercise generation fails."""
 
-    def __init__(self) -> None:
-        super().__init__("Failed to generate exercises")
+    def __init__(self, msg: str = "Failed to generate exercises") -> None:
+        super().__init__(msg)
 
 
 class LessonGenerationError(AIError):
     """Exception raised when lesson generation fails."""
 
-    def __init__(self) -> None:
-        super().__init__("Failed to generate lesson content")
+    def __init__(self, msg: str = "Failed to generate lesson content") -> None:
+        super().__init__(msg)
 
 
 class ModelManager:
@@ -56,10 +56,16 @@ class ModelManager:
             raise ValidationError(msg)
 
         os.environ["OPENAI_API_KEY"] = self.api_key
-        self.model = "gpt-4o"
+        self.model = "openai/gpt-4o"
         self._logger = logging.getLogger(__name__)
 
-    async def _get_completion(self, messages: Sequence[dict[str, str]], *, format_json: bool = True) -> str | dict:
+    async def _get_completion(
+        self,
+        messages: list[dict[str, str]] | Sequence[dict[str, str]],
+        *,
+        format_json: bool = True,
+        expect_list: bool = False
+    ) -> Any:
         """Get completion from AI model."""
         try:
             if format_json:
@@ -73,12 +79,16 @@ class ModelManager:
 
             response = await acompletion(
                 model=self.model,
-                messages=messages,
+                messages=list(messages),  # Convert to list for litellm
                 temperature=0.7,
                 max_tokens=8000,
             )
 
-            content: str = response.choices[0].message.content
+            # Extract content from response
+            content = str(getattr(response, "choices", [{}])[0].get("message", {}).get("content", ""))
+            if not content:
+                msg = "No content received from AI model"
+                raise AIError(msg)
 
             if format_json:
                 # Clean up JSON response and strip code fences
@@ -95,7 +105,7 @@ class ModelManager:
             msg = f"Failed to generate content: {e!s}"
             raise AIError(msg) from e
 
-    async def generate_onboarding_questions(self, topic: str) -> list[dict]:
+    async def generate_onboarding_questions(self, topic: str) -> list[dict[str, Any]]:
         """Generate personalized onboarding questions."""
         prompt = f"""For someone wanting to learn {topic}, create 5 questions to understand their:
         1. Current experience level with {topic}
@@ -117,7 +127,11 @@ class ModelManager:
             {"role": "user", "content": prompt},
         ]
 
-        return await self._get_completion(messages)
+        result = await self._get_completion(messages, expect_list=True)
+        if not isinstance(result, list):
+            msg = "Expected list response from AI model"
+            raise AIError(msg)
+        return result
 
     async def generate_roadmap_content(
         self,
@@ -219,21 +233,29 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
         ]
 
         try:
-            response = await self._get_completion(messages)
+            response = await self._get_completion(messages, expect_list=True)
+            if not isinstance(response, (list, dict)):
+                msg = "Invalid response format from AI model"
+                raise RoadmapGenerationError(msg)
+            if not isinstance(response, list):
+                msg = "Expected list response from AI model"
+                raise RoadmapGenerationError(msg)
 
             # Ensure proper formatting of node data
             validated_nodes = []
             for i, node in enumerate(response):
-                validated_nodes.append(
-                    {
-                        "title": str(node.get("title", f"Topic {i + 1}")),
-                        "description": str(node.get("description", "")),
-                        "content": str(node.get("content", "")),
-                        "order": i,
-                        "prerequisite_ids": [],  # Start with no prerequisites
-                        "children": node.get("children", []),
-                    },
-                )
+                if not isinstance(node, dict):
+                    msg = "Expected dict node from AI model"
+                    raise RoadmapGenerationError(msg)
+
+                validated_nodes.append({
+                    "title": str(node.get("title", f"Topic {i + 1}")),
+                    "description": str(node.get("description", "")),
+                    "content": str(node.get("content", "")),
+                    "order": i,
+                    "prerequisite_ids": [],  # Start with no prerequisites
+                    "children": node.get("children", []),
+                })
 
         except Exception as e:
             self._logger.exception("Error generating roadmap content")
@@ -265,7 +287,11 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
         ]
 
         try:
-            return await self._get_completion(messages)
+            result = await self._get_completion(messages, expect_list=True)
+            if not isinstance(result, list):
+                msg = "Expected list response from AI model"
+                raise ExerciseGenerationError
+            return result
         except Exception as e:
             self._logger.exception("Error generating exercises")
             raise ExerciseGenerationError from e
@@ -287,12 +313,17 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
         ]
         try:
             response = await self._get_completion(messages)
-            return {
+            if not isinstance(response, dict):
+                msg = "Expected dict response from AI model"
+                raise NodeCustomizationError(msg)
+
+            result = {
                 "title": str(response.get("title", current_node)),
                 "description": str(response.get("description", "")),
                 "content": str(response.get("content", "")),
                 "prerequisites": response.get("prerequisites", []),
             }
+            return result
         except Exception as e:
             self._logger.exception("Error generating node content")
             raise NodeCustomizationError from e
@@ -357,13 +388,15 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> str:
 
         # Get completion without JSON formatting
         response = await acompletion(
-            model="gpt-4o",
+            model="openai/gpt-4o",
             messages=messages,
             temperature=0.7,
             max_tokens=8000,
         )
 
-        markdown_content = response.choices[0].message.content
+        markdown_content = str(getattr(response, "choices", [{}])[0].get("message", {}).get("content", ""))
+        if markdown_content is None:
+            raise LessonGenerationError
 
         if not isinstance(markdown_content, str) or len(markdown_content.strip()) < 100:
             logging.error(f"Invalid or too short lesson content received: {markdown_content[:100]}...")
