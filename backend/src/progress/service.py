@@ -4,9 +4,9 @@ import logging
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import Result, Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import DeclarativeMeta, Session
 
 from src.progress.models import Progress
 from src.progress.schemas import LessonStatus, StatusUpdate
@@ -28,6 +28,54 @@ class ProgressService:
         self._session = session
         self._is_async = isinstance(session, AsyncSession)
 
+    async def _execute_query(self, query: Select) -> Result:
+        """Execute a query based on session type."""
+        if self._is_async:
+            async_session = cast("AsyncSession", self._session)
+            return await async_session.execute(query)
+        sync_session = cast("Session", self._session)
+        return sync_session.execute(query)
+
+    async def _commit_and_refresh(self, obj: DeclarativeMeta) -> None:
+        """Commit changes and refresh object based on session type."""
+        if self._is_async:
+            async_session = cast("AsyncSession", self._session)
+            await async_session.commit()
+            await async_session.refresh(obj)
+        else:
+            sync_session = cast("Session", self._session)
+            sync_session.commit()
+            sync_session.refresh(obj)
+
+    async def _get_course_id(self, lesson_id: str) -> str:
+        """Get course ID from either Node table or existing Progress records."""
+        try:
+            # Try to get course_id from Node table
+            node_id = UUID(lesson_id)
+            node_query = select(Node).where(Node.id == node_id)
+            node_result = await self._execute_query(node_query)
+            node = node_result.scalar_one_or_none()
+
+            if node:
+                return str(node.roadmap_id)
+
+            logger.warning(f"Node not found for lesson_id: {lesson_id}")
+            return lesson_id
+
+        except (ValueError, TypeError):
+            # Try to get course_id from existing Progress records
+            existing_query = select(Progress).limit(1)
+            existing_result = await self._execute_query(existing_query)
+            existing_progress = existing_result.scalar_one_or_none()
+
+            if existing_progress:
+                course_id = existing_progress.course_id
+                logger.info(f"Using existing course_id: {course_id} for lesson_id: {lesson_id}")
+                return course_id
+
+            logger.info(f"No existing progress records, using lesson_id as course_id: {lesson_id}")
+            return lesson_id
+
     async def update_lesson_status(self, lesson_id: str, data: StatusUpdate) -> Progress:
         """Update lesson status.
 
@@ -46,74 +94,24 @@ class ProgressService:
         """
         # Check if progress record exists
         query = select(Progress).where(Progress.lesson_id == lesson_id)
-
-        # Execute query based on session type
-        if self._is_async:
-            async_session = cast("AsyncSession", self._session)
-            result = await async_session.execute(query)
-        else:
-            sync_session = cast("Session", self._session)
-            result = sync_session.execute(query)
-
+        result = await self._execute_query(query)
         progress = result.scalars().first()
 
         if progress:
             # Update existing record
             progress.status = data.status
-
-            # Commit changes based on session type
-            if self._is_async:
-                async_session = cast("AsyncSession", self._session)
-                await async_session.commit()
-                await async_session.refresh(progress)
-            else:
-                sync_session = cast("Session", self._session)
-                sync_session.commit()
-                sync_session.refresh(progress)
-
+            await self._commit_and_refresh(progress)
             return progress
 
-        # Get the node to determine the roadmap_id
-        try:
-            # Try to convert lesson_id to UUID
-            node_id = UUID(lesson_id)
-
-            # Query the node to get its roadmap_id
-            node_query = select(Node).where(Node.id == node_id)
-
-            if self._is_async:
-                async_session = cast("AsyncSession", self._session)
-                node_result = await async_session.execute(node_query)
-            else:
-                sync_session = cast("Session", self._session)
-                node_result = sync_session.execute(node_query)
-
-            node = node_result.scalar_one_or_none()
-
-            # Use roadmap_id if node exists, otherwise use lesson_id
-            course_id = str(node.roadmap_id) if node else lesson_id
-
-        except (ValueError, TypeError):
-            # If lesson_id is not a valid UUID, use it as the course_id
-            course_id = lesson_id
-
         # Create new record
+        course_id = await self._get_course_id(lesson_id)
         progress = Progress(
             lesson_id=lesson_id,
             course_id=course_id,
             status=data.status,
         )
         self._session.add(progress)
-
-        # Commit changes based on session type
-        if self._is_async:
-            async_session = cast("AsyncSession", self._session)
-            await async_session.commit()
-            await async_session.refresh(progress)
-        else:
-            sync_session = cast("Session", self._session)
-            sync_session.commit()
-            sync_session.refresh(progress)
+        await self._commit_and_refresh(progress)
 
         return progress
 
@@ -138,13 +136,7 @@ class ProgressService:
             # Get total lessons from the nodes table
             total_nodes_query = select(func.count()).select_from(Node).where(Node.roadmap_id == roadmap_id)
 
-            # Execute query based on session type
-            if self._is_async:
-                async_session = cast("AsyncSession", self._session)
-                total_nodes_result = await async_session.execute(total_nodes_query)
-            else:
-                sync_session = cast("Session", self._session)
-                total_nodes_result = sync_session.execute(total_nodes_query)
+            total_nodes_result = await self._execute_query(total_nodes_query)
 
             total_lessons = total_nodes_result.scalar() or 0
 
@@ -156,13 +148,7 @@ class ProgressService:
             # If course_id is not a valid UUID, fall back to counting progress records
             total_query = select(func.count()).select_from(Progress).where(Progress.course_id == course_id)
 
-            # Execute query based on session type
-            if self._is_async:
-                async_session = cast("AsyncSession", self._session)
-                total_result = await async_session.execute(total_query)
-            else:
-                sync_session = cast("Session", self._session)
-                total_result = sync_session.execute(total_query)
+            total_result = await self._execute_query(total_query)
 
             total_lessons = total_result.scalar() or 0
 
@@ -180,13 +166,7 @@ class ProgressService:
             )
         )
 
-        # Execute query based on session type
-        if self._is_async:
-            async_session = cast("AsyncSession", self._session)
-            completed_result = await async_session.execute(completed_query)
-        else:
-            sync_session = cast("Session", self._session)
-            completed_result = sync_session.execute(completed_query)
+        completed_result = await self._execute_query(completed_query)
 
         completed_lessons = completed_result.scalar() or 0
 
@@ -216,13 +196,7 @@ class ProgressService:
             # Get all nodes for this roadmap
             nodes_query = select(Node).where(Node.roadmap_id == roadmap_id)
 
-            # Execute query based on session type
-            if self._is_async:
-                async_session = cast("AsyncSession", self._session)
-                nodes_result = await async_session.execute(nodes_query)
-            else:
-                sync_session = cast("Session", self._session)
-                nodes_result = sync_session.execute(nodes_query)
+            nodes_result = await self._execute_query(nodes_query)
 
             nodes = nodes_result.scalars().all()
 
@@ -231,16 +205,17 @@ class ProgressService:
                 return []
 
             # Get all progress records for this course
-            progress_query = select(Progress).where(Progress.course_id == course_id)
+            # We need to check both by course_id and by lesson_id to catch all possible records
+            progress_query = select(Progress).where(
+                (Progress.course_id == course_id) | (Progress.lesson_id.in_([str(node.id) for node in nodes])),
+            )
 
-            if self._is_async:
-                async_session = cast("AsyncSession", self._session)
-                progress_result = await async_session.execute(progress_query)
-            else:
-                sync_session = cast("Session", self._session)
-                progress_result = sync_session.execute(progress_query)
+            progress_result = await self._execute_query(progress_query)
 
             progress_records = progress_result.scalars().all()
+
+            # Log the found progress records for debugging
+            logger.debug(f"Found {len(progress_records)} progress records for course_id: {course_id}")
 
             # Create a map of lesson_id to status
             progress_map = {str(record.lesson_id): record.status for record in progress_records}
@@ -262,13 +237,7 @@ class ProgressService:
             # If course_id is not a valid UUID, fall back to just returning progress records
             query = select(Progress).where(Progress.course_id == course_id)
 
-            # Execute query based on session type
-            if self._is_async:
-                async_session = cast("AsyncSession", self._session)
-                result = await async_session.execute(query)
-            else:
-                sync_session = cast("Session", self._session)
-                result = sync_session.execute(query)
+            result = await self._execute_query(query)
 
             progress_records = result.scalars().all()
 

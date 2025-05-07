@@ -1,5 +1,6 @@
 import { FileText, Layout, PanelLeft } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
+import { useProgress } from "../../hooks/useProgress";
 
 /**
  * Application header component that provides navigation controls and course progress
@@ -17,10 +18,12 @@ import { useSidebar } from "./SidebarContext";
  * @param {string} props.courseName - Course title to display in the header
  * @param {string} props.mode - Current view mode ("visual" for flowchart or "outline" for text)
  * @param {function} props.onModeChange - Callback handler for mode toggle changes
- * @param {number} [props.progress=3] - Course completion percentage (0-100)
+ * @param {string} props.courseId - ID of the current course
  */
-function RoadmapHeader({ courseName, mode, onModeChange, progress = 3 }) {
+function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
   const { isOpen, toggleSidebar } = useSidebar();
+  // Use the same progress hook that's used in the sidebar
+  const { courseProgress } = useProgress(courseId);
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md bg-white/80 border-b border-zinc-200">
@@ -75,10 +78,10 @@ function RoadmapHeader({ courseName, mode, onModeChange, progress = 3 }) {
               <div className="relative w-32 h-2 bg-zinc-200 rounded-full overflow-hidden">
                 <div
                   className="absolute top-0 left-0 h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full"
-                  style={{ width: `${progress}%` }}
+                  style={{ width: `${courseProgress?.progress_percentage || 0}%` }}
                 />
               </div>
-              <span className="text-xs font-medium text-zinc-500">{progress}%</span>
+              <span className="text-xs font-medium text-zinc-500">{courseProgress?.progress_percentage || 0}%</span>
             </div>
           </div>
         </div>
