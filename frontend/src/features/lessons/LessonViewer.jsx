@@ -1,7 +1,7 @@
 import { Button } from "@/components/button";
-import { cn, convertMarkdownToHtml } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
-import React from "react";
+import { ContentRenderer } from "./ContentRenderer";
 import "./LessonViewer.css";
 
 /**
@@ -69,49 +69,7 @@ export function LessonViewer({ lesson, isLoading, error, onBack }) {
 
       {/* Lesson content */}
       <div className="prose prose-emerald max-w-none">
-        <div className="markdown-content">
-          {lesson.md_source.split("\n").map((line, index) => {
-            // Headers
-            const key = `${index}-${line.slice(0, 40)}`; // Create unique key from index and content
-            if (line.startsWith("# ")) {
-              return <h1 key={key}>{line.slice(2)}</h1>;
-            }
-            if (line.startsWith("## ")) {
-              return <h2 key={key}>{line.slice(3)}</h2>;
-            }
-            if (line.startsWith("### ")) {
-              return <h3 key={key}>{line.slice(4)}</h3>;
-            }
-
-            // Lists
-            if (line.trim().startsWith("* ")) {
-              return (
-                <ul key={key}>
-                  <li>{line.trim().slice(2)}</li>
-                </ul>
-              );
-            }
-            if (/^\d+\.\s/.test(line.trim())) {
-              return (
-                <ol key={key}>
-                  <li>{line.trim().replace(/^\d+\.\s/, "")}</li>
-                </ol>
-              );
-            }
-
-            // Code blocks (simple case)
-            if (line.trim().startsWith("```") || line.trim().endsWith("```")) {
-              return null; // Skip code block delimiters
-            }
-
-            // Regular paragraph (non-empty lines)
-            if (line.trim()) {
-              return <p key={key}>{line}</p>;
-            }
-
-            return null; // Skip empty lines
-          })}
-        </div>
+        <ContentRenderer content={lesson.md_source} />
       </div>
     </div>
   );
