@@ -1,11 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
-
-
-if TYPE_CHECKING:
-    from src.progress.models import Progress
-    from src.users.models import User
+from typing import Optional
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID as SA_UUID
@@ -36,16 +31,6 @@ class Roadmap(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
     )
-    # Add user_id foreign key for roadmap ownership
-    user_id: Mapped[uuid.UUID | None] = mapped_column(
-        SA_UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-
-    # Relationship to User (owner)
-    owner: Mapped["User"] = relationship("User", back_populates="roadmaps", lazy="selectin")
-
     nodes: Mapped[list["Node"]] = relationship(
         "Node",
         back_populates="roadmap",
@@ -101,16 +86,10 @@ class Node(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+
     # --- REMOVE ALL REFERENCES TO PREREQUISITES ---
     # If any code tries to access node.prerequisites, it should raise AttributeError
     # or be removed from the codebase.
-    progress_records: Mapped[list["Progress"]] = relationship(
-        "Progress",
-        back_populates="node",
-        cascade="all, delete-orphan",
-        lazy="selectin",
-    )
-
     def set_status(self, value: str) -> None:
         """Set the node status.
 

@@ -16,7 +16,6 @@ from src.lessons import router as lessons_router
 from src.onboarding.router import router as onboarding_router
 from src.progress.router import router as progress_router
 from src.roadmaps.router import router as roadmaps_router
-from src.users.router import router as users_router
 
 
 # Load .env from backend directory (parent of src)
@@ -83,10 +82,9 @@ def create_app() -> FastAPI:
 
     # Register routers
     app.include_router(roadmaps_router)
-    app.include_router(users_router)
-    app.include_router(progress_router)
     app.include_router(onboarding_router)
     app.include_router(lessons_router)
+    app.include_router(progress_router)
 
     # Register startup event
     @app.on_event("startup")
