@@ -2,7 +2,19 @@ import { useState, useEffect, useMemo } from "react";
 import { evaluate } from "@mdx-js/mdx";
 import * as runtime from "react/jsx-runtime";
 import { MDXProvider } from "@mdx-js/react";
+import rehypePrettyCode from "rehype-pretty-code";
+import remarkGfm from "remark-gfm";
+import remarkRehype from "remark-rehype";
+import rehypeRaw from "rehype-raw";
+import { CodeBlock } from "../../components/code-block";
 import "./LessonViewer.css";
+
+// Configure rehype-pretty-code with Catppuccin Latte theme
+const prettyCodeOptions = {
+  theme: "catppuccin-latte",
+  keepBackground: true,
+  defaultLang: "text",
+};
 
 /**
  * Component to render MDX/Markdown content using @mdx-js/mdx
@@ -46,12 +58,28 @@ export function MDXRenderer({ content }) {
       // Code
       code: (props) => {
         const isInline = !props.className;
-        return isInline ? (
-          <code className="bg-zinc-100 px-1.5 py-0.5 rounded text-sm font-mono text-zinc-800" {...props} />
-        ) : (
-          <pre className="bg-zinc-100 p-4 rounded-md overflow-x-auto mb-4 text-sm font-mono">
-            <code className="block" {...props} />
-          </pre>
+        // For inline code, keep the original styling
+        if (isInline) {
+          return <code className="bg-zinc-100 px-1.5 py-0.5 rounded text-sm font-mono text-zinc-800" {...props} />;
+        }
+
+        // For code blocks, use our CodeBlock component
+        const language = props.className ? props.className.replace(/language-/, "") : "text";
+        return <CodeBlock code={props.children} language={language} />;
+      },
+
+      // Pre - this will receive the rehype-pretty-code output
+      pre: (props) => {
+        // Extract language from className (e.g., "language-js")
+        const className = props.children?.props?.className || "";
+        const match = className.match(/language-(\w+)/);
+        const language = match ? match[1] : "text";
+
+        // Wrap in our CodeBlock component
+        return (
+          <CodeBlock language={language} className="rehype-code-block">
+            <pre {...props} />
+          </CodeBlock>
         );
       },
 
@@ -71,11 +99,13 @@ export function MDXRenderer({ content }) {
 
     const compileMdx = async () => {
       try {
-        // Evaluate the MDX content with the runtime
+        // Evaluate the MDX content with the runtime and rehype plugins
         const result = await evaluate(content, {
           ...runtime,
           development: false,
           useMDXComponents: () => currentComponents,
+          rehypePlugins: [rehypeRaw, [rehypePrettyCode, prettyCodeOptions]],
+          remarkPlugins: [remarkGfm, [remarkRehype, { allowDangerousHtml: true }]],
         });
 
         setMdxModule(result);

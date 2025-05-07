@@ -86,3 +86,61 @@
 .markdown-content em {
   font-style: italic;
 }
+
+/* Styles for code blocks */
+.markdown-content pre,
+pre {
+  margin: 0 0 1rem 0;
+  border-radius: 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  background-color: #eff1f5;
+  /* Catppuccin Latte background */
+}
+
+.markdown-content code,
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+/* Ensure inline code has proper styling */
+.markdown-content p>code,
+p>code {
+  background-color: #eff1f5;
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+}
+
+/* rehype-pretty-code styles */
+.code-block-wrapper pre {
+  margin: 0;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+/* Style for code lines */
+.code-block-wrapper [data-line] {
+  display: block;
+  padding: 0 1rem;
+  border-left: 2px solid transparent;
+}
+
+/* Style for highlighted lines */
+.code-block-wrapper [data-highlighted-line] {
+  background-color: rgba(30, 102, 245, 0.1);
+  /* Catppuccin Latte blue with opacity */
+  border-left: 2px solid #1e66f5;
+  /* Catppuccin Latte blue */
+}
+
+/* Style for highlighted words */
+.code-block-wrapper [data-highlighted-chars] {
+  background-color: rgba(30, 102, 245, 0.2);
+  /* Catppuccin Latte blue with opacity */
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.2rem;
+  margin: 0 -0.2rem;
+}
