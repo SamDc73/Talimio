@@ -1,6 +1,7 @@
 import { CheckCircle, ChevronRight, Circle } from "lucide-react";
-import { useState, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useSidebar } from "./SidebarContext";
+import { useProgress } from "../../hooks/useProgress";
 
 /**
  * @typedef {Object} Lesson - Course lesson with completion status
@@ -24,19 +25,20 @@ import { useSidebar } from "./SidebarContext";
  * - Progress tracking for overall course completion
  * - Responsive design that can be toggled via SidebarContext
  * - First module expanded by default, but users can collapse all modules if desired
+ * - Connects to backend progress API to track lesson completion
  *
  * @param {Object} props
  * @param {Module[]} props.modules - Array of course modules to display
  * @param {Function} props.onLessonClick - Callback when lesson is clicked, receives (moduleId, lessonId)
  * @param {string|null} props.activeLessonId - Currently active lesson ID for highlighting
+ * @param {string} props.courseId - ID of the current course
  */
-function Sidebar({ modules = [], onLessonClick, activeLessonId = null }) {
+function Sidebar({ modules = [], onLessonClick, activeLessonId = null, courseId }) {
   // Get sidebar visibility state from context
   const { isOpen } = useSidebar();
 
-  // Track which modules are expanded - first one expanded by default
-  // Track which lessons have been clicked but not yet completed
-  const [clickedLessons, setClickedLessons] = useState(new Set());
+  // Use progress hook to connect to backend
+  const { courseProgress, toggleLessonCompletion, isLessonCompleted } = useProgress(courseId);
 
   const [expandedModules, setExpandedModules] = useState(() => {
     // Only expand the first module by default if there are modules and the sidebar is open
@@ -45,7 +47,7 @@ function Sidebar({ modules = [], onLessonClick, activeLessonId = null }) {
 
   const handleToggleModule = (moduleId) => {
     setExpandedModules((prev) =>
-      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId],
+      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId]
     );
   };
 
@@ -60,14 +62,12 @@ function Sidebar({ modules = [], onLessonClick, activeLessonId = null }) {
   const isModuleCompleted = (module) => {
     return (
       module.status === "completed" ||
-      (module.lessons?.every((l) => l.status === "completed") && module.lessons.length > 0)
+      (module.lessons?.every((l) => isLessonCompleted(l.id)) && module.lessons.length > 0)
     );
   };
 
-  // Calculate overall progress percentage
-  const completedModulesCount = modules?.filter(isModuleCompleted).length || 0;
-  const totalModules = modules.length;
-  const progress = totalModules ? Math.round((completedModulesCount / totalModules) * 100) : 0;
+  // Use progress percentage from backend if available, otherwise calculate from modules
+  const progress = courseProgress?.progress_percentage || 0;
   return (
     <aside
       className={`fixed-sidebar flex flex-col bg-white border-r border-zinc-200 transition-all duration-300 ease-in-out ${
@@ -111,12 +111,13 @@ function Sidebar({ modules = [], onLessonClick, activeLessonId = null }) {
                     </div>
                     {/* Progress circle */}
                     {/* Only show progress circle if there's any progress */}
-                    {module.lessons.length > 0 &&
-                     module.lessons.some(l => l.status === 'completed' || clickedLessons.has(l.id)) && (
+                    {module.lessons.length > 0 && module.lessons.some((l) => isLessonCompleted(l.id)) && (
                       <svg
                         className="absolute top-0 left-0 w-8 h-8 -rotate-90"
                         role="img"
-                        aria-label={`Module progress: ${Math.round((module.lessons.filter(l => l.status === 'completed' || clickedLessons.has(l.id)).length / module.lessons.length) * 100)}%`}
+                        aria-label={`Module progress: ${Math.round(
+                          (module.lessons.filter((l) => isLessonCompleted(l.id)).length / module.lessons.length) * 100
+                        )}%`}
                       >
                         <title>Module progress indicator</title>
                         <circle
@@ -136,10 +137,13 @@ function Sidebar({ modules = [], onLessonClick, activeLessonId = null }) {
                           fill="none"
                           stroke="#10b981"
                           strokeLinecap="round"
-                          strokeDasharray={`${(module.lessons.filter(l => l.status === 'completed' || clickedLessons.has(l.id)).length / module.lessons.length) * 87.96} 87.96`}
+                          strokeDasharray={`${
+                            (module.lessons.filter((l) => isLessonCompleted(l.id)).length / module.lessons.length) *
+                            87.96
+                          } 87.96`}
                           className="transition-all duration-300"
                           style={{
-                            filter: "drop-shadow(0 1px 1px rgb(0 0 0 / 0.05))"
+                            filter: "drop-shadow(0 1px 1px rgb(0 0 0 / 0.05))",
                           }}
                         />
                       </svg>
@@ -157,7 +161,7 @@ function Sidebar({ modules = [], onLessonClick, activeLessonId = null }) {
               {isExpanded && (
                 <ol className="px-4 py-2 space-y-2">
                   {module.lessons.map((lesson) => {
-                    const isLessonComplete = lesson.status === "completed";
+                    // Use backend status from our hook instead of local state
                     const isLocked = lesson.status === "locked";
                     const isActive = lesson.id === activeLessonId;
                     return (
@@ -166,37 +170,31 @@ function Sidebar({ modules = [], onLessonClick, activeLessonId = null }) {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (!isLessonComplete) {
-                              setClickedLessons(prev => {
-                                const next = new Set(prev);
-                                if (next.has(lesson.id)) {
-                                  next.delete(lesson.id);
-                                } else {
-                                  next.add(lesson.id);
-                                }
-                                return next;
-                              });
+                            if (!isLocked) {
+                              toggleLessonCompletion(lesson.id);
                             }
                           }}
                           className="mt-0.5 transition-all duration-200 hover:scale-110"
                           disabled={isLocked}
                         >
-                          {isLessonComplete ? (
+                          {isLessonCompleted(lesson.id) ? (
                             <CheckCircle className="w-5 h-5 text-emerald-500" />
-                          ) : clickedLessons.has(lesson.id) ? (
-                            <CheckCircle className="w-5 h-5 text-emerald-400" />
                           ) : (
-                            <Circle className={`w-5 h-5 ${isLocked ? 'text-zinc-200' : 'text-zinc-300 hover:text-emerald-300'}`} />
+                            <Circle
+                              className={`w-5 h-5 ${
+                                isLocked ? "text-zinc-200" : "text-zinc-300 hover:text-emerald-300"
+                              }`}
+                            />
                           )}
                         </button>
                         <button
                           type="button"
                           className={`text-left ${
-                            isLessonComplete
+                            isLessonCompleted(lesson.id)
                               ? "font-semibold text-emerald-700"
                               : isActive
-                                ? "font-semibold text-emerald-700"
-                                : "text-zinc-800"
+                              ? "font-semibold text-emerald-700"
+                              : "text-zinc-800"
                           }`}
                           style={{
                             background: "none",

@@ -90,18 +90,16 @@ const RoadmapFlow = ({ roadmapId, onError }) => {
   };
 
   const childNodes = edges.filter((edge) => edge.source === selectedNode?.id).map((edge) => edge.target);
-  const getProgress = () => 42;
-  const progress = getProgress();
 
   return (
     <div
       className={`roadmap-container ${isOpen ? "sidebar-open" : "sidebar-closed"}`}
       style={{ margin: 0, padding: 0 }}
     >
-      <RoadmapHeader mode={mode} onModeChange={setMode} progress={progress} courseName={courseName} />
+      <RoadmapHeader mode={mode} onModeChange={setMode} courseId={roadmapId} courseName={courseName} />
 
       <div className="flex h-screen">
-        <Sidebar modules={modules || []} onLessonClick={() => {}} />
+        <Sidebar modules={modules || []} onLessonClick={() => {}} courseId={roadmapId} />
         {mode === "outline" ? (
           <div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
             <OutlineView roadmapId={roadmapId} />
