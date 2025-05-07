@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class StatusUpdate(BaseModel):
@@ -14,8 +14,9 @@ class StatusUpdate(BaseModel):
         pattern="^(not_started|in_progress|done)$",
     )
 
-    @validator("status")
-    def validate_status(self, v: str) -> str:
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
         """Validate status value."""
         allowed_values = ["not_started", "in_progress", "done"]
         if v not in allowed_values:
