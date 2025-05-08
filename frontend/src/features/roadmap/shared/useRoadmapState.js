@@ -1,37 +1,24 @@
 import { addEdge, useEdgesState, useNodesState } from "@xyflow/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-// import dagre from "@dagrejs/dagre";
 
-// --- Layout Helpers ---
-const NODE_WIDTH = 220; // Width matching our CSS width in node components
-const NODE_HEIGHT = 80; // Height matching our CSS height in node components
-const VERTICAL_SPACING = 180; // Increased vertical space between nodes for better separation
-const HORIZONTAL_INDENTATION = 70; // Slightly reduced for denser child grouping
-const SIBLING_SPACING = 36; // Reduced spacing for denser sibling layout
-const HORIZONTAL_SIBLING_SPACING = 250; // Spacing for horizontally arranged siblings
+const NODE_HEIGHT = 80;
+const VERTICAL_SPACING = 180;
+const HORIZONTAL_INDENTATION = 70;
+const HORIZONTAL_SIBLING_SPACING = 250;
 
-// Helper function to determine if a node's children should be arranged horizontally
-// This makes the decision dynamic based on node type and relationship
 const shouldUseHorizontalLayout = (node, childIds, allNodes) => {
   if (!node || !childIds || childIds.length < 2) {
     return false;
   }
 
-  // Top-level parent nodes (those without parent_id) should always flow vertically
   if (node.parent_id === null) {
     return false;
   }
 
-  // For siblings that represent parallel concepts rather than sequential steps,
-  // arrange them horizontally to better visualize their relationship
   const children = childIds.map((id) => allNodes.get(id)).filter(Boolean);
-
-  // If node has multiple children that don't depend on each other,
-  // display them horizontally
   return children.length >= 2;
 };
 
-// Helper functions to break down complexity
 const processNode = (node, parentId, uniqueApiNodes, nodeRelationships) => {
   if (!uniqueApiNodes.has(node.id)) {
     uniqueApiNodes.set(node.id, { ...node, parent_id: parentId });
@@ -47,7 +34,6 @@ const processNode = (node, parentId, uniqueApiNodes, nodeRelationships) => {
       nodeRelationships.set(parentId, []);
     }
     if (!nodeRelationships.get(parentId).includes(node.id)) {
-      // Add the node to the parent's children array
       nodeRelationships.get(parentId).push(node.id);
     }
   }
@@ -219,7 +205,7 @@ const createEdges = (nodeRelationships, uniqueApiNodes) => {
   return edges;
 };
 
-// Duolingo-style vertical layout with intuitive parent-child relationships
+// Vertical layout with intuitive parent-child relationships
 const getVerticalTreeLayout = (apiNodes) => {
   // Process nodes and build relationships
   const { uniqueApiNodes, nodeRelationships } = processNodeStack(apiNodes);
@@ -242,115 +228,18 @@ const getVerticalTreeLayout = (apiNodes) => {
   return { nodes: reactFlowNodes, edges: reactFlowEdges };
 };
 
-// Helper functions for Dagre layout processing
-const initializeDagreGraph = (direction = "TB") => {
-  const graph = new dagre.graphlib.Graph();
-  graph.setDefaultEdgeLabel(() => ({}));
-  graph.setGraph({ rankdir: direction, nodesep: 70, ranksep: 100 });
-  return graph;
-};
-
-const setupDagreNode = (node, dagreGraph) => {
-  dagreGraph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
-  return node;
-};
-
-const createEdge = (parentId, nodeId) => ({
-  id: `e${parentId}-${nodeId}`,
-  source: parentId,
-  target: nodeId,
-  type: "smoothstep",
-});
-
-const determineNodeType = (node) =>
-  node.type || (Array.isArray(node.children) && node.children.length > 0 ? "decision" : "task");
-
-const createFlowNode = (apiNode, nodeWithPosition) => ({
-  id: apiNode.id,
-  type: determineNodeType(apiNode),
-  position: {
-    x: nodeWithPosition.x - NODE_WIDTH / 2,
-    y: nodeWithPosition.y - NODE_HEIGHT / 2,
-  },
-  data: {
-    label: apiNode.title,
-    description: apiNode.description,
-    ...apiNode,
-  },
-});
-
-// Keep the original Dagre layout as a fallback
-const getDagreLayout = (apiNodes, direction = "TB") => {
-  const dagreGraph = initializeDagreGraph(direction);
-  const uniqueApiNodes = new Map();
-  const processedNodeIds = new Set();
-  const edges = new Set();
-
-  const addNodeAndEdges = (node, parentId = null) => {
-    if (!processedNodeIds.has(node.id)) {
-      processedNodeIds.add(node.id);
-      uniqueApiNodes.set(node.id, node);
-      setupDagreNode(node, dagreGraph);
-    }
-
-    if (parentId) {
-      const edgeId = `e${parentId}-${node.id}`;
-      if (!edges.has(edgeId)) {
-        dagreGraph.setEdge(parentId, node.id);
-        edges.add(edgeId);
-      }
-    }
-
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        addNodeAndEdges(child, node.id);
-      }
-    }
-  };
-
-  const rootNodes = apiNodes.filter((node) => !node.parent_id);
-  for (const node of rootNodes) {
-    addNodeAndEdges(node);
-  }
-
-  dagre.layout(dagreGraph);
-
-  const reactFlowNodes = Array.from(uniqueApiNodes.values())
-    .map((apiNode) => {
-      const nodeWithPosition = dagreGraph.node(apiNode.id);
-      if (!nodeWithPosition) {
-        console.warn(`Dagre layout information missing for node ID: ${apiNode.id}`);
-        return null;
-      }
-      return createFlowNode(apiNode, nodeWithPosition);
-    })
-    .filter(Boolean);
-
-  const finalNodeIds = new Set(reactFlowNodes.map((n) => n.id));
-  const reactFlowEdges = Array.from(edges)
-    .map((edgeId) => {
-      const [, parentId, nodeId] = edgeId.match(/^e(.*)-(.*)$/);
-      return createEdge(parentId, nodeId);
-    })
-    .filter((edge) => finalNodeIds.has(edge.source) && finalNodeIds.has(edge.target));
-
-  return { nodes: reactFlowNodes, edges: reactFlowEdges };
-};
-
-// Main layout function that uses the vertical tree layout
 const getLayoutedElements = (apiNodes) => {
-  // Sort the top-level nodes by their order property before processing
   const sortedApiNodes = [...apiNodes].sort((a, b) => a.order - b.order);
   return getVerticalTreeLayout(sortedApiNodes);
 };
 
-export const useRoadmapState = () => {
+export const useRoadmapState = (roadmapId, onError) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
   const [roadmap, setRoadmap] = useState(null);
-  const requestRef = useRef(null);
+  const initializedRef = useRef(false);
 
   const handleConnect = useCallback((params) => setEdges((eds) => addEdge(params, eds)), [setEdges]);
 
@@ -395,6 +284,16 @@ export const useRoadmapState = () => {
     },
     [hasInitialized, isLoading, updateRoadmapState],
   );
+
+  useEffect(() => {
+    if (!roadmapId || initializedRef.current) return;
+
+    initializedRef.current = true;
+    initializeRoadmap(roadmapId).catch((error) => {
+      console.error("Error loading roadmap:", error);
+      onError?.();
+    });
+  }, [roadmapId, initializeRoadmap, onError]);
 
   useEffect(() => {
     const controller = new AbortController();

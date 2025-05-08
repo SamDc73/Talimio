@@ -1,4 +1,3 @@
-// useOutlineData.js
 // Loads and normalizes the roadmap data for Outline mode
 
 import { useEffect, useState } from "react";
