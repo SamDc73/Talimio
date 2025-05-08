@@ -7,7 +7,7 @@ import { SidebarProvider } from "./features/navigation/SidebarContext";
 import Sidebar from "./features/navigation/sidebar";
 import { OnboardingFlow } from "./features/onboarding";
 import RoadmapFlow from "./features/roadmap";
-import { useOutlineData } from "./features/roadmap/useOutlineData";
+import { useOutlineData } from "./features/roadmap/outline/useOutlineData";
 import { useAppState } from "./hooks/useAppState";
 import { CodeBlockTest } from "@/components/code-block-test";
 

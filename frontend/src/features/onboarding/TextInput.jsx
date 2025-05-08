@@ -1,6 +1,6 @@
 import React from "react";
 
-import { serializeGraphState } from "../roadmap/roadmapUtils";
+import { serializeGraphState } from "../roadmap/map/useRoadmapUtils";
 
 import { Input } from "@/components/input";
 

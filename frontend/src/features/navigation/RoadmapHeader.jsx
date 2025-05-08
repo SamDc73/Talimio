@@ -8,7 +8,7 @@ import { useProgress } from "../../hooks/useProgress";
  * Features:
  * - Collapsible sidebar toggle
  * - Course title display with gradient styling
- * - View mode toggle between visual and outline representations
+ * - View mode toggle between map and outline representations
  * - Progress bar showing course completion percentage
  *
  * The header stays fixed at the top and includes a subtle blur effect for better readability
@@ -16,7 +16,7 @@ import { useProgress } from "../../hooks/useProgress";
  *
  * @param {Object} props
  * @param {string} props.courseName - Course title to display in the header
- * @param {string} props.mode - Current view mode ("visual" for flowchart or "outline" for text)
+ * @param {string} props.mode - Current view mode ("visual" for map flowchart or "outline" for text)
  * @param {function} props.onModeChange - Callback handler for mode toggle changes
  * @param {string} props.courseId - ID of the current course
  */
@@ -44,7 +44,7 @@ function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
             {courseName}
           </h1>
           <div className="flex items-center gap-4 ml-8 pr-12">
-            {/* View mode toggle - switches between visual flowchart and outline text views */}
+            {/* View mode toggle - switches between map flowchart and outline text views */}
             <div className="flex items-center gap-2">
               <button
                 className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${
@@ -57,7 +57,7 @@ function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
                 aria-pressed={mode === "visual"}
                 tabIndex={0}
               >
-                <Layout className="w-4 h-4 mr-1" /> {mode === "visual" ? "Visual" : "Visual View"}
+                <Layout className="w-4 h-4 mr-1" /> {mode === "visual" ? "Map" : "Map View"}
               </button>
               <button
                 className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${
