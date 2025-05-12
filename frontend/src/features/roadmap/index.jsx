@@ -5,6 +5,7 @@ import { useSidebar } from "../navigation/SidebarContext";
 import Sidebar from "../navigation/sidebar";
 import MapView from "./map";
 import OutlineView from "./outline";
+import TrackView from "./track";
 import { useRoadmapState } from "./shared/useRoadmapState";
 import { useOutlineData } from "./outline/useOutlineData";
 
@@ -45,6 +46,10 @@ const RoadmapFlow = ({ roadmapId, onError }) => {
         {mode === "outline" ? (
           <div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
             <OutlineView roadmapId={roadmapId} />
+          </div>
+        ) : mode === "track" ? (
+          <div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
+            <TrackView roadmapId={roadmapId} />
           </div>
         ) : (
           // Map view (mode === "visual")

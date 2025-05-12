@@ -1,4 +1,4 @@
-import { FileText, Layout, PanelLeft } from "lucide-react";
+import { FileText, Layout, PanelLeft, GitBranch } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
 import { useProgress } from "../../hooks/useProgress";
 
@@ -44,7 +44,7 @@ function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
             {courseName}
           </h1>
           <div className="flex items-center gap-4 ml-8 pr-12">
-            {/* View mode toggle - switches between map flowchart and outline text views */}
+            {/* View mode toggle - switches between map, outline, and track views */}
             <div className="flex items-center gap-2">
               <button
                 className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${
@@ -71,6 +71,19 @@ function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
                 tabIndex={0}
               >
                 <FileText className="w-4 h-4 mr-1" /> {mode === "outline" ? "Outline" : "Outline View"}
+              </button>
+              <button
+                className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${
+                  mode === "track"
+                    ? "bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default"
+                    : "text-zinc-400 bg-zinc-100 border-zinc-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 cursor-pointer"
+                }`}
+                type="button"
+                onClick={() => mode !== "track" && onModeChange("track")}
+                aria-pressed={mode === "track"}
+                tabIndex={0}
+              >
+                <GitBranch className="w-4 h-4 mr-1" /> Track Mode
               </button>
             </div>
             {/* Animated progress bar with percentage indicator */}
