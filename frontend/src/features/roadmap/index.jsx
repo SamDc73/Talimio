@@ -3,7 +3,7 @@ import { useState } from "react";
 import RoadmapHeader from "../navigation/RoadmapHeader";
 import { useSidebar } from "../navigation/SidebarContext";
 import Sidebar from "../navigation/sidebar";
-import MapView from "./map";
+// import MapView from "./map";  // Temporarily hidden
 import OutlineView from "./outline";
 import TrackView from "./track";
 import { useRoadmapState } from "./shared/useRoadmapState";
@@ -17,7 +17,7 @@ const RoadmapFlow = ({ roadmapId, onError }) => {
   const { isLoading: roadmapLoading, roadmap } = useRoadmapState(roadmapId, onError);
   const { modules, isLoading: modulesLoading } = useOutlineData(roadmapId);
   const { isOpen } = useSidebar();
-  const [mode, setMode] = useState("visual"); // "visual" is used for map view
+  const [mode, setMode] = useState("outline"); // Default to outline view
 
   const isLoading = roadmapLoading || modulesLoading;
   const courseName = roadmap?.title || "Learn FastAPI";
@@ -43,6 +43,7 @@ const RoadmapFlow = ({ roadmapId, onError }) => {
 
       <div className="flex h-screen">
         <Sidebar modules={modules || []} onLessonClick={() => {}} courseId={roadmapId} />
+        {/* Conditional rendering of views */}
         {mode === "outline" ? (
           <div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
             <OutlineView roadmapId={roadmapId} />
@@ -52,10 +53,8 @@ const RoadmapFlow = ({ roadmapId, onError }) => {
             <TrackView roadmapId={roadmapId} />
           </div>
         ) : (
-          // Map view (mode === "visual")
-          <div className="flex-1 relative main-content transition-all duration-300 ease-in-out">
-            <MapView roadmapId={roadmapId} />
-          </div>
+          // Map view temporarily hidden
+          null
         )}
       </div>
     </div>
