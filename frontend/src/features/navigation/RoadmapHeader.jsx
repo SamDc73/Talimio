@@ -46,6 +46,7 @@ function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
           <div className="flex items-center gap-4 ml-8 pr-12">
             {/* View mode toggle - switches between map, outline, and track views */}
             <div className="flex items-center gap-2">
+              {/* Map view button temporarily hidden
               <button
                 className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${
                   mode === "visual"
@@ -59,6 +60,7 @@ function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
               >
                 <Layout className="w-4 h-4 mr-1" /> {mode === "visual" ? "Map" : "Map View"}
               </button>
+              */}
               <button
                 className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${
                   mode === "outline"
@@ -83,7 +85,7 @@ function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
                 aria-pressed={mode === "track"}
                 tabIndex={0}
               >
-                <GitBranch className="w-4 h-4 mr-1" /> Track Mode
+                <GitBranch className="w-4 h-4 mr-1" /> {mode === "track" ? "Track" : "Track View"}
               </button>
             </div>
             {/* Animated progress bar with percentage indicator */}

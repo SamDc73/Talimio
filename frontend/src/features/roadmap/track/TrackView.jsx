@@ -73,23 +73,10 @@ export default function TrackView({ roadmapId }) {
     // Skip further calculations if initial positioning is done
     // except on resize which needs recalculation
     const measure = (isInitialOrResize = false) => {
-      if (!svgRef.current) {
-        console.log('[TrackView] No SVG ref available');
-        return;
-      }
-
-      console.log('[TrackView] Running measure()', {
-        isInitialOrResize,
-        initialPositioningDone,
-        moduleCount: modules?.length,
-        storedTransforms: storedModuleTransforms.current.length
-      });
+      if (!svgRef.current) return;
 
       // Don't run measurements again unless it's initial or resize
-      if (initialPositioningDone && !isInitialOrResize) {
-        console.log('[TrackView] Skipping measurement - already positioned');
-        return;
-      }
+      if (initialPositioningDone && !isInitialOrResize) return;
 
       const svgBox = svgRef.current.getBoundingClientRect();
       const path = svgRef.current.querySelector("#coursePath");
@@ -248,7 +235,14 @@ export default function TrackView({ roadmapId }) {
           </div>
 
           {/* Modules and lessons */}
-          <div ref={wrapperRef} className="relative z-10 pb-20 flex-1">
+          <div
+            ref={wrapperRef}
+            className={cn(
+              "relative z-10 pb-20 flex-1",
+              !initialPositioningDone && "opacity-0",
+              initialPositioningDone && "opacity-100 transition-opacity duration-300"
+            )}
+          >
             {/* Clear lesson refs before mapping */}
             {(() => {
               lessonWrapRefs.current = [];

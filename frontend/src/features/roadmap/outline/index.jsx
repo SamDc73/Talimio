@@ -81,21 +81,12 @@ function OutlineView({ roadmapId }) {
     );
   }
 
-  // TODO: Fetch the actual roadmap title dynamically if available
-  const courseTitle = "Roadmap Outline";
-
   if (activeLesson && (lesson || lessonLoading)) {
     return <LessonViewer lesson={lesson} isLoading={lessonLoading} error={lessonError} onBack={handleBackToOutline} />;
   }
   return (
     <div className="flex-1 p-4 md:p-6 lg:p-8">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 mb-1">{courseTitle}</h1>
-          </div>
-        </div>
-
         {modules.map((module, idx) => (
           <OutlineItem
             key={module.id || idx}
