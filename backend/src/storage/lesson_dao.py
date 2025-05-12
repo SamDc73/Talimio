@@ -15,14 +15,16 @@ class LessonDAO:
         import logging
         import os
 
-        # Default to localhost if not specified
-        host = os.getenv("POSTGRES_HOST", "localhost")
-        port = os.getenv("POSTGRES_PORT", "5432")
-        user = os.getenv("POSTGRES_USER", "postgres")
-        password = os.getenv("POSTGRES_PASSWORD", "postgres")
-        dbname = os.getenv("POSTGRES_DB", "postgres")
-
-        connection_string = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+        # Use DATABASE_URL if available, otherwise fallback to individual settings
+        connection_string = os.getenv("DATABASE_URL")
+        if not connection_string:
+            # Default to localhost if not specified
+            host = os.getenv("POSTGRES_HOST", "localhost")
+            port = os.getenv("POSTGRES_PORT", "5432")
+            user = os.getenv("POSTGRES_USER", "postgres")
+            password = os.getenv("POSTGRES_PASSWORD", "postgres")
+            dbname = os.getenv("POSTGRES_DB", "postgres")
+            connection_string = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
 
         try:
             logging.info(f"Connecting to database at {host}:{port}/{dbname}")
