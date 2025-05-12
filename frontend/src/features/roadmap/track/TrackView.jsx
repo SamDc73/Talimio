@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useTrackData } from "./useTrackData";
 import { useProgress } from "../../../hooks/useProgress";
+import { LessonViewer } from "../../lessons/LessonViewer";
+import { useLessonViewer } from "../../lessons/useLessonViewer";
 
 // Helper function to find x position at given y coordinate on an SVG path
 const xAtY = (path, targetY) => {
@@ -38,6 +40,35 @@ const xAtY = (path, targetY) => {
 export default function TrackView({ roadmapId }) {
   const { modules, isLoading, error } = useTrackData(roadmapId);
   const { courseProgress, isLessonCompleted } = useProgress(roadmapId);
+  const [activeLesson, setActiveLesson] = useState(null);
+  const { lesson, isLoading: lessonLoading, error: lessonError, getOrGenerateLesson, clearLesson } = useLessonViewer();
+
+  // Handle lesson click
+  const handleLessonClick = async (moduleId, lessonId, lessonTitle, lessonDescription) => {
+    try {
+      setActiveLesson({
+        moduleId,
+        lessonId,
+        title: lessonTitle,
+        description: lessonDescription || "",
+      });
+
+      // Ensure lessonId is a string for compatibility
+      await getOrGenerateLesson(String(lessonId), {
+        title: lessonTitle,
+        description: lessonDescription || "",
+        skill_level: "beginner", // Default skill level
+      });
+    } catch (err) {
+      console.error("Error handling lesson click:", err);
+    }
+  };
+
+  // Handle back to track view
+  const handleBackToTrack = () => {
+    setActiveLesson(null);
+    clearLesson();
+  };
 
   // Create refs for path, wrappers, circles and lesson wrappers
   const svgRef = useRef(null);
@@ -203,6 +234,11 @@ export default function TrackView({ roadmapId }) {
     );
   }
 
+  // Show lesson viewer when a lesson is active
+  if (activeLesson && (lesson || lessonLoading)) {
+    return <LessonViewer lesson={lesson} isLoading={lessonLoading} error={lessonError} onBack={handleBackToTrack} />;
+  }
+
   return (
     <div className="flex-1 min-h-screen flex flex-col p-4 md:p-6 lg:p-8">
       <div className="flex-1 max-w-2xl mx-auto w-full flex flex-col">
@@ -326,17 +362,20 @@ export default function TrackView({ roadmapId }) {
                             />
 
                             {/* Lesson card */}
-                            <div
+                            <button
+                              type="button"
                               ref={(el) => {
                                 if (!lessonWrapRefs.current[moduleIndex]) lessonWrapRefs.current[moduleIndex] = [];
                                 lessonWrapRefs.current[moduleIndex][lessonIndex] = el;
                               }}
                               className={cn(
-                                "relative bg-white border rounded-xl p-4 shadow-sm w-[calc(50%-20px)] hover:shadow-md hover:border-emerald-300 z-10",
+                                "relative bg-white border rounded-xl p-4 shadow-sm w-[calc(50%-20px)] hover:shadow-md hover:border-emerald-300 z-10 text-left",
                                 isLessonCompleted(lesson.id)
                                   ? "border-emerald-300 bg-emerald-50/30"
                                   : "border-slate-200"
                               )}
+                              onClick={() => handleLessonClick(module.id, lesson.id, lesson.title, lesson.description)}
+                              aria-label={`Open lesson: ${lesson.title}`}
                             >
                               <div className="flex items-center gap-3 mb-2">
                                 <div
@@ -356,7 +395,7 @@ export default function TrackView({ roadmapId }) {
                                 <h4 className="font-medium text-slate-800 text-sm">{lesson.title}</h4>
                               </div>
                               <p className="text-xs text-slate-500 ml-11">{lesson.description}</p>
-                            </div>
+                            </button>
                           </div>
                         ))}
                     </div>
