@@ -15,7 +15,7 @@ function OutlineView({ roadmapId }) {
   const { modules, isLoading, error } = useOutlineData(roadmapId);
   const [activeLesson, setActiveLesson] = useState(null);
   const { lesson, isLoading: lessonLoading, error: lessonError, getOrGenerateLesson, clearLesson } = useLessonViewer();
-  const { courseProgress, toggleLessonCompletion, isLessonCompleted } = useProgress(roadmapId);
+  const { courseProgress, toggleLessonCompletion, isLessonCompleted } = useProgress();
 
   const handleLessonClick = async (moduleIdx, lessonIdx, lessonId) => {
     try {

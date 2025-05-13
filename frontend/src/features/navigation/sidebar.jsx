@@ -38,7 +38,7 @@ function Sidebar({ modules = [], onLessonClick, activeLessonId = null, courseId 
   const { isOpen } = useSidebar();
 
   // Use progress hook to connect to backend
-  const { courseProgress, toggleLessonCompletion, isLessonCompleted } = useProgress(courseId);
+  const { courseProgress, toggleLessonCompletion, isLessonCompleted } = useProgress();
 
   const [expandedModules, setExpandedModules] = useState(() => {
     // Only expand the first module by default if there are modules and the sidebar is open

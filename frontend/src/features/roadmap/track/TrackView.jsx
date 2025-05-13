@@ -39,7 +39,7 @@ const xAtY = (path, targetY) => {
  */
 export default function TrackView({ roadmapId }) {
   const { modules, isLoading, error } = useTrackData(roadmapId);
-  const { courseProgress, isLessonCompleted } = useProgress(roadmapId);
+  const { courseProgress, isLessonCompleted } = useProgress();
   const [activeLesson, setActiveLesson] = useState(null);
   const { lesson, isLoading: lessonLoading, error: lessonError, getOrGenerateLesson, clearLesson } = useLessonViewer();
 
