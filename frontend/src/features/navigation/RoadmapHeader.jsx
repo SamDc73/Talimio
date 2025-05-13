@@ -1,15 +1,16 @@
-import { FileText, Layout, PanelLeft, GitBranch } from "lucide-react";
+import { FileText, Layout, PanelLeft, GitBranch, ChevronLeft, Settings } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
+import { Link } from "react-router-dom";
 import { useProgress } from "../../hooks/useProgress";
+import { Progress } from "@/components/progress";
 
 /**
- * Application header component that provides navigation controls and course progress
+ * Application header component that provides navigation controls
  *
  * Features:
  * - Collapsible sidebar toggle
  * - Course title display with gradient styling
  * - View mode toggle between map and outline representations
- * - Progress bar showing course completion percentage
  *
  * The header stays fixed at the top and includes a subtle blur effect for better readability
  * when content scrolls underneath.
@@ -22,13 +23,17 @@ import { useProgress } from "../../hooks/useProgress";
  */
 function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
   const { isOpen, toggleSidebar } = useSidebar();
-  // Use the same progress hook that's used in the sidebar
-  const { courseProgress } = useProgress(courseId);
+  // Use the progress hook to get real-time course progress updates
+  const { courseProgress } = useProgress();
+
+  // Calculate progress percentage, defaulting to 0 if not available
+  const progress = courseProgress?.progress_percentage || 0;
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md bg-white/80 border-b border-zinc-200">
-      <div className="flex items-center h-16 w-full max-w-[100vw]">
-        <div className="ml-4">
+      <div className="flex items-center justify-between h-16 w-full max-w-[100vw] px-4">
+        {/* Left section */}
+        <div className="flex items-center gap-2">
           <button
             className="p-2 text-zinc-500 bg-white rounded-md hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-all duration-300"
             aria-label={isOpen ? "Collapse sidebar" : "Expand sidebar"}
@@ -37,15 +42,32 @@ function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
           >
             <PanelLeft className={`w-5 h-5 transition-transform duration-300 ${isOpen ? "" : "rotate-180"}`} />
           </button>
+          <Link
+            to="/library"
+            className="flex items-center px-3 py-1.5 text-sm text-zinc-600 hover:text-zinc-900 transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" />
+            My Library
+          </Link>
         </div>
-        {/* Title and progress bar, spaced apart and flush with edges */}
-        <div className="flex flex-1 min-w-0 items-center justify-between ml-2">
-          <h1 className="text-xl font-semibold bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent truncate">
+        {/* Middle section - Course title */}
+        <div className="flex-1 flex justify-center min-w-0">
+          <h1 className="text-xl font-semibold bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent truncate max-w-[500px]">
             {courseName}
           </h1>
-          <div className="flex items-center gap-4 ml-8 pr-12">
-            {/* View mode toggle - switches between map, outline, and track views */}
-            <div className="flex items-center gap-2">
+        </div>
+
+        {/* Right section */}
+        <div className="flex items-center gap-4">
+          {/* Progress indicator */}
+          <div className="flex items-center gap-2 mr-2">
+            <div className="w-32">
+              <Progress value={progress} />
+            </div>
+            <span className="text-sm font-medium text-zinc-600">{progress}%</span>
+          </div>
+          {/* View mode toggle - switches between map, outline, and track views */}
+          <div className="flex items-center gap-2">
               {/* Map view button temporarily hidden
               <button
                 className={`flex items-center px-2 py-1 rounded-md text-sm font-medium border min-w-[32px] transition-colors ${
@@ -88,18 +110,15 @@ function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
                 <GitBranch className="w-4 h-4 mr-1" /> {mode === "track" ? "Track" : "Track View"}
               </button>
             </div>
-            {/* Animated progress bar with percentage indicator */}
-            <div className="flex items-center gap-2">
-              <div className="relative w-32 h-2 bg-zinc-200 rounded-full overflow-hidden">
-                <div
-                  className="absolute top-0 left-0 h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full"
-                  style={{ width: `${courseProgress?.progress_percentage || 0}%` }}
-                />
-              </div>
-              <span className="text-xs font-medium text-zinc-500">{courseProgress?.progress_percentage || 0}%</span>
-            </div>
+            {/* Settings button */}
+            <button
+              type="button"
+              className="p-2 text-zinc-500 hover:text-zinc-700 transition-colors"
+              aria-label="Settings"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
           </div>
-        </div>
       </div>
     </header>
   );

@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { ProgressProvider } from "../../hooks/useProgress";
 import RoadmapHeader from "../navigation/RoadmapHeader";
 import { useSidebar } from "../navigation/SidebarContext";
 import Sidebar from "../navigation/sidebar";
@@ -35,29 +36,31 @@ const RoadmapFlow = ({ roadmapId, onError }) => {
   }
 
   return (
-    <div
-      className={`roadmap-container ${isOpen ? "sidebar-open" : "sidebar-closed"}`}
-      style={{ margin: 0, padding: 0 }}
-    >
-      <RoadmapHeader mode={mode} onModeChange={setMode} courseId={roadmapId} courseName={courseName} />
+    <ProgressProvider courseId={roadmapId}>
+      <div
+        className={`roadmap-container ${isOpen ? "sidebar-open" : "sidebar-closed"}`}
+        style={{ margin: 0, padding: 0 }}
+      >
+        <RoadmapHeader mode={mode} onModeChange={setMode} courseId={roadmapId} courseName={courseName} />
 
-      <div className="flex h-screen">
-        <Sidebar modules={modules || []} onLessonClick={() => {}} courseId={roadmapId} />
-        {/* Conditional rendering of views */}
-        {mode === "outline" ? (
-          <div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
-            <OutlineView roadmapId={roadmapId} />
-          </div>
-        ) : mode === "track" ? (
-          <div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
-            <TrackView roadmapId={roadmapId} />
-          </div>
-        ) : (
-          // Map view temporarily hidden
-          null
-        )}
+        <div className="flex h-screen">
+          <Sidebar modules={modules || []} onLessonClick={() => {}} courseId={roadmapId} />
+          {/* Conditional rendering of views */}
+          {mode === "outline" ? (
+            <div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
+              <OutlineView roadmapId={roadmapId} />
+            </div>
+          ) : mode === "track" ? (
+            <div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
+              <TrackView roadmapId={roadmapId} />
+            </div>
+          ) : (
+            // Map view temporarily hidden
+            null
+          )}
+        </div>
       </div>
-    </div>
+    </ProgressProvider>
   );
 };
 
