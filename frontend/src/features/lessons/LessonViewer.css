@@ -103,9 +103,7 @@ pre {
   line-height: 1.5;
   overflow-x: auto;
   background-color: #eff1f5;
-  /* Catppuccin Latte background */
 }
-
 
 /* Ensure inline code has proper styling */
 .markdown-content p>code,
