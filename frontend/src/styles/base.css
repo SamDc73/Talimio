@@ -1,0 +1,71 @@
+@layer base {
+  /* Base Styles */
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: var(--font-sans);
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+  }
+}
+
+/* Layout */
+html,
+body,
+#root {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+/* Layout Components */
+.fixed-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  margin: 0;
+  padding: 0;
+}
+
+.fixed-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  overflow-y: auto;
+  z-index: 20;
+}
+
+.main-content {
+  padding-top: 4rem; /* 64px for header height */
+  margin-left: 320px; /* Width of sidebar */
+  margin-top: 0;
+  padding-bottom: 2rem;
+}
+
+/* Sidebar animations */
+.sidebar-open .main-content {
+  margin-left: 320px;
+  transition: margin-left 0.3s ease-in-out;
+}
+
+.sidebar-closed .main-content {
+  margin-left: 0;
+  transition: margin-left 0.3s ease-in-out;
+}
