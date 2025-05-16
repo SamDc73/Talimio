@@ -1,4 +1,5 @@
 import React, { useRef } from "react";
+import HomePage from "./features/home";
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import "@xyflow/react/dist/style.css";
 
@@ -46,13 +47,7 @@ export default function App() {
         <Route
           path="/"
           element={
-            showOnboarding ? (
-              <OnboardingFlow isOpen={true} onComplete={handleOnboardingComplete} />
-            ) : currentRoadmapId ? (
-              <Navigate to={`/roadmap/${currentRoadmapId}`} replace />
-            ) : (
-              <div>No roadmap selected</div>
-            )
+            <HomePage />
           }
         />
       </Routes>

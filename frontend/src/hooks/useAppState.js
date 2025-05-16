@@ -5,7 +5,7 @@ import { useOnboarding } from "@/features/onboarding/useOnboarding";
 import { useToast } from "@/hooks/use-toast";
 
 export const useAppState = () => {
-  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [currentRoadmapId, setCurrentRoadmapId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
