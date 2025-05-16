@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { ProgressProvider } from "../../hooks/useProgress";
-import RoadmapHeader from "../navigation/RoadmapHeader";
+import RoadmapHeader from "@/components/header/RoadmapHeader";
 import { useSidebar } from "../navigation/SidebarContext";
 import Sidebar from "../navigation/sidebar";
 // import MapView from "./map";  // Temporarily hidden

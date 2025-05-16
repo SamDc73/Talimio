@@ -1,5 +1,5 @@
 import { FileText, Layout, PanelLeft, GitBranch, ChevronLeft, Settings } from "lucide-react";
-import { useSidebar } from "./SidebarContext";
+import { useSidebar } from "../../features/navigation/SidebarContext";
 import { Link } from "react-router-dom";
 import { useProgress } from "../../hooks/useProgress";
 import { Progress } from "@/components/progress";
