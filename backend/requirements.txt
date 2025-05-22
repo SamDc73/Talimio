@@ -16,8 +16,12 @@ python-dotenv
 # AI
 litellm
 
+# Spaced Repetition
+fsrs
+
 
 # Dev
 uv
 ruff
 mypy
+asyncpg-stubs
