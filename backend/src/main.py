@@ -9,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.assistant.router import router as assistant_router
+from src.books.models import Book, BookProgress  # Import models to register with SQLAlchemy
+from src.books.router import router as books_router
 from src.config.settings import get_settings
 from src.core.exceptions import ResourceNotFoundError
 from src.database.core import Base
@@ -83,6 +85,7 @@ def create_app() -> FastAPI:
 
     # Register routers
     app.include_router(assistant_router)
+    app.include_router(books_router)
     app.include_router(roadmaps_router)
     app.include_router(onboarding_router)
     app.include_router(lessons_router)
