@@ -19,6 +19,9 @@ litellm
 # Spaced Repetition
 fsrs
 
+# Video
+yt-dlp
+
 
 # Dev
 uv
