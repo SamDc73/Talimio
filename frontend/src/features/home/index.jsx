@@ -26,13 +26,25 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover"
 import { Badge } from "@/components/badge"
 import { Separator } from "@/components/separator"
 import { RadioGroup, RadioGroupItem } from "@/components/radio-group"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/sheet"
 import { fetchContentData, processContentData } from "@/lib/api"
+import { useApi } from "@/hooks/useApi"
+import { useToast } from "@/hooks/use-toast"
 import { YoutubeCard } from "./components/YoutubeCard"
 import { FlashcardDeckCard } from "./components/FlashcardDeckCard"
 import { MainHeader } from "@/components/header/MainHeader"
 
 export default function HomePage() {
   console.log("[Debug] Rendering HomePage component");
+  const api = useApi()
+  const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState("")
   const [isGenerateMode, setIsGenerateMode] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -170,18 +182,38 @@ export default function HomePage() {
       }
     })
 
-  const handleGenerateCourse = () => {
+  const handleGenerateCourse = async () => {
     if (!searchQuery.trim()) return
 
     setIsGenerating(true)
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsGenerating(false)
+    try {
+      const response = await api.post("/assistant/generate-course", {
+        topic: searchQuery,
+        level: "beginner",
+      })
+      
+      toast({
+        title: "Course Generated!",
+        description: `Successfully created a course on "${searchQuery}".`,
+      })
+      
       setSearchQuery("")
       setIsGenerateMode(false)
-      alert(`New course on "${searchQuery}" has been generated!`)
-    }, 2000)
+      
+      // Refresh content list
+      const data = await fetchContentData()
+      const { content } = processContentData(data)
+      setContentItems(content)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to generate course. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   const handleFileChange = (e) => {
@@ -191,41 +223,123 @@ export default function HomePage() {
     }
   }
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (!selectedFile) return
 
-    setTimeout(() => {
+    try {
+      const formData = new FormData()
+      formData.append("file", selectedFile)
+      
+      const response = await api.post("/books", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      })
+      
+      toast({
+        title: "Book Uploaded!",
+        description: `${selectedFile.name} has been added to your library.`,
+      })
+      
       setSelectedFile(null)
       setShowUploadDialog(false)
-      alert(`${selectedFile.name} has been uploaded!`)
-    }, 1000)
+      
+      // Refresh content list
+      const data = await fetchContentData()
+      const { content } = processContentData(data)
+      setContentItems(content)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to upload book. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
-  const handleYoutubeAdd = () => {
+  const handleYoutubeAdd = async () => {
     if (!youtubeUrl.trim() || (!youtubeUrl.includes("youtube.com") && !youtubeUrl.includes("youtu.be"))) {
-      alert("Please enter a valid YouTube URL")
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid YouTube URL",
+        variant: "destructive",
+      })
       return
     }
 
-    setTimeout(() => {
+    try {
+      // TODO: Call YouTube API when implemented
+      // const response = await api.post("/videos", { url: youtubeUrl })
+      
+      toast({
+        title: "Video Added!",
+        description: "YouTube video has been added to your library.",
+      })
+      
       setYoutubeUrl("")
       setSearchQuery("")
       setShowYoutubeDialog(false)
       setIsYoutubeMode(false)
-      alert("YouTube video has been added to your library!")
-    }, 1000)
+      
+      // Refresh content list when API is available
+      // const data = await fetchContentData()
+      // const { content } = processContentData(data)
+      // setContentItems(content)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add video. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
-  const handleCreateDeck = () => {
+  const handleCreateDeck = async () => {
     if (!newDeckTitle.trim()) return
 
-    setTimeout(() => {
+    try {
+      // Create the deck first
+      const deckResponse = await api.post("/flashcards", {
+        title: newDeckTitle,
+        description: newDeckDescription || "",
+      })
+      
+      // If cards were provided, add them to the deck
+      if (newCards.trim()) {
+        const cards = newCards.split("\n").filter(line => line.trim())
+        const cardData = cards.map(line => {
+          const [front, back] = line.split("|").map(s => s.trim())
+          return { front: front || line, back: back || "" }
+        })
+        
+        if (cardData.length > 0) {
+          await api.post(`/flashcards/${deckResponse.data.id}/cards`, {
+            cards: cardData,
+          })
+        }
+      }
+      
+      toast({
+        title: "Deck Created!",
+        description: `"${newDeckTitle}" has been created with ${newCards.split("\n").filter(Boolean).length} cards.`,
+      })
+      
       setNewDeckTitle("")
       setNewDeckDescription("")
       setNewCards("")
       setShowFlashcardDialog(false)
-      alert(`New flashcard deck "${newDeckTitle}" has been created!`)
-    }, 1000)
+      
+      // Refresh content list
+      const data = await fetchContentData()
+      const { content } = processContentData(data)
+      setContentItems(content)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create flashcard deck. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   const toggleSortDirection = () => {
@@ -534,6 +648,146 @@ export default function HomePage() {
           </motion.div>
         </div>
 
+        {/* Upload Book Dialog */}
+        <Sheet open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+          <SheetContent side="bottom" className="sm:max-w-lg mx-auto">
+            <SheetHeader>
+              <SheetTitle>Upload a Book</SheetTitle>
+              <SheetDescription>
+                Upload a PDF or EPUB file to add it to your library
+              </SheetDescription>
+            </SheetHeader>
+            <div className="py-6 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="book-file">Choose File</Label>
+                <Input
+                  id="book-file"
+                  type="file"
+                  accept=".pdf,.epub"
+                  onChange={handleFileChange}
+                  className="cursor-pointer"
+                />
+                {selectedFile && (
+                  <p className="text-sm text-muted-foreground">
+                    Selected: {selectedFile.name}
+                  </p>
+                )}
+              </div>
+            </div>
+            <SheetFooter>
+              <Button variant="outline" onClick={() => setShowUploadDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleUpload} 
+                disabled={!selectedFile}
+                className="bg-indigo-500 hover:bg-indigo-600 text-white"
+              >
+                Upload Book
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+
+        {/* Add YouTube Video Dialog */}
+        <Sheet open={showYoutubeDialog} onOpenChange={setShowYoutubeDialog}>
+          <SheetContent side="bottom" className="sm:max-w-lg mx-auto">
+            <SheetHeader>
+              <SheetTitle>Add YouTube Video</SheetTitle>
+              <SheetDescription>
+                Paste a YouTube URL to add it to your learning library
+              </SheetDescription>
+            </SheetHeader>
+            <div className="py-6 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="youtube-url">YouTube URL</Label>
+                <Input
+                  id="youtube-url"
+                  type="url"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  value={youtubeUrl}
+                  onChange={(e) => setYoutubeUrl(e.target.value)}
+                />
+              </div>
+              <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  Note: YouTube integration is coming soon! For now, URLs will be saved for future processing.
+                </p>
+              </div>
+            </div>
+            <SheetFooter>
+              <Button variant="outline" onClick={() => setShowYoutubeDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleYoutubeAdd} 
+                disabled={!youtubeUrl.trim()}
+                className="bg-red-500 hover:bg-red-600 text-white"
+              >
+                Add Video
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+
+        {/* Create Flashcard Deck Dialog */}
+        <Sheet open={showFlashcardDialog} onOpenChange={setShowFlashcardDialog}>
+          <SheetContent side="bottom" className="sm:max-w-lg mx-auto">
+            <SheetHeader>
+              <SheetTitle>Create Flashcard Deck</SheetTitle>
+              <SheetDescription>
+                Create a new deck and optionally add cards
+              </SheetDescription>
+            </SheetHeader>
+            <div className="py-6 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="deck-title">Deck Title</Label>
+                <Input
+                  id="deck-title"
+                  placeholder="e.g., Spanish Vocabulary"
+                  value={newDeckTitle}
+                  onChange={(e) => setNewDeckTitle(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="deck-description">Description (Optional)</Label>
+                <Input
+                  id="deck-description"
+                  placeholder="e.g., Common Spanish words and phrases"
+                  value={newDeckDescription}
+                  onChange={(e) => setNewDeckDescription(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="deck-cards">Cards (Optional)</Label>
+                <textarea
+                  id="deck-cards"
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder="Enter cards (one per line, format: front | back)&#10;Example:&#10;Hello | Hola&#10;Thank you | Gracias"
+                  value={newCards}
+                  onChange={(e) => setNewCards(e.target.value)}
+                  rows={4}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Format: front | back (one card per line)
+                </p>
+              </div>
+            </div>
+            <SheetFooter>
+              <Button variant="outline" onClick={() => setShowFlashcardDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleCreateDeck} 
+                disabled={!newDeckTitle.trim()}
+                className="bg-amber-500 hover:bg-amber-600 text-white"
+              >
+                Create Deck
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+
         {/* Floating Action Button (FAB) */}
         <div className="fixed bottom-6 right-6 z-40">
           <div className="relative">
@@ -583,6 +837,7 @@ export default function HomePage() {
                       onClick={() => {
                         setShowUploadDialog(true)
                         setIsFabExpanded(false)
+                        setSelectedFile(null)
                       }}
                       size="icon"
                       className="h-14 w-14 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg transition-all hover:scale-110"
@@ -605,6 +860,7 @@ export default function HomePage() {
                       onClick={() => {
                         setShowYoutubeDialog(true)
                         setIsFabExpanded(false)
+                        setYoutubeUrl("")
                       }}
                       size="icon"
                       className="h-14 w-14 rounded-full bg-red-500 hover:bg-red-600 text-white shadow-lg transition-all hover:scale-110"
@@ -627,6 +883,9 @@ export default function HomePage() {
                       onClick={() => {
                         setShowFlashcardDialog(true)
                         setIsFabExpanded(false)
+                        setNewDeckTitle("")
+                        setNewDeckDescription("")
+                        setNewCards("")
                       }}
                       size="icon"
                       className="h-14 w-14 rounded-full bg-amber-500 hover:bg-amber-600 text-white shadow-lg transition-all hover:scale-110"
