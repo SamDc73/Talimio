@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Float, Integer, String, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID  # noqa: N811
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -41,7 +41,7 @@ class BookProgress(Base):
     __tablename__ = "book_progress"
 
     id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True, default=uuid4)
-    book_id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), nullable=False, index=True)
+    book_id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), ForeignKey("books.id"), nullable=False, index=True)
     user_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)  # For future user support
     current_page: Mapped[int] = mapped_column(Integer, default=1)
     total_pages_read: Mapped[int] = mapped_column(Integer, default=0)
