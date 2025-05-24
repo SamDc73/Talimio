@@ -64,7 +64,7 @@ class ModelManager:
         messages: list[dict[str, str]] | Sequence[dict[str, str]],
         *,
         format_json: bool = True,
-        expect_list: bool = False
+        expect_list: bool = False,
     ) -> Any:
         """Get completion from AI model."""
         try:
@@ -248,14 +248,16 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
                     msg = "Expected dict node from AI model"
                     raise RoadmapGenerationError(msg)
 
-                validated_nodes.append({
-                    "title": str(node.get("title", f"Topic {i + 1}")),
-                    "description": str(node.get("description", "")),
-                    "content": str(node.get("content", "")),
-                    "order": i,
-                    "prerequisite_ids": [],  # Start with no prerequisites
-                    "children": node.get("children", []),
-                })
+                validated_nodes.append(
+                    {
+                        "title": str(node.get("title", f"Topic {i + 1}")),
+                        "description": str(node.get("description", "")),
+                        "content": str(node.get("content", "")),
+                        "order": i,
+                        "prerequisite_ids": [],  # Start with no prerequisites
+                        "children": node.get("children", []),
+                    },
+                )
 
         except Exception as e:
             self._logger.exception("Error generating roadmap content")
@@ -317,13 +319,12 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
                 msg = "Expected dict response from AI model"
                 raise NodeCustomizationError(msg)
 
-            result = {
+            return {
                 "title": str(response.get("title", current_node)),
                 "description": str(response.get("description", "")),
                 "content": str(response.get("content", "")),
                 "prerequisites": response.get("prerequisites", []),
             }
-            return result
         except Exception as e:
             self._logger.exception("Error generating node content")
             raise NodeCustomizationError from e

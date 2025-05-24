@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -8,8 +8,10 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from src.books.models import Book, BookProgress
-from src.books.schemas import (
+from src.database.session import async_session_maker
+
+from .models import Book, BookProgress
+from .schemas import (
     BookCreate,
     BookListResponse,
     BookProgressResponse,
@@ -18,7 +20,6 @@ from src.books.schemas import (
     BookUpdate,
     BookWithProgress,
 )
-from src.database.session import async_session_maker
 
 
 DEFAULT_USER_ID = "default_user"  # For now, use default user
@@ -63,7 +64,7 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
         if len(file_content) > MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024*1024)}MB",
+                detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB",
             )
 
         # Create upload directory
@@ -71,6 +72,7 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
 
         # Generate unique filename
         from uuid import uuid4
+
         unique_filename = f"{uuid4()}{file_extension}"
         file_path = UPLOAD_DIR / unique_filename
 
@@ -242,7 +244,7 @@ async def update_book(book_id: UUID, book_data: BookUpdate) -> BookResponse:
                 else:
                     setattr(book, field, value)
 
-            book.updated_at = datetime.now(timezone.utc)
+            book.updated_at = datetime.now(UTC)
 
             await session.commit()
             await session.refresh(book)
@@ -356,8 +358,8 @@ async def update_book_progress(book_id: UUID, progress_data: BookProgressUpdate)
                 else:
                     setattr(progress, field, value)
 
-            progress.last_read_at = datetime.now(timezone.utc)
-            progress.updated_at = datetime.now(timezone.utc)
+            progress.last_read_at = datetime.now(UTC)
+            progress.updated_at = datetime.now(UTC)
 
             # Calculate total pages read based on current page
             if progress_data.current_page is not None:

@@ -1,4 +1,3 @@
-
 from src.ai.client import ModelManager
 from src.onboarding.schemas import OnboardingQuestion, OnboardingQuestions
 
@@ -36,6 +35,7 @@ class OnboardingService:
 
             # Validate and transform the data
             questions = []
+
             def _raise_invalid_question() -> None:
                 msg = "Each question must have 'question' and 'options' fields"
                 raise ValueError(msg)

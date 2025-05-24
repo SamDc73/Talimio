@@ -21,12 +21,12 @@ class FlashcardDeck(Base):
     is_public: Mapped[bool] = mapped_column(nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
     )
 
     # Relationships
     cards: Mapped[list["FlashcardCard"]] = relationship(
-        "FlashcardCard", back_populates="deck", cascade="all, delete-orphan"
+        "FlashcardCard", back_populates="deck", cascade="all, delete-orphan",
     )
 
 
@@ -37,7 +37,7 @@ class FlashcardCard(Base):
 
     id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True, default=uuid4)
     deck_id: Mapped[UUID] = mapped_column(
-        PostgresUUID(as_uuid=True), ForeignKey("flashcard_decks.id"), nullable=False, index=True
+        PostgresUUID(as_uuid=True), ForeignKey("flashcard_decks.id"), nullable=False, index=True,
     )
     question: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
@@ -58,13 +58,13 @@ class FlashcardCard(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
     )
 
     # Relationships
     deck: Mapped["FlashcardDeck"] = relationship("FlashcardDeck", back_populates="cards")
     reviews: Mapped[list["FlashcardReview"]] = relationship(
-        "FlashcardReview", back_populates="card", cascade="all, delete-orphan"
+        "FlashcardReview", back_populates="card", cascade="all, delete-orphan",
     )
 
 
@@ -75,7 +75,7 @@ class FlashcardReview(Base):
 
     id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True, default=uuid4)
     card_id: Mapped[UUID] = mapped_column(
-        PostgresUUID(as_uuid=True), ForeignKey("flashcard_cards.id"), nullable=False, index=True
+        PostgresUUID(as_uuid=True), ForeignKey("flashcard_cards.id"), nullable=False, index=True,
     )
     user_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     rating: Mapped[int] = mapped_column(Integer, nullable=False)  # 1=Again, 2=Hard, 3=Good, 4=Easy

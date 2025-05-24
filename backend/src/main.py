@@ -8,21 +8,19 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from src.assistant.router import router as assistant_router
-from src.books.models import Book, BookProgress  # Import models to register with SQLAlchemy
-from src.books.router import router as books_router
-from src.config.settings import get_settings
-from src.core.exceptions import ResourceNotFoundError
-from src.database.core import Base
-from src.database.session import engine
-from src.flashcards.models import FlashcardCard, FlashcardDeck, FlashcardReview  # Import models to register with SQLAlchemy
-from src.flashcards.router import router as flashcards_router
-from src.lessons import router as lessons_router
-from src.onboarding.router import router as onboarding_router
-from src.progress.router import router as progress_router
-from src.roadmaps.router import router as roadmaps_router
-from src.videos.models import Video  # Import models to register with SQLAlchemy
-from src.videos.router import router as videos_router
+from .assistant.router import router as assistant_router
+from .books.router import router as books_router
+from .config.settings import get_settings
+from .content.router import router as content_router
+from .core.exceptions import ResourceNotFoundError
+from .database.core import Base
+from .database.session import engine
+from .flashcards.router import router as flashcards_router
+from .lessons import router as lessons_router
+from .onboarding.router import router as onboarding_router
+from .progress.router import router as progress_router
+from .roadmaps.router import router as roadmaps_router
+from .videos.router import router as videos_router
 
 
 # Load .env from backend directory (parent of src)
@@ -90,6 +88,7 @@ def create_app() -> FastAPI:
     # Register routers
     app.include_router(assistant_router)
     app.include_router(books_router)
+    app.include_router(content_router)
     app.include_router(flashcards_router)
     app.include_router(roadmaps_router)
     app.include_router(onboarding_router)

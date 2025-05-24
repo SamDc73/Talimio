@@ -29,10 +29,14 @@ class Book(Base):
     publisher: Mapped[str | None] = mapped_column(String(200), nullable=True)
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    )
 
     # Relationships
-    progress_records: Mapped[list["BookProgress"]] = relationship("BookProgress", back_populates="book", cascade="all, delete-orphan")
+    progress_records: Mapped[list["BookProgress"]] = relationship(
+        "BookProgress", back_populates="book", cascade="all, delete-orphan",
+    )
 
 
 class BookProgress(Base):
@@ -41,7 +45,9 @@ class BookProgress(Base):
     __tablename__ = "book_progress"
 
     id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True, default=uuid4)
-    book_id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), ForeignKey("books.id"), nullable=False, index=True)
+    book_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("books.id"), nullable=False, index=True,
+    )
     user_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)  # For future user support
     current_page: Mapped[int] = mapped_column(Integer, default=1)
     total_pages_read: Mapped[int] = mapped_column(Integer, default=0)
@@ -52,7 +58,9 @@ class BookProgress(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     bookmarks: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string of page numbers/locations
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    )
 
     # Relationships
     book: Mapped["Book"] = relationship("Book", back_populates="progress_records")

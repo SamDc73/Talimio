@@ -1,5 +1,5 @@
-from src.core.exceptions import DomainError, ResourceNotFoundError, ValidationError
-from src.core.validators import validate_uuid
+from .exceptions import DomainError, ResourceNotFoundError, ValidationError
+from .validators import validate_uuid
 
 
 __all__ = [

@@ -39,6 +39,9 @@ import { useApi } from "@/hooks/useApi"
 import { useToast } from "@/hooks/use-toast"
 import { YoutubeCard } from "./components/YoutubeCard"
 import { FlashcardDeckCard } from "./components/FlashcardDeckCard"
+import { BookCard } from "./components/BookCard"
+import { RoadmapCard } from "./components/RoadmapCard"
+import { CourseCard } from "./components/CourseCard"
 import { MainHeader } from "@/components/header/MainHeader"
 
 export default function HomePage() {
@@ -616,11 +619,20 @@ export default function HomePage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredAndSortedContent.length > 0 ? (
                   filteredAndSortedContent.map((item, index) => {
+                    if (item.type === "course") {
+                      return <CourseCard key={item.id} course={item} index={index} />
+                    }
                     if (item.type === "youtube") {
                       return <YoutubeCard key={item.id} video={item} index={index} />
                     }
                     if (item.type === "flashcards") {
                       return <FlashcardDeckCard key={item.id} deck={item} index={index} />
+                    }
+                    if (item.type === "book") {
+                      return <BookCard key={item.id} book={item} index={index} />
+                    }
+                    if (item.type === "roadmap") {
+                      return <RoadmapCard key={item.id} roadmap={item} index={index} />
                     }
                     return null
                   })
