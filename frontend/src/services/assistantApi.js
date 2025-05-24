@@ -1,0 +1,38 @@
+import { useApi } from '../hooks/useApi';
+
+export const assistantApi = {
+  async chat(message, conversationHistory = []) {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/assistant/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message,
+        conversation_history: conversationHistory
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to send message');
+    }
+
+    return response.json();
+  }
+};
+
+export function useAssistantChat() {
+  const { execute, loading, error } = useApi();
+
+  const sendMessage = async (message, conversationHistory = []) => {
+    return execute(async () => {
+      return assistantApi.chat(message, conversationHistory);
+    });
+  };
+
+  return {
+    sendMessage,
+    loading,
+    error
+  };
+}

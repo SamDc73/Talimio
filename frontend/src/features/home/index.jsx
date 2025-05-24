@@ -25,9 +25,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover"
 import { Badge } from "@/components/badge"
 import { Separator } from "@/components/separator"
 import { RadioGroup, RadioGroupItem } from "@/components/radio-group"
-import { fetchContentData, processContentData } from "@/lib/api.js"
+import { fetchContentData, processContentData } from "@/lib/api"
 import { YoutubeCard } from "./components/YoutubeCard"
 import { FlashcardDeckCard } from "./components/FlashcardDeckCard"
+import { MainHeader } from "@/components/header/MainHeader"
 
 export default function HomePage() {
   console.log("[Debug] Rendering HomePage component");
@@ -243,7 +244,8 @@ export default function HomePage() {
       <TooltipProvider>
         <ErrorBoundary>
           <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <MainHeader transparent />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-28">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
