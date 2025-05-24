@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Integer, String, Float, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import DateTime, Float, Integer, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database.base import Base
-
-if TYPE_CHECKING:
-    from src.progress.models import Progress
 
 
 class Video(Base):
@@ -27,17 +23,21 @@ class Video(Base):
     thumbnail_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array stored as text
-    
+
     # Timestamps
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
-    
+
     # Progress tracking
     last_position: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)  # Position in seconds
     completion_percentage: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
-    
