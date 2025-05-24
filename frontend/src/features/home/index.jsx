@@ -3,10 +3,11 @@ import ErrorBoundary from "@/components/ErrorBoundary"
 
 // Debug logging for Radix UI component initialization
 console.log("[Debug] Initializing Radix UI components in HomePage");
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import {
   Search,
   X,
+  Plus,
   Sparkles,
   ArrowUpDown,
   BookOpen,
@@ -531,6 +532,130 @@ export default function HomePage() {
               </div>
             )}
           </motion.div>
+        </div>
+
+        {/* Floating Action Button (FAB) */}
+        <div className="fixed bottom-6 right-6 z-40">
+          <div className="relative">
+            {/* Expanded FAB Options */}
+            <AnimatePresence mode="wait">
+              {isFabExpanded && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute bottom-0 right-0 flex flex-col items-end gap-4 pb-[70px]"
+                >
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0, y: 280, x: 0 }}
+                    animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
+                    exit={{ opacity: 0, scale: 0, y: 280, x: 0 }}
+                    transition={{ delay: 0, duration: 0.3, type: "spring", stiffness: 300, damping: 25 }}
+                    className="group relative"
+                  >
+                    <span className="absolute right-full mr-3 bg-white text-slate-800 px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                      Generate Course
+                    </span>
+                    <Button
+                      onClick={() => {
+                        setIsGenerateMode(true)
+                        setIsFabExpanded(false)
+                      }}
+                      size="icon"
+                      className="h-14 w-14 rounded-full bg-teal-500 hover:bg-teal-600 text-white shadow-lg transition-all hover:scale-110"
+                    >
+                      <Sparkles className="h-6 w-6" />
+                    </Button>
+                  </motion.div>
+
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0, y: 210, x: 0 }}
+                    animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
+                    exit={{ opacity: 0, scale: 0, y: 210, x: 0 }}
+                    transition={{ delay: 0.05, duration: 0.3, type: "spring", stiffness: 300, damping: 25 }}
+                    className="group relative"
+                  >
+                    <span className="absolute right-full mr-3 bg-white text-slate-800 px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                      Upload Book
+                    </span>
+                    <Button
+                      onClick={() => {
+                        setShowUploadDialog(true)
+                        setIsFabExpanded(false)
+                      }}
+                      size="icon"
+                      className="h-14 w-14 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg transition-all hover:scale-110"
+                    >
+                      <FileText className="h-6 w-6" />
+                    </Button>
+                  </motion.div>
+
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0, y: 140, x: 0 }}
+                    animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
+                    exit={{ opacity: 0, scale: 0, y: 140, x: 0 }}
+                    transition={{ delay: 0.1, duration: 0.3, type: "spring", stiffness: 300, damping: 25 }}
+                    className="group relative"
+                  >
+                    <span className="absolute right-full mr-3 bg-white text-slate-800 px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                      Add YouTube Video
+                    </span>
+                    <Button
+                      onClick={() => {
+                        setShowYoutubeDialog(true)
+                        setIsFabExpanded(false)
+                      }}
+                      size="icon"
+                      className="h-14 w-14 rounded-full bg-red-500 hover:bg-red-600 text-white shadow-lg transition-all hover:scale-110"
+                    >
+                      <Youtube className="h-6 w-6" />
+                    </Button>
+                  </motion.div>
+
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0, y: 70, x: 0 }}
+                    animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
+                    exit={{ opacity: 0, scale: 0, y: 70, x: 0 }}
+                    transition={{ delay: 0.15, duration: 0.3, type: "spring", stiffness: 300, damping: 25 }}
+                    className="group relative"
+                  >
+                    <span className="absolute right-full mr-3 bg-white text-slate-800 px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                      Create Flashcards
+                    </span>
+                    <Button
+                      onClick={() => {
+                        setShowFlashcardDialog(true)
+                        setIsFabExpanded(false)
+                      }}
+                      size="icon"
+                      className="h-14 w-14 rounded-full bg-amber-500 hover:bg-amber-600 text-white shadow-lg transition-all hover:scale-110"
+                    >
+                      <Layers className="h-6 w-6" />
+                    </Button>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Main FAB Button */}
+            <motion.div
+              animate={{ rotate: isFabExpanded ? 45 : 0 }}
+              transition={{ duration: 0.2, type: "spring", stiffness: 500, damping: 25 }}
+            >
+              <Button
+                onClick={() => setIsFabExpanded(!isFabExpanded)}
+                size="icon"
+                className={`h-14 w-14 rounded-full shadow-lg transition-all duration-200 hover:scale-110 ${
+                  isFabExpanded
+                    ? "bg-red-500 hover:bg-red-600"
+                    : "bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600"
+                }`}
+              >
+                <Plus className="h-6 w-6 text-white" />
+              </Button>
+            </motion.div>
+          </div>
         </div>
           </div>
         </ErrorBoundary>

@@ -1,10 +1,10 @@
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from fsrs import FSRS, Card, Rating
+from fsrs import Card, Rating, Scheduler
 from sqlalchemy import func, select
 
 from src.database.session import async_session_maker
@@ -217,7 +217,7 @@ async def update_deck(deck_id: UUID, deck_data: FlashcardDeckUpdate) -> Flashcar
                 else:
                     setattr(deck, field, value)
 
-            deck.updated_at = datetime.now(timezone.utc)
+            deck.updated_at = datetime.now(UTC)
 
             await session.commit()
             await session.refresh(deck)
@@ -324,9 +324,14 @@ async def get_deck_cards(deck_id: UUID, page: int = 1, per_page: int = 20) -> Ca
 
             # Get paginated cards
             offset = (page - 1) * per_page
-            query = select(FlashcardCard).where(
-                FlashcardCard.deck_id == deck_id,
-            ).offset(offset).limit(per_page)
+            query = (
+                select(FlashcardCard)
+                .where(
+                    FlashcardCard.deck_id == deck_id,
+                )
+                .offset(offset)
+                .limit(per_page)
+            )
             result = await session.execute(query)
             cards = result.scalars().all()
 
@@ -390,7 +395,7 @@ async def create_card(deck_id: UUID, card_data: FlashcardCardCreate) -> Flashcar
                 tags=json.dumps(card_data.tags) if card_data.tags else None,
                 difficulty=card_data.difficulty,
                 # FSRS defaults for new cards
-                due=datetime.now(timezone.utc),
+                due=datetime.now(UTC),
                 stability=2.0,
                 difficulty_score=5.0,
                 state=0,  # New
@@ -453,7 +458,7 @@ async def update_card(deck_id: UUID, card_id: UUID, card_data: FlashcardCardUpda
                 else:
                     setattr(card, field, value)
 
-            card.updated_at = datetime.now(timezone.utc)
+            card.updated_at = datetime.now(UTC)
 
             await session.commit()
             await session.refresh(card)
@@ -544,7 +549,7 @@ async def review_card(deck_id: UUID, card_id: UUID, review_data: FlashcardReview
                 )
 
             # Create FSRS objects
-            fsrs = FSRS()
+            scheduler = Scheduler()
 
             # Convert database card to FSRS Card
             fsrs_card = Card(
@@ -564,11 +569,11 @@ async def review_card(deck_id: UUID, card_id: UUID, review_data: FlashcardReview
             fsrs_rating = rating_map[review_data.rating]
 
             # Calculate next review
-            scheduling_cards = fsrs.repeat(fsrs_card, card.due)
+            scheduling_cards = scheduler.review_card(fsrs_card, fsrs_rating)
             next_card = scheduling_cards[fsrs_rating]
 
             # Update card with new FSRS values
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             card.due = next_card.due
             card.stability = next_card.stability
             card.difficulty_score = next_card.difficulty
@@ -649,11 +654,15 @@ async def get_study_session(deck_id: UUID, limit: int = 20) -> StudySessionRespo
                 )
 
             # Get cards due for review
-            now = datetime.now(timezone.utc)
-            query = select(FlashcardCard).where(
-                FlashcardCard.deck_id == deck_id,
-                FlashcardCard.due <= now,
-            ).limit(limit)
+            now = datetime.now(UTC)
+            query = (
+                select(FlashcardCard)
+                .where(
+                    FlashcardCard.deck_id == deck_id,
+                    FlashcardCard.due <= now,
+                )
+                .limit(limit)
+            )
 
             result = await session.execute(query)
             cards = result.scalars().all()
