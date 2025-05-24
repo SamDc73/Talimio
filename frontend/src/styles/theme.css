@@ -72,3 +72,12 @@
     --ring: 142.1 76.2% 36.3%;
   }
 }
+
+/* Dark mode support */
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}

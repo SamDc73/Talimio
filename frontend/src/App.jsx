@@ -11,6 +11,8 @@ import RoadmapFlow from "./features/roadmap";
 import { useOutlineData } from "./features/roadmap/outline/useOutlineData";
 import { useAppState } from "./hooks/useAppState";
 import { CodeBlockTest } from "@/components/code-block-test";
+import { ThemeProvider } from "./contexts/ThemeContext";
+import { ChatSidebarProvider, ChatSidebar } from "./components/header/MainHeader";
 
 function RoadmapPage() {
   const { roadmapId } = useParams();
@@ -40,18 +42,23 @@ export default function App() {
   const { showOnboarding, currentRoadmapId, handleOnboardingComplete } = useAppState();
 
   return (
-    <div className="app-container">
-      <Routes>
-        <Route path="/roadmap/:roadmapId" element={<RoadmapPage />} />
-        <Route path="/code-test" element={<CodeBlockTest />} />
-        <Route
-          path="/"
-          element={
-            <HomePage />
-          }
-        />
-      </Routes>
-      <Toaster />
-    </div>
+    <ThemeProvider>
+      <ChatSidebarProvider>
+        <div className="app-container">
+          <Routes>
+            <Route path="/roadmap/:roadmapId" element={<RoadmapPage />} />
+            <Route path="/code-test" element={<CodeBlockTest />} />
+            <Route
+              path="/"
+              element={
+                <HomePage />
+              }
+            />
+          </Routes>
+          <Toaster />
+          <ChatSidebar />
+        </div>
+      </ChatSidebarProvider>
+    </ThemeProvider>
   );
 }
