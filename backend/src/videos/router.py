@@ -1,25 +1,20 @@
-from typing import Annotated, List, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.session import get_db_session
-from src.videos.schemas import (
-    VideoCreate,
-    VideoUpdate,
-    VideoProgressUpdate,
-    VideoResponse,
-    VideoListResponse
-)
+from src.videos.schemas import VideoCreate, VideoListResponse, VideoProgressUpdate, VideoResponse, VideoUpdate
 from src.videos.service import video_service
+
 
 router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
 
 
-@router.post("", response_model=VideoResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_video(
     video_data: VideoCreate,
-    db: AsyncSession = Depends(get_db_session)
+    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> VideoResponse:
     """Add a YouTube video to the library."""
     try:
@@ -30,23 +25,23 @@ async def create_video(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@router.get("", response_model=VideoListResponse)
+@router.get("")
 async def list_videos(
-    db: AsyncSession = Depends(get_db_session),
-    page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(20, ge=1, le=100, description="Page size"),
-    channel: Optional[str] = Query(None, description="Filter by channel name"),
-    search: Optional[str] = Query(None, description="Search in title, description, or channel"),
-    tags: Optional[List[str]] = Query(None, description="Filter by tags")
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    page: Annotated[int, Query(ge=1, description="Page number")] = 1,
+    size: Annotated[int, Query(ge=1, le=100, description="Page size")] = 20,
+    channel: Annotated[str | None, Query(description="Filter by channel name")] = None,
+    search: Annotated[str | None, Query(description="Search in title, description, or channel")] = None,
+    tags: Annotated[list[str] | None, Query(description="Filter by tags")] = None,
 ) -> VideoListResponse:
     """List all YouTube videos in library with optional filtering."""
     return await video_service.get_videos(db, page=page, size=size, channel=channel, search=search, tags=tags)
 
 
-@router.get("/{video_id}", response_model=VideoResponse)
+@router.get("/{video_id}")
 async def get_video(
     video_id: int,
-    db: AsyncSession = Depends(get_db_session)
+    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> VideoResponse:
     """Get a specific video by ID."""
     try:
@@ -55,11 +50,11 @@ async def get_video(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.patch("/{video_id}", response_model=VideoResponse)
+@router.patch("/{video_id}")
 async def update_video(
     video_id: int,
     update_data: VideoUpdate,
-    db: AsyncSession = Depends(get_db_session)
+    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> VideoResponse:
     """Update video metadata."""
     try:
@@ -68,11 +63,11 @@ async def update_video(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.patch("/{video_id}/progress", response_model=VideoResponse)
+@router.patch("/{video_id}/progress")
 async def update_video_progress(
     video_id: int,
     progress_data: VideoProgressUpdate,
-    db: AsyncSession = Depends(get_db_session)
+    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> VideoResponse:
     """Update video watch progress."""
     try:
@@ -84,7 +79,7 @@ async def update_video_progress(
 @router.delete("/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_video(
     video_id: int,
-    db: AsyncSession = Depends(get_db_session)
+    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> None:
     """Remove a video from library."""
     try:

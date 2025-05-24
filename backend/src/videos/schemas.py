@@ -85,7 +85,6 @@ class VideoResponse(VideoInDB):
     """Schema for video API response."""
 
 
-
 class VideoListResponse(BaseModel):
     """Schema for paginated video list response."""
 

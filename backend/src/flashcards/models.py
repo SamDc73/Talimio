@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Float, Integer, String, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID  # noqa: N811
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,10 +20,14 @@ class FlashcardDeck(Base):
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     is_public: Mapped[bool] = mapped_column(nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     # Relationships
-    cards: Mapped[list["FlashcardCard"]] = relationship("FlashcardCard", back_populates="deck", cascade="all, delete-orphan")
+    cards: Mapped[list["FlashcardCard"]] = relationship(
+        "FlashcardCard", back_populates="deck", cascade="all, delete-orphan"
+    )
 
 
 class FlashcardCard(Base):
@@ -32,7 +36,9 @@ class FlashcardCard(Base):
     __tablename__ = "flashcard_cards"
 
     id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True, default=uuid4)
-    deck_id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), nullable=False, index=True)
+    deck_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("flashcard_decks.id"), nullable=False, index=True
+    )
     question: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
     hint: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -51,11 +57,15 @@ class FlashcardCard(Base):
     last_review: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     # Relationships
     deck: Mapped["FlashcardDeck"] = relationship("FlashcardDeck", back_populates="cards")
-    reviews: Mapped[list["FlashcardReview"]] = relationship("FlashcardReview", back_populates="card", cascade="all, delete-orphan")
+    reviews: Mapped[list["FlashcardReview"]] = relationship(
+        "FlashcardReview", back_populates="card", cascade="all, delete-orphan"
+    )
 
 
 class FlashcardReview(Base):
@@ -64,7 +74,9 @@ class FlashcardReview(Base):
     __tablename__ = "flashcard_reviews"
 
     id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True, default=uuid4)
-    card_id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), nullable=False, index=True)
+    card_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True), ForeignKey("flashcard_cards.id"), nullable=False, index=True
+    )
     user_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     rating: Mapped[int] = mapped_column(Integer, nullable=False)  # 1=Again, 2=Hard, 3=Good, 4=Easy
     response_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
