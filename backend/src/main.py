@@ -21,6 +21,8 @@ from src.lessons import router as lessons_router
 from src.onboarding.router import router as onboarding_router
 from src.progress.router import router as progress_router
 from src.roadmaps.router import router as roadmaps_router
+from src.videos.models import Video  # Import models to register with SQLAlchemy
+from src.videos.router import router as videos_router
 
 
 # Load .env from backend directory (parent of src)
@@ -93,6 +95,7 @@ def create_app() -> FastAPI:
     app.include_router(onboarding_router)
     app.include_router(lessons_router)
     app.include_router(progress_router)
+    app.include_router(videos_router)
 
     # Register startup event
     @app.on_event("startup")
