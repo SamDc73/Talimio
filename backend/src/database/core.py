@@ -5,6 +5,7 @@ from .session import engine
 
 Base = declarative_base()
 
+
 async def create_all_tables() -> None:
     """Create all tables in the database."""
     async with engine.begin() as conn:

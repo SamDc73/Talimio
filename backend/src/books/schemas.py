@@ -56,6 +56,7 @@ class BookResponse(BookBase):
         """Convert tags JSON string to list."""
         if isinstance(self.tags, str):
             import json
+
             try:
                 return json.loads(self.tags)
             except (json.JSONDecodeError, TypeError):
@@ -103,6 +104,7 @@ class BookProgressResponse(BookProgressBase):
         """Convert bookmarks JSON string to list."""
         if isinstance(self.bookmarks, str):
             import json
+
             try:
                 return json.loads(self.bookmarks)
             except (json.JSONDecodeError, TypeError):

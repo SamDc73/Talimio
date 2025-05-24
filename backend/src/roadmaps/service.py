@@ -249,8 +249,7 @@ class RoadmapService:
             new_nodes: list[Node] = []
             # Ensure next_nodes_content is a list of dictionaries
             next_nodes_content_list = (
-                [next_nodes_content] if not isinstance(next_nodes_content, list)
-                else next_nodes_content
+                [next_nodes_content] if not isinstance(next_nodes_content, list) else next_nodes_content
             )
 
             for content in next_nodes_content_list:
@@ -292,16 +291,19 @@ class RoadmapService:
             mark_target(node_dict)
 
         # Convert prompt to expected format
-        prompt_data = [{
-            "role": "system",
-            "content": (
-                "Given the following roadmap structure in JSON, generate 2-3 appropriate sub-nodes for the node marked with 'target': true. "
-                "Each sub-node should have a title and description. Respond with a JSON array of objects with 'title' and 'description'."
-            ),
-        }, {
-            "role": "user",
-            "content": f"Roadmap JSON:\n{roadmap_json}",
-        }]
+        prompt_data = [
+            {
+                "role": "system",
+                "content": (
+                    "Given the following roadmap structure in JSON, generate 2-3 appropriate sub-nodes for the node marked with 'target': true. "
+                    "Each sub-node should have a title and description. Respond with a JSON array of objects with 'title' and 'description'."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"Roadmap JSON:\n{roadmap_json}",
+            },
+        ]
 
         # Call LLM
         llm_response = await self.ai_client._get_completion(prompt_data)  # noqa: SLF001
@@ -311,6 +313,7 @@ class RoadmapService:
         def _raise_type_error() -> None:
             msg = "LLM did not return a list"
             raise TypeError(msg)
+
         try:
             sub_nodes = json.loads(llm_response) if isinstance(llm_response, str) else llm_response
             if not isinstance(sub_nodes, list):

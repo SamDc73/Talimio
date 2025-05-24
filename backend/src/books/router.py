@@ -56,6 +56,7 @@ async def create_book_endpoint(
     """Add a new book (PDF, EPUB)."""
     # Parse tags from JSON string
     import json
+
     try:
         tags_list = json.loads(tags) if tags else []
     except json.JSONDecodeError:

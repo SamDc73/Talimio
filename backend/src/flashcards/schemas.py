@@ -17,7 +17,6 @@ class FlashcardDeckCreate(FlashcardDeckBase):
     """Schema for creating flashcard deck."""
 
 
-
 class FlashcardDeckUpdate(BaseModel):
     """Schema for updating flashcard deck."""
 
@@ -43,6 +42,7 @@ class FlashcardDeckResponse(FlashcardDeckBase):
         """Convert tags JSON string to list."""
         if isinstance(self.tags, str):
             import json
+
             try:
                 return json.loads(self.tags)
             except (json.JSONDecodeError, TypeError):
@@ -62,7 +62,6 @@ class FlashcardCardBase(BaseModel):
 
 class FlashcardCardCreate(FlashcardCardBase):
     """Schema for creating flashcard."""
-
 
 
 class FlashcardCardUpdate(BaseModel):
@@ -97,6 +96,7 @@ class FlashcardCardResponse(FlashcardCardBase):
         """Convert tags JSON string to list."""
         if isinstance(self.tags, str):
             import json
+
             try:
                 return json.loads(self.tags)
             except (json.JSONDecodeError, TypeError):

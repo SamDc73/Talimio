@@ -4,7 +4,8 @@ from uuid import uuid4
 from fastapi import HTTPException, status
 
 from src.ai.client import ModelManager
-from src.assistant.schemas import (
+
+from .schemas import (
     ChatRequest,
     ChatResponse,
     CourseModule,
@@ -36,23 +37,29 @@ async def chat_with_assistant(request: ChatRequest) -> ChatResponse:
 
         # Build conversation messages
         messages = []
-        messages.append({
-            "role": "system",
-            "content": "You are a helpful learning assistant. Provide clear, educational responses that help users learn new topics. Be encouraging and supportive.",
-        })
+        messages.append(
+            {
+                "role": "system",
+                "content": "You are a helpful learning assistant. Provide clear, educational responses that help users learn new topics. Be encouraging and supportive.",
+            },
+        )
 
         # Add conversation history
         for msg in request.conversation_history:
-            messages.append({
-                "role": msg.role,
-                "content": msg.content,
-            })
+            messages.append(
+                {
+                    "role": msg.role,
+                    "content": msg.content,
+                },
+            )
 
         # Add current message
-        messages.append({
-            "role": "user",
-            "content": request.message,
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": request.message,
+            },
+        )
 
         # Get response from AI
         response = await model_manager._get_completion(messages, format_json=False)
@@ -98,17 +105,17 @@ async def generate_course(request: GenerateCourseRequest) -> GenerateCourseRespo
 
         prompt = f"""
         Create a comprehensive {request.duration_weeks}-week course on "{request.topic}" for {request.skill_level} level learners.
-        
-        {f'Course Description: {request.description}' if request.description else ''}
-        
+
+        {f"Course Description: {request.description}" if request.description else ""}
+
         Generate a structured course with modules. Each module should be a weekly unit.
-        
+
         For each module, provide:
         - Title (clear and descriptive)
         - Description (what will be covered)
         - Content (detailed learning objectives and key topics)
         - Estimated hours to complete
-        
+
         Format as JSON:
         {{
             "title": "Complete Course Title",
@@ -126,7 +133,10 @@ async def generate_course(request: GenerateCourseRequest) -> GenerateCourseRespo
         """
 
         messages = [
-            {"role": "system", "content": "You are an expert curriculum designer creating structured learning courses."},
+            {
+                "role": "system",
+                "content": "You are an expert curriculum designer creating structured learning courses.",
+            },
             {"role": "user", "content": prompt},
         ]
 
@@ -199,17 +209,17 @@ async def generate_flashcards(request: GenerateFlashcardsRequest) -> GenerateFla
 
         prompt = f"""
         Create {request.num_cards} flashcards from the following content about {topic}:
-        
+
         Content:
         {request.content}
-        
+
         Generate flashcards that:
         - Focus on key concepts and important facts
         - Have clear, concise questions
         - Provide complete, accurate answers
         - Vary in difficulty (easy, medium, hard)
         - Include relevant tags for categorization
-        
+
         Format as JSON:
         {{
             "flashcards": [
@@ -224,7 +234,10 @@ async def generate_flashcards(request: GenerateFlashcardsRequest) -> GenerateFla
         """
 
         messages = [
-            {"role": "system", "content": "You are an expert at creating educational flashcards that help students learn and retain information effectively."},
+            {
+                "role": "system",
+                "content": "You are an expert at creating educational flashcards that help students learn and retain information effectively.",
+            },
             {"role": "user", "content": prompt},
         ]
 
