@@ -54,6 +54,9 @@ export default function HomePage() {
   const [showUploadDialog, setShowUploadDialog] = useState(false)
   const [showYoutubeDialog, setShowYoutubeDialog] = useState(false)
   const [selectedFile, setSelectedFile] = useState(null)
+  const [bookTitle, setBookTitle] = useState("")
+  const [bookAuthor, setBookAuthor] = useState("")
+  const [isExtractingMetadata, setIsExtractingMetadata] = useState(false)
   const [youtubeUrl, setYoutubeUrl] = useState("")
   const [isFabExpanded, setIsFabExpanded] = useState(false)
   const [showFlashcardDialog, setShowFlashcardDialog] = useState(false)
@@ -219,32 +222,79 @@ export default function HomePage() {
     }
   }
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0]
     if (file) {
       setSelectedFile(file)
+      setIsExtractingMetadata(true)
+      
+      // Extract metadata from the file
+      try {
+        const formData = new FormData()
+        formData.append("file", file)
+        
+        const response = await fetch("/api/v1/books/extract-metadata", {
+          method: "POST",
+          body: formData,
+        })
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
+        const metadata = await response.json()
+        
+        // Pre-populate fields with extracted metadata
+        if (metadata.title) {
+          setBookTitle(metadata.title)
+        }
+        if (metadata.author) {
+          setBookAuthor(metadata.author)
+        }
+        
+        toast({
+          title: "Metadata Extracted",
+          description: "Book information has been auto-populated. You can edit if needed.",
+        })
+        
+      } catch (error) {
+        console.error("Failed to extract metadata:", error)
+        // If extraction fails, use filename as title
+        const titleFromFilename = file.name.replace(/\.[^/.]+$/, "")
+        setBookTitle(titleFromFilename)
+      } finally {
+        setIsExtractingMetadata(false)
+      }
     }
   }
 
   const handleUpload = async () => {
-    if (!selectedFile) return
+    if (!selectedFile || !bookTitle.trim() || !bookAuthor.trim()) return
 
     try {
       const formData = new FormData()
       formData.append("file", selectedFile)
+      formData.append("title", bookTitle)
+      formData.append("author", bookAuthor)
+      formData.append("tags", JSON.stringify([]))
       
-      const response = await api.post("/books", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+      const response = await fetch("/api/v1/books", {
+        method: "POST",
+        body: formData,
       })
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
       
       toast({
         title: "Book Uploaded!",
-        description: `${selectedFile.name} has been added to your library.`,
+        description: `"${bookTitle}" by ${bookAuthor} has been added to your library.`,
       })
       
       setSelectedFile(null)
+      setBookTitle("")
+      setBookAuthor("")
       setShowUploadDialog(false)
       
       // Refresh content list
@@ -643,7 +693,13 @@ export default function HomePage() {
                       <Button variant="outline" onClick={() => setIsGenerateMode(true)}>
                         Generate a new course
                       </Button>
-                      <Button variant="outline" onClick={() => setShowUploadDialog(true)}>
+                      <Button variant="outline" onClick={() => {
+                        setShowUploadDialog(true)
+                        setSelectedFile(null)
+                        setBookTitle("")
+                        setBookAuthor("")
+                        setIsExtractingMetadata(false)
+                      }}>
                         Upload a new book
                       </Button>
                       <Button variant="outline" onClick={() => setShowYoutubeDialog(true)}>
@@ -685,6 +741,34 @@ export default function HomePage() {
                   </p>
                 )}
               </div>
+              {isExtractingMetadata && (
+                <div className="flex items-center justify-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-500 mr-2" />
+                  <span className="text-sm text-gray-600">Extracting book information...</span>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="book-title">Title *</Label>
+                <Input
+                  id="book-title"
+                  type="text"
+                  placeholder="Enter book title"
+                  value={bookTitle}
+                  onChange={(e) => setBookTitle(e.target.value)}
+                  disabled={isExtractingMetadata}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="book-author">Author *</Label>
+                <Input
+                  id="book-author"
+                  type="text"
+                  placeholder="Enter author name"
+                  value={bookAuthor}
+                  onChange={(e) => setBookAuthor(e.target.value)}
+                  disabled={isExtractingMetadata}
+                />
+              </div>
             </div>
             <SheetFooter>
               <Button variant="outline" onClick={() => setShowUploadDialog(false)}>
@@ -692,7 +776,7 @@ export default function HomePage() {
               </Button>
               <Button 
                 onClick={handleUpload} 
-                disabled={!selectedFile}
+                disabled={!selectedFile || !bookTitle.trim() || !bookAuthor.trim()}
                 className="bg-indigo-500 hover:bg-indigo-600 text-white"
               >
                 Upload Book
@@ -850,6 +934,9 @@ export default function HomePage() {
                         setShowUploadDialog(true)
                         setIsFabExpanded(false)
                         setSelectedFile(null)
+                        setBookTitle("")
+                        setBookAuthor("")
+                        setIsExtractingMetadata(false)
                       }}
                       size="icon"
                       className="h-14 w-14 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg transition-all hover:scale-110"

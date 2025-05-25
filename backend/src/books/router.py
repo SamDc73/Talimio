@@ -2,7 +2,9 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel
 
+from .metadata import extract_metadata
 from .schemas import (
     BookCreate,
     BookListResponse,
@@ -25,6 +27,19 @@ from .service import (
 router = APIRouter(prefix="/api/v1/books", tags=["books"])
 
 
+class BookMetadataResponse(BaseModel):
+    """Response model for book metadata extraction."""
+
+    title: str | None = None
+    author: str | None = None
+    description: str | None = None
+    language: str | None = None
+    publisher: str | None = None
+    isbn: str | None = None
+    publication_year: int | None = None
+    page_count: int | None = None
+
+
 @router.get("")
 async def list_books(
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
@@ -38,6 +53,49 @@ async def list_books(
 async def get_book_endpoint(book_id: UUID) -> BookWithProgress:
     """Get book details with progress information."""
     return await get_book(book_id)
+
+
+@router.post("/extract-metadata")
+async def extract_book_metadata(
+    file: Annotated[UploadFile, File(description="Book file (PDF or EPUB) to extract metadata from")],
+) -> BookMetadataResponse:
+    """Extract metadata from a book file without storing it."""
+    # Validate file type
+    if not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No filename provided",
+        )
+
+    file_extension = file.filename.lower().split(".")[-1]
+    if file_extension not in ["pdf", "epub"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only PDF and EPUB files are supported",
+        )
+
+    # Read file content
+    file_content = await file.read()
+
+    # Extract metadata
+    metadata = extract_metadata(file_content, f".{file_extension}")
+
+    # If no title was extracted, use filename without extension
+    if not metadata.title:
+        from pathlib import Path
+
+        metadata.title = Path(file.filename).stem
+
+    return BookMetadataResponse(
+        title=metadata.title,
+        author=metadata.author,
+        description=metadata.description,
+        language=metadata.language,
+        publisher=metadata.publisher,
+        isbn=metadata.isbn,
+        publication_year=metadata.publication_year,
+        page_count=metadata.page_count,
+    )
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

@@ -6,7 +6,6 @@ uvicorn
 sqlalchemy
 asyncpg
 psycopg2-binary
-alembic
 
 # Settings & Validation
 pydantic
@@ -22,6 +21,10 @@ fsrs
 # Video
 yt-dlp
 
+# Document Processing
+pymupdf
+ebooklib
+python-multipart
 
 # Dev
 uv
