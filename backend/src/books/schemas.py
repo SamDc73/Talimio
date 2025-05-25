@@ -38,30 +38,28 @@ class BookUpdate(BaseModel):
     tags: list[str] | None = None
 
 
-class BookResponse(BookBase):
+class BookResponse(BaseModel):
     """Schema for book response."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    title: str
+    subtitle: str | None = None
+    author: str
+    description: str | None = None
+    isbn: str | None = None
+    language: str | None = None
+    publication_year: int | None = None
+    publisher: str | None = None
+    tags: list[str] = Field(default_factory=list)
     file_type: str
     file_size: int
-    total_pages: int | None
-    cover_image_path: str | None
+    total_pages: int | None = None
+    cover_image_path: str | None = None
     created_at: datetime
     updated_at: datetime
 
-    @property
-    def tags_list(self) -> list[str]:
-        """Convert tags JSON string to list."""
-        if isinstance(self.tags, str):
-            import json
-
-            try:
-                return json.loads(self.tags)
-            except (json.JSONDecodeError, TypeError):
-                return []
-        return self.tags or []
 
 
 class BookProgressBase(BaseModel):

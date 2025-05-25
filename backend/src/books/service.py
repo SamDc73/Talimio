@@ -28,6 +28,35 @@ ALLOWED_EXTENSIONS = {".pdf", ".epub"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 
+def _book_to_response(book: Book) -> BookResponse:
+    """Convert Book model to BookResponse with proper tags handling."""
+    tags_list = []
+    if book.tags:
+        try:
+            tags_list = json.loads(book.tags)
+        except (json.JSONDecodeError, TypeError):
+            tags_list = []
+
+    return BookResponse(
+        id=book.id,
+        title=book.title,
+        subtitle=book.subtitle,
+        author=book.author,
+        description=book.description,
+        isbn=book.isbn,
+        language=book.language,
+        publication_year=book.publication_year,
+        publisher=book.publisher,
+        tags=tags_list,
+        file_type=book.file_type,
+        file_size=book.file_size,
+        total_pages=book.total_pages,
+        cover_image_path=book.cover_image_path,
+        created_at=book.created_at,
+        updated_at=book.updated_at,
+    )
+
+
 async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
     """
     Create a new book with uploaded file.
@@ -100,7 +129,7 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
             await session.commit()
             await session.refresh(book)
 
-            return BookResponse.model_validate(book)
+            return _book_to_response(book)
 
     except HTTPException:
         raise
@@ -141,7 +170,7 @@ async def get_books(page: int = 1, per_page: int = 20) -> BookListResponse:
             result = await session.execute(query)
             books = result.scalars().all()
 
-            book_responses = [BookResponse.model_validate(book) for book in books]
+            book_responses = [_book_to_response(book) for book in books]
 
             return BookListResponse(
                 books=book_responses,
@@ -192,7 +221,7 @@ async def get_book(book_id: UUID) -> BookWithProgress:
                     progress = BookProgressResponse.model_validate(prog)
                     break
 
-            book_response = BookResponse.model_validate(book)
+            book_response = _book_to_response(book)
             return BookWithProgress(
                 **book_response.model_dump(),
                 progress=progress,
@@ -249,7 +278,7 @@ async def update_book(book_id: UUID, book_data: BookUpdate) -> BookResponse:
             await session.commit()
             await session.refresh(book)
 
-            return BookResponse.model_validate(book)
+            return _book_to_response(book)
 
     except HTTPException:
         raise

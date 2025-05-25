@@ -9,17 +9,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .assistant.router import router as assistant_router
+
+# Import models to register them with SQLAlchemy - MUST be after database.base import
+from .books.models import Book, BookProgress  # noqa: F401
 from .books.router import router as books_router
 from .config.settings import get_settings
 from .content.router import router as content_router
 from .core.exceptions import ResourceNotFoundError
-from .database.core import Base
+from .database.base import Base
 from .database.session import engine
+from .flashcards.models import FlashcardCard, FlashcardDeck, FlashcardReview  # noqa: F401
 from .flashcards.router import router as flashcards_router
 from .lessons import router as lessons_router
 from .onboarding.router import router as onboarding_router
+from .progress.models import Progress  # noqa: F401
 from .progress.router import router as progress_router
+from .roadmaps.models import Node, Roadmap  # noqa: F401
 from .roadmaps.router import router as roadmaps_router
+from .videos.models import Video  # noqa: F401
 from .videos.router import router as videos_router
 
 

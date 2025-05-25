@@ -39,6 +39,7 @@ class Book(Base):
     )
 
 
+
 class BookProgress(Base):
     """Model for tracking reading progress."""
 

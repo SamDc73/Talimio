@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -21,6 +22,16 @@ from src.videos.models import Video
 
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_parse_tags(tags_json: str | None) -> list[str]:
+    """Safely parse tags from JSON string."""
+    if not tags_json:
+        return []
+    try:
+        return json.loads(tags_json)
+    except (json.JSONDecodeError, TypeError):
+        return []
 
 
 def apply_search_filter(stmt: Select[Any], model: type[Any], fields: list[str], search: str | None) -> Select[Any]:
@@ -89,7 +100,7 @@ async def fetch_flashcard_decks(search: str | None = None) -> list[FlashcardCont
                 # Count total cards and due cards
                 card_count = len(deck.cards) if deck.cards else 0
                 due_count = (
-                    sum(1 for card in deck.cards if card.next_review and card.next_review <= datetime.now(UTC))
+                    sum(1 for card in deck.cards if card.due and card.due <= datetime.now(UTC))
                     if deck.cards
                     else 0
                 )
@@ -104,7 +115,7 @@ async def fetch_flashcard_decks(search: str | None = None) -> list[FlashcardCont
                         last_accessed_date=deck.updated_at or deck.created_at,
                         created_date=deck.created_at,
                         progress=0,  # Calculate based on reviewed cards if needed
-                        tags=deck.tags.split(",") if deck.tags else [],
+                        tags=_safe_parse_tags(deck.tags),
                     ),
                 )
     except Exception as e:
@@ -144,7 +155,7 @@ async def fetch_books(search: str | None = None) -> list[BookContent]:
                         last_accessed_date=last_read_at or book.created_at,
                         created_date=book.created_at,
                         progress=progress,
-                        tags=book.tags.split(",") if book.tags else [],
+                        tags=_safe_parse_tags(book.tags),
                     ),
                 )
     except Exception as e:
@@ -223,7 +234,15 @@ async def list_all_content(
         items.extend(roadmap_items)
 
     # Sort items by last accessed date (descending by default)
-    items.sort(key=lambda x: x.last_accessed_date, reverse=True)
+    # Handle timezone-aware/naive datetime comparison
+    def safe_sort_key(item):
+        date = item.last_accessed_date
+        if date and date.tzinfo is None:
+            # Make naive datetime timezone-aware (UTC)
+            date = date.replace(tzinfo=UTC)
+        return date or datetime.min.replace(tzinfo=UTC)
+
+    items.sort(key=safe_sort_key, reverse=True)
 
     # Apply pagination
     total = len(items)
