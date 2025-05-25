@@ -1,0 +1,41 @@
+.book-viewer-container {
+  height: 100%;
+  overflow: hidden;
+}
+
+.book-viewer-loading {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--background);
+}
+
+.spinner {
+  font-size: 1.25rem;
+  color: var(--muted-foreground);
+}
+
+.book-viewer-error {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--background);
+  color: var(--foreground);
+  padding: 2rem;
+  text-align: center;
+}
+
+.book-viewer-error h2 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  color: var(--destructive);
+}
+
+.book-viewer-error p {
+  color: var(--muted-foreground);
+}

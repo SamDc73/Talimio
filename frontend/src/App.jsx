@@ -13,6 +13,7 @@ import { useAppState } from "./hooks/useAppState";
 import { CodeBlockTest } from "@/components/code-block-test";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ChatSidebarProvider, ChatSidebar } from "./components/header/MainHeader";
+import { BookViewer } from "./features/book-viewer";
 
 function RoadmapPage() {
   const { roadmapId } = useParams();
@@ -47,6 +48,7 @@ export default function App() {
         <div className="app-container">
           <Routes>
             <Route path="/roadmap/:roadmapId" element={<RoadmapPage />} />
+            <Route path="/books/:bookId" element={<BookViewer />} />
             <Route path="/code-test" element={<CodeBlockTest />} />
             <Route
               path="/"
