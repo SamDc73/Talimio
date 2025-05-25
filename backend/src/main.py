@@ -114,6 +114,12 @@ def create_app() -> FastAPI:
             try:
                 async with engine.begin() as conn:
                     await conn.run_sync(Base.metadata.create_all)
+
+                # Run migrations to add any missing columns
+                from src.database.add_missing_columns import run_migrations
+
+                await run_migrations(engine)
+
                 break  # Success - exit the retry loop
 
             except ConnectionDoesNotExistError:

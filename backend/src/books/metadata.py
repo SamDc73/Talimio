@@ -23,6 +23,7 @@ class BookMetadata:
         isbn: str | None = None,
         publication_year: int | None = None,
         page_count: int | None = None,
+        table_of_contents: list[dict] | None = None,
     ) -> None:
         self.title = title
         self.author = author
@@ -32,6 +33,7 @@ class BookMetadata:
         self.isbn = isbn
         self.publication_year = publication_year
         self.page_count = page_count
+        self.table_of_contents = table_of_contents
 
 
 def extract_pdf_metadata(file_content: bytes) -> BookMetadata:
@@ -86,6 +88,11 @@ def extract_pdf_metadata(file_content: bytes) -> BookMetadata:
                         metadata.publication_year = int(year_str)
                 except (ValueError, IndexError):
                     pass
+
+        # Extract table of contents
+        toc = pdf_document.get_toc()
+        if toc:
+            metadata.table_of_contents = _process_pdf_toc(toc)
 
         # Close the document
         pdf_document.close()
@@ -198,3 +205,46 @@ def extract_metadata(file_content: bytes, file_extension: str) -> BookMetadata:
         return extract_epub_metadata(file_content)
     logger.warning(f"Unsupported file type for metadata extraction: {file_extension}")
     return BookMetadata()
+
+
+def _process_pdf_toc(toc: list) -> list[dict]:
+    """
+    Process PyMuPDF table of contents into a structured format.
+
+    Args:
+        toc: PyMuPDF table of contents list
+
+    Returns
+    -------
+        List of dictionaries representing the table of contents
+    """
+    result = []
+    stack = []  # Stack to track parent chapters
+
+    for entry in toc:
+        level, title, page = entry
+
+        # Create TOC item
+        item = {
+            "id": f"toc_{len(result)}_{level}_{page}",
+            "title": title.strip(),
+            "page": page,
+            "level": level - 1,  # Make it 0-based
+            "children": [],
+        }
+
+        # Handle hierarchy
+        while stack and stack[-1]["level"] >= item["level"]:
+            stack.pop()
+
+        if stack:
+            # Add as child to parent
+            stack[-1]["children"].append(item)
+        else:
+            # Top-level item
+            result.append(item)
+
+        # Add to stack for potential children
+        stack.append(item)
+
+    return result

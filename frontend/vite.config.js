@@ -10,6 +10,12 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  optimizeDeps: {
+    include: ['react-pdf', 'pdfjs-dist'],
+    esbuildOptions: {
+      target: 'esnext',
+    },
+  },
   server: {
     proxy: {
       '/api': {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, ChevronRight, Circle, CheckCircle, FileText } from "lucide-react";
+import { ChevronRight, Circle, CheckCircle, FileText } from "lucide-react";
 import { useSidebar } from "../../navigation/SidebarContext";
 
 function BookSidebar({ book, currentPage = 1, onChapterClick }) {
@@ -9,42 +9,28 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
 
   if (!book) return null;
 
-  // Mock chapters structure - this can be replaced with real data when available
-  const mockChapters = [
-    {
-      id: "ch1",
-      title: "Introduction",
-      startPage: 1,
-      endPage: 20,
-      sections: [
-        { id: "s1-1", title: "Getting Started", page: 1 },
-        { id: "s1-2", title: "Basic Concepts", page: 8 },
-        { id: "s1-3", title: "Overview", page: 15 }
-      ]
-    },
-    {
-      id: "ch2",
-      title: "Chapter 2: Core Concepts",
-      startPage: 21,
-      endPage: 45,
-      sections: [
-        { id: "s2-1", title: "Fundamental Principles", page: 21 },
-        { id: "s2-2", title: "Advanced Topics", page: 30 },
-        { id: "s2-3", title: "Practical Examples", page: 38 }
-      ]
-    },
-    {
-      id: "ch3",
-      title: "Chapter 3: Implementation",
-      startPage: 46,
-      endPage: 80,
-      sections: [
-        { id: "s3-1", title: "Setup and Configuration", page: 46 },
-        { id: "s3-2", title: "Best Practices", page: 60 },
-        { id: "s3-3", title: "Common Patterns", page: 70 }
-      ]
-    }
-  ];
+  // Transform table of contents into a flattened structure
+  const chapters = book.table_of_contents || [];
+  
+  // If no table of contents is available, show a message
+  if (!chapters.length) {
+    return (
+      <aside
+        className={`fixed-sidebar flex flex-col bg-white border-r border-zinc-200 transition-all duration-300 ease-in-out ${
+          isOpen ? "w-[320px] opacity-100 translate-x-0" : "w-0 opacity-0 -translate-x-full"
+        }`}
+        style={{ boxShadow: isOpen ? "0 4px 20px rgba(0, 0, 0, 0.05)" : "none" }}
+      >
+        <div className="px-4 pt-20 pb-4">
+          <div className="text-center text-zinc-500 text-sm mt-8">
+            <FileText className="w-12 h-12 mx-auto mb-4 text-zinc-300" />
+            <p>No table of contents available</p>
+            <p className="text-xs mt-2">This book doesn't have chapter information.</p>
+          </div>
+        </div>
+      </aside>
+    );
+  }
 
   const handleToggleChapter = (chapterIndex) => {
     setExpandedChapters((prev) =>
@@ -62,18 +48,35 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
   };
 
   const getChapterProgress = (chapter) => {
-    const completedCount = chapter.sections.filter(s => completedSections.has(s.id)).length;
-    return (completedCount / chapter.sections.length) * 100;
+    if (!chapter.children || chapter.children.length === 0) return 0;
+    const completedCount = chapter.children.filter(s => completedSections.has(s.id)).length;
+    return (completedCount / chapter.children.length) * 100;
   };
 
-  const isPageInRange = (page, start, end) => {
-    return page >= start && page <= end;
+  const isPageInRange = (page, chapter) => {
+    if (chapter.start_page && chapter.end_page) {
+      return page >= chapter.start_page && page <= chapter.end_page;
+    }
+    // If we only have a single page number
+    return page === chapter.page;
   };
 
   // Calculate overall progress
-  const totalSections = mockChapters.reduce((acc, ch) => acc + ch.sections.length, 0);
+  const countAllSections = (chapters) => {
+    let count = 0;
+    chapters.forEach(ch => {
+      if (ch.children && ch.children.length > 0) {
+        count += ch.children.length;
+      } else {
+        count += 1; // Count the chapter itself if it has no children
+      }
+    });
+    return count;
+  };
+  
+  const totalSections = countAllSections(chapters);
   const completedCount = completedSections.size;
-  const overallProgress = Math.round((completedCount / totalSections) * 100);
+  const overallProgress = totalSections > 0 ? Math.round((completedCount / totalSections) * 100) : 0;
 
   return (
     <aside
@@ -82,25 +85,12 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
       }`}
       style={{ boxShadow: isOpen ? "0 4px 20px rgba(0, 0, 0, 0.05)" : "none" }}
     >
-      {/* Book header */}
+      {/* Progress indicator */}
       <div
         className={`px-4 pt-20 pb-4 border-b border-zinc-100 transition-opacity duration-300 ${
           isOpen ? "opacity-100" : "opacity-0"
         }`}
       >
-        <div className="flex items-start gap-3 mb-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
-            <BookOpen className="w-6 h-6 text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-zinc-900 text-sm line-clamp-2">
-              {book.title}
-            </h3>
-            <p className="text-xs text-zinc-600 mt-1">{book.author}</p>
-          </div>
-        </div>
-
-        {/* Progress indicator */}
         <div className="flex items-center gap-2">
           <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full px-3 py-1">
             {overallProgress}% Read
@@ -121,10 +111,10 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
           Table of Contents
         </h4>
         
-        {mockChapters.map((chapter, chapterIndex) => {
+        {chapters.map((chapter, chapterIndex) => {
           const isExpanded = expandedChapters.includes(chapterIndex);
           const chapterProgress = getChapterProgress(chapter);
-          const isCurrentChapter = isPageInRange(currentPage, chapter.startPage, chapter.endPage);
+          const isCurrentChapter = isPageInRange(currentPage, chapter);
           
           return (
             <div 
@@ -134,14 +124,19 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
               } shadow-sm overflow-hidden`}
             >
               {/* Chapter header */}
-              <button
-                type="button"
-                onClick={() => handleToggleChapter(chapterIndex)}
-                className="flex items-center gap-3 justify-between w-full px-4 py-3 text-left font-semibold text-base text-zinc-900 border-b border-zinc-100 rounded-t-2xl focus:outline-none"
+              <div
+                className="flex items-center gap-3 justify-between w-full px-4 py-3 text-left font-semibold text-base text-zinc-900 border-b border-zinc-100 rounded-t-2xl"
                 style={{ background: isCurrentChapter ? "transparent" : "#fff" }}
-                aria-expanded={isExpanded}
               >
-                <div className="flex items-center gap-3 flex-1 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onChapterClick) {
+                      onChapterClick(chapter.page || chapter.start_page);
+                    }
+                  }}
+                  className="flex items-center gap-3 flex-1 min-w-0 hover:text-emerald-700 transition-colors"
+                >
                   <div className="relative flex items-center justify-center">
                     <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">
                       <span className="text-sm text-zinc-600">{chapterIndex + 1}</span>
@@ -181,21 +176,29 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
                     )}
                   </div>
                   <span className="line-clamp-2 text-sm">{chapter.title}</span>
-                </div>
+                </button>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-zinc-500">p. {chapter.startPage}</span>
-                  <ChevronRight
-                    className={`w-5 h-5 text-zinc-400 transition-transform duration-200 ${
-                      isExpanded ? "rotate-90 text-emerald-600" : "rotate-0"
-                    }`}
-                  />
+                  <span className="text-xs text-zinc-500">p. {chapter.page || chapter.start_page}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleChapter(chapterIndex)}
+                    className="p-1 hover:bg-zinc-100 rounded-lg transition-colors focus:outline-none"
+                    aria-expanded={isExpanded}
+                    aria-label={isExpanded ? "Collapse chapter" : "Expand chapter"}
+                  >
+                    <ChevronRight
+                      className={`w-5 h-5 text-zinc-400 transition-transform duration-200 ${
+                        isExpanded ? "rotate-90 text-emerald-600" : "rotate-0"
+                      }`}
+                    />
+                  </button>
                 </div>
-              </button>
+              </div>
 
               {/* Chapter sections */}
-              {isExpanded && (
+              {isExpanded && chapter.children && chapter.children.length > 0 && (
                 <ol className="px-4 py-2 space-y-2">
-                  {chapter.sections.map((section) => {
+                  {chapter.children.map((section) => {
                     const isCompleted = completedSections.has(section.id);
                     const isCurrentSection = currentPage === section.page;
                     
