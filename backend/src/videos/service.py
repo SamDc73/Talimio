@@ -141,7 +141,10 @@ class VideoService:
         return VideoResponse.model_validate(video)
 
     async def update_progress(
-        self, db: AsyncSession, video_id: int, progress_data: VideoProgressUpdate,
+        self,
+        db: AsyncSession,
+        video_id: int,
+        progress_data: VideoProgressUpdate,
     ) -> VideoResponse:
         """Update video watch progress."""
         result = await db.execute(select(Video).where(Video.id == video_id))

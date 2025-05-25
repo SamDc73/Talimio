@@ -38,6 +38,18 @@ class BookUpdate(BaseModel):
     tags: list[str] | None = None
 
 
+class TableOfContentsItem(BaseModel):
+    """Schema for table of contents item."""
+
+    id: str
+    title: str
+    page: int | None = None
+    start_page: int | None = None
+    end_page: int | None = None
+    level: int = 0  # 0 for chapters, 1 for sections, etc.
+    children: list["TableOfContentsItem"] = Field(default_factory=list)
+
+
 class BookResponse(BaseModel):
     """Schema for book response."""
 
@@ -54,12 +66,13 @@ class BookResponse(BaseModel):
     publisher: str | None = None
     tags: list[str] = Field(default_factory=list)
     file_type: str
+    file_path: str
     file_size: int
     total_pages: int | None = None
     cover_image_path: str | None = None
+    table_of_contents: list[TableOfContentsItem] | None = None
     created_at: datetime
     updated_at: datetime
-
 
 
 class BookProgressBase(BaseModel):
@@ -123,3 +136,7 @@ class BookListResponse(BaseModel):
     total: int
     page: int
     per_page: int
+
+
+# Update forward references
+TableOfContentsItem.model_rebuild()

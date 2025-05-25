@@ -19,6 +19,7 @@ from .schemas import (
     BookResponse,
     BookUpdate,
     BookWithProgress,
+    TableOfContentsItem,
 )
 
 
@@ -37,6 +38,15 @@ def _book_to_response(book: Book) -> BookResponse:
         except (json.JSONDecodeError, TypeError):
             tags_list = []
 
+    # Handle table of contents
+    toc_list = None
+    if book.table_of_contents:
+        try:
+            toc_data = json.loads(book.table_of_contents)
+            toc_list = _convert_toc_to_schema(toc_data)
+        except (json.JSONDecodeError, TypeError):
+            toc_list = None
+
     return BookResponse(
         id=book.id,
         title=book.title,
@@ -48,10 +58,12 @@ def _book_to_response(book: Book) -> BookResponse:
         publication_year=book.publication_year,
         publisher=book.publisher,
         tags=tags_list,
+        file_path=book.file_path,
         file_type=book.file_type,
         file_size=book.file_size,
         total_pages=book.total_pages,
         cover_image_path=book.cover_image_path,
+        table_of_contents=toc_list,
         created_at=book.created_at,
         updated_at=book.updated_at,
     )
@@ -108,6 +120,11 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
         # Save file
         file_path.write_bytes(file_content)
 
+        # Extract metadata from the file to get page count
+        from .metadata import extract_metadata
+
+        metadata = extract_metadata(file_content, file_extension)
+
         # Create book record
         async with async_session_maker() as session:
             book = Book(
@@ -123,6 +140,8 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
                 publication_year=book_data.publication_year,
                 publisher=book_data.publisher,
                 tags=json.dumps(book_data.tags) if book_data.tags else None,
+                total_pages=metadata.page_count,  # Set the page count from extracted metadata
+                table_of_contents=json.dumps(metadata.table_of_contents) if metadata.table_of_contents else None,
             )
 
             session.add(book)
@@ -406,4 +425,88 @@ async def update_book_progress(book_id: UUID, progress_data: BookProgressUpdate)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update book progress: {e!s}",
+        ) from e
+
+
+def _convert_toc_to_schema(toc_data: list[dict]) -> list[TableOfContentsItem]:
+    """Convert table of contents data to schema objects."""
+    result = []
+    for item in toc_data:
+        children = []
+        if item.get("children"):
+            children = _convert_toc_to_schema(item["children"])
+
+        toc_item = TableOfContentsItem(
+            id=item.get("id", ""),
+            title=item.get("title", ""),
+            page=item.get("page"),
+            start_page=item.get("start_page"),
+            end_page=item.get("end_page"),
+            level=item.get("level", 0),
+            children=children,
+        )
+        result.append(toc_item)
+    return result
+
+
+async def extract_and_update_toc(book_id: UUID) -> BookResponse:
+    """
+    Extract and update table of contents for an existing book.
+
+    Args:
+        book_id: Book ID
+
+    Returns
+    -------
+        BookResponse: Updated book data with table of contents
+
+    Raises
+    ------
+        HTTPException: If book not found or extraction fails
+    """
+    try:
+        async with async_session_maker() as session:
+            query = select(Book).where(Book.id == book_id)
+            result = await session.execute(query)
+            book = result.scalar_one_or_none()
+
+            if not book:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Book {book_id} not found",
+                )
+
+            # Read the book file
+            file_path = Path(book.file_path)
+            if not file_path.exists():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Book file not found on disk",
+                )
+
+            file_content = file_path.read_bytes()
+            file_extension = f".{book.file_type}"
+
+            # Extract metadata including table of contents
+            from .metadata import extract_metadata
+
+            metadata = extract_metadata(file_content, file_extension)
+
+            # Update book with table of contents
+            if metadata.table_of_contents:
+                book.table_of_contents = json.dumps(metadata.table_of_contents)
+                book.updated_at = datetime.now(UTC)
+
+                await session.commit()
+                await session.refresh(book)
+
+            return _book_to_response(book)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.exception(f"Error extracting TOC for book {book_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to extract table of contents: {e!s}",
         ) from e

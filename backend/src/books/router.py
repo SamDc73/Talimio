@@ -2,6 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from .metadata import extract_metadata
@@ -172,3 +173,42 @@ async def update_book_progress_endpoint(
 ) -> BookProgressResponse:
     """Update reading progress for a book."""
     return await update_book_progress(book_id, progress_data)
+
+
+@router.get("/{book_id}/file")
+async def serve_book_file(book_id: UUID) -> FileResponse:
+    """Serve the actual book file for viewing."""
+    book = await get_book(book_id)
+
+    if not book.file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Book file not found",
+        )
+
+    # Ensure the file exists
+    from pathlib import Path
+
+    file_path = Path(book.file_path)
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Book file not found on disk",
+        )
+
+    # Determine media type based on file extension
+    media_type = "application/pdf" if book.file_type == "pdf" else "application/epub+zip"
+
+    return FileResponse(
+        path=str(file_path),
+        media_type=media_type,
+        headers={"Content-Disposition": "inline"},
+    )
+
+
+@router.post("/{book_id}/extract-toc")
+async def extract_table_of_contents(book_id: UUID) -> BookResponse:
+    """Extract and update table of contents for an existing book."""
+    from .service import extract_and_update_toc
+
+    return await extract_and_update_toc(book_id)

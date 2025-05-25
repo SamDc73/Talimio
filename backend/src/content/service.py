@@ -100,9 +100,7 @@ async def fetch_flashcard_decks(search: str | None = None) -> list[FlashcardCont
                 # Count total cards and due cards
                 card_count = len(deck.cards) if deck.cards else 0
                 due_count = (
-                    sum(1 for card in deck.cards if card.due and card.due <= datetime.now(UTC))
-                    if deck.cards
-                    else 0
+                    sum(1 for card in deck.cards if card.due and card.due <= datetime.now(UTC)) if deck.cards else 0
                 )
 
                 items.append(

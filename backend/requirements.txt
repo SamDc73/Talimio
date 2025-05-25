@@ -31,3 +31,7 @@ uv
 ruff
 mypy
 asyncpg-stubs
+aiosqlite
+pytest
+pytest-asyncio
+httpx
