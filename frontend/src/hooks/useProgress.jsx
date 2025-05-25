@@ -139,3 +139,19 @@ export function useProgress() {
   }
   return context;
 }
+
+// Hook that safely uses progress context (returns null values if not in a provider)
+export function useProgressSafe() {
+  const context = useContext(ProgressContext);
+  if (context === null) {
+    return {
+      courseProgress: null,
+      isLoading: false,
+      error: null,
+      toggleLessonCompletion: () => {},
+      isLessonCompleted: () => false,
+      refreshProgress: () => Promise.resolve(),
+    };
+  }
+  return context;
+}

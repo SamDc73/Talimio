@@ -1,7 +1,7 @@
 import { CheckCircle, ChevronRight, Circle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSidebar } from "./SidebarContext";
-import { useProgress } from "../../hooks/useProgress";
+import { useProgressSafe } from "../../hooks/useProgress";
 
 /**
  * @typedef {Object} Lesson - Course lesson with completion status
@@ -37,8 +37,8 @@ function Sidebar({ modules = [], onLessonClick, activeLessonId = null, courseId 
   // Get sidebar visibility state from context
   const { isOpen } = useSidebar();
 
-  // Use progress hook to connect to backend
-  const { courseProgress, toggleLessonCompletion, isLessonCompleted } = useProgress();
+  // Use progress hook to connect to backend (safe version for non-course contexts)
+  const { courseProgress, toggleLessonCompletion, isLessonCompleted } = useProgressSafe();
 
   const [expandedModules, setExpandedModules] = useState(() => {
     // Only expand the first module by default if there are modules and the sidebar is open
