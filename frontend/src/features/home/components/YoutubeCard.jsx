@@ -2,6 +2,19 @@ import { motion } from "framer-motion"
 import { Link } from "react-router-dom"
 import { ChevronRight, Youtube, MoreHorizontal } from "lucide-react"
 
+function formatDuration(seconds) {
+  if (!seconds) return "Unknown duration"
+  
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = seconds % 60
+  
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+  return `${minutes}:${secs.toString().padStart(2, '0')}`
+}
+
 export function YoutubeCard({ video, index }) {
   return (
     <motion.div
@@ -28,7 +41,7 @@ export function YoutubeCard({ video, index }) {
       
       {/* Description */}
       <p className="text-gray-600 text-sm mb-4">
-        {video.channelName} • {video.duration}
+        {video.channel_name || video.channel} • {formatDuration(video.duration)}
       </p>
       
       {/* Tags */}
@@ -55,17 +68,17 @@ export function YoutubeCard({ video, index }) {
           <div className="flex-1 bg-gray-100 rounded-full h-2">
             <div 
               className="bg-teal-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${video.progress || 0}%` }}
+              style={{ width: `${video.completion_percentage || 0}%` }}
             />
           </div>
-          <span className="text-sm text-gray-900 font-medium">{video.progress || 0}%</span>
+          <span className="text-sm text-gray-900 font-medium">{Math.round(video.completion_percentage || 0)}%</span>
         </div>
       </div>
       
       {/* Footer */}
       <div className="flex justify-between items-center">
         <span className="text-sm text-gray-500">YouTube</span>
-        <Link to={`/videos/${video.id}`} className="flex items-center gap-1 text-teal-600 hover:text-teal-700 text-sm font-medium">
+        <Link to={`/videos/${video.uuid || video.id}`} className="flex items-center gap-1 text-teal-600 hover:text-teal-700 text-sm font-medium">
           Watch
           <ChevronRight className="h-4 w-4" />
         </Link>

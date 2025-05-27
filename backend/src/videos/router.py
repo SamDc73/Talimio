@@ -1,11 +1,16 @@
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.session import get_db_session
 from src.videos.schemas import VideoCreate, VideoListResponse, VideoProgressUpdate, VideoResponse, VideoUpdate
 from src.videos.service import video_service
+
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
@@ -21,7 +26,32 @@ async def create_video(
         return await video_service.create_video(db, video_data)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except IntegrityError:
+        # Handle duplicate video case - try to fetch and return existing video
+        await db.rollback()
+        try:
+            # Extract YouTube URL to get the video
+            from src.videos.service import video_service as svc
+
+            video_info = await svc._fetch_video_info(video_data.url)
+            youtube_id = video_info.get("youtube_id")
+
+            if youtube_id:
+                # Try to get existing video
+                from sqlalchemy import select
+
+                from src.videos.models import Video
+
+                result = await db.execute(select(Video).where(Video.youtube_id == youtube_id))
+                existing_video = result.scalar_one_or_none()
+                if existing_video:
+                    return VideoResponse.model_validate(existing_video)
+        except Exception:
+            pass
+
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Video already exists in the library")
     except Exception as e:
+        logger.exception(f"Error creating video: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
@@ -38,51 +68,51 @@ async def list_videos(
     return await video_service.get_videos(db, page=page, size=size, channel=channel, search=search, tags=tags)
 
 
-@router.get("/{video_id}")
+@router.get("/{video_uuid}")
 async def get_video(
-    video_id: int,
+    video_uuid: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> VideoResponse:
-    """Get a specific video by ID."""
+    """Get a specific video by UUID."""
     try:
-        return await video_service.get_video(db, video_id)
+        return await video_service.get_video(db, video_uuid)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.patch("/{video_id}")
+@router.patch("/{video_uuid}")
 async def update_video(
-    video_id: int,
+    video_uuid: str,
     update_data: VideoUpdate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> VideoResponse:
     """Update video metadata."""
     try:
-        return await video_service.update_video(db, video_id, update_data)
+        return await video_service.update_video(db, video_uuid, update_data)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.patch("/{video_id}/progress")
+@router.patch("/{video_uuid}/progress")
 async def update_video_progress(
-    video_id: int,
+    video_uuid: str,
     progress_data: VideoProgressUpdate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> VideoResponse:
     """Update video watch progress."""
     try:
-        return await video_service.update_progress(db, video_id, progress_data)
+        return await video_service.update_progress(db, video_uuid, progress_data)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.delete("/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{video_uuid}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_video(
-    video_id: int,
+    video_uuid: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> None:
     """Remove a video from library."""
     try:
-        await video_service.delete_video(db, video_id)
+        await video_service.delete_video(db, video_uuid)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

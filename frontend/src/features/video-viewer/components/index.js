@@ -1,0 +1,1 @@
+export { VideoSidebar } from './VideoSidebar';

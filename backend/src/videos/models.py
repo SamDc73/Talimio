@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import uuid
 from datetime import datetime  # noqa: TC003
 
 from sqlalchemy import DateTime, Float, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database.base import Base
@@ -14,6 +16,9 @@ class Video(Base):
     __tablename__ = "videos"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    uuid: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4, index=True,
+    )
     youtube_id: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
     url: Mapped[str] = mapped_column(String(255), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)

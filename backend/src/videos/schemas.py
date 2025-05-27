@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -61,6 +62,7 @@ class VideoInDB(VideoBase):
     """Schema for video stored in database."""
 
     id: int
+    uuid: UUID
     last_position: float = 0.0
     completion_percentage: float = 0.0
     created_at: datetime
@@ -68,6 +70,17 @@ class VideoInDB(VideoBase):
 
     class Config:
         from_attributes = True
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def parse_tags_json(cls, v):
+        """Parse tags from JSON string if needed."""
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return []
+        return v
 
     def model_dump(self, **kwargs):
         """Override to handle tags serialization."""
