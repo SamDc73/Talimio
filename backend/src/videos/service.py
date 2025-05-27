@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime
 from typing import Any
 
 import yt_dlp
@@ -26,9 +27,10 @@ class VideoService:
         existing = await db.execute(
             select(Video).where(Video.youtube_id == video_info["youtube_id"]),
         )
-        if existing.scalar_one_or_none():
-            msg = f"Video with ID {video_info['youtube_id']} already exists"
-            raise ValueError(msg)
+        existing_video = existing.scalar_one_or_none()
+        if existing_video:
+            # Return existing video instead of throwing error
+            return VideoResponse.model_validate(existing_video)
 
         # Create video record
         video = Video(
@@ -105,24 +107,24 @@ class VideoService:
             pages=pages,
         )
 
-    async def get_video(self, db: AsyncSession, video_id: int) -> VideoResponse:
-        """Get a single video by ID."""
-        result = await db.execute(select(Video).where(Video.id == video_id))
+    async def get_video(self, db: AsyncSession, video_uuid: str) -> VideoResponse:
+        """Get a single video by UUID."""
+        result = await db.execute(select(Video).where(Video.uuid == video_uuid))
         video = result.scalar_one_or_none()
 
         if not video:
-            msg = f"Video with ID {video_id} not found"
+            msg = f"Video with UUID {video_uuid} not found"
             raise ValueError(msg)
 
         return VideoResponse.model_validate(video)
 
-    async def update_video(self, db: AsyncSession, video_id: int, update_data: VideoUpdate) -> VideoResponse:
+    async def update_video(self, db: AsyncSession, video_uuid: str, update_data: VideoUpdate) -> VideoResponse:
         """Update video metadata."""
-        result = await db.execute(select(Video).where(Video.id == video_id))
+        result = await db.execute(select(Video).where(Video.uuid == video_uuid))
         video = result.scalar_one_or_none()
 
         if not video:
-            msg = f"Video with ID {video_id} not found"
+            msg = f"Video with UUID {video_uuid} not found"
             raise ValueError(msg)
 
         # Update fields
@@ -143,23 +145,24 @@ class VideoService:
     async def update_progress(
         self,
         db: AsyncSession,
-        video_id: int,
+        video_uuid: str,
         progress_data: VideoProgressUpdate,
     ) -> VideoResponse:
         """Update video watch progress."""
-        result = await db.execute(select(Video).where(Video.id == video_id))
+        result = await db.execute(select(Video).where(Video.uuid == video_uuid))
         video = result.scalar_one_or_none()
 
         if not video:
-            msg = f"Video with ID {video_id} not found"
+            msg = f"Video with UUID {video_uuid} not found"
             raise ValueError(msg)
 
         # Update progress
         video.last_position = progress_data.last_position
 
-        # Calculate completion percentage
+        # Calculate completion percentage and round to 1 decimal place
         if video.duration > 0:
-            video.completion_percentage = min((progress_data.last_position / video.duration) * 100, 100.0)
+            percentage = (progress_data.last_position / video.duration) * 100
+            video.completion_percentage = round(min(percentage, 100.0), 1)
         else:
             video.completion_percentage = 0.0
 
@@ -168,13 +171,13 @@ class VideoService:
 
         return VideoResponse.model_validate(video)
 
-    async def delete_video(self, db: AsyncSession, video_id: int) -> None:
+    async def delete_video(self, db: AsyncSession, video_uuid: str) -> None:
         """Delete a video."""
-        result = await db.execute(select(Video).where(Video.id == video_id))
+        result = await db.execute(select(Video).where(Video.uuid == video_uuid))
         video = result.scalar_one_or_none()
 
         if not video:
-            msg = f"Video with ID {video_id} not found"
+            msg = f"Video with UUID {video_uuid} not found"
             raise ValueError(msg)
 
         await db.delete(video)
@@ -198,6 +201,15 @@ class VideoService:
                     raise ValueError(msg)
 
                 # Extract relevant fields
+                # Parse upload_date from YYYYMMDD format to datetime
+                upload_date_str = info.get("upload_date")
+                published_at = None
+                if upload_date_str and len(upload_date_str) == 8:
+                    try:
+                        published_at = datetime.strptime(upload_date_str, "%Y%m%d")
+                    except ValueError:
+                        logger.warning(f"Failed to parse upload date: {upload_date_str}")
+
                 return {
                     "youtube_id": info.get("id", ""),
                     "url": url,
@@ -208,7 +220,7 @@ class VideoService:
                     "thumbnail_url": info.get("thumbnail"),
                     "description": info.get("description"),
                     "tags": info.get("tags", []),
-                    "published_at": info.get("upload_date"),  # May need date parsing
+                    "published_at": published_at,
                 }
         except Exception as e:
             logger.exception(f"Error fetching video info: {e}")

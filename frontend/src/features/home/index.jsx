@@ -38,6 +38,7 @@ import { fetchContentData, processContentData } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useToast } from "@/hooks/use-toast"
 import { YoutubeCard } from "./components/YoutubeCard"
+import { videoApi } from "@/services/videoApi"
 import { FlashcardDeckCard } from "./components/FlashcardDeckCard"
 import { BookCard } from "./components/BookCard"
 import { RoadmapCard } from "./components/RoadmapCard"
@@ -58,6 +59,7 @@ export default function HomePage() {
   const [bookAuthor, setBookAuthor] = useState("")
   const [isExtractingMetadata, setIsExtractingMetadata] = useState(false)
   const [youtubeUrl, setYoutubeUrl] = useState("")
+  const [isAddingVideo, setIsAddingVideo] = useState(false)
   const [isFabExpanded, setIsFabExpanded] = useState(false)
   const [showFlashcardDialog, setShowFlashcardDialog] = useState(false)
   const [newDeckTitle, setNewDeckTitle] = useState("")
@@ -320,13 +322,15 @@ export default function HomePage() {
       return
     }
 
+    if (isAddingVideo) return // Prevent duplicate submissions
+
+    setIsAddingVideo(true)
     try {
-      // TODO: Call YouTube API when implemented
-      // const response = await api.post("/videos", { url: youtubeUrl })
+      const response = await videoApi.createVideo(youtubeUrl)
       
       toast({
         title: "Video Added!",
-        description: "YouTube video has been added to your library.",
+        description: `"${response.title}" has been added to your library.`,
       })
       
       setYoutubeUrl("")
@@ -334,16 +338,18 @@ export default function HomePage() {
       setShowYoutubeDialog(false)
       setIsYoutubeMode(false)
       
-      // Refresh content list when API is available
-      // const data = await fetchContentData()
-      // const { content } = processContentData(data)
-      // setContentItems(content)
+      // Refresh content list
+      const data = await fetchContentData()
+      const { content } = processContentData(data)
+      setContentItems(content)
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to add video. Please try again.",
+        description: error.message || "Failed to add video. Please try again.",
         variant: "destructive",
       })
+    } finally {
+      setIsAddingVideo(false)
     }
   }
 
@@ -817,10 +823,10 @@ export default function HomePage() {
               </Button>
               <Button 
                 onClick={handleYoutubeAdd} 
-                disabled={!youtubeUrl.trim()}
+                disabled={!youtubeUrl.trim() || isAddingVideo}
                 className="bg-red-500 hover:bg-red-600 text-white"
               >
-                Add Video
+                {isAddingVideo ? "Adding..." : "Add Video"}
               </Button>
             </SheetFooter>
           </SheetContent>

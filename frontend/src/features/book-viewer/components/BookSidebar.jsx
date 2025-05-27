@@ -11,7 +11,7 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
 
   // Transform table of contents into a flattened structure
   const chapters = book.table_of_contents || [];
-  
+
   // If no table of contents is available, show a message
   if (!chapters.length) {
     return (
@@ -34,14 +34,12 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
 
   const handleToggleChapter = (chapterIndex) => {
     setExpandedChapters((prev) =>
-      prev.includes(chapterIndex) 
-        ? prev.filter((idx) => idx !== chapterIndex) 
-        : [...prev, chapterIndex]
+      prev.includes(chapterIndex) ? prev.filter((idx) => idx !== chapterIndex) : [...prev, chapterIndex]
     );
   };
 
   const handleSectionClick = (sectionId, pageNumber) => {
-    setCompletedSections(prev => new Set([...prev, sectionId]));
+    setCompletedSections((prev) => new Set([...prev, sectionId]));
     if (onChapterClick) {
       onChapterClick(pageNumber);
     }
@@ -49,7 +47,7 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
 
   const getChapterProgress = (chapter) => {
     if (!chapter.children || chapter.children.length === 0) return 0;
-    const completedCount = chapter.children.filter(s => completedSections.has(s.id)).length;
+    const completedCount = chapter.children.filter((s) => completedSections.has(s.id)).length;
     return (completedCount / chapter.children.length) * 100;
   };
 
@@ -64,7 +62,7 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
   // Calculate overall progress
   const countAllSections = (chapters) => {
     let count = 0;
-    chapters.forEach(ch => {
+    chapters.forEach((ch) => {
       if (ch.children && ch.children.length > 0) {
         count += ch.children.length;
       } else {
@@ -73,7 +71,7 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
     });
     return count;
   };
-  
+
   const totalSections = countAllSections(chapters);
   const completedCount = completedSections.size;
   const overallProgress = totalSections > 0 ? Math.round((completedCount / totalSections) * 100) : 0;
@@ -107,18 +105,16 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
           isOpen ? "opacity-100" : "opacity-0"
         }`}
       >
-        <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-2">
-          Table of Contents
-        </h4>
-        
+        <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-2">Table of Contents</h4>
+
         {chapters.map((chapter, chapterIndex) => {
           const isExpanded = expandedChapters.includes(chapterIndex);
           const chapterProgress = getChapterProgress(chapter);
           const isCurrentChapter = isPageInRange(currentPage, chapter);
-          
+
           return (
-            <div 
-              key={chapter.id} 
+            <div
+              key={chapter.id}
               className={`rounded-2xl border ${
                 isCurrentChapter ? "border-emerald-200 bg-emerald-50/50" : "border-zinc-200 bg-white"
               } shadow-sm overflow-hidden`}
@@ -201,7 +197,7 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
                   {chapter.children.map((section) => {
                     const isCompleted = completedSections.has(section.id);
                     const isCurrentSection = currentPage === section.page;
-                    
+
                     return (
                       <li key={section.id} className="flex items-start gap-3">
                         <button

@@ -66,7 +66,7 @@ async def fetch_youtube_videos(search: str | None = None) -> list[YoutubeContent
 
             items.extend(
                 YoutubeContent(
-                    id=str(video.id),
+                    id=str(video.uuid),
                     title=video.title,
                     description=video.description or "",
                     channel_name=video.channel,
@@ -75,7 +75,7 @@ async def fetch_youtube_videos(search: str | None = None) -> list[YoutubeContent
                     last_accessed_date=video.updated_at or video.created_at,
                     created_date=video.created_at,
                     progress=video.completion_percentage or 0,
-                    tags=video.tags.split(",") if video.tags else [],
+                    tags=_safe_parse_tags(video.tags),
                 )
                 for video in videos
             )

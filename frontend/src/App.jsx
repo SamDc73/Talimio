@@ -14,6 +14,7 @@ import { CodeBlockTest } from "@/components/code-block-test";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ChatSidebarProvider, ChatSidebar } from "./components/header/MainHeader";
 import { BookViewer } from "./features/book-viewer";
+import { VideoViewer } from "./features/video-viewer";
 
 function RoadmapPage() {
   const { roadmapId } = useParams();
@@ -49,6 +50,7 @@ export default function App() {
           <Routes>
             <Route path="/roadmap/:roadmapId" element={<RoadmapPage />} />
             <Route path="/books/:bookId" element={<BookViewer />} />
+            <Route path="/videos/:videoId" element={<VideoViewer />} />
             <Route path="/code-test" element={<CodeBlockTest />} />
             <Route
               path="/"

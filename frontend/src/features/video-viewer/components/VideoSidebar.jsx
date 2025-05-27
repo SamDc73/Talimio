@@ -1,0 +1,243 @@
+import { useState, useEffect } from 'react'
+import { CheckCircle, Circle, ChevronRight, Clock, FileText } from 'lucide-react'
+import { useSidebar } from '@/features/navigation/SidebarContext'
+
+export function VideoSidebar({ video, currentTime, onSeek }) {
+  const { isOpen } = useSidebar()
+  const [chapters, setChapters] = useState([])
+  const [completedChapters, setCompletedChapters] = useState(new Set())
+  const [activeChapter, setActiveChapter] = useState(null)
+
+  useEffect(() => {
+    if (video?.description) {
+      const extractedChapters = extractChapters(video.description)
+      setChapters(extractedChapters)
+    }
+  }, [video])
+
+  useEffect(() => {
+    if (chapters.length > 0 && currentTime !== undefined) {
+      // Find active chapter based on current time
+      const active = chapters.findIndex((chapter, index) => {
+        const nextChapter = chapters[index + 1]
+        return currentTime >= chapter.timestamp && 
+               (!nextChapter || currentTime < nextChapter.timestamp)
+      })
+      setActiveChapter(active)
+    }
+  }, [currentTime, chapters])
+
+  const extractChapters = (description) => {
+    if (!description) return []
+    
+    // Common timestamp patterns in YouTube descriptions
+    const timestampRegex = /(?:^|\n)(?:[^\d]*)?(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–—]?\s*(.+?)(?=\n|$)/gm
+    
+    const chapters = []
+    let match
+    
+    match = timestampRegex.exec(description)
+    while (match !== null) {
+      const timeStr = match[1]
+      const title = match[2].trim()
+      
+      // Convert timestamp to seconds
+      const parts = timeStr.split(':').map(Number)
+      let timestamp = 0
+      
+      if (parts.length === 3) {
+        timestamp = parts[0] * 3600 + parts[1] * 60 + parts[2]
+      } else if (parts.length === 2) {
+        timestamp = parts[0] * 60 + parts[1]
+      }
+      
+      // Clean up the title
+      const cleanTitle = title
+        .replace(/^[^\w\s]+\s*/, '')
+        .replace(/^\([^)]+\)\s*/, '')
+        .trim()
+      
+      if (cleanTitle && timestamp >= 0) {
+        chapters.push({
+          id: `chapter-${timestamp}`,
+          timestamp,
+          timeStr,
+          title: cleanTitle
+        })
+      }
+      
+      match = timestampRegex.exec(description)
+    }
+    
+    return chapters.sort((a, b) => a.timestamp - b.timestamp)
+  }
+
+  const handleChapterClick = (chapter) => {
+    if (onSeek) {
+      onSeek(chapter.timestamp)
+    }
+  }
+
+  const toggleChapterCompletion = (chapterId) => {
+    setCompletedChapters(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(chapterId)) {
+        newSet.delete(chapterId)
+      } else {
+        newSet.add(chapterId)
+      }
+      return newSet
+    })
+  }
+
+  const getProgress = () => {
+    if (chapters.length === 0) return 0
+    return Math.round((completedChapters.size / chapters.length) * 100)
+  }
+
+  if (!video) return null
+
+  return (
+    <aside
+      className={`fixed-sidebar flex flex-col bg-white border-r border-zinc-200 transition-all duration-300 ease-in-out ${
+        isOpen ? "w-[320px] opacity-100 translate-x-0" : "w-0 opacity-0 -translate-x-full"
+      }`}
+      style={{ boxShadow: isOpen ? "0 4px 20px rgba(0, 0, 0, 0.05)" : "none" }}
+    >
+      {/* Progress indicator */}
+      <div
+        className={`flex items-center gap-2 px-4 pt-20 transition-opacity duration-300 ${
+          isOpen ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full px-3 py-1">
+          {getProgress()}% Completed
+        </span>
+      </div>
+
+      {/* Video info */}
+      <div className={`px-4 py-3 border-b border-zinc-200 transition-opacity duration-300 ${
+        isOpen ? "opacity-100" : "opacity-0"
+      }`}>
+        <h3 className="text-sm font-semibold text-zinc-800 truncate">{video.title}</h3>
+        <p className="text-xs text-zinc-500 mt-1">{video.channel}</p>
+      </div>
+
+      {/* Chapters list */}
+      <nav
+        className={`flex-1 p-3 overflow-y-auto transition-opacity duration-300 ${
+          isOpen ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        {chapters.length === 0 ? (
+          <div className="text-center text-zinc-500 mt-8">
+            <Clock className="w-12 h-12 mx-auto mb-4 text-zinc-300" />
+            <p className="text-sm">No chapters found</p>
+            <p className="text-xs mt-2">Chapters are extracted from the video description</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
+              <div className="p-3">
+                <h4 className="text-sm font-semibold text-zinc-700 mb-2 flex items-center">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Chapters
+                </h4>
+                <div className="space-y-1">
+                  {chapters.map((chapter, index) => {
+                    const isCompleted = completedChapters.has(chapter.id)
+                    const isActive = activeChapter === index
+                    
+                    return (
+                      <div
+                        key={chapter.id}
+                        className={`flex items-start gap-3 p-2 rounded-lg transition-all duration-200 ${
+                          isActive ? 'bg-red-50' : 'hover:bg-zinc-50'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleChapterCompletion(chapter.id)}
+                          className="mt-0.5 transition-all duration-200"
+                        >
+                          {isCompleted ? (
+                            <CheckCircle className="w-5 h-5 text-emerald-500" />
+                          ) : (
+                            <Circle className="w-5 h-5 text-zinc-400 hover:text-zinc-600" />
+                          )}
+                        </button>
+                        
+                        <div className="flex-1 min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => handleChapterClick(chapter)}
+                            className="w-full text-left"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className={`text-xs font-mono ${
+                                isActive ? 'text-red-600' : 'text-zinc-500'
+                              }`}>
+                                {chapter.timeStr}
+                              </span>
+                              <h5 className={`text-sm font-medium truncate ${
+                                isCompleted ? 'text-emerald-700' : isActive ? 'text-red-900' : 'text-zinc-700'
+                              }`}>
+                                {chapter.title}
+                              </h5>
+                            </div>
+                            
+                            {isActive && currentTime !== undefined && (
+                              <div className="mt-2">
+                                <div className="h-1 bg-zinc-200 rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-red-500 transition-all duration-300"
+                                    style={{
+                                      width: `${Math.min(
+                                        100,
+                                        ((currentTime - chapter.timestamp) / 
+                                         ((chapters[index + 1]?.timestamp || video.duration) - chapter.timestamp)) * 100
+                                      )}%`
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </nav>
+
+      {/* Footer with video duration */}
+      <div className={`px-4 py-3 border-t border-zinc-200 bg-zinc-50 transition-opacity duration-300 ${
+        isOpen ? "opacity-100" : "opacity-0"
+      }`}>
+        <div className="text-xs text-zinc-600">
+          <p>Duration: {formatDuration(video.duration)}</p>
+          {chapters.length > 0 && (
+            <p className="text-zinc-500 mt-1">{chapters.length} chapters</p>
+          )}
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+function formatDuration(seconds) {
+  if (!seconds) return "Unknown"
+  
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = Math.floor(seconds % 60)
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`
+  }
+  return `${minutes}m ${secs}s`
+}
