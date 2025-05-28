@@ -96,18 +96,28 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
               onToggle={() => handleToggleChapter(chapterIndex)}
               isActive={isCurrentChapter}
               headerContent={
-                <button
-                  type="button"
+                <div
                   onClick={(e) => {
                     e.stopPropagation();
                     if (onChapterClick) {
                       onChapterClick(chapter.page || chapter.start_page);
                     }
                   }}
-                  className="cursor-pointer hover:text-emerald-700 transition-colors focus:outline-none"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (onChapterClick) {
+                        onChapterClick(chapter.page || chapter.start_page);
+                      }
+                    }
+                  }}
+                  role="link"
+                  tabIndex={0}
+                  className="cursor-pointer hover:text-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded"
                 >
                   <ProgressCircle number={chapterIndex + 1} progress={chapterProgress} />
-                </button>
+                </div>
               }
             >
               {chapter.children && chapter.children.length > 0 && (
