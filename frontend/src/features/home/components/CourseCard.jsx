@@ -1,15 +1,9 @@
-import { motion } from "framer-motion"
 import { Sparkles, ChevronRight, MoreHorizontal } from "lucide-react"
 import { Link } from "react-router-dom"
 
-export function CourseCard({ course, index }) {
+export function CourseCard({ course }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: 0.1 * index }}
-      className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6"
-    >
+    <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6">
       {/* Header with badge and menu */}
       <div className="flex justify-between items-start mb-4">
         <div className="bg-teal-50 text-teal-600 text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1">
@@ -70,6 +64,6 @@ export function CourseCard({ course, index }) {
           <ChevronRight className="h-4 w-4" />
         </Link>
       </div>
-    </motion.div>
+    </div>
   )
 }

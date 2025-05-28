@@ -1,18 +1,12 @@
-import { motion } from "framer-motion"
 import { Link } from "react-router-dom"
 import { ChevronRight, Layers, MoreHorizontal } from "lucide-react"
 
-export function FlashcardDeckCard({ deck, index }) {
+export function FlashcardDeckCard({ deck }) {
   // Calculate progress percentage based on mastery
   const progressPercentage = (deck.masteryLevel / 5) * 100
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: 0.1 * index }}
-      className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6"
-    >
+    <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6">
       {/* Header with badge and menu */}
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-1.5 text-amber-600">
@@ -73,6 +67,6 @@ export function FlashcardDeckCard({ deck, index }) {
           <ChevronRight className="h-4 w-4" />
         </Link>
       </div>
-    </motion.div>
+    </div>
   )
 }

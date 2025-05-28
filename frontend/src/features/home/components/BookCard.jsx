@@ -1,19 +1,13 @@
-import { motion } from "framer-motion"
 import { Link } from "react-router-dom"
 import { BookOpen, ChevronRight, MoreHorizontal } from "lucide-react"
 
-export function BookCard({ book, index }) {
+export function BookCard({ book }) {
   const currentPage = book.currentPage || 0
   const totalPages = book.pageCount || 0
   const readingProgress = totalPages > 0 ? (currentPage / totalPages) * 100 : 0
   
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: 0.1 * index }}
-      className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6"
-    >
+    <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6">
       {/* Header with badge and menu */}
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-1.5 text-indigo-600">
@@ -74,6 +68,6 @@ export function BookCard({ book, index }) {
           <ChevronRight className="h-4 w-4" />
         </Link>
       </div>
-    </motion.div>
+    </div>
   )
 }
