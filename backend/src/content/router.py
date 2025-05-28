@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from src.content.schemas import ContentListResponse, ContentType
-from src.content.service import list_all_content
+from src.content.service_fast import list_content_fast
 
 
 router = APIRouter(prefix="/api/v1/content", tags=["content"])
@@ -20,8 +20,9 @@ async def get_all_content(
     List all content across different types (videos, flashcards, books, roadmaps).
 
     Returns a unified list of content items with consistent structure.
+    Uses ultra-optimized single query with database-level sorting and pagination.
     """
-    return await list_all_content(
+    return await list_content_fast(
         search=search,
         content_type=content_type,
         page=page,

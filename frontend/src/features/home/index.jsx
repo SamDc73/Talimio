@@ -667,28 +667,30 @@ export default function HomePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
           >
-            {isLoading ? (
-              <div className="flex justify-center items-center py-20">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredAndSortedContent.length > 0 ? (
-                  filteredAndSortedContent.map((item, index) => {
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {isLoading ? (
+                  // Show skeleton cards while loading
+                  Array.from({ length: 6 }).map((_, index) => (
+                    <div key={index} className="animate-pulse">
+                      <div className="bg-gray-200 dark:bg-gray-700 rounded-xl h-64" />
+                    </div>
+                  ))
+                ) : filteredAndSortedContent.length > 0 ? (
+                  filteredAndSortedContent.map((item) => {
                     if (item.type === "course") {
-                      return <CourseCard key={item.id} course={item} index={index} />
+                      return <CourseCard key={item.id} course={item} />
                     }
                     if (item.type === "youtube") {
-                      return <YoutubeCard key={item.id} video={item} index={index} />
+                      return <YoutubeCard key={item.id} video={item} />
                     }
                     if (item.type === "flashcards") {
-                      return <FlashcardDeckCard key={item.id} deck={item} index={index} />
+                      return <FlashcardDeckCard key={item.id} deck={item} />
                     }
                     if (item.type === "book") {
-                      return <BookCard key={item.id} book={item} index={index} />
+                      return <BookCard key={item.id} book={item} />
                     }
                     if (item.type === "roadmap") {
-                      return <RoadmapCard key={item.id} roadmap={item} index={index} />
+                      return <RoadmapCard key={item.id} roadmap={item} />
                     }
                     return null
                   })
@@ -718,7 +720,6 @@ export default function HomePage() {
                   </div>
                 )}
               </div>
-            )}
           </motion.div>
         </div>
 
