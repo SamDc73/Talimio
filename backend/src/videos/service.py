@@ -50,6 +50,50 @@ class VideoService:
         await db.commit()
         await db.refresh(video)
 
+        # Trigger automatic tagging
+        try:
+            from src.ai.client import ModelManager
+            from src.tagging.service import TaggingService
+            
+            model_manager = ModelManager()
+            tagging_service = TaggingService(db, model_manager)
+            
+            # Build content preview
+            content_preview = []
+            content_preview.append(f"Channel: {video.channel}")
+            
+            if video.description:
+                # Take first 1000 characters
+                desc_preview = video.description[:1000]
+                if len(video.description) > 1000:
+                    desc_preview += "..."
+                content_preview.append(f"Description: {desc_preview}")
+            
+            # Add YouTube tags if available
+            if video_info.get("tags"):
+                content_preview.append(f"YouTube tags: {', '.join(video_info['tags'][:10])}")
+            
+            # Generate and store tags
+            tags = await tagging_service.tag_content(
+                content_id=video.uuid,
+                content_type="video",
+                title=video.title,
+                content_preview="\n\n".join(content_preview),
+            )
+            
+            # Update video's tags field with both YouTube and generated tags
+            if tags:
+                existing_tags = video_info.get("tags", [])
+                all_tags = list(set(existing_tags + tags))  # Combine and deduplicate
+                video.tags = json.dumps(all_tags)
+                await db.commit()
+                
+            logger.info(f"Successfully tagged video {video.uuid} with tags: {tags}")
+            
+        except Exception as e:
+            # Don't fail video creation if tagging fails
+            logger.exception(f"Failed to tag video {video.uuid}: {e}")
+
         return VideoResponse.model_validate(video)
 
     async def get_videos(

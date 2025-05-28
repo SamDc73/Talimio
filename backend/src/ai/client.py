@@ -45,6 +45,13 @@ class LessonGenerationError(AIError):
         super().__init__(msg)
 
 
+class TagGenerationError(AIError):
+    """Exception raised when tag generation fails."""
+
+    def __init__(self, msg: str = "Failed to generate tags") -> None:
+        super().__init__(msg)
+
+
 class ModelManager:
     """Manage AI model interactions for the learning roadmap platform."""
 
@@ -328,6 +335,121 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
         except Exception as e:
             self._logger.exception("Error generating node content")
             raise NodeCustomizationError from e
+
+    async def generate_content_tags(
+        self,
+        content_type: str,
+        title: str,
+        content_preview: str,
+    ) -> list[str]:
+        """Generate subject-based tags for content using LiteLLM.
+
+        Args:
+            content_type: Type of content (book, video, roadmap)
+            title: Title of the content
+            content_preview: Preview or excerpt of the content
+
+        Returns
+        -------
+            List of generated tags
+
+        Raises
+        ------
+            TagGenerationError: If tag generation fails
+        """
+        from src.ai.constants import CONTENT_TAGGING_PROMPT
+
+        prompt = CONTENT_TAGGING_PROMPT.format(
+            content_type=content_type,
+            title=title,
+            content_preview=content_preview[:3000],  # Limit preview length
+        )
+
+        messages = [
+            {"role": "system", "content": "You are an expert at categorizing educational content."},
+            {"role": "user", "content": prompt},
+        ]
+
+        try:
+            result = await self._get_completion(messages, expect_list=True)
+            if not isinstance(result, list):
+                msg = "Expected list response from AI model"
+                raise TagGenerationError(msg)
+
+            # Normalize tags: lowercase, hyphenated
+            normalized_tags = []
+            for tag in result:
+                if isinstance(tag, str):
+                    normalized = tag.lower().strip().replace(" ", "-")
+                    # Remove any special characters except hyphens
+                    normalized = re.sub(r"[^a-z0-9-]", "", normalized)
+                    if normalized:
+                        normalized_tags.append(normalized)
+
+            return normalized_tags[:7]  # Limit to max 7 tags
+
+        except Exception as e:
+            self._logger.exception("Error generating content tags")
+            raise TagGenerationError from e
+
+    async def generate_tags_with_confidence(
+        self,
+        content_type: str,
+        title: str,
+        content_preview: str,
+    ) -> list[dict[str, Any]]:
+        """Generate tags with confidence scores.
+
+        Args:
+            content_type: Type of content (book, video, roadmap)
+            title: Title of the content
+            content_preview: Preview or excerpt of the content
+
+        Returns
+        -------
+            List of dicts with 'tag' and 'confidence' keys
+
+        Raises
+        ------
+            TagGenerationError: If tag generation fails
+        """
+        from src.ai.constants import CONTENT_TAGGING_WITH_CONFIDENCE_PROMPT
+
+        prompt = CONTENT_TAGGING_WITH_CONFIDENCE_PROMPT.format(
+            content_type=content_type,
+            title=title,
+            content_preview=content_preview[:3000],
+        )
+
+        messages = [
+            {"role": "system", "content": "You are an expert at categorizing educational content."},
+            {"role": "user", "content": prompt},
+        ]
+
+        try:
+            result = await self._get_completion(messages, expect_list=True)
+            if not isinstance(result, list):
+                msg = "Expected list response from AI model"
+                raise TagGenerationError(msg)
+
+            # Process and normalize results
+            processed_tags = []
+            for item in result:
+                if isinstance(item, dict) and "tag" in item:
+                    tag = str(item["tag"]).lower().strip().replace(" ", "-")
+                    tag = re.sub(r"[^a-z0-9-]", "", tag)
+                    confidence = float(item.get("confidence", 0.8))
+                    if tag:
+                        processed_tags.append({
+                            "tag": tag,
+                            "confidence": min(max(confidence, 0.0), 1.0),
+                        })
+
+            return processed_tags[:7]
+
+        except Exception as e:
+            self._logger.exception("Error generating tags with confidence")
+            raise TagGenerationError from e
 
 
 async def create_lesson_body(node_meta: dict[str, Any]) -> str:
