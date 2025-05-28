@@ -12,9 +12,10 @@ const PDFViewer = forwardRef(({ url, bookInfo, onPageChange, zoom = 100, onZoomC
   const [pageNumber, setPageNumber] = useState(1);
   const [visiblePages, setVisiblePages] = useState(new Set([1, 2, 3]));
   const [pageWidth, setPageWidth] = useState(null);
+  const [isZooming, setIsZooming] = useState(false);
   const containerRef = useRef(null);
-  const documentRef = useRef(null);
   const pagesRef = useRef({});
+  const zoomPointRef = useRef(null);
   const scale = zoom / 100;
 
   // Memoize document options to prevent re-renders
@@ -67,46 +68,100 @@ const PDFViewer = forwardRef(({ url, bookInfo, onPageChange, zoom = 100, onZoomC
     scrollToPage
   }), [calculateFitToWidth, scrollToPage]);
 
-  // Handle wheel zoom and keyboard detection
+  // Handle wheel zoom
   useEffect(() => {
     const handleWheel = (e) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
+        
+        const container = containerRef.current;
+        if (!container) return;
+        
+        // Get mouse position relative to the viewport
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        // Get the current scroll position
+        const scrollLeft = container.scrollLeft;
+        const scrollTop = container.scrollTop;
+        
+        // Calculate the actual point in the document under the mouse
+        // This is the absolute position in the unscaled document
+        const docX = (scrollLeft + mouseX) / scale;
+        const docY = (scrollTop + mouseY) / scale;
+        
+        // Store all needed info for the scroll adjustment
+        zoomPointRef.current = { 
+          docX, 
+          docY, 
+          mouseX, 
+          mouseY,
+          prevScale: scale
+        };
+        
+        // Calculate new zoom
         const delta = e.deltaY > 0 ? -10 : 10;
         const newZoom = Math.max(50, Math.min(300, zoom + delta));
+        
         if (onZoomChange) {
+          setIsZooming(true);
           onZoomChange(newZoom);
+          
+          // Clear zooming state after animation
+          setTimeout(() => setIsZooming(false), 300);
         }
-      }
-    };
-
-    const handleKeyDown = (e) => {
-      if (e.ctrlKey || e.metaKey) {
-        containerRef.current?.classList.add('zoom-ready');
-      }
-    };
-
-    const handleKeyUp = (e) => {
-      if (!e.ctrlKey && !e.metaKey) {
-        containerRef.current?.classList.remove('zoom-ready');
       }
     };
 
     const container = containerRef.current;
     if (container) {
       container.addEventListener('wheel', handleWheel, { passive: false });
-      document.addEventListener('keydown', handleKeyDown);
-      document.addEventListener('keyup', handleKeyUp);
     }
 
     return () => {
       if (container) {
         container.removeEventListener('wheel', handleWheel);
       }
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('keyup', handleKeyUp);
     };
-  }, [zoom, onZoomChange]);
+  }, [zoom, onZoomChange, scale]);
+
+  // Apply scroll adjustment after zoom changes
+  useEffect(() => {
+    if (zoomPointRef.current && containerRef.current) {
+      const { docX, docY, mouseX, mouseY, prevScale } = zoomPointRef.current;
+      const container = containerRef.current;
+      
+      // Only proceed if scale actually changed
+      if (prevScale === scale) return;
+      
+      // Disable smooth scrolling temporarily
+      const originalScrollBehavior = container.style.scrollBehavior;
+      container.style.scrollBehavior = 'auto';
+      
+      // Double RAF to ensure DOM has updated with new scale
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          // Calculate new scroll position
+          // The document point (docX, docY) should now be at position (mouseX, mouseY) in the viewport
+          const newScrollLeft = (docX * scale) - mouseX;
+          const newScrollTop = (docY * scale) - mouseY;
+          
+          // Apply the scroll position
+          container.scrollLeft = Math.max(0, newScrollLeft);
+          container.scrollTop = Math.max(0, newScrollTop);
+          
+          // Restore smooth scrolling
+          setTimeout(() => {
+            container.style.scrollBehavior = originalScrollBehavior;
+          }, 50);
+          
+          // Clear the ref
+          zoomPointRef.current = null;
+        });
+      });
+    }
+  }, [scale]);
 
   // Intersection Observer for efficient page visibility detection
   useEffect(() => {
@@ -120,11 +175,11 @@ const PDFViewer = forwardRef(({ url, bookInfo, onPageChange, zoom = 100, onZoomC
 
     const observer = new IntersectionObserver((entries) => {
       const newVisiblePages = new Set();
-      let mostVisiblePage = pageNumber;
+      let mostVisiblePage = 1;
       let maxVisibleHeight = 0;
 
       // First pass: collect all visible pages
-      entries.forEach(entry => {
+      for (const entry of entries) {
         const pageNum = Number.parseInt(entry.target.dataset.page, 10);
         
         if (entry.isIntersecting) {
@@ -140,7 +195,7 @@ const PDFViewer = forwardRef(({ url, bookInfo, onPageChange, zoom = 100, onZoomC
             mostVisiblePage = pageNum;
           }
         }
-      });
+      }
 
       // Update visible pages if there are changes
       if (newVisiblePages.size > 0) {
@@ -150,14 +205,14 @@ const PDFViewer = forwardRef(({ url, bookInfo, onPageChange, zoom = 100, onZoomC
           
           // Remove pages that are too far away (more than 3 pages)
           const filtered = new Set();
-          combined.forEach(page => {
+          for (const page of combined) {
             const isNearVisible = [...newVisiblePages].some(
               visiblePage => Math.abs(page - visiblePage) <= 3
             );
             if (isNearVisible) {
               filtered.add(page);
             }
-          });
+          }
           
           return filtered;
         });
@@ -176,7 +231,9 @@ const PDFViewer = forwardRef(({ url, bookInfo, onPageChange, zoom = 100, onZoomC
     requestAnimationFrame(() => {
       const pageElements = containerRef.current?.querySelectorAll('.pdf-page-wrapper');
       if (pageElements) {
-        pageElements.forEach(el => observer.observe(el));
+        for (const el of pageElements) {
+        observer.observe(el);
+      }
       }
     });
 
@@ -185,34 +242,11 @@ const PDFViewer = forwardRef(({ url, bookInfo, onPageChange, zoom = 100, onZoomC
     };
   }, [numPages, onPageChange]); // Remove pageNumber from deps to avoid re-creating observer
 
-  const goToPrevPage = useCallback(() => {
-    const newPage = Math.max(pageNumber - 1, 1);
-    scrollToPage(newPage);
-  }, [pageNumber, scrollToPage]);
-
-  const goToNextPage = useCallback(() => {
-    const newPage = Math.min(pageNumber + 1, numPages);
-    scrollToPage(newPage);
-  }, [pageNumber, numPages, scrollToPage]);
-
-  const handleSliderChange = useCallback((e) => {
-    const newPage = Number.parseInt(e.target.value, 10);
-    scrollToPage(newPage);
-  }, [scrollToPage]);
+  // Removed unused page navigation functions
 
   return (
     <div className="pdf-viewer-container">
-      <div className="pdf-viewer-wrapper" ref={containerRef}>
-        <div 
-          ref={documentRef}
-          style={{
-            transform: `scale(${scale})`,
-            transformOrigin: 'center top',
-            transition: 'transform 0.2s ease-out',
-            width: 'max-content',
-            margin: '0 auto'
-          }}
-        >
+      <div className={`pdf-viewer-wrapper ${isZooming ? 'is-zooming' : ''}`} ref={containerRef}>
           <Document
             file={url}
             onLoadSuccess={onDocumentLoadSuccess}
@@ -224,7 +258,9 @@ const PDFViewer = forwardRef(({ url, bookInfo, onPageChange, zoom = 100, onZoomC
           {numPages && Array.from({ length: numPages }, (_, i) => i + 1).map(pageNum => (
             <div 
               key={pageNum} 
-              ref={el => pagesRef.current[pageNum] = el}
+              ref={el => {
+                if (el) pagesRef.current[pageNum] = el;
+              }}
               className="pdf-page-wrapper"
               data-page={pageNum}
             >
@@ -232,23 +268,26 @@ const PDFViewer = forwardRef(({ url, bookInfo, onPageChange, zoom = 100, onZoomC
                 <Page
                   pageNumber={pageNum}
                   className="pdf-page"
+                  scale={scale}
                   renderTextLayer={true}
                   renderAnnotationLayer={false}
                   loading={
-                    <div className="pdf-page-placeholder">
+                    <div className="pdf-page-placeholder" style={{ transform: `scale(${scale})` }}>
                       <div className="pdf-page-spinner">Loading page {pageNum}...</div>
                     </div>
                   }
                 />
               ) : (
-                <div className="pdf-page-placeholder">
+                <div className="pdf-page-placeholder" style={{ 
+                  minHeight: `${800 * scale}px`,
+                  width: pageWidth ? `${pageWidth * scale}px` : `${600 * scale}px`
+                }}>
                   <div className="pdf-page-number">Page {pageNum}</div>
                 </div>
               )}
             </div>
           ))}
           </Document>
-        </div>
       </div>
     </div>
   );
