@@ -39,6 +39,11 @@ async def run_migrations(engine: AsyncEngine) -> None:
     """Run all pending migrations."""
     try:
         await add_table_of_contents_column(engine)
+        
+        # Run tagging migrations
+        from .add_tagging_columns import run_tagging_migrations
+        await run_tagging_migrations(engine)
+        
         logger.info("All migrations completed successfully")
     except Exception as e:
         logger.exception(f"Migration failed: {e}")

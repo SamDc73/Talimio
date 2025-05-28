@@ -148,6 +148,45 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
             await session.commit()
             await session.refresh(book)
 
+            # Trigger automatic tagging
+            try:
+                from src.ai.client import ModelManager
+                from src.tagging.service import TaggingService
+                
+                model_manager = ModelManager()
+                tagging_service = TaggingService(session, model_manager)
+                
+                # Extract content for tagging
+                content_preview = []
+                if book.description:
+                    content_preview.append(f"Description: {book.description}")
+                if metadata.table_of_contents:
+                    # Format TOC for tagging
+                    toc_items = []
+                    for item in metadata.table_of_contents[:10]:  # First 10 items
+                        toc_items.append(item.get("title", ""))
+                    if toc_items:
+                        content_preview.append(f"Table of Contents: {', '.join(toc_items)}")
+                
+                # Generate and store tags
+                tags = await tagging_service.tag_content(
+                    content_id=book.id,
+                    content_type="book",
+                    title=f"{book.title} {book.subtitle or ''}".strip(),
+                    content_preview="\n".join(content_preview),
+                )
+                
+                # Update book's tags field
+                if tags:
+                    book.tags = json.dumps(tags)
+                    await session.commit()
+                    
+                logging.info(f"Successfully tagged book {book.id} with tags: {tags}")
+                
+            except Exception as e:
+                # Don't fail book creation if tagging fails
+                logging.exception(f"Failed to tag book {book.id}: {e}")
+
             return _book_to_response(book)
 
     except HTTPException:

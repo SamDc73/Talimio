@@ -2,11 +2,11 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as SA_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.database.core import Base
+from src.database.base import Base
 
 
 __all__ = ["Node", "Roadmap"]
@@ -24,6 +24,7 @@ class Roadmap(Base):
         Enum("beginner", "intermediate", "advanced", name="skill_level_enum"),
         nullable=False,
     )
+    tags_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of tags
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
