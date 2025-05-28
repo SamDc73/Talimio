@@ -1,61 +1,61 @@
-import { useState, useEffect } from 'react'
-import { CheckCircle, Circle, ChevronRight, Clock, FileText } from 'lucide-react'
-import { useSidebar } from '@/features/navigation/SidebarContext'
+import { useState, useEffect } from "react";
+import { Clock, FileText } from "lucide-react";
+import { useSidebar } from "@/features/navigation/SidebarContext";
+import SidebarContainer from "./SidebarContainer";
+import ProgressIndicator from "./ProgressIndicator";
+import SidebarNav from "./SidebarNav";
+import CompletionCheckbox from "./CompletionCheckbox";
 
 export function VideoSidebar({ video, currentTime, onSeek }) {
-  const { isOpen } = useSidebar()
-  const [chapters, setChapters] = useState([])
-  const [completedChapters, setCompletedChapters] = useState(new Set())
-  const [activeChapter, setActiveChapter] = useState(null)
+  const { isOpen } = useSidebar();
+  const [chapters, setChapters] = useState([]);
+  const [completedChapters, setCompletedChapters] = useState(new Set());
+  const [activeChapter, setActiveChapter] = useState(null);
 
   useEffect(() => {
     if (video?.description) {
-      const extractedChapters = extractChapters(video.description)
-      setChapters(extractedChapters)
+      const extractedChapters = extractChapters(video.description);
+      setChapters(extractedChapters);
     }
-  }, [video])
+  }, [video]);
 
   useEffect(() => {
     if (chapters.length > 0 && currentTime !== undefined) {
-      // Find active chapter based on current time
       const active = chapters.findIndex((chapter, index) => {
-        const nextChapter = chapters[index + 1]
+        const nextChapter = chapters[index + 1];
         return currentTime >= chapter.timestamp && 
-               (!nextChapter || currentTime < nextChapter.timestamp)
-      })
-      setActiveChapter(active)
+               (!nextChapter || currentTime < nextChapter.timestamp);
+      });
+      setActiveChapter(active);
     }
-  }, [currentTime, chapters])
+  }, [currentTime, chapters]);
 
   const extractChapters = (description) => {
-    if (!description) return []
+    if (!description) return [];
     
-    // Common timestamp patterns in YouTube descriptions
-    const timestampRegex = /(?:^|\n)(?:[^\d]*)?(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–—]?\s*(.+?)(?=\n|$)/gm
+    const timestampRegex = /(?:^|\n)(?:[^\d]*)?(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–—]?\s*(.+?)(?=\n|$)/gm;
     
-    const chapters = []
-    let match
+    const chapters = [];
+    let match;
     
-    match = timestampRegex.exec(description)
+    match = timestampRegex.exec(description);
     while (match !== null) {
-      const timeStr = match[1]
-      const title = match[2].trim()
+      const timeStr = match[1];
+      const title = match[2].trim();
       
-      // Convert timestamp to seconds
-      const parts = timeStr.split(':').map(Number)
-      let timestamp = 0
+      const parts = timeStr.split(':').map(Number);
+      let timestamp = 0;
       
       if (parts.length === 3) {
-        timestamp = parts[0] * 3600 + parts[1] * 60 + parts[2]
+        timestamp = parts[0] * 3600 + parts[1] * 60 + parts[2];
       } else if (parts.length === 2) {
-        timestamp = parts[0] * 60 + parts[1]
+        timestamp = parts[0] * 60 + parts[1];
       }
       
-      // Clean up the title
       const cleanTitle = title
         .replace(/^[^\w\s]+\s*/, '')
         .replace(/^\([^)]+\)\s*/, '')
-        .trim()
+        .trim();
       
       if (cleanTitle && timestamp >= 0) {
         chapters.push({
@@ -63,57 +63,43 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
           timestamp,
           timeStr,
           title: cleanTitle
-        })
+        });
       }
       
-      match = timestampRegex.exec(description)
+      match = timestampRegex.exec(description);
     }
     
-    return chapters.sort((a, b) => a.timestamp - b.timestamp)
-  }
+    return chapters.sort((a, b) => a.timestamp - b.timestamp);
+  };
 
   const handleChapterClick = (chapter) => {
     if (onSeek) {
-      onSeek(chapter.timestamp)
+      onSeek(chapter.timestamp);
     }
-  }
+  };
 
   const toggleChapterCompletion = (chapterId) => {
     setCompletedChapters(prev => {
-      const newSet = new Set(prev)
+      const newSet = new Set(prev);
       if (newSet.has(chapterId)) {
-        newSet.delete(chapterId)
+        newSet.delete(chapterId);
       } else {
-        newSet.add(chapterId)
+        newSet.add(chapterId);
       }
-      return newSet
-    })
-  }
+      return newSet;
+    });
+  };
 
   const getProgress = () => {
-    if (chapters.length === 0) return 0
-    return Math.round((completedChapters.size / chapters.length) * 100)
-  }
+    if (chapters.length === 0) return 0;
+    return Math.round((completedChapters.size / chapters.length) * 100);
+  };
 
-  if (!video) return null
+  if (!video) return null;
 
   return (
-    <aside
-      className={`fixed-sidebar flex flex-col bg-white border-r border-zinc-200 transition-all duration-300 ease-in-out ${
-        isOpen ? "w-[320px] opacity-100 translate-x-0" : "w-0 opacity-0 -translate-x-full"
-      }`}
-      style={{ boxShadow: isOpen ? "0 4px 20px rgba(0, 0, 0, 0.05)" : "none" }}
-    >
-      {/* Progress indicator */}
-      <div
-        className={`flex items-center gap-2 px-4 pt-20 transition-opacity duration-300 ${
-          isOpen ? "opacity-100" : "opacity-0"
-        }`}
-      >
-        <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full px-3 py-1">
-          {getProgress()}% Completed
-        </span>
-      </div>
+    <SidebarContainer>
+      <ProgressIndicator progress={getProgress()} />
 
       {/* Video info */}
       <div className={`px-4 py-3 border-b border-zinc-200 transition-opacity duration-300 ${
@@ -123,12 +109,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
         <p className="text-xs text-zinc-500 mt-1">{video.channel}</p>
       </div>
 
-      {/* Chapters list */}
-      <nav
-        className={`flex-1 p-3 overflow-y-auto transition-opacity duration-300 ${
-          isOpen ? "opacity-100" : "opacity-0"
-        }`}
-      >
+      <SidebarNav>
         {chapters.length === 0 ? (
           <div className="text-center text-zinc-500 mt-8">
             <Clock className="w-12 h-12 mx-auto mb-4 text-zinc-300" />
@@ -145,8 +126,8 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
                 </h4>
                 <div className="space-y-1">
                   {chapters.map((chapter, index) => {
-                    const isCompleted = completedChapters.has(chapter.id)
-                    const isActive = activeChapter === index
+                    const isCompleted = completedChapters.has(chapter.id);
+                    const isActive = activeChapter === index;
                     
                     return (
                       <div
@@ -155,17 +136,10 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
                           isActive ? 'bg-red-50' : 'hover:bg-zinc-50'
                         }`}
                       >
-                        <button
-                          type="button"
+                        <CompletionCheckbox
+                          isCompleted={isCompleted}
                           onClick={() => toggleChapterCompletion(chapter.id)}
-                          className="mt-0.5 transition-all duration-200"
-                        >
-                          {isCompleted ? (
-                            <CheckCircle className="w-5 h-5 text-emerald-500" />
-                          ) : (
-                            <Circle className="w-5 h-5 text-zinc-400 hover:text-zinc-600" />
-                          )}
-                        </button>
+                        />
                         
                         <div className="flex-1 min-w-0">
                           <button
@@ -205,14 +179,14 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
                           </button>
                         </div>
                       </div>
-                    )
+                    );
                   })}
                 </div>
               </div>
             </div>
           </div>
         )}
-      </nav>
+      </SidebarNav>
 
       {/* Footer with video duration */}
       <div className={`px-4 py-3 border-t border-zinc-200 bg-zinc-50 transition-opacity duration-300 ${
@@ -225,19 +199,21 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
           )}
         </div>
       </div>
-    </aside>
-  )
+    </SidebarContainer>
+  );
 }
 
 function formatDuration(seconds) {
-  if (!seconds) return "Unknown"
+  if (!seconds) return "Unknown";
   
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = Math.floor(seconds % 60)
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
   
   if (hours > 0) {
-    return `${hours}h ${minutes}m`
+    return `${hours}h ${minutes}m`;
   }
-  return `${minutes}m ${secs}s`
+  return `${minutes}m ${secs}s`;
 }
+
+export default VideoSidebar;

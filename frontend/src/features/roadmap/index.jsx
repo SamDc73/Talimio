@@ -3,7 +3,7 @@ import { useState } from "react";
 import { ProgressProvider } from "../../hooks/useProgress";
 import RoadmapHeader from "@/components/header/RoadmapHeader";
 import { useSidebar } from "../navigation/SidebarContext";
-import Sidebar from "../navigation/sidebar";
+import { CourseSidebar } from "@/components/sidebar";
 // import MapView from "./map";  // Temporarily hidden
 import OutlineView from "./outline";
 import TrackView from "./track";
@@ -44,7 +44,7 @@ const RoadmapFlow = ({ roadmapId, onError }) => {
         <RoadmapHeader mode={mode} onModeChange={setMode} courseId={roadmapId} courseName={courseName} />
 
         <div className="flex h-screen">
-          <Sidebar modules={modules || []} onLessonClick={() => {}} courseId={roadmapId} />
+          <CourseSidebar modules={modules || []} onLessonClick={() => {}} courseId={roadmapId} />
           {/* Conditional rendering of views */}
           {mode === "outline" ? (
             <div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
