@@ -1,1 +1,0 @@
-export { VideoSidebar } from './VideoSidebar';

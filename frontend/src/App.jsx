@@ -5,7 +5,7 @@ import "@xyflow/react/dist/style.css";
 
 import { Toaster } from "./components/toaster";
 import { SidebarProvider } from "./features/navigation/SidebarContext";
-import Sidebar from "./features/navigation/sidebar";
+// Sidebar import removed - now imported in individual components
 import { OnboardingFlow } from "./features/onboarding";
 import RoadmapFlow from "./features/roadmap";
 import { useOutlineData } from "./features/roadmap/outline/useOutlineData";

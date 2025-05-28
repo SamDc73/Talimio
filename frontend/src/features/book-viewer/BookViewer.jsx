@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import PDFViewer from './components/PDFViewer';
 import EPUBViewer from './components/EPUBViewer';
 import { SidebarProvider, useSidebar } from '../navigation/SidebarContext';
-import BookSidebar from './components/BookSidebar';
+import { BookSidebar } from '@/components/sidebar';
 import { BookHeader } from '@/components/header/BookHeader';
 import './BookViewer.css';
 
