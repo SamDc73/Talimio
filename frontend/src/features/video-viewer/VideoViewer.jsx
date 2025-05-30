@@ -6,6 +6,7 @@ import { VideoSidebar } from "@/components/sidebar"
 import { videoApi } from "@/services/videoApi"
 import { Loader2 } from "lucide-react"
 import { SidebarProvider, useSidebar } from "@/features/navigation/SidebarContext"
+import "@justinribeiro/lite-youtube"
 import "./VideoViewer.css"
 
 function VideoViewerContent() {
@@ -18,7 +19,6 @@ function VideoViewerContent() {
   const [error, setError] = useState(null)
   const [currentTime, setCurrentTime] = useState(0)
   const playerRef = useRef(null)
-  const progressIntervalRef = useRef(null)
 
   // First useEffect - load video
   useEffect(() => {
@@ -52,44 +52,55 @@ function VideoViewerContent() {
     loadVideo()
   }, [videoId, toast])
 
-  // Second useEffect - YouTube player messaging
+  // Second useEffect - Handle lite-youtube player
   useEffect(() => {
-    const handleMessage = (event) => {
-      if (event.origin !== 'https://www.youtube.com') return
-      
-      try {
-        const data = JSON.parse(event.data)
-        if (data.event === 'infoDelivery' && data.info && data.info.currentTime !== undefined) {
-          setCurrentTime(Math.floor(data.info.currentTime))
+    if (!video || !playerRef.current) return
+
+    const handleLiteYoutubeActivate = () => {
+      // Player is activated (user clicked play)
+      const iframe = playerRef.current.querySelector('iframe')
+      if (iframe) {
+
+        // Set up postMessage communication with the YouTube iframe
+        const intervalId = setInterval(() => {
+          iframe.contentWindow?.postMessage(
+            JSON.stringify({
+              event: 'listening',
+              id: 1,
+              channel: 'widget'
+            }),
+            '*'
+          )
+        }, 1000)
+
+        // Handle messages from YouTube iframe
+        const handleMessage = (event) => {
+          if (event.origin !== 'https://www.youtube.com') return
+          
+          try {
+            const data = JSON.parse(event.data)
+            if (data.event === 'infoDelivery' && data.info && data.info.currentTime !== undefined) {
+              setCurrentTime(Math.floor(data.info.currentTime))
+            }
+          } catch (e) {
+            // Ignore non-JSON messages
+          }
         }
-      } catch (e) {
-        // Ignore non-JSON messages
+
+        window.addEventListener('message', handleMessage)
+
+        return () => {
+          clearInterval(intervalId)
+          window.removeEventListener('message', handleMessage)
+        }
       }
     }
 
-    if (!video) return
-
-    window.addEventListener('message', handleMessage)
-    
-    // Request player state updates
-    if (playerRef.current?.contentWindow) {
-      progressIntervalRef.current = setInterval(() => {
-        playerRef.current.contentWindow.postMessage(
-          JSON.stringify({
-            event: 'listening',
-            id: 1,
-            channel: 'widget'
-          }),
-          '*'
-        )
-      }, 1000)
-    }
+    // Listen for when lite-youtube activates
+    playerRef.current.addEventListener('liteYoutubeActivate', handleLiteYoutubeActivate)
 
     return () => {
-      window.removeEventListener('message', handleMessage)
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current)
-      }
+      playerRef.current?.removeEventListener('liteYoutubeActivate', handleLiteYoutubeActivate)
     }
   }, [video])
 
@@ -107,9 +118,10 @@ function VideoViewerContent() {
   }
 
   const handleSeekToChapter = (timestamp) => {
-    if (playerRef.current?.contentWindow) {
+    const iframe = playerRef.current?.querySelector('iframe')
+    if (iframe?.contentWindow) {
       // Use postMessage to control YouTube player
-      playerRef.current.contentWindow.postMessage(
+      iframe.contentWindow.postMessage(
         JSON.stringify({
           event: 'command',
           func: 'seekTo',
@@ -120,6 +132,7 @@ function VideoViewerContent() {
       setCurrentTime(timestamp)
     }
   }
+
 
 
   // Conditional returns after all hooks
@@ -164,13 +177,20 @@ function VideoViewerContent() {
       <div className="content-with-sidebar">
         <div className="video-player-section">
           <div className="video-player">
-            <iframe
+            <lite-youtube
               ref={playerRef}
-              src={`https://www.youtube.com/embed/${video.youtube_id}?autoplay=1&rel=0&modestbranding=1&enablejsapi=1&origin=${window.location.origin}`}
-              title={video.title}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+              videoid={video.youtube_id}
+              videotitle={video.title}
+              posterquality="hqdefault"
+              params="rel=0&modestbranding=1&enablejsapi=1&iv_load_policy=3&cc_load_policy=0&fs=0&playsinline=1&disablekb=0"
+              autoload
+              nocookie
+              privacy
+            >
+              {video.thumbnail_url && (
+                <img slot="image" src={video.thumbnail_url} alt={video.title} />
+              )}
+            </lite-youtube>
           </div>
         
           <div className="video-info">

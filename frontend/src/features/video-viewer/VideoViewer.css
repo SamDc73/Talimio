@@ -47,7 +47,8 @@
 }
 
 /* Video container with cropping */
-.video-player iframe {
+.video-player iframe,
+.video-player lite-youtube {
   position: absolute;
   top: 0;
   left: 0;
@@ -55,6 +56,32 @@
   height: 100%;
   border: 0;
 }
+
+/* Ensure lite-youtube fills container */
+.video-player lite-youtube {
+  max-width: none !important;
+}
+
+/* Override default lite-youtube background for better loading state */
+lite-youtube:not([activated]) {
+  background-color: #000;
+  background-size: cover;
+  background-position: center;
+}
+
+/* Ensure play button is centered and visible */
+lite-youtube::before {
+  border-color: transparent transparent transparent #fff !important;
+}
+
+/* Custom thumbnail styling */
+lite-youtube img[slot="image"] {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+
 
 
 .video-info {
