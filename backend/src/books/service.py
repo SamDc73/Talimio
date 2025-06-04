@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 from datetime import UTC, datetime
@@ -108,6 +109,22 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
                 detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB",
             )
 
+        # Calculate file hash for duplicate detection
+        file_hash = hashlib.sha256(file_content).hexdigest()
+
+        # Check for duplicate files
+        async with async_session_maker() as session:
+            existing_book = await session.execute(
+                select(Book).where(Book.file_hash == file_hash),
+            )
+            existing_book = existing_book.scalar_one_or_none()
+
+            if existing_book:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"This PDF already exists in the library as '{existing_book.title}' by {existing_book.author}",
+                )
+
         # Create upload directory
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -136,6 +153,7 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
                 file_path=str(file_path),
                 file_type=book_data.file_type,
                 file_size=len(file_content),
+                file_hash=file_hash,  # Add the file hash
                 language=book_data.language,
                 publication_year=book_data.publication_year,
                 publisher=book_data.publisher,
@@ -152,10 +170,10 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
             try:
                 from src.ai.client import ModelManager
                 from src.tagging.service import TaggingService
-                
+
                 model_manager = ModelManager()
                 tagging_service = TaggingService(session, model_manager)
-                
+
                 # Extract content for tagging
                 content_preview = []
                 if book.description:
@@ -167,7 +185,7 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
                         toc_items.append(item.get("title", ""))
                     if toc_items:
                         content_preview.append(f"Table of Contents: {', '.join(toc_items)}")
-                
+
                 # Generate and store tags
                 tags = await tagging_service.tag_content(
                     content_id=book.id,
@@ -175,14 +193,14 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
                     title=f"{book.title} {book.subtitle or ''}".strip(),
                     content_preview="\n".join(content_preview),
                 )
-                
+
                 # Update book's tags field
                 if tags:
                     book.tags = json.dumps(tags)
                     await session.commit()
-                    
+
                 logging.info(f"Successfully tagged book {book.id} with tags: {tags}")
-                
+
             except Exception as e:
                 # Don't fail book creation if tagging fails
                 logging.exception(f"Failed to tag book {book.id}: {e}")

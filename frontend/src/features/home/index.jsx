@@ -286,7 +286,17 @@ export default function HomePage() {
       })
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        const errorData = await response.json()
+        if (response.status === 409) {
+          // Duplicate file error
+          toast({
+            title: "Duplicate Book",
+            description: errorData.detail || "This book already exists in your library.",
+            variant: "destructive",
+          })
+          return
+        }
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
       }
       
       toast({
@@ -306,7 +316,7 @@ export default function HomePage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to upload book. Please try again.",
+        description: error.message || "Failed to upload book. Please try again.",
         variant: "destructive",
       })
     }
