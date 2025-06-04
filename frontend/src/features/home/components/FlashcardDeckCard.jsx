@@ -1,22 +1,46 @@
+import { useState } from "react"
 import { Link } from "react-router-dom"
-import { ChevronRight, Layers, MoreHorizontal } from "lucide-react"
+import { ChevronRight, Layers } from "lucide-react"
+import { KebabMenu } from "./KebabMenu"
+import { deleteApi } from "@/services/deleteApi"
 
-export function FlashcardDeckCard({ deck }) {
+export function FlashcardDeckCard({ deck, onDelete }) {
+  const [showMenu, setShowMenu] = useState(false)
   // Calculate progress percentage based on mastery
   const progressPercentage = (deck.masteryLevel / 5) * 100
 
+  const handleDelete = async (itemType, itemId) => {
+    try {
+      await deleteApi.deleteItem(itemType, itemId)
+      if (onDelete) {
+        onDelete(itemId, itemType)
+      }
+    } catch (error) {
+      console.error('Failed to delete flashcard deck:', error)
+    }
+  }
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6">
+    <div 
+      className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6 relative"
+      onMouseEnter={() => setShowMenu(true)}
+      onMouseLeave={() => setShowMenu(false)}
+    >
       {/* Header with badge and menu */}
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-1.5 text-amber-600">
           <Layers className="h-4 w-4" />
           <span className="text-sm">Flashcards</span>
         </div>
-        <button type="button" className="text-gray-400 hover:text-gray-600">
-          <MoreHorizontal className="h-5 w-5" />
-        </button>
       </div>
+      
+      <KebabMenu
+        showMenu={showMenu}
+        onDelete={handleDelete}
+        itemType="flashcard"
+        itemId={deck.id}
+        itemTitle={deck.title}
+      />
       
       {/* Title */}
       <h3 className="text-xl font-semibold text-gray-900 mb-2">

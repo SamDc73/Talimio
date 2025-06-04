@@ -1,10 +1,42 @@
 import { useState } from "react"
-import { MoreHorizontal } from "lucide-react"
+import { MoreHorizontal, Trash2, Archive, PlayCircle, PauseCircle } from "lucide-react"
 import { Button } from "@/components/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover"
+import { ConfirmationDialog } from "@/components/ConfirmationDialog"
 
-export function KebabMenu({ onMouseEnter, onMouseLeave, showMenu = false }) {
+export function KebabMenu({ 
+  onMouseEnter, 
+  onMouseLeave, 
+  showMenu = false,
+  onDelete,
+  itemType,
+  itemId,
+  itemTitle = "",
+  isPaused = false 
+}) {
   const [open, setOpen] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  const handleDeleteClick = () => {
+    setShowDeleteConfirm(true)
+    setOpen(false)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (onDelete) {
+      await onDelete(itemType, itemId)
+    }
+  }
+
+  const handleArchive = () => {
+    console.log("Archive functionality - placeholder")
+    setOpen(false)
+  }
+
+  const handleTogglePause = () => {
+    console.log(`${isPaused ? 'Resume' : 'Pause'} functionality - placeholder`)
+    setOpen(false)
+  }
 
   return (
     <div className="absolute top-3 right-3 z-10" onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
@@ -28,9 +60,45 @@ export function KebabMenu({ onMouseEnter, onMouseLeave, showMenu = false }) {
             <Button variant="ghost" size="sm" className="justify-start font-normal">
               Edit Tags
             </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="justify-start font-normal flex items-center gap-2"
+              onClick={handleArchive}
+            >
+              <Archive className="h-4 w-4" />
+              Archive
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="justify-start font-normal flex items-center gap-2"
+              onClick={handleTogglePause}
+            >
+              {isPaused ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}
+              {isPaused ? 'Resume' : 'Pause'}
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="justify-start font-normal text-red-600 hover:text-red-700 hover:bg-red-50 flex items-center gap-2"
+              onClick={handleDeleteClick}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </Button>
           </div>
         </PopoverContent>
       </Popover>
+      
+      <ConfirmationDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Delete Item"
+        description="This action cannot be undone. This item will be permanently removed from your library."
+        itemName={itemTitle}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   )
 }
