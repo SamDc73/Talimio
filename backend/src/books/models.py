@@ -29,6 +29,7 @@ class Book(Base):
     publisher: Mapped[str | None] = mapped_column(String(200), nullable=True)
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     table_of_contents: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
+    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
