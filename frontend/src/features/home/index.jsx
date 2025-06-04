@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom"
 import ErrorBoundary from "@/components/ErrorBoundary"
 
 // Debug logging for Radix UI component initialization
-console.log("[Debug] Initializing Radix UI components in HomePage");
+if (import.meta.env.VITE_DEBUG_MODE === 'true') {
+  console.log("[Debug] Initializing Radix UI components in HomePage");
+}
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Search,
@@ -147,6 +149,11 @@ const DueDateChip = ({ dueDate, isPaused, progress, type, dueCount = 0, overdue 
 const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
   const [hover, setHover] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  
+  if (import.meta.env.VITE_DEBUG_MODE === 'true') {
+    console.log("[DEBUG] BaseCard received item:", item)
+  }
+  
   const V = VARIANTS[item.type]
   const isFlashcard = item.type === "flashcards"
   const progressValue = isFlashcard
@@ -199,14 +206,14 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
         {/* Video metadata */}
         {item.type === "youtube" && (
           <p className="text-slate-600 text-sm mb-4">
-            by {item.channel_name || item.channelName} • {formatDuration(item.duration)}
+            by {item.channel_name || item.channelName || "Unknown Channel"} • {formatDuration(item.duration)}
           </p>
         )}
         
         {/* Book metadata */}
         {item.type === "book" && (
           <p className="text-slate-600 text-sm mb-4">
-            by {item.author} • {item.pageCount || item.pages} pages
+            by {item.author || "Unknown Author"} • {item.pageCount || item.pages || "Unknown"} pages
           </p>
         )}
         
@@ -331,7 +338,9 @@ function formatDuration(seconds) {
 }
 
 export default function HomePage() {
-  console.log("[Debug] Rendering HomePage component");
+  if (import.meta.env.VITE_DEBUG_MODE === 'true') {
+    console.log("[Debug] Rendering HomePage component");
+  }
   const api = useApi()
   const { toast } = useToast()
   const navigate = useNavigate()
@@ -475,10 +484,11 @@ export default function HomePage() {
         return title.includes(query) || item.description.toLowerCase().includes(query) || tags
       }
       if (item.type === "book") {
-        return title.includes(query) || item.author.toLowerCase().includes(query) || tags
+        return title.includes(query) || (item.author?.toLowerCase().includes(query)) || tags
       }
       if (item.type === "youtube") {
-        return title.includes(query) || item.channelName.toLowerCase().includes(query) || tags
+        const channelName = item.channel_name || item.channelName || ""
+        return title.includes(query) || (channelName?.toLowerCase().includes(query)) || tags
       }
       if (item.type === "flashcards") {
         return title.includes(query) || item.description.toLowerCase().includes(query) || tags

@@ -186,7 +186,7 @@ async def list_content_fast(
                         id=row.id,
                         title=row.title,
                         description=row.description,
-                        channel_name=row.extra1,
+                        channel_name=row.extra1 or "",  # Ensure it's not None
                         duration=row.count1,
                         thumbnail_url=row.extra2,
                         last_accessed_date=row.last_accessed,
@@ -215,7 +215,7 @@ async def list_content_fast(
                         id=row.id,
                         title=row.title,
                         description=row.description,
-                        author=row.extra1,
+                        author=row.extra1 or "",  # Ensure it's not None
                         page_count=row.count1,
                         current_page=0,
                         last_accessed_date=row.last_accessed,
