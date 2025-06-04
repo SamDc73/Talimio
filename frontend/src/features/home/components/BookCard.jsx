@@ -1,23 +1,47 @@
+import { useState } from "react"
 import { Link } from "react-router-dom"
-import { BookOpen, ChevronRight, MoreHorizontal } from "lucide-react"
+import { BookOpen, ChevronRight } from "lucide-react"
+import { KebabMenu } from "./KebabMenu"
+import { deleteApi } from "@/services/deleteApi"
 
-export function BookCard({ book }) {
+export function BookCard({ book, onDelete }) {
+  const [showMenu, setShowMenu] = useState(false)
   const currentPage = book.currentPage || 0
   const totalPages = book.pageCount || 0
   const readingProgress = totalPages > 0 ? (currentPage / totalPages) * 100 : 0
+
+  const handleDelete = async (itemType, itemId) => {
+    try {
+      await deleteApi.deleteItem(itemType, itemId)
+      if (onDelete) {
+        onDelete(itemId, itemType)
+      }
+    } catch (error) {
+      console.error('Failed to delete book:', error)
+    }
+  }
   
   return (
-    <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6">
+    <div 
+      className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6 relative"
+      onMouseEnter={() => setShowMenu(true)}
+      onMouseLeave={() => setShowMenu(false)}
+    >
       {/* Header with badge and menu */}
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-1.5 text-indigo-600">
           <BookOpen className="h-4 w-4" />
           <span className="text-sm">Book</span>
         </div>
-        <button type="button" className="text-gray-400 hover:text-gray-600">
-          <MoreHorizontal className="h-5 w-5" />
-        </button>
       </div>
+      
+      <KebabMenu
+        showMenu={showMenu}
+        onDelete={handleDelete}
+        itemType="book"
+        itemId={book.id}
+        itemTitle={book.title || "Untitled Book"}
+      />
       
       {/* Title */}
       <h3 className="text-xl font-semibold text-gray-900 mb-2">

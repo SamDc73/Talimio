@@ -1,19 +1,44 @@
-import { Sparkles, ChevronRight, MoreHorizontal } from "lucide-react"
+import { useState } from "react"
+import { Sparkles, ChevronRight } from "lucide-react"
 import { Link } from "react-router-dom"
+import { KebabMenu } from "./KebabMenu"
+import { deleteApi } from "@/services/deleteApi"
 
-export function CourseCard({ course }) {
+export function CourseCard({ course, onDelete }) {
+  const [showMenu, setShowMenu] = useState(false)
+
+  const handleDelete = async (itemType, itemId) => {
+    try {
+      await deleteApi.deleteItem(itemType, itemId)
+      if (onDelete) {
+        onDelete(itemId, itemType)
+      }
+    } catch (error) {
+      console.error('Failed to delete course:', error)
+    }
+  }
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6">
+    <div 
+      className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6 relative"
+      onMouseEnter={() => setShowMenu(true)}
+      onMouseLeave={() => setShowMenu(false)}
+    >
       {/* Header with badge and menu */}
       <div className="flex justify-between items-start mb-4">
         <div className="bg-teal-50 text-teal-600 text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1">
           <Sparkles className="h-3 w-3" />
           <span>Course</span>
         </div>
-        <button type="button" className="text-gray-400 hover:text-gray-600">
-          <MoreHorizontal className="h-5 w-5" />
-        </button>
       </div>
+      
+      <KebabMenu
+        showMenu={showMenu}
+        onDelete={handleDelete}
+        itemType="roadmap"
+        itemId={course.id}
+        itemTitle={course.title}
+      />
       
       {/* Title */}
       <h3 className="text-xl font-semibold text-gray-900 mb-2">

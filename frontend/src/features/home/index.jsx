@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import ErrorBoundary from "@/components/ErrorBoundary"
 
 // Debug logging for Radix UI component initialization
@@ -49,7 +50,9 @@ import { fetchContentData, processContentData } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useToast } from "@/hooks/use-toast"
 import { videoApi } from "@/services/videoApi"
+import { deleteApi } from "@/services/deleteApi"
 import { MainHeader } from "@/components/header/MainHeader"
+import { ConfirmationDialog } from "@/components/ConfirmationDialog"
 
 const VARIANTS = {
   course: { label: "Course", icon: Sparkles, badge: "bg-cyan-50 text-cyan-600", grad: "from-cyan-400 to-cyan-500" },
@@ -141,28 +144,48 @@ const DueDateChip = ({ dueDate, isPaused, progress, type, dueCount = 0, overdue 
   )
 }
 
-const BaseCard = ({ item, pinned, onTogglePin, index, onClick }) => {
+const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
   const [hover, setHover] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const V = VARIANTS[item.type]
   const isFlashcard = item.type === "flashcards"
   const progressValue = isFlashcard
     ? item.totalCards > 0 ? ((item.totalCards - (item.due || 0) - (item.overdue || 0)) / item.totalCards) * 100 : 0
     : item.progress || item.completion_percentage || 0
 
+  const handleDeleteClick = () => {
+    setShowDeleteConfirm(true)
+  }
+
+  const handleConfirmDelete = async () => {
+    try {
+      const itemType = item.type === "youtube" ? "video" : 
+                       item.type === "flashcards" ? "flashcard" : 
+                       item.type
+      await deleteApi.deleteItem(itemType, item.id || item.uuid)
+      if (onDelete) {
+        onDelete(item.id || item.uuid, itemType)
+      }
+    } catch (error) {
+      console.error('Failed to delete item:', error)
+    }
+  }
+
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: 0.1 * index }}
-      whileHover={{ y: -5, transition: { duration: 0.2 } }}
-      className={`bg-white rounded-2xl overflow-hidden relative flex flex-col h-full cursor-pointer ${
-        pinned ? "shadow-md border-2 border-primary/10 bg-primary/5" : "shadow-sm hover:shadow-md border border-slate-100"
-      }`}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onClick={onClick}
-    >
+    <div>
+      <motion.div
+        layout
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 * index }}
+        whileHover={{ y: -5, transition: { duration: 0.2 } }}
+        className={`bg-white rounded-2xl overflow-hidden relative flex flex-col h-full cursor-pointer ${
+          pinned ? "shadow-md border-2 border-primary/10 bg-primary/5" : "shadow-sm hover:shadow-md border border-slate-100"
+        }`}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        onClick={onClick}
+      >
       {pinned && <div className="absolute top-0 left-6 w-6 h-1 bg-primary rounded-b-full" />}
       <div className="p-6 flex flex-col justify-between h-full">
         <div className="flex justify-between items-start mb-4">
@@ -253,7 +276,7 @@ const BaseCard = ({ item, pinned, onTogglePin, index, onClick }) => {
             </PopoverTrigger>
             <PopoverContent align="end" className="w-40 p-0">
               <div className="flex flex-col text-sm">
-                {["Pin", "Rename", "Export", "sep", "Delete"].map((action) =>
+                {["Pin", "Edit Tags", "Archive", "sep", "Pause", "Delete"].map((action) =>
                   action === "sep" ? (
                     <Separator key="separator" />
                   ) : (
@@ -265,6 +288,10 @@ const BaseCard = ({ item, pinned, onTogglePin, index, onClick }) => {
                       onClick={(e) => {
                         e.stopPropagation()
                         if (action === "Pin") onTogglePin()
+                        else if (action === "Delete") handleDeleteClick()
+                        else if (action === "Archive") console.log("Archive functionality - placeholder")
+                        else if (action === "Pause") console.log("Pause functionality - placeholder")
+                        else if (action === "Edit Tags") console.log("Edit Tags functionality - placeholder")
                       }}
                     >
                       {action === "Pin" ? (pinned ? "Unpin" : "Pin") : action}
@@ -277,6 +304,16 @@ const BaseCard = ({ item, pinned, onTogglePin, index, onClick }) => {
         </div>
       )}
     </motion.div>
+    
+    <ConfirmationDialog
+      open={showDeleteConfirm}
+      onOpenChange={setShowDeleteConfirm}
+      title="Delete Item"
+      description="This action cannot be undone. This item will be permanently removed from your library."
+      itemName={item.title}
+      onConfirm={handleConfirmDelete}
+    />
+  </div>
   )
 }
 
@@ -297,6 +334,7 @@ export default function HomePage() {
   console.log("[Debug] Rendering HomePage component");
   const api = useApi()
   const { toast } = useToast()
+  const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState("")
   const [isGenerateMode, setIsGenerateMode] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -543,16 +581,38 @@ export default function HomePage() {
   const handleCardClick = (item) => {
     // Navigate to the appropriate page based on item type
     if (item.type === "course") {
-      window.location.href = `/courses/${item.id}`
+      navigate(`/courses/${item.id}`)
     } else if (item.type === "youtube") {
-      window.location.href = `/videos/${item.uuid || item.id}`
+      navigate(`/videos/${item.uuid || item.id}`)
     } else if (item.type === "book") {
-      window.location.href = `/books/${item.id}`
+      navigate(`/books/${item.id}`)
     } else if (item.type === "roadmap") {
-      window.location.href = `/roadmap/${item.id}`
+      navigate(`/roadmap/${item.id}`)
     } else if (item.type === "flashcards") {
-      window.location.href = `/flashcards/${item.id}`
+      navigate(`/flashcards/${item.id}`)
     }
+  }
+
+  const handleDeleteItem = (itemId, itemType) => {
+    // Remove the item from content state
+    setContentItems(prevContent => prevContent.filter(item => 
+      (item.id !== itemId && item.uuid !== itemId)
+    ))
+    
+    // Remove from pins if it was pinned
+    setPins(prevPins => {
+      const newPins = { ...prevPins }
+      Object.keys(newPins).forEach(type => {
+        newPins[type] = newPins[type].filter(id => id !== itemId)
+      })
+      return newPins
+    })
+
+    // Show success toast
+    toast({
+      title: "Item deleted",
+      description: `${itemType} has been successfully deleted.`,
+    })
   }
 
   const renderCard = (item, i) => (
@@ -562,6 +622,7 @@ export default function HomePage() {
       index={i}
       pinned={pins[item.type]?.includes(item.id)}
       onTogglePin={() => togglePin(item.type, item.id)}
+      onDelete={handleDeleteItem}
       onClick={() => handleCardClick(item)}
     />
   )

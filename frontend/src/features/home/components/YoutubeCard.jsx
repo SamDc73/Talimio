@@ -1,5 +1,8 @@
+import { useState } from "react"
 import { Link } from "react-router-dom"
-import { ChevronRight, Youtube, MoreHorizontal } from "lucide-react"
+import { ChevronRight, Youtube } from "lucide-react"
+import { KebabMenu } from "./KebabMenu"
+import { deleteApi } from "@/services/deleteApi"
 
 function formatDuration(seconds) {
   if (!seconds) return "Unknown duration"
@@ -14,19 +17,41 @@ function formatDuration(seconds) {
   return `${minutes}:${secs.toString().padStart(2, '0')}`
 }
 
-export function YoutubeCard({ video }) {
+export function YoutubeCard({ video, onDelete }) {
+  const [showMenu, setShowMenu] = useState(false)
+
+  const handleDelete = async (itemType, itemId) => {
+    try {
+      await deleteApi.deleteItem(itemType, itemId)
+      if (onDelete) {
+        onDelete(itemId, itemType)
+      }
+    } catch (error) {
+      console.error('Failed to delete video:', error)
+    }
+  }
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6">
+    <div 
+      className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6 relative"
+      onMouseEnter={() => setShowMenu(true)}
+      onMouseLeave={() => setShowMenu(false)}
+    >
       {/* Header with badge and menu */}
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-1.5 text-red-600">
           <Youtube className="h-4 w-4" />
           <span className="text-sm">Video</span>
         </div>
-        <button type="button" className="text-gray-400 hover:text-gray-600">
-          <MoreHorizontal className="h-5 w-5" />
-        </button>
       </div>
+      
+      <KebabMenu
+        showMenu={showMenu}
+        onDelete={handleDelete}
+        itemType="video"
+        itemId={video.uuid || video.id}
+        itemTitle={video.title}
+      />
       
       {/* Title */}
       <h3 className="text-xl font-semibold text-gray-900 mb-2">
