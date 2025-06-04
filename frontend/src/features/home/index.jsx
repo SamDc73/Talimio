@@ -17,11 +17,22 @@ import {
   Youtube,
   Layers,
   SlidersHorizontal,
+  MoreHorizontal,
+  Check,
+  Pin,
+  Calendar,
+  AlertCircle,
+  Pause,
+  ChevronUp,
+  ChevronDown,
+  Info,
+  TimerOff,
+  Code,
 } from "lucide-react"
 import { Input } from "@/components/input"
 import { Button } from "@/components/button"
 import { Label } from "@/components/label"
-import { TooltipProvider } from "@/components/tooltip"
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/tooltip"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover"
 import { Badge } from "@/components/badge"
 import { Separator } from "@/components/separator"
@@ -37,13 +48,250 @@ import {
 import { fetchContentData, processContentData } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useToast } from "@/hooks/use-toast"
-import { YoutubeCard } from "./components/YoutubeCard"
 import { videoApi } from "@/services/videoApi"
-import { FlashcardDeckCard } from "./components/FlashcardDeckCard"
-import { BookCard } from "./components/BookCard"
-import { RoadmapCard } from "./components/RoadmapCard"
-import { CourseCard } from "./components/CourseCard"
 import { MainHeader } from "@/components/header/MainHeader"
+
+const VARIANTS = {
+  course: { label: "Course", icon: Sparkles, badge: "bg-cyan-50 text-cyan-600", grad: "from-cyan-400 to-cyan-500" },
+  book: { label: "PDF", icon: FileText, badge: "bg-blue-50 text-blue-600", grad: "from-blue-400 to-blue-500" },
+  youtube: {
+    label: "Video",
+    icon: Youtube,
+    badge: "bg-violet-50 text-violet-600",
+    grad: "from-violet-400 to-violet-500",
+  },
+  flashcards: {
+    label: "Flashcards",
+    icon: Layers,
+    badge: "bg-lime-100 text-lime-700",
+    grad: "from-lime-500 to-lime-600",
+  },
+  roadmap: {
+    label: "Course",
+    icon: Sparkles,
+    badge: "bg-cyan-50 text-cyan-600",
+    grad: "from-cyan-400 to-cyan-500",
+  },
+}
+
+const STATES = [
+  {
+    key: "overdue",
+    bg: "bg-orange-50",
+    txt: "text-orange-700",
+    icon: TimerOff,
+    msg: "You're late – jump back in",
+    btn: true,
+  },
+  { key: "today", bg: "bg-amber-50", txt: "text-amber-700", icon: Clock, msg: "Due today — quick session" },
+  {
+    key: "upcoming",
+    bg: "bg-blue-50",
+    txt: "text-blue-700",
+    icon: Calendar,
+    msg: (d) => `Next check‑in ${d.toLocaleDateString("en-US", { weekday: "long" })}`,
+  },
+]
+
+const TagChip = ({ tag }) => (
+  <div className="bg-slate-100 text-slate-700 text-xs font-medium px-2 py-1 rounded-full">{tag}</div>
+)
+
+const DueDateChip = ({ dueDate, isPaused, progress, type, dueCount = 0, overdue = 0, onSnooze }) => {
+  if (progress === 100 || (type === "flashcards" && dueCount === 0 && overdue === 0))
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-emerald-50 text-emerald-700 text-xs font-medium px-2 py-1 rounded-full flex items-center gap-2 whitespace-nowrap"
+      >
+        <Check className="h-3 w-3" />
+        <span>Great streak!</span>
+      </motion.div>
+    )
+  if (isPaused)
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-slate-100 text-slate-600 text-xs font-medium px-2 py-1 rounded-full flex items-center gap-2 whitespace-nowrap"
+      >
+        <Pause className="h-3 w-3" />
+        <span>On hold – resume when free</span>
+      </motion.div>
+    )
+  if (!dueDate) return null
+  const diffHrs = (new Date(dueDate) - Date.now()) / 36e5
+  const stateIdx = diffHrs < 0 ? 0 : diffHrs < 24 ? 1 : 2
+  const state = STATES[stateIdx]
+  const base = `${state.bg} ${state.txt} text-xs font-medium px-2 py-1 rounded-full flex items-center gap-2 whitespace-nowrap`
+  const msg = typeof state.msg === "function" ? state.msg(new Date(dueDate)) : state.msg
+  return (
+    <div className="flex items-center gap-2">
+      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className={base}>
+        <state.icon className="h-3 w-3" />
+        <span>{msg}</span>
+      </motion.div>
+      {state.btn && (
+        <Button onClick={onSnooze} variant="outline" size="sm" className="h-6 text-xs px-3">
+          Reschedule
+        </Button>
+      )}
+    </div>
+  )
+}
+
+const BaseCard = ({ item, pinned, onTogglePin, index, onClick }) => {
+  const [hover, setHover] = useState(false)
+  const V = VARIANTS[item.type]
+  const isFlashcard = item.type === "flashcards"
+  const progressValue = isFlashcard
+    ? item.totalCards > 0 ? ((item.totalCards - (item.due || 0) - (item.overdue || 0)) / item.totalCards) * 100 : 0
+    : item.progress || item.completion_percentage || 0
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: 0.1 * index }}
+      whileHover={{ y: -5, transition: { duration: 0.2 } }}
+      className={`bg-white rounded-2xl overflow-hidden relative flex flex-col h-full cursor-pointer ${
+        pinned ? "shadow-md border-2 border-primary/10 bg-primary/5" : "shadow-sm hover:shadow-md border border-slate-100"
+      }`}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={onClick}
+    >
+      {pinned && <div className="absolute top-0 left-6 w-6 h-1 bg-primary rounded-b-full" />}
+      <div className="p-6 flex flex-col justify-between h-full">
+        <div className="flex justify-between items-start mb-4">
+          <div className={`${V.badge} text-xs font-medium px-3 py-1 rounded-full flex items-center gap-2`}>
+            <V.icon className="h-3 w-3" />
+            <span>{V.label}</span>
+          </div>
+        </div>
+        <h3 className="text-xl font-bold text-slate-900 hover:underline line-clamp-2 mb-1">{item.title}</h3>
+        
+        {/* Video metadata */}
+        {item.type === "youtube" && (
+          <p className="text-slate-600 text-sm mb-4">
+            by {item.channel_name || item.channelName} • {formatDuration(item.duration)}
+          </p>
+        )}
+        
+        {/* Book metadata */}
+        {item.type === "book" && (
+          <p className="text-slate-600 text-sm mb-4">
+            by {item.author} • {item.pageCount || item.pages} pages
+          </p>
+        )}
+        
+        {/* Description for other types */}
+        {item.type !== "youtube" && item.type !== "book" && item.description && (
+          <p className="text-slate-600 text-sm line-clamp-2 mb-4">{item.description}</p>
+        )}
+        
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          {item.tags?.slice(0, 2).map((t) => (
+            <TagChip key={t} tag={t} />
+          ))}
+          {item.tags?.length > 2 && (
+            <span className="inline-flex text-xs font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
+              +{item.tags.length - 2}
+            </span>
+          )}
+          <DueDateChip
+            dueDate={item.dueDate}
+            isPaused={item.isPaused}
+            progress={progressValue}
+            type={item.type}
+            dueCount={item.due || item.dueCount}
+            overdue={item.overdue}
+            onSnooze={(e) => {
+              e.stopPropagation()
+              alert(`Rescheduled: ${item.title}`)
+            }}
+          />
+        </div>
+        <div>
+          {isFlashcard && (
+            <div className="flex justify-between text-xs text-slate-500 mb-2">
+              <span>
+                {item.overdue > 0 && (
+                  <>
+                    <span className="text-orange-600 font-medium">{item.overdue} overdue</span>
+                    <span className="text-slate-400 mx-1">•</span>
+                  </>
+                )}
+                <span>{item.totalCards || item.cardCount || 0} cards</span>
+              </span>
+            </div>
+          )}
+          {!isFlashcard && progressValue != null && progressValue !== "" && (
+            <div className="flex justify-between text-xs text-slate-500 mb-2">
+              <span>{Math.round(progressValue)}%</span>
+            </div>
+          )}
+          <div className="w-full bg-slate-100 rounded-full h-2">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${progressValue}%` }}
+              transition={{ duration: 0.6 }}
+              className={`h-2 rounded-full bg-gradient-to-r ${V.grad}`}
+            />
+          </div>
+        </div>
+      </div>
+      {hover && (
+        <div className="absolute top-4 right-4 z-10">
+          <Popover>
+            <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-40 p-0">
+              <div className="flex flex-col text-sm">
+                {["Pin", "Rename", "Export", "sep", "Delete"].map((action) =>
+                  action === "sep" ? (
+                    <Separator key="separator" />
+                  ) : (
+                    <Button
+                      key={action}
+                      variant="ghost"
+                      size="sm"
+                      className={`justify-start ${action === "Delete" ? "text-red-600 hover:bg-red-50" : ""}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (action === "Pin") onTogglePin()
+                      }}
+                    >
+                      {action === "Pin" ? (pinned ? "Unpin" : "Pin") : action}
+                    </Button>
+                  ),
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      )}
+    </motion.div>
+  )
+}
+
+function formatDuration(seconds) {
+  if (!seconds) return "Unknown duration"
+  
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = seconds % 60
+  
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+  return `${minutes}:${secs.toString().padStart(2, '0')}`
+}
 
 export default function HomePage() {
   console.log("[Debug] Rendering HomePage component");
@@ -73,6 +321,8 @@ export default function HomePage() {
   const [filterOptions, setFilterOptions] = useState([])
   const [sortOptions, setSortOptions] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [pins, setPins] = useState({})
+  const [showAll, setShowAll] = useState(false)
 
   // Fetch content data on component mount
   useEffect(() => {
@@ -82,7 +332,19 @@ export default function HomePage() {
         const data = await fetchContentData()
         const { content, filterOptions: options, sortOptions: sortOpts } = processContentData(data)
 
-        setContentItems(content)
+        // Transform data to match new structure
+        const transformedContent = content.map(item => ({
+          ...item,
+          // Add mock due dates and states for demonstration
+          dueDate: Math.random() > 0.7 ? new Date(Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000).toISOString() : null,
+          isPaused: Math.random() > 0.9,
+          // For flashcards, map the existing fields
+          totalCards: item.cardCount,
+          due: item.dueCount || Math.floor(Math.random() * 10),
+          overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
+        }))
+
+        setContentItems(transformedContent)
 
         // Map the filter options with their icons
         setFilterOptions(
@@ -135,15 +397,27 @@ export default function HomePage() {
             }
           }),
         )
+        
+        // Initialize pins state
+        const initialPins = {}
+        transformedContent.forEach(item => {
+          if (!initialPins[item.type]) initialPins[item.type] = []
+        })
+        setPins(initialPins)
       } catch (error) {
         console.error("Error loading content data:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load content. Please refresh the page.",
+          variant: "destructive",
+        })
       } finally {
         setIsLoading(false)
       }
     }
 
     loadContentData()
-  }, [])
+  }, [toast])
 
   // Apply filters and sorting
   const filteredAndSortedContent = contentItems
@@ -212,7 +486,14 @@ export default function HomePage() {
       // Refresh content list
       const data = await fetchContentData()
       const { content } = processContentData(data)
-      setContentItems(content)
+      setContentItems(content.map(item => ({
+        ...item,
+        dueDate: Math.random() > 0.7 ? new Date(Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000).toISOString() : null,
+        isPaused: Math.random() > 0.9,
+        totalCards: item.cardCount,
+        due: item.dueCount || Math.floor(Math.random() * 10),
+        overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
+      })))
     } catch (error) {
       toast({
         title: "Error",
@@ -223,6 +504,72 @@ export default function HomePage() {
       setIsGenerating(false)
     }
   }
+
+  const toggleSortDirection = () => {
+    setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+  }
+
+  const getActiveFilterLabel = () => {
+    return filterOptions.find((option) => option.id === activeFilter)?.label || "All Content"
+  }
+
+  const getActiveSortLabel = () => {
+    return sortOptions.find((option) => option.id === activeSort)?.label || "Last Opened"
+  }
+
+  const togglePin = (type, id) =>
+    setPins((p) => ({ ...p, [type]: p[type].includes(id) ? p[type].filter((x) => x !== id) : [...p[type], id] }))
+
+  const priority = (i) => {
+    if (i.progress === 100 || (i.type === "flashcards" && i.due === 0 && i.overdue === 0)) return 5
+    if (i.isPaused) return 3
+    if (!i.dueDate) return 4
+    const h = (new Date(i.dueDate) - Date.now()) / 36e5
+    return h < 0 ? 1 : h < 24 ? 2 : 4
+  }
+
+  const unpinned = filteredAndSortedContent.filter((i) => !pins[i.type]?.includes(i.id))
+  const visible = showAll ? unpinned : unpinned.slice(0, 3)
+
+  const [celebrate, setCelebrate] = useState(false)
+  useEffect(() => {
+    if (unpinned.length && unpinned.every((i) => priority(i) === 5)) {
+      setCelebrate(true)
+      const t = setTimeout(() => setCelebrate(false), 5000)
+      return () => clearTimeout(t)
+    }
+  }, [unpinned, priority])
+
+  const handleCardClick = (item) => {
+    // Navigate to the appropriate page based on item type
+    if (item.type === "course") {
+      window.location.href = `/courses/${item.id}`
+    } else if (item.type === "youtube") {
+      window.location.href = `/videos/${item.uuid || item.id}`
+    } else if (item.type === "book") {
+      window.location.href = `/books/${item.id}`
+    } else if (item.type === "roadmap") {
+      window.location.href = `/roadmap/${item.id}`
+    } else if (item.type === "flashcards") {
+      window.location.href = `/flashcards/${item.id}`
+    }
+  }
+
+  const renderCard = (item, i) => (
+    <BaseCard
+      key={item.id}
+      item={item}
+      index={i}
+      pinned={pins[item.type]?.includes(item.id)}
+      onTogglePin={() => togglePin(item.type, item.id)}
+      onClick={() => handleCardClick(item)}
+    />
+  )
+
+  const pinnedItems = Object.entries(pins).flatMap(([type, ids]) =>
+    filteredAndSortedContent.filter((x) => x.type === type && ids.includes(x.id)),
+  )
+
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0]
@@ -312,7 +659,14 @@ export default function HomePage() {
       // Refresh content list
       const data = await fetchContentData()
       const { content } = processContentData(data)
-      setContentItems(content)
+      setContentItems(content.map(item => ({
+        ...item,
+        dueDate: Math.random() > 0.7 ? new Date(Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000).toISOString() : null,
+        isPaused: Math.random() > 0.9,
+        totalCards: item.cardCount,
+        due: item.dueCount || Math.floor(Math.random() * 10),
+        overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
+      })))
     } catch (error) {
       toast({
         title: "Error",
@@ -351,7 +705,14 @@ export default function HomePage() {
       // Refresh content list
       const data = await fetchContentData()
       const { content } = processContentData(data)
-      setContentItems(content)
+      setContentItems(content.map(item => ({
+        ...item,
+        dueDate: Math.random() > 0.7 ? new Date(Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000).toISOString() : null,
+        isPaused: Math.random() > 0.9,
+        totalCards: item.cardCount,
+        due: item.dueCount || Math.floor(Math.random() * 10),
+        overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
+      })))
     } catch (error) {
       toast({
         title: "Error",
@@ -401,7 +762,14 @@ export default function HomePage() {
       // Refresh content list
       const data = await fetchContentData()
       const { content } = processContentData(data)
-      setContentItems(content)
+      setContentItems(content.map(item => ({
+        ...item,
+        dueDate: Math.random() > 0.7 ? new Date(Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000).toISOString() : null,
+        isPaused: Math.random() > 0.9,
+        totalCards: item.cardCount,
+        due: item.dueCount || Math.floor(Math.random() * 10),
+        overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
+      })))
     } catch (error) {
       toast({
         title: "Error",
@@ -411,17 +779,6 @@ export default function HomePage() {
     }
   }
 
-  const toggleSortDirection = () => {
-    setSortDirection(sortDirection === "asc" ? "desc" : "asc")
-  }
-
-  const getActiveFilterLabel = () => {
-    return filterOptions.find((option) => option.id === activeFilter)?.label || "All Content"
-  }
-
-  const getActiveSortLabel = () => {
-    return sortOptions.find((option) => option.id === activeSort)?.label || "Last Opened"
-  }
 
   return (
     <ErrorBoundary>
@@ -677,33 +1034,34 @@ export default function HomePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
           >
+            <AnimatePresence>
+              {pinnedItems.length > 0 && (
+                <motion.section
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mb-8"
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <Pin className="h-4 w-4 text-primary" />
+                    <h2 className="text-xl font-semibold">Pinned</h2>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{pinnedItems.map(renderCard)}</div>
+                  <div className="border-b border-slate-200 my-8" />
+                </motion.section>
+              )}
+            </AnimatePresence>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {isLoading ? (
                   // Show skeleton cards while loading
                   Array.from({ length: 6 }).map((_, index) => (
-                    <div key={index} className="animate-pulse">
+                    <div key={`skeleton-${index}`} className="animate-pulse">
                       <div className="bg-gray-200 dark:bg-gray-700 rounded-xl h-64" />
                     </div>
                   ))
                 ) : filteredAndSortedContent.length > 0 ? (
-                  filteredAndSortedContent.map((item) => {
-                    if (item.type === "course") {
-                      return <CourseCard key={item.id} course={item} />
-                    }
-                    if (item.type === "youtube") {
-                      return <YoutubeCard key={item.id} video={item} />
-                    }
-                    if (item.type === "flashcards") {
-                      return <FlashcardDeckCard key={item.id} deck={item} />
-                    }
-                    if (item.type === "book") {
-                      return <BookCard key={item.id} book={item} />
-                    }
-                    if (item.type === "roadmap") {
-                      return <RoadmapCard key={item.id} roadmap={item} />
-                    }
-                    return null
-                  })
+                  visible.map(renderCard)
                 ) : (
                   <div className="col-span-full text-center py-12">
                     <p className="text-slate-500">No content found matching your criteria.</p>
@@ -730,8 +1088,63 @@ export default function HomePage() {
                   </div>
                 )}
               </div>
+              
+              {!isLoading && unpinned.length > 3 && (
+                <div className="mt-6 text-center">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAll(!showAll)}
+                    className="h-10 min-w-[120px] flex items-center gap-2"
+                  >
+                    {showAll ? (
+                      <>
+                        <ChevronUp className="h-4 w-4" />
+                        Show Less
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4" />
+                        See {unpinned.length - 3} More
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+              
+              {!isLoading && filteredAndSortedContent.length === 0 && (
+                <div className="text-center py-12">
+                  <div className="inline-block bg-emerald-50 p-4 rounded-full mb-4">
+                    <Check className="h-8 w-8 text-emerald-600" />
+                  </div>
+                  <h3 className="text-xl font-bold text-emerald-700 mb-2">All Caught Up!</h3>
+                  <p className="text-slate-600">You've completed all your learning tasks. Great job!</p>
+                </div>
+              )}
           </motion.div>
         </div>
+        {celebrate && (
+          <div className="fixed inset-0 pointer-events-none z-50">
+            {Array.from({ length: 100 }).map((_, i) => (
+              <div
+                key={i}
+                className="absolute animate-confetti"
+                style={{
+                  left: `${Math.random() * 100}%`,
+                  top: "-5%",
+                  width: `${Math.random() * 10 + 5}px`,
+                  height: `${Math.random() * 10 + 5}px`,
+                  background: ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff", "#ff8000", "#8000ff"][
+                    Math.floor(Math.random() * 8)
+                  ],
+                  transform: `rotate(${Math.random() * 360}deg)`,
+                  animationDuration: `${Math.random() * 3 + 2}s`,
+                  animationDelay: `${Math.random() * 2}s`,
+                }}
+              />
+            ))}
+          </div>
+        )}
+        
 
         {/* Upload Book Dialog */}
         <Sheet open={showUploadDialog} onOpenChange={setShowUploadDialog}>
@@ -926,7 +1339,10 @@ export default function HomePage() {
                     </span>
                     <Button
                       onClick={() => {
-                        setIsGenerateMode(true)
+                        toast({
+                          title: "Coming Soon",
+                          description: "Course generation will be available soon!",
+                        })
                         setIsFabExpanded(false)
                       }}
                       size="icon"
@@ -1032,6 +1448,22 @@ export default function HomePage() {
             </motion.div>
           </div>
         </div>
+        
+        <style jsx global>{`
+          @keyframes confetti {
+            0% {
+              transform: translateY(0) rotate(0deg);
+              opacity: 1;
+            }
+            100% {
+              transform: translateY(100vh) rotate(720deg);
+              opacity: 0;
+            }
+          }
+          .animate-confetti {
+            animation: confetti 5s ease-in-out forwards;
+          }
+        `}</style>
           </div>
         </ErrorBoundary>
       </TooltipProvider>
