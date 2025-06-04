@@ -3,15 +3,19 @@ import React from 'react';
 // Version compatibility check
 const checkReactVersion = () => {
   const reactVersion = React.version;
-  console.log(`[Debug] React version: ${reactVersion}`);
+  if (import.meta.env.VITE_DEBUG_MODE === 'true') {
+    console.log(`[Debug] React version: ${reactVersion}`);
+  }
 
   // Check for React 19
   if (reactVersion.startsWith('19')) {
-    console.log('[Debug] Using React 19 - Experimental Features Enabled');
+    if (import.meta.env.VITE_DEBUG_MODE === 'true') {
+      console.log('[Debug] Using React 19 - Experimental Features Enabled');
 
-    // Log which experimental features are available
-    const experimentalFeatures = Object.keys(React).filter(key => key.startsWith('experimental') || key.startsWith('use'));
-    console.log('[Debug] Available experimental features:', experimentalFeatures);
+      // Log which experimental features are available
+      const experimentalFeatures = Object.keys(React).filter(key => key.startsWith('experimental') || key.startsWith('use'));
+      console.log('[Debug] Available experimental features:', experimentalFeatures);
+    }
 
     // Check for specific APIs we're using
     const requiredAPIs = ['createRoot', 'Fragment', 'forwardRef'];
@@ -27,13 +31,19 @@ const checkReactVersion = () => {
 const checkRadixComponents = async () => {
   try {
     const tooltipModule = await import('@radix-ui/react-tooltip');
-    console.log('[Debug] Tooltip component loaded:', !!tooltipModule.TooltipProvider);
+    if (import.meta.env.VITE_DEBUG_MODE === 'true') {
+      console.log('[Debug] Tooltip component loaded:', !!tooltipModule.TooltipProvider);
+    }
 
     const radioGroupModule = await import('@radix-ui/react-radio-group');
-    console.log('[Debug] RadioGroup component loaded:', !!radioGroupModule.Root);
+    if (import.meta.env.VITE_DEBUG_MODE === 'true') {
+      console.log('[Debug] RadioGroup component loaded:', !!radioGroupModule.Root);
+    }
 
     const separatorModule = await import('@radix-ui/react-separator');
-    console.log('[Debug] Separator component loaded:', !!separatorModule.Root);
+    if (import.meta.env.VITE_DEBUG_MODE === 'true') {
+      console.log('[Debug] Separator component loaded:', !!separatorModule.Root);
+    }
 
     return true;
   } catch (error) {
