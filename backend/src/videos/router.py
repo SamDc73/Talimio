@@ -106,6 +106,19 @@ async def update_video_progress(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
+@router.post("/{video_uuid}/progress")
+async def update_video_progress_post(
+    video_uuid: str,
+    progress_data: VideoProgressUpdate,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> VideoResponse:
+    """Update video watch progress (POST version for sendBeacon compatibility)."""
+    try:
+        return await video_service.update_progress(db, video_uuid, progress_data)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
 @router.delete("/{video_uuid}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_video(
     video_uuid: str,

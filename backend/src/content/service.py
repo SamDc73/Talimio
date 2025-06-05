@@ -238,11 +238,14 @@ async def fetch_roadmaps(search: str | None = None) -> list[RoadmapContent]:
                 .scalar_subquery()
             )
 
+            # Count completed lessons from progress table
+            from src.progress.models import Progress
+            
             completed_count_subq = (
-                select(func.count(Node.id))
+                select(func.count(Progress.id))
                 .where(
-                    Node.roadmap_id == Roadmap.id,
-                    Node.status == "completed",
+                    Progress.course_id == func.cast(Roadmap.id, String),
+                    Progress.status == "done",
                 )
                 .scalar_subquery()
             )

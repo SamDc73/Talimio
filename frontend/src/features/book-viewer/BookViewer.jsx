@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import PDFViewer from './components/PDFViewer';
 import EPUBViewer from './components/EPUBViewer';
 import { SidebarProvider, useSidebar } from '../navigation/SidebarContext';
 import { BookSidebar } from '@/components/sidebar';
 import { BookHeader } from '@/components/header/BookHeader';
+import { booksApi } from '@/services/booksApi';
 import './BookViewer.css';
 
 const BookViewerContent = () => {
@@ -22,13 +23,14 @@ const BookViewerContent = () => {
     const fetchBook = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/v1/books/${bookId}`);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch book: ${response.statusText}`);
-        }
-        const data = await response.json();
+        const data = await booksApi.getBook(bookId);
         setBook(data);
         setTotalPages(data.total_pages || 0);
+        
+        // Set current page from progress if available
+        if (data.progress && data.progress.current_page) {
+          setCurrentPage(data.progress.current_page);
+        }
       } catch (err) {
         setError(err.message);
       } finally {
@@ -39,10 +41,60 @@ const BookViewerContent = () => {
     fetchBook();
   }, [bookId]);
 
+  // Debounced progress update function
+  const updateProgress = useCallback(
+    async (pageNum) => {
+      if (!book || !totalPages) return;
+      
+      try {
+        const progressPercentage = Math.round((pageNum / totalPages) * 100);
+        await booksApi.updateProgress(bookId, {
+          current_page: pageNum,
+          progress_percentage: progressPercentage,
+          status: progressPercentage >= 100 ? 'completed' : 'reading'
+        });
+      } catch (err) {
+        console.error('Failed to update book progress:', err);
+      }
+    },
+    [bookId, book, totalPages]
+  );
 
   const handlePageChange = (pageNum) => {
     setCurrentPage(pageNum);
+    
+    // Debounce progress updates to avoid too many API calls
+    clearTimeout(handlePageChange.timeoutId);
+    handlePageChange.timeoutId = setTimeout(() => {
+      updateProgress(pageNum);
+    }, 1000);
   };
+
+  // Save progress on page unload
+  useEffect(() => {
+    const saveProgressOnUnload = () => {
+      if (currentPage > 1 && book && totalPages) {
+        const progressPercentage = Math.round((currentPage / totalPages) * 100);
+        const data = JSON.stringify({
+          current_page: currentPage,
+          progress_percentage: progressPercentage,
+          status: progressPercentage >= 100 ? 'completed' : 'reading'
+        });
+        navigator.sendBeacon(
+          `/api/v1/books/${bookId}/progress`,
+          new Blob([data], { type: 'application/json' })
+        );
+      }
+    };
+
+    window.addEventListener('beforeunload', saveProgressOnUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', saveProgressOnUnload);
+      // Also save progress when component unmounts
+      saveProgressOnUnload();
+    };
+  }, [currentPage, book, totalPages, bookId]);
 
   const handleZoomIn = () => {
     setZoomLevel(prev => Math.min(prev + 20, 300));

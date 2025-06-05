@@ -80,7 +80,13 @@ function VideoViewerContent() {
           try {
             const data = JSON.parse(event.data)
             if (data.event === 'infoDelivery' && data.info && data.info.currentTime !== undefined) {
-              setCurrentTime(Math.floor(data.info.currentTime))
+              const newTime = Math.floor(data.info.currentTime)
+              setCurrentTime(newTime)
+              
+              // Auto-save progress every 10 seconds of playback
+              if (newTime > 0 && newTime % 10 === 0) {
+                handleProgressUpdate(newTime)
+              }
             }
           } catch (e) {
             // Ignore non-JSON messages
@@ -103,6 +109,30 @@ function VideoViewerContent() {
       playerRef.current?.removeEventListener('liteYoutubeActivate', handleLiteYoutubeActivate)
     }
   }, [video])
+
+  // Third useEffect - Save progress on page unload
+  useEffect(() => {
+    const saveProgressOnUnload = () => {
+      if (currentTime > 0 && video) {
+        // Use sendBeacon for reliable delivery during page unload
+        const data = JSON.stringify({
+          last_position: Math.floor(currentTime)
+        })
+        navigator.sendBeacon(
+          `/api/v1/videos/${videoId}/progress`,
+          new Blob([data], { type: 'application/json' })
+        )
+      }
+    }
+
+    window.addEventListener('beforeunload', saveProgressOnUnload)
+    
+    return () => {
+      window.removeEventListener('beforeunload', saveProgressOnUnload)
+      // Also save progress when component unmounts
+      saveProgressOnUnload()
+    }
+  }, [currentTime, video, videoId])
 
   // Handler functions
   const handleProgressUpdate = async (currentTime) => {
