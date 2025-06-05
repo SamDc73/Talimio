@@ -175,6 +175,15 @@ async def update_book_progress_endpoint(
     return await update_book_progress(book_id, progress_data)
 
 
+@router.post("/{book_id}/progress")
+async def update_book_progress_post_endpoint(
+    book_id: UUID,
+    progress_data: BookProgressUpdate,
+) -> BookProgressResponse:
+    """Update reading progress for a book (POST version for sendBeacon compatibility)."""
+    return await update_book_progress(book_id, progress_data)
+
+
 @router.get("/{book_id}/file")
 async def serve_book_file(book_id: UUID) -> FileResponse:
     """Serve the actual book file for viewing."""

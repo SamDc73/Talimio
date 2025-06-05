@@ -137,12 +137,17 @@ async def list_content_fast(
                     '' as extra2,
                     CASE 
                         WHEN (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id) > 0 
-                        THEN ((SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND status = 'completed') * 100 / 
-                              (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id))
+                        THEN (
+                            (SELECT COUNT(*) 
+                             FROM progress p 
+                             WHERE p.course_id = r.id::text 
+                               AND p.status = 'done') * 100 / 
+                            (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id)
+                        )
                         ELSE 0 
                     END as progress,
                     (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id) as count1,
-                    (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND status = 'completed') as count2
+                    (SELECT COUNT(*) FROM progress p WHERE p.course_id = r.id::text AND p.status = 'done') as count2
                 FROM roadmaps r
             """
             if search:
