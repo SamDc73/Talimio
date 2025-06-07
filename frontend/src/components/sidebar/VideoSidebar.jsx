@@ -1,23 +1,70 @@
 import { useState, useEffect } from "react";
-import { Clock, FileText } from "lucide-react";
+import { Clock, FileText, Download } from "lucide-react";
 import { useSidebar } from "@/features/navigation/SidebarContext";
 import SidebarContainer from "./SidebarContainer";
 import ProgressIndicator from "./ProgressIndicator";
 import SidebarNav from "./SidebarNav";
 import CompletionCheckbox from "./CompletionCheckbox";
+import { getVideoChapters, updateVideoChapterStatus, extractVideoChapters } from "@/services/videosService";
+import { useToast } from "@/hooks/use-toast";
 
 export function VideoSidebar({ video, currentTime, onSeek }) {
   const { isOpen } = useSidebar();
   const [chapters, setChapters] = useState([]);
+  const [apiChapters, setApiChapters] = useState([]);
   const [completedChapters, setCompletedChapters] = useState(new Set());
   const [activeChapter, setActiveChapter] = useState(null);
+  const [isLoadingChapters, setIsLoadingChapters] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const { toast } = useToast();
 
+  // Fetch API chapters
   useEffect(() => {
-    if (video?.description) {
+    if (!video?.uuid) return;
+
+    async function fetchApiChapters() {
+      setIsLoadingChapters(true);
+      try {
+        const chapters = await getVideoChapters(video.uuid);
+        setApiChapters(chapters || []);
+        
+        // Update completed chapters based on chapter status
+        const completed = new Set();
+        chapters?.forEach(chapter => {
+          if (chapter.status === 'completed') {
+            completed.add(chapter.id);
+          }
+        });
+        setCompletedChapters(completed);
+      } catch (error) {
+        console.error('Failed to fetch video chapters:', error);
+        // Fall back to description extraction
+        setApiChapters([]);
+      } finally {
+        setIsLoadingChapters(false);
+      }
+    }
+
+    fetchApiChapters();
+  }, [video?.uuid]);
+
+  // Extract chapters from description as fallback
+  useEffect(() => {
+    if (video?.description && apiChapters.length === 0) {
       const extractedChapters = extractChapters(video.description);
       setChapters(extractedChapters);
+    } else if (apiChapters.length > 0) {
+      // Convert API chapters to the expected format
+      const formattedChapters = apiChapters.map(chapter => ({
+        id: chapter.id,
+        timestamp: chapter.start_time,
+        timeStr: formatTime(chapter.start_time),
+        title: chapter.title,
+        chapter_id: chapter.id
+      }));
+      setChapters(formattedChapters);
     }
-  }, [video]);
+  }, [video?.description, apiChapters]);
 
   useEffect(() => {
     if (chapters.length > 0 && currentTime !== undefined) {
@@ -78,16 +125,84 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
     }
   };
 
-  const toggleChapterCompletion = (chapterId) => {
+  const toggleChapterCompletion = async (chapter) => {
+    const chapterId = chapter.id || chapter.chapter_id;
+    const isCompleted = completedChapters.has(chapterId);
+    const newStatus = isCompleted ? 'not_started' : 'completed';
+
+    // Optimistic update
     setCompletedChapters(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(chapterId)) {
+      if (isCompleted) {
         newSet.delete(chapterId);
       } else {
         newSet.add(chapterId);
       }
       return newSet;
     });
+
+    // Update via API if this is an API chapter
+    if (apiChapters.length > 0 && chapter.chapter_id) {
+      try {
+        await updateVideoChapterStatus(video.uuid, chapter.chapter_id, newStatus);
+        toast({
+          title: "Chapter updated",
+          description: `Chapter marked as ${newStatus.replace('_', ' ')}`,
+        });
+      } catch (error) {
+        // Revert optimistic update
+        setCompletedChapters(prev => {
+          const newSet = new Set(prev);
+          if (isCompleted) {
+            newSet.add(chapterId);
+          } else {
+            newSet.delete(chapterId);
+          }
+          return newSet;
+        });
+        
+        toast({
+          title: "Error",
+          description: "Failed to update chapter status",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const handleExtractChapters = async () => {
+    setIsExtracting(true);
+    try {
+      const result = await extractVideoChapters(video.uuid);
+      toast({
+        title: "Chapters extracted",
+        description: `Successfully extracted ${result.count || 0} chapters`,
+      });
+      
+      // Refresh chapters
+      const chapters = await getVideoChapters(video.uuid);
+      setApiChapters(chapters || []);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to extract chapters",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  // Helper function to format seconds to time string
+  const formatTime = (seconds) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
   };
 
   const getProgress = () => {
@@ -115,6 +230,17 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
             <Clock className="w-12 h-12 mx-auto mb-4 text-zinc-300" />
             <p className="text-sm">No chapters found</p>
             <p className="text-xs mt-2">Chapters are extracted from the video description</p>
+            
+            {/* Extract chapters button */}
+            <button
+              type="button"
+              onClick={handleExtractChapters}
+              disabled={isExtracting}
+              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
+            >
+              <Download className="w-4 h-4" />
+              {isExtracting ? 'Extracting...' : 'Extract Chapters'}
+            </button>
           </div>
         ) : (
           <div className="space-y-2">
@@ -138,7 +264,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
                       >
                         <CompletionCheckbox
                           isCompleted={isCompleted}
-                          onClick={() => toggleChapterCompletion(chapter.id)}
+                          onClick={() => toggleChapterCompletion(chapter)}
                         />
                         
                         <div className="flex-1 min-w-0">
