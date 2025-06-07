@@ -25,7 +25,7 @@ from .onboarding.router import router as onboarding_router
 from .progress.models import Progress  # noqa: F401
 from .progress.router import router as progress_router
 from .roadmaps.models import Node, Roadmap  # noqa: F401
-from .roadmaps.router import router as roadmaps_router
+from .roadmaps.router import nodes_router, router as roadmaps_router
 from .tagging.models import Tag, TagAssociation  # noqa: F401
 from .tagging.router import router as tagging_router
 from .videos.models import Video  # noqa: F401
@@ -100,6 +100,7 @@ def create_app() -> FastAPI:
     app.include_router(content_router)
     app.include_router(flashcards_router)
     app.include_router(roadmaps_router)
+    app.include_router(nodes_router)  # Phase 2.1: Direct node access
     app.include_router(onboarding_router)
     app.include_router(lessons_router)
     app.include_router(progress_router)

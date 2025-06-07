@@ -138,5 +138,33 @@ class BookListResponse(BaseModel):
     per_page: int
 
 
+# Chapter schemas for Phase 2.2
+class BookChapterBase(BaseModel):
+    """Base schema for book chapter."""
+
+    chapter_number: int = Field(..., ge=1)
+    title: str = Field(..., max_length=500)
+    start_page: int | None = Field(None, ge=1)
+    end_page: int | None = Field(None, ge=1)
+    status: str = Field(default="not_started", pattern="^(not_started|in_progress|done)$")
+
+
+class BookChapterResponse(BookChapterBase):
+    """Schema for book chapter response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    book_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class BookChapterStatusUpdate(BaseModel):
+    """Schema for updating book chapter status."""
+
+    status: str = Field(..., pattern="^(not_started|in_progress|done)$")
+
+
 # Update forward references
 TableOfContentsItem.model_rebuild()

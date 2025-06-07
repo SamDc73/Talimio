@@ -180,3 +180,9 @@ class RoadmapsListResponse(PydanticBaseModel):
     total: int
     page: int
     pages: int
+
+
+class NodeStatusUpdate(PydanticBaseModel):
+    """Schema for updating node status."""
+
+    status: str = Field(..., pattern="^(not_started|in_progress|done)$")

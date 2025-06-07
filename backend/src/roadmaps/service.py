@@ -355,3 +355,69 @@ class RoadmapService:
         roadmap = await self.get_roadmap(roadmap_id)
         # Serialize the full roadmap tree
         return RoadmapResponse.model_validate(roadmap).model_dump()
+
+    # New methods for direct node access (Phase 2.1)
+    async def get_node_direct(self, node_id: UUID) -> Node:
+        """Get a node directly by ID without requiring roadmap ID."""
+        query = select(Node).where(Node.id == node_id)
+        result = await self._session.execute(query)
+        node = result.scalar_one_or_none()
+
+        if node is None:
+            msg = "Node"
+            raise ResourceNotFoundError(msg, str(node_id))
+
+        return node
+
+    async def update_node_direct(self, node_id: UUID, data: NodeUpdate) -> Node:
+        """Update a node directly by ID without requiring roadmap ID."""
+        node = await self.get_node_direct(node_id)
+
+        update_data = data.model_dump(exclude_unset=True)
+
+        # Remove prerequisite_ids from update data as the feature is removed
+        if "prerequisite_ids" in update_data:
+            update_data.pop("prerequisite_ids")
+
+        # Update remaining fields
+        for key, value in update_data.items():
+            setattr(node, key, value)
+
+        await self._session.commit()
+        await self._session.refresh(node)
+        return node
+
+    async def update_node_status(self, node_id: UUID, status: str) -> Node:
+        """Update node status directly by ID."""
+        node = await self.get_node_direct(node_id)
+
+        # Validate status
+        valid_statuses = ["not_started", "in_progress", "done"]
+        if status not in valid_statuses:
+            msg = f"Invalid status '{status}'. Valid statuses are: {', '.join(valid_statuses)}"
+            raise ValidationError(msg)
+
+        node.status = status
+
+        # Update completion percentage based on status
+        if status == "not_started":
+            node.completion_percentage = 0.0
+        elif status == "in_progress":
+            # Keep current percentage if already set, otherwise default to 50%
+            if node.completion_percentage == 0.0:
+                node.completion_percentage = 50.0
+        elif status == "done":
+            node.completion_percentage = 100.0
+
+        await self._session.commit()
+        await self._session.refresh(node)
+        return node
+
+    async def get_roadmap_nodes(self, roadmap_id: UUID) -> list[Node]:
+        """Get all nodes for a roadmap with their current status."""
+        # Verify roadmap exists
+        await self.get_roadmap(roadmap_id)
+
+        query = select(Node).where(Node.roadmap_id == roadmap_id).order_by(Node.order)
+        result = await self._session.execute(query)
+        return list(result.scalars().all())

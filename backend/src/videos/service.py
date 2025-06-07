@@ -8,8 +8,15 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.pagination import Paginator
-from src.videos.models import Video
-from src.videos.schemas import VideoCreate, VideoListResponse, VideoProgressUpdate, VideoResponse, VideoUpdate
+from src.videos.models import Video, VideoChapter
+from src.videos.schemas import (
+    VideoChapterResponse,
+    VideoCreate,
+    VideoListResponse,
+    VideoProgressUpdate,
+    VideoResponse,
+    VideoUpdate,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -54,25 +61,25 @@ class VideoService:
         try:
             from src.ai.client import ModelManager
             from src.tagging.service import TaggingService
-            
+
             model_manager = ModelManager()
             tagging_service = TaggingService(db, model_manager)
-            
+
             # Build content preview
             content_preview = []
             content_preview.append(f"Channel: {video.channel}")
-            
+
             if video.description:
                 # Take first 1000 characters
                 desc_preview = video.description[:1000]
                 if len(video.description) > 1000:
                     desc_preview += "..."
                 content_preview.append(f"Description: {desc_preview}")
-            
+
             # Add YouTube tags if available
             if video_info.get("tags"):
                 content_preview.append(f"YouTube tags: {', '.join(video_info['tags'][:10])}")
-            
+
             # Generate and store tags
             tags = await tagging_service.tag_content(
                 content_id=video.uuid,
@@ -80,16 +87,16 @@ class VideoService:
                 title=video.title,
                 content_preview="\n\n".join(content_preview),
             )
-            
+
             # Update video's tags field with both YouTube and generated tags
             if tags:
                 existing_tags = video_info.get("tags", [])
                 all_tags = list(set(existing_tags + tags))  # Combine and deduplicate
                 video.tags = json.dumps(all_tags)
                 await db.commit()
-                
+
             logger.info(f"Successfully tagged video {video.uuid} with tags: {tags}")
-            
+
         except Exception as e:
             # Don't fail video creation if tagging fails
             logger.exception(f"Failed to tag video {video.uuid}: {e}")
@@ -270,6 +277,181 @@ class VideoService:
             logger.exception(f"Error fetching video info: {e}")
             msg = f"Failed to fetch video information: {e!s}"
             raise ValueError(msg)
+
+    # Phase 2.3: Video Chapter Methods
+    async def get_video_chapters(self, db: AsyncSession, video_uuid: str) -> list[VideoChapterResponse]:
+        """Get all chapters for a video."""
+        # Verify video exists
+        video_result = await db.execute(select(Video).where(Video.uuid == video_uuid))
+        video = video_result.scalar_one_or_none()
+
+        if not video:
+            msg = f"Video with UUID {video_uuid} not found"
+            raise ValueError(msg)
+
+        # Get chapters
+        chapters_result = await db.execute(
+            select(VideoChapter).where(VideoChapter.video_uuid == video_uuid).order_by(VideoChapter.chapter_number),
+        )
+        chapters = chapters_result.scalars().all()
+
+        return [VideoChapterResponse.model_validate(chapter) for chapter in chapters]
+
+    async def get_video_chapter(self, db: AsyncSession, video_uuid: str, chapter_id: str) -> VideoChapterResponse:
+        """Get a specific chapter for a video."""
+        # Verify video exists
+        video_result = await db.execute(select(Video).where(Video.uuid == video_uuid))
+        video = video_result.scalar_one_or_none()
+
+        if not video:
+            msg = f"Video with UUID {video_uuid} not found"
+            raise ValueError(msg)
+
+        # Get chapter
+        chapter_result = await db.execute(
+            select(VideoChapter).where(
+                VideoChapter.id == chapter_id,
+                VideoChapter.video_uuid == video_uuid,
+            ),
+        )
+        chapter = chapter_result.scalar_one_or_none()
+
+        if not chapter:
+            msg = f"Chapter {chapter_id} not found"
+            raise ValueError(msg)
+
+        return VideoChapterResponse.model_validate(chapter)
+
+    async def update_video_chapter_status(
+        self, db: AsyncSession, video_uuid: str, chapter_id: str, status: str,
+    ) -> VideoChapterResponse:
+        """Update the status of a video chapter."""
+        # Verify video exists
+        video_result = await db.execute(select(Video).where(Video.uuid == video_uuid))
+        video = video_result.scalar_one_or_none()
+
+        if not video:
+            msg = f"Video with UUID {video_uuid} not found"
+            raise ValueError(msg)
+
+        # Get chapter
+        chapter_result = await db.execute(
+            select(VideoChapter).where(
+                VideoChapter.id == chapter_id,
+                VideoChapter.video_uuid == video_uuid,
+            ),
+        )
+        chapter = chapter_result.scalar_one_or_none()
+
+        if not chapter:
+            msg = f"Chapter {chapter_id} not found"
+            raise ValueError(msg)
+
+        # Validate status
+        valid_statuses = ["not_started", "in_progress", "done"]
+        if status not in valid_statuses:
+            msg = f"Invalid status '{status}'. Valid statuses are: {', '.join(valid_statuses)}"
+            raise ValueError(msg)
+
+        # Update status
+        chapter.status = status
+        chapter.updated_at = datetime.now()
+
+        await db.commit()
+        await db.refresh(chapter)
+
+        return VideoChapterResponse.model_validate(chapter)
+
+    async def extract_and_create_video_chapters(self, db: AsyncSession, video_uuid: str) -> list[VideoChapterResponse]:
+        """Extract chapters from YouTube video and create chapter records."""
+        # Get video
+        video_result = await db.execute(select(Video).where(Video.uuid == video_uuid))
+        video = video_result.scalar_one_or_none()
+
+        if not video:
+            msg = f"Video with UUID {video_uuid} not found"
+            raise ValueError(msg)
+
+        # Extract chapters using yt-dlp
+        try:
+            chapters_info = await self._fetch_video_chapters(video.url)
+        except Exception as e:
+            logger.exception(f"Failed to extract chapters for video {video_uuid}")
+            msg = f"Failed to extract chapters: {e!s}"
+            raise ValueError(msg)
+
+        if not chapters_info:
+            # Create a single default chapter for the entire video
+            chapters_info = [{
+                "title": video.title,
+                "start_time": 0,
+                "end_time": video.duration,
+            }]
+
+        # Clear existing chapters
+        existing_chapters_result = await db.execute(
+            select(VideoChapter).where(VideoChapter.video_uuid == video_uuid),
+        )
+        existing_chapters = existing_chapters_result.scalars().all()
+        for chapter in existing_chapters:
+            await db.delete(chapter)
+
+        # Create new chapters
+        chapters = []
+        for i, chapter_info in enumerate(chapters_info):
+            chapter = VideoChapter(
+                video_uuid=video.uuid,
+                chapter_number=i + 1,
+                title=chapter_info.get("title", f"Chapter {i + 1}"),
+                start_time=chapter_info.get("start_time"),
+                end_time=chapter_info.get("end_time"),
+                status="not_started",
+            )
+            db.add(chapter)
+            chapters.append(chapter)
+
+        await db.commit()
+
+        # Refresh chapters to get IDs
+        for chapter in chapters:
+            await db.refresh(chapter)
+
+        return [VideoChapterResponse.model_validate(chapter) for chapter in chapters]
+
+    async def _fetch_video_chapters(self, url: str) -> list[dict[str, Any]]:
+        """Fetch video chapter information using yt-dlp."""
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "extract_flat": False,
+            "skip_download": True,
+        }
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+
+                if not info:
+                    return []
+
+                # Extract chapters if available
+                chapters = info.get("chapters", [])
+                if not chapters:
+                    return []
+
+                chapter_list = []
+                for chapter in chapters:
+                    chapter_list.append({
+                        "title": chapter.get("title", "Unknown Chapter"),
+                        "start_time": int(chapter.get("start_time", 0)),
+                        "end_time": int(chapter.get("end_time", 0)),
+                    })
+
+                return chapter_list
+
+        except Exception as e:
+            logger.exception(f"Error fetching video chapters: {e}")
+            return []
 
 
 # Service instance

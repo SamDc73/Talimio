@@ -12,6 +12,7 @@ from src.roadmaps.models import Node, Roadmap
 from src.roadmaps.schemas import (
     NodeCreate,
     NodeResponse,
+    NodeStatusUpdate,
     NodeUpdate,
     RoadmapCreate,
     RoadmapResponse,
@@ -22,6 +23,9 @@ from src.roadmaps.service import RoadmapService
 
 
 router = APIRouter(prefix="/api/v1/roadmaps", tags=["roadmaps"])
+
+# Create a separate router for direct node access endpoints
+nodes_router = APIRouter(prefix="/api/v1/nodes", tags=["nodes"])
 
 
 @router.get(
@@ -267,3 +271,100 @@ async def generate_sub_nodes(
         return [NodeResponse.model_validate(n) for n in nodes]
     except (ResourceNotFoundError, ValidationError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get(
+    "/{roadmap_id}/nodes",
+    summary="Get all nodes for a roadmap",
+    responses={404: {"description": "Roadmap not found"}},
+)
+async def get_roadmap_nodes(
+    roadmap_id: UUID,
+    session: DbSession,
+) -> list[NodeResponse]:
+    """Get all nodes for a roadmap with their current status."""
+    service = RoadmapService(session)
+    try:
+        nodes = await service.get_roadmap_nodes(roadmap_id)
+        return [NodeResponse.model_validate(n) for n in nodes]
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+
+
+# Phase 2.1: Direct Node Access Endpoints
+@nodes_router.get(
+    "/{node_id}",
+    summary="Get node directly by ID",
+    responses={404: {"description": "Node not found"}},
+)
+async def get_node_direct(
+    node_id: UUID,
+    session: DbSession,
+) -> NodeResponse:
+    """Get a node directly by ID without requiring roadmap ID."""
+    service = RoadmapService(session)
+    try:
+        node = await service.get_node_direct(node_id)
+        return NodeResponse.model_validate(node)
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+
+
+@nodes_router.patch(
+    "/{node_id}",
+    summary="Update node directly by ID",
+    responses={404: {"description": "Node not found"}},
+)
+async def update_node_direct(
+    node_id: UUID,
+    data: NodeUpdate,
+    session: DbSession,
+) -> NodeResponse:
+    """Update a node directly by ID without requiring roadmap ID."""
+    service = RoadmapService(session)
+    try:
+        node = await service.update_node_direct(node_id, data)
+        return NodeResponse.model_validate(node)
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+
+@nodes_router.put(
+    "/{node_id}/status",
+    summary="Update node status directly by ID",
+    responses={404: {"description": "Node not found"}},
+)
+async def update_node_status(
+    node_id: UUID,
+    data: NodeStatusUpdate,
+    session: DbSession,
+) -> NodeResponse:
+    """Update node status directly by ID."""
+    service = RoadmapService(session)
+    try:
+        node = await service.update_node_status(node_id, data.status)
+        return NodeResponse.model_validate(node)
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e

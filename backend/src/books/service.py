@@ -11,8 +11,9 @@ from sqlalchemy.orm import selectinload
 
 from src.database.session import async_session_maker
 
-from .models import Book, BookProgress
+from .models import Book, BookChapter, BookProgress
 from .schemas import (
+    BookChapterResponse,
     BookCreate,
     BookListResponse,
     BookProgressResponse,
@@ -566,4 +567,260 @@ async def extract_and_update_toc(book_id: UUID) -> BookResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to extract table of contents: {e!s}",
+        ) from e
+
+
+# Phase 2.2: Book Chapter Methods
+async def get_book_chapters(book_id: UUID) -> list[BookChapterResponse]:
+    """
+    Get all chapters for a book.
+
+    Args:
+        book_id: Book ID
+
+    Returns
+    -------
+        list[BookChapterResponse]: List of book chapters
+
+    Raises
+    ------
+        HTTPException: If book not found or retrieval fails
+    """
+    try:
+        async with async_session_maker() as session:
+            # Verify book exists
+            book_query = select(Book).where(Book.id == book_id)
+            book_result = await session.execute(book_query)
+            book = book_result.scalar_one_or_none()
+
+            if not book:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Book {book_id} not found",
+                )
+
+            # Get chapters
+            chapters_query = select(BookChapter).where(BookChapter.book_id == book_id).order_by(BookChapter.chapter_number)
+            chapters_result = await session.execute(chapters_query)
+            chapters = chapters_result.scalars().all()
+
+            return [BookChapterResponse.model_validate(chapter) for chapter in chapters]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.exception(f"Error getting chapters for book {book_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get book chapters: {e!s}",
+        ) from e
+
+
+async def get_book_chapter(book_id: UUID, chapter_id: UUID) -> BookChapterResponse:
+    """
+    Get a specific chapter for a book.
+
+    Args:
+        book_id: Book ID
+        chapter_id: Chapter ID
+
+    Returns
+    -------
+        BookChapterResponse: Book chapter data
+
+    Raises
+    ------
+        HTTPException: If book or chapter not found or retrieval fails
+    """
+    try:
+        async with async_session_maker() as session:
+            # Verify book exists
+            book_query = select(Book).where(Book.id == book_id)
+            book_result = await session.execute(book_query)
+            book = book_result.scalar_one_or_none()
+
+            if not book:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Book {book_id} not found",
+                )
+
+            # Get chapter
+            chapter_query = select(BookChapter).where(
+                BookChapter.id == chapter_id,
+                BookChapter.book_id == book_id,
+            )
+            chapter_result = await session.execute(chapter_query)
+            chapter = chapter_result.scalar_one_or_none()
+
+            if not chapter:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Chapter {chapter_id} not found",
+                )
+
+            return BookChapterResponse.model_validate(chapter)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.exception(f"Error getting chapter {chapter_id} for book {book_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get book chapter: {e!s}",
+        ) from e
+
+
+async def update_book_chapter_status(book_id: UUID, chapter_id: UUID, status: str) -> BookChapterResponse:
+    """
+    Update the status of a book chapter.
+
+    Args:
+        book_id: Book ID
+        chapter_id: Chapter ID
+        status: New status
+
+    Returns
+    -------
+        BookChapterResponse: Updated chapter data
+
+    Raises
+    ------
+        HTTPException: If book or chapter not found or update fails
+    """
+    try:
+        async with async_session_maker() as session:
+            # Verify book exists
+            book_query = select(Book).where(Book.id == book_id)
+            book_result = await session.execute(book_query)
+            book = book_result.scalar_one_or_none()
+
+            if not book:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Book {book_id} not found",
+                )
+
+            # Get chapter
+            chapter_query = select(BookChapter).where(
+                BookChapter.id == chapter_id,
+                BookChapter.book_id == book_id,
+            )
+            chapter_result = await session.execute(chapter_query)
+            chapter = chapter_result.scalar_one_or_none()
+
+            if not chapter:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Chapter {chapter_id} not found",
+                )
+
+            # Validate status
+            valid_statuses = ["not_started", "in_progress", "done"]
+            if status not in valid_statuses:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid status '{status}'. Valid statuses are: {', '.join(valid_statuses)}",
+                )
+
+            # Update status
+            chapter.status = status
+            chapter.updated_at = datetime.now(UTC)
+
+            await session.commit()
+            await session.refresh(chapter)
+
+            return BookChapterResponse.model_validate(chapter)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.exception(f"Error updating chapter {chapter_id} status for book {book_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update chapter status: {e!s}",
+        ) from e
+
+
+async def extract_and_create_chapters(book_id: UUID) -> list[BookChapterResponse]:
+    """
+    Extract chapters from book's table of contents and create chapter records.
+
+    Args:
+        book_id: Book ID
+
+    Returns
+    -------
+        list[BookChapterResponse]: Created chapters
+
+    Raises
+    ------
+        HTTPException: If book not found or extraction fails
+    """
+    try:
+        async with async_session_maker() as session:
+            # Get book with table of contents
+            book_query = select(Book).where(Book.id == book_id)
+            book_result = await session.execute(book_query)
+            book = book_result.scalar_one_or_none()
+
+            if not book:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Book {book_id} not found",
+                )
+
+            if not book.table_of_contents:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Book has no table of contents",
+                )
+
+            # Parse table of contents
+            import json
+            try:
+                toc_data = json.loads(book.table_of_contents)
+            except (json.JSONDecodeError, TypeError):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid table of contents format",
+                )
+
+            # Clear existing chapters
+            delete_query = select(BookChapter).where(BookChapter.book_id == book_id)
+            delete_result = await session.execute(delete_query)
+            existing_chapters = delete_result.scalars().all()
+            for chapter in existing_chapters:
+                await session.delete(chapter)
+
+            # Create chapters from TOC (top-level items only)
+            chapters = []
+            for i, item in enumerate(toc_data):
+                if item.get("level", 0) == 0:  # Only top-level chapters
+                    chapter = BookChapter(
+                        book_id=book_id,
+                        chapter_number=i + 1,
+                        title=item.get("title", f"Chapter {i + 1}"),
+                        start_page=item.get("start_page") or item.get("page"),
+                        end_page=item.get("end_page"),
+                        status="not_started",
+                    )
+                    session.add(chapter)
+                    chapters.append(chapter)
+
+            await session.commit()
+
+            # Refresh chapters to get IDs
+            for chapter in chapters:
+                await session.refresh(chapter)
+
+            return [BookChapterResponse.model_validate(chapter) for chapter in chapters]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.exception(f"Error extracting chapters for book {book_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to extract chapters: {e!s}",
         ) from e

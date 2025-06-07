@@ -6,7 +6,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.session import get_db_session
-from src.videos.schemas import VideoCreate, VideoListResponse, VideoProgressUpdate, VideoResponse, VideoUpdate
+from src.videos.schemas import (
+    VideoChapterResponse,
+    VideoChapterStatusUpdate,
+    VideoCreate,
+    VideoListResponse,
+    VideoProgressUpdate,
+    VideoResponse,
+    VideoUpdate,
+)
 from src.videos.service import video_service
 
 
@@ -129,3 +137,59 @@ async def delete_video(
         await video_service.delete_video(db, video_uuid)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+# Phase 2.3: Video Chapter Endpoints
+@router.get("/{video_uuid}/chapters")
+async def get_video_chapters(
+    video_uuid: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[VideoChapterResponse]:
+    """Get all chapters for a video."""
+    try:
+        return await video_service.get_video_chapters(db, video_uuid)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get("/{video_uuid}/chapters/{chapter_id}")
+async def get_video_chapter(
+    video_uuid: str,
+    chapter_id: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> VideoChapterResponse:
+    """Get a specific chapter for a video."""
+    try:
+        return await video_service.get_video_chapter(db, video_uuid, chapter_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.put("/{video_uuid}/chapters/{chapter_id}/status")
+async def update_video_chapter_status(
+    video_uuid: str,
+    chapter_id: str,
+    status_data: VideoChapterStatusUpdate,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> VideoChapterResponse:
+    """Update the status of a video chapter."""
+    try:
+        return await video_service.update_video_chapter_status(db, video_uuid, chapter_id, status_data.status)
+    except ValueError as e:
+        if "Invalid status" in str(e):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post("/{video_uuid}/extract-chapters")
+async def extract_video_chapters(
+    video_uuid: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[VideoChapterResponse]:
+    """Extract chapters from YouTube video."""
+    try:
+        return await video_service.extract_and_create_video_chapters(db, video_uuid)
+    except ValueError as e:
+        if "not found" in str(e):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

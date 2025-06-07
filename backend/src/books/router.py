@@ -7,6 +7,8 @@ from pydantic import BaseModel
 
 from .metadata import extract_metadata
 from .schemas import (
+    BookChapterResponse,
+    BookChapterStatusUpdate,
     BookCreate,
     BookListResponse,
     BookProgressResponse,
@@ -18,9 +20,13 @@ from .schemas import (
 from .service import (
     create_book,
     delete_book,
+    extract_and_create_chapters,
     get_book,
+    get_book_chapter,
+    get_book_chapters,
     get_books,
     update_book,
+    update_book_chapter_status,
     update_book_progress,
 )
 
@@ -221,3 +227,32 @@ async def extract_table_of_contents(book_id: UUID) -> BookResponse:
     from .service import extract_and_update_toc
 
     return await extract_and_update_toc(book_id)
+
+
+# Phase 2.2: Book Chapter Endpoints
+@router.get("/{book_id}/chapters")
+async def get_book_chapters_endpoint(book_id: UUID) -> list[BookChapterResponse]:
+    """Get all chapters for a book."""
+    return await get_book_chapters(book_id)
+
+
+@router.get("/{book_id}/chapters/{chapter_id}")
+async def get_book_chapter_endpoint(book_id: UUID, chapter_id: UUID) -> BookChapterResponse:
+    """Get a specific chapter for a book."""
+    return await get_book_chapter(book_id, chapter_id)
+
+
+@router.put("/{book_id}/chapters/{chapter_id}/status")
+async def update_book_chapter_status_endpoint(
+    book_id: UUID,
+    chapter_id: UUID,
+    status_data: BookChapterStatusUpdate,
+) -> BookChapterResponse:
+    """Update the status of a book chapter."""
+    return await update_book_chapter_status(book_id, chapter_id, status_data.status)
+
+
+@router.post("/{book_id}/extract-chapters")
+async def extract_chapters_endpoint(book_id: UUID) -> list[BookChapterResponse]:
+    """Extract chapters from book's table of contents."""
+    return await extract_and_create_chapters(book_id)
