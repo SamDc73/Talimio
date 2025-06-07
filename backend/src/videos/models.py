@@ -3,9 +3,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime  # noqa: TC003
 
-from sqlalchemy import DateTime, Float, Integer, String, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.base import Base
 
@@ -46,3 +46,38 @@ class Video(Base):
     # Progress tracking
     last_position: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)  # Position in seconds
     completion_percentage: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+
+    # Relationships
+    chapters: Mapped[list[VideoChapter]] = relationship(
+        "VideoChapter",
+        back_populates="video",
+        cascade="all, delete-orphan",
+    )
+
+
+class VideoChapter(Base):
+    """Model for video chapters."""
+
+    __tablename__ = "video_chapters"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    video_uuid: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("videos.uuid", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    chapter_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    start_time: Mapped[int | None] = mapped_column(Integer, nullable=True)  # in seconds
+    end_time: Mapped[int | None] = mapped_column(Integer, nullable=True)  # in seconds
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_started")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    # Relationships
+    video: Mapped[Video] = relationship("Video", back_populates="chapters")
