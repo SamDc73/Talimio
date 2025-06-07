@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { FileText } from "lucide-react";
+import { useState, useEffect } from "react";
+import { FileText, Download } from "lucide-react";
 import SidebarContainer from "./SidebarContainer";
 import ProgressIndicator from "./ProgressIndicator";
 import SidebarNav from "./SidebarNav";
@@ -7,14 +7,74 @@ import ExpandableSection from "./ExpandableSection";
 import ProgressCircle from "./ProgressCircle";
 import CompletionCheckbox from "./CompletionCheckbox";
 import SidebarItem from "./SidebarItem";
+import { getBookChapters, updateChapterStatus, extractBookChapters } from "@/services/booksService";
+import { useToast } from "@/hooks/use-toast";
 
 function BookSidebar({ book, currentPage = 1, onChapterClick }) {
   const [expandedChapters, setExpandedChapters] = useState([0]);
   const [completedSections, setCompletedSections] = useState(new Set());
+  const [apiChapters, setApiChapters] = useState([]);
+  const [isLoadingChapters, setIsLoadingChapters] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const { toast } = useToast();
+
+  // Fetch chapters from API
+  useEffect(() => {
+    if (!book?.id) return;
+
+    async function fetchChapters() {
+      setIsLoadingChapters(true);
+      try {
+        const chapters = await getBookChapters(book.id);
+        setApiChapters(chapters || []);
+        
+        // Update completed sections based on chapter status
+        const completed = new Set();
+        chapters?.forEach(chapter => {
+          if (chapter.status === 'completed') {
+            completed.add(chapter.id);
+          }
+        });
+        setCompletedSections(completed);
+      } catch (error) {
+        console.error('Failed to fetch chapters:', error);
+        // Fall back to table of contents if API fails
+        setApiChapters([]);
+      } finally {
+        setIsLoadingChapters(false);
+      }
+    }
+
+    fetchChapters();
+  }, [book?.id]);
+
+  const handleExtractChapters = async () => {
+    setIsExtracting(true);
+    try {
+      const result = await extractBookChapters(book.id);
+      toast({
+        title: "Chapters extracted",
+        description: `Successfully extracted ${result.count || 0} chapters`,
+      });
+      
+      // Refresh chapters
+      const chapters = await getBookChapters(book.id);
+      setApiChapters(chapters || []);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to extract chapters",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExtracting(false);
+    }
+  };
 
   if (!book) return null;
 
-  const chapters = book.table_of_contents || [];
+  // Use API chapters if available, otherwise fall back to table of contents
+  const chapters = apiChapters.length > 0 ? apiChapters : (book.table_of_contents || []);
 
   if (!chapters.length) {
     return (
@@ -24,6 +84,17 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
             <FileText className="w-12 h-12 mx-auto mb-4 text-zinc-300" />
             <p>No table of contents available</p>
             <p className="text-xs mt-2">This book doesn't have chapter information.</p>
+            
+            {/* Extract chapters button */}
+            <button
+              type="button"
+              onClick={handleExtractChapters}
+              disabled={isExtracting}
+              className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
+            >
+              <Download className="w-4 h-4" />
+              {isExtracting ? 'Extracting...' : 'Extract Chapters'}
+            </button>
           </div>
         </div>
       </SidebarContainer>
@@ -36,8 +107,50 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
     );
   };
 
-  const handleSectionClick = (sectionId, pageNumber) => {
-    setCompletedSections((prev) => new Set([...prev, sectionId]));
+  const handleSectionClick = async (section, pageNumber) => {
+    const sectionId = section.id || section.chapter_id;
+    const isCompleted = completedSections.has(sectionId);
+    const newStatus = isCompleted ? 'not_started' : 'completed';
+
+    // Optimistic update
+    setCompletedSections((prev) => {
+      const newSet = new Set(prev);
+      if (isCompleted) {
+        newSet.delete(sectionId);
+      } else {
+        newSet.add(sectionId);
+      }
+      return newSet;
+    });
+
+    // Update via API if this is an API chapter
+    if (apiChapters.length > 0 && section.chapter_id) {
+      try {
+        await updateChapterStatus(book.id, section.chapter_id, newStatus);
+        toast({
+          title: "Chapter updated",
+          description: `Chapter marked as ${newStatus.replace('_', ' ')}`,
+        });
+      } catch (error) {
+        // Revert optimistic update
+        setCompletedSections((prev) => {
+          const newSet = new Set(prev);
+          if (isCompleted) {
+            newSet.add(sectionId);
+          } else {
+            newSet.delete(sectionId);
+          }
+          return newSet;
+        });
+        
+        toast({
+          title: "Error",
+          description: "Failed to update chapter status",
+          variant: "destructive",
+        });
+      }
+    }
+
     if (onChapterClick) {
       onChapterClick(pageNumber);
     }
@@ -137,11 +250,11 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
                         }
                         isActive={isCurrentSection}
                         isCompleted={isCompleted}
-                        onClick={() => handleSectionClick(section.id, section.page)}
+                        onClick={() => handleSectionClick(section, section.page)}
                         leftContent={
                           <CompletionCheckbox
                             isCompleted={isCompleted}
-                            onClick={() => handleSectionClick(section.id, section.page)}
+                            onClick={() => handleSectionClick(section, section.page)}
                           />
                         }
                       />

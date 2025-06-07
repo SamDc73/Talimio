@@ -2,7 +2,7 @@
  * Base API URL for progress endpoints
  * @constant
  */
-const API_BASE = '/api/v1/progress';
+const API_BASE = '/api/v1';
 
 /**
  * Default timeout for API requests in milliseconds
@@ -96,44 +96,6 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
-/**
- * Batch multiple progress requests
- * @param {string[]} nodeIds - Array of node IDs
- * @param {string} userId - The user ID
- * @returns {Promise<Object>} Map of nodeId to progress data
- */
-async function batchProgressRequests(nodeIds, userId) {
-  const uniqueIds = [...new Set(nodeIds)];
-  const cacheKey = `${userId}-${uniqueIds.sort().join(',')}`;
-
-  // Check cache first
-  const cachedData = progressCache.get(cacheKey);
-  if (cachedData) {
-    return cachedData;
-  }
-
-  try {
-    const response = await fetchWithTimeout(
-      `${API_BASE}/user/${userId}/batch`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodeIds: uniqueIds }),
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch batch progress: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    progressCache.set(cacheKey, data);
-    return data;
-  } catch (error) {
-    console.error('Error fetching batch progress:', error);
-    throw error;
-  }
-}
 
 /**
  * Get progress for a specific user and node
@@ -142,74 +104,74 @@ async function batchProgressRequests(nodeIds, userId) {
  * @returns {Promise<Progress>} The progress data
  * @throws {Error} If the request fails
  */
-export async function getNodeProgress(userId, nodeId) {
-  const cacheKey = `${userId}-${nodeId}`;
+export async function getNodeProgress(nodeId) {
+  const cacheKey = `node-${nodeId}`;
   const cachedData = progressCache.get(cacheKey);
   if (cachedData) {
     return cachedData;
   }
 
   try {
-    const response = await fetchWithTimeout(`${API_BASE}/user/${userId}/node/${nodeId}`);
+    const response = await fetchWithTimeout(`${API_BASE}/nodes/${nodeId}`);
     if (!response.ok) {
-      throw new Error(`Failed to fetch progress: ${response.statusText}`);
+      throw new Error(`Failed to fetch node: ${response.statusText}`);
     }
     const data = await response.json();
     progressCache.set(cacheKey, data);
     return data;
   } catch (error) {
-    console.error('Error fetching node progress:', error);
+    console.error('Error fetching node:', error);
     throw error;
   }
 }
 
 /**
- * Get all progress records for a user
- * @param {string} userId - The ID of the user
- * @returns {Promise<Progress[]>} Array of progress records
+ * Get nodes for a roadmap with their progress
+ * @param {string} roadmapId - The ID of the roadmap
+ * @returns {Promise<Node[]>} Array of nodes with progress
  * @throws {Error} If the request fails
  */
-export async function getUserProgress(userId) {
-  const cacheKey = `user-${userId}`;
+export async function getRoadmapNodes(roadmapId) {
+  const cacheKey = `roadmap-nodes-${roadmapId}`;
   const cachedData = progressCache.get(cacheKey);
   if (cachedData) {
     return cachedData;
   }
 
   try {
-    const response = await fetchWithTimeout(`${API_BASE}/user/${userId}`);
+    const response = await fetchWithTimeout(`${API_BASE}/roadmaps/${roadmapId}/nodes`);
     if (!response.ok) {
-      throw new Error(`Failed to fetch user progress: ${response.statusText}`);
+      throw new Error(`Failed to fetch roadmap nodes: ${response.statusText}`);
     }
     const data = await response.json();
     progressCache.set(cacheKey, data);
     return data;
   } catch (error) {
-    console.error('Error fetching user progress:', error);
+    console.error('Error fetching roadmap nodes:', error);
     throw error;
   }
 }
 
 /**
- * Create a new progress record for a node
+ * Update node status
  * @param {string} nodeId - The ID of the node
- * @param {Object} progressData - The progress data to create
- * @returns {Promise<Progress>} The created progress record
+ * @param {string} status - The new status (not_started, in_progress, completed)
+ * @returns {Promise<Object>} The update response
  * @throws {Error} If the request fails
  */
-export async function createNodeProgress(nodeId, progressData) {
+export async function updateNodeStatus(nodeId, status) {
   try {
     const response = await fetchWithTimeout(
-      `${API_BASE}/node/${nodeId}`,
+      `${API_BASE}/nodes/${nodeId}/status`,
       {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(progressData),
+        body: JSON.stringify({ status }),
       }
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to create progress: ${response.statusText}`);
+      throw new Error(`Failed to update node status: ${response.statusText}`);
     }
     const data = await response.json();
 
@@ -217,31 +179,31 @@ export async function createNodeProgress(nodeId, progressData) {
     progressCache.clear();
     return data;
   } catch (error) {
-    console.error('Error creating node progress:', error);
+    console.error('Error updating node status:', error);
     throw error;
   }
 }
 
 /**
- * Update an existing progress record
- * @param {string} progressId - The ID of the progress record to update
+ * Update a node
+ * @param {string} nodeId - The ID of the node to update
  * @param {Object} updateData - The data to update
- * @returns {Promise<Progress>} The updated progress record
+ * @returns {Promise<Node>} The updated node
  * @throws {Error} If the request fails
  */
-export async function updateProgress(progressId, updateData) {
+export async function updateNode(nodeId, updateData) {
   try {
     const response = await fetchWithTimeout(
-      `${API_BASE}/${progressId}`,
+      `${API_BASE}/nodes/${nodeId}`,
       {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateData),
       }
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to update progress: ${response.statusText}`);
+      throw new Error(`Failed to update node: ${response.statusText}`);
     }
     const data = await response.json();
 
@@ -249,11 +211,10 @@ export async function updateProgress(progressId, updateData) {
     progressCache.clear();
     return data;
   } catch (error) {
-    console.error('Error updating progress:', error);
+    console.error('Error updating node:', error);
     throw error;
   }
 }
 
 // Export for testing
 export const _progressCache = progressCache;
-export const _batchProgressRequests = batchProgressRequests;
