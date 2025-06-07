@@ -106,3 +106,32 @@ class VideoListResponse(BaseModel):
     page: int
     size: int
     pages: int
+
+
+# Chapter schemas for Phase 2.3
+class VideoChapterBase(BaseModel):
+    """Base schema for video chapter."""
+
+    chapter_number: int = Field(..., ge=1)
+    title: str = Field(..., max_length=500)
+    start_time: int | None = Field(None, ge=0, description="Start time in seconds")
+    end_time: int | None = Field(None, ge=0, description="End time in seconds")
+    status: str = Field(default="not_started", pattern="^(not_started|in_progress|done)$")
+
+
+class VideoChapterResponse(VideoChapterBase):
+    """Schema for video chapter response."""
+
+    class Config:
+        from_attributes = True
+
+    id: UUID
+    video_uuid: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class VideoChapterStatusUpdate(BaseModel):
+    """Schema for updating video chapter status."""
+
+    status: str = Field(..., pattern="^(not_started|in_progress|done)$")
