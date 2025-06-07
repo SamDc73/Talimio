@@ -43,6 +43,11 @@ class Book(Base):
         back_populates="book",
         cascade="all, delete-orphan",
     )
+    chapters: Mapped[list["BookChapter"]] = relationship(
+        "BookChapter",
+        back_populates="book",
+        cascade="all, delete-orphan",
+    )
 
 
 class BookProgress(Base):
@@ -75,3 +80,31 @@ class BookProgress(Base):
 
     # Relationships
     book: Mapped["Book"] = relationship("Book", back_populates="progress_records")
+
+
+class BookChapter(Base):
+    """Model for book chapters."""
+
+    __tablename__ = "book_chapters"
+
+    id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True, default=uuid4)
+    book_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True),
+        ForeignKey("books.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    chapter_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    start_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_started")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    # Relationships
+    book: Mapped["Book"] = relationship("Book", back_populates="chapters")
