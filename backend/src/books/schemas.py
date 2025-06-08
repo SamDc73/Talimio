@@ -132,10 +132,10 @@ class BookWithProgress(BookResponse):
 class BookListResponse(BaseModel):
     """Schema for book list response."""
 
-    books: list[BookResponse]
+    items: list[BookResponse]
     total: int
     page: int
-    per_page: int
+    pages: int
 
 
 # Chapter schemas for Phase 2.2

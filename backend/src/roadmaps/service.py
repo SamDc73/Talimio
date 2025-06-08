@@ -132,6 +132,7 @@ class RoadmapService:
             setattr(roadmap, key, value)
 
         await self._session.commit()
+        await self._session.refresh(roadmap)
         return roadmap
 
     async def delete_roadmap(self, roadmap_id: UUID) -> None:

@@ -134,19 +134,19 @@ class FlashcardReviewResponse(BaseModel):
 class DeckListResponse(BaseModel):
     """Schema for deck list response."""
 
-    decks: list[FlashcardDeckResponse]
+    items: list[FlashcardDeckResponse]
     total: int
     page: int
-    per_page: int
+    pages: int
 
 
 class CardListResponse(BaseModel):
     """Schema for card list response."""
 
-    cards: list[FlashcardCardResponse]
+    items: list[FlashcardCardResponse]
     total: int
     page: int
-    per_page: int
+    pages: int
 
 
 class StudySessionResponse(BaseModel):

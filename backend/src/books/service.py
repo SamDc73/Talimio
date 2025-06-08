@@ -250,10 +250,10 @@ async def get_books(page: int = 1, per_page: int = 20) -> BookListResponse:
             book_responses = [_book_to_response(book) for book in books]
 
             return BookListResponse(
-                books=book_responses,
+                items=book_responses,
                 total=total,
                 page=page,
-                per_page=per_page,
+                pages=(total + per_page - 1) // per_page,
             )
 
     except Exception as e:
@@ -671,14 +671,14 @@ async def get_book_chapter(book_id: UUID, chapter_id: UUID) -> BookChapterRespon
         ) from e
 
 
-async def update_book_chapter_status(book_id: UUID, chapter_id: UUID, status: str) -> BookChapterResponse:
+async def update_book_chapter_status(book_id: UUID, chapter_id: UUID, chapter_status: str) -> BookChapterResponse:
     """
     Update the status of a book chapter.
 
     Args:
         book_id: Book ID
         chapter_id: Chapter ID
-        status: New status
+        chapter_status: New status
 
     Returns
     -------
@@ -717,14 +717,14 @@ async def update_book_chapter_status(book_id: UUID, chapter_id: UUID, status: st
 
             # Validate status
             valid_statuses = ["not_started", "in_progress", "done"]
-            if status not in valid_statuses:
+            if chapter_status not in valid_statuses:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid status '{status}'. Valid statuses are: {', '.join(valid_statuses)}",
+                    detail=f"Invalid status '{chapter_status}'. Valid statuses are: {', '.join(valid_statuses)}",
                 )
 
             # Update status
-            chapter.status = status
+            chapter.status = chapter_status
             chapter.updated_at = datetime.now(UTC)
 
             await session.commit()
