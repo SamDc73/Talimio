@@ -104,7 +104,6 @@ class VideoListResponse(BaseModel):
     items: list[VideoResponse]
     total: int
     page: int
-    size: int
     pages: int
 
 

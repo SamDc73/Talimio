@@ -67,13 +67,13 @@ async def create_video(
 async def list_videos(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
-    size: Annotated[int, Query(ge=1, le=100, description="Page size")] = 20,
+    limit: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
     channel: Annotated[str | None, Query(description="Filter by channel name")] = None,
     search: Annotated[str | None, Query(description="Search in title, description, or channel")] = None,
     tags: Annotated[list[str] | None, Query(description="Filter by tags")] = None,
 ) -> VideoListResponse:
     """List all YouTube videos in library with optional filtering."""
-    return await video_service.get_videos(db, page=page, size=size, channel=channel, search=search, tags=tags)
+    return await video_service.get_videos(db, page=page, size=limit, channel=channel, search=search, tags=tags)
 
 
 @router.get("/{video_uuid}")

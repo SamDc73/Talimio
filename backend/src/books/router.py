@@ -50,10 +50,10 @@ class BookMetadataResponse(BaseModel):
 @router.get("")
 async def list_books(
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
-    per_page: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
+    limit: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
 ) -> BookListResponse:
     """List all books with pagination."""
-    return await get_books(page=page, per_page=per_page)
+    return await get_books(page=page, per_page=limit)
 
 
 @router.get("/{book_id}")
@@ -160,7 +160,7 @@ async def create_book_endpoint(
     return await create_book(book_data, file)
 
 
-@router.put("/{book_id}")
+@router.patch("/{book_id}")
 async def update_book_endpoint(book_id: UUID, book_data: BookUpdate) -> BookResponse:
     """Update book details."""
     return await update_book(book_id, book_data)

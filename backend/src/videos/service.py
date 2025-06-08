@@ -154,7 +154,6 @@ class VideoService:
             items=video_responses,
             total=total,
             page=page,
-            size=size,
             pages=pages,
         )
 

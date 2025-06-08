@@ -113,7 +113,7 @@ async def get_roadmap(
         ) from e
 
 
-@router.put(
+@router.patch(
     "/{roadmap_id}",
 )
 async def update_roadmap(
@@ -181,7 +181,7 @@ async def create_node(
         ) from e
 
 
-@router.put(
+@router.patch(
     "/{roadmap_id}/nodes/{node_id}",
     responses={404: {"description": "Roadmap or node not found"}},
 )
