@@ -91,3 +91,33 @@ export async function extractVideoChapters(videoUuid) {
     throw error;
   }
 }
+
+/**
+ * Sync chapter progress from frontend to backend
+ * @param {string} videoUuid - The UUID of the video
+ * @param {string[]} completedChapterIds - Array of completed chapter IDs
+ * @param {number} totalChapters - Total number of chapters
+ * @returns {Promise<Object>} Updated video data
+ */
+export async function syncVideoChapterProgress(videoUuid, completedChapterIds, totalChapters) {
+  try {
+    const response = await fetch(`${API_BASE}/videos/${videoUuid}/sync-chapter-progress`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        completed_chapter_ids: completedChapterIds,
+        total_chapters: totalChapters,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to sync chapter progress: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error syncing chapter progress:', error);
+    throw error;
+  }
+}
