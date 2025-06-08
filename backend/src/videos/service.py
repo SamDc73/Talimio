@@ -322,7 +322,11 @@ class VideoService:
         return VideoChapterResponse.model_validate(chapter)
 
     async def update_video_chapter_status(
-        self, db: AsyncSession, video_uuid: str, chapter_id: str, status: str,
+        self,
+        db: AsyncSession,
+        video_uuid: str,
+        chapter_id: str,
+        status: str,
     ) -> VideoChapterResponse:
         """Update the status of a video chapter."""
         # Verify video exists
@@ -381,11 +385,13 @@ class VideoService:
 
         if not chapters_info:
             # Create a single default chapter for the entire video
-            chapters_info = [{
-                "title": video.title,
-                "start_time": 0,
-                "end_time": video.duration,
-            }]
+            chapters_info = [
+                {
+                    "title": video.title,
+                    "start_time": 0,
+                    "end_time": video.duration,
+                },
+            ]
 
         # Clear existing chapters
         existing_chapters_result = await db.execute(
@@ -440,11 +446,13 @@ class VideoService:
 
                 chapter_list = []
                 for chapter in chapters:
-                    chapter_list.append({
-                        "title": chapter.get("title", "Unknown Chapter"),
-                        "start_time": int(chapter.get("start_time", 0)),
-                        "end_time": int(chapter.get("end_time", 0)),
-                    })
+                    chapter_list.append(
+                        {
+                            "title": chapter.get("title", "Unknown Chapter"),
+                            "start_time": int(chapter.get("start_time", 0)),
+                            "end_time": int(chapter.get("end_time", 0)),
+                        },
+                    )
 
                 return chapter_list
 

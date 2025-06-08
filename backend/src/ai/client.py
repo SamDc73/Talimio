@@ -440,10 +440,12 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
                     tag = re.sub(r"[^a-z0-9-]", "", tag)
                     confidence = float(item.get("confidence", 0.8))
                     if tag:
-                        processed_tags.append({
-                            "tag": tag,
-                            "confidence": min(max(confidence, 0.0), 1.0),
-                        })
+                        processed_tags.append(
+                            {
+                                "tag": tag,
+                                "confidence": min(max(confidence, 0.0), 1.0),
+                            },
+                        )
 
             return processed_tags[:7]
 

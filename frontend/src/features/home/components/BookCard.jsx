@@ -1,14 +1,71 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import { BookOpen, ChevronRight } from "lucide-react"
 import { KebabMenu } from "./KebabMenu"
 import { deleteApi } from "@/services/deleteApi"
+import { calculateBookProgress, getBookProgressStats } from "@/services/bookProgressService"
 
 export function BookCard({ book, onDelete }) {
   const [showMenu, setShowMenu] = useState(false)
-  const currentPage = book.currentPage || 0
-  const totalPages = book.pageCount || 0
-  const readingProgress = totalPages > 0 ? (currentPage / totalPages) * 100 : 0
+  const [progress, setProgress] = useState(() => {
+    // ALWAYS use saved stats first (they have the correct chapter-based progress)
+    const stats = getBookProgressStats(book.id);
+    if (stats.totalSections > 0) {
+      return stats;
+    }
+    
+    // If no saved stats but we have table_of_contents, calculate
+    if (book.table_of_contents && book.table_of_contents.length > 0) {
+      return calculateBookProgress(book);
+    }
+    
+    // Otherwise, no progress yet
+    return { percentage: 0, completedSections: 0, totalSections: 0, type: 'section-based' };
+  })
+  const readingProgress = progress.percentage
+
+  // Check for updated progress on mount and when book changes
+  useEffect(() => {
+    // Check if we have updated stats
+    const stats = getBookProgressStats(book.id);
+    if (stats.totalSections > 0) {
+      setProgress(stats);
+    }
+  }, [book.id]); // Only depend on book.id
+  
+  // Listen for localStorage changes to update progress
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === `book_toc_progress_${book.id}` || e.key === `book_progress_stats_${book.id}`) {
+        // Get updated stats
+        const stats = getBookProgressStats(book.id);
+        if (stats.totalSections > 0) {
+          setProgress(stats);
+        } else {
+          setProgress(calculateBookProgress(book));
+        }
+      }
+    }
+
+    // Listen for storage events from other tabs/windows
+    window.addEventListener('storage', handleStorageChange)
+    
+    // Custom event for same-tab updates
+    const handleProgressUpdate = (e) => {
+      if (e.detail.bookId === book.id) {
+        const stats = getBookProgressStats(book.id);
+        if (stats.totalSections > 0) {
+          setProgress(stats);
+        }
+      }
+    }
+    window.addEventListener('bookProgressUpdate', handleProgressUpdate)
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('bookProgressUpdate', handleProgressUpdate)
+    }
+  }, [book.id, book])
 
   const handleDelete = async (itemType, itemId) => {
     try {
@@ -86,7 +143,12 @@ export function BookCard({ book, onDelete }) {
       
       {/* Footer */}
       <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-500">{currentPage}/{totalPages} pages</span>
+        <span className="text-sm text-gray-500">
+          {progress.type === 'section-based' 
+            ? `${progress.completedSections}/${progress.totalSections} sections`
+            : `${progress.completedSections}/${progress.totalSections} pages`
+          }
+        </span>
         <Link to={`/books/${book.id}`} className="flex items-center gap-1 text-teal-600 hover:text-teal-700 text-sm font-medium">
           Read
           <ChevronRight className="h-4 w-4" />

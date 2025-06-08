@@ -419,6 +419,11 @@ class RoadmapService:
         # Verify roadmap exists
         await self.get_roadmap(roadmap_id)
 
-        query = select(Node).where(Node.roadmap_id == roadmap_id).order_by(Node.order)
+        # Use selectinload to eagerly load children relationships
+        from sqlalchemy.orm import selectinload
+
+        query = (
+            select(Node).options(selectinload(Node.children)).where(Node.roadmap_id == roadmap_id).order_by(Node.order)
+        )
         result = await self._session.execute(query)
         return list(result.scalars().all())

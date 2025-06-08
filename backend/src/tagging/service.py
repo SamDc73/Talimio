@@ -176,23 +176,27 @@ class TaggingService:
                     content_preview=preview,
                 )
 
-                results.append({
-                    "content_id": str(content_id),
-                    "content_type": content_type,
-                    "tags": tags,
-                    "success": True,
-                })
+                results.append(
+                    {
+                        "content_id": str(content_id),
+                        "content_type": content_type,
+                        "tags": tags,
+                        "success": True,
+                    },
+                )
                 successful += 1
 
             except Exception as e:
                 logger.exception(f"Failed to tag item {item}: {e}")
-                results.append({
-                    "content_id": item.get("content_id"),
-                    "content_type": item.get("content_type"),
-                    "tags": [],
-                    "success": False,
-                    "error": str(e),
-                })
+                results.append(
+                    {
+                        "content_id": item.get("content_id"),
+                        "content_type": item.get("content_type"),
+                        "tags": [],
+                        "success": False,
+                        "error": str(e),
+                    },
+                )
                 failed += 1
 
         return {
@@ -246,6 +250,7 @@ class TaggingService:
         """
         # Delete existing associations
         from sqlalchemy import delete
+
         await self.session.execute(
             delete(TagAssociation).where(
                 and_(
@@ -447,6 +452,7 @@ async def update_content_tags_json(
         from sqlalchemy import update
 
         from src.books.models import Book
+
         await session.execute(
             update(Book).where(Book.id == content_id).values(tags=tags_json),
         )
@@ -454,6 +460,7 @@ async def update_content_tags_json(
         from sqlalchemy import update
 
         from src.videos.models import Video
+
         await session.execute(
             update(Video).where(Video.uuid == content_id).values(tags=tags_json),
         )
@@ -461,6 +468,7 @@ async def update_content_tags_json(
         from sqlalchemy import update
 
         from src.roadmaps.models import Roadmap
+
         await session.execute(
             update(Roadmap).where(Roadmap.id == content_id).values(tags_json=tags_json),
         )

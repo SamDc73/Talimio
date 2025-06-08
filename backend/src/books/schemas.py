@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BookBase(BaseModel):
@@ -108,6 +108,24 @@ class BookProgressResponse(BookProgressBase):
     total_pages_read: int
     last_read_at: datetime | None
     created_at: datetime
+
+    @field_validator("bookmarks", mode="before")
+    @classmethod
+    def validate_bookmarks(cls, v):
+        """Convert bookmarks from JSON string to list."""
+        if v is None:
+            return []
+        if isinstance(v, str):
+            import json
+
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return []
+        if isinstance(v, list):
+            return v
+        return []
+
     updated_at: datetime
 
     @property
