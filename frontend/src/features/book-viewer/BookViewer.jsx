@@ -28,7 +28,7 @@ const BookViewerContent = () => {
         setTotalPages(data.total_pages || 0);
         
         // Set current page from progress if available
-        if (data.progress && data.progress.current_page) {
+        if (data.progress?.current_page) {
           setCurrentPage(data.progress.current_page);
         }
       } catch (err) {

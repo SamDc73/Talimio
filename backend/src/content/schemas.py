@@ -1,6 +1,5 @@
 from datetime import datetime
 from enum import Enum
-from typing import Union
 
 from pydantic import BaseModel, Field
 
@@ -89,7 +88,7 @@ class RoadmapContent(ContentItemBase):
 class ContentListResponse(BaseModel):
     """Response model for paginated content list."""
 
-    items: list[Union[YoutubeContent, FlashcardContent, BookContent, RoadmapContent]]
+    items: list[YoutubeContent | FlashcardContent | BookContent | RoadmapContent]
     total: int
     page: int
     page_size: int = Field(alias="pageSize")

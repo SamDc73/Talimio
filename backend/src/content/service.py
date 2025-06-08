@@ -104,9 +104,7 @@ async def fetch_flashcard_decks(search: str | None = None) -> list[FlashcardCont
         async with async_session_maker() as session:
             # Use subqueries for counting instead of loading all cards
             card_count_subq = (
-                select(func.count(FlashcardCard.id))
-                .where(FlashcardCard.deck_id == FlashcardDeck.id)
-                .scalar_subquery()
+                select(func.count(FlashcardCard.id)).where(FlashcardCard.deck_id == FlashcardDeck.id).scalar_subquery()
             )
 
             due_count_subq = (
@@ -166,10 +164,12 @@ async def fetch_books(search: str | None = None) -> list[BookContent]:
                     BookProgress.current_page,
                     BookProgress.progress_percentage,
                     BookProgress.last_read_at,
-                    func.row_number().over(
+                    func.row_number()
+                    .over(
                         partition_by=BookProgress.book_id,
                         order_by=BookProgress.updated_at.desc(),
-                    ).label("rn"),
+                    )
+                    .label("rn"),
                 )
                 .where(BookProgress.book_id.isnot(None))
                 .subquery()
@@ -232,20 +232,14 @@ async def fetch_roadmaps(search: str | None = None) -> list[RoadmapContent]:
     try:
         async with async_session_maker() as session:
             # Use subqueries for counting instead of loading all nodes
-            node_count_subq = (
-                select(func.count(Node.id))
-                .where(Node.roadmap_id == Roadmap.id)
-                .scalar_subquery()
-            )
+            node_count_subq = select(func.count(Node.id)).where(Node.roadmap_id == Roadmap.id).scalar_subquery()
 
-            # Count completed lessons from progress table
-            from src.progress.models import Progress
-            
+            # Count completed nodes directly from Node table
             completed_count_subq = (
-                select(func.count(Progress.id))
+                select(func.count(Node.id))
                 .where(
-                    Progress.course_id == func.cast(Roadmap.id, String),
-                    Progress.status == "done",
+                    Node.roadmap_id == Roadmap.id,
+                    Node.status == "done",
                 )
                 .scalar_subquery()
             )

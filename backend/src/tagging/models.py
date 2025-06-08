@@ -22,12 +22,16 @@ class Tag(Base):
     usage_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
     )
 
     # Relationships
     associations: Mapped[list["TagAssociation"]] = relationship(
-        "TagAssociation", back_populates="tag", cascade="all, delete-orphan",
+        "TagAssociation",
+        back_populates="tag",
+        cascade="all, delete-orphan",
     )
 
 

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useToast } from "./use-toast";
-import { getCourseProgress, getLessonStatuses, updateLessonStatus } from "../services/progressApi";
+import { getRoadmapNodes, updateNodeStatus } from "../services/progressService";
 
 const ProgressContext = createContext(null);
 
@@ -29,16 +29,29 @@ export function ProgressProvider({ children, courseId }) {
       setError(null);
 
       try {
-        const statusesResponse = await getLessonStatuses(currentCourseId);
+        const nodes = await getRoadmapNodes(currentCourseId);
+        
+        // Transform nodes to lesson statuses format
         const statusMap = {};
-        for (const lesson of statusesResponse?.lessons ?? []) {
-          statusMap[lesson.id] = lesson.status;
-        }
+        nodes.forEach(node => {
+          statusMap[node.id] = node.status || 'not_started';
+        });
         setLessonStatuses(statusMap);
 
-        const progressResponse = await getCourseProgress(currentCourseId);
+        // Calculate progress from nodes
+        const totalLessons = nodes.length;
+        const completedLessons = nodes.filter(node => node.status === 'done').length;
+        const progressPercentage = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+        
+        const progressResponse = {
+          course_id: currentCourseId,
+          total_lessons: totalLessons,
+          completed_lessons: completedLessons,
+          progress_percentage: progressPercentage
+        };
+        
         console.log("ProgressProvider - progress response:", progressResponse);
-        setCourseProgress(progressResponse || { total_lessons: 0, completed_lessons: 0, progress_percentage: 0 });
+        setCourseProgress(progressResponse);
       } catch (err) {
         console.error("ProgressProvider - fetch error:", err);
         setError(err);
@@ -87,8 +100,8 @@ export function ProgressProvider({ children, courseId }) {
         }));
 
         // Update server in background without waiting
-        updateLessonStatus(lessonId, newStatus).catch((err) => {
-          console.error("Failed to update lesson status:", err);
+        updateNodeStatus(lessonId, newStatus).catch((err) => {
+          console.error("Failed to update node status:", err);
           // Revert on error
           setLessonStatuses(originalLessonStatuses);
           setCourseProgress(originalCourseProgress);

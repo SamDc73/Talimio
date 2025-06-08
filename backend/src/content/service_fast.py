@@ -1,4 +1,5 @@
 """Ultra-fast content service with minimal queries."""
+
 import json
 import logging
 
@@ -36,7 +37,7 @@ async def list_content_fast(
 ) -> ContentListResponse:
     """
     Ultra-fast content listing using raw SQL queries.
-    
+
     This version:
     1. Uses raw SQL for maximum performance
     2. Fetches only essential fields
@@ -139,15 +140,15 @@ async def list_content_fast(
                         WHEN (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id) > 0 
                         THEN (
                             (SELECT COUNT(*) 
-                             FROM progress p 
-                             WHERE p.course_id = r.id::text 
-                               AND p.status = 'done') * 100 / 
+                             FROM nodes n 
+                             WHERE n.roadmap_id = r.id 
+                               AND n.status = 'done') * 100 / 
                             (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id)
                         )
                         ELSE 0 
                     END as progress,
                     (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id) as count1,
-                    (SELECT COUNT(*) FROM progress p WHERE p.course_id = r.id::text AND p.status = 'done') as count2
+                    (SELECT COUNT(*) FROM nodes n WHERE n.roadmap_id = r.id AND n.status = 'done') as count2
                 FROM roadmaps r
             """
             if search:

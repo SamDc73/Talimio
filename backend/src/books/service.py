@@ -600,7 +600,9 @@ async def get_book_chapters(book_id: UUID) -> list[BookChapterResponse]:
                 )
 
             # Get chapters
-            chapters_query = select(BookChapter).where(BookChapter.book_id == book_id).order_by(BookChapter.chapter_number)
+            chapters_query = (
+                select(BookChapter).where(BookChapter.book_id == book_id).order_by(BookChapter.chapter_number)
+            )
             chapters_result = await session.execute(chapters_query)
             chapters = chapters_result.scalars().all()
 
@@ -778,6 +780,7 @@ async def extract_and_create_chapters(book_id: UUID) -> list[BookChapterResponse
 
             # Parse table of contents
             import json
+
             try:
                 toc_data = json.loads(book.table_of_contents)
             except (json.JSONDecodeError, TypeError):

@@ -113,6 +113,7 @@ async def tag_content(
 
         # Update content's tags field
         from .service import update_content_tags_json
+
         background_tasks.add_task(
             update_content_tags_json,
             service.session,
@@ -262,6 +263,7 @@ async def update_content_tags(
 
         # Also update content's tags field
         from .service import update_content_tags_json
+
         await update_content_tags_json(
             service.session,
             content_id,
@@ -305,4 +307,3 @@ async def suggest_tags(
         content_type=request.content_type,
         title=request.title,
     )
-

@@ -152,6 +152,7 @@ class BookProcessor:
                             content = item.get_content().decode("utf-8")
                             # Basic HTML stripping (you might want to use BeautifulSoup for better results)
                             import re
+
                             text = re.sub(r"<[^>]+>", "", content)
                             text = text.strip()
 
@@ -218,6 +219,7 @@ class BookProcessor:
         if book.tags:
             # Include existing tags if any
             import json
+
             try:
                 existing_tags = json.loads(book.tags)
                 if existing_tags:

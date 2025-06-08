@@ -17,7 +17,11 @@ class Video(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     uuid: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4, index=True,
+        UUID(as_uuid=True),
+        unique=True,
+        nullable=False,
+        default=uuid.uuid4,
+        index=True,
     )
     youtube_id: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
     url: Mapped[str] = mapped_column(String(255), nullable=False)

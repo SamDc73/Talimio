@@ -9,6 +9,7 @@ import CompletionCheckbox from "./CompletionCheckbox";
 import SidebarItem from "./SidebarItem";
 import { getBookChapters, updateChapterStatus, extractBookChapters } from "@/services/booksService";
 import { useToast } from "@/hooks/use-toast";
+import { updateBookProgress, getCompletedSections, saveBookProgressStats } from "@/services/bookProgressService";
 
 function BookSidebar({ book, currentPage = 1, onChapterClick }) {
   const [expandedChapters, setExpandedChapters] = useState([0]);
@@ -18,7 +19,7 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
   const [isExtracting, setIsExtracting] = useState(false);
   const { toast } = useToast();
 
-  // Fetch chapters from API
+  // Fetch chapters from API and load progress
   useEffect(() => {
     if (!book?.id) return;
 
@@ -28,18 +29,31 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
         const chapters = await getBookChapters(book.id);
         setApiChapters(chapters || []);
         
-        // Update completed sections based on chapter status
+        // Load progress from both API chapters and localStorage
         const completed = new Set();
-        chapters?.forEach(chapter => {
-          if (chapter.status === 'completed') {
-            completed.add(chapter.id);
-          }
-        });
+        
+        // If we have API chapters, use their status
+        if (chapters && chapters.length > 0) {
+          chapters.forEach(chapter => {
+            if (chapter.status === 'completed') {
+              completed.add(chapter.id);
+            }
+          });
+        }
+        
+        // Load table_of_contents progress from localStorage
+        const tocCompleted = getCompletedSections(book.id);
+        tocCompleted.forEach(id => completed.add(id));
+        
         setCompletedSections(completed);
       } catch (error) {
         console.error('Failed to fetch chapters:', error);
         // Fall back to table of contents if API fails
         setApiChapters([]);
+        
+        // Still load ToC progress from localStorage
+        const tocCompleted = getCompletedSections(book.id);
+        setCompletedSections(tocCompleted);
       } finally {
         setIsLoadingChapters(false);
       }
@@ -73,8 +87,10 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
 
   if (!book) return null;
 
-  // Use API chapters if available, otherwise fall back to table of contents
-  const chapters = apiChapters.length > 0 ? apiChapters : (book.table_of_contents || []);
+  // Prefer table_of_contents (hierarchical with children) over API chapters (flat)
+  // Only use API chapters if no table_of_contents exists
+  const hasTableOfContents = book.table_of_contents && book.table_of_contents.length > 0;
+  const chapters = hasTableOfContents ? book.table_of_contents : apiChapters;
 
   if (!chapters.length) {
     return (
@@ -113,18 +129,51 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
     const newStatus = isCompleted ? 'not_started' : 'completed';
 
     // Optimistic update
-    setCompletedSections((prev) => {
-      const newSet = new Set(prev);
-      if (isCompleted) {
-        newSet.delete(sectionId);
-      } else {
-        newSet.add(sectionId);
-      }
-      return newSet;
-    });
+    const newCompletedSections = new Set(completedSections);
+    if (isCompleted) {
+      newCompletedSections.delete(sectionId);
+    } else {
+      newCompletedSections.add(sectionId);
+    }
+    setCompletedSections(newCompletedSections);
 
-    // Update via API if this is an API chapter
-    if (apiChapters.length > 0 && section.chapter_id) {
+    // Save progress based on data source
+    const usingTableOfContents = hasTableOfContents;
+    
+    if (usingTableOfContents) {
+      // Save table_of_contents progress using service
+      updateBookProgress(book.id, sectionId, !isCompleted);
+      
+      // Update stats with properly calculated count
+      // We need to calculate based on chapters structure, not just set size
+      const tempCompletedSections = newCompletedSections;
+      const calculateNewCompletedCount = () => {
+        let count = 0;
+        for (const ch of chapters) {
+          if (ch.children && ch.children.length > 0) {
+            for (const section of ch.children) {
+              if (tempCompletedSections.has(section.id)) {
+                count++;
+              }
+            }
+          } else {
+            if (tempCompletedSections.has(ch.id)) {
+              count++;
+            }
+          }
+        }
+        return count;
+      };
+      
+      const newCompletedCount = calculateNewCompletedCount();
+      saveBookProgressStats(book.id, totalSections, newCompletedCount);
+      
+      toast({
+        title: "Progress saved",
+        description: `Section marked as ${newStatus.replace('_', ' ')}`,
+      });
+    } else if (apiChapters.length > 0 && section.chapter_id) {
+      // Update via API for API chapters
       try {
         await updateChapterStatus(book.id, section.chapter_id, newStatus);
         toast({
@@ -133,15 +182,7 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
         });
       } catch (error) {
         // Revert optimistic update
-        setCompletedSections((prev) => {
-          const newSet = new Set(prev);
-          if (isCompleted) {
-            newSet.add(sectionId);
-          } else {
-            newSet.delete(sectionId);
-          }
-          return newSet;
-        });
+        setCompletedSections(completedSections);
         
         toast({
           title: "Error",
@@ -181,9 +222,37 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
     return count;
   };
 
+  // Count completed sections with SAME logic as countAllSections
+  const countCompletedSectionsForChapters = (chapters) => {
+    let count = 0;
+    for (const ch of chapters) {
+      if (ch.children && ch.children.length > 0) {
+        // Count completed children
+        for (const section of ch.children) {
+          if (completedSections.has(section.id)) {
+            count++;
+          }
+        }
+      } else {
+        // Chapter is a section itself
+        if (completedSections.has(ch.id)) {
+          count++;
+        }
+      }
+    }
+    return count;
+  };
+
   const totalSections = countAllSections(chapters);
-  const completedCount = completedSections.size;
+  const completedCount = countCompletedSectionsForChapters(chapters);
   const overallProgress = totalSections > 0 ? Math.round((completedCount / totalSections) * 100) : 0;
+  
+  // Save stats for home page when we have table of contents
+  useEffect(() => {
+    if (hasTableOfContents && totalSections > 0) {
+      saveBookProgressStats(book.id, totalSections, completedCount);
+    }
+  }, [book.id, hasTableOfContents, totalSections, completedCount]);
 
   return (
     <SidebarContainer>
@@ -200,14 +269,16 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
           const isExpanded = expandedChapters.includes(chapterIndex);
           const chapterProgress = getChapterProgress(chapter);
           const isCurrentChapter = isPageInRange(currentPage, chapter);
+          const hasChildren = chapter.children && chapter.children.length > 0;
 
           return (
             <ExpandableSection
-              key={chapter.id}
+              key={`chapter_${chapterIndex}_${chapter.id}`}
               title={chapter.title}
               isExpanded={isExpanded}
               onToggle={() => handleToggleChapter(chapterIndex)}
               isActive={isCurrentChapter}
+              showExpandButton={hasChildren}
               headerContent={
                 <div
                   onClick={(e) => {
@@ -235,13 +306,13 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
             >
               {chapter.children && chapter.children.length > 0 && (
                 <ol>
-                  {chapter.children.map((section) => {
+                  {chapter.children.map((section, sectionIndex) => {
                     const isCompleted = completedSections.has(section.id);
                     const isCurrentSection = currentPage === section.page;
 
                     return (
                       <SidebarItem
-                        key={section.id}
+                        key={`${chapter.id}_${sectionIndex}_${section.id}`}
                         title={
                           <>
                             <span className="line-clamp-2 text-sm">{section.title}</span>
