@@ -53,6 +53,7 @@ import { useApi } from "@/hooks/useApi"
 import { useToast } from "@/hooks/use-toast"
 import { videoApi } from "@/services/videoApi"
 import { deleteApi } from "@/services/deleteApi"
+import { calculateBookProgress, getBookProgressStats } from "@/services/bookProgressService"
 import { MainHeader } from "@/components/header/MainHeader"
 import { ConfirmationDialog } from "@/components/ConfirmationDialog"
 
@@ -156,8 +157,25 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
   
   const V = VARIANTS[item.type]
   const isFlashcard = item.type === "flashcards"
+  const isBook = item.type === "book"
+  
   const progressValue = isFlashcard
     ? item.totalCards > 0 ? ((item.totalCards - (item.due || 0) - (item.overdue || 0)) / item.totalCards) * 100 : 0
+    : isBook
+    ? (() => {
+        // Use chapter-based progress for books
+        const stats = getBookProgressStats(item.id);
+        if (stats.totalSections > 0) {
+          return stats.percentage;
+        }
+        // If no saved stats but we have table_of_contents, calculate
+        if (item.table_of_contents && item.table_of_contents.length > 0) {
+          const progress = calculateBookProgress(item);
+          return progress.percentage;
+        }
+        // Otherwise, no progress yet
+        return 0;
+      })()
     : item.progress || item.completion_percentage || 0
 
   const handleDeleteClick = () => {
