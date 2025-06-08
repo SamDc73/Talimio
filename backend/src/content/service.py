@@ -58,7 +58,10 @@ async def fetch_youtube_videos(search: str | None = None) -> list[YoutubeContent
     items = []
     try:
         async with async_session_maker() as session:
-            # Select only needed fields
+            # Import here to avoid circular imports
+            from src.videos.models import VideoChapter
+
+            # Select video and chapter data in one query
             video_stmt = select(
                 Video.uuid,
                 Video.title,
@@ -70,26 +73,48 @@ async def fetch_youtube_videos(search: str | None = None) -> list[YoutubeContent
                 Video.tags,
                 Video.created_at,
                 Video.updated_at,
+                func.count(VideoChapter.id).label("total_chapters"),
+                func.count(VideoChapter.id).filter(VideoChapter.status == "done").label("completed_chapters"),
+            ).outerjoin(VideoChapter, Video.uuid == VideoChapter.video_uuid).group_by(
+                Video.uuid,
+                Video.title,
+                Video.description,
+                Video.channel,
+                Video.duration,
+                Video.thumbnail_url,
+                Video.completion_percentage,
+                Video.tags,
+                Video.created_at,
+                Video.updated_at,
             )
+
             video_stmt = apply_search_filter(video_stmt, Video, ["title", "channel"], search)
             result = await session.execute(video_stmt)
             videos = result.all()
 
-            items.extend(
-                YoutubeContent(
-                    id=str(video.uuid),
-                    title=video.title,
-                    description=video.description or "",
-                    channel_name=video.channel,
-                    duration=video.duration,
-                    thumbnail_url=video.thumbnail_url,
-                    last_accessed_date=video.updated_at or video.created_at,
-                    created_date=video.created_at,
-                    progress=video.completion_percentage or 0,
-                    tags=_safe_parse_tags(video.tags),
+            for video in videos:
+                # Calculate progress: use chapter progress if chapters exist, otherwise use stored completion_percentage
+                progress = 0
+                if video.total_chapters > 0:
+                    progress = (video.completed_chapters / video.total_chapters) * 100
+                else:
+                    progress = video.completion_percentage or 0
+
+                items.append(
+                    YoutubeContent(
+                        id=str(video.uuid),
+                        title=video.title,
+                        description=video.description or "",
+                        channel_name=video.channel,
+                        duration=video.duration,
+                        thumbnail_url=video.thumbnail_url,
+                        last_accessed_date=video.updated_at or video.created_at,
+                        created_date=video.created_at,
+                        progress=progress,
+                        tags=_safe_parse_tags(video.tags),
+                    ),
                 )
-                for video in videos
-            )
+
     except Exception as e:
         # Log the error but continue with other content types
         logger.warning(f"Failed to fetch YouTube videos: {e}")

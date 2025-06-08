@@ -134,3 +134,10 @@ class VideoChapterStatusUpdate(BaseModel):
     """Schema for updating video chapter status."""
 
     status: str = Field(..., pattern="^(not_started|in_progress|done)$")
+
+
+class VideoChapterProgressSync(BaseModel):
+    """Schema for syncing chapter progress from frontend."""
+
+    completed_chapter_ids: list[str] = Field(..., description="List of completed chapter IDs")
+    total_chapters: int = Field(..., gt=0, description="Total number of chapters")

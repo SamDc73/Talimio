@@ -55,22 +55,35 @@ async def list_content_fast(
         if not content_type or content_type == ContentType.YOUTUBE:
             video_query = """
                 SELECT 
-                    uuid::text as id,
-                    title,
-                    COALESCE(description, '') as description,
+                    v.uuid::text as id,
+                    v.title,
+                    COALESCE(v.description, '') as description,
                     'youtube' as type,
-                    COALESCE(updated_at, created_at) as last_accessed,
-                    created_at,
-                    tags,
-                    channel as extra1,
-                    thumbnail_url as extra2,
-                    COALESCE(completion_percentage, 0)::int as progress,
-                    COALESCE(duration, 0) as count1,
+                    COALESCE(v.updated_at, v.created_at) as last_accessed,
+                    v.created_at,
+                    v.tags,
+                    v.channel as extra1,
+                    v.thumbnail_url as extra2,
+                    CASE 
+                        WHEN chapter_stats.total_chapters > 0 THEN 
+                            (chapter_stats.completed_chapters * 100.0 / chapter_stats.total_chapters)
+                        ELSE 
+                            COALESCE(v.completion_percentage, 0)
+                    END as progress,
+                    COALESCE(v.duration, 0) as count1,
                     0 as count2
-                FROM videos
+                FROM videos v
+                LEFT JOIN (
+                    SELECT 
+                        video_uuid,
+                        COUNT(*) as total_chapters,
+                        COUNT(CASE WHEN status = 'done' THEN 1 END) as completed_chapters
+                    FROM video_chapters 
+                    GROUP BY video_uuid
+                ) chapter_stats ON v.uuid = chapter_stats.video_uuid
             """
             if search:
-                video_query += " WHERE title ILIKE %(search)s OR channel ILIKE %(search)s"
+                video_query += " WHERE v.title ILIKE %(search)s OR v.channel ILIKE %(search)s"
             queries.append(video_query)
 
         # Flashcards

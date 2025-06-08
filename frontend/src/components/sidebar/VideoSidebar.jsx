@@ -5,8 +5,28 @@ import SidebarContainer from "./SidebarContainer";
 import ProgressIndicator from "./ProgressIndicator";
 import SidebarNav from "./SidebarNav";
 import CompletionCheckbox from "./CompletionCheckbox";
-import { getVideoChapters, updateVideoChapterStatus, extractVideoChapters } from "@/services/videosService";
+import { getVideoChapters, updateVideoChapterStatus, extractVideoChapters, syncVideoChapterProgress } from "@/services/videosService";
 import { useToast } from "@/hooks/use-toast";
+
+// Load completed chapters from localStorage
+const loadCompletedChaptersFromStorage = (videoUuid) => {
+  try {
+    const saved = localStorage.getItem(`video_chapters_${videoUuid}`);
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  } catch (error) {
+    console.error('Failed to load completed chapters from storage:', error);
+    return new Set();
+  }
+};
+
+// Save completed chapters to localStorage
+const saveCompletedChaptersToStorage = (videoUuid, completedSet) => {
+  try {
+    localStorage.setItem(`video_chapters_${videoUuid}`, JSON.stringify([...completedSet]));
+  } catch (error) {
+    console.error('Failed to save completed chapters to storage:', error);
+  }
+};
 
 export function VideoSidebar({ video, currentTime, onSeek }) {
   const { isOpen } = useSidebar();
@@ -28,18 +48,26 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
         const chapters = await getVideoChapters(video.uuid);
         setApiChapters(chapters || []);
         
-        // Update completed chapters based on chapter status
-        const completed = new Set();
-        chapters?.forEach(chapter => {
-          if (chapter.status === 'completed') {
-            completed.add(chapter.id);
-          }
-        });
-        setCompletedChapters(completed);
+        if (chapters && chapters.length > 0) {
+          // Update completed chapters based on chapter status from API
+          const completed = new Set();
+          chapters.forEach(chapter => {
+            if (chapter.status === 'done') {
+              completed.add(chapter.id);
+            }
+          });
+          setCompletedChapters(completed);
+        } else {
+          // No API chapters, load from localStorage for description-based chapters
+          const savedCompleted = loadCompletedChaptersFromStorage(video.uuid);
+          setCompletedChapters(savedCompleted);
+        }
       } catch (error) {
         console.error('Failed to fetch video chapters:', error);
-        // Fall back to description extraction
+        // Fall back to description extraction and load from localStorage
         setApiChapters([]);
+        const savedCompleted = loadCompletedChaptersFromStorage(video.uuid);
+        setCompletedChapters(savedCompleted);
       } finally {
         setIsLoadingChapters(false);
       }
@@ -53,6 +81,18 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
     if (video?.description && apiChapters.length === 0) {
       const extractedChapters = extractChapters(video.description);
       setChapters(extractedChapters);
+      
+      // Sync existing localStorage progress to backend
+      if (extractedChapters.length > 0) {
+        const savedCompleted = loadCompletedChaptersFromStorage(video.uuid);
+        if (savedCompleted.size > 0) {
+          // Sync existing progress to backend
+          syncVideoChapterProgress(video.uuid, [...savedCompleted], extractedChapters.length)
+            .catch(error => {
+              console.error('Failed to sync existing chapter progress to backend:', error);
+            });
+        }
+      }
     } else if (apiChapters.length > 0) {
       // Convert API chapters to the expected format
       const formattedChapters = apiChapters.map(chapter => ({
@@ -128,18 +168,16 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
   const toggleChapterCompletion = async (chapter) => {
     const chapterId = chapter.id || chapter.chapter_id;
     const isCompleted = completedChapters.has(chapterId);
-    const newStatus = isCompleted ? 'not_started' : 'completed';
+    const newStatus = isCompleted ? 'not_started' : 'done';
 
     // Optimistic update
-    setCompletedChapters(prev => {
-      const newSet = new Set(prev);
-      if (isCompleted) {
-        newSet.delete(chapterId);
-      } else {
-        newSet.add(chapterId);
-      }
-      return newSet;
-    });
+    const newCompletedChapters = new Set(completedChapters);
+    if (isCompleted) {
+      newCompletedChapters.delete(chapterId);
+    } else {
+      newCompletedChapters.add(chapterId);
+    }
+    setCompletedChapters(newCompletedChapters);
 
     // Update via API if this is an API chapter
     if (apiChapters.length > 0 && chapter.chapter_id) {
@@ -151,19 +189,43 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
         });
       } catch (error) {
         // Revert optimistic update
-        setCompletedChapters(prev => {
-          const newSet = new Set(prev);
-          if (isCompleted) {
-            newSet.add(chapterId);
-          } else {
-            newSet.delete(chapterId);
-          }
-          return newSet;
-        });
+        setCompletedChapters(completedChapters);
         
         toast({
           title: "Error",
           description: "Failed to update chapter status",
+          variant: "destructive",
+        });
+      }
+    } else {
+      // This is a description-based chapter, save to localStorage and sync to backend
+      try {
+        saveCompletedChaptersToStorage(video.uuid, newCompletedChapters);
+        
+        // Sync to backend for homepage progress
+        const completedIds = [...newCompletedChapters];
+        const totalChapters = chapters.length;
+        
+        if (totalChapters > 0) {
+          // Don't await - let it sync in background
+          syncVideoChapterProgress(video.uuid, completedIds, totalChapters)
+            .catch(error => {
+              console.error('Failed to sync chapter progress to backend:', error);
+              // Don't show error to user, this is just for homepage sync
+            });
+        }
+        
+        toast({
+          title: "Chapter updated",
+          description: `Chapter marked as ${newStatus.replace('_', ' ')}`,
+        });
+      } catch (error) {
+        // Revert optimistic update
+        setCompletedChapters(completedChapters);
+        
+        toast({
+          title: "Error",
+          description: "Failed to save chapter progress",
           variant: "destructive",
         });
       }

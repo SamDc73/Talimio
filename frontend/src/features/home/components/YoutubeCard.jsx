@@ -87,10 +87,10 @@ export function YoutubeCard({ video, onDelete }) {
           <div className="flex-1 bg-gray-100 rounded-full h-2">
             <div 
               className="bg-teal-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${video.completion_percentage || 0}%` }}
+              style={{ width: `${video.progress || video.completion_percentage || 0}%` }}
             />
           </div>
-          <span className="text-sm text-gray-900 font-medium">{Math.round(video.completion_percentage || 0)}%</span>
+          <span className="text-sm text-gray-900 font-medium">{Math.round(video.progress || video.completion_percentage || 0)}%</span>
         </div>
       </div>
       

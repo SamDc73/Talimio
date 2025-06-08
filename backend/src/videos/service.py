@@ -360,10 +360,54 @@ class VideoService:
         chapter.status = status
         chapter.updated_at = datetime.now()
 
+        # Recalculate video completion percentage based on all chapters
+        all_chapters_result = await db.execute(
+            select(VideoChapter).where(VideoChapter.video_uuid == video_uuid),
+        )
+        all_chapters = all_chapters_result.scalars().all()
+
+        if all_chapters:
+            completed_chapters = len([ch for ch in all_chapters if ch.status == "done"])
+            total_chapters = len(all_chapters)
+            completion_percentage = (completed_chapters / total_chapters) * 100
+
+            # Update video completion percentage
+            video.completion_percentage = completion_percentage
+            video.updated_at = datetime.now()
+
         await db.commit()
         await db.refresh(chapter)
 
         return VideoChapterResponse.model_validate(chapter)
+
+    async def sync_chapter_progress(
+        self,
+        db: AsyncSession,
+        video_uuid: str,
+        completed_chapter_ids: list[str],
+        total_chapters: int,
+    ) -> VideoResponse:
+        """Sync chapter progress from frontend and update video completion percentage."""
+        # Verify video exists
+        video_result = await db.execute(select(Video).where(Video.uuid == video_uuid))
+        video = video_result.scalar_one_or_none()
+
+        if not video:
+            msg = f"Video with UUID {video_uuid} not found"
+            raise ValueError(msg)
+
+        # Calculate completion percentage from chapter progress
+        completed_count = len(completed_chapter_ids)
+        completion_percentage = (completed_count / total_chapters) * 100
+
+        # Update video completion percentage
+        video.completion_percentage = completion_percentage
+        video.updated_at = datetime.now()
+
+        await db.commit()
+        await db.refresh(video)
+
+        return VideoResponse.model_validate(video)
 
     async def extract_and_create_video_chapters(self, db: AsyncSession, video_uuid: str) -> list[VideoChapterResponse]:
         """Extract chapters from YouTube video and create chapter records."""

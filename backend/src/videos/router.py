@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.session import get_db_session
 from src.videos.schemas import (
+    VideoChapterProgressSync,
     VideoChapterResponse,
     VideoChapterStatusUpdate,
     VideoCreate,
@@ -193,3 +194,18 @@ async def extract_video_chapters(
         if "not found" in str(e):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post("/{video_uuid}/sync-chapter-progress")
+async def sync_video_chapter_progress(
+    video_uuid: str,
+    progress_data: VideoChapterProgressSync,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> VideoResponse:
+    """Sync chapter progress from frontend to update video completion percentage."""
+    try:
+        return await video_service.sync_chapter_progress(
+            db, video_uuid, progress_data.completed_chapter_ids, progress_data.total_chapters
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
