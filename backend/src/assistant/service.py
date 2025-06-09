@@ -4,6 +4,11 @@ from uuid import uuid4
 from fastapi import HTTPException, status
 
 from src.ai.client import ModelManager
+from src.ai.prompts import (
+    ASSISTANT_CHAT_SYSTEM_PROMPT,
+    COURSE_GENERATION_PROMPT,
+    FLASHCARD_GENERATION_PROMPT,
+)
 
 from .schemas import (
     ChatRequest,
@@ -40,7 +45,7 @@ async def chat_with_assistant(request: ChatRequest) -> ChatResponse:
         messages.append(
             {
                 "role": "system",
-                "content": "You are a helpful learning assistant. Provide clear, educational responses that help users learn new topics. Be encouraging and supportive.",
+                "content": ASSISTANT_CHAT_SYSTEM_PROMPT,
             },
         )
 
@@ -103,34 +108,10 @@ async def generate_course(request: GenerateCourseRequest) -> GenerateCourseRespo
     try:
         model_manager = ModelManager()
 
-        prompt = f"""
-        Create a comprehensive {request.duration_weeks}-week course on "{request.topic}" for {request.skill_level} level learners.
-
-        {f"Course Description: {request.description}" if request.description else ""}
-
-        Generate a structured course with modules. Each module should be a weekly unit.
-
-        For each module, provide:
-        - Title (clear and descriptive)
-        - Description (what will be covered)
-        - Content (detailed learning objectives and key topics)
-        - Estimated hours to complete
-
-        Format as JSON:
-        {{
-            "title": "Complete Course Title",
-            "description": "Course overview and what students will learn",
-            "modules": [
-                {{
-                    "title": "Module 1 Title",
-                    "description": "What this module covers",
-                    "content": "Detailed learning objectives and topics",
-                    "order": 0,
-                    "estimated_hours": 5
-                }}
-            ]
-        }}
-        """
+        prompt = COURSE_GENERATION_PROMPT.format(
+            topic=request.topic,
+            duration=request.duration_weeks,
+        )
 
         messages = [
             {
@@ -207,31 +188,10 @@ async def generate_flashcards(request: GenerateFlashcardsRequest) -> GenerateFla
 
         topic = request.topic or "General Topic"
 
-        prompt = f"""
-        Create {request.num_cards} flashcards from the following content about {topic}:
-
-        Content:
-        {request.content}
-
-        Generate flashcards that:
-        - Focus on key concepts and important facts
-        - Have clear, concise questions
-        - Provide complete, accurate answers
-        - Vary in difficulty (easy, medium, hard)
-        - Include relevant tags for categorization
-
-        Format as JSON:
-        {{
-            "flashcards": [
-                {{
-                    "question": "Clear, specific question",
-                    "answer": "Complete, accurate answer",
-                    "difficulty": "easy|medium|hard",
-                    "tags": ["tag1", "tag2"]
-                }}
-            ]
-        }}
-        """
+        prompt = FLASHCARD_GENERATION_PROMPT.format(
+            content=request.content,
+            count=request.num_cards,
+        )
 
         messages = [
             {

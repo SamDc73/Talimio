@@ -219,7 +219,11 @@ async def _get_total_count(session: AsyncSession, combined_query: str, search_te
 
 
 async def _get_paginated_results(
-    session: AsyncSession, combined_query: str, search_term: str | None, page_size: int, offset: int
+    session: AsyncSession,
+    combined_query: str,
+    search_term: str | None,
+    page_size: int,
+    offset: int,
 ) -> list[Any]:
     """Get paginated results."""
     final_query = f"""
