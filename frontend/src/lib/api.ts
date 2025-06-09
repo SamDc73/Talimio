@@ -114,10 +114,9 @@ export function processContentData(data: ContentItem[]) {
 	const filterOptions: FilterOption[] = [
 		{ id: "all", label: "All Content", icon: "Search" },
 		{ id: "course", label: "Courses", icon: "BookOpen" },
-		{ id: "youtube", label: "YouTube Videos", icon: "Youtube" },
-		{ id: "flashcards", label: "Flashcard Decks", icon: "Layers" },
+		{ id: "youtube", label: "Videos", icon: "Youtube" },
+		{ id: "flashcards", label: "Flashcards", icon: "Layers" },
 		{ id: "book", label: "Books", icon: "FileText" },
-		{ id: "roadmap", label: "Roadmaps", icon: "FileText" },
 	];
 
 	// Define sort options
