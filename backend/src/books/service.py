@@ -178,7 +178,11 @@ def _extract_file_metadata(file_content: bytes, file_extension: str) -> "BookMet
 
 
 def _create_book_record(
-    book_data: BookCreate, file_path: Path, file_content: bytes, file_hash: str, metadata: "BookMetadata"
+    book_data: BookCreate,
+    file_path: Path,
+    file_content: bytes,
+    file_hash: str,
+    metadata: "BookMetadata",
 ) -> Book:
     """Create book database record."""
     return Book(

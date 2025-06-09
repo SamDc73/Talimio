@@ -59,7 +59,8 @@ async def create_video(
             logging.warning(f"Failed to fetch existing video during duplicate handling: {e}")
 
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Video already exists in the library"
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Video already exists in the library",
         ) from None
     except Exception as e:
         logger.exception(f"Error creating video: {e}")

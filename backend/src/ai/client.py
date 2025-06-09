@@ -117,20 +117,9 @@ class ModelManager:
 
     async def generate_onboarding_questions(self, topic: str) -> list[dict[str, Any]]:
         """Generate personalized onboarding questions."""
-        prompt = f"""For someone wanting to learn {topic}, create 5 questions to understand their:
-        1. Current experience level with {topic}
-        2. Learning goals
-        3. Preferred learning style
-        4. Available time commitment
-        5. Related skills/background
+        from src.ai.prompts import ONBOARDING_QUESTIONS_PROMPT
 
-        Format as JSON array:
-        [
-            {{
-                "question": "What is your current experience with {topic}?",
-                "options": ["Complete Beginner", "Some Basic Knowledge", "Intermediate", "Advanced"]
-            }}
-        ]"""
+        prompt = ONBOARDING_QUESTIONS_PROMPT.format(topic=topic)
 
         messages = [
             {"role": "system", "content": "You are an expert curriculum designer."},
@@ -173,69 +162,13 @@ class ModelManager:
         if sub_min > sub_max:
             msg = "sub_min cannot be greater than sub_max"
             raise ValidationError(msg)
-        prompt = f"""
-You are *CurriculumArchitect 9000*.
-Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdown, no commentary.
+        from src.ai.prompts import ROADMAP_GENERATION_PROMPT
 
-### Parameters
-- Title: {title}
-- Description: {description}
-- Learner Level: {skill_level}  (beginner | intermediate | advanced)
-
-### Output rules
-1. Output ONLY a JSON array that validates against the schema below.
-2. Core topics: min {min_core_topics}, max {max_core_topics}.
-3. Each core topic gets {sub_min}-{sub_max} subtopics.
-4. Keep the `children` field (level 3) present but **empty**.
-5. Set `order` fields so siblings start at 0 and increment.
-6. Never wrap the JSON in back-ticks, markdown, or prose.
-7. All prerequisite_ids must be empty arrays ([]) for compatibility.
-
-### JSON Schema (draft-07)
-{{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "array",
-  "items": {{
-    "type": "object",
-    "required": ["title","description","content","order","prerequisite_ids","children"],
-    "properties": {{
-      "title": {{ "type": "string" }},
-      "description": {{ "type": "string" }},
-      "content": {{ "type": "string" }},
-      "order": {{ "type": "integer", "minimum": 0 }},
-      "prerequisite_ids": {{ "type": "array", "items": {{ "type": "string" }} }},
-      "children": {{
-        "type": "array",
-        "items": {{ "$ref": "#" }}
-      }}
-    }}
-  }}
-}}
-
-### Example (trimmed)
-[
-  {{
-    "title": "Core Topic 1",
-    "description": "Overview of Core Topic 1",
-    "content": "Key learning objectives...",
-    "order": 0,
-    "prerequisite_ids": [],
-    "children": [
-      {{
-        "title": "Subtopic 1.1",
-        "description": "Overview of Subtopic 1.1",
-        "content": "Objectives...",
-        "order": 0,
-        "prerequisite_ids": [],
-        "children": []
-      }},
-      {{ "title": "Subtopic 1.2", "description": "...", "content": "...", "order": 1, "prerequisite_ids": [], "children": [] }},
-      {{ "title": "Subtopic 1.3", "description": "...", "content": "...", "order": 2, "prerequisite_ids": [], "children": [] }}
-    ]
-  }},
-  ... (repeat for Core Topics 2-4)
-]
-"""
+        prompt = ROADMAP_GENERATION_PROMPT.format(
+            title=title,
+            skill_level=skill_level,
+            description=description,
+        )
 
         messages = [
             {"role": "system", "content": "You are a curriculum design expert."},
@@ -286,12 +219,12 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
             msg = "Invalid node ID"
             raise ValidationError(msg)
 
-        prompt = f"""Create 3 practice exercises for:
-        Topic: {topic}
-        Difficulty: {difficulty}
+        from src.ai.prompts import PRACTICE_EXERCISES_PROMPT
 
-        Include problem statement and solution for each exercise.
-        Format as JSON array with 'problem' and 'solution' for each exercise."""
+        prompt = PRACTICE_EXERCISES_PROMPT.format(
+            topic=topic,
+            difficulty=difficulty,
+        )
 
         messages = [
             {"role": "system", "content": "You are an expert at creating educational exercises."},
@@ -318,7 +251,18 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
         if not validate_uuid(roadmap_id):
             msg = "Invalid roadmap ID"
             raise ValidationError(msg)
-        prompt = f"""You are a curriculum design expert. For the existing roadmap (ID: {roadmap_id}) at skill level {progress_level}, generate content for the next node titled '{current_node}'. Return a pure JSON object with keys: title, description, content, prerequisites (list of existing node titles that should be prerequisites, may be empty). Format as JSON only."""
+        from src.ai.prompts import ROADMAP_NODE_CONTENT_PROMPT
+
+        # Build node details and roadmap structure for the prompt
+        node_details = {"title": current_node}
+        roadmap_json = f"roadmap_id={roadmap_id}, skill_level={progress_level}"
+        parent_info = "(parent information not available)"
+
+        prompt = ROADMAP_NODE_CONTENT_PROMPT.format(
+            parent_info=parent_info,
+            node_details=node_details,
+            roadmap_json=roadmap_json,
+        )
         messages = [
             {"role": "system", "content": "You are an expert curriculum designer."},
             {"role": "user", "content": prompt},
@@ -360,7 +304,7 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
         ------
             TagGenerationError: If tag generation fails
         """
-        from src.ai.constants import CONTENT_TAGGING_PROMPT
+        from src.ai.prompts import CONTENT_TAGGING_PROMPT
 
         prompt = CONTENT_TAGGING_PROMPT.format(
             content_type=content_type,
@@ -416,7 +360,7 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
         ------
             TagGenerationError: If tag generation fails
         """
-        from src.ai.constants import CONTENT_TAGGING_WITH_CONFIDENCE_PROMPT
+        from src.ai.prompts import CONTENT_TAGGING_WITH_CONFIDENCE_PROMPT
 
         prompt = CONTENT_TAGGING_WITH_CONFIDENCE_PROMPT.format(
             content_type=content_type,
@@ -479,30 +423,11 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> str:
         node_description = node_meta.get("description", "")
         skill_level = node_meta.get("skill_level", "beginner")
 
+        from src.ai.prompts import LESSON_GENERATION_PROMPT
+
         # Create a more detailed prompt for lesson generation
-        prompt = f"""
-        Create a comprehensive, detailed lesson on "{node_title}".
-
-        Description: {node_description}
-        Skill Level: {skill_level}
-
-        The lesson should include:
-        1. A clear introduction explaining the topic and its importance
-        2. Core concepts explained in detail with examples
-        3. Practical applications or exercises
-        4. Summary of key points
-        5. Additional resources for further learning
-
-        Important requirements:
-        - Write a complete, in-depth lesson with substantial content (at least 1000 words)
-        - Include code examples where appropriate
-        - Use proper Markdown formatting with headings (##, ###), lists, code blocks, etc.
-        - Organize content with clear section headings
-        - Include practical exercises or challenges
-        - Provide real-world examples and applications
-
-        Format the content in Markdown with proper headings, code blocks, and formatting.
-        """
+        content_info = f"{node_title} - {node_description} (Skill Level: {skill_level})"
+        prompt = LESSON_GENERATION_PROMPT.format(content=content_info)
 
         messages = [
             {
@@ -528,7 +453,7 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> str:
 
         if not isinstance(markdown_content, str) or len(markdown_content.strip()) < MIN_LESSON_CONTENT_LENGTH:
             logging.error(
-                f"Invalid or too short lesson content received: {markdown_content[:MIN_LESSON_CONTENT_LENGTH]}..."
+                f"Invalid or too short lesson content received: {markdown_content[:MIN_LESSON_CONTENT_LENGTH]}...",
             )
             raise LessonGenerationError
 

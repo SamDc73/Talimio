@@ -1,4 +1,5 @@
 from src.ai.client import ModelManager
+from src.ai.prompts import ONBOARDING_QUESTIONS_PROMPT
 from src.onboarding.schemas import OnboardingQuestion, OnboardingQuestions
 
 
@@ -10,20 +11,7 @@ class OnboardingService:
 
     async def generate_questions(self, topic: str) -> OnboardingQuestions:
         """Generate onboarding questions based on the topic."""
-        prompt = f"""For someone wanting to learn {topic}, create 5 questions to understand their:
-        1. Current experience level with {topic}
-        2. Learning goals
-        3. Preferred learning style
-        4. Available time commitment
-        5. Related skills/background
-
-        Format as JSON array:
-        [
-            {{
-                "question": "What is your current experience with {topic}?",
-                "options": ["Complete Beginner", "Some Basic Knowledge", "Intermediate", "Advanced"]
-            }}
-        ]"""
+        prompt = ONBOARDING_QUESTIONS_PROMPT.format(topic=topic)
 
         messages = [
             {"role": "system", "content": "You are an expert curriculum designer."},
