@@ -67,8 +67,8 @@ class VideoProcessor:
                 existing_tags = json.loads(video.tags)
                 if existing_tags:
                     content_parts.append(f"YouTube tags: {', '.join(existing_tags[:10])}")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to parse existing video tags: {e}")
 
         # TODO: In the future, could add:
         # - Transcript extraction from YouTube API

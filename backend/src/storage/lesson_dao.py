@@ -17,7 +17,9 @@ class LessonDAO:
 
         # Use DATABASE_URL if available, otherwise fallback to individual settings
         connection_string = os.getenv("DATABASE_URL")
-        if not connection_string:
+        if connection_string:
+            logging.info("Connecting to database using DATABASE_URL")
+        else:
             # Default to localhost if not specified
             host = os.getenv("POSTGRES_HOST", "localhost")
             port = os.getenv("POSTGRES_PORT", "5432")
@@ -25,9 +27,9 @@ class LessonDAO:
             password = os.getenv("POSTGRES_PASSWORD", "postgres")
             dbname = os.getenv("POSTGRES_DB", "postgres")
             connection_string = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+            logging.info(f"Connecting to database at {host}:{port}/{dbname}")
 
         try:
-            logging.info(f"Connecting to database at {host}:{port}/{dbname}")
             return await asyncpg.connect(connection_string)
         except Exception as e:
             logging.exception(f"Failed to connect to database: {e!s}")

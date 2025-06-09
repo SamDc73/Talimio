@@ -3,13 +3,19 @@ import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.database.session import async_session_maker
+
+
+if TYPE_CHECKING:
+    from src.books.metadata import BookMetadata
 
 from .models import Book, BookChapter, BookProgress
 from .schemas import (
@@ -88,124 +94,18 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
         HTTPException: If creation fails
     """
     try:
-        # Validate file
-        if not file.filename:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No filename provided",
-            )
+        file_content, file_extension, file_hash = await _validate_and_process_file(file)
+        await _check_duplicate_book(file_hash)
+        file_path = _save_file_to_disk(file_content, file_extension)
+        metadata = _extract_file_metadata(file_content, file_extension)
 
-        file_extension = Path(file.filename).suffix.lower()
-        if file_extension not in ALLOWED_EXTENSIONS:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File type {file_extension} not supported. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
-            )
-
-        # Check file size
-        file_content = await file.read()
-        if len(file_content) > MAX_FILE_SIZE:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB",
-            )
-
-        # Calculate file hash for duplicate detection
-        file_hash = hashlib.sha256(file_content).hexdigest()
-
-        # Check for duplicate files
         async with async_session_maker() as session:
-            existing_book = await session.execute(
-                select(Book).where(Book.file_hash == file_hash),
-            )
-            existing_book = existing_book.scalar_one_or_none()
-
-            if existing_book:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"This PDF already exists in the library as '{existing_book.title}' by {existing_book.author}",
-                )
-
-        # Create upload directory
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-        # Generate unique filename
-        from uuid import uuid4
-
-        unique_filename = f"{uuid4()}{file_extension}"
-        file_path = UPLOAD_DIR / unique_filename
-
-        # Save file
-        file_path.write_bytes(file_content)
-
-        # Extract metadata from the file to get page count
-        from .metadata import extract_metadata
-
-        metadata = extract_metadata(file_content, file_extension)
-
-        # Create book record
-        async with async_session_maker() as session:
-            book = Book(
-                title=book_data.title,
-                subtitle=book_data.subtitle,
-                author=book_data.author,
-                description=book_data.description,
-                isbn=book_data.isbn,
-                file_path=str(file_path),
-                file_type=book_data.file_type,
-                file_size=len(file_content),
-                file_hash=file_hash,  # Add the file hash
-                language=book_data.language,
-                publication_year=book_data.publication_year,
-                publisher=book_data.publisher,
-                tags=json.dumps(book_data.tags) if book_data.tags else None,
-                total_pages=metadata.page_count,  # Set the page count from extracted metadata
-                table_of_contents=json.dumps(metadata.table_of_contents) if metadata.table_of_contents else None,
-            )
-
+            book = _create_book_record(book_data, file_path, file_content, file_hash, metadata)
             session.add(book)
             await session.commit()
             await session.refresh(book)
 
-            # Trigger automatic tagging
-            try:
-                from src.ai.client import ModelManager
-                from src.tagging.service import TaggingService
-
-                model_manager = ModelManager()
-                tagging_service = TaggingService(session, model_manager)
-
-                # Extract content for tagging
-                content_preview = []
-                if book.description:
-                    content_preview.append(f"Description: {book.description}")
-                if metadata.table_of_contents:
-                    # Format TOC for tagging
-                    toc_items = []
-                    for item in metadata.table_of_contents[:10]:  # First 10 items
-                        toc_items.append(item.get("title", ""))
-                    if toc_items:
-                        content_preview.append(f"Table of Contents: {', '.join(toc_items)}")
-
-                # Generate and store tags
-                tags = await tagging_service.tag_content(
-                    content_id=book.id,
-                    content_type="book",
-                    title=f"{book.title} {book.subtitle or ''}".strip(),
-                    content_preview="\n".join(content_preview),
-                )
-
-                # Update book's tags field
-                if tags:
-                    book.tags = json.dumps(tags)
-                    await session.commit()
-
-                logging.info(f"Successfully tagged book {book.id} with tags: {tags}")
-
-            except Exception as e:
-                # Don't fail book creation if tagging fails
-                logging.exception(f"Failed to tag book {book.id}: {e}")
-
+            await _apply_automatic_tagging(session, book, metadata)
             return _book_to_response(book)
 
     except HTTPException:
@@ -216,6 +116,131 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create book: {e!s}",
         ) from e
+
+
+async def _validate_and_process_file(file: UploadFile) -> tuple[bytes, str, str]:
+    """Validate file and return content, extension, and hash."""
+    if not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No filename provided",
+        )
+
+    file_extension = Path(file.filename).suffix.lower()
+    if file_extension not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File type {file_extension} not supported. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
+        )
+
+    file_content = await file.read()
+    if len(file_content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB",
+        )
+
+    file_hash = hashlib.sha256(file_content).hexdigest()
+    return file_content, file_extension, file_hash
+
+
+async def _check_duplicate_book(file_hash: str) -> None:
+    """Check for duplicate books by file hash."""
+    async with async_session_maker() as session:
+        existing_book = await session.execute(
+            select(Book).where(Book.file_hash == file_hash),
+        )
+        existing_book = existing_book.scalar_one_or_none()
+
+        if existing_book:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"This PDF already exists in the library as '{existing_book.title}' by {existing_book.author}",
+            )
+
+
+def _save_file_to_disk(file_content: bytes, file_extension: str) -> Path:
+    """Save file to disk and return path."""
+    from uuid import uuid4
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    unique_filename = f"{uuid4()}{file_extension}"
+    file_path = UPLOAD_DIR / unique_filename
+    file_path.write_bytes(file_content)
+    return file_path
+
+
+def _extract_file_metadata(file_content: bytes, file_extension: str) -> "BookMetadata":
+    """Extract metadata from file content."""
+    from .metadata import extract_metadata
+
+    return extract_metadata(file_content, file_extension)
+
+
+def _create_book_record(
+    book_data: BookCreate, file_path: Path, file_content: bytes, file_hash: str, metadata: "BookMetadata"
+) -> Book:
+    """Create book database record."""
+    return Book(
+        title=book_data.title,
+        subtitle=book_data.subtitle,
+        author=book_data.author,
+        description=book_data.description,
+        isbn=book_data.isbn,
+        file_path=str(file_path),
+        file_type=book_data.file_type,
+        file_size=len(file_content),
+        file_hash=file_hash,
+        language=book_data.language,
+        publication_year=book_data.publication_year,
+        publisher=book_data.publisher,
+        tags=json.dumps(book_data.tags) if book_data.tags else None,
+        total_pages=metadata.page_count,
+        table_of_contents=json.dumps(metadata.table_of_contents) if metadata.table_of_contents else None,
+    )
+
+
+async def _apply_automatic_tagging(session: AsyncSession, book: Book, metadata: "BookMetadata") -> None:
+    """Apply automatic tagging to the book."""
+    try:
+        from src.ai.client import ModelManager
+        from src.tagging.service import TaggingService
+
+        model_manager = ModelManager()
+        tagging_service = TaggingService(session, model_manager)
+
+        content_preview = _build_content_preview(book, metadata)
+        tags = await tagging_service.tag_content(
+            content_id=book.id,
+            content_type="book",
+            title=f"{book.title} {book.subtitle or ''}".strip(),
+            content_preview="\n".join(content_preview),
+        )
+
+        if tags:
+            book.tags = json.dumps(tags)
+            await session.commit()
+
+        logging.info(f"Successfully tagged book {book.id} with tags: {tags}")
+
+    except Exception as e:
+        logging.exception(f"Failed to tag book {book.id}: {e}")
+
+
+def _build_content_preview(book: Book, metadata: "BookMetadata") -> list[str]:
+    """Build content preview for tagging."""
+    content_preview = []
+    if book.description:
+        content_preview.append(f"Description: {book.description}")
+
+    if metadata.table_of_contents:
+        toc_list = metadata.table_of_contents
+        if toc_list and len(toc_list) > 0:
+            toc_items = [item.get("title", "") for item in toc_list[:10]]
+            if toc_items:
+                content_preview.append(f"Table of Contents: {', '.join(toc_items)}")
+
+    return content_preview
 
 
 async def get_books(page: int = 1, per_page: int = 20) -> BookListResponse:
@@ -783,11 +808,11 @@ async def extract_and_create_chapters(book_id: UUID) -> list[BookChapterResponse
 
             try:
                 toc_data = json.loads(book.table_of_contents)
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError) as e:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid table of contents format",
-                )
+                ) from e
 
             # Clear existing chapters
             delete_query = select(BookChapter).where(BookChapter.book_id == book_id)

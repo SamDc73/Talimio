@@ -307,7 +307,7 @@ class RoadmapService:
         ]
 
         # Call LLM
-        llm_response = await self.ai_client._get_completion(prompt_data)  # noqa: SLF001
+        llm_response = await self.ai_client.get_completion(prompt_data)
         # Parse LLM response (expecting a JSON array)
         import json
 

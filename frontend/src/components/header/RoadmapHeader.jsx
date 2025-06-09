@@ -20,24 +20,24 @@ import { CourseHeader } from "./CourseHeader";
  * @param {string} props.courseId - ID of the current course
  */
 function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
-  const { isOpen, toggleSidebar } = useSidebar();
-  // Use the progress hook to get real-time course progress updates
-  const { courseProgress } = useProgress();
+	const { isOpen, toggleSidebar } = useSidebar();
+	// Use the progress hook to get real-time course progress updates
+	const { courseProgress } = useProgress();
 
-  // Calculate progress percentage, defaulting to 0 if not available
-  const progress = courseProgress?.progress_percentage || 0;
+	// Calculate progress percentage, defaulting to 0 if not available
+	const progress = courseProgress?.progressPercentage || 0;
 
-  return (
-    <CourseHeader
-      courseName={courseName}
-      mode={mode}
-      onModeChange={onModeChange}
-      courseId={courseId}
-      progress={progress}
-      isOpen={isOpen}
-      toggleSidebar={toggleSidebar}
-    />
-  );
+	return (
+		<CourseHeader
+			courseName={courseName}
+			mode={mode}
+			onModeChange={onModeChange}
+			courseId={courseId}
+			progress={progress}
+			isOpen={isOpen}
+			toggleSidebar={toggleSidebar}
+		/>
+	);
 }
 
 export default RoadmapHeader;

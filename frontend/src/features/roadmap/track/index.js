@@ -1,3 +1,3 @@
-import TrackView from './TrackView.jsx';
+import TrackView from "./TrackView.jsx";
 
 export default TrackView;

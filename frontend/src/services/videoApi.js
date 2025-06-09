@@ -1,90 +1,94 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api/v1";
 
 export const videoApi = {
-  async createVideo(youtubeUrl) {
-    const response = await fetch(`${BASE_URL}/videos`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ url: youtubeUrl })
-    });
+	async createVideo(youtubeUrl) {
+		const response = await fetch(`${BASE_URL}/videos`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({ url: youtubeUrl }),
+		});
 
-    if (!response.ok) {
-      if (response.status === 409) {
-        // Video already exists, but that's OK - treat as success
-        const data = await response.json();
-        return data;
-      }
-      const error = await response.json().catch(() => ({ detail: 'Failed to create video' }));
-      throw new Error(error.detail || 'Failed to create video');
-    }
+		if (!response.ok) {
+			if (response.status === 409) {
+				// Video already exists, but that's OK - treat as success
+				const data = await response.json();
+				return data;
+			}
+			const error = await response
+				.json()
+				.catch(() => ({ detail: "Failed to create video" }));
+			throw new Error(error.detail || "Failed to create video");
+		}
 
-    return response.json();
-  },
+		return response.json();
+	},
 
-  async getVideos(params = {}) {
-    const queryString = new URLSearchParams(params).toString();
-    const url = queryString ? `${BASE_URL}/videos?${queryString}` : `${BASE_URL}/videos`;
-    
-    const response = await fetch(url);
+	async getVideos(params = {}) {
+		const queryString = new URLSearchParams(params).toString();
+		const url = queryString
+			? `${BASE_URL}/videos?${queryString}`
+			: `${BASE_URL}/videos`;
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch videos');
-    }
+		const response = await fetch(url);
 
-    return response.json();
-  },
+		if (!response.ok) {
+			throw new Error("Failed to fetch videos");
+		}
 
-  async getVideo(id) {
-    const response = await fetch(`${BASE_URL}/videos/${id}`);
+		return response.json();
+	},
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch video');
-    }
+	async getVideo(id) {
+		const response = await fetch(`${BASE_URL}/videos/${id}`);
 
-    return response.json();
-  },
+		if (!response.ok) {
+			throw new Error("Failed to fetch video");
+		}
 
-  async updateVideo(id, data) {
-    const response = await fetch(`${BASE_URL}/videos/${id}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data)
-    });
+		return response.json();
+	},
 
-    if (!response.ok) {
-      throw new Error('Failed to update video');
-    }
+	async updateVideo(id, data) {
+		const response = await fetch(`${BASE_URL}/videos/${id}`, {
+			method: "PATCH",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(data),
+		});
 
-    return response.json();
-  },
+		if (!response.ok) {
+			throw new Error("Failed to update video");
+		}
 
-  async updateProgress(id, progressData) {
-    const response = await fetch(`${BASE_URL}/videos/${id}/progress`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(progressData)
-    });
+		return response.json();
+	},
 
-    if (!response.ok) {
-      throw new Error('Failed to update progress');
-    }
+	async updateProgress(id, progressData) {
+		const response = await fetch(`${BASE_URL}/videos/${id}/progress`, {
+			method: "PATCH",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(progressData),
+		});
 
-    return response.json();
-  },
+		if (!response.ok) {
+			throw new Error("Failed to update progress");
+		}
 
-  async deleteVideo(id) {
-    const response = await fetch(`${BASE_URL}/videos/${id}`, {
-      method: 'DELETE'
-    });
+		return response.json();
+	},
 
-    if (!response.ok) {
-      throw new Error('Failed to delete video');
-    }
-  }
+	async deleteVideo(id) {
+		const response = await fetch(`${BASE_URL}/videos/${id}`, {
+			method: "DELETE",
+		});
+
+		if (!response.ok) {
+			throw new Error("Failed to delete video");
+		}
+	},
 };

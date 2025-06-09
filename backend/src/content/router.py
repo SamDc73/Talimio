@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from src.content.schemas import ContentListResponse, ContentType
-from src.content.service_fast import list_content_fast
+from src.content.service import list_content_fast
 
 
 router = APIRouter(prefix="/api/v1/content", tags=["content"])

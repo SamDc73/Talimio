@@ -159,8 +159,8 @@ class BookProcessor:
                             if text and len(text) > 100:  # Skip very short sections
                                 content_parts.append(text[:2000])  # Limit each section
                                 items_processed += 1
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"Failed to extract text from PDF page: {e}")
 
             finally:
                 # Clean up temporary file
@@ -224,8 +224,8 @@ class BookProcessor:
                 existing_tags = json.loads(book.tags)
                 if existing_tags:
                     parts.append(f"Existing tags: {', '.join(existing_tags)}")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to parse existing tags: {e}")
 
         # Add extracted content
         if extracted_content:

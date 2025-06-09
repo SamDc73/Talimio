@@ -181,9 +181,9 @@ async def batch_tag_content(
 
 @router.get("/tags")
 async def list_tags(
+    service: Annotated[TaggingService, Depends(get_tagging_service)],
     category: str | None = None,
     limit: int = 100,
-    service: TaggingService = Depends(get_tagging_service),
 ) -> list[TagSchema]:
     """List all available tags.
 
@@ -284,7 +284,7 @@ async def update_content_tags(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update tags: {e!s}",
-        )
+        ) from e
 
 
 @router.post("/suggest")
