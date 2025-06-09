@@ -1,138 +1,177 @@
+import { FileText, GitBranch, MessageSquare, PanelLeft } from "lucide-react";
 import React, { useState } from "react";
-import { MessageSquare, FileText, GitBranch, PanelLeft } from "lucide-react";
-import { Button } from "../button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../tooltip";
-import { cn } from "../../lib/utils";
 import { Link } from "react-router-dom";
+import { cn } from "../../lib/utils";
+import { Button } from "../button";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "../tooltip";
 import { useChatSidebar } from "./MainHeader";
 import { UserAvatarMenu } from "./MainHeader";
 
 export function CourseHeader({
-  courseName,
-  mode,
-  onModeChange,
-  courseId,
-  progress = 0,
-  isOpen = true,
-  toggleSidebar = () => {},
+	courseName,
+	mode,
+	onModeChange,
+	courseId,
+	progress = 0,
+	isOpen = true,
+	toggleSidebar = () => {},
 }) {
-  const { toggleChat } = useChatSidebar();
-  const [showFullTitle, setShowFullTitle] = useState(false);
+	const { toggleChat } = useChatSidebar();
+	const [showFullTitle, setShowFullTitle] = useState(false);
 
-  return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
-      <div className="container mx-auto px-4">
-        <div className="flex h-16 items-center">
-          {/* Logo Section */}
-          <div className="flex-shrink-0 mr-4">
-            <Link to="/" className="block">
-              <img src="/logo.png" alt="Talimio Logo" width={32} height={32} className="object-contain" />
-            </Link>
-          </div>
+	return (
+		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
+			<div className="container mx-auto px-4">
+				<div className="flex h-16 items-center">
+					{/* Logo Section */}
+					<div className="flex-shrink-0 mr-4">
+						<Link to="/" className="block">
+							<img
+								src="/logo.png"
+								alt="Talimio Logo"
+								width={32}
+								height={32}
+								className="object-contain"
+							/>
+						</Link>
+					</div>
 
-          {/* Divider */}
-          <div className="h-8 w-px bg-slate-200 mx-3" />
+					{/* Divider */}
+					<div className="h-8 w-px bg-slate-200 mx-3" />
 
-          {/* Course Info Section */}
-          <div className="flex-1 min-w-0">
-            <h1 className="text-base font-semibold text-slate-800 truncate">{courseName}</h1>
-            <div className="flex items-center mt-1">
-              <div className="w-32 md:w-48 bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <span className="ml-2 text-xs font-medium text-slate-600">{progress}%</span>
-            </div>
-          </div>
+					{/* Course Info Section */}
+					<div className="flex-1 min-w-0">
+						<h1 className="text-base font-semibold text-slate-800 truncate">
+							{courseName}
+						</h1>
+						<div className="flex items-center mt-1">
+							<div className="w-32 md:w-48 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+								<div
+									className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full"
+									style={{ width: `${progress}%` }}
+								/>
+							</div>
+							<span className="ml-2 text-xs font-medium text-slate-600">
+								{progress}%
+							</span>
+						</div>
+					</div>
 
-          {/* View Toggle Section */}
-          <div className="hidden md:flex items-center border border-slate-200 rounded-full h-8 px-1 mx-4 bg-slate-50/50">
-            <button
-              className={cn(
-                "px-3 py-1 text-xs font-medium rounded-full transition-colors",
-                mode === "outline" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700",
-              )}
-              type="button"
-              onClick={() => mode !== "outline" && onModeChange("outline")}
-              aria-pressed={mode === "outline"}
-            >
-              <FileText className="w-3.5 h-3.5 inline-block mr-1" />
-              <span>Outline</span>
-            </button>
-            <button
-              className={cn(
-                "px-3 py-1 text-xs font-medium rounded-full transition-colors",
-                mode === "track" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700",
-              )}
-              type="button"
-              onClick={() => mode !== "track" && onModeChange("track")}
-              aria-pressed={mode === "track"}
-            >
-              <GitBranch className="w-3.5 h-3.5 inline-block mr-1" />
-              <span>Track</span>
-            </button>
-          </div>
+					{/* View Toggle Section */}
+					<div className="hidden md:flex items-center border border-slate-200 rounded-full h-8 px-1 mx-4 bg-slate-50/50">
+						<button
+							className={cn(
+								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
+								mode === "outline"
+									? "bg-white text-slate-800 shadow-sm"
+									: "text-slate-500 hover:text-slate-700",
+							)}
+							type="button"
+							onClick={() => mode !== "outline" && onModeChange("outline")}
+							aria-pressed={mode === "outline"}
+						>
+							<FileText className="w-3.5 h-3.5 inline-block mr-1" />
+							<span>Outline</span>
+						</button>
+						<button
+							className={cn(
+								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
+								mode === "track"
+									? "bg-white text-slate-800 shadow-sm"
+									: "text-slate-500 hover:text-slate-700",
+							)}
+							type="button"
+							onClick={() => mode !== "track" && onModeChange("track")}
+							aria-pressed={mode === "track"}
+						>
+							<GitBranch className="w-3.5 h-3.5 inline-block mr-1" />
+							<span>Track</span>
+						</button>
+					</div>
 
-          {/* Actions Section */}
-          <div className="flex items-center gap-2">
-            {/* Mobile View Toggle */}
-            <div className="md:hidden">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 rounded-full"
-                      onClick={() => onModeChange(mode === "outline" ? "track" : "outline")}
-                    >
-                      {mode === "outline" ? <GitBranch className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Switch to {mode === "outline" ? "Track" : "Outline"} View</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
+					{/* Actions Section */}
+					<div className="flex items-center gap-2">
+						{/* Mobile View Toggle */}
+						<div className="md:hidden">
+							<TooltipProvider>
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Button
+											variant="outline"
+											size="icon"
+											className="h-8 w-8 rounded-full"
+											onClick={() =>
+												onModeChange(mode === "outline" ? "track" : "outline")
+											}
+										>
+											{mode === "outline" ? (
+												<GitBranch className="h-4 w-4" />
+											) : (
+												<FileText className="h-4 w-4" />
+											)}
+										</Button>
+									</TooltipTrigger>
+									<TooltipContent>
+										<p>
+											Switch to {mode === "outline" ? "Track" : "Outline"} View
+										</p>
+									</TooltipContent>
+								</Tooltip>
+							</TooltipProvider>
+						</div>
 
-            {/* Sidebar Toggle */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" onClick={toggleSidebar}>
-                    <PanelLeft className={`h-4 w-4 transition-transform duration-300 ${isOpen ? "" : "rotate-180"}`} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{isOpen ? "Hide" : "Show"} sidebar</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+						{/* Sidebar Toggle */}
+						<TooltipProvider>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										variant="outline"
+										size="icon"
+										className="h-8 w-8 rounded-full"
+										onClick={toggleSidebar}
+									>
+										<PanelLeft
+											className={`h-4 w-4 transition-transform duration-300 ${isOpen ? "" : "rotate-180"}`}
+										/>
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>
+									<p>{isOpen ? "Hide" : "Show"} sidebar</p>
+								</TooltipContent>
+							</Tooltip>
+						</TooltipProvider>
 
-            {/* Chat Button */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button onClick={toggleChat} variant="outline" size="icon" className="h-8 w-8 rounded-full">
-                    <MessageSquare className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Chat with AI assistant</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+						{/* Chat Button */}
+						<TooltipProvider>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										onClick={toggleChat}
+										variant="outline"
+										size="icon"
+										className="h-8 w-8 rounded-full"
+									>
+										<MessageSquare className="h-4 w-4" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>
+									<p>Chat with AI assistant</p>
+								</TooltipContent>
+							</Tooltip>
+						</TooltipProvider>
 
-            {/* User Avatar */}
-            <div className="ml-1">
-              <UserAvatarMenu />
-            </div>
-          </div>
-        </div>
-      </div>
-    </header>
-  );
+						{/* User Avatar */}
+						<div className="ml-1">
+							<UserAvatarMenu />
+						</div>
+					</div>
+				</div>
+			</div>
+		</header>
+	);
 }

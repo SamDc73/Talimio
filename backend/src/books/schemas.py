@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -7,13 +8,15 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class BookBase(BaseModel):
     """Base schema for book data."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     title: str = Field(..., max_length=500)
     subtitle: str | None = Field(None, max_length=500)
     author: str = Field(..., max_length=200)
     description: str | None = None
     isbn: str | None = Field(None, max_length=20)
     language: str | None = Field(None, max_length=10)
-    publication_year: int | None = Field(None, ge=1000, le=2030)
+    publication_year: int | None = Field(None, ge=1000, le=2030, alias="publicationYear")
     publisher: str | None = Field(None, max_length=200)
     tags: list[str] = Field(default_factory=list)
 
@@ -21,11 +24,13 @@ class BookBase(BaseModel):
 class BookCreate(BookBase):
     """Schema for creating a book."""
 
-    file_type: str = Field(..., pattern="^(pdf|epub)$")
+    file_type: str = Field(..., pattern="^(pdf|epub)$", alias="fileType")
 
 
 class BookUpdate(BaseModel):
     """Schema for updating a book."""
+
+    model_config = ConfigDict(populate_by_name=True)
 
     title: str | None = Field(None, max_length=500)
     subtitle: str | None = Field(None, max_length=500)
@@ -33,7 +38,7 @@ class BookUpdate(BaseModel):
     description: str | None = None
     isbn: str | None = Field(None, max_length=20)
     language: str | None = Field(None, max_length=10)
-    publication_year: int | None = Field(None, ge=1000, le=2030)
+    publication_year: int | None = Field(None, ge=1000, le=2030, alias="publicationYear")
     publisher: str | None = Field(None, max_length=200)
     tags: list[str] | None = None
 
@@ -41,11 +46,13 @@ class BookUpdate(BaseModel):
 class TableOfContentsItem(BaseModel):
     """Schema for table of contents item."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str
     title: str
     page: int | None = None
-    start_page: int | None = None
-    end_page: int | None = None
+    start_page: int | None = Field(None, alias="startPage")
+    end_page: int | None = Field(None, alias="endPage")
     level: int = 0  # 0 for chapters, 1 for sections, etc.
     children: list["TableOfContentsItem"] = Field(default_factory=list)
 
@@ -53,7 +60,7 @@ class TableOfContentsItem(BaseModel):
 class BookResponse(BaseModel):
     """Schema for book response."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: UUID
     title: str
@@ -62,25 +69,27 @@ class BookResponse(BaseModel):
     description: str | None = None
     isbn: str | None = None
     language: str | None = None
-    publication_year: int | None = None
+    publication_year: int | None = Field(None, alias="publicationYear")
     publisher: str | None = None
     tags: list[str] = Field(default_factory=list)
-    file_type: str
-    file_path: str
-    file_size: int
-    total_pages: int | None = None
-    cover_image_path: str | None = None
-    table_of_contents: list[TableOfContentsItem] | None = None
-    created_at: datetime
-    updated_at: datetime
+    file_type: str = Field(alias="fileType")
+    file_path: str = Field(alias="filePath")
+    file_size: int = Field(alias="fileSize")
+    total_pages: int | None = Field(None, alias="totalPages")
+    cover_image_path: str | None = Field(None, alias="coverImagePath")
+    table_of_contents: list[TableOfContentsItem] | None = Field(None, alias="tableOfContents")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
 
 
 class BookProgressBase(BaseModel):
     """Base schema for book progress."""
 
-    current_page: int = Field(default=1, ge=1)
-    progress_percentage: float = Field(default=0.0, ge=0.0, le=100.0)
-    reading_time_minutes: int = Field(default=0, ge=0)
+    model_config = ConfigDict(populate_by_name=True)
+
+    current_page: int = Field(default=1, ge=1, alias="currentPage")
+    progress_percentage: float = Field(default=0.0, ge=0.0, le=100.0, alias="progressPercentage")
+    reading_time_minutes: int = Field(default=0, ge=0, alias="readingTimeMinutes")
     status: str = Field(default="not_started", pattern="^(not_started|reading|completed|paused)$")
     notes: str | None = None
     bookmarks: list[int] = Field(default_factory=list)
@@ -89,9 +98,9 @@ class BookProgressBase(BaseModel):
 class BookProgressUpdate(BaseModel):
     """Schema for updating book progress."""
 
-    current_page: int | None = Field(None, ge=1)
-    progress_percentage: float | None = Field(None, ge=0.0, le=100.0)
-    reading_time_minutes: int | None = Field(None, ge=0)
+    current_page: int | None = Field(None, ge=1, alias="currentPage")
+    progress_percentage: float | None = Field(None, ge=0.0, le=100.0, alias="progressPercentage")
+    reading_time_minutes: int | None = Field(None, ge=0, alias="readingTimeMinutes")
     status: str | None = Field(None, pattern="^(not_started|reading|completed|paused)$")
     notes: str | None = None
     bookmarks: list[int] | None = None
@@ -100,18 +109,18 @@ class BookProgressUpdate(BaseModel):
 class BookProgressResponse(BookProgressBase):
     """Schema for book progress response."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: UUID
-    book_id: UUID
-    user_id: str
-    total_pages_read: int
-    last_read_at: datetime | None
-    created_at: datetime
+    book_id: UUID = Field(alias="bookId")
+    user_id: str = Field(alias="userId")
+    total_pages_read: int = Field(alias="totalPagesRead")
+    last_read_at: datetime | None = Field(alias="lastReadAt")
+    created_at: datetime = Field(alias="createdAt")
 
     @field_validator("bookmarks", mode="before")
     @classmethod
-    def validate_bookmarks(cls, v):
+    def validate_bookmarks(cls, v: str | list[dict[str, Any]] | None) -> list[dict[str, Any]]:
         """Convert bookmarks from JSON string to list."""
         if v is None:
             return []
@@ -126,7 +135,7 @@ class BookProgressResponse(BookProgressBase):
             return v
         return []
 
-    updated_at: datetime
+    updated_at: datetime = Field(alias="updatedAt")
 
     @property
     def bookmarks_list(self) -> list[int]:
@@ -160,22 +169,22 @@ class BookListResponse(BaseModel):
 class BookChapterBase(BaseModel):
     """Base schema for book chapter."""
 
-    chapter_number: int = Field(..., ge=1)
+    chapter_number: int = Field(..., ge=1, alias="chapterNumber")
     title: str = Field(..., max_length=500)
-    start_page: int | None = Field(None, ge=1)
-    end_page: int | None = Field(None, ge=1)
+    start_page: int | None = Field(None, ge=1, alias="startPage")
+    end_page: int | None = Field(None, ge=1, alias="endPage")
     status: str = Field(default="not_started", pattern="^(not_started|in_progress|done)$")
 
 
 class BookChapterResponse(BookChapterBase):
     """Schema for book chapter response."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: UUID
-    book_id: UUID
-    created_at: datetime
-    updated_at: datetime
+    book_id: UUID = Field(alias="bookId")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
 
 
 class BookChapterStatusUpdate(BaseModel):

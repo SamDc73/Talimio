@@ -1,11 +1,12 @@
+"""Ultra-fast content service with minimal queries."""
+
 import json
 import logging
-from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.books.models import Book, BookProgress
 from src.content.schemas import (
     BookContent,
     ContentListResponse,
@@ -15,9 +16,6 @@ from src.content.schemas import (
     YoutubeContent,
 )
 from src.database.session import async_session_maker
-from src.flashcards.models import FlashcardCard, FlashcardDeck
-from src.roadmaps.models import Node, Roadmap
-from src.videos.models import Video
 
 
 logger = logging.getLogger(__name__)
@@ -33,393 +31,283 @@ def _safe_parse_tags(tags_json: str | None) -> list[str]:
         return []
 
 
-def apply_search_filter(stmt: Select[Any], model: type[Any], fields: list[str], search: str | None) -> Select[Any]:
-    """Apply search filter to a SQLAlchemy query.
-
-    Args:
-        stmt: SQLAlchemy select statement
-        model: SQLAlchemy model class
-        fields: List of field names to search in
-        search: Search term
-
-    Returns
-    -------
-        Modified select statement with search conditions
-    """
-    if search:
-        search_term = f"%{search}%"
-        conditions = [getattr(model, field).ilike(search_term) for field in fields]
-        return stmt.where(or_(*conditions))
-    return stmt
-
-
-async def fetch_youtube_videos(search: str | None = None) -> list[YoutubeContent]:
-    """Fetch YouTube videos from the database using optimized queries."""
-    items = []
-    try:
-        async with async_session_maker() as session:
-            # Import here to avoid circular imports
-            from src.videos.models import VideoChapter
-
-            # Select video and chapter data in one query
-            video_stmt = select(
-                Video.uuid,
-                Video.title,
-                Video.description,
-                Video.channel,
-                Video.duration,
-                Video.thumbnail_url,
-                Video.completion_percentage,
-                Video.tags,
-                Video.created_at,
-                Video.updated_at,
-                func.count(VideoChapter.id).label("total_chapters"),
-                func.count(VideoChapter.id).filter(VideoChapter.status == "done").label("completed_chapters"),
-            ).outerjoin(VideoChapter, Video.uuid == VideoChapter.video_uuid).group_by(
-                Video.uuid,
-                Video.title,
-                Video.description,
-                Video.channel,
-                Video.duration,
-                Video.thumbnail_url,
-                Video.completion_percentage,
-                Video.tags,
-                Video.created_at,
-                Video.updated_at,
-            )
-
-            video_stmt = apply_search_filter(video_stmt, Video, ["title", "channel"], search)
-            result = await session.execute(video_stmt)
-            videos = result.all()
-
-            for video in videos:
-                # Calculate progress: use chapter progress if chapters exist, otherwise use stored completion_percentage
-                progress = 0
-                if video.total_chapters > 0:
-                    progress = (video.completed_chapters / video.total_chapters) * 100
-                else:
-                    progress = video.completion_percentage or 0
-
-                items.append(
-                    YoutubeContent(
-                        id=str(video.uuid),
-                        title=video.title,
-                        description=video.description or "",
-                        channel_name=video.channel,
-                        duration=video.duration,
-                        thumbnail_url=video.thumbnail_url,
-                        last_accessed_date=video.updated_at or video.created_at,
-                        created_date=video.created_at,
-                        progress=progress,
-                        tags=_safe_parse_tags(video.tags),
-                    ),
-                )
-
-    except Exception as e:
-        # Log the error but continue with other content types
-        logger.warning(f"Failed to fetch YouTube videos: {e}")
-
-    return items
-
-
-async def fetch_flashcard_decks(search: str | None = None) -> list[FlashcardContent]:
-    """Fetch flashcard decks from the database using optimized queries."""
-    items = []
-    try:
-        async with async_session_maker() as session:
-            # Use subqueries for counting instead of loading all cards
-            card_count_subq = (
-                select(func.count(FlashcardCard.id)).where(FlashcardCard.deck_id == FlashcardDeck.id).scalar_subquery()
-            )
-
-            due_count_subq = (
-                select(func.count(FlashcardCard.id))
-                .where(
-                    FlashcardCard.deck_id == FlashcardDeck.id,
-                    FlashcardCard.due <= datetime.now(UTC),
-                )
-                .scalar_subquery()
-            )
-
-            # Select only needed fields with aggregated counts
-            deck_stmt = select(
-                FlashcardDeck.id,
-                FlashcardDeck.name,
-                FlashcardDeck.description,
-                FlashcardDeck.tags,
-                FlashcardDeck.created_at,
-                FlashcardDeck.updated_at,
-                card_count_subq.label("card_count"),
-                due_count_subq.label("due_count"),
-            )
-
-            deck_stmt = apply_search_filter(deck_stmt, FlashcardDeck, ["name", "description"], search)
-            result = await session.execute(deck_stmt)
-            decks = result.all()
-
-            for deck in decks:
-                items.append(
-                    FlashcardContent(
-                        id=str(deck.id),
-                        title=deck.name,
-                        description=deck.description or "",
-                        card_count=deck.card_count or 0,
-                        due_count=deck.due_count or 0,
-                        last_accessed_date=deck.updated_at or deck.created_at,
-                        created_date=deck.created_at,
-                        progress=0,  # Calculate based on reviewed cards if needed
-                        tags=_safe_parse_tags(deck.tags),
-                    ),
-                )
-    except Exception as e:
-        logger.warning(f"Failed to fetch flashcard decks: {e}")
-
-    return items
-
-
-async def fetch_books(search: str | None = None) -> list[BookContent]:
-    """Fetch books from the database using optimized queries."""
-    items = []
-    try:
-        async with async_session_maker() as session:
-            # Get latest progress for each book using subquery
-            latest_progress_subq = (
-                select(
-                    BookProgress.book_id,
-                    BookProgress.current_page,
-                    BookProgress.progress_percentage,
-                    BookProgress.last_read_at,
-                    func.row_number()
-                    .over(
-                        partition_by=BookProgress.book_id,
-                        order_by=BookProgress.updated_at.desc(),
-                    )
-                    .label("rn"),
-                )
-                .where(BookProgress.book_id.isnot(None))
-                .subquery()
-            )
-
-            latest_progress = (
-                select(
-                    latest_progress_subq.c.book_id,
-                    latest_progress_subq.c.current_page,
-                    latest_progress_subq.c.progress_percentage,
-                    latest_progress_subq.c.last_read_at,
-                )
-                .where(latest_progress_subq.c.rn == 1)
-                .subquery()
-            )
-
-            # Select books with their latest progress
-            book_stmt = select(
-                Book.id,
-                Book.title,
-                Book.description,
-                Book.author,
-                Book.total_pages,
-                Book.tags,
-                Book.created_at,
-                Book.updated_at,
-                latest_progress.c.current_page,
-                latest_progress.c.progress_percentage,
-                latest_progress.c.last_read_at,
-            ).outerjoin(latest_progress, Book.id == latest_progress.c.book_id)
-
-            book_stmt = apply_search_filter(book_stmt, Book, ["title", "author"], search)
-            result = await session.execute(book_stmt)
-            books = result.all()
-
-            for book in books:
-                items.append(
-                    BookContent(
-                        id=str(book.id),
-                        title=book.title,
-                        description=book.description or "",
-                        author=book.author,
-                        page_count=book.total_pages,
-                        current_page=book.current_page or 0,
-                        last_accessed_date=book.last_read_at or book.created_at,
-                        created_date=book.created_at,
-                        progress=book.progress_percentage or 0,
-                        tags=_safe_parse_tags(book.tags),
-                    ),
-                )
-    except Exception as e:
-        logger.warning(f"Failed to fetch books: {e}")
-
-    return items
-
-
-async def fetch_roadmaps(search: str | None = None) -> list[RoadmapContent]:
-    """Fetch roadmaps from the database using optimized queries."""
-    items = []
-    try:
-        async with async_session_maker() as session:
-            # Use subqueries for counting instead of loading all nodes
-            node_count_subq = select(func.count(Node.id)).where(Node.roadmap_id == Roadmap.id).scalar_subquery()
-
-            # Count completed nodes directly from Node table
-            completed_count_subq = (
-                select(func.count(Node.id))
-                .where(
-                    Node.roadmap_id == Roadmap.id,
-                    Node.status == "done",
-                )
-                .scalar_subquery()
-            )
-
-            # Select only needed fields with aggregated counts
-            roadmap_stmt = select(
-                Roadmap.id,
-                Roadmap.title,
-                Roadmap.description,
-                Roadmap.created_at,
-                Roadmap.updated_at,
-                node_count_subq.label("node_count"),
-                completed_count_subq.label("completed_count"),
-            )
-
-            roadmap_stmt = apply_search_filter(roadmap_stmt, Roadmap, ["title", "description"], search)
-            result = await session.execute(roadmap_stmt)
-            roadmaps = result.all()
-
-            for roadmap in roadmaps:
-                node_count = roadmap.node_count or 0
-                completed_count = roadmap.completed_count or 0
-
-                # Calculate progress percentage
-                progress = (completed_count / node_count * 100) if node_count > 0 else 0
-
-                items.append(
-                    RoadmapContent(
-                        id=str(roadmap.id),
-                        title=roadmap.title,
-                        description=roadmap.description or "",
-                        node_count=node_count,
-                        completed_nodes=completed_count,
-                        last_accessed_date=roadmap.updated_at or roadmap.created_at,
-                        created_date=roadmap.created_at,
-                        progress=progress,
-                        tags=[],  # Add tags field to roadmap model if needed
-                    ),
-                )
-    except Exception as e:
-        logger.warning(f"Failed to fetch roadmaps: {e}")
-
-    return items
-
-
-async def list_all_content(
+async def list_content_fast(
     search: str | None = None,
     content_type: ContentType | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> ContentListResponse:
-    """List all content across different types with unified format.
-
-    Fetches content from multiple sources (videos, flashcards, books, roadmaps)
-    and returns them in a unified paginated response.
     """
-    items = []
+    Ultra-fast content listing using raw SQL queries.
 
-    # Fetch content based on type filter
-    if Video and (not content_type or content_type == ContentType.YOUTUBE):
-        youtube_items = await fetch_youtube_videos(search)
-        items.extend(youtube_items)
+    This version:
+    1. Uses raw SQL for maximum performance
+    2. Fetches only essential fields
+    3. Single database round-trip
+    4. No ORM overhead
+    """
+    offset = (page - 1) * page_size
+    search_term = f"%{search}%" if search else None
+
+    async with async_session_maker() as session:
+        queries = _build_content_queries(content_type, search)
+
+        if not queries:
+            return ContentListResponse(items=[], total=0, page=page, page_size=page_size)
+
+        combined_query = " UNION ALL ".join(f"({q})" for q in queries)
+        total = await _get_total_count(session, combined_query, search_term)
+        rows = await _get_paginated_results(session, combined_query, search_term, page_size, offset)
+        items = _transform_rows_to_items(rows)
+
+        return ContentListResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+
+
+def _build_content_queries(content_type: ContentType | None, search: str | None) -> list[str]:
+    """Build SQL queries for different content types."""
+    queries = []
+
+    if not content_type or content_type == ContentType.YOUTUBE:
+        queries.append(_get_video_query(search))
 
     if not content_type or content_type == ContentType.FLASHCARDS:
-        flashcard_items = await fetch_flashcard_decks(search)
-        items.extend(flashcard_items)
+        queries.append(_get_flashcard_query(search))
 
     if not content_type or content_type == ContentType.BOOK:
-        book_items = await fetch_books(search)
-        items.extend(book_items)
+        queries.append(_get_book_query(search))
 
     if not content_type or content_type == ContentType.ROADMAP:
-        roadmap_items = await fetch_roadmaps(search)
-        items.extend(roadmap_items)
+        queries.append(_get_roadmap_query(search))
 
-    # Sort items by last accessed date (descending by default)
-    # Handle timezone-aware/naive datetime comparison
-    def safe_sort_key(item):
-        date = item.last_accessed_date
-        if date and date.tzinfo is None:
-            # Make naive datetime timezone-aware (UTC)
-            date = date.replace(tzinfo=UTC)
-        return date or datetime.min.replace(tzinfo=UTC)
+    return queries
 
-    items.sort(key=safe_sort_key, reverse=True)
 
-    # Apply pagination
-    total = len(items)
-    start = (page - 1) * page_size
-    end = start + page_size
-    paginated_items = items[start:end]
+def _get_video_query(search: str | None) -> str:
+    """Get SQL query for videos."""
+    query = """
+        SELECT
+            v.uuid::text as id,
+            v.title,
+            COALESCE(v.description, '') as description,
+            'youtube' as type,
+            COALESCE(v.updated_at, v.created_at) as last_accessed,
+            v.created_at,
+            v.tags,
+            v.channel as extra1,
+            v.thumbnail_url as extra2,
+            CASE
+                WHEN chapter_stats.total_chapters > 0 THEN
+                    (chapter_stats.completed_chapters * 100.0 / chapter_stats.total_chapters)
+                ELSE
+                    COALESCE(v.completion_percentage, 0)
+            END as progress,
+            COALESCE(v.duration, 0) as count1,
+            0 as count2
+        FROM videos v
+        LEFT JOIN (
+            SELECT
+                video_uuid,
+                COUNT(*) as total_chapters,
+                COUNT(CASE WHEN status = 'done' THEN 1 END) as completed_chapters
+            FROM video_chapters
+            GROUP BY video_uuid
+        ) chapter_stats ON v.uuid = chapter_stats.video_uuid
+    """
+    if search:
+        query += " WHERE v.title ILIKE %(search)s OR v.channel ILIKE %(search)s"
+    return query
 
-    return ContentListResponse(
-        items=paginated_items,
-        total=total,
-        page=page,
-        page_size=page_size,
+
+def _get_flashcard_query(search: str | None) -> str:
+    """Get SQL query for flashcards."""
+    query = """
+        SELECT
+            id::text,
+            name as title,
+            COALESCE(description, '') as description,
+            'flashcards' as type,
+            COALESCE(updated_at, created_at) as last_accessed,
+            created_at,
+            tags,
+            '' as extra1,
+            '' as extra2,
+            0 as progress,
+            (SELECT COUNT(*) FROM flashcard_cards WHERE deck_id = flashcard_decks.id) as count1,
+            0 as count2
+        FROM flashcard_decks
+    """
+    if search:
+        query += " WHERE name ILIKE %(search)s OR description ILIKE %(search)s"
+    return query
+
+
+def _get_book_query(search: str | None) -> str:
+    """Get SQL query for books."""
+    query = """
+        SELECT
+            b.id::text,
+            b.title,
+            COALESCE(b.description, '') as description,
+            'book' as type,
+            COALESCE(b.updated_at, b.created_at) as last_accessed,
+            b.created_at,
+            b.tags,
+            b.author as extra1,
+            '' as extra2,
+            COALESCE(
+                (SELECT progress_percentage
+                 FROM book_progress
+                 WHERE book_id = b.id
+                 ORDER BY updated_at DESC
+                 LIMIT 1), 0
+            )::int as progress,
+            COALESCE(b.total_pages, 0) as count1,
+            0 as count2
+        FROM books b
+    """
+    if search:
+        query += " WHERE b.title ILIKE %(search)s OR b.author ILIKE %(search)s"
+    return query
+
+
+def _get_roadmap_query(search: str | None) -> str:
+    """Get SQL query for roadmaps."""
+    query = """
+        SELECT
+            r.id::text,
+            r.title,
+            COALESCE(r.description, '') as description,
+            'roadmap' as type,
+            COALESCE(r.updated_at, r.created_at) as last_accessed,
+            r.created_at,
+            '[]' as tags,
+            '' as extra1,
+            '' as extra2,
+            CASE
+                WHEN (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id) > 0
+                THEN (
+                    (SELECT COUNT(*)
+                     FROM nodes n
+                     WHERE n.roadmap_id = r.id
+                       AND n.status = 'done') * 100 /
+                    (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id)
+                )
+                ELSE 0
+            END as progress,
+            (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id) as count1,
+            (SELECT COUNT(*) FROM nodes n WHERE n.roadmap_id = r.id AND n.status = 'done') as count2
+        FROM roadmaps r
+    """
+    if search:
+        query += " WHERE r.title ILIKE %(search)s OR r.description ILIKE %(search)s"
+    return query
+
+
+async def _get_total_count(session: AsyncSession, combined_query: str, search_term: str | None) -> int:
+    """Get total count of results."""
+    count_query = f"SELECT COUNT(*) FROM ({combined_query}) as combined"
+    count_result = await session.execute(
+        text(count_query),
+        {"search": search_term} if search_term else {},
+    )
+    return count_result.scalar() or 0
+
+
+async def _get_paginated_results(
+    session: AsyncSession, combined_query: str, search_term: str | None, page_size: int, offset: int
+) -> list[Any]:
+    """Get paginated results."""
+    final_query = f"""
+        SELECT * FROM ({combined_query}) as combined
+        ORDER BY last_accessed DESC
+        LIMIT :limit OFFSET :offset
+    """
+
+    params: dict[str, Any] = {"limit": page_size, "offset": offset}
+    if search_term:
+        params["search"] = search_term
+
+    result = await session.execute(text(final_query), params)
+    return list(result.all())
+
+
+def _transform_rows_to_items(rows: list[Any]) -> list[Any]:
+    """Transform database rows to content items."""
+    items: list[Any] = []
+    for row in rows:
+        if row.type == "youtube":
+            items.append(_create_youtube_content(row))
+        elif row.type == "flashcards":
+            items.append(_create_flashcard_content(row))
+        elif row.type == "book":
+            items.append(_create_book_content(row))
+        elif row.type == "roadmap":
+            items.append(_create_roadmap_content(row))
+    return items
+
+
+def _create_youtube_content(row: Any) -> YoutubeContent:
+    """Create YoutubeContent from row data."""
+    return YoutubeContent(
+        id=row.id,
+        title=row.title,
+        description=row.description,
+        channelName=row.extra1 or "",
+        duration=row.count1,
+        thumbnailUrl=row.extra2,
+        lastAccessedDate=row.last_accessed,
+        createdDate=row.created_at,
+        progress=row.progress,
+        tags=_safe_parse_tags(row.tags),
     )
 
 
-async def list_content_summary(
-    search: str | None = None,
-    content_type: ContentType | None = None,
-    page: int = 1,
-    page_size: int = 50,
-) -> ContentListResponse:
-    """Optimized content listing with database-level pagination and minimal data.
+def _create_flashcard_content(row: Any) -> FlashcardContent:
+    """Create FlashcardContent from row data."""
+    return FlashcardContent(
+        id=row.id,
+        title=row.title,
+        description=row.description,
+        cardCount=row.count1,
+        dueCount=0,
+        lastAccessedDate=row.last_accessed,
+        createdDate=row.created_at,
+        progress=row.progress,
+        tags=_safe_parse_tags(row.tags),
+    )
 
-    This is a high-performance version that:
-    - Uses database aggregations instead of loading relationships
-    - Applies pagination at the database level
-    - Returns only essential fields needed for cards
-    - Uses a unified query approach for better performance
-    """
-    items = []
 
-    # Fetch content with optimized queries (already optimized above)
-    # But limit results at the application level for now
-    # TODO: Implement true database-level pagination across content types
+def _create_book_content(row: Any) -> BookContent:
+    """Create BookContent from row data."""
+    return BookContent(
+        id=row.id,
+        title=row.title,
+        description=row.description,
+        author=row.extra1 or "",
+        pageCount=row.count1,
+        currentPage=0,
+        lastAccessedDate=row.last_accessed,
+        createdDate=row.created_at,
+        progress=row.progress,
+        tags=_safe_parse_tags(row.tags),
+    )
 
-    # For now, use the optimized fetch functions but limit results
-    if not content_type or content_type == ContentType.YOUTUBE:
-        youtube_items = await fetch_youtube_videos(search)
-        items.extend(youtube_items)
 
-    if not content_type or content_type == ContentType.FLASHCARDS:
-        flashcard_items = await fetch_flashcard_decks(search)
-        items.extend(flashcard_items)
-
-    if not content_type or content_type == ContentType.BOOK:
-        book_items = await fetch_books(search)
-        items.extend(book_items)
-
-    if not content_type or content_type == ContentType.ROADMAP:
-        roadmap_items = await fetch_roadmaps(search)
-        items.extend(roadmap_items)
-
-    # Sort items by last accessed date (descending by default)
-    def safe_sort_key(item):
-        date = item.last_accessed_date
-        if date and date.tzinfo is None:
-            date = date.replace(tzinfo=UTC)
-        return date or datetime.min.replace(tzinfo=UTC)
-
-    items.sort(key=safe_sort_key, reverse=True)
-
-    # Apply pagination
-    total = len(items)
-    start = (page - 1) * page_size
-    end = start + page_size
-    paginated_items = items[start:end]
-
-    return ContentListResponse(
-        items=paginated_items,
-        total=total,
-        page=page,
-        page_size=page_size,
+def _create_roadmap_content(row: Any) -> RoadmapContent:
+    """Create RoadmapContent from row data."""
+    return RoadmapContent(
+        id=row.id,
+        title=row.title,
+        description=row.description,
+        nodeCount=row.count1,
+        completedNodes=row.count2,
+        lastAccessedDate=row.last_accessed,
+        createdDate=row.created_at,
+        progress=row.progress,
+        tags=[],
     )

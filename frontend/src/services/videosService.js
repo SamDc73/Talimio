@@ -2,7 +2,7 @@
  * Service for managing video chapters and their progress
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
 
 /**
  * Fetch chapters for a video
@@ -10,16 +10,16 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
  * @returns {Promise<Array>} Array of chapters
  */
 export async function getVideoChapters(videoUuid) {
-  try {
-    const response = await fetch(`${API_BASE}/videos/${videoUuid}/chapters`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch video chapters: ${response.statusText}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching video chapters:', error);
-    throw error;
-  }
+	try {
+		const response = await fetch(`${API_BASE}/videos/${videoUuid}/chapters`);
+		if (!response.ok) {
+			throw new Error(`Failed to fetch video chapters: ${response.statusText}`);
+		}
+		return await response.json();
+	} catch (error) {
+		console.error("Error fetching video chapters:", error);
+		throw error;
+	}
 }
 
 /**
@@ -29,16 +29,18 @@ export async function getVideoChapters(videoUuid) {
  * @returns {Promise<Object>} Chapter data
  */
 export async function getVideoChapter(videoUuid, chapterId) {
-  try {
-    const response = await fetch(`${API_BASE}/videos/${videoUuid}/chapters/${chapterId}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch chapter: ${response.statusText}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching chapter:', error);
-    throw error;
-  }
+	try {
+		const response = await fetch(
+			`${API_BASE}/videos/${videoUuid}/chapters/${chapterId}`,
+		);
+		if (!response.ok) {
+			throw new Error(`Failed to fetch chapter: ${response.statusText}`);
+		}
+		return await response.json();
+	} catch (error) {
+		console.error("Error fetching chapter:", error);
+		throw error;
+	}
 }
 
 /**
@@ -49,23 +51,28 @@ export async function getVideoChapter(videoUuid, chapterId) {
  * @returns {Promise<Object>} Update response
  */
 export async function updateVideoChapterStatus(videoUuid, chapterId, status) {
-  try {
-    const response = await fetch(`${API_BASE}/videos/${videoUuid}/chapters/${chapterId}/status`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ status }),
-    });
+	try {
+		const response = await fetch(
+			`${API_BASE}/videos/${videoUuid}/chapters/${chapterId}/status`,
+			{
+				method: "PUT",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ status }),
+			},
+		);
 
-    if (!response.ok) {
-      throw new Error(`Failed to update chapter status: ${response.statusText}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error updating chapter status:', error);
-    throw error;
-  }
+		if (!response.ok) {
+			throw new Error(
+				`Failed to update chapter status: ${response.statusText}`,
+			);
+		}
+		return await response.json();
+	} catch (error) {
+		console.error("Error updating chapter status:", error);
+		throw error;
+	}
 }
 
 /**
@@ -74,22 +81,25 @@ export async function updateVideoChapterStatus(videoUuid, chapterId, status) {
  * @returns {Promise<Object>} Extraction response
  */
 export async function extractVideoChapters(videoUuid) {
-  try {
-    const response = await fetch(`${API_BASE}/videos/${videoUuid}/extract-chapters`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+	try {
+		const response = await fetch(
+			`${API_BASE}/videos/${videoUuid}/extract-chapters`,
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+			},
+		);
 
-    if (!response.ok) {
-      throw new Error(`Failed to extract chapters: ${response.statusText}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error extracting chapters:', error);
-    throw error;
-  }
+		if (!response.ok) {
+			throw new Error(`Failed to extract chapters: ${response.statusText}`);
+		}
+		return await response.json();
+	} catch (error) {
+		console.error("Error extracting chapters:", error);
+		throw error;
+	}
 }
 
 /**
@@ -99,25 +109,34 @@ export async function extractVideoChapters(videoUuid) {
  * @param {number} totalChapters - Total number of chapters
  * @returns {Promise<Object>} Updated video data
  */
-export async function syncVideoChapterProgress(videoUuid, completedChapterIds, totalChapters) {
-  try {
-    const response = await fetch(`${API_BASE}/videos/${videoUuid}/sync-chapter-progress`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        completed_chapter_ids: completedChapterIds,
-        total_chapters: totalChapters,
-      }),
-    });
+export async function syncVideoChapterProgress(
+	videoUuid,
+	completedChapterIds,
+	totalChapters,
+) {
+	try {
+		const response = await fetch(
+			`${API_BASE}/videos/${videoUuid}/sync-chapter-progress`,
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					completedChapterIds: completedChapterIds,
+					totalChapters: totalChapters,
+				}),
+			},
+		);
 
-    if (!response.ok) {
-      throw new Error(`Failed to sync chapter progress: ${response.statusText}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error syncing chapter progress:', error);
-    throw error;
-  }
+		if (!response.ok) {
+			throw new Error(
+				`Failed to sync chapter progress: ${response.statusText}`,
+			);
+		}
+		return await response.json();
+	} catch (error) {
+		console.error("Error syncing chapter progress:", error);
+		throw error;
+	}
 }

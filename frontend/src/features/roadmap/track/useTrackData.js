@@ -6,68 +6,68 @@ import { useEffect, useState } from "react";
  * @returns {Object} - Object containing modules array and loading/error states
  */
 export function useTrackData(roadmapId) {
-  const [modules, setModules] = useState([]);
+	const [modules, setModules] = useState([]);
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+	const [isLoading, setIsLoading] = useState(false);
+	const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (!roadmapId) {
-      setModules([]);
-      return;
-    }
+	useEffect(() => {
+		if (!roadmapId) {
+			setModules([]);
+			return;
+		}
 
-    async function fetchData() {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`http://localhost:8080/api/v1/roadmaps/${roadmapId}`);
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        const data = await res.json();
+		async function fetchData() {
+			setIsLoading(true);
+			setError(null);
+			try {
+				const res = await fetch(
+					`http://localhost:8080/api/v1/roadmaps/${roadmapId}`,
+				);
+				if (!res.ok) {
+					throw new Error(`HTTP error! status: ${res.status}`);
+				}
+				const data = await res.json();
 
-        if (!data || !data.nodes) {
-          console.warn("API response missing nodes");
-          setModules([]);
-          return;
-        }
+				if (!data || !data.nodes) {
+					console.warn("API response missing nodes");
+					setModules([]);
+					return;
+				}
 
+				// Map could be used for more complex operations if needed
 
+				// Recursive function to normalize a node and all its children
+				const normalizeNode = (node) => ({
+					id: node.id,
+					title: node.title || "Untitled",
+					description: node.description || "",
+					order: node.order || 0,
+					status: node.status || "not_started",
+					// Include the original children array for the track view
+					children: node.children || [],
+				});
 
-        // Map could be used for more complex operations if needed
+				// Find root nodes (those without parentId)
+				const rootNodes = data.nodes.filter((node) => !node.parentId);
 
-        // Recursive function to normalize a node and all its children
-        const normalizeNode = (node) => ({
-          id: node.id,
-          title: node.title || "Untitled",
-          description: node.description || "",
-          order: node.order || 0,
-          status: node.status || "not_started",
-          // Include the original children array for the track view
-          children: node.children || [],
-        });
+				// Process and sort root nodes
+				const normalizedModules = rootNodes
+					.map((node) => normalizeNode(node))
+					.sort((a, b) => (a.order || 0) - (b.order || 0));
 
-        // Find root nodes (those without parent_id)
-        const rootNodes = data.nodes.filter((node) => !node.parent_id);
+				setModules(normalizedModules);
+			} catch (err) {
+				console.error("Failed to load or parse roadmap data:", err);
+				setError(err.message || "Failed to load data");
+				setModules([]);
+			} finally {
+				setIsLoading(false);
+			}
+		}
 
-        // Process and sort root nodes
-        const normalizedModules = rootNodes
-          .map((node) => normalizeNode(node))
-          .sort((a, b) => (a.order || 0) - (b.order || 0));
+		fetchData();
+	}, [roadmapId]);
 
-        setModules(normalizedModules);
-      } catch (err) {
-        console.error("Failed to load or parse roadmap data:", err);
-        setError(err.message || "Failed to load data");
-        setModules([]);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    fetchData();
-  }, [roadmapId]);
-
-  return { modules, isLoading, error };
+	return { modules, isLoading, error };
 }

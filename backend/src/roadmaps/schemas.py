@@ -15,9 +15,11 @@ if TYPE_CHECKING:
 class RoadmapBase(PydanticBaseModel):  # type: ignore[misc]
     """Base schema for roadmap data."""
 
+    model_config = {"populate_by_name": True}
+
     title: str = Field(..., min_length=1, max_length=200)
     description: str = Field(..., min_length=1)
-    skill_level: str = Field(..., pattern="^(beginner|intermediate|advanced)$")
+    skill_level: str = Field(..., pattern="^(beginner|intermediate|advanced)$", alias="skillLevel")
 
 
 class RoadmapCreate(RoadmapBase):
@@ -25,11 +27,12 @@ class RoadmapCreate(RoadmapBase):
 
     title: str
     description: str
-    skill_level: str = Field(..., pattern="^(beginner|intermediate|advanced)$")
+    skill_level: str = Field(..., pattern="^(beginner|intermediate|advanced)$", alias="skillLevel")
 
     class Config:
         """Configuration for the RoadmapCreate schema."""
 
+        populate_by_name = True
         json_schema_extra: ClassVar[dict[str, Any]] = {
             "example": {
                 "title": "Machine Learning Engineer Roadmap",
@@ -42,30 +45,35 @@ class RoadmapCreate(RoadmapBase):
 class RoadmapUpdate(PydanticBaseModel):  # type: ignore[misc]
     """Schema for updating a roadmap."""
 
+    model_config = {"populate_by_name": True}
+
     title: str | None = Field(None, min_length=1, max_length=200)
     description: str | None = Field(None, min_length=1)
-    skill_level: str | None = Field(None, pattern="^(beginner|intermediate|advanced)$")
+    skill_level: str | None = Field(None, pattern="^(beginner|intermediate|advanced)$", alias="skillLevel")
 
 
 class NodeBase(PydanticBaseModel):  # type: ignore[misc]
     """Base schema for node data."""
 
+    model_config = {"populate_by_name": True}
+
     title: str = Field(..., min_length=1, max_length=200)
     description: str = Field(..., min_length=1)
     content: str | None = None
     order: int = Field(default=0, ge=0)
-    prerequisite_ids: list[UUID] = Field(default_factory=list)
-    parent_id: UUID | None = Field(None, description="Parent node ID if this is a sub-node.")
+    prerequisite_ids: list[UUID] = Field(default_factory=list, alias="prerequisiteIds")
+    parent_id: UUID | None = Field(None, description="Parent node ID if this is a sub-node.", alias="parentId")
 
 
 class NodeCreate(NodeBase):
     """Schema for creating a node."""
 
-    roadmap_id: UUID
+    roadmap_id: UUID = Field(alias="roadmapId")
 
     class Config:
         """Configuration for Pydantic model with JSON schema example."""
 
+        populate_by_name = True
         json_schema_extra: ClassVar[dict[str, Any]] = {
             "example": {
                 "title": "Python Basics",
@@ -82,12 +90,14 @@ class NodeCreate(NodeBase):
 class NodeUpdate(PydanticBaseModel):  # type: ignore[misc]
     """Schema for updating a node."""
 
+    model_config = {"populate_by_name": True}
+
     title: str | None = Field(None, min_length=1, max_length=200)
     description: str | None = Field(None, min_length=1)
     content: str | None = None
     order: int | None = Field(None, ge=0)
-    prerequisite_ids: list[UUID] | None = None
-    parent_id: UUID | None = Field(None, description="Parent node ID if this is a sub-node.")
+    prerequisite_ids: list[UUID] | None = Field(None, alias="prerequisiteIds")
+    parent_id: UUID | None = Field(None, description="Parent node ID if this is a sub-node.", alias="parentId")
 
 
 class NodeResponse(NodeBase):
@@ -95,10 +105,10 @@ class NodeResponse(NodeBase):
 
     id: UUID
     status: str
-    roadmap_id: UUID
-    created_at: datetime
-    updated_at: datetime
-    prerequisite_ids: list[UUID] = Field(default_factory=list)
+    roadmap_id: UUID = Field(alias="roadmapId")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+    prerequisite_ids: list[UUID] = Field(default_factory=list, alias="prerequisiteIds")
     # Use string literal for recursive type hint
     children: list["NodeResponse"] = Field(default_factory=list, description="Child nodes (sub-nodes)")
 
@@ -106,6 +116,7 @@ class NodeResponse(NodeBase):
         """Configuration for Pydantic model to support ORM model conversion."""
 
         from_attributes = True
+        populate_by_name = True
 
     # Removed custom model_validate. Relying on from_attributes=True.
 
@@ -114,14 +125,15 @@ class RoadmapResponse(RoadmapBase):
     """Schema for roadmap response."""
 
     id: UUID
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
     nodes: list[NodeResponse] = []  # Will be overridden in model_validate
 
     class Config:
         """Configuration for Pydantic model to support ORM model conversion."""
 
         from_attributes = True
+        populate_by_name = True
 
     @classmethod
     def model_validate(

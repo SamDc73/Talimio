@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import yt_dlp
@@ -28,7 +28,7 @@ class VideoService:
     async def create_video(self, db: AsyncSession, video_data: VideoCreate) -> VideoResponse:
         """Create a new video by fetching metadata from YouTube."""
         # Extract video info using yt-dlp
-        video_info = await self._fetch_video_info(video_data.url)
+        video_info = await self.fetch_video_info(video_data.url)
 
         # Check if video already exists
         existing = await db.execute(
@@ -131,8 +131,7 @@ class VideoService:
 
         if tags:
             # Filter by tags (stored as JSON)
-            for tag in tags:
-                filters.append(Video.tags.ilike(f"%{tag}%"))
+            filters.extend(Video.tags.ilike(f"%{tag}%") for tag in tags)
 
         if filters:
             query = query.where(*filters)
@@ -233,7 +232,7 @@ class VideoService:
         await db.delete(video)
         await db.commit()
 
-    async def _fetch_video_info(self, url: str) -> dict[str, Any]:
+    async def fetch_video_info(self, url: str) -> dict[str, Any]:
         """Fetch video information using yt-dlp."""
         ydl_opts = {
             "quiet": True,
@@ -256,7 +255,7 @@ class VideoService:
                 published_at = None
                 if upload_date_str and len(upload_date_str) == 8:
                     try:
-                        published_at = datetime.strptime(upload_date_str, "%Y%m%d")
+                        published_at = datetime.strptime(upload_date_str, "%Y%m%d").replace(tzinfo=UTC)
                     except ValueError:
                         logger.warning(f"Failed to parse upload date: {upload_date_str}")
 
@@ -275,7 +274,7 @@ class VideoService:
         except Exception as e:
             logger.exception(f"Error fetching video info: {e}")
             msg = f"Failed to fetch video information: {e!s}"
-            raise ValueError(msg)
+            raise ValueError(msg) from e
 
     # Phase 2.3: Video Chapter Methods
     async def get_video_chapters(self, db: AsyncSession, video_uuid: str) -> list[VideoChapterResponse]:
@@ -358,7 +357,7 @@ class VideoService:
 
         # Update status
         chapter.status = status
-        chapter.updated_at = datetime.now()
+        chapter.updated_at = datetime.now(UTC)
 
         # Recalculate video completion percentage based on all chapters
         all_chapters_result = await db.execute(
@@ -373,7 +372,7 @@ class VideoService:
 
             # Update video completion percentage
             video.completion_percentage = completion_percentage
-            video.updated_at = datetime.now()
+            video.updated_at = datetime.now(UTC)
 
         await db.commit()
         await db.refresh(chapter)
@@ -402,7 +401,7 @@ class VideoService:
 
         # Update video completion percentage
         video.completion_percentage = completion_percentage
-        video.updated_at = datetime.now()
+        video.updated_at = datetime.now(UTC)
 
         await db.commit()
         await db.refresh(video)
@@ -425,7 +424,7 @@ class VideoService:
         except Exception as e:
             logger.exception(f"Failed to extract chapters for video {video_uuid}")
             msg = f"Failed to extract chapters: {e!s}"
-            raise ValueError(msg)
+            raise ValueError(msg) from e
 
         if not chapters_info:
             # Create a single default chapter for the entire video
@@ -488,17 +487,14 @@ class VideoService:
                 if not chapters:
                     return []
 
-                chapter_list = []
-                for chapter in chapters:
-                    chapter_list.append(
-                        {
-                            "title": chapter.get("title", "Unknown Chapter"),
-                            "start_time": int(chapter.get("start_time", 0)),
-                            "end_time": int(chapter.get("end_time", 0)),
-                        },
-                    )
-
-                return chapter_list
+                return [
+                    {
+                        "title": chapter.get("title", "Unknown Chapter"),
+                        "start_time": int(chapter.get("start_time", 0)),
+                        "end_time": int(chapter.get("end_time", 0)),
+                    }
+                    for chapter in chapters
+                ]
 
         except Exception as e:
             logger.exception(f"Error fetching video chapters: {e}")

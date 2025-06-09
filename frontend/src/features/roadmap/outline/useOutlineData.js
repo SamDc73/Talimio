@@ -8,68 +8,72 @@ import { useEffect, useState } from "react";
  * @returns {Object} - Object containing modules array and loading/error states
  */
 export function useOutlineData(roadmapId) {
-  const [modules, setModules] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+	const [modules, setModules] = useState([]);
+	const [isLoading, setIsLoading] = useState(false);
+	const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (!roadmapId) {
-      setModules([]);
-      return;
-    }
+	useEffect(() => {
+		if (!roadmapId) {
+			setModules([]);
+			return;
+		}
 
-    async function fetchData() {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`http://localhost:8080/api/v1/roadmaps/${roadmapId}`);
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        const data = await res.json();
+		async function fetchData() {
+			setIsLoading(true);
+			setError(null);
+			try {
+				const res = await fetch(
+					`http://localhost:8080/api/v1/roadmaps/${roadmapId}`,
+				);
+				if (!res.ok) {
+					throw new Error(`HTTP error! status: ${res.status}`);
+				}
+				const data = await res.json();
 
-        if (!data || !data.nodes) {
-          console.warn("API response missing nodes");
-          setModules([]);
-          return;
-        }
+				if (!data || !data.nodes) {
+					console.warn("API response missing nodes");
+					setModules([]);
+					return;
+				}
 
-        // Create a map of all nodes for easy lookup
-        const nodeMap = new Map(data.nodes.map((node) => [node.id, node]));
+				// Create a map of all nodes for easy lookup
+				const nodeMap = new Map(data.nodes.map((node) => [node.id, node]));
 
-        // Recursive function to normalize a node and all its children
-        const normalizeNode = (node) => ({
-          id: node.id,
-          title: node.title || "Untitled",
-          description: node.description || "",
-          order: node.order || 0,
-          status: node.status || "not_started",
-          // Recursively normalize all children (if any)
-          lessons: node.children
-            ? node.children.sort((a, b) => (a.order || 0) - (b.order || 0)).map((child) => normalizeNode(child))
-            : [],
-        });
+				// Recursive function to normalize a node and all its children
+				const normalizeNode = (node) => ({
+					id: node.id,
+					title: node.title || "Untitled",
+					description: node.description || "",
+					order: node.order || 0,
+					status: node.status || "not_started",
+					// Recursively normalize all children (if any)
+					lessons: node.children
+						? node.children
+								.sort((a, b) => (a.order || 0) - (b.order || 0))
+								.map((child) => normalizeNode(child))
+						: [],
+				});
 
-        // Find root nodes (those without parent_id)
-        const rootNodes = data.nodes.filter((node) => !node.parent_id);
+				// Find root nodes (those without parentId)
+				const rootNodes = data.nodes.filter((node) => !node.parentId);
 
-        // Process and sort root nodes
-        const normalizedModules = rootNodes
-          .map((node) => normalizeNode(node))
-          .sort((a, b) => (a.order || 0) - (b.order || 0));
+				// Process and sort root nodes
+				const normalizedModules = rootNodes
+					.map((node) => normalizeNode(node))
+					.sort((a, b) => (a.order || 0) - (b.order || 0));
 
-        setModules(normalizedModules);
-      } catch (err) {
-        console.error("Failed to load or parse roadmap data:", err);
-        setError(err.message || "Failed to load data");
-        setModules([]);
-      } finally {
-        setIsLoading(false);
-      }
-    }
+				setModules(normalizedModules);
+			} catch (err) {
+				console.error("Failed to load or parse roadmap data:", err);
+				setError(err.message || "Failed to load data");
+				setModules([]);
+			} finally {
+				setIsLoading(false);
+			}
+		}
 
-    fetchData();
-  }, [roadmapId]);
+		fetchData();
+	}, [roadmapId]);
 
-  return { modules, isLoading, error };
+	return { modules, isLoading, error };
 }

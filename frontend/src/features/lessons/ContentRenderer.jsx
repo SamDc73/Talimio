@@ -8,5 +8,5 @@ import { MDXRenderer } from "./MDXRenderer";
  * @returns {JSX.Element}
  */
 export function ContentRenderer({ content }) {
-  return <MDXRenderer content={content} />;
+	return <MDXRenderer content={content} />;
 }

@@ -63,12 +63,11 @@ async def generate_lesson(request: LessonCreateRequest) -> LessonResponse:
         # Cache the lesson for future retrieval
         try:
             import json
-            import os
             from pathlib import Path
 
             # Cache in the lessons directory
             cache_dir = Path("backend/cache/lessons")
-            os.makedirs(cache_dir, exist_ok=True)
+            cache_dir.mkdir(parents=True, exist_ok=True)
             cache_file = cache_dir / f"{lesson_id}.json"
 
             lesson_data = {
@@ -80,15 +79,15 @@ async def generate_lesson(request: LessonCreateRequest) -> LessonResponse:
                 "updated_at": now.isoformat(),
             }
 
-            with open(cache_file, "w") as f:
+            with cache_file.open("w") as f:
                 json.dump(lesson_data, f)
 
             # Also cache in the node's lessons directory
             node_cache_dir = Path(f"backend/cache/nodes/{request.course_id}/lessons")
-            os.makedirs(node_cache_dir, exist_ok=True)
+            node_cache_dir.mkdir(parents=True, exist_ok=True)
             node_cache_file = node_cache_dir / f"{lesson_id}.json"
 
-            with open(node_cache_file, "w") as f:
+            with node_cache_file.open("w") as f:
                 json.dump(lesson_data, f)
 
             logging.info(f"Cached lesson {lesson_id} for future retrieval")
@@ -118,7 +117,6 @@ async def get_lesson(lesson_id: UUID) -> LessonResponse:
     """
     import json
     import logging
-    import os
     from pathlib import Path
 
     try:
@@ -129,9 +127,9 @@ async def get_lesson(lesson_id: UUID) -> LessonResponse:
                 # Cache the result for future use
                 try:
                     cache_dir = Path("backend/cache/lessons")
-                    os.makedirs(cache_dir, exist_ok=True)
+                    cache_dir.mkdir(parents=True, exist_ok=True)
                     cache_file = cache_dir / f"{lesson_id}.json"
-                    with open(cache_file, "w") as f:
+                    with cache_file.open("w") as f:
                         json.dump(result, f)
                 except Exception as cache_error:
                     logging.warning(f"Failed to cache lesson: {cache_error!s}")
@@ -146,7 +144,7 @@ async def get_lesson(lesson_id: UUID) -> LessonResponse:
         cache_file = cache_dir / f"{lesson_id}.json"
         if cache_file.exists():
             try:
-                with open(cache_file) as f:
+                with cache_file.open() as f:
                     cached_data = json.load(f)
                 logging.info(f"Retrieved lesson {lesson_id} from local cache")
                 return LessonResponse(**cached_data)
@@ -180,10 +178,8 @@ async def get_node_lessons(node_id: str) -> list[LessonResponse]:
     ------
         HTTPException: If database error occurs.
     """
-    import glob
     import json
     import logging
-    import os
     from pathlib import Path
 
     try:
@@ -194,14 +190,14 @@ async def get_node_lessons(node_id: str) -> list[LessonResponse]:
             # Cache the results for future use
             try:
                 cache_dir = Path(f"backend/cache/nodes/{node_id}/lessons")
-                os.makedirs(cache_dir, exist_ok=True)
+                cache_dir.mkdir(parents=True, exist_ok=True)
 
                 # Cache each lesson
                 for result in results:
                     lesson_id = result.get("id")
                     if lesson_id:
                         cache_file = cache_dir / f"{lesson_id}.json"
-                        with open(cache_file, "w") as f:
+                        with cache_file.open("w") as f:
                             json.dump(result, f)
             except Exception as cache_error:
                 logging.warning(f"Failed to cache node lessons: {cache_error!s}")
@@ -216,8 +212,8 @@ async def get_node_lessons(node_id: str) -> list[LessonResponse]:
         if cache_dir.exists():
             try:
                 cached_lessons = []
-                for cache_file_path in glob.glob(str(cache_dir / "*.json")):
-                    with open(cache_file_path) as f:
+                for cache_file_path in cache_dir.glob("*.json"):
+                    with cache_file_path.open() as f:
                         cached_data = json.load(f)
                         cached_lessons.append(cached_data)
 

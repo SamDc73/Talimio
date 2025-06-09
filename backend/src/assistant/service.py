@@ -45,13 +45,13 @@ async def chat_with_assistant(request: ChatRequest) -> ChatResponse:
         )
 
         # Add conversation history
-        for msg in request.conversation_history:
-            messages.append(
-                {
-                    "role": msg.role,
-                    "content": msg.content,
-                },
-            )
+        messages.extend(
+            {
+                "role": msg.role,
+                "content": msg.content,
+            }
+            for msg in request.conversation_history
+        )
 
         # Add current message
         messages.append(
@@ -62,7 +62,7 @@ async def chat_with_assistant(request: ChatRequest) -> ChatResponse:
         )
 
         # Get response from AI
-        response = await model_manager._get_completion(messages, format_json=False)
+        response = await model_manager.get_completion(messages, format_json=False)
 
         if not response or not isinstance(response, str):
             raise HTTPException(
@@ -140,7 +140,7 @@ async def generate_course(request: GenerateCourseRequest) -> GenerateCourseRespo
             {"role": "user", "content": prompt},
         ]
 
-        response = await model_manager._get_completion(messages, format_json=True)
+        response = await model_manager.get_completion(messages, format_json=True)
 
         if not isinstance(response, dict):
             raise HTTPException(
@@ -241,7 +241,7 @@ async def generate_flashcards(request: GenerateFlashcardsRequest) -> GenerateFla
             {"role": "user", "content": prompt},
         ]
 
-        response = await model_manager._get_completion(messages, format_json=True)
+        response = await model_manager.get_completion(messages, format_json=True)
 
         if not isinstance(response, dict) or "flashcards" not in response:
             raise HTTPException(

@@ -34,7 +34,7 @@ async def create_video(
     try:
         return await video_service.create_video(db, video_data)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except IntegrityError:
         # Handle duplicate video case - try to fetch and return existing video
         await db.rollback()
@@ -42,7 +42,7 @@ async def create_video(
             # Extract YouTube URL to get the video
             from src.videos.service import video_service as svc
 
-            video_info = await svc._fetch_video_info(video_data.url)
+            video_info = await svc.fetch_video_info(video_data.url)
             youtube_id = video_info.get("youtube_id")
 
             if youtube_id:
@@ -55,13 +55,15 @@ async def create_video(
                 existing_video = result.scalar_one_or_none()
                 if existing_video:
                     return VideoResponse.model_validate(existing_video)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.warning(f"Failed to fetch existing video during duplicate handling: {e}")
 
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Video already exists in the library")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Video already exists in the library"
+        ) from None
     except Exception as e:
         logger.exception(f"Error creating video: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.get("")
@@ -86,7 +88,7 @@ async def get_video(
     try:
         return await video_service.get_video(db, video_uuid)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.patch("/{video_uuid}")
@@ -99,7 +101,7 @@ async def update_video(
     try:
         return await video_service.update_video(db, video_uuid, update_data)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.patch("/{video_uuid}/progress")
@@ -112,7 +114,7 @@ async def update_video_progress(
     try:
         return await video_service.update_progress(db, video_uuid, progress_data)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.post("/{video_uuid}/progress")
@@ -125,7 +127,7 @@ async def update_video_progress_post(
     try:
         return await video_service.update_progress(db, video_uuid, progress_data)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.delete("/{video_uuid}", status_code=status.HTTP_204_NO_CONTENT)
@@ -137,7 +139,7 @@ async def delete_video(
     try:
         await video_service.delete_video(db, video_uuid)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 # Phase 2.3: Video Chapter Endpoints
@@ -150,7 +152,7 @@ async def get_video_chapters(
     try:
         return await video_service.get_video_chapters(db, video_uuid)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.get("/{video_uuid}/chapters/{chapter_id}")
@@ -163,7 +165,7 @@ async def get_video_chapter(
     try:
         return await video_service.get_video_chapter(db, video_uuid, chapter_id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.put("/{video_uuid}/chapters/{chapter_id}/status")
@@ -178,8 +180,8 @@ async def update_video_chapter_status(
         return await video_service.update_video_chapter_status(db, video_uuid, chapter_id, status_data.status)
     except ValueError as e:
         if "Invalid status" in str(e):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.post("/{video_uuid}/extract-chapters")
@@ -192,8 +194,8 @@ async def extract_video_chapters(
         return await video_service.extract_and_create_video_chapters(db, video_uuid)
     except ValueError as e:
         if "not found" in str(e):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.post("/{video_uuid}/sync-chapter-progress")
@@ -205,7 +207,10 @@ async def sync_video_chapter_progress(
     """Sync chapter progress from frontend to update video completion percentage."""
     try:
         return await video_service.sync_chapter_progress(
-            db, video_uuid, progress_data.completed_chapter_ids, progress_data.total_chapters
+            db,
+            video_uuid,
+            progress_data.completed_chapter_ids,
+            progress_data.total_chapters,
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e

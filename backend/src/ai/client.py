@@ -13,6 +13,10 @@ from src.core.exceptions import DomainError, ValidationError
 from src.core.validators import validate_uuid
 
 
+# Constants
+MIN_LESSON_CONTENT_LENGTH = 100
+
+
 class AIError(DomainError):
     """Base exception for AI-related errors."""
 
@@ -66,13 +70,12 @@ class ModelManager:
         self.model = "openai/gpt-4o"
         self._logger = logging.getLogger(__name__)
 
-    async def _get_completion(
+    async def get_completion(
         self,
         messages: list[dict[str, str]] | Sequence[dict[str, str]],
         *,
         format_json: bool = True,
-        expect_list: bool = False,
-    ) -> Any:
+    ) -> str | dict[str, Any] | list[Any]:
         """Get completion from AI model."""
         try:
             if format_json:
@@ -134,7 +137,7 @@ class ModelManager:
             {"role": "user", "content": prompt},
         ]
 
-        result = await self._get_completion(messages, expect_list=True)
+        result = await self.get_completion(messages, expect_list=True)
         if not isinstance(result, list):
             msg = "Expected list response from AI model"
             raise AIError(msg)
@@ -240,7 +243,7 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
         ]
 
         try:
-            response = await self._get_completion(messages, expect_list=True)
+            response = await self.get_completion(messages, expect_list=True)
             if not isinstance(response, (list, dict)):
                 msg = "Invalid response format from AI model"
                 raise RoadmapGenerationError(msg)
@@ -296,7 +299,7 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
         ]
 
         try:
-            result = await self._get_completion(messages, expect_list=True)
+            result = await self.get_completion(messages, expect_list=True)
             if not isinstance(result, list):
                 msg = "Expected list response from AI model"
                 raise ExerciseGenerationError
@@ -321,7 +324,7 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
             {"role": "user", "content": prompt},
         ]
         try:
-            response = await self._get_completion(messages)
+            response = await self.get_completion(messages)
             if not isinstance(response, dict):
                 msg = "Expected dict response from AI model"
                 raise NodeCustomizationError(msg)
@@ -371,7 +374,7 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
         ]
 
         try:
-            result = await self._get_completion(messages, expect_list=True)
+            result = await self.get_completion(messages, expect_list=True)
             if not isinstance(result, list):
                 msg = "Expected list response from AI model"
                 raise TagGenerationError(msg)
@@ -427,7 +430,7 @@ Your task: produce a hierarchical learning roadmap as **valid JSON**, no markdow
         ]
 
         try:
-            result = await self._get_completion(messages, expect_list=True)
+            result = await self.get_completion(messages, expect_list=True)
             if not isinstance(result, list):
                 msg = "Expected list response from AI model"
                 raise TagGenerationError(msg)
@@ -523,8 +526,10 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> str:
         if markdown_content is None:
             raise LessonGenerationError
 
-        if not isinstance(markdown_content, str) or len(markdown_content.strip()) < 100:
-            logging.error(f"Invalid or too short lesson content received: {markdown_content[:100]}...")
+        if not isinstance(markdown_content, str) or len(markdown_content.strip()) < MIN_LESSON_CONTENT_LENGTH:
+            logging.error(
+                f"Invalid or too short lesson content received: {markdown_content[:MIN_LESSON_CONTENT_LENGTH]}..."
+            )
             raise LessonGenerationError
 
         logging.info(f"Successfully generated lesson content ({len(markdown_content)} characters)")
