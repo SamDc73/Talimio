@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from .metadata import extract_metadata
 from .schemas import (
+    BookChapterBatchUpdateRequest,
     BookChapterResponse,
     BookChapterStatusUpdate,
     BookCreate,
@@ -18,6 +19,7 @@ from .schemas import (
     BookWithProgress,
 )
 from .service import (
+    batch_update_chapter_statuses,
     create_book,
     delete_book,
     extract_and_create_chapters,
@@ -74,7 +76,7 @@ async def extract_book_metadata(
             detail="No filename provided",
         )
 
-    file_extension = file.filename.lower().split(".")[-1]
+    file_extension = (file.filename or "").lower().split(".")[-1]
     if file_extension not in ["pdf", "epub"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -137,7 +139,7 @@ async def create_book_endpoint(
             detail="No filename provided",
         )
 
-    file_extension = file.filename.lower().split(".")[-1]
+    file_extension = (file.filename or "").lower().split(".")[-1]
     if file_extension not in ["pdf", "epub"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -250,6 +252,16 @@ async def update_book_chapter_status_endpoint(
 ) -> BookChapterResponse:
     """Update the status of a book chapter."""
     return await update_book_chapter_status(book_id, chapter_id, status_data.status)
+
+
+@router.put("/{book_id}/chapters/batch-status")
+async def batch_update_chapter_statuses_endpoint(
+    book_id: UUID,
+    request: BookChapterBatchUpdateRequest,
+) -> list[BookChapterResponse]:
+    """Update multiple chapter statuses in one atomic transaction."""
+    updates = [{"chapter_id": str(update.chapter_id), "status": update.status} for update in request.updates]
+    return await batch_update_chapter_statuses(book_id, updates)
 
 
 @router.post("/{book_id}/extract-chapters")

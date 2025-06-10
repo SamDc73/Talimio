@@ -585,7 +585,8 @@ export default function HomePage() {
 		.filter((item) => {
 			// Apply content type filter
 			if (activeFilter === "all") return true;
-			if (activeFilter === "course") return item.type === "course" || item.type === "roadmap";
+			if (activeFilter === "course")
+				return item.type === "course" || item.type === "roadmap";
 			return item.type === activeFilter;
 		})
 		.filter((item) => {

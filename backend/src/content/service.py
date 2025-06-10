@@ -167,7 +167,13 @@ def _get_book_query(search: str | None) -> str:
                  LIMIT 1), 0
             )::int as progress,
             COALESCE(b.total_pages, 0) as count1,
-            0 as count2
+            COALESCE(
+                (SELECT current_page
+                 FROM book_progress
+                 WHERE book_id = b.id
+                 ORDER BY updated_at DESC
+                 LIMIT 1), 1
+            ) as count2
         FROM books b
     """
     if search:
@@ -294,7 +300,7 @@ def _create_book_content(row: Any) -> BookContent:
         description=row.description,
         author=row.extra1 or "",
         pageCount=row.count1,
-        currentPage=0,
+        currentPage=row.count2,
         lastAccessedDate=row.last_accessed,
         createdDate=row.created_at,
         progress=row.progress,

@@ -1,5 +1,6 @@
 import { BookHeader } from "@/components/header/BookHeader";
 import { BookSidebar } from "@/components/sidebar";
+import { useHybridProgressTracker } from "@/hooks/useHybridProgressTracker";
 import { booksApi } from "@/services/booksApi";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -18,6 +19,7 @@ const BookViewerContent = () => {
 	const [zoomLevel, setZoomLevel] = useState(100);
 	const pdfViewerRef = useRef(null);
 	const { isOpen, toggle } = useSidebar();
+	const hybridTracker = useHybridProgressTracker(bookId, book, totalPages);
 
 	useEffect(() => {
 		const fetchBook = async () => {
@@ -27,10 +29,12 @@ const BookViewerContent = () => {
 				setBook(data);
 				setTotalPages(data.totalPages || 0);
 
-				// Set current page from progress if available
-				if (data.progress?.currentPage) {
-					setCurrentPage(data.progress.currentPage);
-				}
+				// Get initial page with localStorage priority
+				const serverCurrentPage =
+					data.progress?.currentPage || data.currentPage;
+				const initialPage =
+					hybridTracker.getSmartInitialPage(serverCurrentPage);
+				setCurrentPage(initialPage);
 			} catch (err) {
 				setError(err.message);
 			} finally {
@@ -39,7 +43,7 @@ const BookViewerContent = () => {
 		};
 
 		fetchBook();
-	}, [bookId]);
+	}, [bookId, hybridTracker.getSmartInitialPage]);
 
 	// Debounced progress update function
 	const updateProgress = useCallback(
@@ -63,11 +67,8 @@ const BookViewerContent = () => {
 	const handlePageChange = (pageNum) => {
 		setCurrentPage(pageNum);
 
-		// Debounce progress updates to avoid too many API calls
-		clearTimeout(handlePageChange.timeoutId);
-		handlePageChange.timeoutId = setTimeout(() => {
-			updateProgress(pageNum);
-		}, 1000);
+		// Use hybrid tracker for smart page and chapter tracking
+		hybridTracker.onPageChange(pageNum);
 	};
 
 	// Save progress on page unload
@@ -161,6 +162,7 @@ const BookViewerContent = () => {
 			<BookSidebar
 				book={book}
 				currentPage={currentPage}
+				hybridTracker={hybridTracker}
 				onChapterClick={(pageNumber) => {
 					// For PDF, we need to scroll to the page
 					if (fileType === "pdf" && pdfViewerRef.current) {
@@ -182,6 +184,7 @@ const BookViewerContent = () => {
 							onPageChange={handlePageChange}
 							zoom={zoomLevel}
 							onZoomChange={handleZoomChange}
+							initialPage={currentPage}
 						/>
 					) : fileType === "epub" ? (
 						<EPUBViewer url={bookUrl} bookInfo={book} />

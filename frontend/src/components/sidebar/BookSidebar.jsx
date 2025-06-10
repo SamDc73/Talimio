@@ -19,7 +19,7 @@ import SidebarContainer from "./SidebarContainer";
 import SidebarItem from "./SidebarItem";
 import SidebarNav from "./SidebarNav";
 
-function BookSidebar({ book, currentPage = 1, onChapterClick }) {
+function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
 	const [expandedChapters, setExpandedChapters] = useState([0]);
 	const [completedSections, setCompletedSections] = useState(new Set());
 	const [apiChapters, setApiChapters] = useState([]);
@@ -55,6 +55,17 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
 					completed.add(id);
 				}
 
+				// Load chapter statuses from hybrid tracker if available
+				if (hybridTracker?.chapterStatuses) {
+					for (const [chapterId, status] of Object.entries(
+						hybridTracker.chapterStatuses,
+					)) {
+						if (status === "done") {
+							completed.add(chapterId);
+						}
+					}
+				}
+
 				setCompletedSections(completed);
 			} catch (error) {
 				console.error("Failed to fetch chapters:", error);
@@ -70,7 +81,7 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
 		}
 
 		fetchChapters();
-	}, [book?.id]);
+	}, [book?.id, hybridTracker?.chapterStatuses]);
 
 	const handleExtractChapters = async () => {
 		setIsExtracting(true);
@@ -141,7 +152,11 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
 	const handleSectionClick = async (section, pageNumber) => {
 		const sectionId = section.id || section.chapter_id;
 		const isCompleted = completedSections.has(sectionId);
-		const newStatus = isCompleted ? "not_started" : "completed";
+		const newStatus = isCompleted
+			? "not_started"
+			: section.level === 0
+				? "done"
+				: "completed";
 
 		// Optimistic update
 		const newCompletedSections = new Set(completedSections);
@@ -152,58 +167,69 @@ function BookSidebar({ book, currentPage = 1, onChapterClick }) {
 		}
 		setCompletedSections(newCompletedSections);
 
-		// Save progress based on data source
-		const usingTableOfContents = hasTableOfContents;
+		// Use hybrid tracker if available for better performance and offline support
+		if (hybridTracker && section.level === 0) {
+			// For top-level chapters, use hybrid tracker
+			const chapterStatus = isCompleted ? "not_started" : "done";
+			hybridTracker.updateChapterStatus(sectionId, chapterStatus);
 
-		if (usingTableOfContents) {
-			// Save tableOfContents progress using service
-			updateBookProgress(book.id, sectionId, !isCompleted);
+			toast({
+				title: "Chapter updated",
+				description: `Chapter marked as ${chapterStatus.replace("_", " ")}`,
+			});
+		} else {
+			// Fall back to original logic for sections or when no hybrid tracker
+			const usingTableOfContents = hasTableOfContents;
 
-			// Update stats with properly calculated count
-			// We need to calculate based on chapters structure, not just set size
-			const tempCompletedSections = newCompletedSections;
-			const calculateNewCompletedCount = () => {
-				let count = 0;
-				for (const ch of chapters) {
-					if (ch.children && ch.children.length > 0) {
-						for (const section of ch.children) {
-							if (tempCompletedSections.has(section.id)) {
+			if (usingTableOfContents) {
+				// Save tableOfContents progress using service
+				updateBookProgress(book.id, sectionId, !isCompleted);
+
+				// Update stats with properly calculated count
+				const tempCompletedSections = newCompletedSections;
+				const calculateNewCompletedCount = () => {
+					let count = 0;
+					for (const ch of chapters) {
+						if (ch.children && ch.children.length > 0) {
+							for (const section of ch.children) {
+								if (tempCompletedSections.has(section.id)) {
+									count++;
+								}
+							}
+						} else {
+							if (tempCompletedSections.has(ch.id)) {
 								count++;
 							}
 						}
-					} else {
-						if (tempCompletedSections.has(ch.id)) {
-							count++;
-						}
 					}
+					return count;
+				};
+
+				const newCompletedCount = calculateNewCompletedCount();
+				saveBookProgressStats(book.id, totalSections, newCompletedCount);
+
+				toast({
+					title: "Progress saved",
+					description: `Section marked as ${newStatus.replace("_", " ")}`,
+				});
+			} else if (apiChapters.length > 0 && section.chapter_id) {
+				// Update via API for API chapters
+				try {
+					await updateChapterStatus(book.id, section.chapter_id, newStatus);
+					toast({
+						title: "Chapter updated",
+						description: `Chapter marked as ${newStatus.replace("_", " ")}`,
+					});
+				} catch (error) {
+					// Revert optimistic update
+					setCompletedSections(completedSections);
+
+					toast({
+						title: "Error",
+						description: "Failed to update chapter status",
+						variant: "destructive",
+					});
 				}
-				return count;
-			};
-
-			const newCompletedCount = calculateNewCompletedCount();
-			saveBookProgressStats(book.id, totalSections, newCompletedCount);
-
-			toast({
-				title: "Progress saved",
-				description: `Section marked as ${newStatus.replace("_", " ")}`,
-			});
-		} else if (apiChapters.length > 0 && section.chapter_id) {
-			// Update via API for API chapters
-			try {
-				await updateChapterStatus(book.id, section.chapter_id, newStatus);
-				toast({
-					title: "Chapter updated",
-					description: `Chapter marked as ${newStatus.replace("_", " ")}`,
-				});
-			} catch (error) {
-				// Revert optimistic update
-				setCompletedSections(completedSections);
-
-				toast({
-					title: "Error",
-					description: "Failed to update chapter status",
-					variant: "destructive",
-				});
 			}
 		}
 

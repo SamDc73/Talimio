@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime  # noqa: TC003
+from uuid import UUID as UUID_TYPE
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -16,7 +17,7 @@ class Video(Base):
     __tablename__ = "videos"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    uuid: Mapped[uuid.UUID] = mapped_column(
+    uuid: Mapped[UUID_TYPE] = mapped_column(
         UUID(as_uuid=True),
         unique=True,
         nullable=False,

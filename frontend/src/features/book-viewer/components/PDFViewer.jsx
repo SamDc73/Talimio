@@ -16,7 +16,10 @@ import "./PDFViewer.css";
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 const PDFViewer = forwardRef(
-	({ url, bookInfo, onPageChange, zoom = 100, onZoomChange }, ref) => {
+	(
+		{ url, bookInfo, onPageChange, zoom = 100, onZoomChange, initialPage = 1 },
+		ref,
+	) => {
 		const [numPages, setNumPages] = useState(null);
 		const [pageNumber, setPageNumber] = useState(1);
 		const [visiblePages, setVisiblePages] = useState(new Set([1, 2, 3]));
@@ -48,9 +51,23 @@ const PDFViewer = forwardRef(
 			pdf.getPage(1).then((page) => {
 				const viewport = page.getViewport({ scale: 1 });
 				setPageWidth(viewport.width);
+
+				// After the page width is set, scroll to the initial page if needed
+				if (initialPage > 1) {
+					setTimeout(() => {
+						scrollToPage(initialPage);
+						setPageNumber(initialPage);
+						if (onPageChange) {
+							onPageChange(initialPage);
+						}
+					}, 100); // Small delay to ensure DOM is ready
+				}
 			});
-			if (onPageChange) {
-				onPageChange(1);
+
+			// Set initial page number
+			setPageNumber(initialPage);
+			if (onPageChange && initialPage === 1) {
+				onPageChange(initialPage);
 			}
 		};
 
