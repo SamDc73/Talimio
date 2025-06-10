@@ -11,7 +11,7 @@ class Settings(PydanticBaseSettings):  # type: ignore[misc]
     ENVIRONMENT: str = "development"
 
     # Database Settings
-    DATABASE_URL: str
+    DATABASE_URL: str = ""
 
     # OpenAI Settings
     openai_api_key: str | None = None

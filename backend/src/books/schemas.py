@@ -193,5 +193,18 @@ class BookChapterStatusUpdate(BaseModel):
     status: str = Field(..., pattern="^(not_started|in_progress|done)$")
 
 
+class BookChapterBatchStatusUpdate(BaseModel):
+    """Schema for batch updating book chapter statuses."""
+
+    chapter_id: UUID = Field(..., alias="chapterId")
+    status: str = Field(..., pattern="^(not_started|in_progress|done)$")
+
+
+class BookChapterBatchUpdateRequest(BaseModel):
+    """Schema for batch chapter status update request."""
+
+    updates: list[BookChapterBatchStatusUpdate] = Field(..., min_length=1, max_length=50)
+
+
 # Update forward references
 TableOfContentsItem.model_rebuild()

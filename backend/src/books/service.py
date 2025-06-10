@@ -42,7 +42,7 @@ def _book_to_response(book: Book) -> BookResponse:
     tags_list = []
     if book.tags:
         try:
-            tags_list = json.loads(book.tags)
+            tags_list = json.loads(book.tags)  # type: ignore[arg-type]
         except (json.JSONDecodeError, TypeError):
             tags_list = []
 
@@ -50,8 +50,9 @@ def _book_to_response(book: Book) -> BookResponse:
     toc_list = None
     if book.table_of_contents:
         try:
-            toc_data = json.loads(book.table_of_contents)
-            toc_list = _convert_toc_to_schema(toc_data)
+            toc_data = json.loads(book.table_of_contents)  # type: ignore[arg-type]
+            if isinstance(toc_data, list):
+                toc_list = _convert_toc_to_schema(toc_data)
         except (json.JSONDecodeError, TypeError):
             toc_list = None
 
@@ -329,7 +330,24 @@ async def get_book(book_id: UUID) -> BookWithProgress:
 
             book_response = _book_to_response(book)
             return BookWithProgress(
-                **book_response.model_dump(),
+                id=book_response.id,
+                title=book_response.title,
+                subtitle=book_response.subtitle,
+                author=book_response.author,
+                description=book_response.description,
+                isbn=book_response.isbn,
+                language=book_response.language,
+                publication_year=book_response.publication_year,
+                publisher=book_response.publisher,
+                tags=book_response.tags,
+                file_path=book_response.file_path,
+                file_type=book_response.file_type,
+                file_size=book_response.file_size,
+                total_pages=book_response.total_pages,
+                cover_image_path=book_response.cover_image_path,
+                table_of_contents=book_response.table_of_contents,
+                created_at=book_response.created_at,
+                updated_at=book_response.updated_at,
                 progress=progress,
             )
 
@@ -497,8 +515,9 @@ async def update_book_progress(book_id: UUID, progress_data: BookProgressUpdate)
             progress.updated_at = datetime.now(UTC)
 
             # Calculate total pages read based on current page
-            if progress_data.current_page is not None:
-                progress.total_pages_read = max(progress.total_pages_read, progress_data.current_page)
+            if progress_data.current_page is not None and progress is not None:
+                current_total = progress.total_pages_read if progress.total_pages_read is not None else 0
+                progress.total_pages_read = max(current_total, progress_data.current_page)  # type: ignore[assignment]
 
             await session.commit()
             await session.refresh(progress)
@@ -855,4 +874,78 @@ async def extract_and_create_chapters(book_id: UUID) -> list[BookChapterResponse
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to extract chapters: {e!s}",
+        ) from e
+
+
+async def batch_update_chapter_statuses(book_id: UUID, updates: list[dict[str, str]]) -> list[BookChapterResponse]:
+    """
+    Update multiple chapter statuses in one transaction.
+
+    Args:
+        book_id: Book ID
+        updates: List of dicts with chapter_id and status
+
+    Returns
+    -------
+        list[BookChapterResponse]: Updated chapters
+
+    Raises
+    ------
+        HTTPException: If book/chapters not found or update fails
+    """
+    try:
+        async with async_session_maker() as session:
+            # Verify book exists
+            book_query = select(Book).where(Book.id == book_id)
+            book_result = await session.execute(book_query)
+            book = book_result.scalar_one_or_none()
+
+            if not book:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Book {book_id} not found",
+                )
+
+            updated_chapters = []
+            chapter_ids = [UUID(update["chapter_id"]) for update in updates]
+
+            # Get all chapters to update in one query
+            chapters_query = select(BookChapter).where(BookChapter.book_id == book_id, BookChapter.id.in_(chapter_ids))
+            chapters_result = await session.execute(chapters_query)
+            chapters = {str(chapter.id): chapter for chapter in chapters_result.scalars().all()}
+
+            # Verify all chapters exist
+            missing_chapters = {update["chapter_id"] for update in updates} - set(chapters.keys())
+            if missing_chapters:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Chapters not found: {', '.join(missing_chapters)}",
+                )
+
+            # Update chapters
+            for update in updates:
+                chapter_id_str = update["chapter_id"]
+                new_status = update["status"]
+
+                chapter = chapters[chapter_id_str]
+                chapter.status = new_status
+                chapter.updated_at = datetime.now(UTC)
+
+                updated_chapters.append(chapter)
+
+            await session.commit()
+
+            # Refresh chapters to get updated timestamps
+            for chapter in updated_chapters:
+                await session.refresh(chapter)
+
+            return [BookChapterResponse.model_validate(chapter) for chapter in updated_chapters]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.exception(f"Error batch updating chapters for book {book_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to batch update chapters: {e!s}",
         ) from e
