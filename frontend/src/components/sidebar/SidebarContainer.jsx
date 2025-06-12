@@ -1,11 +1,11 @@
-import { useSidebar } from "@/features/navigation/SidebarContext";
+import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore";
 
 /**
  * Base container component for all sidebar implementations
  * Handles open/close animations and common styling
  */
 function SidebarContainer({ children }) {
-	const { isOpen } = useSidebar();
+	const isOpen = useAppStore(selectSidebarOpen);
 
 	return (
 		<aside

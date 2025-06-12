@@ -3,9 +3,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Mock the SidebarContext
-vi.mock("@/features/navigation/SidebarContext", () => ({
-	useSidebar: () => ({ isOpen: true }),
+// Mock the Zustand store
+vi.mock("@/stores/useAppStore", () => ({
+	default: vi.fn(() => true), // Mock sidebarOpen state
 }));
 
 // Mock the useApi hook for chapter fetching

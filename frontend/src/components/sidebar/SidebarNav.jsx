@@ -1,11 +1,11 @@
-import { useSidebar } from "@/features/navigation/SidebarContext";
+import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore";
 
 /**
  * Navigation wrapper component for sidebar
  * Provides scrollable container with fade animations
  */
 function SidebarNav({ children, className = "" }) {
-	const { isOpen } = useSidebar();
+	const isOpen = useAppStore(selectSidebarOpen);
 
 	return (
 		<nav

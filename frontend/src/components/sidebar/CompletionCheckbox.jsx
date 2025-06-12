@@ -11,7 +11,7 @@ function CompletionCheckbox({ isCompleted, isLocked = false, onClick }) {
 			onClick={(e) => {
 				e.stopPropagation();
 				if (!isLocked && onClick) {
-					onClick();
+					onClick(e);
 				}
 			}}
 			className="mt-0.5 transition-all duration-200 hover:scale-110"

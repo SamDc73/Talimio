@@ -1,4 +1,3 @@
-import { useSidebar } from "@/features/navigation/SidebarContext";
 import { useToast } from "@/hooks/use-toast";
 import {
 	extractVideoChapters,
@@ -6,45 +5,57 @@ import {
 	syncVideoChapterProgress,
 	updateVideoChapterStatus,
 } from "@/services/videosService";
+import useAppStore from "@/stores/useAppStore";
 import { Clock, Download, FileText } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import CompletionCheckbox from "./CompletionCheckbox";
 import ProgressIndicator from "./ProgressIndicator";
 import SidebarContainer from "./SidebarContainer";
 import SidebarNav from "./SidebarNav";
 
-// Load completed chapters from localStorage
-const loadCompletedChaptersFromStorage = (videoUuid) => {
+// Migrate completed chapters from localStorage to Zustand (for backwards compatibility)
+const migrateVideoChaptersFromStorage = (videoUuid, setChapterCompletion) => {
 	try {
 		const saved = localStorage.getItem(`video_chapters_${videoUuid}`);
-		return saved ? new Set(JSON.parse(saved)) : new Set();
+		if (saved) {
+			const completedArray = JSON.parse(saved);
+			const completedObj = {};
+			completedArray.forEach((chapterId) => {
+				completedObj[chapterId] = true;
+			});
+			setChapterCompletion(videoUuid, completedObj);
+			// Clean up localStorage after migration
+			localStorage.removeItem(`video_chapters_${videoUuid}`);
+		}
 	} catch (error) {
-		console.error("Failed to load completed chapters from storage:", error);
-		return new Set();
-	}
-};
-
-// Save completed chapters to localStorage
-const saveCompletedChaptersToStorage = (videoUuid, completedSet) => {
-	try {
-		localStorage.setItem(
-			`video_chapters_${videoUuid}`,
-			JSON.stringify([...completedSet]),
-		);
-	} catch (error) {
-		console.error("Failed to save completed chapters to storage:", error);
+		console.error("Failed to migrate completed chapters from storage:", error);
 	}
 };
 
 export function VideoSidebar({ video, currentTime, onSeek }) {
-	const { isOpen } = useSidebar();
 	const [chapters, setChapters] = useState([]);
 	const [apiChapters, setApiChapters] = useState([]);
-	const [completedChapters, setCompletedChapters] = useState(new Set());
 	const [activeChapter, setActiveChapter] = useState(null);
 	const [isLoadingChapters, setIsLoadingChapters] = useState(false);
 	const [isExtracting, setIsExtracting] = useState(false);
 	const { toast } = useToast();
+
+	// Zustand store selectors - use shallow comparison to prevent infinite loops
+	const { videoChapterCompletion, updateVideoChapterCompletion, setVideoChapterStatus } = useAppStore(
+		useShallow((state) => ({
+			videoChapterCompletion: state.videos.chapterCompletion[video?.uuid] || {},
+			updateVideoChapterCompletion: state.updateVideoChapterCompletion,
+			setVideoChapterStatus: state.setVideoChapterStatus,
+		})),
+	);
+
+	// Convert store object to Set for backwards compatibility - memoized to prevent infinite loops
+	const completedChapters = useMemo(() => new Set(
+		Object.entries(videoChapterCompletion)
+			.filter(([_, completed]) => completed)
+			.map(([chapterId, _]) => chapterId),
+	), [videoChapterCompletion]);
 
 	// Fetch API chapters
 	useEffect(() => {
@@ -58,24 +69,28 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 
 				if (chapters && chapters.length > 0) {
 					// Update completed chapters based on chapter status from API
-					const completed = new Set();
+					const completed = {};
 					for (const chapter of chapters) {
 						if (chapter.status === "done") {
-							completed.add(chapter.id);
+							completed[chapter.id] = true;
 						}
 					}
-					setCompletedChapters(completed);
+					updateVideoChapterCompletion(video.uuid, completed);
 				} else {
-					// No API chapters, load from localStorage for description-based chapters
-					const savedCompleted = loadCompletedChaptersFromStorage(video.uuid);
-					setCompletedChapters(savedCompleted);
+					// No API chapters, try to migrate from localStorage for description-based chapters
+					migrateVideoChaptersFromStorage(
+						video.uuid,
+						updateVideoChapterCompletion,
+					);
 				}
 			} catch (error) {
 				console.error("Failed to fetch video chapters:", error);
-				// Fall back to description extraction and load from localStorage
+				// Fall back to description extraction and try to migrate from localStorage
 				setApiChapters([]);
-				const savedCompleted = loadCompletedChaptersFromStorage(video.uuid);
-				setCompletedChapters(savedCompleted);
+				migrateVideoChaptersFromStorage(
+					video.uuid,
+					updateVideoChapterCompletion,
+				);
 			} finally {
 				setIsLoadingChapters(false);
 			}
@@ -90,14 +105,23 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 			const extractedChapters = extractChapters(video.description);
 			setChapters(extractedChapters);
 
-			// Sync existing localStorage progress to backend
+			// Try to migrate from localStorage and sync to backend
 			if (extractedChapters.length > 0) {
-				const savedCompleted = loadCompletedChaptersFromStorage(video.uuid);
-				if (savedCompleted.size > 0) {
+				migrateVideoChaptersFromStorage(
+					video.uuid,
+					updateVideoChapterCompletion,
+				);
+
+				// Sync existing store progress to backend
+				const storeCompleted = Object.entries(videoChapterCompletion)
+					.filter(([_, completed]) => completed)
+					.map(([chapterId, _]) => chapterId);
+
+				if (storeCompleted.length > 0) {
 					// Sync existing progress to backend
 					syncVideoChapterProgress(
 						video.uuid,
-						[...savedCompleted],
+						storeCompleted,
 						extractedChapters.length,
 					).catch((error) => {
 						console.error(
@@ -118,7 +142,13 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 			}));
 			setChapters(formattedChapters);
 		}
-	}, [video?.description, apiChapters, video?.uuid]);
+	}, [
+		video?.description,
+		apiChapters,
+		video?.uuid,
+		videoChapterCompletion,
+		updateVideoChapterCompletion,
+	]);
 
 	useEffect(() => {
 		if (chapters.length > 0 && currentTime !== undefined) {
@@ -187,14 +217,8 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 		const isCompleted = completedChapters.has(chapterId);
 		const newStatus = isCompleted ? "not_started" : "done";
 
-		// Optimistic update
-		const newCompletedChapters = new Set(completedChapters);
-		if (isCompleted) {
-			newCompletedChapters.delete(chapterId);
-		} else {
-			newCompletedChapters.add(chapterId);
-		}
-		setCompletedChapters(newCompletedChapters);
+		// Optimistic update to store
+		setVideoChapterStatus(video.uuid, chapterId, !isCompleted);
 
 		// Update via API if this is an API chapter
 		if (apiChapters.length > 0 && chapter.chapter_id) {
@@ -210,7 +234,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 				});
 			} catch (error) {
 				// Revert optimistic update
-				setCompletedChapters(completedChapters);
+				setVideoChapterStatus(video.uuid, chapterId, isCompleted);
 
 				toast({
 					title: "Error",
@@ -219,19 +243,19 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 				});
 			}
 		} else {
-			// This is a description-based chapter, save to localStorage and sync to backend
+			// This is a description-based chapter, sync to backend
 			try {
-				saveCompletedChaptersToStorage(video.uuid, newCompletedChapters);
-
 				// Sync to backend for homepage progress
-				const completedIds = [...newCompletedChapters];
+				const currentCompleted = Object.entries(videoChapterCompletion)
+					.filter(([_, completed]) => completed)
+					.map(([chapterId, _]) => chapterId);
 				const totalChapters = chapters.length;
 
 				if (totalChapters > 0) {
 					// Don't await - let it sync in background
 					syncVideoChapterProgress(
 						video.uuid,
-						completedIds,
+						currentCompleted,
 						totalChapters,
 					).catch((error) => {
 						console.error("Failed to sync chapter progress to backend:", error);
@@ -245,7 +269,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 				});
 			} catch (error) {
 				// Revert optimistic update
-				setCompletedChapters(completedChapters);
+				setVideoChapterStatus(video.uuid, chapterId, isCompleted);
 
 				toast({
 					title: "Error",
@@ -303,11 +327,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 			<ProgressIndicator progress={getProgress()} />
 
 			{/* Video info */}
-			<div
-				className={`px-4 py-3 border-b border-zinc-200 transition-opacity duration-300 ${
-					isOpen ? "opacity-100" : "opacity-0"
-				}`}
-			>
+			<div className="px-4 py-3 border-b border-zinc-200">
 				<h3 className="text-sm font-semibold text-zinc-800 truncate">
 					{video.title}
 				</h3>
@@ -418,11 +438,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 			</SidebarNav>
 
 			{/* Footer with video duration */}
-			<div
-				className={`px-4 py-3 border-t border-zinc-200 bg-zinc-50 transition-opacity duration-300 ${
-					isOpen ? "opacity-100" : "opacity-0"
-				}`}
-			>
+			<div className="px-4 py-3 border-t border-zinc-200 bg-zinc-50">
 				<div className="text-xs text-zinc-600">
 					<p>Duration: {formatDuration(video.duration)}</p>
 					{chapters.length > 0 && (

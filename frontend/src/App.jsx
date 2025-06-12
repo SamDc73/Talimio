@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import HomePage from "./features/home";
 import "@xyflow/react/dist/style.css";
@@ -11,13 +11,13 @@ import {
 import { Toaster } from "./components/toaster";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { BookViewer } from "./features/book-viewer";
-import { SidebarProvider } from "./features/navigation/SidebarContext";
 // Sidebar import removed - now imported in individual components
 import { OnboardingFlow } from "./features/onboarding";
 import RoadmapFlow from "./features/roadmap";
 import { useOutlineData } from "./features/roadmap/outline/useOutlineData";
 import { VideoViewer } from "./features/video-viewer";
 import { useAppState } from "./hooks/useAppState";
+import useAppStore from "./stores/useAppStore";
 
 function RoadmapPage() {
 	const { roadmapId } = useParams();
@@ -39,21 +39,25 @@ function RoadmapPage() {
 	}
 
 	return (
-		<SidebarProvider>
-			<div className="h-screen">
-				<RoadmapFlow
-					ref={flowRef}
-					roadmapId={roadmapId}
-					onError={handleResetOnboarding}
-				/>
-			</div>
-		</SidebarProvider>
+		<div className="h-screen">
+			<RoadmapFlow
+				ref={flowRef}
+				roadmapId={roadmapId}
+				onError={handleResetOnboarding}
+			/>
+		</div>
 	);
 }
 
 export default function App() {
 	const { showOnboarding, currentRoadmapId, handleOnboardingComplete } =
 		useAppState();
+	const cleanupOldStorage = useAppStore((state) => state.cleanupOldStorage);
+
+	// Clean up old localStorage on app startup
+	useEffect(() => {
+		cleanupOldStorage();
+	}, [cleanupOldStorage]);
 
 	return (
 		<ThemeProvider>

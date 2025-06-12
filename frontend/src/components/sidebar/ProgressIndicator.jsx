@@ -1,11 +1,11 @@
-import { useSidebar } from "@/features/navigation/SidebarContext";
+import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore";
 
 /**
  * Progress indicator component for sidebar
  * Shows completion percentage with customizable text
  */
 function ProgressIndicator({ progress, suffix = "Completed", children }) {
-	const { isOpen } = useSidebar();
+	const isOpen = useAppStore(selectSidebarOpen);
 
 	return (
 		<div
