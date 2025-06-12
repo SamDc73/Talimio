@@ -1,8 +1,8 @@
+import { deleteApi } from "@/services/deleteApi";
 import {
 	calculateBookProgress,
 	getBookProgressStats,
-} from "@/services/bookProgressService";
-import { deleteApi } from "@/services/deleteApi";
+} from "@/services/tocProgressService";
 import { BookOpen, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -19,7 +19,7 @@ export function BookCard({ book, onDelete }) {
 
 		// If no saved stats but we have table_of_contents, calculate
 		if (book.tableOfContents && book.tableOfContents.length > 0) {
-			return calculateBookProgress(book);
+			return calculateBookProgress(book.id, book.tableOfContents);
 		}
 
 		// Otherwise, no progress yet
@@ -53,7 +53,7 @@ export function BookCard({ book, onDelete }) {
 				if (stats.totalSections > 0) {
 					setProgress(stats);
 				} else {
-					setProgress(calculateBookProgress(book));
+					setProgress(calculateBookProgress(book.id, book.tableOfContents));
 				}
 			}
 		};

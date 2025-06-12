@@ -16,6 +16,7 @@ export function BookHeader({
 	bookAuthor,
 	currentPage = 1,
 	totalPages = 0,
+	progressPercentage = 0, // Use the reliable progress percentage
 	isOpen = true,
 	toggleSidebar = () => {},
 	onZoomIn = () => {},
@@ -25,8 +26,6 @@ export function BookHeader({
 	showZoomControls = false,
 }) {
 	const { toggleChat } = useChatSidebar();
-	const readingProgress =
-		totalPages > 0 ? Math.round((currentPage / totalPages) * 100) : 0;
 
 	return (
 		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
@@ -62,11 +61,13 @@ export function BookHeader({
 							<div className="flex items-center">
 								<BookOpen className="w-3 h-3 text-slate-500 mr-1" />
 								<span className="text-xs text-slate-600">
-									Page {currentPage} of {totalPages || "?"}
+									{totalPages > 0 && currentPage > 0
+										? `Page ${currentPage} of ${totalPages}`
+										: "Loading..."}
 								</span>
-								{totalPages > 0 && (
+								{progressPercentage > 0 && (
 									<span className="ml-2 text-xs font-medium text-slate-600">
-										({readingProgress}%)
+										({progressPercentage}%)
 									</span>
 								)}
 							</div>

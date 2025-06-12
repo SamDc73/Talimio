@@ -1,14 +1,11 @@
 import { useToast } from "@/hooks/use-toast";
+import { extractBookChapters, getBookChapters } from "@/services/booksService";
 import {
-	getCompletedSections,
-	saveBookProgressStats,
-	updateBookProgress,
-} from "@/services/bookProgressService";
-import {
-	extractBookChapters,
-	getBookChapters,
-	updateChapterStatus,
-} from "@/services/booksService";
+	getChapterProgress,
+	updateSectionProgress,
+	useTocProgress,
+} from "@/services/tocProgressService";
+import useAppStore from "@/stores/useAppStore";
 import { Download, FileText } from "lucide-react";
 import { useEffect, useState } from "react";
 import CompletionCheckbox from "./CompletionCheckbox";
@@ -19,72 +16,80 @@ import SidebarContainer from "./SidebarContainer";
 import SidebarItem from "./SidebarItem";
 import SidebarNav from "./SidebarNav";
 
-function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
+/**
+ * Enhanced BookSidebar using Zustand for state management
+ * Replaces hybrid tracker and localStorage with unified store
+ */
+function BookSidebarV2({
+	book,
+	currentPage = 1,
+	onChapterClick,
+	chapterCompletion = {},
+	progressPercentage = 0,
+	tocProgress = {},
+	progressStats = {},
+	completedSections = new Set(),
+}) {
 	const [expandedChapters, setExpandedChapters] = useState([0]);
-	const [completedSections, setCompletedSections] = useState(new Set());
 	const [apiChapters, setApiChapters] = useState([]);
 	const [isLoadingChapters, setIsLoadingChapters] = useState(false);
 	const [isExtracting, setIsExtracting] = useState(false);
 	const { toast } = useToast();
 
-	// Fetch chapters from API and load progress
+	// Zustand store actions
+	const updateChapterStatus = useAppStore(
+		(state) => state.updateBookChapterStatus,
+	);
+	const setLoading = useAppStore((state) => state.setLoading);
+
+	// Use enhanced ToC progress hook
+	const tocProgressUtils = useTocProgress(book?.id);
+
+	/**
+	 * Fetch chapters from API
+	 */
 	useEffect(() => {
 		if (!book?.id) return;
 
 		async function fetchChapters() {
 			setIsLoadingChapters(true);
+			setLoading("book-chapters", true);
+
 			try {
 				const chapters = await getBookChapters(book.id);
 				setApiChapters(chapters || []);
 
-				// Load progress from both API chapters and localStorage
-				const completed = new Set();
-
-				// If we have API chapters, use their status
+				// Initialize chapter statuses in store if they don't exist
 				if (chapters && chapters.length > 0) {
 					for (const chapter of chapters) {
-						if (chapter.status === "completed") {
-							completed.add(chapter.id);
+						if (chapterCompletion[chapter.id] === undefined) {
+							updateChapterStatus(
+								book.id,
+								chapter.id,
+								chapter.status === "completed",
+							);
 						}
 					}
 				}
-
-				// Load tableOfContents progress from localStorage
-				const tocCompleted = getCompletedSections(book.id);
-				for (const id of tocCompleted) {
-					completed.add(id);
-				}
-
-				// Load chapter statuses from hybrid tracker if available
-				if (hybridTracker?.chapterStatuses) {
-					for (const [chapterId, status] of Object.entries(
-						hybridTracker.chapterStatuses,
-					)) {
-						if (status === "done") {
-							completed.add(chapterId);
-						}
-					}
-				}
-
-				setCompletedSections(completed);
 			} catch (error) {
 				console.error("Failed to fetch chapters:", error);
-				// Fall back to table of contents if API fails
 				setApiChapters([]);
-
-				// Still load ToC progress from localStorage
-				const tocCompleted = getCompletedSections(book.id);
-				setCompletedSections(tocCompleted);
 			} finally {
 				setIsLoadingChapters(false);
+				setLoading("book-chapters", false);
 			}
 		}
 
 		fetchChapters();
-	}, [book?.id, hybridTracker?.chapterStatuses]);
+	}, [book?.id, updateChapterStatus, setLoading]);
 
+	/**
+	 * Extract chapters using AI
+	 */
 	const handleExtractChapters = async () => {
 		setIsExtracting(true);
+		setLoading("extract-chapters", true);
+
 		try {
 			const result = await extractBookChapters(book.id);
 			toast({
@@ -103,17 +108,20 @@ function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
 			});
 		} finally {
 			setIsExtracting(false);
+			setLoading("extract-chapters", false);
 		}
 	};
 
 	if (!book) return null;
 
-	// Prefer tableOfContents (hierarchical with children) over API chapters (flat)
-	// Only use API chapters if no tableOfContents exists
+	// Prefer tableOfContents (hierarchical) over API chapters (flat)
 	const hasTableOfContents =
 		book.tableOfContents && book.tableOfContents.length > 0;
 	const chapters = hasTableOfContents ? book.tableOfContents : apiChapters;
 
+	/**
+	 * Render empty state
+	 */
 	if (!chapters.length) {
 		return (
 			<SidebarContainer>
@@ -125,7 +133,6 @@ function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
 							This book doesn't have chapter information.
 						</p>
 
-						{/* Extract chapters button */}
 						<button
 							type="button"
 							onClick={handleExtractChapters}
@@ -141,6 +148,9 @@ function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
 		);
 	}
 
+	/**
+	 * Toggle chapter expansion
+	 */
 	const handleToggleChapter = (chapterIndex) => {
 		setExpandedChapters((prev) =>
 			prev.includes(chapterIndex)
@@ -149,103 +159,43 @@ function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
 		);
 	};
 
+	/**
+	 * Handle section/chapter click - navigates to the page
+	 */
 	const handleSectionClick = async (section, pageNumber) => {
-		const sectionId = section.id || section.chapter_id;
-		const isCompleted = completedSections.has(sectionId);
-		const newStatus = isCompleted
-			? "not_started"
-			: section.level === 0
-				? "done"
-				: "completed";
-
-		// Optimistic update
-		const newCompletedSections = new Set(completedSections);
-		if (isCompleted) {
-			newCompletedSections.delete(sectionId);
-		} else {
-			newCompletedSections.add(sectionId);
-		}
-		setCompletedSections(newCompletedSections);
-
-		// Use hybrid tracker if available for better performance and offline support
-		if (hybridTracker && section.level === 0) {
-			// For top-level chapters, use hybrid tracker
-			const chapterStatus = isCompleted ? "not_started" : "done";
-			hybridTracker.updateChapterStatus(sectionId, chapterStatus);
-
-			toast({
-				title: "Chapter updated",
-				description: `Chapter marked as ${chapterStatus.replace("_", " ")}`,
-			});
-		} else {
-			// Fall back to original logic for sections or when no hybrid tracker
-			const usingTableOfContents = hasTableOfContents;
-
-			if (usingTableOfContents) {
-				// Save tableOfContents progress using service
-				updateBookProgress(book.id, sectionId, !isCompleted);
-
-				// Update stats with properly calculated count
-				const tempCompletedSections = newCompletedSections;
-				const calculateNewCompletedCount = () => {
-					let count = 0;
-					for (const ch of chapters) {
-						if (ch.children && ch.children.length > 0) {
-							for (const section of ch.children) {
-								if (tempCompletedSections.has(section.id)) {
-									count++;
-								}
-							}
-						} else {
-							if (tempCompletedSections.has(ch.id)) {
-								count++;
-							}
-						}
-					}
-					return count;
-				};
-
-				const newCompletedCount = calculateNewCompletedCount();
-				saveBookProgressStats(book.id, totalSections, newCompletedCount);
-
-				toast({
-					title: "Progress saved",
-					description: `Section marked as ${newStatus.replace("_", " ")}`,
-				});
-			} else if (apiChapters.length > 0 && section.chapter_id) {
-				// Update via API for API chapters
-				try {
-					await updateChapterStatus(book.id, section.chapter_id, newStatus);
-					toast({
-						title: "Chapter updated",
-						description: `Chapter marked as ${newStatus.replace("_", " ")}`,
-					});
-				} catch (error) {
-					// Revert optimistic update
-					setCompletedSections(completedSections);
-
-					toast({
-						title: "Error",
-						description: "Failed to update chapter status",
-						variant: "destructive",
-					});
-				}
-			}
-		}
-
+		// Navigate to chapter/section
 		if (onChapterClick) {
-			onChapterClick(pageNumber);
+			onChapterClick(pageNumber, section.id || section.chapter_id);
 		}
 	};
 
-	const getChapterProgress = (chapter) => {
-		if (!chapter.children || chapter.children.length === 0) return 0;
-		const completedCount = chapter.children.filter((s) =>
-			completedSections.has(s.id),
-		).length;
-		return (completedCount / chapter.children.length) * 100;
+	/**
+	 * Handle completion toggle without navigation
+	 */
+	const handleCompletionToggle = async (section) => {
+		const sectionId = section.id || section.chapter_id;
+		const isCompleted = tocProgressUtils.isCompleted(sectionId);
+		const newStatus = !isCompleted;
+
+		// Update ToC progress using the enhanced system
+		tocProgressUtils.updateSection(sectionId, newStatus);
+
+		toast({
+			title: "Progress updated",
+			description: `Section marked as ${newStatus ? "completed" : "not started"}`,
+		});
 	};
 
+	/**
+	 * Calculate progress for a chapter based on completed children
+	 */
+	const getChapterProgressPercentage = (chapter) => {
+		return tocProgressUtils.getChapterProgress(chapter);
+	};
+
+	/**
+	 * Check if current page is in chapter range
+	 */
 	const isPageInRange = (page, chapter) => {
 		if (chapter.startPage && chapter.endPage) {
 			return page >= chapter.startPage && page <= chapter.endPage;
@@ -253,6 +203,9 @@ function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
 		return page === chapter.page;
 	};
 
+	/**
+	 * Count all sections/chapters for progress calculation
+	 */
 	const countAllSections = (chapters) => {
 		let count = 0;
 		for (const ch of chapters) {
@@ -265,8 +218,10 @@ function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
 		return count;
 	};
 
-	// Count completed sections with SAME logic as countAllSections
-	const countCompletedSectionsForChapters = (chapters) => {
+	/**
+	 * Count completed sections matching the same logic
+	 */
+	const countCompletedSections = (chapters) => {
 		let count = 0;
 		for (const ch of chapters) {
 			if (ch.children && ch.children.length > 0) {
@@ -286,23 +241,18 @@ function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
 		return count;
 	};
 
-	const totalSections = countAllSections(chapters);
-	const completedCount = countCompletedSectionsForChapters(chapters);
+	// Use enhanced progress stats from store
+	const stats = tocProgressUtils.progressStats;
 	const overallProgress =
-		totalSections > 0 ? Math.round((completedCount / totalSections) * 100) : 0;
-
-	// Save stats for home page when we have table of contents
-	useEffect(() => {
-		if (hasTableOfContents && totalSections > 0) {
-			saveBookProgressStats(book.id, totalSections, completedCount);
-		}
-	}, [book.id, hasTableOfContents, totalSections, completedCount]);
+		stats.percentage > 0 ? stats.percentage : progressPercentage; // Fall back to page-based progress
 
 	return (
 		<SidebarContainer>
 			<ProgressIndicator progress={overallProgress} suffix="Read">
 				<span className="text-xs text-zinc-500">
-					Page {currentPage} of {book.totalPages || "?"}
+					{currentPage && book.totalPages
+						? `Page ${currentPage} of ${book.totalPages}`
+						: "Loading..."}
 				</span>
 			</ProgressIndicator>
 
@@ -313,7 +263,7 @@ function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
 
 				{chapters.map((chapter, chapterIndex) => {
 					const isExpanded = expandedChapters.includes(chapterIndex);
-					const chapterProgress = getChapterProgress(chapter);
+					const chapterProgress = getChapterProgressPercentage(chapter);
 					const isCurrentChapter = isPageInRange(currentPage, chapter);
 					const hasChildren = chapter.children && chapter.children.length > 0;
 
@@ -331,7 +281,10 @@ function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
 									onClick={(e) => {
 										e.stopPropagation();
 										if (onChapterClick) {
-											onChapterClick(chapter.page || chapter.startPage);
+											onChapterClick(
+												chapter.page || chapter.startPage,
+												chapter.id,
+											);
 										}
 									}}
 									className="cursor-pointer hover:text-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded bg-transparent border-none p-0"
@@ -346,7 +299,9 @@ function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
 							{chapter.children && chapter.children.length > 0 && (
 								<ol>
 									{chapter.children.map((section, sectionIndex) => {
-										const isCompleted = completedSections.has(section.id);
+										const isCompleted = tocProgressUtils.isCompleted(
+											section.id,
+										);
 										const isCurrentSection = currentPage === section.page;
 
 										return (
@@ -370,9 +325,10 @@ function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
 												leftContent={
 													<CompletionCheckbox
 														isCompleted={isCompleted}
-														onClick={() =>
-															handleSectionClick(section, section.page)
-														}
+														onClick={(e) => {
+															e.stopPropagation();
+															handleCompletionToggle(section);
+														}}
 													/>
 												}
 											/>
@@ -399,6 +355,18 @@ function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
 								{book.totalPages || "Unknown"}
 							</span>
 						</div>
+						<div className="flex justify-between">
+							<span className="text-zinc-600">Progress</span>
+							<span className="text-zinc-900">{overallProgress}%</span>
+						</div>
+						{stats.totalSections > 0 && (
+							<div className="flex justify-between">
+								<span className="text-zinc-600">Sections</span>
+								<span className="text-zinc-900">
+									{stats.completedSections}/{stats.totalSections}
+								</span>
+							</div>
+						)}
 						{book.publicationYear && (
 							<div className="flex justify-between">
 								<span className="text-zinc-600">Published</span>
@@ -424,4 +392,4 @@ function BookSidebar({ book, currentPage = 1, onChapterClick, hybridTracker }) {
 	);
 }
 
-export default BookSidebar;
+export default BookSidebarV2;

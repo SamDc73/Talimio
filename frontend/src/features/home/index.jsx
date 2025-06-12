@@ -32,11 +32,11 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useApi } from "@/hooks/useApi";
 import { fetchContentData, processContentData } from "@/lib/api";
+import { deleteApi } from "@/services/deleteApi";
 import {
 	calculateBookProgress,
 	getBookProgressStats,
-} from "@/services/bookProgressService";
-import { deleteApi } from "@/services/deleteApi";
+} from "@/services/tocProgressService";
 import { videoApi } from "@/services/videoApi";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -222,7 +222,7 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
 					}
 					// If no saved stats but we have table_of_contents, calculate
 					if (item.tableOfContents && item.tableOfContents.length > 0) {
-						const progress = calculateBookProgress(item);
+						const progress = calculateBookProgress(item.id, item.tableOfContents);
 						return progress.percentage;
 					}
 					// Otherwise, no progress yet

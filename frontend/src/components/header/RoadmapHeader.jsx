@@ -1,4 +1,7 @@
-import { useSidebar } from "../../features/navigation/SidebarContext";
+import useAppStore, {
+	selectSidebarOpen,
+	selectToggleSidebar,
+} from "@/stores/useAppStore";
 import { useProgress } from "../../hooks/useProgress";
 import { CourseHeader } from "./CourseHeader";
 
@@ -20,7 +23,8 @@ import { CourseHeader } from "./CourseHeader";
  * @param {string} props.courseId - ID of the current course
  */
 function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
-	const { isOpen, toggleSidebar } = useSidebar();
+	const isOpen = useAppStore(selectSidebarOpen);
+	const toggleSidebar = useAppStore(selectToggleSidebar);
 	// Use the progress hook to get real-time course progress updates
 	const { courseProgress } = useProgress();
 

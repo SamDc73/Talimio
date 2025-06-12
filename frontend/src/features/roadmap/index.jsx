@@ -3,7 +3,7 @@ import { useState } from "react";
 import RoadmapHeader from "@/components/header/RoadmapHeader";
 import { CourseSidebar } from "@/components/sidebar";
 import { ProgressProvider } from "../../hooks/useProgress";
-import { useSidebar } from "../navigation/SidebarContext";
+import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore";
 // import MapView from "./map";  // Temporarily hidden
 import OutlineView from "./outline";
 import { useOutlineData } from "./outline/useOutlineData";
@@ -20,7 +20,7 @@ const RoadmapFlow = ({ roadmapId, onError }) => {
 		onError,
 	);
 	const { modules, isLoading: modulesLoading } = useOutlineData(roadmapId);
-	const { isOpen } = useSidebar();
+	const isOpen = useAppStore(selectSidebarOpen);
 	const [mode, setMode] = useState("outline"); // Default to outline view
 
 	const isLoading = roadmapLoading || modulesLoading;
