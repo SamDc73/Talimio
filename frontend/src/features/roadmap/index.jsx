@@ -2,8 +2,8 @@ import { useState } from "react";
 
 import RoadmapHeader from "@/components/header/RoadmapHeader";
 import { CourseSidebar } from "@/components/sidebar";
-import { ProgressProvider } from "../../hooks/useProgress";
 import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore";
+import { ProgressProvider } from "../../hooks/useProgress";
 // import MapView from "./map";  // Temporarily hidden
 import OutlineView from "./outline";
 import { useOutlineData } from "./outline/useOutlineData";

@@ -60,7 +60,7 @@ export function YoutubeCard({ video, onDelete, className = "" }) {
 			</h3>
 
 			{/* Description */}
-			<p className="text-gray-600 text-sm mb-4">
+			<p className="text-muted-foreground text-sm mb-4">
 				{video.channelName || video.channel} • {formatDuration(video.duration)}
 			</p>
 
@@ -78,9 +78,9 @@ export function YoutubeCard({ video, onDelete, className = "" }) {
 
 			{/* Progress */}
 			<div className="mb-6">
-				<div className="text-sm text-gray-600 mb-2">Progress</div>
+				<div className="text-sm text-muted-foreground mb-2">Progress</div>
 				<div className="flex items-center gap-3">
-					<div className="flex-1 bg-gray-100 rounded-full h-2">
+					<div className="flex-1 bg-muted rounded-full h-2">
 						<div
 							className="bg-video h-2 rounded-full transition-all duration-300"
 							style={{
@@ -88,7 +88,7 @@ export function YoutubeCard({ video, onDelete, className = "" }) {
 							}}
 						/>
 					</div>
-					<span className="text-sm text-gray-900 font-medium">
+					<span className="text-sm text-foreground font-medium">
 						{Math.round(video.progress || video.completionPercentage || 0)}%
 					</span>
 				</div>
@@ -96,7 +96,7 @@ export function YoutubeCard({ video, onDelete, className = "" }) {
 
 			{/* Footer */}
 			<div className="flex justify-between items-center">
-				<span className="text-sm text-gray-500">YouTube</span>
+				<span className="text-sm text-muted-foreground">YouTube</span>
 				<Link
 					to={`/videos/${video.uuid || video.id}`}
 					className="flex items-center gap-1 text-video hover:text-video-accent text-sm font-medium transition-colors"

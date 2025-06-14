@@ -140,13 +140,13 @@ export function BookCard({ book, onDelete, className = "" }) {
 					Reading Progress
 				</div>
 				<div className="flex items-center gap-3">
-					<div className="flex-1 bg-gray-100 rounded-full h-2">
+					<div className="flex-1 bg-muted rounded-full h-2">
 						<div
 							className="bg-book h-2 rounded-full transition-all duration-300"
 							style={{ width: `${readingProgress}%` }}
 						/>
 					</div>
-					<span className="text-sm text-gray-900 font-medium">
+					<span className="text-sm text-foreground font-medium">
 						{Math.round(readingProgress)}%
 					</span>
 				</div>
@@ -154,7 +154,7 @@ export function BookCard({ book, onDelete, className = "" }) {
 
 			{/* Footer */}
 			<div className="flex justify-between items-center">
-				<span className="text-sm text-gray-500">
+				<span className="text-sm text-muted-foreground">
 					{progress.type === "section-based"
 						? `${progress.completedSections}/${progress.totalSections} sections`
 						: `${progress.completedSections}/${progress.totalSections} pages`}

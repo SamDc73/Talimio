@@ -43,24 +43,29 @@ export const useAppState = () => {
 				if (preferences?.roadmapId) {
 					// Migrate to Zustand store
 					setActiveRoadmap(preferences.roadmapId);
-					updatePreference('onboardingCompleted', true);
-					updatePreference('userPreferences', preferences);
+					updatePreference("onboardingCompleted", true);
+					updatePreference("userPreferences", preferences);
 					// Clean up localStorage after migration
 					localStorage.removeItem(STORAGE_KEYS.USER_PREFERENCES);
-					console.log('Migrated onboarding preferences to Zustand');
+					console.log("Migrated onboarding preferences to Zustand");
 				}
 			} catch (error) {
 				console.error("Failed to migrate saved roadmap:", error);
 				handleResetOnboarding();
 			}
 		}
-	}, [activeRoadmapId, onboardingCompleted, setActiveRoadmap, updatePreference]);
+	}, [
+		activeRoadmapId,
+		onboardingCompleted,
+		setActiveRoadmap,
+		updatePreference,
+	]);
 
 	const handleResetOnboarding = useCallback(() => {
 		// Reset in Zustand store
 		setActiveRoadmap(null);
-		updatePreference('onboardingCompleted', false);
-		updatePreference('userPreferences', null);
+		updatePreference("onboardingCompleted", false);
+		updatePreference("userPreferences", null);
 		setShowOnboarding(true);
 		setCurrentRoadmapId(null);
 		resetOnboarding();
@@ -127,12 +132,12 @@ export const useAppState = () => {
 			};
 
 			console.log("Saving preferences to Zustand:", preferences);
-			
+
 			// Update Zustand store
 			setActiveRoadmap(newRoadmap.id);
-			updatePreference('onboardingCompleted', true);
-			updatePreference('userPreferences', preferences);
-			
+			updatePreference("onboardingCompleted", true);
+			updatePreference("userPreferences", preferences);
+
 			// Update local state
 			setCurrentRoadmapId(newRoadmap.id);
 			setShowOnboarding(false);
