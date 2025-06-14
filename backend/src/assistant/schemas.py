@@ -15,6 +15,7 @@ class ChatRequest(BaseModel):
 
     message: str
     conversation_history: list[ChatMessage] = []
+    user_id: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -31,6 +32,7 @@ class GenerateCourseRequest(BaseModel):
     skill_level: str = "beginner"
     description: str | None = None
     duration_weeks: int = 4
+    user_id: str | None = None
 
 
 class CourseModule(BaseModel):
@@ -60,6 +62,7 @@ class GenerateFlashcardsRequest(BaseModel):
     content: str
     topic: str | None = None
     num_cards: int = 10
+    user_id: str | None = None
 
 
 class FlashcardItem(BaseModel):

@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
 	BookOpen,
 	Bot,
+	Brain,
 	FileText,
 	HelpCircle,
 	Layers,
@@ -34,6 +35,7 @@ import { useTheme } from "../../contexts/ThemeContext";
 import { cn } from "../../lib/utils";
 import { useAssistantChat } from "../../services/assistantApi";
 import { Button } from "../button";
+import { PersonalizationDialog } from "../PersonalizationDialog";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -88,6 +90,7 @@ export function useChatSidebar() {
 export function UserAvatarMenu() {
 	const { theme, setTheme } = useTheme();
 	const [open, setOpen] = useState(false);
+	const [personalizationOpen, setPersonalizationOpen] = useState(false);
 
 	return (
 		<DropdownMenu open={open} onOpenChange={setOpen}>
@@ -135,6 +138,10 @@ export function UserAvatarMenu() {
 						<MessageSquare className="mr-2 h-4 w-4" />
 						<span>Notifications</span>
 					</DropdownMenuItem>
+					<DropdownMenuItem onClick={() => setPersonalizationOpen(true)}>
+						<Brain className="mr-2 h-4 w-4" />
+						<span>Personalize Talimio</span>
+					</DropdownMenuItem>
 					<DropdownMenuItem>
 						<Settings className="mr-2 h-4 w-4" />
 						<span>Settings</span>
@@ -165,6 +172,10 @@ export function UserAvatarMenu() {
 					<span>Log out</span>
 				</DropdownMenuItem>
 			</DropdownMenuContent>
+			<PersonalizationDialog
+				open={personalizationOpen}
+				onOpenChange={setPersonalizationOpen}
+			/>
 		</DropdownMenu>
 	);
 }

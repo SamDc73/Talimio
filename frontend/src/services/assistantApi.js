@@ -1,4 +1,5 @@
 import { useApi } from "../hooks/useApi";
+import { getUserHeaders } from "../utils/userUtils";
 
 export const assistantApi = {
 	async chat(message, conversationHistory = []) {
@@ -8,10 +9,12 @@ export const assistantApi = {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
+					...getUserHeaders(),
 				},
 				body: JSON.stringify({
 					message,
 					conversation_history: conversationHistory,
+					user_id: getUserHeaders()['x-user-id'],
 				}),
 			},
 		);

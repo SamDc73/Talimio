@@ -59,7 +59,7 @@ class TagGenerationError(AIError):
 class ModelManager:
     """Manage AI model interactions for the learning roadmap platform."""
 
-    def __init__(self) -> None:
+    def __init__(self, memory_wrapper: Any = None) -> None:
         self.settings = get_settings()
         self.api_key = os.getenv("OPENAI_API_KEY")
         if not self.api_key:
@@ -69,6 +69,61 @@ class ModelManager:
         os.environ["OPENAI_API_KEY"] = self.api_key
         self.model = "openai/gpt-4o"
         self._logger = logging.getLogger(__name__)
+        self.memory_wrapper = memory_wrapper
+
+    async def get_completion_with_memory(
+        self,
+        messages: list[dict[str, str]] | Sequence[dict[str, str]],
+        user_id: str | None = None,
+        *,
+        format_json: bool = True,
+        track_interaction: bool = True,
+    ) -> str | dict[str, Any] | list[Any]:
+        """Get completion with memory integration and tracking."""
+        # Build memory context if user_id and memory_wrapper are provided
+        if user_id and self.memory_wrapper:
+            try:
+                # Extract query from last user message for memory search
+                user_messages = [msg for msg in messages if msg.get("role") == "user"]
+                current_query = user_messages[-1].get("content", "") if user_messages else ""
+
+                # Get memory context
+                memory_context = await self.memory_wrapper.build_memory_context(user_id, current_query)
+
+                # Prepend memory context to system message if available
+                if memory_context:
+                    messages = list(messages)  # Convert to mutable list
+
+                    # Find existing system message or create new one
+                    system_message_idx = next(
+                        (i for i, msg in enumerate(messages) if msg.get("role") == "system"),
+                        None
+                    )
+
+                    memory_prompt = f"Personal Context:\n{memory_context}\n\nPlease use this context to personalize your response appropriately."
+
+                    if system_message_idx is not None:
+                        # Append to existing system message
+                        messages[system_message_idx]["content"] += f"\n\n{memory_prompt}"
+                    else:
+                        # Insert new system message at the beginning
+                        messages.insert(0, {"role": "system", "content": memory_prompt})
+
+                # Track the interaction if enabled
+                if track_interaction and current_query:
+                    await self.memory_wrapper.track_learning_interaction(
+                        user_id=user_id,
+                        interaction_type="ai_query",
+                        content=f"User asked: {current_query}",
+                        metadata={"model": self.model, "timestamp": "now"}
+                    )
+
+            except Exception as e:
+                self._logger.exception(f"Error integrating memory for user {user_id}: {e}")
+                # Continue without memory integration on error
+
+        # Get completion using existing method
+        return await self.get_completion(messages, format_json=format_json)
 
     async def get_completion(
         self,

@@ -29,6 +29,7 @@ from .roadmaps.models import Node, Roadmap  # noqa: F401
 from .roadmaps.router import nodes_router, router as roadmaps_router
 from .tagging.models import Tag, TagAssociation  # noqa: F401
 from .tagging.router import router as tagging_router
+from .user.router import router as user_router
 from .videos.models import Video  # noqa: F401
 from .videos.router import router as videos_router
 
@@ -106,6 +107,7 @@ def create_app() -> FastAPI:
     app.include_router(onboarding_router)
     app.include_router(lessons_router)
     app.include_router(tagging_router)
+    app.include_router(user_router)
     app.include_router(videos_router)
 
     # Register startup event
