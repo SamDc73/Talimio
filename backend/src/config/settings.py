@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings as PydanticBaseSettings, SettingsConfigDict
 
 
@@ -15,6 +16,12 @@ class Settings(PydanticBaseSettings):  # type: ignore[misc]
 
     # OpenAI Settings
     openai_api_key: str | None = None
+
+    # Authentication Settings
+    jwt_secret_key: str = Field(default="any-random-string-for-now", description="JWT secret key")
+    jwt_algorithm: str = Field(default="HS256", description="JWT algorithm")
+    jwt_expire_hours: int = Field(default=24, description="JWT token expiration in hours")
+    auth_disabled: bool = Field(default=False, description="Disable authentication for single-user mode")
 
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.local"),
