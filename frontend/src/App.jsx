@@ -3,7 +3,6 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import HomePage from "./features/home";
 import "@xyflow/react/dist/style.css";
 
-import { CodeBlockTest } from "@/components/code-block-test";
 import {
 	ChatSidebar,
 	ChatSidebarProvider,
@@ -67,7 +66,6 @@ export default function App() {
 						<Route path="/roadmap/:roadmapId" element={<RoadmapPage />} />
 						<Route path="/books/:bookId" element={<BookViewer />} />
 						<Route path="/videos/:videoId" element={<VideoViewer />} />
-						<Route path="/code-test" element={<CodeBlockTest />} />
 						<Route path="/" element={<HomePage />} />
 					</Routes>
 					<Toaster />
