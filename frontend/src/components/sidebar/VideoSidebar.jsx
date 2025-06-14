@@ -7,7 +7,7 @@ import {
 } from "@/services/videosService";
 import useAppStore from "@/stores/useAppStore";
 import { Clock, Download, FileText } from "lucide-react";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import CompletionCheckbox from "./CompletionCheckbox";
 import ProgressIndicator from "./ProgressIndicator";
@@ -42,7 +42,11 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 	const { toast } = useToast();
 
 	// Zustand store selectors - use shallow comparison to prevent infinite loops
-	const { videoChapterCompletion, updateVideoChapterCompletion, setVideoChapterStatus } = useAppStore(
+	const {
+		videoChapterCompletion,
+		updateVideoChapterCompletion,
+		setVideoChapterStatus,
+	} = useAppStore(
 		useShallow((state) => ({
 			videoChapterCompletion: state.videos.chapterCompletion[video?.uuid] || {},
 			updateVideoChapterCompletion: state.updateVideoChapterCompletion,
@@ -51,11 +55,15 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 	);
 
 	// Convert store object to Set for backwards compatibility - memoized to prevent infinite loops
-	const completedChapters = useMemo(() => new Set(
-		Object.entries(videoChapterCompletion)
-			.filter(([_, completed]) => completed)
-			.map(([chapterId, _]) => chapterId),
-	), [videoChapterCompletion]);
+	const completedChapters = useMemo(
+		() =>
+			new Set(
+				Object.entries(videoChapterCompletion)
+					.filter(([_, completed]) => completed)
+					.map(([chapterId, _]) => chapterId),
+			),
+		[videoChapterCompletion],
+	);
 
 	// Fetch API chapters
 	useEffect(() => {
@@ -327,7 +335,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 			<ProgressIndicator progress={getProgress()} />
 
 			{/* Video info */}
-			<div className="px-4 py-3 border-b border-zinc-200">
+			<div className="px-4 py-3 border-b border-border">
 				<h3 className="text-sm font-semibold text-zinc-800 truncate">
 					{video.title}
 				</h3>
@@ -348,7 +356,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 							type="button"
 							onClick={handleExtractChapters}
 							disabled={isExtracting}
-							className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
+							className="mt-4 px-4 py-2 bg-video text-white rounded-lg text-sm hover:bg-video-accent disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
 						>
 							<Download className="w-4 h-4" />
 							{isExtracting ? "Extracting..." : "Extract Chapters"}
@@ -356,7 +364,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 					</div>
 				) : (
 					<div className="space-y-2">
-						<div className="rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
+						<div className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden">
 							<div className="p-3">
 								<h4 className="text-sm font-semibold text-zinc-700 mb-2 flex items-center">
 									<FileText className="w-4 h-4 mr-2" />
@@ -371,7 +379,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 											<div
 												key={chapter.id}
 												className={`flex items-start gap-3 p-2 rounded-lg transition-all duration-200 ${
-													isActive ? "bg-red-50" : "hover:bg-zinc-50"
+													isActive ? "bg-video/10" : "hover:bg-muted"
 												}`}
 											>
 												<CompletionCheckbox
@@ -388,7 +396,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 														<div className="flex items-center gap-2">
 															<span
 																className={`text-xs font-mono ${
-																	isActive ? "text-red-600" : "text-zinc-500"
+																	isActive ? "text-video-text" : "text-zinc-500"
 																}`}
 															>
 																{chapter.timeStr}
@@ -398,7 +406,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 																	isCompleted
 																		? "text-emerald-700"
 																		: isActive
-																			? "text-red-900"
+																			? "text-video-text"
 																			: "text-zinc-700"
 																}`}
 															>
@@ -410,7 +418,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 															<div className="mt-2">
 																<div className="h-1 bg-zinc-200 rounded-full overflow-hidden">
 																	<div
-																		className="h-full bg-red-500 transition-all duration-300"
+																		className="h-full bg-video/100 transition-all duration-300"
 																		style={{
 																			width: `${Math.min(
 																				100,
@@ -438,7 +446,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 			</SidebarNav>
 
 			{/* Footer with video duration */}
-			<div className="px-4 py-3 border-t border-zinc-200 bg-zinc-50">
+			<div className="px-4 py-3 border-t border-border bg-muted">
 				<div className="text-xs text-zinc-600">
 					<p>Duration: {formatDuration(video.duration)}</p>
 					{chapters.length > 0 && (

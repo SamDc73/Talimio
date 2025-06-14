@@ -63,15 +63,15 @@ export function CourseCard({ course, onDelete, className = "" }) {
 
 			{/* Progress */}
 			<div className="mb-6">
-				<div className="text-sm text-gray-600 mb-2">Progress</div>
+				<div className="text-sm text-muted-foreground mb-2">Progress</div>
 				<div className="flex items-center gap-3">
-					<div className="flex-1 bg-gray-100 rounded-full h-2">
+					<div className="flex-1 bg-muted rounded-full h-2">
 						<div
 							className="bg-course h-2 rounded-full transition-all duration-300"
 							style={{ width: `${course.progress || 0}%` }}
 						/>
 					</div>
-					<span className="text-sm text-gray-900 font-medium">
+					<span className="text-sm text-foreground font-medium">
 						{course.progress || 0}%
 					</span>
 				</div>
@@ -79,7 +79,7 @@ export function CourseCard({ course, onDelete, className = "" }) {
 
 			{/* Footer */}
 			<div className="flex justify-between items-center">
-				<span className="text-sm text-gray-500">
+				<span className="text-sm text-muted-foreground">
 					{course.modules || 0} modules
 				</span>
 				<Link

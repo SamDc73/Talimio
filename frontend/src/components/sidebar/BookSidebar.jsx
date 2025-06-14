@@ -341,8 +341,8 @@ function BookSidebarV2({
 				})}
 
 				{/* Book metadata section */}
-				<div className="rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden mt-6">
-					<div className="px-4 py-3 border-b border-zinc-100">
+				<div className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden mt-6">
+					<div className="px-4 py-3 border-b border-border">
 						<h4 className="font-semibold text-sm text-zinc-900 flex items-center gap-2">
 							<FileText className="w-4 h-4" />
 							Book Details

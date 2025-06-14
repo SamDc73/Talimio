@@ -2,7 +2,7 @@
  * @deprecated This store is deprecated. Use useAppStore instead.
  * All state management should go through the single useAppStore to follow
  * the documented state management architecture.
- * 
+ *
  * Migration guide:
  * - Book pages: use useAppStore's updateBookProgress(bookId, { currentPage })
  * - Book zoom: use useAppStore's updateBookProgress(bookId, { zoomLevel })

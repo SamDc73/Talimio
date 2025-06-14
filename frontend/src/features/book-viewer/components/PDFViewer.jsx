@@ -321,8 +321,8 @@ const PDFViewer = forwardRef(
 												renderAnnotationLayer={false}
 												onRenderTextLayerError={(error) => {
 													// Suppress AbortException warnings for TextLayer
-													if (error.name !== 'AbortException') {
-														console.warn('TextLayer render error:', error);
+													if (error.name !== "AbortException") {
+														console.warn("TextLayer render error:", error);
 													}
 												}}
 												loading={

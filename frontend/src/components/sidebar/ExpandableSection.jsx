@@ -19,11 +19,11 @@ function ExpandableSection({
 			className={`rounded-2xl border ${
 				isActive
 					? "border-emerald-200 bg-emerald-50/50"
-					: "border-zinc-200 bg-white"
+					: "border-border bg-white"
 			} shadow-sm overflow-hidden ${className}`}
 		>
 			<div
-				className={`flex items-center gap-3 justify-between w-full px-4 py-3 text-left font-semibold text-base text-zinc-900 border-b border-zinc-100 rounded-t-2xl ${showExpandButton ? "cursor-pointer" : ""}`}
+				className={`flex items-center gap-3 justify-between w-full px-4 py-3 text-left font-semibold text-base text-foreground border-b border-border rounded-t-2xl ${showExpandButton ? "cursor-pointer" : ""}`}
 				style={{ background: isActive ? "transparent" : "#fff" }}
 				onClick={showExpandButton ? onToggle : undefined}
 				role={showExpandButton ? "button" : undefined}

@@ -65,15 +65,15 @@ export function FlashcardDeckCard({ deck, onDelete, className = "" }) {
 
 			{/* Progress */}
 			<div className="mb-6">
-				<div className="text-sm text-gray-600 mb-2">Mastery Level</div>
+				<div className="text-sm text-muted-foreground mb-2">Mastery Level</div>
 				<div className="flex items-center gap-3">
-					<div className="flex-1 bg-gray-100 rounded-full h-2">
+					<div className="flex-1 bg-muted rounded-full h-2">
 						<div
 							className="bg-flashcard h-2 rounded-full transition-all duration-300"
 							style={{ width: `${progressPercentage}%` }}
 						/>
 					</div>
-					<span className="text-sm text-gray-900 font-medium">
+					<span className="text-sm text-foreground font-medium">
 						Level {deck.masteryLevel}
 					</span>
 				</div>
@@ -81,7 +81,7 @@ export function FlashcardDeckCard({ deck, onDelete, className = "" }) {
 
 			{/* Footer */}
 			<div className="flex justify-between items-center">
-				<span className="text-sm text-gray-500">
+				<span className="text-sm text-muted-foreground">
 					{deck.totalCards} cards • {deck.due} due
 				</span>
 				<Link

@@ -21,11 +21,11 @@ class ErrorBoundary extends React.Component {
 	render() {
 		if (this.state.hasError) {
 			return (
-				<div className="error-boundary p-4 m-4 border border-red-500 rounded bg-red-50">
-					<h2 className="text-xl font-bold text-red-700 mb-2">
+				<div className="error-boundary p-4 m-4 border border-destructive rounded bg-destructive/10">
+					<h2 className="text-xl font-bold text-destructive mb-2">
 						Something went wrong
 					</h2>
-					<details className="whitespace-pre-wrap text-sm text-red-600">
+					<details className="whitespace-pre-wrap text-sm text-destructive">
 						{this.state.error?.toString()}
 						<br />
 						{this.state.errorInfo?.componentStack}

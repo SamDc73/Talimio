@@ -69,32 +69,32 @@ const VARIANTS = {
 	course: {
 		label: "Course",
 		icon: Sparkles,
-		badge: "bg-cyan-50 text-cyan-600",
-		grad: "from-cyan-400 to-cyan-500",
+		badge: "bg-course/10 text-course-text",
+		grad: "from-course to-course-accent",
 	},
 	book: {
 		label: "PDF",
 		icon: FileText,
-		badge: "bg-blue-50 text-blue-600",
-		grad: "from-blue-400 to-blue-500",
+		badge: "bg-book/10 text-book-text",
+		grad: "from-book to-book-accent",
 	},
 	youtube: {
 		label: "Video",
 		icon: Youtube,
-		badge: "bg-violet-50 text-violet-600",
-		grad: "from-violet-400 to-violet-500",
+		badge: "bg-video/10 text-video-text",
+		grad: "from-video to-video-accent",
 	},
 	flashcards: {
 		label: "Flashcards",
 		icon: Layers,
-		badge: "bg-lime-100 text-lime-700",
-		grad: "from-lime-500 to-lime-600",
+		badge: "bg-flashcard/10 text-flashcard-text",
+		grad: "from-flashcard to-flashcard-accent",
 	},
 	roadmap: {
 		label: "Course",
 		icon: Sparkles,
-		badge: "bg-cyan-50 text-cyan-600",
-		grad: "from-cyan-400 to-cyan-500",
+		badge: "bg-course/10 text-course-text",
+		grad: "from-course to-course-accent",
 	},
 };
 
@@ -277,7 +277,7 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
 				className={`bg-white rounded-2xl overflow-hidden relative flex flex-col h-full cursor-pointer ${
 					pinned
 						? "shadow-md border-2 border-primary/10 bg-primary/5"
-						: "shadow-sm hover:shadow-md border border-slate-100"
+						: "shadow-sm hover:shadow-md border border-border"
 				}`}
 				onMouseEnter={() => setHover(true)}
 				onMouseLeave={() => setHover(false)}
@@ -295,13 +295,13 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
 							<span>{V.label}</span>
 						</div>
 					</div>
-					<h3 className="text-xl font-display font-bold text-slate-900 hover:underline line-clamp-2 mb-1">
+					<h3 className="text-xl font-display font-bold text-foreground hover:underline line-clamp-2 mb-1">
 						{item.title}
 					</h3>
 
 					{/* Video metadata */}
 					{item.type === "youtube" && (
-						<p className="text-slate-600 text-sm mb-4">
+						<p className="text-muted-foreground text-sm mb-4">
 							by {item.channelName || item.channel || "Unknown Channel"} •{" "}
 							{formatDuration(item.duration)}
 						</p>
@@ -309,7 +309,7 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
 
 					{/* Book metadata */}
 					{item.type === "book" && (
-						<p className="text-slate-600 text-sm mb-4">
+						<p className="text-muted-foreground text-sm mb-4">
 							by {item.author || "Unknown Author"} •{" "}
 							{item.pageCount || item.pages || "Unknown"} pages
 						</p>
@@ -319,7 +319,7 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
 					{item.type !== "youtube" &&
 						item.type !== "book" &&
 						item.description && (
-							<p className="text-slate-600 text-sm line-clamp-2 mb-4">
+							<p className="text-muted-foreground text-sm line-clamp-2 mb-4">
 								{item.description}
 							</p>
 						)}
@@ -348,14 +348,14 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
 					</div>
 					<div>
 						{isFlashcard && (
-							<div className="flex justify-between text-xs text-slate-500 mb-2">
+							<div className="flex justify-between text-xs text-muted-foreground mb-2">
 								<span>
 									{item.overdue > 0 && (
 										<>
-											<span className="text-orange-600 font-medium">
+											<span className="text-overdue-text font-medium">
 												{item.overdue} overdue
 											</span>
-											<span className="text-slate-400 mx-1">•</span>
+											<span className="text-muted-foreground mx-1">•</span>
 										</>
 									)}
 									<span>{item.totalCards || item.cardCount || 0} cards</span>
@@ -363,7 +363,7 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
 							</div>
 						)}
 						{!isFlashcard && progressValue != null && progressValue !== "" && (
-							<div className="flex justify-between text-xs text-slate-500 mb-2">
+							<div className="flex justify-between text-xs text-muted-foreground mb-2">
 								<span>{Math.round(progressValue)}%</span>
 							</div>
 						)}
@@ -1076,7 +1076,7 @@ export default function HomePage() {
 								<h1 className="text-4xl md:text-5xl font-display font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 mb-4 tracking-tight">
 									Welcome Back!
 								</h1>
-								<p className="text-lg text-slate-600 max-w-2xl mx-auto">
+								<p className="text-lg text-muted-foreground max-w-2xl mx-auto">
 									Ready to continue your journey? Pick up where you left off or
 									explore something new today.
 								</p>
@@ -1088,23 +1088,23 @@ export default function HomePage() {
 								transition={{ duration: 0.5, delay: 0.1 }}
 								className="max-w-2xl mx-auto mb-6"
 							>
-								<div className="bg-white rounded-2xl shadow-sm p-2 border border-slate-200 transition-all hover:shadow-md">
+								<div className="bg-white rounded-2xl shadow-sm p-2 border border-border transition-all hover:shadow-md">
 									<div className="flex items-center">
 										<div
 											className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${
 												isGenerateMode
-													? "bg-teal-50"
+													? "bg-course/10"
 													: isYoutubeMode
-														? "bg-red-50"
+														? "bg-video/10"
 														: ""
 											}`}
 										>
 											{isGenerateMode ? (
-												<Sparkles className="text-teal-500" size={20} />
+												<Sparkles className="text-course" size={20} />
 											) : isYoutubeMode ? (
-												<Youtube className="text-red-500" size={20} />
+												<Youtube className="text-video" size={20} />
 											) : (
-												<Search className="text-slate-400" size={20} />
+												<Search className="text-muted-foreground" size={20} />
 											)}
 											<Input
 												type="text"
@@ -1132,14 +1132,14 @@ export default function HomePage() {
 										</div>
 
 										<div className="flex items-center gap-2 pl-2">
-											<div className="h-8 w-px bg-slate-200" />
+											<div className="h-8 w-px bg-border" />
 											{isGenerateMode ? (
 												<>
 													<Button
 														variant="ghost"
 														size="sm"
 														onClick={() => setIsGenerateMode(false)}
-														className="text-slate-500"
+														className="text-muted-foreground"
 													>
 														Cancel
 													</Button>
@@ -1158,7 +1158,7 @@ export default function HomePage() {
 														variant="ghost"
 														size="sm"
 														onClick={() => setIsYoutubeMode(false)}
-														className="text-slate-500"
+														className="text-muted-foreground"
 													>
 														Cancel
 													</Button>
@@ -1172,7 +1172,7 @@ export default function HomePage() {
 															}
 														}}
 														disabled={!searchQuery.trim()}
-														className="bg-red-500 hover:bg-red-600 text-white"
+														className="bg-video hover:bg-video-accent text-white"
 													>
 														Add Video
 													</Button>
@@ -1184,7 +1184,7 @@ export default function HomePage() {
 															variant="ghost"
 															size="sm"
 															onClick={() => setSearchQuery("")}
-															className="text-slate-500"
+															className="text-muted-foreground"
 														>
 															Clear
 														</Button>
@@ -1298,7 +1298,7 @@ export default function HomePage() {
 											variant="ghost"
 											size="sm"
 											onClick={() => setActiveFilter("all")}
-											className="h-4 w-4 p-0 ml-1 text-slate-400 hover:text-slate-600"
+											className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
 										>
 											<X className="h-3 w-3" />
 											<span className="sr-only">Remove filter</span>
@@ -1313,7 +1313,7 @@ export default function HomePage() {
 											variant="ghost"
 											size="sm"
 											onClick={() => setActiveSort("last-accessed")}
-											className="h-4 w-4 p-0 ml-1 text-slate-400 hover:text-slate-600"
+											className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
 										>
 											<X className="h-3 w-3" />
 											<span className="sr-only">Remove sort</span>
@@ -1328,7 +1328,7 @@ export default function HomePage() {
 											variant="ghost"
 											size="sm"
 											onClick={() => setSortDirection("desc")}
-											className="h-4 w-4 p-0 ml-1 text-slate-400 hover:text-slate-600"
+											className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
 										>
 											<X className="h-3 w-3" />
 											<span className="sr-only">Remove sort direction</span>
@@ -1347,7 +1347,7 @@ export default function HomePage() {
 											setActiveSort("last-accessed");
 											setSortDirection("desc");
 										}}
-										className="text-xs text-slate-500 h-7 px-2 ml-auto"
+										className="text-xs text-muted-foreground h-7 px-2 ml-auto"
 									>
 										Reset All
 									</Button>
@@ -1374,7 +1374,7 @@ export default function HomePage() {
 											<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 												{pinnedItems.map(renderCard)}
 											</div>
-											<div className="border-b border-slate-200 my-8" />
+											<div className="border-b border-border my-8" />
 										</motion.section>
 									)}
 								</AnimatePresence>
@@ -1391,7 +1391,7 @@ export default function HomePage() {
 										visible.map(renderCard)
 									) : (
 										<div className="col-span-full text-center py-12">
-											<p className="text-slate-500">
+											<p className="text-muted-foreground">
 												No content found matching your criteria.
 											</p>
 											<div className="flex justify-center gap-4 mt-4 flex-wrap">
@@ -1460,7 +1460,7 @@ export default function HomePage() {
 										<h3 className="text-xl font-display font-bold text-emerald-700 mb-2">
 											All Caught Up!
 										</h3>
-										<p className="text-slate-600">
+										<p className="text-muted-foreground">
 											You've completed all your learning tasks. Great job!
 										</p>
 									</div>
@@ -1524,8 +1524,8 @@ export default function HomePage() {
 									</div>
 									{isExtractingMetadata && (
 										<div className="flex items-center justify-center py-4">
-											<div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-500 mr-2" />
-											<span className="text-sm text-gray-600">
+											<div className="animate-spin rounded-full h-6 w-6 border-b-2 border-book mr-2" />
+											<span className="text-sm text-muted-foreground">
 												Extracting book information...
 											</span>
 										</div>
@@ -1565,7 +1565,7 @@ export default function HomePage() {
 										disabled={
 											!selectedFile || !bookTitle.trim() || !bookAuthor.trim()
 										}
-										className="bg-indigo-500 hover:bg-indigo-600 text-white"
+										className="bg-book hover:bg-book-accent text-white"
 									>
 										Upload Book
 									</Button>
@@ -1610,7 +1610,7 @@ export default function HomePage() {
 									<Button
 										onClick={handleYoutubeAdd}
 										disabled={!youtubeUrl.trim() || isAddingVideo}
-										className="bg-red-500 hover:bg-red-600 text-white"
+										className="bg-video hover:bg-video-accent text-white"
 									>
 										{isAddingVideo ? "Adding..." : "Add Video"}
 									</Button>
@@ -1676,7 +1676,7 @@ export default function HomePage() {
 									<Button
 										onClick={handleCreateDeck}
 										disabled={!newDeckTitle.trim()}
-										className="bg-amber-500 hover:bg-amber-600 text-white"
+										className="bg-flashcard hover:bg-flashcard-accent text-white"
 									>
 										Create Deck
 									</Button>
@@ -1710,7 +1710,7 @@ export default function HomePage() {
 												}}
 												className="group relative"
 											>
-												<span className="absolute right-full mr-3 bg-white text-slate-800 px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+												<span className="absolute right-full mr-3 bg-white text-foreground px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
 													Generate Course
 												</span>
 												<Button
@@ -1742,7 +1742,7 @@ export default function HomePage() {
 												}}
 												className="group relative"
 											>
-												<span className="absolute right-full mr-3 bg-white text-slate-800 px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+												<span className="absolute right-full mr-3 bg-white text-foreground px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
 													Upload Book
 												</span>
 												<Button
@@ -1774,7 +1774,7 @@ export default function HomePage() {
 												}}
 												className="group relative"
 											>
-												<span className="absolute right-full mr-3 bg-white text-slate-800 px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+												<span className="absolute right-full mr-3 bg-white text-foreground px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
 													Add YouTube Video
 												</span>
 												<Button
@@ -1803,7 +1803,7 @@ export default function HomePage() {
 												}}
 												className="group relative"
 											>
-												<span className="absolute right-full mr-3 bg-white text-slate-800 px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+												<span className="absolute right-full mr-3 bg-white text-foreground px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
 													Create Flashcards
 												</span>
 												<Button
@@ -1839,7 +1839,7 @@ export default function HomePage() {
 										size="icon"
 										className={`h-14 w-14 rounded-full shadow-lg transition-all duration-200 hover:scale-110 ${
 											isFabExpanded
-												? "bg-red-500 hover:bg-red-600"
+												? "bg-destructive hover:bg-destructive/90"
 												: "bg-gradient-to-r from-course to-completed hover:from-course-accent hover:to-completed"
 										}`}
 									>
