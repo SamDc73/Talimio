@@ -12,8 +12,14 @@ pydantic
 pydantic-settings
 python-dotenv
 
+# Authentication
+pyjwt
+passlib[bcrypt]
+
 # AI
 litellm
+pgvector
+mem0ai
 
 # Spaced Repetition
 fsrs

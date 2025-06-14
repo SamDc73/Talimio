@@ -9,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .assistant.router import router as assistant_router
+from .auth.models import User  # noqa: F401
+from .auth.router import router as auth_router
 
 # Import models to register them with SQLAlchemy - MUST be after database.base import
 from .books.models import Book, BookProgress  # noqa: F401
@@ -94,6 +96,7 @@ def create_app() -> FastAPI:
         return {"status": "healthy"}
 
     # Register routers
+    app.include_router(auth_router)
     app.include_router(assistant_router)
     app.include_router(books_router)
     app.include_router(content_router)
@@ -121,6 +124,11 @@ def create_app() -> FastAPI:
                 from src.database.add_missing_columns import run_migrations
 
                 await run_migrations(engine)
+
+                # Run auth migration
+                from src.database.add_user_table import add_user_table
+
+                await add_user_table()
 
                 break  # Success - exit the retry loop
 
