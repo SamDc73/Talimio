@@ -4,6 +4,7 @@ from uuid import uuid4
 from fastapi import HTTPException, status
 
 from src.ai.client import ModelManager
+from src.ai.memory import get_memory_wrapper
 from src.ai.prompts import (
     ASSISTANT_CHAT_SYSTEM_PROMPT,
     COURSE_GENERATION_PROMPT,
@@ -24,10 +25,10 @@ from .schemas import (
 
 async def chat_with_assistant(request: ChatRequest) -> ChatResponse:
     """
-    Chat with the AI assistant.
+    Chat with the AI assistant with memory integration.
 
     Args:
-        request: Chat request containing message and conversation history
+        request: Chat request containing message, conversation history, and optional user_id
 
     Returns
     -------
@@ -38,7 +39,8 @@ async def chat_with_assistant(request: ChatRequest) -> ChatResponse:
         HTTPException: If chat fails
     """
     try:
-        model_manager = ModelManager()
+        memory_wrapper = get_memory_wrapper()
+        model_manager = ModelManager(memory_wrapper=memory_wrapper)
 
         # Build conversation messages
         messages = []
@@ -66,14 +68,34 @@ async def chat_with_assistant(request: ChatRequest) -> ChatResponse:
             },
         )
 
-        # Get response from AI
-        response = await model_manager.get_completion(messages, format_json=False)
+        # Get response from AI with memory integration
+        response = await model_manager.get_completion_with_memory(
+            messages,
+            user_id=request.user_id,
+            format_json=False
+        )
 
         if not response or not isinstance(response, str):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to get response from assistant",
             )
+
+        # Store the conversation in memory for future context
+        if request.user_id:
+            try:
+                await memory_wrapper.add_memory(
+                    user_id=request.user_id,
+                    content=f"User: {request.message}\nAssistant: {response}",
+                    metadata={
+                        "interaction_type": "chat",
+                        "conversation_id": str(uuid4()),
+                        "timestamp": "now"
+                    }
+                )
+            except Exception as e:
+                logging.warning(f"Failed to store chat memory for user {request.user_id}: {e}")
+                # Continue without failing the chat
 
         return ChatResponse(
             response=response,
@@ -92,7 +114,7 @@ async def chat_with_assistant(request: ChatRequest) -> ChatResponse:
 
 async def generate_course(request: GenerateCourseRequest) -> GenerateCourseResponse:
     """
-    Generate a complete course on a topic.
+    Generate a complete course on a topic with personalization.
 
     Args:
         request: Course generation request
@@ -106,7 +128,8 @@ async def generate_course(request: GenerateCourseRequest) -> GenerateCourseRespo
         HTTPException: If course generation fails
     """
     try:
-        model_manager = ModelManager()
+        memory_wrapper = get_memory_wrapper()
+        model_manager = ModelManager(memory_wrapper=memory_wrapper)
 
         prompt = COURSE_GENERATION_PROMPT.format(
             topic=request.topic,
@@ -121,7 +144,11 @@ async def generate_course(request: GenerateCourseRequest) -> GenerateCourseRespo
             {"role": "user", "content": prompt},
         ]
 
-        response = await model_manager.get_completion(messages, format_json=True)
+        response = await model_manager.get_completion_with_memory(
+            messages,
+            user_id=request.user_id,
+            format_json=True
+        )
 
         if not isinstance(response, dict):
             raise HTTPException(
@@ -149,7 +176,7 @@ async def generate_course(request: GenerateCourseRequest) -> GenerateCourseRespo
             modules.append(module)
             total_hours += estimated_hours
 
-        return GenerateCourseResponse(
+        course_response = GenerateCourseResponse(
             course_id=uuid4(),
             title=course_title,
             description=course_description,
@@ -157,6 +184,27 @@ async def generate_course(request: GenerateCourseRequest) -> GenerateCourseRespo
             modules=modules,
             total_estimated_hours=total_hours,
         )
+
+        # Track course generation in memory
+        if request.user_id:
+            try:
+                await memory_wrapper.add_memory(
+                    user_id=request.user_id,
+                    content=f"Generated course '{course_title}' on {request.topic}",
+                    metadata={
+                        "interaction_type": "course_generation",
+                        "topic": request.topic,
+                        "skill_level": request.skill_level,
+                        "duration_weeks": request.duration_weeks,
+                        "total_hours": total_hours,
+                        "num_modules": len(modules),
+                        "timestamp": "now"
+                    }
+                )
+            except Exception as e:
+                logging.warning(f"Failed to store course generation memory for user {request.user_id}: {e}")
+
+        return course_response
 
     except HTTPException:
         raise
@@ -170,7 +218,7 @@ async def generate_course(request: GenerateCourseRequest) -> GenerateCourseRespo
 
 async def generate_flashcards(request: GenerateFlashcardsRequest) -> GenerateFlashcardsResponse:
     """
-    Generate flashcards from content.
+    Generate flashcards from content with personalization.
 
     Args:
         request: Flashcard generation request
@@ -184,7 +232,8 @@ async def generate_flashcards(request: GenerateFlashcardsRequest) -> GenerateFla
         HTTPException: If flashcard generation fails
     """
     try:
-        model_manager = ModelManager()
+        memory_wrapper = get_memory_wrapper()
+        model_manager = ModelManager(memory_wrapper=memory_wrapper)
 
         topic = request.topic or "General Topic"
 
@@ -201,7 +250,11 @@ async def generate_flashcards(request: GenerateFlashcardsRequest) -> GenerateFla
             {"role": "user", "content": prompt},
         ]
 
-        response = await model_manager.get_completion(messages, format_json=True)
+        response = await model_manager.get_completion_with_memory(
+            messages,
+            user_id=request.user_id,
+            format_json=True
+        )
 
         if not isinstance(response, dict) or "flashcards" not in response:
             raise HTTPException(
@@ -221,11 +274,30 @@ async def generate_flashcards(request: GenerateFlashcardsRequest) -> GenerateFla
             )
             flashcards.append(flashcard)
 
-        return GenerateFlashcardsResponse(
+        flashcard_response = GenerateFlashcardsResponse(
             flashcards=flashcards,
             topic=topic,
             total_cards=len(flashcards),
         )
+
+        # Track flashcard generation in memory
+        if request.user_id:
+            try:
+                await memory_wrapper.add_memory(
+                    user_id=request.user_id,
+                    content=f"Generated {len(flashcards)} flashcards on {topic}",
+                    metadata={
+                        "interaction_type": "flashcard_generation",
+                        "topic": topic,
+                        "num_cards": len(flashcards),
+                        "content_preview": request.content[:200],
+                        "timestamp": "now"
+                    }
+                )
+            except Exception as e:
+                logging.warning(f"Failed to store flashcard generation memory for user {request.user_id}: {e}")
+
+        return flashcard_response
 
     except HTTPException:
         raise

@@ -4,11 +4,12 @@ from uuid import UUID, uuid4
 from fastapi import HTTPException, status
 
 from src.ai.client import create_lesson_body
+from src.ai.memory import get_memory_wrapper
 from src.lessons.schemas import LessonCreateRequest, LessonResponse, LessonUpdateRequest
 from src.storage.lesson_dao import LessonDAO
 
 
-async def generate_lesson(request: LessonCreateRequest) -> LessonResponse:
+async def generate_lesson(request: LessonCreateRequest, user_id: str | None = None) -> LessonResponse:
     """
     Generate a new lesson and store it in the database.
 
@@ -26,7 +27,34 @@ async def generate_lesson(request: LessonCreateRequest) -> LessonResponse:
     import logging
 
     try:
-        # Generate the lesson content using AI
+        # Generate the lesson content using AI with memory context
+        memory_wrapper = get_memory_wrapper()
+
+        # Get personalized context if user_id is provided
+        lesson_query = f"Generate lesson for {request.node_meta.get('title', 'learning topic')}"
+        if user_id:
+            try:
+                # Search for relevant learning history
+                relevant_memories = await memory_wrapper.search_memories(
+                    user_id=user_id,
+                    query=lesson_query,
+                    limit=3
+                )
+
+                # Add learning preferences to node metadata if available
+                if relevant_memories:
+                    memory_context = []
+                    for mem in relevant_memories:
+                        memory_content = mem.get("memory", mem.get("content", ""))
+                        if memory_content:
+                            memory_context.append(memory_content)
+
+                    if memory_context:
+                        # Enhance node metadata with learning context
+                        request.node_meta["learning_context"] = "\n".join(memory_context[:3])
+            except Exception as e:
+                logging.warning(f"Failed to get memory context for lesson generation: {e}")
+
         md_source = await create_lesson_body(request.node_meta)
         lesson_id = uuid4()
         now = datetime.now(UTC)
@@ -94,13 +122,33 @@ async def generate_lesson(request: LessonCreateRequest) -> LessonResponse:
         except Exception as cache_error:
             logging.warning(f"Failed to cache lesson: {cache_error!s}")
 
+        # Track lesson generation in memory
+        if user_id:
+            try:
+                await memory_wrapper.add_memory(
+                    user_id=user_id,
+                    content=f"Generated lesson '{request.node_meta.get('title', 'untitled')}' for course {request.course_id}",
+                    metadata={
+                        "interaction_type": "lesson_generation",
+                        "lesson_id": str(lesson_id),
+                        "course_id": str(request.course_id),
+                        "slug": request.slug,
+                        "title": request.node_meta.get("title", "untitled"),
+                        "skill_level": request.node_meta.get("skill_level", "unknown"),
+                        "content_length": len(md_source),
+                        "timestamp": "now"
+                    }
+                )
+            except Exception as e:
+                logging.warning(f"Failed to store lesson generation memory for user {user_id}: {e}")
+
         return lesson_response
     except Exception as e:
         logging.exception("Error generating lesson")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
-async def get_lesson(lesson_id: UUID) -> LessonResponse:
+async def get_lesson(lesson_id: UUID, user_id: str | None = None) -> LessonResponse:
     """
     Retrieve a lesson by its ID.
 
@@ -134,7 +182,27 @@ async def get_lesson(lesson_id: UUID) -> LessonResponse:
                 except Exception as cache_error:
                     logging.warning(f"Failed to cache lesson: {cache_error!s}")
 
-                return LessonResponse(**result)
+                lesson_response = LessonResponse(**result)
+
+                # Track lesson access in memory
+                if user_id:
+                    try:
+                        memory_wrapper = get_memory_wrapper()
+                        await memory_wrapper.add_memory(
+                            user_id=user_id,
+                            content=f"Accessed lesson '{lesson_response.slug}' (ID: {lesson_id})",
+                            metadata={
+                                "interaction_type": "lesson_access",
+                                "lesson_id": str(lesson_id),
+                                "course_id": str(lesson_response.course_id),
+                                "slug": lesson_response.slug,
+                                "timestamp": "now"
+                            }
+                        )
+                    except Exception as e:
+                        logging.warning(f"Failed to store lesson access memory for user {user_id}: {e}")
+
+                return lesson_response
         except Exception as db_error:
             logging.warning(f"Database error when retrieving lesson {lesson_id}: {db_error!s}")
             logging.info("Trying fallback mechanism...")

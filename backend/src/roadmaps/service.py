@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from src.ai.client import ModelManager
+from src.ai.memory import get_memory_wrapper
 from src.core.exceptions import ResourceNotFoundError, ValidationError
 from src.database.pagination import Paginator
 from src.database.session import DbSession
@@ -17,11 +18,13 @@ logger = logging.getLogger(__name__)
 
 
 class RoadmapService:
-    """Service for handling roadmap operations."""
+    """Service for handling roadmap operations with memory integration."""
 
-    def __init__(self, session: DbSession) -> None:
+    def __init__(self, session: DbSession, user_id: str | None = None) -> None:
         self._session = session
-        self.ai_client = ModelManager()
+        self.user_id = user_id
+        self.memory_wrapper = get_memory_wrapper()
+        self.ai_client = ModelManager(memory_wrapper=self.memory_wrapper)
 
     async def get_roadmaps(
         self,
@@ -74,6 +77,25 @@ class RoadmapService:
 
         try:
             logger.info(f"Generating initial nodes for roadmap '{data.title}' (level: {data.skill_level})")
+
+            # Create personalized roadmap using memory
+            roadmap_query = f"Create roadmap for {data.title} at {data.skill_level} level"
+            if self.user_id:
+                # Search for relevant learning preferences and history
+                relevant_memories = await self.memory_wrapper.search_memories(
+                    user_id=self.user_id,
+                    query=roadmap_query,
+                    limit=3
+                )
+
+                # Add memory context to AI generation if available
+                if relevant_memories:
+                    memory_context = "\n".join([
+                        f"Previous learning: {mem.get('memory', mem.get('content', ''))}"
+                        for mem in relevant_memories
+                    ])
+                    roadmap_query += f"\n\nUser's Learning History:\n{memory_context}"
+
             nodes_data = await self.ai_client.generate_roadmap_content(
                 title=data.title,
                 skill_level=data.skill_level,
@@ -96,6 +118,26 @@ class RoadmapService:
         else:
             await self._session.commit()
             logger.info(f"Roadmap '{roadmap.id}' created successfully.")
+
+            # Track roadmap creation in memory
+            if self.user_id:
+                try:
+                    await self.memory_wrapper.add_memory(
+                        user_id=self.user_id,
+                        content=f"Created roadmap '{data.title}' for {data.skill_level} level",
+                        metadata={
+                            "interaction_type": "roadmap_creation",
+                            "roadmap_id": str(roadmap.id),
+                            "title": data.title,
+                            "skill_level": data.skill_level,
+                            "description": data.description,
+                            "num_nodes": len(nodes_data),
+                            "timestamp": "now"
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to store roadmap creation memory for user {self.user_id}: {e}")
+
             return roadmap
 
     async def _create_nodes_recursive(
@@ -389,8 +431,9 @@ class RoadmapService:
         return node
 
     async def update_node_status(self, node_id: UUID, status: str) -> Node:
-        """Update node status directly by ID."""
+        """Update node status directly by ID with memory tracking."""
         node = await self.get_node_direct(node_id)
+        old_status = node.status
 
         # Validate status
         valid_statuses = ["not_started", "in_progress", "done"]
@@ -412,6 +455,33 @@ class RoadmapService:
 
         await self._session.commit()
         await self._session.refresh(node)
+
+        # Track node progress in memory
+        if self.user_id and old_status != status:
+            try:
+                content = f"Updated node '{node.title}' status from {old_status} to {status}"
+                if status == "done":
+                    content = f"Completed node '{node.title}'"
+                elif status == "in_progress":
+                    content = f"Started working on node '{node.title}'"
+
+                await self.memory_wrapper.add_memory(
+                    user_id=self.user_id,
+                    content=content,
+                    metadata={
+                        "interaction_type": "node_progress",
+                        "node_id": str(node.id),
+                        "roadmap_id": str(node.roadmap_id),
+                        "title": node.title,
+                        "old_status": old_status,
+                        "new_status": status,
+                        "completion_percentage": node.completion_percentage,
+                        "timestamp": "now"
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Failed to store node progress memory for user {self.user_id}: {e}")
+
         return node
 
     async def get_roadmap_nodes(self, roadmap_id: UUID) -> list[Node]:
