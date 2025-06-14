@@ -97,7 +97,7 @@ export function UserAvatarMenu() {
 						<DropdownMenuTrigger asChild>
 							<button
 								type="button"
-								className="flex items-center rounded-full transition-all hover:bg-slate-100 focus:outline-none h-10 w-10 justify-center"
+								className="flex items-center rounded-full transition-all hover:bg-muted focus:outline-none h-10 w-10 justify-center"
 							>
 								<div className="h-8 w-8 rounded-full bg-white flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
 									<div className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500 font-semibold text-sm">
@@ -116,7 +116,7 @@ export function UserAvatarMenu() {
 				<DropdownMenuLabel className="font-normal">
 					<div className="flex flex-col space-y-1">
 						<p className="text-sm font-medium leading-none">John Doe</p>
-						<p className="text-xs leading-none text-slate-500">
+						<p className="text-xs leading-none text-muted-foreground">
 							john.doe@example.com
 						</p>
 					</div>
@@ -160,7 +160,7 @@ export function UserAvatarMenu() {
 					<span>Help & Support</span>
 				</DropdownMenuItem>
 				<DropdownMenuSeparator />
-				<DropdownMenuItem className="text-red-500 focus:text-red-500">
+				<DropdownMenuItem className="text-destructive focus:text-destructive">
 					<LogOut className="mr-2 h-4 w-4" />
 					<span>Log out</span>
 				</DropdownMenuItem>
@@ -190,7 +190,7 @@ export function Logo({ className, size = "md", href = "/" }) {
 			</div>
 			<span
 				className={cn(
-					"font-bold tracking-tight text-slate-900 dark:text-white",
+					"font-bold tracking-tight text-foreground dark:text-white",
 					size === "sm" ? "text-lg" : size === "md" ? "text-xl" : "text-2xl",
 				)}
 			>
@@ -305,7 +305,7 @@ export function ChatSidebar() {
 			<motion.div
 				className={cn(
 					"fixed top-0 right-0 z-50 h-screen shadow-xl",
-					isDarkMode ? "bg-zinc-900 text-white" : "bg-white text-slate-900",
+					isDarkMode ? "bg-zinc-900 text-white" : "bg-white text-foreground",
 					"border-l",
 					isDarkMode ? "border-zinc-800" : "border-slate-200",
 					isPinned ? "w-80 md:w-96" : "w-80 md:w-96",
@@ -343,7 +343,7 @@ export function ChatSidebar() {
 							className={cn(
 								isDarkMode
 									? "text-zinc-400 hover:text-white"
-									: "text-slate-500 hover:text-slate-900",
+									: "text-muted-foreground hover:text-foreground",
 							)}
 						>
 							{isPinned ? (
@@ -362,7 +362,7 @@ export function ChatSidebar() {
 							className={cn(
 								isDarkMode
 									? "text-zinc-400 hover:text-white"
-									: "text-slate-500 hover:text-slate-900",
+									: "text-muted-foreground hover:text-foreground",
 							)}
 						>
 							<X className="h-5 w-5" />
@@ -536,7 +536,7 @@ export function MainHeader({ transparent = false, className }) {
 								<button
 									type="button"
 									onClick={() => setSearchOpen(false)}
-									className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+									className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground"
 								>
 									<X className="h-4 w-4" />
 								</button>
@@ -556,7 +556,7 @@ export function MainHeader({ transparent = false, className }) {
 												variant="ghost"
 												size="icon"
 												onClick={() => setSearchOpen(true)}
-												className="h-10 w-10 rounded-full text-slate-600 hover:bg-slate-100 transition-all"
+												className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted transition-all"
 											>
 												<Search className="h-5 w-5" />
 											</Button>
@@ -575,7 +575,7 @@ export function MainHeader({ transparent = false, className }) {
 											variant="ghost"
 											size="icon"
 											onClick={toggleChat}
-											className="h-10 w-10 rounded-full text-slate-600 hover:bg-slate-100 transition-all"
+											className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted transition-all"
 										>
 											<MessageSquare className="h-5 w-5" />
 										</Button>
@@ -596,7 +596,7 @@ export function MainHeader({ transparent = false, className }) {
 								<Button
 									variant="ghost"
 									size="icon"
-									className="md:hidden h-10 w-10 rounded-full text-slate-600 hover:bg-slate-100 ml-1"
+									className="md:hidden h-10 w-10 rounded-full text-muted-foreground hover:bg-muted ml-1"
 								>
 									<Menu className="h-5 w-5" />
 									<span className="sr-only">Toggle menu</span>
@@ -610,30 +610,30 @@ export function MainHeader({ transparent = false, className }) {
 									<nav className="flex flex-col space-y-4">
 										<Link
 											to="/courses"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-slate-100 transition-colors"
+											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
 										>
-											<BookOpen className="h-5 w-5 text-emerald-500" />
+											<BookOpen className="h-5 w-5 text-course" />
 											<span className="font-medium">Courses</span>
 										</Link>
 										<Link
 											to="/books"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-slate-100 transition-colors"
+											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
 										>
-											<FileText className="h-5 w-5 text-indigo-500" />
+											<FileText className="h-5 w-5 text-book" />
 											<span className="font-medium">Books</span>
 										</Link>
 										<Link
 											to="/videos"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-slate-100 transition-colors"
+											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
 										>
-											<Youtube className="h-5 w-5 text-red-500" />
+											<Youtube className="h-5 w-5 text-video" />
 											<span className="font-medium">Videos</span>
 										</Link>
 										<Link
 											to="/flashcards"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-slate-100 transition-colors"
+											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
 										>
-											<Layers className="h-5 w-5 text-amber-500" />
+											<Layers className="h-5 w-5 text-flashcard" />
 											<span className="font-medium">Flashcards</span>
 										</Link>
 										<div className="px-4 py-3">

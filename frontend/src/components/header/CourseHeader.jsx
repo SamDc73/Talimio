@@ -25,7 +25,7 @@ export function CourseHeader({
 	const [showFullTitle, setShowFullTitle] = useState(false);
 
 	return (
-		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
+		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-border shadow-sm">
 			<div className="container mx-auto px-4">
 				<div className="flex h-16 items-center">
 					{/* Logo Section */}
@@ -46,29 +46,29 @@ export function CourseHeader({
 
 					{/* Course Info Section */}
 					<div className="flex-1 min-w-0">
-						<h1 className="text-base font-semibold text-slate-800 truncate">
+						<h1 className="text-base font-semibold text-foreground truncate">
 							{courseName}
 						</h1>
 						<div className="flex items-center mt-1">
-							<div className="w-32 md:w-48 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+							<div className="w-32 md:w-48 bg-muted rounded-full h-1.5 overflow-hidden">
 								<div
-									className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full"
+									className="h-full bg-gradient-to-r from-course to-course-accent rounded-full"
 									style={{ width: `${progress}%` }}
 								/>
 							</div>
-							<span className="ml-2 text-xs font-medium text-slate-600">
+							<span className="ml-2 text-xs font-medium text-muted-foreground">
 								{progress}%
 							</span>
 						</div>
 					</div>
 
 					{/* View Toggle Section */}
-					<div className="hidden md:flex items-center border border-slate-200 rounded-full h-8 px-1 mx-4 bg-slate-50/50">
+					<div className="hidden md:flex items-center border border-border rounded-full h-8 px-1 mx-4 bg-slate-50/50">
 						<button
 							className={cn(
 								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
 								mode === "outline"
-									? "bg-white text-slate-800 shadow-sm"
+									? "bg-white text-foreground shadow-sm"
 									: "text-slate-500 hover:text-slate-700",
 							)}
 							type="button"
@@ -82,7 +82,7 @@ export function CourseHeader({
 							className={cn(
 								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
 								mode === "track"
-									? "bg-white text-slate-800 shadow-sm"
+									? "bg-white text-foreground shadow-sm"
 									: "text-slate-500 hover:text-slate-700",
 							)}
 							type="button"

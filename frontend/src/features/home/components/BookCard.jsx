@@ -7,8 +7,9 @@ import { BookOpen, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { KebabMenu } from "./KebabMenu";
+import { TagChip } from "./TagChip";
 
-export function BookCard({ book, onDelete }) {
+export function BookCard({ book, onDelete, className = "" }) {
 	const [showMenu, setShowMenu] = useState(false);
 	const [progress, setProgress] = useState(() => {
 		// ALWAYS use saved stats first (they have the correct chapter-based progress)
@@ -91,13 +92,13 @@ export function BookCard({ book, onDelete }) {
 
 	return (
 		<div
-			className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6 relative"
+			className={`bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 p-6 relative ${className}`}
 			onMouseEnter={() => setShowMenu(true)}
 			onMouseLeave={() => setShowMenu(false)}
 		>
 			{/* Header with badge and menu */}
 			<div className="flex justify-between items-start mb-4">
-				<div className="flex items-center gap-1.5 text-indigo-600">
+				<div className="flex items-center gap-1.5 text-book">
 					<BookOpen className="h-4 w-4" />
 					<span className="text-sm">Book</span>
 				</div>
@@ -112,37 +113,36 @@ export function BookCard({ book, onDelete }) {
 			/>
 
 			{/* Title */}
-			<h3 className="text-xl font-semibold text-gray-900 mb-2">
+			<h3 className="text-xl font-display font-semibold text-foreground mb-2">
 				{book.title || "Untitled Book"}
 			</h3>
 
 			{/* Description */}
-			<p className="text-gray-600 text-sm mb-4">
+			<p className="text-muted-foreground text-sm mb-4">
 				{book.author || "Unknown Author"}
 			</p>
 
 			{/* Tags */}
 			<div className="flex flex-wrap gap-2 mb-6">
 				{book.tags?.slice(0, 3).map((tag) => (
-					<span
-						key={tag}
-						className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-100 text-gray-700 text-xs"
-					>
-						{tag}
-					</span>
+					<TagChip key={tag} tag={tag} contentType="book" />
 				))}
 				{book.tags?.length > 3 && (
-					<span className="text-xs text-gray-500">+{book.tags.length - 3}</span>
+					<span className="text-xs text-muted-foreground">
+						+{book.tags.length - 3}
+					</span>
 				)}
 			</div>
 
 			{/* Progress */}
 			<div className="mb-6">
-				<div className="text-sm text-gray-600 mb-2">Reading Progress</div>
+				<div className="text-sm text-muted-foreground mb-2">
+					Reading Progress
+				</div>
 				<div className="flex items-center gap-3">
 					<div className="flex-1 bg-gray-100 rounded-full h-2">
 						<div
-							className="bg-teal-500 h-2 rounded-full transition-all duration-300"
+							className="bg-book h-2 rounded-full transition-all duration-300"
 							style={{ width: `${readingProgress}%` }}
 						/>
 					</div>
@@ -161,7 +161,7 @@ export function BookCard({ book, onDelete }) {
 				</span>
 				<Link
 					to={`/books/${book.id}`}
-					className="flex items-center gap-1 text-teal-600 hover:text-teal-700 text-sm font-medium"
+					className="flex items-center gap-1 text-book hover:text-book-accent text-sm font-medium transition-colors"
 				>
 					Read
 					<ChevronRight className="h-4 w-4" />

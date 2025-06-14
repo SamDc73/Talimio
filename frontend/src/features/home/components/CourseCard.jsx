@@ -3,8 +3,9 @@ import { ChevronRight, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { KebabMenu } from "./KebabMenu";
+import { TagChip } from "./TagChip";
 
-export function CourseCard({ course, onDelete }) {
+export function CourseCard({ course, onDelete, className = "" }) {
 	const [showMenu, setShowMenu] = useState(false);
 
 	const handleDelete = async (itemType, itemId) => {
@@ -20,13 +21,13 @@ export function CourseCard({ course, onDelete }) {
 
 	return (
 		<div
-			className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6 relative"
+			className={`bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 p-6 relative ${className}`}
 			onMouseEnter={() => setShowMenu(true)}
 			onMouseLeave={() => setShowMenu(false)}
 		>
 			{/* Header with badge and menu */}
 			<div className="flex justify-between items-start mb-4">
-				<div className="bg-teal-50 text-teal-600 text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1">
+				<div className="bg-course/10 text-course-text text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1">
 					<Sparkles className="h-3 w-3" />
 					<span>Course</span>
 				</div>
@@ -41,25 +42,20 @@ export function CourseCard({ course, onDelete }) {
 			/>
 
 			{/* Title */}
-			<h3 className="text-xl font-semibold text-gray-900 mb-2">
+			<h3 className="text-xl font-display font-semibold text-foreground mb-2">
 				{course.title}
 			</h3>
 
 			{/* Description */}
-			<p className="text-gray-600 text-sm mb-4">{course.description}</p>
+			<p className="text-muted-foreground text-sm mb-4">{course.description}</p>
 
 			{/* Tags */}
 			<div className="flex flex-wrap gap-2 mb-6">
 				{course.tags?.slice(0, 3).map((tag) => (
-					<span
-						key={tag}
-						className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-100 text-gray-700 text-xs"
-					>
-						{tag}
-					</span>
+					<TagChip key={tag} tag={tag} contentType="course" />
 				))}
 				{course.tags?.length > 3 && (
-					<span className="text-xs text-gray-500">
+					<span className="text-xs text-muted-foreground">
 						+{course.tags.length - 3}
 					</span>
 				)}
@@ -71,7 +67,7 @@ export function CourseCard({ course, onDelete }) {
 				<div className="flex items-center gap-3">
 					<div className="flex-1 bg-gray-100 rounded-full h-2">
 						<div
-							className="bg-teal-500 h-2 rounded-full transition-all duration-300"
+							className="bg-course h-2 rounded-full transition-all duration-300"
 							style={{ width: `${course.progress || 0}%` }}
 						/>
 					</div>
@@ -88,7 +84,7 @@ export function CourseCard({ course, onDelete }) {
 				</span>
 				<Link
 					to={`/courses/${course.id}`}
-					className="flex items-center gap-1 text-teal-600 hover:text-teal-700 text-sm font-medium"
+					className="flex items-center gap-1 text-course hover:text-course-accent text-sm font-medium transition-colors"
 				>
 					Resume
 					<ChevronRight className="h-4 w-4" />

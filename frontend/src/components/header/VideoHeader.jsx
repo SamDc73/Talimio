@@ -19,7 +19,7 @@ export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
 	const progress = video ? Math.round(video.completionPercentage || 0) : 0;
 
 	return (
-		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
+		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-border shadow-sm">
 			<div className="container mx-auto px-4">
 				<div className="flex h-16 items-center">
 					{/* Logo Section */}

@@ -101,31 +101,43 @@ const VARIANTS = {
 const STATES = [
 	{
 		key: "overdue",
-		bg: "bg-orange-50",
-		txt: "text-orange-700",
+		bg: "bg-overdue/10",
+		txt: "text-overdue-text",
 		icon: TimerOff,
 		msg: "You're late – jump back in",
 		btn: true,
 	},
 	{
 		key: "today",
-		bg: "bg-amber-50",
-		txt: "text-amber-700",
+		bg: "bg-due-today/10",
+		txt: "text-due-today-text",
 		icon: Clock,
 		msg: "Due today — quick session",
 	},
 	{
 		key: "upcoming",
-		bg: "bg-blue-50",
-		txt: "text-blue-700",
+		bg: "bg-upcoming/10",
+		txt: "text-upcoming-text",
 		icon: Calendar,
 		msg: (d) =>
 			`Next check‑in ${d.toLocaleDateString("en-US", { weekday: "long" })}`,
 	},
 ];
 
-const TagChip = ({ tag }) => (
-	<div className="bg-slate-100 text-slate-700 text-xs font-medium px-2 py-1 rounded-full">
+const TagChip = ({ tag, contentType }) => (
+	<div
+		className={`text-xs font-medium px-2 py-1 rounded-full ${
+			contentType === "course"
+				? "bg-course/10 text-course-text"
+				: contentType === "book"
+					? "bg-book/10 text-book-text"
+					: contentType === "video"
+						? "bg-video/10 text-video-text"
+						: contentType === "flashcard"
+							? "bg-flashcard/10 text-flashcard-text"
+							: "bg-muted text-muted-foreground"
+		}`}
+	>
 		{tag}
 	</div>
 );
@@ -147,7 +159,7 @@ const DueDateChip = ({
 			<motion.div
 				initial={{ opacity: 0, scale: 0.9 }}
 				animate={{ opacity: 1, scale: 1 }}
-				className="bg-emerald-50 text-emerald-700 text-xs font-medium px-2 py-1 rounded-full flex items-center gap-2 whitespace-nowrap"
+				className="bg-completed/10 text-completed-text text-xs font-medium px-2 py-1 rounded-full flex items-center gap-2 whitespace-nowrap"
 			>
 				<Check className="h-3 w-3" />
 				<span>Great streak!</span>
@@ -158,7 +170,7 @@ const DueDateChip = ({
 			<motion.div
 				initial={{ opacity: 0, scale: 0.9 }}
 				animate={{ opacity: 1, scale: 1 }}
-				className="bg-slate-100 text-slate-600 text-xs font-medium px-2 py-1 rounded-full flex items-center gap-2 whitespace-nowrap"
+				className="bg-paused/10 text-paused-text text-xs font-medium px-2 py-1 rounded-full flex items-center gap-2 whitespace-nowrap"
 			>
 				<Pause className="h-3 w-3" />
 				<span>On hold – resume when free</span>
@@ -222,7 +234,10 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
 					}
 					// If no saved stats but we have table_of_contents, calculate
 					if (item.tableOfContents && item.tableOfContents.length > 0) {
-						const progress = calculateBookProgress(item.id, item.tableOfContents);
+						const progress = calculateBookProgress(
+							item.id,
+							item.tableOfContents,
+						);
 						return progress.percentage;
 					}
 					// Otherwise, no progress yet
@@ -280,7 +295,7 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
 							<span>{V.label}</span>
 						</div>
 					</div>
-					<h3 className="text-xl font-bold text-slate-900 hover:underline line-clamp-2 mb-1">
+					<h3 className="text-xl font-display font-bold text-slate-900 hover:underline line-clamp-2 mb-1">
 						{item.title}
 					</h3>
 
@@ -311,10 +326,10 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
 
 					<div className="flex flex-wrap items-center gap-2 mb-3">
 						{item.tags?.slice(0, 2).map((t) => (
-							<TagChip key={t} tag={t} />
+							<TagChip key={t} tag={t} contentType={item.type} />
 						))}
 						{item.tags?.length > 2 && (
-							<span className="inline-flex text-xs font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
+							<span className="inline-flex text-xs font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded">
 								+{item.tags.length - 2}
 							</span>
 						)}
@@ -352,7 +367,7 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
 								<span>{Math.round(progressValue)}%</span>
 							</div>
 						)}
-						<div className="w-full bg-slate-100 rounded-full h-2">
+						<div className="w-full bg-muted rounded-full h-2">
 							<motion.div
 								initial={{ width: 0 }}
 								animate={{ width: `${progressValue}%` }}
@@ -1058,7 +1073,7 @@ export default function HomePage() {
 								transition={{ duration: 0.5 }}
 								className="text-center mb-6"
 							>
-								<h1 className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 mb-4 tracking-tight">
+								<h1 className="text-4xl md:text-5xl font-display font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 mb-4 tracking-tight">
 									Welcome Back!
 								</h1>
 								<p className="text-lg text-slate-600 max-w-2xl mx-auto">
@@ -1132,7 +1147,7 @@ export default function HomePage() {
 														size="sm"
 														onClick={handleGenerateCourse}
 														disabled={!searchQuery.trim() || isGenerating}
-														className="bg-teal-500 hover:bg-teal-600 text-white"
+														className="bg-course hover:bg-course-accent text-white"
 													>
 														{isGenerating ? "Generating..." : "Generate"}
 													</Button>
@@ -1442,7 +1457,7 @@ export default function HomePage() {
 										<div className="inline-block bg-emerald-50 p-4 rounded-full mb-4">
 											<Check className="h-8 w-8 text-emerald-600" />
 										</div>
-										<h3 className="text-xl font-bold text-emerald-700 mb-2">
+										<h3 className="text-xl font-display font-bold text-emerald-700 mb-2">
 											All Caught Up!
 										</h3>
 										<p className="text-slate-600">
@@ -1708,7 +1723,7 @@ export default function HomePage() {
 														setIsFabExpanded(false);
 													}}
 													size="icon"
-													className="h-14 w-14 rounded-full bg-teal-500 hover:bg-teal-600 text-white shadow-lg transition-all hover:scale-110"
+													className="h-14 w-14 rounded-full bg-course hover:bg-course-accent text-white shadow-lg transition-all hover:scale-110"
 												>
 													<Sparkles className="h-6 w-6" />
 												</Button>
@@ -1740,7 +1755,7 @@ export default function HomePage() {
 														setIsExtractingMetadata(false);
 													}}
 													size="icon"
-													className="h-14 w-14 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg transition-all hover:scale-110"
+													className="h-14 w-14 rounded-full bg-book hover:bg-book-accent text-white shadow-lg transition-all hover:scale-110"
 												>
 													<FileText className="h-6 w-6" />
 												</Button>
@@ -1769,7 +1784,7 @@ export default function HomePage() {
 														setYoutubeUrl("");
 													}}
 													size="icon"
-													className="h-14 w-14 rounded-full bg-red-500 hover:bg-red-600 text-white shadow-lg transition-all hover:scale-110"
+													className="h-14 w-14 rounded-full bg-video hover:bg-video-accent text-white shadow-lg transition-all hover:scale-110"
 												>
 													<Youtube className="h-6 w-6" />
 												</Button>
@@ -1800,7 +1815,7 @@ export default function HomePage() {
 														setNewCards("");
 													}}
 													size="icon"
-													className="h-14 w-14 rounded-full bg-amber-500 hover:bg-amber-600 text-white shadow-lg transition-all hover:scale-110"
+													className="h-14 w-14 rounded-full bg-flashcard hover:bg-flashcard-accent text-white shadow-lg transition-all hover:scale-110"
 												>
 													<Layers className="h-6 w-6" />
 												</Button>
@@ -1825,7 +1840,7 @@ export default function HomePage() {
 										className={`h-14 w-14 rounded-full shadow-lg transition-all duration-200 hover:scale-110 ${
 											isFabExpanded
 												? "bg-red-500 hover:bg-red-600"
-												: "bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600"
+												: "bg-gradient-to-r from-course to-completed hover:from-course-accent hover:to-completed"
 										}`}
 									>
 										<Plus className="h-6 w-6 text-white" />

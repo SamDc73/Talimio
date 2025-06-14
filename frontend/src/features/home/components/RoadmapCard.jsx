@@ -3,6 +3,7 @@ import { ChevronRight, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { KebabMenu } from "./KebabMenu";
+import { TagChip } from "./TagChip";
 
 export function RoadmapCard({ roadmap, onDelete }) {
 	const [showMenu, setShowMenu] = useState(false);
@@ -29,7 +30,7 @@ export function RoadmapCard({ roadmap, onDelete }) {
 		>
 			{/* Header with badge and menu */}
 			<div className="flex justify-between items-start mb-4">
-				<div className="bg-teal-50 text-teal-600 text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1">
+				<div className="bg-course/10 text-course-text text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1">
 					<Sparkles className="h-3 w-3" />
 					<span>Course</span>
 				</div>
@@ -44,7 +45,7 @@ export function RoadmapCard({ roadmap, onDelete }) {
 			/>
 
 			{/* Title */}
-			<h3 className="text-xl font-semibold text-gray-900 mb-2">
+			<h3 className="text-xl font-display font-semibold text-foreground mb-2">
 				{roadmap.title || "Untitled Roadmap"}
 			</h3>
 
@@ -57,15 +58,10 @@ export function RoadmapCard({ roadmap, onDelete }) {
 			{roadmap.tags && roadmap.tags.length > 0 && (
 				<div className="flex flex-wrap gap-2 mb-6">
 					{roadmap.tags.slice(0, 3).map((tag) => (
-						<span
-							key={tag}
-							className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-100 text-gray-700 text-xs"
-						>
-							{tag}
-						</span>
+						<TagChip key={tag} tag={tag} contentType="course" />
 					))}
 					{roadmap.tags.length > 3 && (
-						<span className="text-xs text-gray-500">
+						<span className="text-xs text-muted-foreground">
 							+{roadmap.tags.length - 3}
 						</span>
 					)}
@@ -78,7 +74,7 @@ export function RoadmapCard({ roadmap, onDelete }) {
 				<div className="flex items-center gap-3">
 					<div className="flex-1 bg-gray-100 rounded-full h-2">
 						<div
-							className="bg-teal-500 h-2 rounded-full transition-all duration-300"
+							className="bg-course h-2 rounded-full transition-all duration-300"
 							style={{ width: `${completionProgress}%` }}
 						/>
 					</div>
@@ -97,7 +93,7 @@ export function RoadmapCard({ roadmap, onDelete }) {
 				</span>
 				<Link
 					to={`/roadmap/${roadmap.id}`}
-					className="flex items-center gap-1 text-teal-600 hover:text-teal-700 text-sm font-medium"
+					className="flex items-center gap-1 text-course hover:text-course-accent text-sm font-medium transition-colors"
 				>
 					Resume
 					<ChevronRight className="h-4 w-4" />
