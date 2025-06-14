@@ -1,8 +1,19 @@
 /**
  * Circular progress indicator component
  * Shows completion percentage as a circle around a number
+ * @param {string} variant - Content type variant: 'course', 'book', 'video', 'flashcard'
  */
-function ProgressCircle({ number, progress }) {
+function ProgressCircle({ number, progress, variant = "default" }) {
+	// Map variants to stroke colors
+	const strokeColors = {
+		default: "#10b981", // emerald-500
+		course: "hsl(var(--course-bg))",
+		book: "hsl(var(--book-bg))",
+		video: "hsl(var(--video-bg))",
+		flashcard: "hsl(var(--flashcard-bg))",
+	};
+
+	const strokeColor = strokeColors[variant] || strokeColors.default;
 	if (progress <= 0) {
 		return (
 			<div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">
@@ -37,7 +48,7 @@ function ProgressCircle({ number, progress }) {
 					r="14"
 					strokeWidth="2.5"
 					fill="none"
-					stroke="#10b981"
+					stroke={strokeColor}
 					strokeLinecap="round"
 					strokeDasharray={`${(progress / 100) * 87.96} 87.96`}
 					className="transition-all duration-300"

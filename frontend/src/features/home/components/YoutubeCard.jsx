@@ -3,6 +3,7 @@ import { ChevronRight, Youtube } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { KebabMenu } from "./KebabMenu";
+import { TagChip } from "./TagChip";
 
 function formatDuration(seconds) {
 	if (!seconds) return "Unknown duration";
@@ -17,7 +18,7 @@ function formatDuration(seconds) {
 	return `${minutes}:${secs.toString().padStart(2, "0")}`;
 }
 
-export function YoutubeCard({ video, onDelete }) {
+export function YoutubeCard({ video, onDelete, className = "" }) {
 	const [showMenu, setShowMenu] = useState(false);
 
 	const handleDelete = async (itemType, itemId) => {
@@ -33,13 +34,13 @@ export function YoutubeCard({ video, onDelete }) {
 
 	return (
 		<div
-			className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-6 relative"
+			className={`bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 p-6 relative ${className}`}
 			onMouseEnter={() => setShowMenu(true)}
 			onMouseLeave={() => setShowMenu(false)}
 		>
 			{/* Header with badge and menu */}
 			<div className="flex justify-between items-start mb-4">
-				<div className="flex items-center gap-1.5 text-red-600">
+				<div className="flex items-center gap-1.5 text-video">
 					<Youtube className="h-4 w-4" />
 					<span className="text-sm">Video</span>
 				</div>
@@ -54,7 +55,7 @@ export function YoutubeCard({ video, onDelete }) {
 			/>
 
 			{/* Title */}
-			<h3 className="text-xl font-semibold text-gray-900 mb-2">
+			<h3 className="text-xl font-display font-semibold text-foreground mb-2">
 				{video.title}
 			</h3>
 
@@ -66,15 +67,10 @@ export function YoutubeCard({ video, onDelete }) {
 			{/* Tags */}
 			<div className="flex flex-wrap gap-2 mb-6">
 				{video.tags?.slice(0, 3).map((tag) => (
-					<span
-						key={tag}
-						className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-100 text-gray-700 text-xs"
-					>
-						{tag}
-					</span>
+					<TagChip key={tag} tag={tag} contentType="video" />
 				))}
 				{video.tags?.length > 3 && (
-					<span className="text-xs text-gray-500">
+					<span className="text-xs text-muted-foreground">
 						+{video.tags.length - 3}
 					</span>
 				)}
@@ -86,7 +82,7 @@ export function YoutubeCard({ video, onDelete }) {
 				<div className="flex items-center gap-3">
 					<div className="flex-1 bg-gray-100 rounded-full h-2">
 						<div
-							className="bg-teal-500 h-2 rounded-full transition-all duration-300"
+							className="bg-video h-2 rounded-full transition-all duration-300"
 							style={{
 								width: `${video.progress || video.completionPercentage || 0}%`,
 							}}
@@ -103,7 +99,7 @@ export function YoutubeCard({ video, onDelete }) {
 				<span className="text-sm text-gray-500">YouTube</span>
 				<Link
 					to={`/videos/${video.uuid || video.id}`}
-					className="flex items-center gap-1 text-teal-600 hover:text-teal-700 text-sm font-medium"
+					className="flex items-center gap-1 text-video hover:text-video-accent text-sm font-medium transition-colors"
 				>
 					Watch
 					<ChevronRight className="h-4 w-4" />

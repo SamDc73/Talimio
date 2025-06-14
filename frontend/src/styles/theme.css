@@ -41,6 +41,48 @@
 		--chart-3: 197 37% 24%;
 		--chart-4: 43 74% 66%;
 		--chart-5: 27 87% 67%;
+
+		/* Catppuccin Latte Colors */
+		--ctp-latte-green: 142.1 76.2% 36.3%; /* #40a02b */
+		--ctp-latte-teal: 183.3 74.3% 35.1%; /* #179299 */
+		--ctp-latte-blue: 220.3 91.3% 54.1%; /* #1e66f5 */
+		--ctp-latte-mauve: 267 83.5% 58%; /* #8839ef */
+		--ctp-latte-yellow: 35.5 77.4% 49.4%; /* #df8e1d */
+		--ctp-latte-peach: 22.5 99.4% 51.8%; /* #fe640b */
+		--ctp-latte-red: 347.3 87.1% 44.3%; /* #d20f39 */
+
+		/* Content Type Colors */
+		--course-bg: 183.3 74.3% 35.1%; /* Teal */
+		--course-text: 183.3 74.3% 25.1%; /* Darker Teal */
+		--course-accent: 183.3 74.3% 45.1%; /* Lighter Teal */
+
+		--book-bg: 220.3 91.3% 54.1%; /* Blue */
+		--book-text: 220.3 91.3% 34.1%; /* Darker Blue */
+		--book-accent: 220.3 91.3% 64.1%; /* Lighter Blue */
+
+		--video-bg: 267 83.5% 58%; /* Mauve */
+		--video-text: 267 83.5% 38%; /* Darker Mauve */
+		--video-accent: 267 83.5% 68%; /* Lighter Mauve */
+
+		--flashcard-bg: 35.5 77.4% 49.4%; /* Yellow */
+		--flashcard-text: 35.5 77.4% 29.4%; /* Darker Yellow */
+		--flashcard-accent: 35.5 77.4% 59.4%; /* Lighter Yellow */
+
+		/* Status Colors */
+		--overdue-bg: 347.3 87.1% 44.3%; /* Red */
+		--overdue-text: 347.3 87.1% 24.3%; /* Darker Red */
+
+		--due-today-bg: 35.5 77.4% 49.4%; /* Yellow */
+		--due-today-text: 35.5 77.4% 29.4%; /* Darker Yellow */
+
+		--upcoming-bg: 220.3 91.3% 54.1%; /* Blue */
+		--upcoming-text: 220.3 91.3% 34.1%; /* Darker Blue */
+
+		--completed-bg: 142.1 76.2% 36.3%; /* Green */
+		--completed-text: 142.1 76.2% 16.3%; /* Darker Green */
+
+		--paused-bg: 215.4 16.3% 46.9%; /* Slate */
+		--paused-text: 215.4 16.3% 26.9%; /* Darker Slate */
 	}
 
 	.dark {
@@ -71,6 +113,48 @@
 		--border: 217.2 32.6% 17.5%;
 		--input: 217.2 32.6% 17.5%;
 		--ring: 142.1 76.2% 36.3%;
+
+		/* Catppuccin Frappé Colors */
+		--ctp-frappe-green: 95.9 44% 68.4%; /* #a6d189 */
+		--ctp-frappe-teal: 171.6 47% 69%; /* #81c8be */
+		--ctp-frappe-blue: 218.2 66% 71.4%; /* #8caaee */
+		--ctp-frappe-mauve: 275.8 59.3% 79.8%; /* #ca9ee6 */
+		--ctp-frappe-yellow: 41.5 56.4% 74.1%; /* #e5c890 */
+		--ctp-frappe-peach: 22.3 82.5% 70.4%; /* #ef9f76 */
+		--ctp-frappe-red: 359.4 67.6% 71.4%; /* #e78284 */
+
+		/* Content Type Colors (Dark) */
+		--course-bg: 171.6 47% 69%; /* Teal */
+		--course-text: 171.6 47% 89%; /* Lighter Teal */
+		--course-accent: 171.6 47% 59%; /* Darker Teal */
+
+		--book-bg: 218.2 66% 71.4%; /* Blue */
+		--book-text: 218.2 66% 91.4%; /* Lighter Blue */
+		--book-accent: 218.2 66% 61.4%; /* Darker Blue */
+
+		--video-bg: 275.8 59.3% 79.8%; /* Mauve */
+		--video-text: 275.8 59.3% 99.8%; /* Lighter Mauve */
+		--video-accent: 275.8 59.3% 69.8%; /* Darker Mauve */
+
+		--flashcard-bg: 41.5 56.4% 74.1%; /* Yellow */
+		--flashcard-text: 41.5 56.4% 94.1%; /* Lighter Yellow */
+		--flashcard-accent: 41.5 56.4% 64.1%; /* Darker Yellow */
+
+		/* Status Colors (Dark) */
+		--overdue-bg: 359.4 67.6% 71.4%; /* Red */
+		--overdue-text: 359.4 67.6% 91.4%; /* Lighter Red */
+
+		--due-today-bg: 41.5 56.4% 74.1%; /* Yellow */
+		--due-today-text: 41.5 56.4% 94.1%; /* Lighter Yellow */
+
+		--upcoming-bg: 218.2 66% 71.4%; /* Blue */
+		--upcoming-text: 218.2 66% 91.4%; /* Lighter Blue */
+
+		--completed-bg: 95.9 44% 68.4%; /* Green */
+		--completed-text: 95.9 44% 88.4%; /* Lighter Green */
+
+		--paused-bg: 215 20.2% 65.1%; /* Slate */
+		--paused-text: 215 20.2% 85.1%; /* Lighter Slate */
 	}
 }
 

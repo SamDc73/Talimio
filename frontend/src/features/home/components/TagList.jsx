@@ -1,14 +1,19 @@
 import { TagChip } from "./TagChip";
 
-export function TagList({ tags, colorClass }) {
+export function TagList({ tags, colorClass, contentType, className = "" }) {
 	return (
-		<div className="flex flex-wrap gap-1 mb-4">
-			{tags.slice(0, 2).map((tag) => (
-				<TagChip key={tag} tag={tag} colorClass={colorClass} />
+		<div className={`flex flex-wrap gap-2 mb-4 ${className}`}>
+			{tags.slice(0, 3).map((tag) => (
+				<TagChip
+					key={tag}
+					tag={tag}
+					colorClass={colorClass}
+					contentType={contentType}
+				/>
 			))}
-			{tags.length > 2 && (
-				<span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">
-					+{tags.length - 2}
+			{tags.length > 3 && (
+				<span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs bg-muted text-muted-foreground">
+					+{tags.length - 3}
 				</span>
 			)}
 		</div>
