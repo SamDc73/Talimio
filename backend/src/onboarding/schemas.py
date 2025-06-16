@@ -1,4 +1,4 @@
-from typing import Any, ClassVar, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -27,14 +27,13 @@ class OnboardingRequest(BaseModel):
         examples=["machine learning"],
     )
 
-    class Config:
-        """Configuration for the OnboardingRequest schema."""
-
-        json_schema_extra: ClassVar[dict[str, Any]] = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "topic": "machine learning",
             },
-        }
+        },
+    }
 
 
 class OnboardingQuestions(BaseModel):

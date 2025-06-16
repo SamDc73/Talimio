@@ -70,7 +70,7 @@ class TagAssociationSchema(TagAssociationBase):
 class ContentTagsUpdate(BaseModel):
     """Schema for updating content tags."""
 
-    tags: list[str] = Field(..., max_items=20)
+    tags: list[str] = Field(..., max_length=20)
 
 
 class TagSuggestionRequest(BaseModel):

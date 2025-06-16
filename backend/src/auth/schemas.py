@@ -28,10 +28,7 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
 
-    class Config:
-        """Pydantic config."""
-
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class Token(BaseModel):
