@@ -32,7 +32,7 @@ const BookViewerContent = () => {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState(null);
 	const pdfViewerRef = useRef(null);
-	const isOpen = useAppStore((state) => state.ui.sidebarOpen);
+	const isOpen = useAppStore((state) => state.preferences.sidebarOpen);
 	const toggle = useAppStore((state) => state.toggleSidebar);
 	// Zustand store selectors - use stable references
 	const bookProgress = useAppStore((state) => state.books.progress[bookId]);
