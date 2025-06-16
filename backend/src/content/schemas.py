@@ -25,10 +25,7 @@ class ContentItemBase(BaseModel):
     progress: float = Field(ge=0, le=100)
     tags: list[str] = []
 
-    class Config:
-        """Pydantic configuration for ContentItemBase."""
-
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
 
 
 class YoutubeContent(ContentItemBase):
@@ -39,10 +36,7 @@ class YoutubeContent(ContentItemBase):
     duration: int | None = None
     thumbnail_url: str | None = Field(None, alias="thumbnailUrl")
 
-    class Config:
-        """Pydantic configuration for YoutubeContent."""
-
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
 
 
 class FlashcardContent(ContentItemBase):
@@ -52,10 +46,7 @@ class FlashcardContent(ContentItemBase):
     card_count: int = Field(alias="cardCount")
     due_count: int = Field(0, alias="dueCount")
 
-    class Config:
-        """Pydantic configuration for FlashcardContent."""
-
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
 
 
 class BookContent(ContentItemBase):
@@ -66,10 +57,7 @@ class BookContent(ContentItemBase):
     page_count: int | None = Field(None, alias="pageCount")
     current_page: int | None = Field(0, alias="currentPage")
 
-    class Config:
-        """Pydantic configuration for BookContent."""
-
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
 
 
 class RoadmapContent(ContentItemBase):
@@ -79,10 +67,7 @@ class RoadmapContent(ContentItemBase):
     node_count: int = Field(alias="nodeCount")
     completed_nodes: int = Field(0, alias="completedNodes")
 
-    class Config:
-        """Pydantic configuration for RoadmapContent."""
-
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
 
 
 class ContentListResponse(BaseModel):
@@ -93,7 +78,4 @@ class ContentListResponse(BaseModel):
     page: int
     page_size: int = Field(alias="pageSize")
 
-    class Config:
-        """Pydantic configuration for ContentListResponse."""
-
-        populate_by_name = True
+    model_config = {"populate_by_name": True}

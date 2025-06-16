@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from pydantic import BaseModel as PydanticBaseModel, Field
@@ -25,21 +25,20 @@ class RoadmapBase(PydanticBaseModel):  # type: ignore[misc]
 class RoadmapCreate(RoadmapBase):
     """Schema for creating a roadmap."""
 
-    title: str
-    description: str
-    skill_level: str = Field(..., pattern="^(beginner|intermediate|advanced)$", alias="skillLevel")
-
-    class Config:
-        """Configuration for the RoadmapCreate schema."""
-
-        populate_by_name = True
-        json_schema_extra: ClassVar[dict[str, Any]] = {
+    model_config = {
+        "populate_by_name": True,
+        "json_schema_extra": {
             "example": {
                 "title": "Machine Learning Engineer Roadmap",
                 "description": "Complete roadmap to become an ML engineer",
                 "skill_level": "beginner",
             },
-        }
+        },
+    }
+
+    title: str
+    description: str
+    skill_level: str = Field(..., pattern="^(beginner|intermediate|advanced)$", alias="skillLevel")
 
 
 class RoadmapUpdate(PydanticBaseModel):  # type: ignore[misc]
@@ -68,13 +67,9 @@ class NodeBase(PydanticBaseModel):  # type: ignore[misc]
 class NodeCreate(NodeBase):
     """Schema for creating a node."""
 
-    roadmap_id: UUID = Field(alias="roadmapId")
-
-    class Config:
-        """Configuration for Pydantic model with JSON schema example."""
-
-        populate_by_name = True
-        json_schema_extra: ClassVar[dict[str, Any]] = {
+    model_config = {
+        "populate_by_name": True,
+        "json_schema_extra": {
             "example": {
                 "title": "Python Basics",
                 "description": "Learn Python fundamentals",
@@ -84,7 +79,10 @@ class NodeCreate(NodeBase):
                 "roadmap_id": "123e4567-e89b-12d3-a456-426614174000",
                 "parent_id": None,
             },
-        }
+        },
+    }
+
+    roadmap_id: UUID = Field(alias="roadmapId")
 
 
 class NodeUpdate(PydanticBaseModel):  # type: ignore[misc]
@@ -112,11 +110,10 @@ class NodeResponse(NodeBase):
     # Use string literal for recursive type hint
     children: list["NodeResponse"] = Field(default_factory=list, description="Child nodes (sub-nodes)")
 
-    class Config:
-        """Configuration for Pydantic model to support ORM model conversion."""
-
-        from_attributes = True
-        populate_by_name = True
+    model_config = {
+        "from_attributes": True,
+        "populate_by_name": True,
+    }
 
     # Removed custom model_validate. Relying on from_attributes=True.
 
@@ -127,13 +124,13 @@ class RoadmapResponse(RoadmapBase):
     id: UUID
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
+    tags_json: str | None = Field(None, alias="tagsJson")
     nodes: list[NodeResponse] = []  # Will be overridden in model_validate
 
-    class Config:
-        """Configuration for Pydantic model to support ORM model conversion."""
-
-        from_attributes = True
-        populate_by_name = True
+    model_config = {
+        "from_attributes": True,
+        "populate_by_name": True,
+    }
 
     @classmethod
     def model_validate(

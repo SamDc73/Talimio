@@ -1,5 +1,7 @@
 import asyncio
 import logging
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from asyncpg.exceptions import ConnectionDoesNotExistError
@@ -55,6 +57,51 @@ async def create_tables() -> None:
         raise
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Application lifespan events."""
+    # Startup
+    max_retries = 5
+    retry_delay = 1  # seconds
+
+    for attempt in range(max_retries):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+
+            # Run migrations to add any missing columns
+            from src.database.migrations.missing_columns import run_all_missing_columns_migrations
+
+            await run_all_missing_columns_migrations(engine)
+
+            # Run auth migration
+            from src.database.migrations.user_table import add_user_table
+
+            await add_user_table()
+
+            break  # Success - exit the retry loop
+
+        except ConnectionDoesNotExistError:
+            if attempt == max_retries - 1:  # Last attempt
+                logger.exception("Startup failed after %d attempts", max_retries)
+                raise
+
+            logger.warning(
+                "Database connection attempt %d failed, retrying in %ds...",
+                attempt + 1,
+                retry_delay,
+            )
+            await asyncio.sleep(retry_delay)
+            retry_delay *= 2  # Exponential backoff
+
+        except Exception:
+            logger.exception("Startup failed with unexpected error")
+            raise
+
+    yield
+    # Shutdown (if needed)
+
+
 def create_app() -> FastAPI:
     """Create and configure FastAPI application."""
     try:
@@ -68,6 +115,7 @@ def create_app() -> FastAPI:
         description="API for managing learning roadmaps",
         version="0.1.0",
         debug=settings.DEBUG,
+        lifespan=lifespan,
     )
 
     # Add CORS middleware
@@ -110,46 +158,7 @@ def create_app() -> FastAPI:
     app.include_router(user_router)
     app.include_router(videos_router)
 
-    # Register startup event
-    @app.on_event("startup")
-    async def startup() -> None:
-        """Run startup tasks."""
-        max_retries = 5
-        retry_delay = 1  # seconds
-
-        for attempt in range(max_retries):
-            try:
-                async with engine.begin() as conn:
-                    await conn.run_sync(Base.metadata.create_all)
-
-                # Run migrations to add any missing columns
-                from src.database.migrations.missing_columns import run_all_missing_columns_migrations
-
-                await run_all_missing_columns_migrations(engine)
-
-                # Run auth migration
-                from src.database.migrations.user_table import add_user_table
-
-                await add_user_table()
-
-                break  # Success - exit the retry loop
-
-            except ConnectionDoesNotExistError:
-                if attempt == max_retries - 1:  # Last attempt
-                    logger.exception("Startup failed after %d attempts", max_retries)
-                    raise
-
-                logger.warning(
-                    "Database connection attempt %d failed, retrying in %ds...",
-                    attempt + 1,
-                    retry_delay,
-                )
-                await asyncio.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff
-
-            except Exception:
-                logger.exception("Startup failed with unexpected error")
-                raise
+    # Startup tasks are now handled by the lifespan context manager
 
     return app
 
