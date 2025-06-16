@@ -123,12 +123,12 @@ def create_app() -> FastAPI:
                     await conn.run_sync(Base.metadata.create_all)
 
                 # Run migrations to add any missing columns
-                from src.database.add_missing_columns import run_migrations
+                from src.database.migrations.missing_columns import run_all_missing_columns_migrations
 
-                await run_migrations(engine)
+                await run_all_missing_columns_migrations(engine)
 
                 # Run auth migration
-                from src.database.add_user_table import add_user_table
+                from src.database.migrations.user_table import add_user_table
 
                 await add_user_table()
 
