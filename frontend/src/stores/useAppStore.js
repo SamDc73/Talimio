@@ -336,6 +336,8 @@ const useAppStore = create(
 					// Onboarding preferences
 					onboardingCompleted: false,
 					userPreferences: null,
+					// UI preferences
+					sidebarOpen: true,
 				},
 
 				// Preferences actions
@@ -378,7 +380,7 @@ const useAppStore = create(
 				// UI actions
 				toggleSidebar: () => {
 					set((state) => {
-						state.ui.sidebarOpen = !state.ui.sidebarOpen;
+						state.preferences.sidebarOpen = !state.preferences.sidebarOpen;
 					});
 				},
 
@@ -477,10 +479,10 @@ const useAppStore = create(
 						}
 
 						// Remove old keys
-						keysToRemove.forEach((key) => {
+						for (const key of keysToRemove) {
 							localStorage.removeItem(key);
 							console.log(`Cleaned up old storage key: ${key}`);
-						});
+						}
 						if (keysToRemove.length > 0) {
 							console.log(
 								`Cleaned up ${keysToRemove.length} old localStorage keys`,
@@ -575,7 +577,7 @@ const useAppStore = create(
 	),
 );
 // Optimized selectors to prevent unnecessary re-renders
-export const selectSidebarOpen = (state) => state.ui.sidebarOpen;
+export const selectSidebarOpen = (state) => state.preferences.sidebarOpen;
 export const selectToggleSidebar = (state) => state.toggleSidebar;
 export const selectTheme = (state) => state.preferences.theme;
 export const selectBookProgress = (bookId) => (state) =>

@@ -17,7 +17,8 @@ function VideoViewerContentV2() {
 	const { videoId } = useParams();
 	const navigate = useNavigate();
 	const { toast } = useToast();
-	const isOpen = useAppStore((state) => state.ui.sidebarOpen);
+	const isOpen = useAppStore((state) => state.preferences.sidebarOpen);
+	const toggleSidebar = useAppStore((state) => state.toggleSidebar);
 	const [video, setVideo] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState(null);
@@ -88,7 +89,15 @@ function VideoViewerContentV2() {
 		};
 
 		loadVideo();
-	}, [videoId, toast, updateVideoProgress, addError, setAppLoading]);
+	}, [
+		videoId,
+		toast,
+		updateVideoProgress,
+		addError,
+		setAppLoading,
+		videoProgress.currentTime,
+		videoProgress.duration,
+	]);
 
 	/**
 	 * Handle progress updates with store synchronization
@@ -286,11 +295,13 @@ function VideoViewerContentV2() {
 	}
 
 	return (
-		<div className={`h-screen ${isOpen ? "sidebar-open" : ""}`}>
+		<div className="flex h-screen bg-background">
 			<VideoHeader
 				video={video}
 				currentTime={currentTime}
 				progressPercentage={progressPercentage}
+				onToggleSidebar={toggleSidebar}
+				isSidebarOpen={isOpen}
 			/>
 			<VideoSidebar
 				video={video}
@@ -298,7 +309,9 @@ function VideoViewerContentV2() {
 				onSeek={handleSeekToChapter}
 				progressPercentage={progressPercentage}
 			/>
-			<div className="content-with-sidebar">
+			<main
+				className={`flex-1 transition-all duration-300 ${isOpen ? "ml-80" : "ml-0"} pt-16`}
+			>
 				<div className="video-player-section">
 					<div className="video-player">
 						<lite-youtube
@@ -347,7 +360,7 @@ function VideoViewerContentV2() {
 						)}
 					</div>
 				</div>
-			</div>
+			</main>
 		</div>
 	);
 }
