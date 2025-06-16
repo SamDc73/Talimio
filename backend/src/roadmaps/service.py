@@ -83,17 +83,14 @@ class RoadmapService:
             if self.user_id:
                 # Search for relevant learning preferences and history
                 relevant_memories = await self.memory_wrapper.search_memories(
-                    user_id=self.user_id,
-                    query=roadmap_query,
-                    limit=3
+                    user_id=self.user_id, query=roadmap_query, limit=3
                 )
 
                 # Add memory context to AI generation if available
                 if relevant_memories:
-                    memory_context = "\n".join([
-                        f"Previous learning: {mem.get('memory', mem.get('content', ''))}"
-                        for mem in relevant_memories
-                    ])
+                    memory_context = "\n".join(
+                        [f"Previous learning: {mem.get('memory', mem.get('content', ''))}" for mem in relevant_memories]
+                    )
                     roadmap_query += f"\n\nUser's Learning History:\n{memory_context}"
 
             nodes_data = await self.ai_client.generate_roadmap_content(
@@ -119,6 +116,13 @@ class RoadmapService:
             await self._session.commit()
             logger.info(f"Roadmap '{roadmap.id}' created successfully.")
 
+            # Generate and store AI tags for the roadmap
+            try:
+                await self._generate_roadmap_tags(roadmap)
+                logger.info(f"Generated AI tags for roadmap '{roadmap.id}'")
+            except Exception as e:
+                logger.warning(f"Failed to generate tags for roadmap '{roadmap.id}': {e}")
+
             # Track roadmap creation in memory
             if self.user_id:
                 try:
@@ -132,8 +136,8 @@ class RoadmapService:
                             "skill_level": data.skill_level,
                             "description": data.description,
                             "num_nodes": len(nodes_data),
-                            "timestamp": "now"
-                        }
+                            "timestamp": "now",
+                        },
                     )
                 except Exception as e:
                     logger.warning(f"Failed to store roadmap creation memory for user {self.user_id}: {e}")
@@ -476,8 +480,8 @@ class RoadmapService:
                         "old_status": old_status,
                         "new_status": status,
                         "completion_percentage": node.completion_percentage,
-                        "timestamp": "now"
-                    }
+                        "timestamp": "now",
+                    },
                 )
             except Exception as e:
                 logger.warning(f"Failed to store node progress memory for user {self.user_id}: {e}")
@@ -497,3 +501,50 @@ class RoadmapService:
         )
         result = await self._session.execute(query)
         return list(result.scalars().all())
+
+    async def _generate_roadmap_tags(self, roadmap: Roadmap) -> None:
+        """Generate and store AI tags for a roadmap.
+
+        Args:
+            roadmap: Roadmap instance to generate tags for
+        """
+        try:
+            # Import tagging components
+            from src.tagging.processors.roadmap_processor import process_roadmap_for_tagging
+            from src.tagging.service import TaggingService, update_content_tags_json
+
+            # Extract content for tagging
+            content_data = await process_roadmap_for_tagging(roadmap.id, self._session)
+
+            if not content_data:
+                logger.warning(f"Could not extract content for roadmap {roadmap.id}")
+                return
+
+            # Initialize tagging service
+            tagging_service = TaggingService(self._session, self.ai_client)
+
+            # Generate and store tags
+            tags = await tagging_service.tag_content(
+                content_id=roadmap.id,
+                content_type="roadmap",
+                title=content_data["title"],
+                content_preview=content_data["content_preview"],
+            )
+
+            # Update the roadmap's tags_json field for backward compatibility
+            await update_content_tags_json(
+                session=self._session,
+                content_id=roadmap.id,
+                content_type="roadmap",
+                tags=tags,
+            )
+
+            await self._session.commit()
+            logger.info(f"Successfully generated {len(tags)} tags for roadmap '{roadmap.title}': {tags}")
+
+        except Exception as e:
+            logger.exception(f"Error generating tags for roadmap {roadmap.id}: {e}")
+            # Don't let tagging failure break roadmap creation
+            await self._session.rollback()
+            # Re-commit the roadmap without tags
+            await self._session.commit()
