@@ -5,6 +5,8 @@ import logging
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from .tagging_columns import run_tagging_migrations
+
 
 logger = logging.getLogger(__name__)
 
@@ -35,17 +37,12 @@ async def add_table_of_contents_column(engine: AsyncEngine) -> None:
             logger.info("table_of_contents column already exists")
 
 
-async def run_migrations(engine: AsyncEngine) -> None:
-    """Run all pending migrations."""
+async def run_all_missing_columns_migrations(engine: AsyncEngine) -> None:
+    """Run all missing columns migrations."""
     try:
         await add_table_of_contents_column(engine)
-
-        # Run tagging migrations
-        from .add_tagging_columns import run_tagging_migrations
-
         await run_tagging_migrations(engine)
-
-        logger.info("All migrations completed successfully")
+        logger.info("All missing columns migrations completed successfully")
     except Exception as e:
-        logger.exception(f"Migration failed: {e}")
+        logger.exception(f"Missing columns migration failed: {e}")
         raise
