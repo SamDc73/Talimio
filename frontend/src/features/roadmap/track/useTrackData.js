@@ -22,7 +22,7 @@ export function useTrackData(roadmapId) {
 			setError(null);
 			try {
 				const res = await fetch(
-					`http://localhost:8080/api/v1/roadmaps/${roadmapId}`,
+					`${import.meta.env.VITE_API_BASE || '/api/v1'}/roadmaps/${roadmapId}`,
 				);
 				if (!res.ok) {
 					throw new Error(`HTTP error! status: ${res.status}`);

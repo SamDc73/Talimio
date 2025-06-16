@@ -4,7 +4,7 @@ import { getUserHeaders } from "../utils/userUtils";
 export const assistantApi = {
 	async chat(message, conversationHistory = []) {
 		const response = await fetch(
-			`${import.meta.env.VITE_API_BASE_URL || "/api/v1"}/assistant/chat`,
+			`${import.meta.env.VITE_API_BASE || "/api/v1"}/assistant/chat`,
 			{
 				method: "POST",
 				headers: {

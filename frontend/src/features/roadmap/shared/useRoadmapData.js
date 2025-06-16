@@ -2,7 +2,7 @@ import { getRoadmapNodes, updateNodeStatus } from "@/services/progressService";
 import { useCallback, useEffect, useState } from "react";
 
 const BASE_URL =
-	import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api/v1";
+	import.meta.env.VITE_API_BASE || "/api/v1";
 
 /**
  * Common hook for fetching roadmap data with node progress

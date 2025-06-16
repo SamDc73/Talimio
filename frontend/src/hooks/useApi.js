@@ -1,7 +1,7 @@
 import { useToast } from "@/hooks/use-toast";
 import { useCallback, useRef, useState } from "react";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api/v1";
+const BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1";
 
 // Helper function to construct the full URL
 const buildUrl = (endpoint, pathParams) => {
