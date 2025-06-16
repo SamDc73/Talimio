@@ -95,7 +95,7 @@ export const useAppState = () => {
 			console.log("Sending roadmap creation request:", roadmapData);
 
 			// Create roadmap
-			const response = await fetch("http://localhost:8080/api/v1/roadmaps", {
+			const response = await fetch(`${import.meta.env.VITE_API_BASE || '/api/v1'}/roadmaps`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
