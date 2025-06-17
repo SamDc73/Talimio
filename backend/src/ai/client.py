@@ -96,8 +96,7 @@ class ModelManager:
 
                     # Find existing system message or create new one
                     system_message_idx = next(
-                        (i for i, msg in enumerate(messages) if msg.get("role") == "system"),
-                        None
+                        (i for i, msg in enumerate(messages) if msg.get("role") == "system"), None
                     )
 
                     memory_prompt = f"Personal Context:\n{memory_context}\n\nPlease use this context to personalize your response appropriately."
@@ -115,7 +114,7 @@ class ModelManager:
                         user_id=user_id,
                         interaction_type="ai_query",
                         content=f"User asked: {current_query}",
-                        metadata={"model": self.model, "timestamp": "now"}
+                        metadata={"model": self.model, "timestamp": "now"},
                     )
 
             except Exception as e:
@@ -231,10 +230,19 @@ class ModelManager:
         ]
 
         try:
-            response = await self.get_completion(messages, expect_list=True)
+            response = await self.get_completion(messages, format_json=True)
             if not isinstance(response, (list, dict)):
                 msg = "Invalid response format from AI model"
                 raise RoadmapGenerationError(msg)
+
+            # Handle both direct list and coreTopics dictionary format
+            if isinstance(response, dict):
+                if "coreTopics" in response:
+                    response = response["coreTopics"]
+                else:
+                    msg = "Expected 'coreTopics' key in response dictionary"
+                    raise RoadmapGenerationError(msg)
+
             if not isinstance(response, list):
                 msg = "Expected list response from AI model"
                 raise RoadmapGenerationError(msg)
@@ -253,7 +261,9 @@ class ModelManager:
                         "content": str(node.get("content", "")),
                         "order": i,
                         "prerequisite_ids": [],  # Start with no prerequisites
-                        "children": node.get("children", []),
+                        "children": node.get(
+                            "subtopics", node.get("children", [])
+                        ),  # Handle both subtopics and children
                     },
                 )
 
@@ -364,7 +374,7 @@ class ModelManager:
         prompt = CONTENT_TAGGING_PROMPT.format(
             content_type=content_type,
             title=title,
-            content_preview=content_preview[:3000],  # Limit preview length
+            preview=content_preview[:3000],  # Limit preview length
         )
 
         messages = [
@@ -420,7 +430,7 @@ class ModelManager:
         prompt = CONTENT_TAGGING_WITH_CONFIDENCE_PROMPT.format(
             content_type=content_type,
             title=title,
-            content_preview=content_preview[:3000],
+            preview=content_preview[:3000],
         )
 
         messages = [
