@@ -1,4 +1,5 @@
 import ErrorBoundary from "@/components/ErrorBoundary";
+import RoadmapPromptModal from "@/features/roadmap/RoadmapPromptModal";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -32,6 +33,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useApi } from "@/hooks/useApi";
 import { fetchContentData, processContentData } from "@/lib/api";
+import { api } from "@/lib/apiClient";
 import { deleteApi } from "@/services/deleteApi";
 import {
 	calculateBookProgress,
@@ -461,7 +463,6 @@ export default function HomePage() {
 	if (import.meta.env.VITE_DEBUG_MODE === "true") {
 		console.log("[Debug] Rendering HomePage component");
 	}
-	const api = useApi();
 	const { toast } = useToast();
 	const navigate = useNavigate();
 	const [searchQuery, setSearchQuery] = useState("");
@@ -490,6 +491,7 @@ export default function HomePage() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [pins, setPins] = useState({});
 	const [showAll, setShowAll] = useState(false);
+	const [showRoadmapModal, setShowRoadmapModal] = useState(false);
 
 	// Fetch content data on component mount
 	useEffect(() => {
@@ -733,6 +735,31 @@ export default function HomePage() {
 			sortOptions.find((option) => option.id === activeSort)?.label ||
 			"Last Opened"
 		);
+	};
+
+	// Handle roadmap creation success
+	const handleRoadmapCreated = async (newRoadmap) => {
+		try {
+			// Refresh content list to include the new roadmap
+			const data = await fetchContentData();
+			const { content } = processContentData(data);
+			const transformedContent = content.map((item) => ({
+				...item,
+				dueDate:
+					Math.random() > 0.7
+						? new Date(
+								Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000,
+							).toISOString()
+						: null,
+				isPaused: Math.random() > 0.9,
+				totalCards: item.cardCount,
+				due: item.dueCount || Math.floor(Math.random() * 10),
+				overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
+			}));
+			setContentItems(transformedContent);
+		} catch (error) {
+			console.error("Error refreshing content after roadmap creation:", error);
+		}
 	};
 
 	const togglePin = (type, id) =>
@@ -1189,6 +1216,14 @@ export default function HomePage() {
 															Clear
 														</Button>
 													)}
+													<Button
+														onClick={() => setShowRoadmapModal(true)}
+														size="sm"
+														className="bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white flex items-center gap-1"
+													>
+														<Sparkles className="h-3.5 w-3.5" />
+														Generate Roadmap
+													</Button>
 													<Popover>
 														<PopoverTrigger asChild>
 															<Button
@@ -1711,19 +1746,15 @@ export default function HomePage() {
 												className="group relative"
 											>
 												<span className="absolute right-full mr-3 bg-white text-foreground px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-													Generate Course
+													Generate Roadmap
 												</span>
 												<Button
 													onClick={() => {
-														toast({
-															title: "Coming Soon",
-															description:
-																"Course generation will be available soon!",
-														});
+														setShowRoadmapModal(true);
 														setIsFabExpanded(false);
 													}}
 													size="icon"
-													className="h-14 w-14 rounded-full bg-course hover:bg-course-accent text-white shadow-lg transition-all hover:scale-110"
+													className="h-14 w-14 rounded-full bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white shadow-lg transition-all hover:scale-110"
 												>
 													<Sparkles className="h-6 w-6" />
 												</Button>
@@ -1866,6 +1897,12 @@ export default function HomePage() {
         `}</style>
 					</div>
 				</ErrorBoundary>
+
+				{/* Roadmap Prompt Modal */}
+				<RoadmapPromptModal
+					isOpen={showRoadmapModal}
+					onClose={() => setShowRoadmapModal(false)}
+				/>
 			</TooltipProvider>
 		</ErrorBoundary>
 	);

@@ -13,6 +13,7 @@ import { BookViewer } from "./features/book-viewer";
 // Sidebar import removed - now imported in individual components
 import { OnboardingFlow } from "./features/onboarding";
 import RoadmapFlow from "./features/roadmap";
+import RoadmapPreviewPage from "./features/roadmap/RoadmapPreviewPage";
 import { useOutlineData } from "./features/roadmap/outline/useOutlineData";
 import { VideoViewer } from "./features/video-viewer";
 import { useAppState } from "./hooks/useAppState";
@@ -63,6 +64,10 @@ export default function App() {
 			<ChatSidebarProvider>
 				<div className="app-container">
 					<Routes>
+						<Route
+							path="/roadmap/preview/:roadmapId"
+							element={<RoadmapPreviewPage />}
+						/>
 						<Route path="/roadmap/:roadmapId" element={<RoadmapPage />} />
 						<Route path="/books/:bookId" element={<BookViewer />} />
 						<Route path="/videos/:videoId" element={<VideoViewer />} />
