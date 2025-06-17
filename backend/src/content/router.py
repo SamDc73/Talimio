@@ -1,4 +1,4 @@
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Query
 
@@ -6,8 +6,6 @@ from src.content.schemas import ContentListResponse, ContentType
 from src.content.service import (
     archive_content,
     delete_content,
-    get_content_stats,
-    list_archived_content,
     list_content_fast,
     unarchive_content,
 )
@@ -65,36 +63,6 @@ async def unarchive_content_item(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to unarchive content: {e!s}")
-
-
-@router.get("/archived")
-async def get_archived_content(
-    search: Annotated[str | None, Query(description="Search term for filtering content")] = None,
-    content_type: Annotated[ContentType | None, Query(description="Filter by content type")] = None,
-    page: Annotated[int, Query(ge=1, description="Page number")] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
-) -> ContentListResponse:
-    """
-    List only archived content across different types.
-
-    Returns a unified list of archived content items with consistent structure.
-    """
-    return await list_archived_content(
-        search=search,
-        content_type=content_type,
-        page=page,
-        page_size=page_size,
-    )
-
-
-@router.get("/stats")
-async def get_dashboard_stats() -> dict[str, Any]:
-    """
-    Get dashboard statistics for all content types.
-
-    Returns counts of total, archived, and active content by type.
-    """
-    return await get_content_stats()
 
 
 @router.delete("/{content_type}/{content_id}")
