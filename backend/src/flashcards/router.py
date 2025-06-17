@@ -19,8 +19,6 @@ from .schemas import (
 from .service import (
     create_card,
     create_deck,
-    delete_card,
-    delete_deck,
     get_deck,
     get_deck_cards,
     get_decks,
@@ -62,12 +60,6 @@ async def update_deck_endpoint(deck_id: UUID, deck_data: FlashcardDeckUpdate) ->
     return await update_deck(deck_id, deck_data)
 
 
-@router.delete("/{deck_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_deck_endpoint(deck_id: UUID) -> None:
-    """Delete a deck."""
-    await delete_deck(deck_id)
-
-
 # Card endpoints
 @router.get("/{deck_id}/cards")
 async def get_deck_cards_endpoint(
@@ -93,12 +85,6 @@ async def update_card_endpoint(
 ) -> FlashcardCardResponse:
     """Update a card."""
     return await update_card(deck_id, card_id, card_data)
-
-
-@router.delete("/{deck_id}/cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_card_endpoint(deck_id: UUID, card_id: UUID) -> None:
-    """Delete a card."""
-    await delete_card(deck_id, card_id)
 
 
 # Review endpoints

@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID  # noqa: N811
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,6 +19,8 @@ class FlashcardDeck(Base):
     user_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)  # For future user support
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     is_public: Mapped[bool] = mapped_column(nullable=False, default=False)
+    archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

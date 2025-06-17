@@ -2,6 +2,7 @@
 
 import json
 import logging
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import text
@@ -89,6 +90,11 @@ def _build_content_queries(content_type: ContentType | None, search: str | None)
 
 def _get_video_query(search: str | None) -> str:
     """Get SQL query for videos."""
+    return _get_youtube_query(search, archived_only=False)
+
+
+def _get_youtube_query(search: str | None, archived_only: bool = False) -> str:
+    """Get SQL query for videos."""
     query = """
         SELECT
             v.uuid::text as id,
@@ -118,12 +124,29 @@ def _get_video_query(search: str | None) -> str:
             GROUP BY video_uuid
         ) chapter_stats ON v.uuid = chapter_stats.video_uuid
     """
+
+    # Build WHERE clause
+    where_conditions = []
+    if archived_only:
+        where_conditions.append("v.archived = true")
+    else:
+        where_conditions.append("(v.archived = false OR v.archived IS NULL)")
+
     if search:
-        query += " WHERE v.title ILIKE %(search)s OR v.channel ILIKE %(search)s"
+        where_conditions.append("(v.title ILIKE %(search)s OR v.channel ILIKE %(search)s)")
+
+    if where_conditions:
+        query += " WHERE " + " AND ".join(where_conditions)
+
     return query
 
 
 def _get_flashcard_query(search: str | None) -> str:
+    """Get SQL query for flashcards."""
+    return _get_flashcards_query(search, archived_only=False)
+
+
+def _get_flashcards_query(search: str | None, archived_only: bool = False) -> str:
     """Get SQL query for flashcards."""
     query = """
         SELECT
@@ -141,12 +164,29 @@ def _get_flashcard_query(search: str | None) -> str:
             0 as count2
         FROM flashcard_decks
     """
+
+    # Build WHERE clause
+    where_conditions = []
+    if archived_only:
+        where_conditions.append("archived = true")
+    else:
+        where_conditions.append("(archived = false OR archived IS NULL)")
+
     if search:
-        query += " WHERE name ILIKE %(search)s OR description ILIKE %(search)s"
+        where_conditions.append("(name ILIKE %(search)s OR description ILIKE %(search)s)")
+
+    if where_conditions:
+        query += " WHERE " + " AND ".join(where_conditions)
+
     return query
 
 
 def _get_book_query(search: str | None) -> str:
+    """Get SQL query for books."""
+    return _get_books_query(search, archived_only=False)
+
+
+def _get_books_query(search: str | None, archived_only: bool = False) -> str:
     """Get SQL query for books."""
     query = """
         SELECT
@@ -176,12 +216,29 @@ def _get_book_query(search: str | None) -> str:
             ) as count2
         FROM books b
     """
+
+    # Build WHERE clause
+    where_conditions = []
+    if archived_only:
+        where_conditions.append("b.archived = true")
+    else:
+        where_conditions.append("(b.archived = false OR b.archived IS NULL)")
+
     if search:
-        query += " WHERE b.title ILIKE %(search)s OR b.author ILIKE %(search)s"
+        where_conditions.append("(b.title ILIKE %(search)s OR b.author ILIKE %(search)s)")
+
+    if where_conditions:
+        query += " WHERE " + " AND ".join(where_conditions)
+
     return query
 
 
 def _get_roadmap_query(search: str | None) -> str:
+    """Get SQL query for roadmaps."""
+    return _get_roadmaps_query(search, archived_only=False)
+
+
+def _get_roadmaps_query(search: str | None, archived_only: bool = False) -> str:
     """Get SQL query for roadmaps."""
     query = """
         SELECT
@@ -209,8 +266,20 @@ def _get_roadmap_query(search: str | None) -> str:
             (SELECT COUNT(*) FROM nodes n WHERE n.roadmap_id = r.id AND n.status = 'done') as count2
         FROM roadmaps r
     """
+
+    # Build WHERE clause
+    where_conditions = []
+    if archived_only:
+        where_conditions.append("r.archived = true")
+    else:
+        where_conditions.append("(r.archived = false OR r.archived IS NULL)")
+
     if search:
-        query += " WHERE r.title ILIKE %(search)s OR r.description ILIKE %(search)s"
+        where_conditions.append("(r.title ILIKE %(search)s OR r.description ILIKE %(search)s)")
+
+    if where_conditions:
+        query += " WHERE " + " AND ".join(where_conditions)
+
     return query
 
 
@@ -321,3 +390,203 @@ def _create_roadmap_content(row: Any) -> RoadmapContent:
         progress=row.progress,
         tags=[],
     )
+
+
+async def archive_content(content_type: ContentType, content_id: str) -> None:
+    """Archive content by type and ID."""
+    table_map = {
+        ContentType.BOOK: "books",
+        ContentType.YOUTUBE: "videos",
+        ContentType.FLASHCARDS: "flashcard_decks",
+        ContentType.ROADMAP: "roadmaps",
+    }
+
+    table_name = table_map.get(content_type)
+    if not table_name:
+        raise ValueError(f"Unsupported content type: {content_type}")
+
+    async with async_session_maker() as session:
+        # Handle different ID column names
+        id_column = "uuid" if content_type == ContentType.YOUTUBE else "id"
+
+        query = f"""
+            UPDATE {table_name}
+            SET archived = true, archived_at = :archived_at
+            WHERE {id_column} = :content_id
+        """
+
+        await session.execute(text(query), {"content_id": content_id, "archived_at": datetime.utcnow()})
+        await session.commit()
+
+
+async def unarchive_content(content_type: ContentType, content_id: str) -> None:
+    """Unarchive content by type and ID."""
+    table_map = {
+        ContentType.BOOK: "books",
+        ContentType.YOUTUBE: "videos",
+        ContentType.FLASHCARDS: "flashcard_decks",
+        ContentType.ROADMAP: "roadmaps",
+    }
+
+    table_name = table_map.get(content_type)
+    if not table_name:
+        raise ValueError(f"Unsupported content type: {content_type}")
+
+    async with async_session_maker() as session:
+        # Handle different ID column names
+        id_column = "uuid" if content_type == ContentType.YOUTUBE else "id"
+
+        query = f"""
+            UPDATE {table_name}
+            SET archived = false, archived_at = NULL
+            WHERE {id_column} = :content_id
+        """
+
+        await session.execute(text(query), {"content_id": content_id})
+        await session.commit()
+
+
+async def list_archived_content(
+    search: str | None = None,
+    content_type: ContentType | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> ContentListResponse:
+    """
+    List only archived content across different types.
+
+    Similar to list_content_fast but filters for archived = true.
+    """
+    offset = (page - 1) * page_size
+    search_term = f"%{search}%" if search else None
+
+    # Construct the combined query with archived filter
+    if content_type:
+        if content_type == ContentType.YOUTUBE:
+            combined_query = _get_youtube_query(search, archived_only=True)
+        elif content_type == ContentType.FLASHCARDS:
+            combined_query = _get_flashcards_query(search, archived_only=True)
+        elif content_type == ContentType.BOOK:
+            combined_query = _get_books_query(search, archived_only=True)
+        elif content_type == ContentType.ROADMAP:
+            combined_query = _get_roadmaps_query(search, archived_only=True)
+        else:
+            raise ValueError(f"Unsupported content type: {content_type}")
+    else:
+        # Union all content types with archived filter
+        combined_query = f"""
+            {_get_youtube_query(search, archived_only=True)}
+            UNION ALL
+            {_get_flashcards_query(search, archived_only=True)}
+            UNION ALL
+            {_get_books_query(search, archived_only=True)}
+            UNION ALL
+            {_get_roadmaps_query(search, archived_only=True)}
+        """
+
+    async with async_session_maker() as session:
+        # Get total count and paginated results
+        total = await _get_total_count(session, combined_query, search_term)
+        rows = await _get_paginated_results(session, combined_query, search_term, page_size, offset)
+
+        # Transform rows to content items
+        items = _transform_rows_to_items(rows)
+
+    return ContentListResponse(
+        items=items,
+        total=total,
+        page=page,
+        pageSize=page_size,
+    )
+
+
+async def get_content_stats() -> dict[str, Any]:
+    """Get dashboard statistics for all content types."""
+    async with async_session_maker() as session:
+        # Get counts for each content type
+        stats_query = """
+            SELECT 
+                'books' as type,
+                COUNT(*) as total,
+                COUNT(*) FILTER (WHERE archived = true) as archived
+            FROM books
+            UNION ALL
+            SELECT 
+                'videos' as type,
+                COUNT(*) as total,
+                COUNT(*) FILTER (WHERE archived = true) as archived
+            FROM videos
+            UNION ALL
+            SELECT 
+                'flashcard_decks' as type,
+                COUNT(*) as total,
+                COUNT(*) FILTER (WHERE archived = true) as archived
+            FROM flashcard_decks
+            UNION ALL
+            SELECT 
+                'roadmaps' as type,
+                COUNT(*) as total,
+                COUNT(*) FILTER (WHERE archived = true) as archived
+            FROM roadmaps
+        """
+
+        result = await session.execute(text(stats_query))
+        rows = result.all()
+
+        stats = {"totalContent": 0, "totalArchived": 0, "byType": {}}
+
+        type_mapping = {"books": "book", "videos": "youtube", "flashcard_decks": "flashcards", "roadmaps": "roadmap"}
+
+        for row in rows:
+            content_type = type_mapping.get(row.type, row.type)
+            stats["byType"][content_type] = {
+                "total": row.total,
+                "archived": row.archived,
+                "active": row.total - row.archived,
+            }
+            stats["totalContent"] += row.total
+            stats["totalArchived"] += row.archived
+
+        stats["totalActive"] = stats["totalContent"] - stats["totalArchived"]
+
+        return stats
+
+
+async def delete_content(content_type: ContentType, content_id: str) -> None:
+    """Delete content by type and ID using proper ORM cascade deletion."""
+    from uuid import UUID
+
+    # Import the models for proper ORM deletion
+    if content_type == ContentType.BOOK:
+        from src.books.models import Book as ModelClass
+    elif content_type == ContentType.YOUTUBE:
+        from src.videos.models import Video as ModelClass
+    elif content_type == ContentType.FLASHCARDS:
+        from src.flashcards.models import FlashcardDeck as ModelClass
+    elif content_type == ContentType.ROADMAP:
+        from src.roadmaps.models import Roadmap as ModelClass
+    else:
+        raise ValueError(f"Unsupported content type: {content_type}")
+
+    async with async_session_maker() as session:
+        # Handle different ID column names and types
+        if content_type == ContentType.YOUTUBE:
+            # Videos use uuid column, need to query by uuid field
+            from sqlalchemy import select
+            stmt = select(ModelClass).where(ModelClass.uuid == content_id)
+            result = await session.execute(stmt)
+            content_obj = result.scalar_one_or_none()
+        else:
+            # Convert string ID to UUID for other content types
+            try:
+                uuid_id = UUID(content_id)
+                content_obj = await session.get(ModelClass, uuid_id)
+            except ValueError:
+                raise ValueError(f"Invalid ID format: {content_id}")
+
+        if not content_obj:
+            raise ValueError(f"Content with ID {content_id} not found")
+
+        # Delete using ORM to ensure proper cascade deletion
+        await session.delete(content_obj)
+        await session.commit()
