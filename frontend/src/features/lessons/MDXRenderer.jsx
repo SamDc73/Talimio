@@ -3,9 +3,7 @@ import { MDXProvider } from "@mdx-js/react";
 import { useEffect, useMemo, useState } from "react";
 import * as runtime from "react/jsx-runtime";
 import rehypePrettyCode from "rehype-pretty-code";
-import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
-import remarkRehype from "remark-rehype";
 import { CodeBlock } from "../../components/code-block";
 import "./LessonViewer.css";
 
@@ -132,11 +130,8 @@ export function MDXRenderer({ content }) {
 					...runtime,
 					development: false,
 					useMDXComponents: () => currentComponents,
-					rehypePlugins: [rehypeRaw, [rehypePrettyCode, prettyCodeOptions]],
-					remarkPlugins: [
-						remarkGfm,
-						[remarkRehype, { allowDangerousHtml: true }],
-					],
+					rehypePlugins: [[rehypePrettyCode, prettyCodeOptions]],
+					remarkPlugins: [remarkGfm],
 				});
 
 				setMdxModule(result);

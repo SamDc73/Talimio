@@ -516,6 +516,26 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> str:
         if markdown_content is None:
             raise LessonGenerationError
 
+        # Clean up any markdown code fences that might wrap the entire content
+        markdown_content = markdown_content.strip()
+        # Remove markdown code fences if the entire content is wrapped
+        if markdown_content.startswith("```") and markdown_content.endswith("```"):
+            # Remove the opening code fence (might have language specifier)
+            lines = markdown_content.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            # Remove the closing code fence
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            markdown_content = "\n".join(lines)
+
+        # Remove any quotes that might wrap the entire content
+        markdown_content = markdown_content.strip()
+        if (markdown_content.startswith('"') and markdown_content.endswith('"')) or (
+            markdown_content.startswith("'") and markdown_content.endswith("'")
+        ):
+            markdown_content = markdown_content[1:-1]
+
         if not isinstance(markdown_content, str) or len(markdown_content.strip()) < MIN_LESSON_CONTENT_LENGTH:
             logging.error(
                 f"Invalid or too short lesson content received: {markdown_content[:MIN_LESSON_CONTENT_LENGTH]}...",
@@ -523,7 +543,7 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> str:
             raise LessonGenerationError
 
         logging.info(f"Successfully generated lesson content ({len(markdown_content)} characters)")
-        return markdown_content
+        return markdown_content.strip()
 
     except Exception as e:
         logging.exception("Error generating lesson content")
