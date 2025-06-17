@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { KebabMenu } from "./KebabMenu";
 import { TagChip } from "./TagChip";
 
-export function RoadmapCard({ roadmap, onDelete }) {
+export function RoadmapCard({ roadmap, onDelete, onArchive }) {
 	const [showMenu, setShowMenu] = useState(false);
 	const nodeCount = roadmap.nodeCount || 0;
 	const completedNodes = roadmap.completedNodes || 0;
@@ -39,9 +39,11 @@ export function RoadmapCard({ roadmap, onDelete }) {
 			<KebabMenu
 				showMenu={showMenu}
 				onDelete={handleDelete}
+				onArchive={onArchive}
 				itemType="roadmap"
 				itemId={roadmap.id}
 				itemTitle={roadmap.title || "Untitled Roadmap"}
+				isArchived={roadmap.archived || false}
 			/>
 
 			{/* Title */}

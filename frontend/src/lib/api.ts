@@ -7,6 +7,7 @@ export interface ContentItem {
 	createdDate: string;
 	progress: number;
 	tags: string[];
+	archived?: boolean;
 	// YouTube specific
 	channelName?: string;
 	channel_name?: string;
@@ -38,9 +39,16 @@ export interface SortOption {
 	icon: "Clock" | "CalendarDays" | "ArrowUpDown" | "FileText";
 }
 
-export async function fetchContentData(): Promise<ContentItem[]> {
+export async function fetchContentData(
+	includeArchived = false,
+): Promise<ContentItem[]> {
 	try {
-		const response = await fetch("http://localhost:8080/api/v1/content", {
+		const url = new URL("http://localhost:8080/api/v1/content");
+		if (includeArchived) {
+			url.searchParams.append("include_archived", "true");
+		}
+
+		const response = await fetch(url.toString(), {
 			headers: {
 				Accept: "application/json",
 			},
@@ -57,9 +65,12 @@ export async function fetchContentData(): Promise<ContentItem[]> {
 
 		// Map the API response to the expected ContentItem format
 		return data.items.map((item: Record<string, unknown>) => {
-			if (import.meta.env.VITE_DEBUG_MODE === "true") {
-				console.log("[DEBUG] Processing item:", item);
-			}
+			// Always log archive status for debugging
+			console.log(`🔄 Processing item "${item.title}":`, {
+				type: item.type,
+				archived: item.archived,
+				willMapTo: (item.archived as boolean) || false,
+			});
 
 			const mappedItem = {
 				id: item.id as string,
@@ -70,6 +81,7 @@ export async function fetchContentData(): Promise<ContentItem[]> {
 				createdDate: item.createdDate as string,
 				progress: (item.progress as number) || 0,
 				tags: (item.tags as string[]) || [],
+				archived: (item.archived as boolean) || false,
 				// Map specific fields based on content type
 				...(item.type === "youtube" && {
 					channelName:
@@ -98,9 +110,11 @@ export async function fetchContentData(): Promise<ContentItem[]> {
 				}),
 			};
 
-			if (import.meta.env.VITE_DEBUG_MODE === "true") {
-				console.log("[DEBUG] Mapped item:", mappedItem);
-			}
+			console.log(`✅ Mapped item "${mappedItem.title}":`, {
+				type: mappedItem.type,
+				archived: mappedItem.archived,
+				id: mappedItem.id,
+			});
 			return mappedItem;
 		});
 	} catch (error) {

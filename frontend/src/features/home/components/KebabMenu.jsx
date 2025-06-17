@@ -1,8 +1,11 @@
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
 import { Button } from "@/components/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover";
+import { useToast } from "@/hooks/use-toast";
+import { archiveContent, unarchiveContent } from "@/services/contentService";
 import {
 	Archive,
+	ArchiveRestore,
 	MoreHorizontal,
 	PauseCircle,
 	PlayCircle,
@@ -15,13 +18,17 @@ export function KebabMenu({
 	onMouseLeave,
 	showMenu = false,
 	onDelete,
+	onArchive,
 	itemType,
 	itemId,
 	itemTitle = "",
+	isArchived = false,
 	isPaused = false,
 }) {
 	const [open, setOpen] = useState(false);
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+	const [isArchiving, setIsArchiving] = useState(false);
+	const { toast } = useToast();
 
 	const handleDeleteClick = () => {
 		setShowDeleteConfirm(true);
@@ -34,9 +41,41 @@ export function KebabMenu({
 		}
 	};
 
-	const handleArchive = () => {
-		console.log("Archive functionality - placeholder");
+	const handleArchive = async () => {
+		if (isArchiving) return;
+
+		setIsArchiving(true);
 		setOpen(false);
+
+		try {
+			if (isArchived) {
+				await unarchiveContent(itemType, itemId);
+				toast({
+					title: "Content Unarchived",
+					description: `${itemTitle} has been unarchived successfully.`,
+				});
+			} else {
+				await archiveContent(itemType, itemId);
+				toast({
+					title: "Content Archived",
+					description: `${itemTitle} has been archived successfully.`,
+				});
+			}
+
+			// Notify parent component to refresh content
+			if (onArchive) {
+				onArchive(itemType, itemId, !isArchived);
+			}
+		} catch (error) {
+			console.error("Archive operation failed:", error);
+			toast({
+				title: "Error",
+				description: `Failed to ${isArchived ? "unarchive" : "archive"} content. Please try again.`,
+				variant: "destructive",
+			});
+		} finally {
+			setIsArchiving(false);
+		}
 	};
 
 	const handleTogglePause = () => {
@@ -83,9 +122,18 @@ export function KebabMenu({
 							size="sm"
 							className="justify-start font-normal flex items-center gap-2"
 							onClick={handleArchive}
+							disabled={isArchiving}
 						>
-							<Archive className="h-4 w-4" />
-							Archive
+							{isArchived ? (
+								<ArchiveRestore className="h-4 w-4" />
+							) : (
+								<Archive className="h-4 w-4" />
+							)}
+							{isArchiving
+								? "Processing..."
+								: isArchived
+									? "Unarchive"
+									: "Archive"}
 						</Button>
 						<Button
 							variant="ghost"

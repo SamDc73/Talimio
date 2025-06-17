@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Query
@@ -11,6 +12,9 @@ from src.content.service import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 router = APIRouter(prefix="/api/v1/content", tags=["content"])
 
 
@@ -20,6 +24,7 @@ async def get_all_content(
     content_type: Annotated[ContentType | None, Query(description="Filter by content type")] = None,
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
+    include_archived: Annotated[bool, Query(description="Include archived content")] = False,
 ) -> ContentListResponse:
     """
     List all content across different types (videos, flashcards, books, roadmaps).
@@ -32,6 +37,7 @@ async def get_all_content(
         content_type=content_type,
         page=page,
         page_size=page_size,
+        include_archived=include_archived,
     )
 
 
@@ -41,13 +47,17 @@ async def archive_content_item(
     content_id: Annotated[str, Path(description="ID of content to archive")],
 ) -> dict[str, str]:
     """Archive a content item by type and ID."""
+    logger.info(f"🗃️ Archive request: {content_type} {content_id}")
     try:
         await archive_content(content_type, content_id)
+        logger.info(f"✅ Successfully archived {content_type} {content_id}")
         return {"message": f"Content {content_id} archived successfully"}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("❌ Archive failed - ValueError")
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to archive content: {e!s}")
+        logger.exception("❌ Archive failed - Exception")
+        raise HTTPException(status_code=500, detail=f"Failed to archive content: {e!s}") from e
 
 
 @router.patch("/{content_type}/{content_id}/unarchive")
@@ -56,13 +66,17 @@ async def unarchive_content_item(
     content_id: Annotated[str, Path(description="ID of content to unarchive")],
 ) -> dict[str, str]:
     """Unarchive a content item by type and ID."""
+    logger.info(f"📤 Unarchive request: {content_type} {content_id}")
     try:
         await unarchive_content(content_type, content_id)
+        logger.info(f"✅ Successfully unarchived {content_type} {content_id}")
         return {"message": f"Content {content_id} unarchived successfully"}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("❌ Unarchive failed - ValueError")
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to unarchive content: {e!s}")
+        logger.exception("❌ Unarchive failed - Exception")
+        raise HTTPException(status_code=500, detail=f"Failed to unarchive content: {e!s}") from e
 
 
 @router.delete("/{content_type}/{content_id}")
@@ -75,6 +89,6 @@ async def delete_content_item(
         await delete_content(content_type, content_id)
         return {"message": f"Content {content_id} deleted successfully"}
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete content: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete content: {e!s}") from e

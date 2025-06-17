@@ -18,7 +18,7 @@ function formatDuration(seconds) {
 	return `${minutes}:${secs.toString().padStart(2, "0")}`;
 }
 
-export function YoutubeCard({ video, onDelete, className = "" }) {
+export function YoutubeCard({ video, onDelete, onArchive, className = "" }) {
 	const [showMenu, setShowMenu] = useState(false);
 
 	const handleDelete = async (itemType, itemId) => {
@@ -49,9 +49,11 @@ export function YoutubeCard({ video, onDelete, className = "" }) {
 			<KebabMenu
 				showMenu={showMenu}
 				onDelete={handleDelete}
-				itemType="video"
+				onArchive={onArchive}
+				itemType="youtube"
 				itemId={video.uuid || video.id}
 				itemTitle={video.title}
+				isArchived={video.archived || false}
 			/>
 
 			{/* Title */}
