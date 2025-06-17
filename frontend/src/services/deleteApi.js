@@ -2,7 +2,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api/v1";
 
 export const deleteApi = {
 	async deleteVideo(id) {
-		const response = await fetch(`${BASE_URL}/videos/${id}`, {
+		const response = await fetch(`${BASE_URL}/content/youtube/${id}`, {
 			method: "DELETE",
 		});
 
@@ -12,7 +12,7 @@ export const deleteApi = {
 	},
 
 	async deleteBook(id) {
-		const response = await fetch(`${BASE_URL}/books/${id}`, {
+		const response = await fetch(`${BASE_URL}/content/book/${id}`, {
 			method: "DELETE",
 		});
 
@@ -22,7 +22,7 @@ export const deleteApi = {
 	},
 
 	async deleteRoadmap(id) {
-		const response = await fetch(`${BASE_URL}/roadmaps/${id}`, {
+		const response = await fetch(`${BASE_URL}/content/roadmap/${id}`, {
 			method: "DELETE",
 		});
 
@@ -32,7 +32,7 @@ export const deleteApi = {
 	},
 
 	async deleteFlashcardDeck(id) {
-		const response = await fetch(`${BASE_URL}/flashcards/${id}`, {
+		const response = await fetch(`${BASE_URL}/content/flashcards/${id}`, {
 			method: "DELETE",
 		});
 
@@ -42,7 +42,7 @@ export const deleteApi = {
 	},
 
 	async deleteLesson(id) {
-		const response = await fetch(`${BASE_URL}/lessons/${id}`, {
+		const response = await fetch(`${BASE_URL}/content/course/${id}`, {
 			method: "DELETE",
 		});
 
@@ -52,19 +52,27 @@ export const deleteApi = {
 	},
 
 	async deleteItem(itemType, id) {
-		switch (itemType) {
-			case "video":
-				return this.deleteVideo(id);
-			case "book":
-				return this.deleteBook(id);
-			case "roadmap":
-				return this.deleteRoadmap(id);
-			case "flashcard":
-				return this.deleteFlashcardDeck(id);
-			case "lesson":
-				return this.deleteLesson(id);
-			default:
-				throw new Error(`Unknown item type: ${itemType}`);
+		// Map frontend item types to backend content types
+		const contentTypeMap = {
+			video: "youtube",
+			book: "book",
+			roadmap: "roadmap",
+			flashcard: "flashcards",
+			lesson: "course",
+			course: "course",
+			youtube: "youtube",
+			flashcards: "flashcards",
+		};
+
+		const contentType = contentTypeMap[itemType] || itemType;
+
+		const response = await fetch(`${BASE_URL}/content/${contentType}/${id}`, {
+			method: "DELETE",
+		});
+
+		if (!response.ok) {
+			const errorMsg = `Failed to delete ${itemType}`;
+			throw new Error(errorMsg);
 		}
 	},
 };

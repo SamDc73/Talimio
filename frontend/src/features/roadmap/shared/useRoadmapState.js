@@ -300,7 +300,7 @@ export const useRoadmapState = (roadmapId, onError) => {
 			setIsLoading(true);
 			try {
 				const response = await fetch(
-					`${import.meta.env.VITE_API_BASE || '/api/v1'}/roadmaps/${roadmapId}`,
+					`${import.meta.env.VITE_API_BASE || "/api/v1"}/roadmaps/${roadmapId}`,
 				);
 				if (!response.ok) {
 					throw new Error(`HTTP error! status: ${response.status}`);
