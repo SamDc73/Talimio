@@ -14,7 +14,7 @@ export const assistantApi = {
 				body: JSON.stringify({
 					message,
 					conversation_history: conversationHistory,
-					user_id: getUserHeaders()['x-user-id'],
+					user_id: getUserHeaders()["x-user-id"],
 				}),
 			},
 		);

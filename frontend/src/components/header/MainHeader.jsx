@@ -34,8 +34,8 @@ import { Link } from "react-router-dom";
 import { useTheme } from "../../contexts/ThemeContext";
 import { cn } from "../../lib/utils";
 import { useAssistantChat } from "../../services/assistantApi";
-import { Button } from "../button";
 import { PersonalizationDialog } from "../PersonalizationDialog";
+import { Button } from "../button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,

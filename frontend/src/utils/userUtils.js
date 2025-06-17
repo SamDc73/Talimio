@@ -7,16 +7,16 @@
  * @returns {string} User ID
  */
 export function getUserId() {
-  let userId = localStorage.getItem('user_id');
-  
-  if (!userId) {
-    // Generate a simple user ID for demo purposes
-    // In production, this would come from authentication
-    userId = 'user_' + Math.random().toString(36).substr(2, 9);
-    localStorage.setItem('user_id', userId);
-  }
-  
-  return userId;
+	let userId = localStorage.getItem("user_id");
+
+	if (!userId) {
+		// Generate a simple user ID for demo purposes
+		// In production, this would come from authentication
+		userId = `user_${Math.random().toString(36).substr(2, 9)}`;
+		localStorage.setItem("user_id", userId);
+	}
+
+	return userId;
 }
 
 /**
@@ -24,14 +24,14 @@ export function getUserId() {
  * @param {string} userId - User ID to set
  */
 export function setUserId(userId) {
-  localStorage.setItem('user_id', userId);
+	localStorage.setItem("user_id", userId);
 }
 
 /**
  * Clear the stored user ID
  */
 export function clearUserId() {
-  localStorage.removeItem('user_id');
+	localStorage.removeItem("user_id");
 }
 
 /**
@@ -39,7 +39,7 @@ export function clearUserId() {
  * @returns {Object} Headers object with x-user-id
  */
 export function getUserHeaders() {
-  return {
-    'x-user-id': getUserId()
-  };
+	return {
+		"x-user-id": getUserId(),
+	};
 }
