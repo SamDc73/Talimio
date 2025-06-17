@@ -21,7 +21,6 @@ from .schemas import (
 from .service import (
     batch_update_chapter_statuses,
     create_book,
-    delete_book,
     extract_and_create_chapters,
     get_book,
     get_book_chapter,
@@ -166,12 +165,6 @@ async def create_book_endpoint(
 async def update_book_endpoint(book_id: UUID, book_data: BookUpdate) -> BookResponse:
     """Update book details."""
     return await update_book(book_id, book_data)
-
-
-@router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_book_endpoint(book_id: UUID) -> None:
-    """Delete a book."""
-    await delete_book(book_id)
 
 
 @router.put("/{book_id}/progress")

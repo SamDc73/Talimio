@@ -132,25 +132,6 @@ async def update_roadmap(
     return RoadmapResponse.model_validate(roadmap)
 
 
-@router.delete(
-    "/{roadmap_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-async def delete_roadmap(
-    roadmap_id: UUID,
-    session: DbSession,
-) -> None:
-    """Delete a roadmap."""
-    service = RoadmapService(session)
-    try:
-        await service.delete_roadmap(roadmap_id)
-    except ResourceNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-
-
 @router.post(
     "/{roadmap_id}/nodes",
     status_code=status.HTTP_201_CREATED,
@@ -201,27 +182,6 @@ async def update_node(
             status_code=status.HTTP_404_NOT_FOUND
             if isinstance(e, ResourceNotFoundError)
             else status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
-
-
-@router.delete(
-    "/{roadmap_id}/nodes/{node_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    responses={404: {"description": "Roadmap or node not found"}},
-)
-async def delete_node(
-    roadmap_id: UUID,
-    node_id: UUID,
-    session: DbSession,
-) -> None:
-    """Delete a node from a roadmap."""
-    service = RoadmapService(session)
-    try:
-        await service.delete_node(roadmap_id, node_id)
-    except ResourceNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         ) from e
 

@@ -4,7 +4,6 @@ from fastapi import APIRouter, HTTPException, status
 
 from .schemas import LessonCreateRequest, LessonResponse, LessonUpdateRequest
 from .service import (
-    delete_lesson,
     generate_lesson,
     get_lesson,
     get_node_lessons,
@@ -95,9 +94,3 @@ async def get_lesson_endpoint(lesson_id: UUID) -> LessonResponse:
 async def update_lesson_endpoint(lesson_id: UUID, request: LessonUpdateRequest) -> LessonResponse:
     """Update a specific lesson."""
     return await update_lesson(lesson_id, request)
-
-
-@router.delete("/lessons/{lesson_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_lesson_endpoint(lesson_id: UUID) -> None:
-    """Delete a specific lesson."""
-    await delete_lesson(lesson_id)

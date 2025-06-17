@@ -131,18 +131,6 @@ async def update_video_progress_post(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{video_uuid}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_video(
-    video_uuid: str,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-) -> None:
-    """Remove a video from library."""
-    try:
-        await video_service.delete_video(db, video_uuid)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-
-
 # Phase 2.3: Video Chapter Endpoints
 @router.get("/{video_uuid}/chapters")
 async def get_video_chapters(

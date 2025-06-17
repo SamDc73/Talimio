@@ -79,6 +79,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
             await add_user_table()
 
+            # Run archive migration
+            from src.database.migrations.add_archive_columns import run_archive_migrations
+
+            await run_archive_migrations(engine)
+
             break  # Success - exit the retry loop
 
         except ConnectionDoesNotExistError:
