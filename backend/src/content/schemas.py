@@ -24,6 +24,7 @@ class ContentItemBase(BaseModel):
     created_date: datetime = Field(alias="createdDate")
     progress: float = Field(ge=0, le=100)
     tags: list[str] = []
+    archived: bool = False
 
     model_config = {"populate_by_name": True}
 

@@ -9,7 +9,7 @@ import { Link } from "react-router-dom";
 import { KebabMenu } from "./KebabMenu";
 import { TagChip } from "./TagChip";
 
-export function BookCard({ book, onDelete, className = "" }) {
+export function BookCard({ book, onDelete, onArchive, className = "" }) {
 	const [showMenu, setShowMenu] = useState(false);
 	const [progress, setProgress] = useState(() => {
 		// ALWAYS use saved stats first (they have the correct chapter-based progress)
@@ -107,9 +107,11 @@ export function BookCard({ book, onDelete, className = "" }) {
 			<KebabMenu
 				showMenu={showMenu}
 				onDelete={handleDelete}
+				onArchive={onArchive}
 				itemType="book"
 				itemId={book.id}
 				itemTitle={book.title || "Untitled Book"}
+				isArchived={book.archived || false}
 			/>
 
 			{/* Title */}

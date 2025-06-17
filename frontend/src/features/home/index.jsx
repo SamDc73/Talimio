@@ -34,6 +34,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useApi } from "@/hooks/useApi";
 import { fetchContentData, processContentData } from "@/lib/api";
 import { api } from "@/lib/apiClient";
+import { archiveContent, unarchiveContent } from "@/services/contentService";
 import { deleteApi } from "@/services/deleteApi";
 import {
 	calculateBookProgress,
@@ -209,13 +210,26 @@ const DueDateChip = ({
 	);
 };
 
-const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
+const BaseCard = ({
+	item,
+	pinned,
+	onTogglePin,
+	onDelete,
+	onArchive,
+	index,
+	onClick,
+}) => {
 	const [hover, setHover] = useState(false);
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+	const [isArchiving, setIsArchiving] = useState(false);
+	const { toast } = useToast();
 
-	if (import.meta.env.VITE_DEBUG_MODE === "true") {
-		console.log("[DEBUG] BaseCard received item:", item);
-	}
+	// Always log archive state for debugging
+	console.log(`🃏 BaseCard for "${item.title}":`, {
+		archived: item.archived,
+		type: item.type,
+		id: item.id || item.uuid,
+	});
 
 	const V = VARIANTS[item.type];
 	const isFlashcard = item.type === "flashcards";
@@ -265,6 +279,57 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
 			}
 		} catch (error) {
 			console.error("Failed to delete item:", error);
+		}
+	};
+
+	const handleArchive = async () => {
+		if (isArchiving) return;
+
+		setIsArchiving(true);
+		const contentType = item.type === "flashcards" ? "flashcards" : item.type;
+		const isArchived = item.archived || false;
+
+		console.log("📋 Archive operation starting:", {
+			itemId: item.id || item.uuid,
+			itemTitle: item.title,
+			contentType,
+			currentArchivedState: isArchived,
+			willArchive: !isArchived,
+		});
+
+		try {
+			if (isArchived) {
+				console.log(`🔓 Unarchiving ${contentType}: ${item.title}`);
+				await unarchiveContent(contentType, item.id || item.uuid);
+				toast({
+					title: "Content Unarchived",
+					description: `${item.title} has been unarchived successfully.`,
+				});
+			} else {
+				console.log(`📦 Archiving ${contentType}: ${item.title}`);
+				await archiveContent(contentType, item.id || item.uuid);
+				toast({
+					title: "Content Archived",
+					description: `${item.title} has been archived successfully.`,
+				});
+			}
+
+			console.log("✅ Archive operation completed successfully");
+
+			// Notify parent component to refresh content
+			if (onArchive) {
+				console.log("🔄 Calling onArchive callback to refresh content");
+				onArchive(item.id || item.uuid, contentType, !isArchived);
+			}
+		} catch (error) {
+			console.error("❌ Archive operation failed:", error);
+			toast({
+				title: "Error",
+				description: `Failed to ${item.archived ? "unarchive" : "archive"} content. Please try again.`,
+				variant: "destructive",
+			});
+		} finally {
+			setIsArchiving(false);
 		}
 	};
 
@@ -413,8 +478,7 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
 													e.stopPropagation();
 													if (action === "Pin") onTogglePin();
 													else if (action === "Delete") handleDeleteClick();
-													else if (action === "Archive")
-														console.log("Archive functionality - placeholder");
+													else if (action === "Archive") handleArchive();
 													else if (action === "Pause")
 														console.log("Pause functionality - placeholder");
 													else if (action === "Edit Tags")
@@ -422,8 +486,19 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, index, onClick }) => {
 															"Edit Tags functionality - placeholder",
 														);
 												}}
+												disabled={action === "Archive" && isArchiving}
 											>
-												{action === "Pin" ? (pinned ? "Unpin" : "Pin") : action}
+												{action === "Pin"
+													? pinned
+														? "Unpin"
+														: "Pin"
+													: action === "Archive"
+														? isArchiving
+															? "Processing..."
+															: item.archived
+																? "Unarchive"
+																: "Archive"
+														: action}
 											</Button>
 										),
 									)}
@@ -485,6 +560,7 @@ export default function HomePage() {
 	const [activeFilter, setActiveFilter] = useState("all");
 	const [activeSort, setActiveSort] = useState("last-accessed");
 	const [sortDirection, setSortDirection] = useState("desc");
+	const [archiveFilter, setArchiveFilter] = useState("active"); // "active", "archived", "all"
 	const [contentItems, setContentItems] = useState([]);
 	const [filterOptions, setFilterOptions] = useState([]);
 	const [sortOptions, setSortOptions] = useState([]);
@@ -493,17 +569,33 @@ export default function HomePage() {
 	const [showAll, setShowAll] = useState(false);
 	const [showRoadmapModal, setShowRoadmapModal] = useState(false);
 
-	// Fetch content data on component mount
+	// Fetch content data on component mount and when archive filter changes
 	useEffect(() => {
 		async function loadContentData() {
 			setIsLoading(true);
 			try {
-				const data = await fetchContentData();
+				// Include archived content if we're showing archived or all content
+				const includeArchived =
+					archiveFilter === "archived" || archiveFilter === "all";
+				console.log(
+					`🔄 Loading content data with archiveFilter: ${archiveFilter}, includeArchived: ${includeArchived}`,
+				);
+
+				const data = await fetchContentData(includeArchived);
+				console.log("📦 Raw API data received:", data);
+
 				const {
 					content,
 					filterOptions: options,
 					sortOptions: sortOpts,
 				} = processContentData(data);
+
+				console.log("⚙️ Processed content:", content);
+				console.log("📊 Archive status breakdown:", {
+					total: content.length,
+					archived: content.filter((item) => item.archived).length,
+					active: content.filter((item) => !item.archived).length,
+				});
 
 				// Transform data to match new structure
 				const transformedContent = content.map((item) => ({
@@ -595,16 +687,37 @@ export default function HomePage() {
 		}
 
 		loadContentData();
-	}, [toast]);
+	}, [toast, archiveFilter]);
 
 	// Apply filters and sorting
-	const filteredAndSortedContent = contentItems
+	const filteredAndSortedContent = (
+		Array.isArray(contentItems) ? contentItems : []
+	)
 		.filter((item) => {
 			// Apply content type filter
 			if (activeFilter === "all") return true;
 			if (activeFilter === "course")
 				return item.type === "course" || item.type === "roadmap";
 			return item.type === activeFilter;
+		})
+		.filter((item) => {
+			// Apply archive filter
+			const isArchived = Boolean(item.archived);
+			console.log("🔍 Archive filter check:", {
+				itemTitle: item.title,
+				itemArchived: isArchived,
+				archiveFilter,
+				willShow:
+					archiveFilter === "active"
+						? !isArchived
+						: archiveFilter === "archived"
+							? isArchived
+							: true,
+			});
+
+			if (archiveFilter === "active") return !isArchived;
+			if (archiveFilter === "archived") return isArchived;
+			return true; // "all" shows both archived and active
 		})
 		.filter((item) => {
 			if (!searchQuery) return true;
@@ -670,6 +783,18 @@ export default function HomePage() {
 					return 0;
 			}
 		});
+
+	// Log final filtering results
+	console.log("📋 Final filtered content:", {
+		totalItems: contentItems.length,
+		filteredItems: filteredAndSortedContent.length,
+		archiveFilter,
+		activeFilter,
+		breakdown: {
+			archived: filteredAndSortedContent.filter((item) => item.archived).length,
+			active: filteredAndSortedContent.filter((item) => !item.archived).length,
+		},
+	});
 
 	const handleGenerateCourse = async () => {
 		if (!searchQuery.trim()) return;
@@ -833,6 +958,59 @@ export default function HomePage() {
 		});
 	};
 
+	const handleArchiveItem = async (itemId, contentType, newArchivedState) => {
+		// Refresh content to get updated state
+		console.log("🔄 handleArchiveItem called:", {
+			itemId,
+			contentType,
+			newArchivedState,
+			currentArchiveFilter: archiveFilter,
+		});
+
+		try {
+			// Include archived content if we're showing archived or all content
+			const includeArchived =
+				archiveFilter === "archived" || archiveFilter === "all";
+			console.log(
+				`📡 Refreshing content with includeArchived: ${includeArchived}`,
+			);
+
+			const data = await fetchContentData(includeArchived);
+			console.log("📦 Refresh - Raw API data:", data);
+
+			const {
+				content,
+				filterOptions: options,
+				sortOptions: sortOpts,
+			} = processContentData(data);
+
+			console.log("⚙️ Refresh - Processed content:", content);
+
+			// Transform data to match new structure (same as initial load)
+			const transformedContent = content.map((item) => ({
+				...item,
+				// Add mock due dates and states for demonstration
+				dueDate:
+					Math.random() > 0.7
+						? new Date(
+								Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000,
+							).toISOString()
+						: null,
+				isPaused: Math.random() > 0.9,
+				// For flashcards, map the existing fields
+				totalCards: item.cardCount,
+				due: item.dueCount || Math.floor(Math.random() * 10),
+				overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
+			}));
+
+			setContentItems(transformedContent);
+			setFilterOptions(options);
+			setSortOptions(sortOpts);
+		} catch (error) {
+			console.error("Failed to refresh content after archive:", error);
+		}
+	};
+
 	const renderCard = (item, i) => (
 		<BaseCard
 			key={item.id}
@@ -841,6 +1019,7 @@ export default function HomePage() {
 			pinned={pins[item.type]?.includes(item.id)}
 			onTogglePin={() => togglePin(item.type, item.id)}
 			onDelete={handleDeleteItem}
+			onArchive={handleArchiveItem}
 			onClick={() => handleCardClick(item)}
 		/>
 	);
@@ -1270,6 +1449,56 @@ export default function HomePage() {
 																<Separator />
 
 																<div>
+																	<h4 className="font-medium text-sm mb-2">
+																		Archive Status
+																	</h4>
+																	<RadioGroup
+																		value={archiveFilter}
+																		onValueChange={setArchiveFilter}
+																		className="flex flex-col gap-2"
+																	>
+																		<div className="flex items-center space-x-2">
+																			<RadioGroupItem
+																				value="active"
+																				id="archive-active"
+																			/>
+																			<Label
+																				htmlFor="archive-active"
+																				className="cursor-pointer"
+																			>
+																				Active Content
+																			</Label>
+																		</div>
+																		<div className="flex items-center space-x-2">
+																			<RadioGroupItem
+																				value="archived"
+																				id="archive-archived"
+																			/>
+																			<Label
+																				htmlFor="archive-archived"
+																				className="cursor-pointer"
+																			>
+																				Archived Content
+																			</Label>
+																		</div>
+																		<div className="flex items-center space-x-2">
+																			<RadioGroupItem
+																				value="all"
+																				id="archive-all"
+																			/>
+																			<Label
+																				htmlFor="archive-all"
+																				className="cursor-pointer"
+																			>
+																				All Content
+																			</Label>
+																		</div>
+																	</RadioGroup>
+																</div>
+
+																<Separator />
+
+																<div>
 																	<div className="flex justify-between items-center mb-2">
 																		<h4 className="font-medium text-sm">
 																			Sort By
@@ -1337,6 +1566,23 @@ export default function HomePage() {
 										>
 											<X className="h-3 w-3" />
 											<span className="sr-only">Remove filter</span>
+										</Button>
+									</Badge>
+								)}
+
+								{archiveFilter !== "active" && (
+									<Badge variant="outline" className="bg-white">
+										{archiveFilter === "archived"
+											? "Archived Content"
+											: "All Content"}
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={() => setArchiveFilter("active")}
+											className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+										>
+											<X className="h-3 w-3" />
+											<span className="sr-only">Reset archive filter</span>
 										</Button>
 									</Badge>
 								)}

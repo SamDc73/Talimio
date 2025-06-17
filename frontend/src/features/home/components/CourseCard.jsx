@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { KebabMenu } from "./KebabMenu";
 import { TagChip } from "./TagChip";
 
-export function CourseCard({ course, onDelete, className = "" }) {
+export function CourseCard({ course, onDelete, onArchive, className = "" }) {
 	const [showMenu, setShowMenu] = useState(false);
 
 	const handleDelete = async (itemType, itemId) => {
@@ -36,9 +36,11 @@ export function CourseCard({ course, onDelete, className = "" }) {
 			<KebabMenu
 				showMenu={showMenu}
 				onDelete={handleDelete}
+				onArchive={onArchive}
 				itemType="roadmap"
 				itemId={course.id}
 				itemTitle={course.title}
+				isArchived={course.archived || false}
 			/>
 
 			{/* Title */}

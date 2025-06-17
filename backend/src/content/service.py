@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import text
@@ -37,6 +37,7 @@ async def list_content_fast(
     content_type: ContentType | None = None,
     page: int = 1,
     page_size: int = 20,
+    include_archived: bool = False,
 ) -> ContentListResponse:
     """
     Ultra-fast content listing using raw SQL queries.
@@ -51,7 +52,11 @@ async def list_content_fast(
     search_term = f"%{search}%" if search else None
 
     async with async_session_maker() as session:
-        queries = _build_content_queries(content_type, search)
+        logger.info(
+            f"🔍 list_content_fast called with include_archived={include_archived}, search={search}, content_type={content_type}"
+        )
+
+        queries = _build_content_queries(content_type, search, include_archived)
 
         if not queries:
             return ContentListResponse(items=[], total=0, page=page, page_size=page_size)
@@ -61,6 +66,15 @@ async def list_content_fast(
         rows = await _get_paginated_results(session, combined_query, search_term, page_size, offset)
         items = _transform_rows_to_items(rows)
 
+        # Log archive status of returned items
+        archived_count = sum(1 for item in items if hasattr(item, "archived") and item.archived)
+        active_count = len(items) - archived_count
+        logger.info(f"📊 Returning {len(items)} items: {archived_count} archived, {active_count} active")
+
+        for item in items:
+            if hasattr(item, "archived"):
+                logger.info(f"🔍 Item '{item.title}': archived={item.archived}, type={item.__class__.__name__}")
+
         return ContentListResponse(
             items=items,
             total=total,
@@ -69,31 +83,33 @@ async def list_content_fast(
         )
 
 
-def _build_content_queries(content_type: ContentType | None, search: str | None) -> list[str]:
+def _build_content_queries(
+    content_type: ContentType | None, search: str | None, include_archived: bool = False
+) -> list[str]:
     """Build SQL queries for different content types."""
     queries = []
 
     if not content_type or content_type == ContentType.YOUTUBE:
-        queries.append(_get_video_query(search))
+        queries.append(_get_video_query(search, include_archived))
 
     if not content_type or content_type == ContentType.FLASHCARDS:
-        queries.append(_get_flashcard_query(search))
+        queries.append(_get_flashcard_query(search, include_archived))
 
     if not content_type or content_type == ContentType.BOOK:
-        queries.append(_get_book_query(search))
+        queries.append(_get_book_query(search, include_archived))
 
     if not content_type or content_type == ContentType.ROADMAP:
-        queries.append(_get_roadmap_query(search))
+        queries.append(_get_roadmap_query(search, include_archived))
 
     return queries
 
 
-def _get_video_query(search: str | None) -> str:
+def _get_video_query(search: str | None, include_archived: bool = False) -> str:
     """Get SQL query for videos."""
-    return _get_youtube_query(search, archived_only=False)
+    return _get_youtube_query(search, archived_only=False, include_archived=include_archived)
 
 
-def _get_youtube_query(search: str | None, archived_only: bool = False) -> str:
+def _get_youtube_query(search: str | None, archived_only: bool = False, include_archived: bool = False) -> str:
     """Get SQL query for videos."""
     query = """
         SELECT
@@ -113,7 +129,8 @@ def _get_youtube_query(search: str | None, archived_only: bool = False) -> str:
                     COALESCE(v.completion_percentage, 0)
             END as progress,
             COALESCE(v.duration, 0) as count1,
-            0 as count2
+            0 as count2,
+            COALESCE(v.archived, false) as archived
         FROM videos v
         LEFT JOIN (
             SELECT
@@ -129,8 +146,9 @@ def _get_youtube_query(search: str | None, archived_only: bool = False) -> str:
     where_conditions = []
     if archived_only:
         where_conditions.append("v.archived = true")
-    else:
+    elif not include_archived:
         where_conditions.append("(v.archived = false OR v.archived IS NULL)")
+    # If include_archived is True, don't add any archive filter (show all)
 
     if search:
         where_conditions.append("(v.title ILIKE %(search)s OR v.channel ILIKE %(search)s)")
@@ -141,12 +159,12 @@ def _get_youtube_query(search: str | None, archived_only: bool = False) -> str:
     return query
 
 
-def _get_flashcard_query(search: str | None) -> str:
+def _get_flashcard_query(search: str | None, include_archived: bool = False) -> str:
     """Get SQL query for flashcards."""
-    return _get_flashcards_query(search, archived_only=False)
+    return _get_flashcards_query(search, archived_only=False, include_archived=include_archived)
 
 
-def _get_flashcards_query(search: str | None, archived_only: bool = False) -> str:
+def _get_flashcards_query(search: str | None, archived_only: bool = False, include_archived: bool = False) -> str:
     """Get SQL query for flashcards."""
     query = """
         SELECT
@@ -161,7 +179,8 @@ def _get_flashcards_query(search: str | None, archived_only: bool = False) -> st
             '' as extra2,
             0 as progress,
             (SELECT COUNT(*) FROM flashcard_cards WHERE deck_id = flashcard_decks.id) as count1,
-            0 as count2
+            0 as count2,
+            COALESCE(archived, false) as archived
         FROM flashcard_decks
     """
 
@@ -169,8 +188,9 @@ def _get_flashcards_query(search: str | None, archived_only: bool = False) -> st
     where_conditions = []
     if archived_only:
         where_conditions.append("archived = true")
-    else:
+    elif not include_archived:
         where_conditions.append("(archived = false OR archived IS NULL)")
+    # If include_archived is True, don't add any archive filter (show all)
 
     if search:
         where_conditions.append("(name ILIKE %(search)s OR description ILIKE %(search)s)")
@@ -181,12 +201,12 @@ def _get_flashcards_query(search: str | None, archived_only: bool = False) -> st
     return query
 
 
-def _get_book_query(search: str | None) -> str:
+def _get_book_query(search: str | None, include_archived: bool = False) -> str:
     """Get SQL query for books."""
-    return _get_books_query(search, archived_only=False)
+    return _get_books_query(search, archived_only=False, include_archived=include_archived)
 
 
-def _get_books_query(search: str | None, archived_only: bool = False) -> str:
+def _get_books_query(search: str | None, archived_only: bool = False, include_archived: bool = False) -> str:
     """Get SQL query for books."""
     query = """
         SELECT
@@ -213,7 +233,8 @@ def _get_books_query(search: str | None, archived_only: bool = False) -> str:
                  WHERE book_id = b.id
                  ORDER BY updated_at DESC
                  LIMIT 1), 1
-            ) as count2
+            ) as count2,
+            COALESCE(b.archived, false) as archived
         FROM books b
     """
 
@@ -221,8 +242,9 @@ def _get_books_query(search: str | None, archived_only: bool = False) -> str:
     where_conditions = []
     if archived_only:
         where_conditions.append("b.archived = true")
-    else:
+    elif not include_archived:
         where_conditions.append("(b.archived = false OR b.archived IS NULL)")
+    # If include_archived is True, don't add any archive filter (show all)
 
     if search:
         where_conditions.append("(b.title ILIKE %(search)s OR b.author ILIKE %(search)s)")
@@ -233,12 +255,12 @@ def _get_books_query(search: str | None, archived_only: bool = False) -> str:
     return query
 
 
-def _get_roadmap_query(search: str | None) -> str:
+def _get_roadmap_query(search: str | None, include_archived: bool = False) -> str:
     """Get SQL query for roadmaps."""
-    return _get_roadmaps_query(search, archived_only=False)
+    return _get_roadmaps_query(search, archived_only=False, include_archived=include_archived)
 
 
-def _get_roadmaps_query(search: str | None, archived_only: bool = False) -> str:
+def _get_roadmaps_query(search: str | None, archived_only: bool = False, include_archived: bool = False) -> str:
     """Get SQL query for roadmaps."""
     query = """
         SELECT
@@ -263,7 +285,8 @@ def _get_roadmaps_query(search: str | None, archived_only: bool = False) -> str:
                 ELSE 0
             END as progress,
             (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id) as count1,
-            (SELECT COUNT(*) FROM nodes n WHERE n.roadmap_id = r.id AND n.status = 'done') as count2
+            (SELECT COUNT(*) FROM nodes n WHERE n.roadmap_id = r.id AND n.status = 'done') as count2,
+            COALESCE(r.archived, false) as archived
         FROM roadmaps r
     """
 
@@ -271,8 +294,9 @@ def _get_roadmaps_query(search: str | None, archived_only: bool = False) -> str:
     where_conditions = []
     if archived_only:
         where_conditions.append("r.archived = true")
-    else:
+    elif not include_archived:
         where_conditions.append("(r.archived = false OR r.archived IS NULL)")
+    # If include_archived is True, don't add any archive filter (show all)
 
     if search:
         where_conditions.append("(r.title ILIKE %(search)s OR r.description ILIKE %(search)s)")
@@ -343,6 +367,7 @@ def _create_youtube_content(row: Any) -> YoutubeContent:
         createdDate=row.created_at,
         progress=row.progress,
         tags=_safe_parse_tags(row.tags),
+        archived=row.archived,
     )
 
 
@@ -358,6 +383,7 @@ def _create_flashcard_content(row: Any) -> FlashcardContent:
         createdDate=row.created_at,
         progress=row.progress,
         tags=_safe_parse_tags(row.tags),
+        archived=row.archived,
     )
 
 
@@ -374,6 +400,7 @@ def _create_book_content(row: Any) -> BookContent:
         createdDate=row.created_at,
         progress=row.progress,
         tags=_safe_parse_tags(row.tags),
+        archived=row.archived,
     )
 
 
@@ -389,6 +416,7 @@ def _create_roadmap_content(row: Any) -> RoadmapContent:
         createdDate=row.created_at,
         progress=row.progress,
         tags=[],
+        archived=row.archived,
     )
 
 
@@ -403,7 +431,11 @@ async def archive_content(content_type: ContentType, content_id: str) -> None:
 
     table_name = table_map.get(content_type)
     if not table_name:
-        raise ValueError(f"Unsupported content type: {content_type}")
+        msg = f"Unsupported content type: {content_type}"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    logger.info(f"🗃️ Archiving {content_type} {content_id} in table {table_name}")
 
     async with async_session_maker() as session:
         # Handle different ID column names
@@ -415,8 +447,19 @@ async def archive_content(content_type: ContentType, content_id: str) -> None:
             WHERE {id_column} = :content_id
         """
 
-        await session.execute(text(query), {"content_id": content_id, "archived_at": datetime.utcnow()})
+        logger.info(f"🔍 Executing query: {query}")
+        logger.info(f"🔍 With params: content_id={content_id}, archived_at={datetime.now(UTC)}")
+
+        result = await session.execute(text(query), {"content_id": content_id, "archived_at": datetime.now(UTC)})
+        affected_rows = result.rowcount
         await session.commit()
+
+        logger.info(f"📊 Archive operation affected {affected_rows} rows")
+
+        if affected_rows == 0:
+            logger.warning(f"⚠️ No rows were updated - content {content_id} may not exist")
+        else:
+            logger.info(f"✅ Successfully archived {content_id}")
 
 
 async def unarchive_content(content_type: ContentType, content_id: str) -> None:
@@ -430,20 +473,41 @@ async def unarchive_content(content_type: ContentType, content_id: str) -> None:
 
     table_name = table_map.get(content_type)
     if not table_name:
-        raise ValueError(f"Unsupported content type: {content_type}")
+        msg = f"Unsupported content type: {content_type}"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    logger.info(f"📤 Unarchiving {content_type} {content_id} in table {table_name}")
 
     async with async_session_maker() as session:
-        # Handle different ID column names
-        id_column = "uuid" if content_type == ContentType.YOUTUBE else "id"
+        try:
+            # Handle different ID column names
+            id_column = "uuid" if content_type == ContentType.YOUTUBE else "id"
 
-        query = f"""
-            UPDATE {table_name}
-            SET archived = false, archived_at = NULL
-            WHERE {id_column} = :content_id
-        """
+            query = f"""
+                UPDATE {table_name}
+                SET archived = false, archived_at = NULL
+                WHERE {id_column} = :content_id
+            """
 
-        await session.execute(text(query), {"content_id": content_id})
-        await session.commit()
+            logger.info(f"🔍 Executing unarchive query: {query}")
+            logger.info(f"🔍 With params: content_id={content_id}")
+
+            result = await session.execute(text(query), {"content_id": content_id})
+            affected_rows = result.rowcount
+            await session.commit()
+
+            logger.info(f"📊 Unarchive operation affected {affected_rows} rows")
+
+            if affected_rows == 0:
+                logger.warning(f"⚠️ No rows were updated - content {content_id} may not exist")
+            else:
+                logger.info(f"✅ Successfully unarchived {content_id}")
+
+        except Exception:
+            logger.exception("💥 Database error in unarchive_content. Query: %s, Params: content_id=%s", query, content_id)
+            await session.rollback()
+            raise
 
 
 async def list_archived_content(
@@ -471,7 +535,8 @@ async def list_archived_content(
         elif content_type == ContentType.ROADMAP:
             combined_query = _get_roadmaps_query(search, archived_only=True)
         else:
-            raise ValueError(f"Unsupported content type: {content_type}")
+            msg = f"Unsupported content type: {content_type}"
+            raise ValueError(msg)
     else:
         # Union all content types with archived filter
         combined_query = f"""
@@ -505,25 +570,25 @@ async def get_content_stats() -> dict[str, Any]:
     async with async_session_maker() as session:
         # Get counts for each content type
         stats_query = """
-            SELECT 
+            SELECT
                 'books' as type,
                 COUNT(*) as total,
                 COUNT(*) FILTER (WHERE archived = true) as archived
             FROM books
             UNION ALL
-            SELECT 
+            SELECT
                 'videos' as type,
                 COUNT(*) as total,
                 COUNT(*) FILTER (WHERE archived = true) as archived
             FROM videos
             UNION ALL
-            SELECT 
+            SELECT
                 'flashcard_decks' as type,
                 COUNT(*) as total,
                 COUNT(*) FILTER (WHERE archived = true) as archived
             FROM flashcard_decks
             UNION ALL
-            SELECT 
+            SELECT
                 'roadmaps' as type,
                 COUNT(*) as total,
                 COUNT(*) FILTER (WHERE archived = true) as archived
@@ -566,13 +631,15 @@ async def delete_content(content_type: ContentType, content_id: str) -> None:
     elif content_type == ContentType.ROADMAP:
         from src.roadmaps.models import Roadmap as ModelClass
     else:
-        raise ValueError(f"Unsupported content type: {content_type}")
+        msg = f"Unsupported content type: {content_type}"
+        raise ValueError(msg)
 
     async with async_session_maker() as session:
         # Handle different ID column names and types
         if content_type == ContentType.YOUTUBE:
             # Videos use uuid column, need to query by uuid field
             from sqlalchemy import select
+
             stmt = select(ModelClass).where(ModelClass.uuid == content_id)
             result = await session.execute(stmt)
             content_obj = result.scalar_one_or_none()
@@ -581,11 +648,13 @@ async def delete_content(content_type: ContentType, content_id: str) -> None:
             try:
                 uuid_id = UUID(content_id)
                 content_obj = await session.get(ModelClass, uuid_id)
-            except ValueError:
-                raise ValueError(f"Invalid ID format: {content_id}")
+            except ValueError as ve:
+                msg = f"Invalid ID format: {content_id}"
+                raise ValueError(msg) from ve
 
         if not content_obj:
-            raise ValueError(f"Content with ID {content_id} not found")
+            msg = f"Content with ID {content_id} not found"
+            raise ValueError(msg)
 
         # Delete using ORM to ensure proper cascade deletion
         await session.delete(content_obj)

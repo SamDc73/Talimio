@@ -5,7 +5,12 @@ import { Link } from "react-router-dom";
 import { KebabMenu } from "./KebabMenu";
 import { TagChip } from "./TagChip";
 
-export function FlashcardDeckCard({ deck, onDelete, className = "" }) {
+export function FlashcardDeckCard({
+	deck,
+	onDelete,
+	onArchive,
+	className = "",
+}) {
 	const [showMenu, setShowMenu] = useState(false);
 	// Calculate progress percentage based on mastery
 	const progressPercentage = (deck.masteryLevel / 5) * 100;
@@ -38,9 +43,11 @@ export function FlashcardDeckCard({ deck, onDelete, className = "" }) {
 			<KebabMenu
 				showMenu={showMenu}
 				onDelete={handleDelete}
-				itemType="flashcard"
+				onArchive={onArchive}
+				itemType="flashcards"
 				itemId={deck.id}
 				itemTitle={deck.title}
+				isArchived={deck.archived || false}
 			/>
 
 			{/* Title */}
