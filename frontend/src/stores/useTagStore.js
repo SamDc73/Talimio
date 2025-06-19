@@ -40,7 +40,7 @@ const useTagStore = create(
 				});
 
 				try {
-					const response = await fetch(`/api/tags/user/${userId}`);
+					const response = await fetch("/api/tags/tags");
 					if (!response.ok) throw new Error("Failed to fetch tags");
 
 					const tags = await response.json();
@@ -69,35 +69,29 @@ const useTagStore = create(
 				});
 
 				try {
-					const response = await fetch("/api/tags/", {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-						},
-						body: JSON.stringify({
-							...tagData,
-							user_id: tagData.user_id || DEFAULT_USER_ID,
-						}),
-					});
-
-					if (!response.ok) {
-						const errorData = await response.json();
-						throw new Error(errorData.detail || "Failed to create tag");
-					}
-
-					const newTag = await response.json();
+					// In our backend, tags are created automatically when updating content tags
+					// So we'll create a mock tag object and let the backend handle creation
+					const mockTag = {
+						id: `temp_${Date.now()}`,
+						name: tagData.name,
+						category: tagData.category || null,
+						color: tagData.color || null,
+						usage_count: 0,
+						created_at: new Date().toISOString(),
+						updated_at: new Date().toISOString(),
+					};
 
 					set((state) => {
-						state.tags[newTag.id] = newTag;
+						state.tags[mockTag.id] = mockTag;
 						state.loading.creating = false;
 						// Add to recent tags
-						state.recentTags.unshift(newTag.id);
+						state.recentTags.unshift(mockTag.id);
 						if (state.recentTags.length > 10) {
 							state.recentTags = state.recentTags.slice(0, 10);
 						}
 					});
 
-					return newTag;
+					return mockTag;
 				} catch (error) {
 					console.error("Failed to create tag:", error);
 					set((state) => {
@@ -108,79 +102,21 @@ const useTagStore = create(
 			},
 
 			async updateTag(tagId, updateData) {
-				set((state) => {
-					state.loading.updating = true;
-				});
-
-				try {
-					const response = await fetch(`/api/tags/${tagId}`, {
-						method: "PUT",
-						headers: {
-							"Content-Type": "application/json",
-						},
-						body: JSON.stringify(updateData),
-					});
-
-					if (!response.ok) {
-						const errorData = await response.json();
-						throw new Error(errorData.detail || "Failed to update tag");
-					}
-
-					const updatedTag = await response.json();
-
-					set((state) => {
-						state.tags[tagId] = updatedTag;
-						state.loading.updating = false;
-					});
-
-					return updatedTag;
-				} catch (error) {
-					console.error("Failed to update tag:", error);
-					set((state) => {
-						state.loading.updating = false;
-					});
-					throw error;
-				}
+				// Tag updates are not supported in our current backend
+				// Tags are managed through content associations
+				console.warn(
+					"Tag updates not supported - tags are managed through content associations",
+				);
+				return null;
 			},
 
 			async deleteTag(tagId) {
-				set((state) => {
-					state.loading.deleting = true;
-				});
-
-				try {
-					const response = await fetch(`/api/tags/${tagId}`, {
-						method: "DELETE",
-					});
-
-					if (!response.ok) {
-						const errorData = await response.json();
-						throw new Error(errorData.detail || "Failed to delete tag");
-					}
-
-					set((state) => {
-						delete state.tags[tagId];
-						state.loading.deleting = false;
-						// Remove from recent tags
-						state.recentTags = state.recentTags.filter((id) => id !== tagId);
-						// Remove from content tags
-						for (const contentType in state.contentTags) {
-							for (const contentId in state.contentTags[contentType]) {
-								state.contentTags[contentType][contentId] = state.contentTags[
-									contentType
-								][contentId].filter((id) => id !== tagId);
-							}
-						}
-					});
-
-					return true;
-				} catch (error) {
-					console.error("Failed to delete tag:", error);
-					set((state) => {
-						state.loading.deleting = false;
-					});
-					throw error;
-				}
+				// Tag deletion is not supported in our current backend
+				// Tags are managed through content associations
+				console.warn(
+					"Tag deletion not supported - tags are managed through content associations",
+				);
+				return null;
 			},
 
 			// Content Tagging
