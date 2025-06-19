@@ -36,9 +36,17 @@ export function clearUserId() {
 
 /**
  * Get headers with user ID for API requests
- * @returns {Object} Headers object with x-user-id
+ * @returns {Object} Headers object with x-user-id (only if not in self-hosting mode)
  */
 export function getUserHeaders() {
+	// In self-hosting mode, don't send user ID header so backend uses its default
+	const isSelfHosting = import.meta.env.VITE_AUTH_DISABLED === 'true' || 
+						  import.meta.env.VITE_SELF_HOSTING === 'true';
+	
+	if (isSelfHosting) {
+		return {}; // No user header, let backend use default
+	}
+	
 	return {
 		"x-user-id": getUserId(),
 	};

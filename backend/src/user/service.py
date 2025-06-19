@@ -30,31 +30,19 @@ async def get_user_settings(user_id: str) -> UserSettingsResponse:
         # Get custom instructions
         custom_instructions = await memory_wrapper.get_custom_instructions(user_id)
 
-        # Get memory count (try to search for all memories to count them)
+        # Get memory count using dedicated method
         try:
-            memories = await memory_wrapper.search_memories(
-                user_id=user_id,
-                query="",  # Empty query to get all memories
-                limit=1000,  # High limit to count all
-                relevance_threshold=0.0  # Include all memories
-            )
-            memory_count = len(memories)
+            memory_count = await memory_wrapper.get_memory_count(user_id)
         except Exception as e:
             logger.warning(f"Failed to count memories for user {user_id}: {e}")
             memory_count = 0
 
-        return UserSettingsResponse(
-            custom_instructions=custom_instructions,
-            memory_count=memory_count
-        )
+        return UserSettingsResponse(custom_instructions=custom_instructions, memory_count=memory_count)
 
     except Exception as e:
         logger.exception(f"Error getting user settings for {user_id}: {e}")
         # Return default settings on error
-        return UserSettingsResponse(
-            custom_instructions="",
-            memory_count=0
-        )
+        return UserSettingsResponse(custom_instructions="", memory_count=0)
 
 
 async def update_custom_instructions(user_id: str, instructions: str) -> CustomInstructionsResponse:
@@ -84,23 +72,58 @@ async def update_custom_instructions(user_id: str, instructions: str) -> CustomI
                         "interaction_type": "settings_update",
                         "setting_type": "custom_instructions",
                         "instructions_length": len(instructions),
-                        "timestamp": "now"
-                    }
+                        "timestamp": "now",
+                    },
                 )
             except Exception as e:
                 logger.warning(f"Failed to log instruction update in memory: {e}")
 
-        return CustomInstructionsResponse(
-            instructions=instructions,
-            updated=success
-        )
+        return CustomInstructionsResponse(instructions=instructions, updated=success)
 
     except Exception as e:
         logger.exception(f"Error updating custom instructions for {user_id}: {e}")
-        return CustomInstructionsResponse(
-            instructions=instructions,
-            updated=False
+        return CustomInstructionsResponse(instructions=instructions, updated=False)
+
+
+async def get_user_memories(user_id: str) -> list[dict]:
+    """
+    Get all memories for a user.
+
+    Args:
+        user_id: Unique identifier for the user
+
+    Returns
+    -------
+        List of memories with content, timestamps, and metadata
+    """
+    try:
+        memory_wrapper = get_memory_wrapper()
+
+        # Search for all memories using empty query with allow_empty=True
+        memories = await memory_wrapper.search_memories(
+            user_id=user_id,
+            query="",  # Empty query to get all memories
+            limit=1000,  # High limit to get all memories
+            relevance_threshold=0.0,  # Accept all relevance levels
+            allow_empty=True  # Allow empty query
         )
+
+        # Format memories for frontend consumption
+        formatted_memories = []
+        for memory in memories:
+            formatted_memory = {
+                "content": memory.get("memory", ""),
+                "timestamp": memory.get("created_at", ""),
+                "source": memory.get("source", "unknown"),
+                "metadata": memory.get("metadata", {})
+            }
+            formatted_memories.append(formatted_memory)
+
+        return formatted_memories
+
+    except Exception as e:
+        logger.exception(f"Error getting memories for user {user_id}: {e}")
+        return []
 
 
 async def clear_user_memory(user_id: str) -> ClearMemoryResponse:
@@ -124,14 +147,8 @@ async def clear_user_memory(user_id: str) -> ClearMemoryResponse:
         else:
             message = "All memories cleared successfully"
 
-        return ClearMemoryResponse(
-            cleared=True,
-            message=message
-        )
+        return ClearMemoryResponse(cleared=True, message=message)
 
     except Exception as e:
         logger.exception(f"Error clearing memory for user {user_id}: {e}")
-        return ClearMemoryResponse(
-            cleared=False,
-            message=f"Failed to clear memories: {e}"
-        )
+        return ClearMemoryResponse(cleared=False, message=f"Failed to clear memories: {e}")

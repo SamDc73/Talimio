@@ -35,11 +35,7 @@ async def generate_lesson(request: LessonCreateRequest, user_id: str | None = No
         if user_id:
             try:
                 # Search for relevant learning history
-                relevant_memories = await memory_wrapper.search_memories(
-                    user_id=user_id,
-                    query=lesson_query,
-                    limit=3
-                )
+                relevant_memories = await memory_wrapper.search_memories(user_id=user_id, query=lesson_query, limit=3)
 
                 # Add learning preferences to node metadata if available
                 if relevant_memories:
@@ -136,8 +132,8 @@ async def generate_lesson(request: LessonCreateRequest, user_id: str | None = No
                         "title": request.node_meta.get("title", "untitled"),
                         "skill_level": request.node_meta.get("skill_level", "unknown"),
                         "content_length": len(md_source),
-                        "timestamp": "now"
-                    }
+                        "timestamp": "now",
+                    },
                 )
             except Exception as e:
                 logging.warning(f"Failed to store lesson generation memory for user {user_id}: {e}")
@@ -196,8 +192,8 @@ async def get_lesson(lesson_id: UUID, user_id: str | None = None) -> LessonRespo
                                 "lesson_id": str(lesson_id),
                                 "course_id": str(lesson_response.course_id),
                                 "slug": lesson_response.slug,
-                                "timestamp": "now"
-                            }
+                                "timestamp": "now",
+                            },
                         )
                     except Exception as e:
                         logging.warning(f"Failed to store lesson access memory for user {user_id}: {e}")

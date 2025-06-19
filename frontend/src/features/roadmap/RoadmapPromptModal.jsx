@@ -46,7 +46,7 @@ const RoadmapPromptModal = ({ isOpen, onClose }) => {
 			});
 
 			// Navigate to roadmap preview page for editing
-			navigate(`/roadmap/preview/${response.data.id}`, {
+			navigate(`/roadmap/preview/${response.id}`, {
 				state: {
 					isNew: true,
 					originalPrompt: prompt.trim(),

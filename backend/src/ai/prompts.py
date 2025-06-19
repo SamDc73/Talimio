@@ -35,9 +35,9 @@ Rules:
 
 Respond with only a JSON array of objects with 'tag' and 'confidence' fields.
 Example: [
-    {"tag": "python", "confidence": 0.95},
-    {"tag": "machine-learning", "confidence": 0.85},
-    {"tag": "tensorflow", "confidence": 0.7}
+    {{"tag": "python", "confidence": 0.95}},
+    {{"tag": "machine-learning", "confidence": 0.85}},
+    {{"tag": "tensorflow", "confidence": 0.7}}
 ]
 
 Title: {title}
@@ -75,13 +75,47 @@ Generate a JSON response with a hierarchical roadmap structure:
   - **title**: Clear, specific topic name
   - **description**: 2-3 sentence explanation of what will be learned
   - **estimatedHours**: Realistic time estimate
-  - **subtopics**: Array of 3-5 detailed subtopics
+  - **subtopics**: Array of 3-5 detailed subtopic objects
+
+- Each subtopic must also have:
+  - **title**: Clear, specific subtopic name
+  - **description**: 1-2 sentence explanation of what will be learned
+  - **estimatedHours**: Realistic time estimate for the subtopic
+  - **subtopics**: Empty array [] (subtopics don't have further nested topics)
+
+# Example Structure:
+```json
+{{
+  "coreTopics": [
+    {{
+      "title": "Introduction to Python",
+      "description": "Learn Python basics including syntax, data types, and control flow. Build a strong foundation for programming.",
+      "estimatedHours": 20,
+      "subtopics": [
+        {{
+          "title": "Python Syntax and Variables",
+          "description": "Master Python syntax rules and variable declaration.",
+          "estimatedHours": 3,
+          "subtopics": []
+        }},
+        {{
+          "title": "Data Types and Structures",
+          "description": "Understand lists, dictionaries, tuples, and sets.",
+          "estimatedHours": 5,
+          "subtopics": []
+        }}
+      ]
+    }}
+  ]
+}}
+```
 
 # Quality Standards
 - Topics should be specific and actionable (not vague concepts)
 - Descriptions must clearly state learning outcomes
 - Time estimates should be realistic for the target skill level
 - Subtopics should comprehensively cover the parent topic
+- IMPORTANT: Subtopics must be objects with title, description, and estimatedHours - NOT strings
 
 Remember: You're designing a roadmap that will shape someone's learning journey. Make it exceptional.
 """

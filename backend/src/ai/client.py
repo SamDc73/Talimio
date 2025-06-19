@@ -71,6 +71,45 @@ class ModelManager:
         self._logger = logging.getLogger(__name__)
         self.memory_wrapper = memory_wrapper
 
+    def _process_subtopics(self, subtopics: Any) -> list[dict[str, Any]]:
+        """Process subtopics into a standardized format.
+
+        Args:
+            subtopics: List of subtopics (can be dicts or strings)
+
+        Returns
+        -------
+            List of properly formatted subtopic dictionaries
+        """
+        processed_children = []
+
+        if not isinstance(subtopics, list):
+            return processed_children
+
+        for j, subtopic in enumerate(subtopics):
+            if isinstance(subtopic, dict):
+                # Subtopic is already a proper object
+                processed_children.append({
+                    "title": str(subtopic.get("title", f"Subtopic {j + 1}")),
+                    "description": str(subtopic.get("description", "")),
+                    "content": str(subtopic.get("content", "")),
+                    "order": j,
+                    "prerequisite_ids": [],
+                    "children": []  # Subtopics don't have further children
+                })
+            elif isinstance(subtopic, str):
+                # Legacy: subtopic is just a string, convert to object
+                processed_children.append({
+                    "title": str(subtopic),
+                    "description": f"Learn about {subtopic}",
+                    "content": "",
+                    "order": j,
+                    "prerequisite_ids": [],
+                    "children": []
+                })
+
+        return processed_children
+
     async def get_completion_with_memory(
         self,
         messages: list[dict[str, str]] | Sequence[dict[str, str]],
@@ -254,6 +293,10 @@ class ModelManager:
                     msg = "Expected dict node from AI model"
                     raise RoadmapGenerationError(msg)
 
+                # Process subtopics using helper method
+                subtopics = node.get("subtopics", node.get("children", []))
+                processed_children = self._process_subtopics(subtopics)
+
                 validated_nodes.append(
                     {
                         "title": str(node.get("title", f"Topic {i + 1}")),
@@ -261,9 +304,7 @@ class ModelManager:
                         "content": str(node.get("content", "")),
                         "order": i,
                         "prerequisite_ids": [],  # Start with no prerequisites
-                        "children": node.get(
-                            "subtopics", node.get("children", [])
-                        ),  # Handle both subtopics and children
+                        "children": processed_children,
                     },
                 )
 
@@ -297,7 +338,7 @@ class ModelManager:
         ]
 
         try:
-            result = await self.get_completion(messages, expect_list=True)
+            result = await self.get_completion(messages)
             if not isinstance(result, list):
                 msg = "Expected list response from AI model"
                 raise ExerciseGenerationError
@@ -383,7 +424,7 @@ class ModelManager:
         ]
 
         try:
-            result = await self.get_completion(messages, expect_list=True)
+            result = await self.get_completion(messages)
             if not isinstance(result, list):
                 msg = "Expected list response from AI model"
                 raise TagGenerationError(msg)
@@ -439,7 +480,7 @@ class ModelManager:
         ]
 
         try:
-            result = await self.get_completion(messages, expect_list=True)
+            result = await self.get_completion(messages)
             if not isinstance(result, list):
                 msg = "Expected list response from AI model"
                 raise TagGenerationError(msg)
