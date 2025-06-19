@@ -67,7 +67,7 @@ class ModelManager:
             raise ValidationError(msg)
 
         os.environ["OPENAI_API_KEY"] = self.api_key
-        self.model = "openai/gpt-4o"
+        self.model = os.getenv("PRIMARY_LLM_MODEL", "openai/gpt-4o")
         self._logger = logging.getLogger(__name__)
         self.memory_wrapper = memory_wrapper
 
@@ -600,8 +600,9 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> str:
         logging.info(f"Generating lesson for '{node_title}' with skill level '{skill_level}'")
 
         # Get completion without JSON formatting
+        lesson_model = os.getenv("LESSON_GENERATION_MODEL", "openai/gpt-4o")
         response = await acompletion(
-            model="openai/gpt-4o",
+            model=lesson_model,
             messages=messages,
             temperature=0.7,
             max_tokens=8000,
