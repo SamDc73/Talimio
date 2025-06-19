@@ -1,28 +1,68 @@
 """User service for handling user settings and memory management."""
 
+import json
 import logging
+from pathlib import Path
 
 from src.ai.memory import get_memory_wrapper
 from src.user.schemas import (
     ClearMemoryResponse,
     CustomInstructionsResponse,
+    PreferencesUpdateResponse,
+    UserPreferences,
     UserSettingsResponse,
 )
 
 
 logger = logging.getLogger(__name__)
 
+# Create preferences storage directory
+PREFERENCES_DIR = Path("data/preferences")
+PREFERENCES_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _get_preferences_file(user_id: str) -> Path:
+    """Get the preferences file path for a user."""
+    return PREFERENCES_DIR / f"{user_id}_preferences.json"
+
+
+async def _load_user_preferences(user_id: str) -> UserPreferences:
+    """Load user preferences from file storage."""
+    try:
+        prefs_file = _get_preferences_file(user_id)
+        if prefs_file.exists():
+            with prefs_file.open() as f:
+                data = json.load(f)
+                return UserPreferences(**data)
+    except Exception as e:
+        logger.warning(f"Failed to load preferences for user {user_id}: {e}")
+
+    # Return default preferences if loading fails or file doesn't exist
+    return UserPreferences()
+
+
+async def _save_user_preferences(user_id: str, preferences: UserPreferences) -> bool:
+    """Save user preferences to file storage."""
+    try:
+        prefs_file = _get_preferences_file(user_id)
+        with prefs_file.open("w") as f:
+            json.dump(preferences.model_dump(), f, indent=2)
+        return True
+    except Exception as e:
+        logger.exception(f"Failed to save preferences for user {user_id}: {e}")
+        return False
+
 
 async def get_user_settings(user_id: str) -> UserSettingsResponse:
     """
-    Get user settings including custom instructions and memory count.
+    Get user settings including custom instructions, memory count, and preferences.
 
     Args:
         user_id: Unique identifier for the user
 
     Returns
     -------
-        UserSettingsResponse: User's settings and memory information
+        UserSettingsResponse: User's settings, memory information, and preferences
     """
     try:
         memory_wrapper = get_memory_wrapper()
@@ -37,12 +77,17 @@ async def get_user_settings(user_id: str) -> UserSettingsResponse:
             logger.warning(f"Failed to count memories for user {user_id}: {e}")
             memory_count = 0
 
-        return UserSettingsResponse(custom_instructions=custom_instructions, memory_count=memory_count)
+        # Get user preferences
+        preferences = await _load_user_preferences(user_id)
+
+        return UserSettingsResponse(
+            custom_instructions=custom_instructions, memory_count=memory_count, preferences=preferences
+        )
 
     except Exception as e:
         logger.exception(f"Error getting user settings for {user_id}: {e}")
         # Return default settings on error
-        return UserSettingsResponse(custom_instructions="", memory_count=0)
+        return UserSettingsResponse(custom_instructions="", memory_count=0, preferences=UserPreferences())
 
 
 async def update_custom_instructions(user_id: str, instructions: str) -> CustomInstructionsResponse:
@@ -105,7 +150,7 @@ async def get_user_memories(user_id: str) -> list[dict]:
             query="",  # Empty query to get all memories
             limit=1000,  # High limit to get all memories
             relevance_threshold=0.0,  # Accept all relevance levels
-            allow_empty=True  # Allow empty query
+            allow_empty=True,  # Allow empty query
         )
 
         # Format memories for frontend consumption
@@ -115,7 +160,7 @@ async def get_user_memories(user_id: str) -> list[dict]:
                 "content": memory.get("memory", ""),
                 "timestamp": memory.get("created_at", ""),
                 "source": memory.get("source", "unknown"),
-                "metadata": memory.get("metadata", {})
+                "metadata": memory.get("metadata", {}),
             }
             formatted_memories.append(formatted_memory)
 
@@ -124,6 +169,26 @@ async def get_user_memories(user_id: str) -> list[dict]:
     except Exception as e:
         logger.exception(f"Error getting memories for user {user_id}: {e}")
         return []
+
+
+async def update_user_preferences(user_id: str, preferences: UserPreferences) -> PreferencesUpdateResponse:
+    """
+    Update user preferences.
+
+    Args:
+        user_id: Unique identifier for the user
+        preferences: New preferences to save
+
+    Returns
+    -------
+        PreferencesUpdateResponse: Updated preferences and success status
+    """
+    try:
+        success = await _save_user_preferences(user_id, preferences)
+        return PreferencesUpdateResponse(preferences=preferences, updated=success)
+    except Exception as e:
+        logger.exception(f"Error updating preferences for user {user_id}: {e}")
+        return PreferencesUpdateResponse(preferences=preferences, updated=False)
 
 
 async def clear_user_memory(user_id: str) -> ClearMemoryResponse:
