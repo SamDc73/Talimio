@@ -84,6 +84,31 @@ export async function getCustomInstructions() {
 }
 
 /**
+ * Get all user memories
+ * @returns {Promise<Array>} List of user memories
+ */
+export async function getUserMemories() {
+	try {
+		const response = await fetch(`${API_BASE_URL}/user/memories`, {
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+				...getUserHeaders(),
+			},
+		});
+
+		if (!response.ok) {
+			throw new Error(`Failed to get memories: ${response.statusText}`);
+		}
+
+		return await response.json();
+	} catch (error) {
+		console.error("Error getting user memories:", error);
+		throw error;
+	}
+}
+
+/**
  * Clear all user memories
  * @returns {Promise<Object>} Clear response
  */

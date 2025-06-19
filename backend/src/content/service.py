@@ -505,7 +505,9 @@ async def unarchive_content(content_type: ContentType, content_id: str) -> None:
                 logger.info(f"✅ Successfully unarchived {content_id}")
 
         except Exception:
-            logger.exception("💥 Database error in unarchive_content. Query: %s, Params: content_id=%s", query, content_id)
+            logger.exception(
+                "💥 Database error in unarchive_content. Query: %s, Params: content_id=%s", query, content_id
+            )
             await session.rollback()
             raise
 

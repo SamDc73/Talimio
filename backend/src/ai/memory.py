@@ -10,9 +10,18 @@ import os
 from typing import Any
 
 import asyncpg
-from mem0 import Memory
+from mem0 import AsyncMemory
 
 from src.config.settings import get_settings
+
+
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not available, rely on environment variables
 
 
 class AIMemoryError(Exception):
@@ -34,33 +43,35 @@ class Mem0Wrapper:
         self._memory_client = None
         self._db_pool = None
 
-        # Mem0 configuration for production with pgvector
+        # Mem0 configuration with pgvector
         self.config = {
             "vector_store": {
                 "provider": "pgvector",
                 "config": {
-                    "dbname": os.getenv("DB_NAME", "neondb"),
+                    "dbname": self._extract_db_name(),
                     "user": self._extract_db_user(),
                     "password": self._extract_db_password(),
                     "host": self._extract_db_host(),
                     "port": self._extract_db_port(),
-                    "collection_name": "learning_memories"
-                }
+                    "collection_name": "learning_memories",
+                    "embedding_model_dims": 1536,
+                },
             },
             "llm": {
                 "provider": "litellm",
                 "config": {
                     "model": os.getenv("MEMORY_LLM_MODEL", "openai/gpt-4o-mini"),
                     "temperature": 0.2,
-                    "max_tokens": 2000
-                }
+                    "max_tokens": 2000,
+                },
             },
             "embedder": {
-                "provider": "litellm",
+                "provider": "openai",
                 "config": {
-                    "model": os.getenv("MEMORY_EMBEDDING_MODEL", "huggingface/sentence-transformers/all-MiniLM-L6-v2")
-                }
-            }
+                    "model": "text-embedding-3-small",
+                    "embedding_dims": 1536
+                },
+            },
         }
 
     def _extract_db_user(self) -> str:
@@ -98,12 +109,21 @@ class Mem0Wrapper:
                 return host_part.split(":")[1]
         return os.getenv("DB_PORT", "5432")
 
-    @property
-    def memory_client(self) -> Memory:
+    def _extract_db_name(self) -> str:
+        """Extract database name from DATABASE_URL."""
+        database_url = os.getenv("DATABASE_URL", "")
+        if "://" in database_url:
+            # Extract from URL format: postgresql+asyncpg://user:pass@host:port/dbname
+            db_part = database_url.split("/")[-1]
+            # Remove any query parameters
+            return db_part.split("?")[0]
+        return os.getenv("DB_NAME", "neondb")
+
+    async def get_memory_client(self) -> AsyncMemory:
         """Get or create Mem0 client instance."""
         if self._memory_client is None:
             try:
-                self._memory_client = Memory(config=self.config)
+                self._memory_client = await AsyncMemory.from_config(self.config)
                 self._logger.info("Mem0 client initialized successfully")
             except Exception as e:
                 self._logger.exception(f"Failed to initialize Mem0 client: {e}")
@@ -113,14 +133,15 @@ class Mem0Wrapper:
 
     def _create_fallback_client(self) -> Any:
         """Create a fallback client when Mem0 initialization fails."""
+
         class FallbackMemory:
-            def add(self, *_args: Any, **_kwargs: Any) -> dict[str, Any]:
+            async def add(self, *_args: Any, **_kwargs: Any) -> dict[str, Any]:
                 return {"id": "fallback", "memory": "Memory storage temporarily unavailable"}
 
-            def search(self, *_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
+            async def search(self, *_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
                 return []
 
-            def delete_all(self, *_args: Any, **_kwargs: Any) -> dict[str, str]:
+            async def delete_all(self, *_args: Any, **_kwargs: Any) -> dict[str, str]:
                 return {"message": "Memory cleared (fallback mode)"}
 
         self._logger.warning("Using fallback memory client - memory features disabled")
@@ -138,7 +159,7 @@ class Mem0Wrapper:
             port=int(self._extract_db_port()),
             user=self._extract_db_user(),
             password=self._extract_db_password(),
-            database=os.getenv("DB_NAME", "neondb")
+            database=os.getenv("DB_NAME", "neondb"),
         )
 
     async def add_memory(self, user_id: str, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -159,17 +180,16 @@ class Mem0Wrapper:
                 metadata = {}
 
             # Add user context to metadata
-            metadata.update({
-                "user_id": user_id,
-                "timestamp": metadata.get("timestamp", "now"),
-                "source": metadata.get("source", "learning_platform")
-            })
-
-            result = self.memory_client.add(
-                content,
-                user_id=user_id,
-                metadata=metadata
+            metadata.update(
+                {
+                    "user_id": user_id,
+                    "timestamp": metadata.get("timestamp", "now"),
+                    "source": metadata.get("source", "learning_platform"),
+                }
             )
+
+            memory_client = await self.get_memory_client()
+            result = await memory_client.add(content, user_id=user_id, metadata=metadata)
 
             self._logger.debug(f"Added memory for user {user_id}: {content[:100]}...")
             return result
@@ -180,11 +200,7 @@ class Mem0Wrapper:
             raise AIMemoryError(msg) from e
 
     async def search_memories(
-        self,
-        user_id: str,
-        query: str,
-        limit: int = 5,
-        relevance_threshold: float = 0.7
+        self, user_id: str, query: str, limit: int = 5, relevance_threshold: float = 0.7, allow_empty: bool = False
     ) -> list[dict[str, Any]]:
         """
         Search for relevant memories for a user.
@@ -194,24 +210,42 @@ class Mem0Wrapper:
             query: Search query to find relevant memories
             limit: Maximum number of memories to return
             relevance_threshold: Minimum relevance score (0.0-1.0)
+            allow_empty: Allow empty queries (for counting all memories)
 
         Returns
         -------
             List of relevant memory entries with content and metadata
         """
         try:
-            results = self.memory_client.search(
-                query=query,
-                user_id=user_id,
-                limit=limit
-            )
+            # Validate query to prevent empty/invalid searches unless explicitly allowed
+            if not allow_empty and (not query or not query.strip()):
+                self._logger.debug(f"Empty query provided for user {user_id}, returning empty results")
+                return []
+
+            memory_client = await self.get_memory_client()
+            # If empty query is allowed and query is empty, use a wildcard
+            search_query = query.strip() if query.strip() else "*" if allow_empty else ""
+            results = await memory_client.search(query=search_query, user_id=user_id, limit=limit)
+
+            # Debug: Log the actual structure of results
+            self._logger.debug(f"Raw search results type: {type(results)}")
+            self._logger.debug(f"Raw search results: {results}")
+
+            # Handle different result formats
+            if isinstance(results, dict) and "results" in results:
+                results = results["results"]
 
             # Filter by relevance threshold if specified
             filtered_results = []
             for result in results:
-                score = result.get("score", 1.0)  # Default high score if not provided
-                if score >= relevance_threshold:
-                    filtered_results.append(result)
+                # Handle both string and dict results
+                if isinstance(result, str):
+                    # If result is a string, treat it as memory content with high relevance
+                    filtered_results.append({"memory": result, "score": 1.0})
+                elif isinstance(result, dict):
+                    score = result.get("score", 1.0)  # Default high score if not provided
+                    if score >= relevance_threshold:
+                        filtered_results.append(result)
 
             self._logger.debug(f"Found {len(filtered_results)} relevant memories for user {user_id}")
             return filtered_results
@@ -232,14 +266,15 @@ class Mem0Wrapper:
             Confirmation message
         """
         try:
-            result = self.memory_client.delete_all(user_id=user_id)
+            memory_client = await self.get_memory_client()
+            result = await memory_client.delete_all(user_id=user_id)
             self._logger.info(f"Deleted all memories for user {user_id}")
             return result
 
         except Exception as e:
-            self._logger.exception(f"Error deleting memories for user {user_id}: {e}")
-            msg = f"Failed to delete memories: {e}"
-            raise AIMemoryError(msg) from e
+            self._logger.warning(f"Error deleting memories for user {user_id}: {e}")
+            # Return a default response if deletion fails (common with orphaned records)
+            return {"message": "Memory deletion attempted, continuing with operation"}
 
     async def get_custom_instructions(self, user_id: str) -> str:
         """
@@ -256,8 +291,7 @@ class Mem0Wrapper:
             conn = await self._get_db_connection()
             try:
                 result = await conn.fetchrow(
-                    "SELECT instructions FROM user_custom_instructions WHERE user_id = $1",
-                    user_id
+                    "SELECT instructions FROM user_custom_instructions WHERE user_id = $1", user_id
                 )
                 return result["instructions"] if result else ""
             finally:
@@ -282,12 +316,16 @@ class Mem0Wrapper:
         try:
             conn = await self._get_db_connection()
             try:
-                await conn.execute("""
+                await conn.execute(
+                    """
                     INSERT INTO user_custom_instructions (user_id, instructions, updated_at)
                     VALUES ($1, $2, NOW())
                     ON CONFLICT (user_id)
                     DO UPDATE SET instructions = $2, updated_at = NOW()
-                """, user_id, instructions)
+                """,
+                    user_id,
+                    instructions,
+                )
 
                 self._logger.info(f"Updated custom instructions for user {user_id}")
                 return True
@@ -297,6 +335,31 @@ class Mem0Wrapper:
         except Exception as e:
             self._logger.exception(f"Error updating custom instructions for user {user_id}: {e}")
             return False
+
+    async def get_memory_count(self, user_id: str) -> int:
+        """
+        Get the total count of memories for a user.
+
+        Args:
+            user_id: Unique identifier for the user
+
+        Returns
+        -------
+            Total number of memories stored for the user
+        """
+        try:
+            # Use search_memories with allow_empty=True to get all memories
+            memories = await self.search_memories(
+                user_id=user_id,
+                query="",  # Empty query to get all memories
+                limit=10000,  # High limit to get all memories
+                relevance_threshold=0.0,  # Include all memories
+                allow_empty=True  # Allow empty query for counting
+            )
+            return len(memories)
+        except Exception as e:
+            self._logger.warning(f"Error counting memories for user {user_id}: {e}")
+            return 0
 
     async def build_memory_context(self, user_id: str, current_query: str) -> str:
         """
@@ -314,12 +377,15 @@ class Mem0Wrapper:
             # Get custom instructions
             custom_instructions = await self.get_custom_instructions(user_id)
 
-            # Search for relevant memories
-            relevant_memories = await self.search_memories(
-                user_id=user_id,
-                query=current_query,
-                limit=5
-            )
+            # Search for relevant memories (only if we have a meaningful query)
+            relevant_memories = []
+            if current_query and current_query.strip():
+                relevant_memories = await self.search_memories(
+                    user_id=user_id,
+                    query=current_query,
+                    limit=5,
+                    relevance_threshold=0.3  # Lower threshold for broader context inclusion
+                )
 
             # Build context string
             context_parts = []
@@ -344,11 +410,7 @@ class Mem0Wrapper:
             return ""  # Return empty context on error to not break AI responses
 
     async def track_learning_interaction(
-        self,
-        user_id: str,
-        interaction_type: str,
-        content: str,
-        metadata: dict[str, Any] | None = None
+        self, user_id: str, interaction_type: str, content: str, metadata: dict[str, Any] | None = None
     ) -> None:
         """
         Track learning interactions automatically (behind the scenes).
@@ -363,10 +425,7 @@ class Mem0Wrapper:
             if metadata is None:
                 metadata = {}
 
-            metadata.update({
-                "interaction_type": interaction_type,
-                "auto_tracked": True
-            })
+            metadata.update({"interaction_type": interaction_type, "auto_tracked": True})
 
             await self.add_memory(user_id, content, metadata)
 

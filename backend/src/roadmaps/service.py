@@ -98,7 +98,7 @@ class RoadmapService:
                 skill_level=data.skill_level,
                 description=data.description,
             )
-            logger.info(f"Successfully generated node data: {nodes_data}")
+            logger.info(f"Successfully generated {len(nodes_data)} core topics for roadmap '{data.title}'")
         except Exception as e:
             logger.exception(f"AI client failed to generate roadmap content: {e}")
             await self._session.rollback()
