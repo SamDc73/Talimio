@@ -2,8 +2,11 @@ import { evaluate } from "@mdx-js/mdx";
 import { MDXProvider } from "@mdx-js/react";
 import { useEffect, useMemo, useState } from "react";
 import * as runtime from "react/jsx-runtime";
+import rehypeKatex from "rehype-katex";
 import rehypePrettyCode from "rehype-pretty-code";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import "katex/dist/katex.min.css";
 import { CodeBlock } from "../../components/code-block";
 import "./LessonViewer.css";
 
@@ -130,8 +133,8 @@ export function MDXRenderer({ content }) {
 					...runtime,
 					development: false,
 					useMDXComponents: () => currentComponents,
-					rehypePlugins: [[rehypePrettyCode, prettyCodeOptions]],
-					remarkPlugins: [remarkGfm],
+					rehypePlugins: [[rehypePrettyCode, prettyCodeOptions], rehypeKatex],
+					remarkPlugins: [remarkMath, remarkGfm],
 				});
 
 				setMdxModule(result);
