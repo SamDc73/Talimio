@@ -85,10 +85,7 @@ export const useAppState = () => {
 		try {
 			// Prepare roadmap data
 			const roadmapData = {
-				title: answers.topic ? `${answers.topic} Learning Path` : "",
-				description: answers.topic
-					? `A personalized learning path for ${answers.topic}`
-					: "",
+				userPrompt: answers.topic || "",
 				skillLevel: String(answers.skillLevel || "beginner").toLowerCase(), // Make sure it's a string
 			};
 
