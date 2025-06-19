@@ -16,6 +16,7 @@ const TagEditModal = ({
 	contentType,
 	contentId,
 	contentTitle = "",
+	onTagsUpdated,
 }) => {
 	const [currentTags, setCurrentTags] = useState([]);
 	const [isLoading, setIsLoading] = useState(false);
@@ -66,6 +67,11 @@ const TagEditModal = ({
 				title: "Tags Updated",
 				description: `Tags for "${contentTitle}" have been updated successfully.`,
 			});
+
+			// Notify parent component that tags were updated
+			if (onTagsUpdated) {
+				onTagsUpdated(contentId, contentType, tagNames);
+			}
 
 			onOpenChange(false);
 		} catch (error) {

@@ -9,6 +9,7 @@ if (import.meta.env.VITE_DEBUG_MODE === "true") {
 	logger.debug("Initializing Radix UI components in HomePage");
 }
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
+import TagEditModal from "@/components/TagEditModal";
 import { Badge } from "@/components/badge";
 import { Button } from "@/components/button";
 import { MainHeader } from "@/components/header/MainHeader";
@@ -45,6 +46,7 @@ import { videoApi } from "@/services/videoApi";
 import { AnimatePresence, motion } from "framer-motion";
 import {
 	AlertCircle,
+	Archive,
 	ArrowUpDown,
 	BookOpen,
 	Calendar,
@@ -64,6 +66,7 @@ import {
 	Search,
 	SlidersHorizontal,
 	Sparkles,
+	Tag,
 	TimerOff,
 	X,
 	Youtube,
@@ -217,11 +220,13 @@ const BaseCard = ({
 	onTogglePin,
 	onDelete,
 	onArchive,
+	onTagsUpdated,
 	index,
 	onClick,
 }) => {
 	const [hover, setHover] = useState(false);
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+	const [showTagEditModal, setShowTagEditModal] = useState(false);
 	const [isArchiving, setIsArchiving] = useState(false);
 	const { toast } = useToast();
 
@@ -332,6 +337,10 @@ const BaseCard = ({
 		} finally {
 			setIsArchiving(false);
 		}
+	};
+
+	const handleEditTags = () => {
+		setShowTagEditModal(true);
 	};
 
 	return (
@@ -474,7 +483,7 @@ const BaseCard = ({
 												key={action}
 												variant="ghost"
 												size="sm"
-												className={`justify-start ${action === "Delete" ? "text-red-600 hover:bg-red-50" : ""}`}
+												className={`justify-start flex items-center gap-2 ${action === "Delete" ? "text-red-600 hover:bg-red-50" : ""}`}
 												onClick={(e) => {
 													e.stopPropagation();
 													if (action === "Pin") onTogglePin();
@@ -482,13 +491,17 @@ const BaseCard = ({
 													else if (action === "Archive") handleArchive();
 													else if (action === "Pause")
 														console.log("Pause functionality - placeholder");
-													else if (action === "Edit Tags")
-														console.log(
-															"Edit Tags functionality - placeholder",
-														);
+													else if (action === "Edit Tags") handleEditTags();
 												}}
 												disabled={action === "Archive" && isArchiving}
 											>
+												{action === "Pin" && <Pin className="h-4 w-4" />}
+												{action === "Edit Tags" && <Tag className="h-4 w-4" />}
+												{action === "Archive" && (
+													<Archive className="h-4 w-4" />
+												)}
+												{action === "Pause" && <Pause className="h-4 w-4" />}
+												{action === "Delete" && <X className="h-4 w-4" />}
 												{action === "Pin"
 													? pinned
 														? "Unpin"
@@ -517,6 +530,21 @@ const BaseCard = ({
 				description="This action cannot be undone. This item will be permanently removed from your library."
 				itemName={item.title}
 				onConfirm={handleConfirmDelete}
+			/>
+
+			<TagEditModal
+				open={showTagEditModal}
+				onOpenChange={setShowTagEditModal}
+				contentType={
+					item.type === "youtube"
+						? "video"
+						: item.type === "flashcards"
+							? "flashcard"
+							: item.type
+				}
+				contentId={item.id || item.uuid}
+				contentTitle={item.title}
+				onTagsUpdated={onTagsUpdated}
 			/>
 		</div>
 	);
@@ -562,6 +590,7 @@ export default function HomePage() {
 	const [activeSort, setActiveSort] = useState("last-accessed");
 	const [sortDirection, setSortDirection] = useState("desc");
 	const [archiveFilter, setArchiveFilter] = useState("active"); // "active", "archived", "all"
+	const [tagFilter, setTagFilter] = useState("");
 	const [contentItems, setContentItems] = useState([]);
 	const [filterOptions, setFilterOptions] = useState([]);
 	const [sortOptions, setSortOptions] = useState([]);
@@ -598,22 +627,51 @@ export default function HomePage() {
 					active: content.filter((item) => !item.archived).length,
 				});
 
-				// Transform data to match new structure
-				const transformedContent = content.map((item) => ({
-					...item,
-					// Add mock due dates and states for demonstration
-					dueDate:
-						Math.random() > 0.7
-							? new Date(
-									Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000,
-								).toISOString()
-							: null,
-					isPaused: Math.random() > 0.9,
-					// For flashcards, map the existing fields
-					totalCards: item.cardCount,
-					due: item.dueCount || Math.floor(Math.random() * 10),
-					overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
-				}));
+				// Transform data to match new structure and load tags
+				const transformedContent = await Promise.all(
+					content.map(async (item) => {
+						// Load tags from tag associations for each item
+						let tags = [];
+						try {
+							const contentType =
+								item.type === "youtube"
+									? "video"
+									: item.type === "flashcards"
+										? "flashcard"
+										: item.type;
+							const contentId = item.id || item.uuid;
+							if (contentId && contentType) {
+								const response = await fetch(
+									`/api/tags/${contentType}/${contentId}/tags`,
+								);
+								if (response.ok) {
+									const tagData = await response.json();
+									tags = tagData.map((tag) => tag.name);
+								}
+							}
+						} catch (error) {
+							console.log(`Could not load tags for ${item.title}:`, error);
+						}
+
+						return {
+							...item,
+							tags, // Use tags from tag associations instead of book endpoint
+							// Add mock due dates and states for demonstration
+							dueDate:
+								Math.random() > 0.7
+									? new Date(
+											Date.now() +
+												(Math.random() * 7 - 2) * 24 * 60 * 60 * 1000,
+										).toISOString()
+									: null,
+							isPaused: Math.random() > 0.9,
+							// For flashcards, map the existing fields
+							totalCards: item.cardCount,
+							due: item.dueCount || Math.floor(Math.random() * 10),
+							overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
+						};
+					}),
+				);
 
 				setContentItems(transformedContent);
 
@@ -759,6 +817,14 @@ export default function HomePage() {
 				);
 			}
 			return true;
+		})
+		.filter((item) => {
+			// Apply tag filter
+			if (!tagFilter) return true;
+
+			return item.tags?.some((tag) =>
+				tag.toLowerCase().includes(tagFilter.toLowerCase()),
+			);
 		})
 		.sort((a, b) => {
 			const direction = sortDirection === "asc" ? 1 : -1;
@@ -1012,6 +1078,21 @@ export default function HomePage() {
 		}
 	};
 
+	const handleTagsUpdated = async (itemId, contentType, newTags) => {
+		// Update the specific item's tags in the content list
+		setContentItems((prevItems) => {
+			return prevItems.map((item) => {
+				if (item.id === itemId || item.uuid === itemId) {
+					return {
+						...item,
+						tags: newTags,
+					};
+				}
+				return item;
+			});
+		});
+	};
+
 	const renderCard = (item, i) => (
 		<BaseCard
 			key={item.id}
@@ -1021,6 +1102,7 @@ export default function HomePage() {
 			onTogglePin={() => togglePin(item.type, item.id)}
 			onDelete={handleDeleteItem}
 			onArchive={handleArchiveItem}
+			onTagsUpdated={handleTagsUpdated}
 			onClick={() => handleCardClick(item)}
 		/>
 	);
@@ -1500,6 +1582,22 @@ export default function HomePage() {
 																<Separator />
 
 																<div>
+																	<h4 className="font-medium text-sm mb-2">
+																		Filter by Tag
+																	</h4>
+																	<Input
+																		placeholder="Filter by tag..."
+																		value={tagFilter}
+																		onChange={(e) =>
+																			setTagFilter(e.target.value)
+																		}
+																		className="text-sm"
+																	/>
+																</div>
+
+																<Separator />
+
+																<div>
 																	<div className="flex justify-between items-center mb-2">
 																		<h4 className="font-medium text-sm">
 																			Sort By
@@ -1618,9 +1716,25 @@ export default function HomePage() {
 									</Badge>
 								)}
 
+								{tagFilter && (
+									<Badge variant="outline" className="bg-white">
+										Tag: {tagFilter}
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={() => setTagFilter("")}
+											className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+										>
+											<X className="h-3 w-3" />
+											<span className="sr-only">Remove tag filter</span>
+										</Button>
+									</Badge>
+								)}
+
 								{(activeFilter !== "all" ||
 									activeSort !== "last-accessed" ||
-									sortDirection !== "desc") && (
+									sortDirection !== "desc" ||
+									tagFilter) && (
 									<Button
 										variant="ghost"
 										size="sm"
@@ -1628,6 +1742,7 @@ export default function HomePage() {
 											setActiveFilter("all");
 											setActiveSort("last-accessed");
 											setSortDirection("desc");
+											setTagFilter("");
 										}}
 										className="text-xs text-muted-foreground h-7 px-2 ml-auto"
 									>
