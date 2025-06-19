@@ -67,10 +67,7 @@ class Mem0Wrapper:
             },
             "embedder": {
                 "provider": "openai",
-                "config": {
-                    "model": "text-embedding-3-small",
-                    "embedding_dims": 1536
-                },
+                "config": {"model": os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"), "embedding_dims": 1536},
             },
         }
 
@@ -354,7 +351,7 @@ class Mem0Wrapper:
                 query="",  # Empty query to get all memories
                 limit=10000,  # High limit to get all memories
                 relevance_threshold=0.0,  # Include all memories
-                allow_empty=True  # Allow empty query for counting
+                allow_empty=True,  # Allow empty query for counting
             )
             return len(memories)
         except Exception as e:
@@ -384,7 +381,7 @@ class Mem0Wrapper:
                     user_id=user_id,
                     query=current_query,
                     limit=5,
-                    relevance_threshold=0.3  # Lower threshold for broader context inclusion
+                    relevance_threshold=0.3,  # Lower threshold for broader context inclusion
                 )
 
             # Build context string
