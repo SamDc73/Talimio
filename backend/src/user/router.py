@@ -9,9 +9,17 @@ from src.user.schemas import (
     ClearMemoryResponse,
     CustomInstructionsRequest,
     CustomInstructionsResponse,
+    PreferencesUpdateRequest,
+    PreferencesUpdateResponse,
     UserSettingsResponse,
 )
-from src.user.service import clear_user_memory, get_user_memories, get_user_settings, update_custom_instructions
+from src.user.service import (
+    clear_user_memory,
+    get_user_memories,
+    get_user_settings,
+    update_custom_instructions,
+    update_user_preferences,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -136,4 +144,30 @@ async def get_memories(user_id: Annotated[str, Header(alias="x-user-id")] = "dem
         logger.exception(f"Error in get_memories for user {user_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get memories: {e}"
+        ) from e
+
+
+@router.put("/preferences")
+async def update_preferences(
+    request: PreferencesUpdateRequest, user_id: Annotated[str, Header(alias="x-user-id")] = "demo_user_123"
+) -> PreferencesUpdateResponse:
+    """
+    Update user preferences.
+
+    Headers:
+        x-user-id: User identifier (optional, defaults to demo_user_123)
+
+    Args:
+        request: User preferences to update
+
+    Returns
+    -------
+        PreferencesUpdateResponse: Updated preferences and success status
+    """
+    try:
+        return await update_user_preferences(user_id, request.preferences)
+    except Exception as e:
+        logger.exception(f"Error in update_preferences for user {user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update preferences: {e}"
         ) from e

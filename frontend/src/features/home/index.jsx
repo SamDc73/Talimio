@@ -1,11 +1,12 @@
 import ErrorBoundary from "@/components/ErrorBoundary";
 import RoadmapPromptModal from "@/features/roadmap/RoadmapPromptModal";
+import logger from "@/utils/logger";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 // Debug logging for Radix UI component initialization
 if (import.meta.env.VITE_DEBUG_MODE === "true") {
-	console.log("[Debug] Initializing Radix UI components in HomePage");
+	logger.debug("Initializing Radix UI components in HomePage");
 }
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
 import { Badge } from "@/components/badge";
@@ -2126,7 +2127,7 @@ export default function HomePage() {
 							</div>
 						</div>
 
-						<style jsx global>{`
+						<style>{`
           @keyframes confetti {
             0% {
               transform: translateY(0) rotate(0deg);
