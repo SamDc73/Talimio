@@ -89,24 +89,28 @@ class ModelManager:
         for j, subtopic in enumerate(subtopics):
             if isinstance(subtopic, dict):
                 # Subtopic is already a proper object
-                processed_children.append({
-                    "title": str(subtopic.get("title", f"Subtopic {j + 1}")),
-                    "description": str(subtopic.get("description", "")),
-                    "content": str(subtopic.get("content", "")),
-                    "order": j,
-                    "prerequisite_ids": [],
-                    "children": []  # Subtopics don't have further children
-                })
+                processed_children.append(
+                    {
+                        "title": str(subtopic.get("title", f"Subtopic {j + 1}")),
+                        "description": str(subtopic.get("description", "")),
+                        "content": str(subtopic.get("content", "")),
+                        "order": j,
+                        "prerequisite_ids": [],
+                        "children": [],  # Subtopics don't have further children
+                    }
+                )
             elif isinstance(subtopic, str):
                 # Legacy: subtopic is just a string, convert to object
-                processed_children.append({
-                    "title": str(subtopic),
-                    "description": f"Learn about {subtopic}",
-                    "content": "",
-                    "order": j,
-                    "prerequisite_ids": [],
-                    "children": []
-                })
+                processed_children.append(
+                    {
+                        "title": str(subtopic),
+                        "description": f"Learn about {subtopic}",
+                        "content": "",
+                        "order": j,
+                        "prerequisite_ids": [],
+                        "children": [],
+                    }
+                )
 
         return processed_children
 
@@ -313,6 +317,56 @@ class ModelManager:
             raise RoadmapGenerationError from e
         else:
             return validated_nodes
+
+    async def generate_roadmap_title_description(
+        self,
+        user_prompt: str,
+        skill_level: str,
+    ) -> dict[str, str]:
+        """Generate a professional title and description for a roadmap.
+
+        Args:
+            user_prompt: The user's raw learning topic/prompt
+            skill_level: The skill level (beginner, intermediate, advanced)
+
+        Returns
+        -------
+            Dict with 'title' and 'description' keys
+
+        Raises
+        ------
+            RoadmapGenerationError: If title/description generation fails
+        """
+        from src.ai.prompts import ROADMAP_TITLE_GENERATION_PROMPT
+
+        prompt = ROADMAP_TITLE_GENERATION_PROMPT.format(
+            user_prompt=user_prompt,
+            skill_level=skill_level,
+        )
+
+        messages = [
+            {"role": "system", "content": "You are an expert educational content strategist."},
+            {"role": "user", "content": prompt},
+        ]
+
+        try:
+            response = await self.get_completion(messages, format_json=True)
+            if not isinstance(response, dict):
+                msg = "Invalid response format from AI model for title generation"
+                raise RoadmapGenerationError(msg)
+
+            if "title" not in response or "description" not in response:
+                msg = "Missing title or description in AI response"
+                raise RoadmapGenerationError(msg)
+
+            return {
+                "title": str(response["title"]),
+                "description": str(response["description"]),
+            }
+
+        except Exception as e:
+            self._logger.exception("Error generating roadmap title and description")
+            raise RoadmapGenerationError from e
 
     async def generate_practice_exercises(
         self,

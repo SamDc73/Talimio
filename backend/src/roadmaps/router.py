@@ -129,7 +129,17 @@ async def update_roadmap(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Roadmap not found",
         )
-    return RoadmapResponse.model_validate(roadmap)
+
+    # Ensure relationships are loaded before validation (same as other endpoints)
+    query = (
+        select(Roadmap)
+        .options(selectinload(Roadmap.nodes).selectinload(Node.children))
+        .where(Roadmap.id == roadmap.id)
+    )
+    result = await session.execute(query)
+    fully_loaded_roadmap = result.scalars().first()
+
+    return RoadmapResponse.model_validate(fully_loaded_roadmap)
 
 
 @router.post(

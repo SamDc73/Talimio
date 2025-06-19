@@ -34,10 +34,8 @@ const RoadmapPromptModal = ({ isOpen, onClose }) => {
 		try {
 			// Generate roadmap with AI using the prompt
 			const response = await api.post("/roadmaps", {
-				title: prompt.trim(), // AI will refine this
-				description: `Learning roadmap for: ${prompt.trim()}`,
-				skill_level: "beginner", // Default, will be editable in preview
-				tags: [], // AI will generate tags
+				userPrompt: prompt.trim(),
+				skillLevel: "beginner", // Default, will be editable in preview
 			});
 
 			toast({

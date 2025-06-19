@@ -1306,7 +1306,7 @@ export default function HomePage() {
 				});
 
 				if (cardData.length > 0) {
-					await api.post(`/flashcards/${deckResponse.data.id}/cards`, {
+					await api.post(`/flashcards/${deckResponse.id}/cards`, {
 						cards: cardData,
 					});
 				}

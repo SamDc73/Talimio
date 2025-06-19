@@ -68,18 +68,26 @@ class RoadmapService:
         -------
             Roadmap: Created roadmap instance
         """
+        # First, generate a professional title and description from the user's prompt
+        logger.info(f"Generating title and description for prompt: '{data.user_prompt}' (level: {data.skill_level})")
+
+        title_desc = await self.ai_client.generate_roadmap_title_description(
+            user_prompt=data.user_prompt,
+            skill_level=data.skill_level,
+        )
+
         roadmap = Roadmap()
-        roadmap.title = data.title
-        roadmap.description = data.description
+        roadmap.title = title_desc["title"]
+        roadmap.description = title_desc["description"]
         roadmap.skill_level = data.skill_level
         self._session.add(roadmap)
         await self._session.flush()
 
         try:
-            logger.info(f"Generating initial nodes for roadmap '{data.title}' (level: {data.skill_level})")
+            logger.info(f"Generating initial nodes for roadmap '{roadmap.title}' (level: {data.skill_level})")
 
             # Create personalized roadmap using memory
-            roadmap_query = f"Create roadmap for {data.title} at {data.skill_level} level"
+            roadmap_query = f"Create roadmap for {data.user_prompt} at {data.skill_level} level"
             if self.user_id:
                 # Search for relevant learning preferences and history
                 relevant_memories = await self.memory_wrapper.search_memories(
@@ -94,11 +102,11 @@ class RoadmapService:
                     roadmap_query += f"\n\nUser's Learning History:\n{memory_context}"
 
             nodes_data = await self.ai_client.generate_roadmap_content(
-                title=data.title,
+                title=roadmap.title,
                 skill_level=data.skill_level,
-                description=data.description,
+                description=roadmap.description,
             )
-            logger.info(f"Successfully generated {len(nodes_data)} core topics for roadmap '{data.title}'")
+            logger.info(f"Successfully generated {len(nodes_data)} core topics for roadmap '{roadmap.title}'")
         except Exception as e:
             logger.exception(f"AI client failed to generate roadmap content: {e}")
             await self._session.rollback()

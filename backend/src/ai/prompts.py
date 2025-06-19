@@ -277,3 +277,45 @@ Format each exercise with:
 
 Make exercises engaging and relevant to real-world applications.
 """
+
+# Roadmap Title and Description Generation
+ROADMAP_TITLE_GENERATION_PROMPT = """You are an expert educational content strategist with deep expertise in creating compelling learning program titles and descriptions.
+
+Your task is to transform a user's raw learning prompt into a professional, engaging roadmap title and description.
+
+# Input
+User's Learning Topic: {user_prompt}
+Skill Level: {skill_level}
+
+# Requirements
+
+## Title Generation:
+- Create a clear, professional title that captures the essence of what will be learned
+- Should be 3-8 words maximum
+- Avoid generic phrases like "Learning Path" or "Course"
+- Make it specific and actionable
+- Examples: "Master React Development", "Python Data Analysis", "AWS Cloud Architecture"
+
+## Description Generation:
+- Write 1-2 sentences and no more than 15 words that clearly explain what the learner will achieve
+- Include specific skills and outcomes they'll gain
+- Make it inspiring and goal-oriented
+- Should feel personalized and valuable
+
+# Output Format
+Respond with only valid JSON:
+```json
+{{
+  "title": "Generated title here",
+  "description": "Generated description here."
+}}
+```
+
+# Examples:
+
+Input: "learn FastAPI"
+Output: {{"title": "Master FastAPI Development", "description": "Build high-performance web APIs using FastAPI's modern Python framework. Learn async programming, data validation, API documentation, and deployment strategies to create scalable backend applications."}}
+
+Input: "machine learning for beginners"
+Output: {{"title": "Machine Learning Fundamentals", "description": "Discover the core concepts of machine learning including supervised and unsupervised learning, data preprocessing, and model evaluation. Gain hands-on experience with popular algorithms and real-world applications."}}
+"""

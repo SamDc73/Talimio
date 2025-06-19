@@ -22,22 +22,20 @@ class RoadmapBase(PydanticBaseModel):  # type: ignore[misc]
     skill_level: str = Field(..., pattern="^(beginner|intermediate|advanced)$", alias="skillLevel")
 
 
-class RoadmapCreate(RoadmapBase):
+class RoadmapCreate(PydanticBaseModel):  # type: ignore[misc]
     """Schema for creating a roadmap."""
 
     model_config = {
         "populate_by_name": True,
         "json_schema_extra": {
             "example": {
-                "title": "Machine Learning Engineer Roadmap",
-                "description": "Complete roadmap to become an ML engineer",
-                "skill_level": "beginner",
+                "userPrompt": "learn FastAPI",
+                "skillLevel": "beginner",
             },
         },
     }
 
-    title: str
-    description: str
+    user_prompt: str = Field(..., min_length=1, max_length=500, description="The user's learning topic or goal", alias="userPrompt")
     skill_level: str = Field(..., pattern="^(beginner|intermediate|advanced)$", alias="skillLevel")
 
 
