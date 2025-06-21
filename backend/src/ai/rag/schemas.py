@@ -28,7 +28,7 @@ class DocumentResponse(BaseModel):
     source_url: str | None = None
     crawl_date: datetime | None = None
     content_hash: str | None = None
-    metadata: dict | None = None
+    doc_metadata: dict | None = Field(alias="metadata", default=None)
     created_at: datetime
     processed_at: datetime | None = None
     embedded_at: datetime | None = None
@@ -55,7 +55,7 @@ class DocumentChunkResponse(BaseModel):
     chunk_index: int
     content: str
     token_count: int | None = None
-    metadata: dict | None = None
+    doc_metadata: dict | None = Field(alias="metadata", default=None)
     created_at: datetime
 
 
@@ -73,7 +73,7 @@ class SearchResult(BaseModel):
     document_title: str
     chunk_content: str
     similarity_score: float
-    metadata: dict | None = None
+    doc_metadata: dict | None = Field(alias="metadata", default=None)
 
 
 class SearchResponse(BaseModel):

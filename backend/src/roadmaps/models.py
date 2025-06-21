@@ -127,7 +127,7 @@ class RoadmapDocument(Base):
     crawl_date: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     parsed_content: Mapped[str | None] = mapped_column(Text, nullable=True)
-    doc_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    doc_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     embedded_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
@@ -151,7 +151,7 @@ class DocumentChunk(Base):
     content: Mapped[str] = mapped_column(Text)
     # Note: embedding vector column is handled by pgvector extension directly
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    doc_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    doc_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=datetime.utcnow)
 
     # Relationships

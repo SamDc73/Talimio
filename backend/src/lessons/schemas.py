@@ -21,6 +21,12 @@ class LessonUpdateRequest(BaseModel):
     html_cache: str | None = None
 
 
+class LessonCitation(BaseModel):
+    """Schema for lesson document citation."""
+    document_id: int
+    document_title: str
+    similarity_score: float
+
 class LessonResponse(BaseModel):
     """Response schema representing a lesson, including metadata and content."""
 
@@ -31,3 +37,4 @@ class LessonResponse(BaseModel):
     html_cache: str | None = None
     created_at: datetime
     updated_at: datetime
+    citations: list[LessonCitation] = []  # Citations from RAG documents

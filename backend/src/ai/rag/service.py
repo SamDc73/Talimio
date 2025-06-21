@@ -49,7 +49,23 @@ class RAGService:
         await session.commit()
         await session.refresh(doc)
 
-        return DocumentResponse.model_validate(doc)
+        # Create response without the metadata field for now
+        return DocumentResponse(
+            id=doc.id,
+            roadmap_id=doc.roadmap_id,
+            document_type=doc.document_type,
+            title=doc.title,
+            file_path=doc.file_path,
+            url=doc.url,
+            source_url=doc.source_url,
+            crawl_date=doc.crawl_date,
+            content_hash=doc.content_hash,
+            created_at=doc.created_at,
+            processed_at=doc.processed_at,
+            embedded_at=doc.embedded_at,
+            status=doc.status,
+            doc_metadata=doc.doc_metadata if hasattr(doc, 'doc_metadata') else None
+        )
 
     async def process_document(self, session: AsyncSession, document_id: int) -> None:
         """Process a document and generate embeddings using modular components."""
@@ -135,7 +151,26 @@ class RAGService:
             {"roadmap_id": str(roadmap_id), "limit": limit, "skip": skip},
         )
 
-        return [DocumentResponse.model_validate(dict(row)) for row in result.fetchall()]
+        docs = []
+        for row in result.fetchall():
+            row_dict = dict(row)
+            docs.append(DocumentResponse(
+                id=row_dict['id'],
+                roadmap_id=row_dict['roadmap_id'],
+                document_type=row_dict['document_type'],
+                title=row_dict['title'],
+                file_path=row_dict.get('file_path'),
+                url=row_dict.get('url'),
+                source_url=row_dict.get('source_url'),
+                crawl_date=row_dict.get('crawl_date'),
+                content_hash=row_dict.get('content_hash'),
+                created_at=row_dict['created_at'],
+                processed_at=row_dict.get('processed_at'),
+                embedded_at=row_dict.get('embedded_at'),
+                status=row_dict['status'],
+                doc_metadata=row_dict.get('metadata')
+            ))
+        return docs
 
     async def delete_document(self, session: AsyncSession, document_id: int) -> None:
         """Delete a document and its associated files."""

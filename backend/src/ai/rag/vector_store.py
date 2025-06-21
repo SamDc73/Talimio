@@ -24,7 +24,11 @@ class EmbeddingGenerator:
         prefixed_texts = [f"{self.instruction} {text}" for text in texts] if is_query else texts
 
         # Generate embeddings using LiteLLM
-        response = embedding(model=self.model, input=prefixed_texts, dimensions=self.dimensions)
+        # Don't pass dimensions parameter for huggingface models (they have fixed dimensions)
+        if self.model.startswith("huggingface/"):
+            response = embedding(model=self.model, input=prefixed_texts)
+        else:
+            response = embedding(model=self.model, input=prefixed_texts, dimensions=self.dimensions)
 
         return [item["embedding"] for item in response["data"]]
 
@@ -84,7 +88,7 @@ class VectorStore:
                     dc.document_id,
                     rd.title as document_title,
                     dc.content,
-                    dc.doc_metadata,
+                    dc.metadata as doc_metadata,
                     1 - (dc.embedding <=> :query_embedding) as similarity_score
                 FROM document_chunks dc
                 JOIN roadmap_documents rd ON dc.document_id = rd.id
