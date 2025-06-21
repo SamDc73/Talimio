@@ -1,11 +1,11 @@
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.session import get_db_session
+from src.videos.models import Video
 from src.videos.schemas import (
     VideoChapterProgressSync,
     VideoChapterResponse,
@@ -22,6 +22,30 @@ from src.videos.service import video_service
 logger = logging.getLogger(__name__)
 
 
+def _video_to_dict(video: Video) -> dict[str, Any]:
+    """Convert Video SQLAlchemy object to dict to avoid lazy loading issues."""
+    return {
+        "id": video.id,
+        "uuid": video.uuid,
+        "youtube_id": video.youtube_id,
+        "url": video.url,
+        "title": video.title,
+        "channel": video.channel,
+        "channel_id": video.channel_id,
+        "duration": video.duration,
+        "thumbnail_url": video.thumbnail_url,
+        "description": video.description,
+        "tags": video.tags,
+        "archived": video.archived,
+        "archived_at": video.archived_at,
+        "published_at": video.published_at,
+        "created_at": video.created_at,
+        "updated_at": video.updated_at,
+        "last_position": video.last_position,
+        "completion_percentage": video.completion_percentage,
+    }
+
+
 router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
 
 
@@ -35,33 +59,6 @@ async def create_video(
         return await video_service.create_video(db, video_data)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    except IntegrityError:
-        # Handle duplicate video case - try to fetch and return existing video
-        await db.rollback()
-        try:
-            # Extract YouTube URL to get the video
-            from src.videos.service import video_service as svc
-
-            video_info = await svc.fetch_video_info(video_data.url)
-            youtube_id = video_info.get("youtube_id")
-
-            if youtube_id:
-                # Try to get existing video
-                from sqlalchemy import select
-
-                from src.videos.models import Video
-
-                result = await db.execute(select(Video).where(Video.youtube_id == youtube_id))
-                existing_video = result.scalar_one_or_none()
-                if existing_video:
-                    return VideoResponse.model_validate(existing_video)
-        except Exception as e:
-            logging.warning(f"Failed to fetch existing video during duplicate handling: {e}")
-
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Video already exists in the library",
-        ) from None
     except Exception as e:
         logger.exception(f"Error creating video: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e

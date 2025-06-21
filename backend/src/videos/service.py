@@ -5,6 +5,7 @@ from typing import Any
 
 import yt_dlp
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.pagination import Paginator
@@ -25,6 +26,29 @@ logger = logging.getLogger(__name__)
 class VideoService:
     """Service for managing videos."""
 
+    def _video_to_dict(self, video: Video) -> dict[str, Any]:
+        """Convert Video SQLAlchemy object to dict to avoid lazy loading issues."""
+        return {
+            "id": video.id,
+            "uuid": video.uuid,
+            "youtube_id": video.youtube_id,
+            "url": video.url,
+            "title": video.title,
+            "channel": video.channel,
+            "channel_id": video.channel_id,
+            "duration": video.duration,
+            "thumbnail_url": video.thumbnail_url,
+            "description": video.description,
+            "tags": video.tags,
+            "archived": video.archived,
+            "archived_at": video.archived_at,
+            "published_at": video.published_at,
+            "created_at": video.created_at,
+            "updated_at": video.updated_at,
+            "last_position": video.last_position,
+            "completion_percentage": video.completion_percentage,
+        }
+
     async def create_video(self, db: AsyncSession, video_data: VideoCreate) -> VideoResponse:
         """Create a new video by fetching metadata from YouTube."""
         # Extract video info using yt-dlp
@@ -36,8 +60,10 @@ class VideoService:
         )
         existing_video = existing.scalar_one_or_none()
         if existing_video:
-            # Return existing video instead of throwing error
-            return VideoResponse.model_validate(existing_video)
+            # Return existing video with flag indicating it already existed
+            video_dict = self._video_to_dict(existing_video)
+            video_dict["already_exists"] = True
+            return VideoResponse.model_validate(video_dict)
 
         # Create video record
         video = Video(
@@ -54,8 +80,23 @@ class VideoService:
         )
 
         db.add(video)
-        await db.commit()
-        await db.refresh(video)
+        try:
+            await db.commit()
+            await db.refresh(video)
+        except IntegrityError:
+            # Handle race condition - video was created by another request between check and insert
+            await db.rollback()
+            # Fetch the existing video that was just created
+            existing = await db.execute(
+                select(Video).where(Video.youtube_id == video_info["youtube_id"]),
+            )
+            existing_video = existing.scalar_one_or_none()
+            if existing_video:
+                video_dict = self._video_to_dict(existing_video)
+                video_dict["already_exists"] = True
+                return VideoResponse.model_validate(video_dict)
+            # If we still can't find it, something else is wrong
+            raise
 
         # Trigger automatic tagging
         try:
@@ -101,7 +142,11 @@ class VideoService:
             # Don't fail video creation if tagging fails
             logger.exception(f"Failed to tag video {video.uuid}: {e}")
 
-        return VideoResponse.model_validate(video)
+        # Ensure video object is refreshed before validation
+        await db.refresh(video)
+
+        # Convert to dict first to avoid SQLAlchemy lazy loading issues
+        return VideoResponse.model_validate(self._video_to_dict(video))
 
     async def get_videos(
         self,
@@ -144,7 +189,7 @@ class VideoService:
         items, total = await paginator.paginate(db, query)
 
         # Convert to response format
-        video_responses = [VideoResponse.model_validate(item) for item in items]
+        video_responses = [VideoResponse.model_validate(self._video_to_dict(item)) for item in items]
 
         # Calculate pages
         pages = (total + size - 1) // size if size > 0 else 0
@@ -165,7 +210,7 @@ class VideoService:
             msg = f"Video with UUID {video_uuid} not found"
             raise ValueError(msg)
 
-        return VideoResponse.model_validate(video)
+        return VideoResponse.model_validate(self._video_to_dict(video))
 
     async def update_video(self, db: AsyncSession, video_uuid: str, update_data: VideoUpdate) -> VideoResponse:
         """Update video metadata."""
@@ -189,7 +234,7 @@ class VideoService:
         await db.commit()
         await db.refresh(video)
 
-        return VideoResponse.model_validate(video)
+        return VideoResponse.model_validate(self._video_to_dict(video))
 
     async def update_progress(
         self,
@@ -218,7 +263,7 @@ class VideoService:
         await db.commit()
         await db.refresh(video)
 
-        return VideoResponse.model_validate(video)
+        return VideoResponse.model_validate(self._video_to_dict(video))
 
     async def delete_video(self, db: AsyncSession, video_uuid: str) -> None:
         """Delete a video."""
@@ -406,7 +451,7 @@ class VideoService:
         await db.commit()
         await db.refresh(video)
 
-        return VideoResponse.model_validate(video)
+        return VideoResponse.model_validate(self._video_to_dict(video))
 
     async def extract_and_create_video_chapters(self, db: AsyncSession, video_uuid: str) -> list[VideoChapterResponse]:
         """Extract chapters from YouTube video and create chapter records."""

@@ -94,6 +94,8 @@ class VideoInDB(VideoBase):
 class VideoResponse(VideoInDB):
     """Schema for video API response."""
 
+    already_exists: bool = Field(default=False, description="True if video already existed in library")
+
 
 class VideoListResponse(BaseModel):
     """Schema for paginated video list response."""
