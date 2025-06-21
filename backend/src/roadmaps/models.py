@@ -2,14 +2,14 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID as SA_UUID
+from sqlalchemy import TIMESTAMP, Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID as SA_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.base import Base
 
 
-__all__ = ["Node", "Roadmap"]
+__all__ = ["DocumentChunk", "Node", "Roadmap", "RoadmapDocument"]
 
 
 class Roadmap(Base):
@@ -110,3 +110,49 @@ class Node(Base):
             msg = f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
             raise ValueError(msg)
         self.status = value
+
+
+class RoadmapDocument(Base):
+    """Document attached to a roadmap for RAG processing."""
+
+    __tablename__ = "roadmap_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    roadmap_id: Mapped[uuid.UUID] = mapped_column(SA_UUID, ForeignKey("roadmaps.id", ondelete="CASCADE"))
+    document_type: Mapped[str] = mapped_column(String(20))  # 'pdf', 'url'
+    title: Mapped[str] = mapped_column(String(255))
+    file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    crawl_date: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    parsed_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    doc_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    embedded_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # 'pending', 'processing', 'embedded', 'failed'
+
+    # Relationships
+    chunks: Mapped[list["DocumentChunk"]] = relationship(
+        "DocumentChunk", back_populates="document", cascade="all, delete-orphan"
+    )
+
+
+class DocumentChunk(Base):
+    """Text chunk from a document with embeddings for vector search."""
+
+    __tablename__ = "document_chunks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(Integer, ForeignKey("roadmap_documents.id", ondelete="CASCADE"))
+    node_id: Mapped[str] = mapped_column(String(255), unique=True)
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    content: Mapped[str] = mapped_column(Text)
+    # Note: embedding vector column is handled by pgvector extension directly
+    token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    doc_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+
+    # Relationships
+    document: Mapped["RoadmapDocument"] = relationship("RoadmapDocument", back_populates="chunks")

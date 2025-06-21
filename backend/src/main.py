@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from .ai.rag.router import router as rag_router
 from .assistant.router import router as assistant_router
 from .auth.models import User  # noqa: F401
 from .auth.router import router as auth_router
@@ -27,7 +28,7 @@ from .flashcards.router import router as flashcards_router
 from .lessons import router as lessons_router
 from .onboarding.router import router as onboarding_router
 from .progress.models import Progress  # noqa: F401
-from .roadmaps.models import Node, Roadmap  # noqa: F401
+from .roadmaps.models import DocumentChunk, Node, Roadmap, RoadmapDocument  # noqa: F401
 from .roadmaps.router import nodes_router, router as roadmaps_router
 from .tagging.models import Tag, TagAssociation  # noqa: F401
 from .tagging.router import router as tagging_router
@@ -83,6 +84,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             from src.database.migrations.add_archive_columns import run_archive_migrations
 
             await run_archive_migrations(engine)
+
+            # Run RAG system migration
+            from src.database.migrations.add_rag_system import add_rag_system
+
+            await add_rag_system()
 
             break  # Success - exit the retry loop
 
@@ -155,6 +161,7 @@ def create_app() -> FastAPI:
     app.include_router(books_router)
     app.include_router(content_router)
     app.include_router(flashcards_router)
+    app.include_router(rag_router)  # RAG system
     app.include_router(roadmaps_router)
     app.include_router(nodes_router)  # Phase 2.1: Direct node access
     app.include_router(onboarding_router)
