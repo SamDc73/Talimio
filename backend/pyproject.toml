@@ -27,6 +27,15 @@ ignore = [
     "PLR0913",  # too-many-arguments
     "PLC0206",  # dict-index-missing-items
     "S608",     # sql-injection-warning
+    "COM812",    # conflicts with Ruff’s formatter
+    "PLR2004",  # magic-value-comparison (many are contextually appropriate)
+    "TD002",    # missing-todo-author (common pattern in this codebase)
+    "TD003",    # missing-todo-link (common pattern in this codebase)
+    "FIX002",   # line-contains-todo (allow TODOs in code)
+    "ANN401",   # **kwargs typing (common pattern in Pydantic overrides)
+    "FBT001",   # boolean-typed-positional-argument (often acceptable for internal APIs)
+    "FBT002",   # boolean-default-positional-argument (often acceptable for internal APIs)
+    "N815",     # variable should be lowercase (mixedCase in Pydantic models with aliases)
 ]
 fixable = ["ALL"]
 
@@ -54,13 +63,12 @@ docstring-code-line-length = 80
 
 [tool.mypy]
 # Essential settings only
-python_version = "3.10"
+python_version = "3.11"
 ignore_missing_imports = true
 check_untyped_defs = true
 disable_error_code = ["misc"]
 plugins = [
     "pydantic.mypy",
-    "sqlalchemy.ext.mypy.plugin"
 ]
 
 [[tool.mypy.overrides]]
@@ -108,3 +116,32 @@ dev = [
     "pytest>=8.3.5",
     "pytest-asyncio>=0.26.0",
 ]
+
+[tool.ty.rules]
+# Only ignore unresolved imports due to environment issues
+unresolved-import = "ignore"
+
+# Enable strict type checking for better code quality
+invalid-assignment = "error"
+invalid-argument-type = "error"
+call-non-callable = "error"
+conflicting-declarations = "error"
+duplicate-base = "error"
+invalid-return-type = "error"
+
+# Naming conventions: enforce snake_case in Python code
+[tool.ruff.lint.pep8-naming]
+# Allow camelCase in Pydantic model instantiation (for aliases)
+classmethod-decorators = ["classmethod", "pydantic.validator", "pydantic.root_validator"]
+
+[tool.ty.src]
+root = "src"
+
+
+
+[tool.codespell]
+# Ref: https://github.com/codespell-project/codespell#using-a-config-file
+skip = '.git*,*.svg,*.lock,*.min.*'
+check-hidden = true
+# ignore-regex = ''
+ignore-words-list = 'Talimio'

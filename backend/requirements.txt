@@ -32,6 +32,13 @@ pymupdf
 ebooklib
 python-multipart
 
+# RAG System
+unstructured[pdf]
+readabilipy
+markdownify
+beautifulsoup4
+requests
+
 # Dev
 uv
 ruff
