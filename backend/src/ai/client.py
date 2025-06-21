@@ -561,17 +561,18 @@ class ModelManager:
             raise TagGenerationError from e
 
 
-async def create_lesson_body(node_meta: dict[str, Any]) -> str:
+async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]]:
     """
     Generate a comprehensive lesson in Markdown format based on node metadata.
+    Includes RAG context from roadmap documents if roadmap_id is provided.
 
     Args:
         node_meta: Dictionary containing metadata about the node, including title,
-                  description, and any other relevant information.
+                  description, roadmap_id (optional) and any other relevant information.
 
     Returns
     -------
-        str: Markdown-formatted lesson content.
+        tuple[str, list[dict]]: Markdown-formatted lesson content and list of citations.
 
     Raises
     ------
@@ -582,17 +583,62 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> str:
         node_title = node_meta.get("title", "")
         node_description = node_meta.get("description", "")
         skill_level = node_meta.get("skill_level", "beginner")
+        roadmap_id = node_meta.get("roadmap_id")
 
         from src.ai.prompts import LESSON_GENERATION_PROMPT
 
         # Create a more detailed prompt for lesson generation
         content_info = f"{node_title} - {node_description} (Skill Level: {skill_level})"
-        prompt = LESSON_GENERATION_PROMPT.format(content=content_info)
+        
+        # Get RAG context and citations if roadmap_id is provided
+        rag_context = ""
+        citations_info = []
+        if roadmap_id:
+            try:
+                from uuid import UUID
+                from src.ai.rag.service import RAGService
+                from src.database.session import async_session_maker
+                
+                rag_service = RAGService()
+                
+                # Create query from lesson topic
+                lesson_query = f"{node_title} {node_description}"
+                
+                async with async_session_maker() as session:
+                    # Get search results with full metadata
+                    search_results = await rag_service.search_documents(
+                        session=session,
+                        roadmap_id=UUID(roadmap_id),
+                        query=lesson_query,
+                        top_k=5
+                    )
+                    
+                    if search_results:
+                        # Build context from search results
+                        context_parts = []
+                        for result in search_results:
+                            context_parts.append(f"[Source: {result.document_title}]\n{result.chunk_content}\n")
+                            
+                            # Store citation info for return
+                            citations_info.append({
+                                "document_id": result.document_id,
+                                "document_title": result.document_title,
+                                "similarity_score": result.similarity_score
+                            })
+                        
+                        rag_context = f"\n\nReference Materials:\n" + "\n".join(context_parts)
+                        logging.info(f"Added RAG context for lesson '{node_title}' from roadmap {roadmap_id} with {len(citations_info)} citations")
+                    
+            except Exception as e:
+                logging.warning(f"Failed to get RAG context for lesson generation: {e}")
+                # Continue without RAG context
+                
+        prompt = LESSON_GENERATION_PROMPT.format(content=content_info + rag_context)
 
         messages = [
             {
                 "role": "system",
-                "content": "You are an expert educator creating high-quality, comprehensive learning materials. Your lessons are detailed, well-structured, and include practical examples and exercises.",
+                "content": "You are an expert educator creating high-quality, comprehensive learning materials. Your lessons are detailed, well-structured, and include practical examples and exercises. When reference materials are provided, incorporate them naturally into your lesson content and cite sources appropriately.",
             },
             {"role": "user", "content": prompt},
         ]
@@ -639,7 +685,7 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> str:
             raise LessonGenerationError
 
         logging.info(f"Successfully generated lesson content ({len(markdown_content)} characters)")
-        return markdown_content.strip()
+        return markdown_content.strip(), citations_info
 
     except Exception as e:
         logging.exception("Error generating lesson content")

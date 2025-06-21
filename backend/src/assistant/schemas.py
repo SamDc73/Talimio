@@ -16,10 +16,18 @@ class ChatRequest(BaseModel):
     message: str
     conversation_history: list[ChatMessage] = []
     user_id: str | None = None
+    roadmap_id: str | None = None  # Optional roadmap ID for RAG context
 
+
+class Citation(BaseModel):
+    """Schema for document citation."""
+    document_id: int
+    document_title: str
+    similarity_score: float
 
 class ChatResponse(BaseModel):
     """Response schema for chat endpoint."""
 
     response: str
     conversation_id: UUID | None = None
+    citations: list[Citation] = []  # Citations from RAG documents

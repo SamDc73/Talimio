@@ -69,7 +69,7 @@ class DocumentRetriever:
                 document_title=candidate["document_title"],
                 chunk_content=candidate["content"],
                 similarity_score=candidate["similarity_score"],
-                metadata=candidate["doc_metadata"],
+                doc_metadata=candidate["doc_metadata"],
             )
             results.append(result)
 

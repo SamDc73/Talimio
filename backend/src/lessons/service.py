@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 
 from src.ai.client import create_lesson_body
 from src.ai.memory import get_memory_wrapper
-from src.lessons.schemas import LessonCreateRequest, LessonResponse, LessonUpdateRequest
+from src.lessons.schemas import LessonCreateRequest, LessonResponse, LessonUpdateRequest, LessonCitation
 from src.storage.lesson_dao import LessonDAO
 
 
@@ -51,7 +51,17 @@ async def generate_lesson(request: LessonCreateRequest, user_id: str | None = No
             except Exception as e:
                 logging.warning(f"Failed to get memory context for lesson generation: {e}")
 
-        md_source = await create_lesson_body(request.node_meta)
+        md_source, citations_info = await create_lesson_body(request.node_meta)
+        
+        # Convert citations info to LessonCitation objects
+        citations = [
+            LessonCitation(
+                document_id=citation["document_id"],
+                document_title=citation["document_title"],
+                similarity_score=citation["similarity_score"]
+            )
+            for citation in citations_info
+        ]
         lesson_id = uuid4()
         now = datetime.now(UTC)
 
@@ -69,7 +79,9 @@ async def generate_lesson(request: LessonCreateRequest, user_id: str | None = No
         try:
             result = await LessonDAO.insert(lesson_data)
             if result:
-                return LessonResponse(**result)
+                lesson_response = LessonResponse(**result)
+                lesson_response.citations = citations
+                return lesson_response
         except Exception as db_error:
             logging.exception(f"Database error: {db_error!s}")
             logging.info("Using fallback mechanism to return lesson without database storage")
@@ -82,6 +94,7 @@ async def generate_lesson(request: LessonCreateRequest, user_id: str | None = No
             md_source=md_source,
             created_at=now,
             updated_at=now,
+            citations=citations,
         )
 
         # Cache the lesson for future retrieval
