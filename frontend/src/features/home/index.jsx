@@ -483,7 +483,11 @@ const BaseCard = ({
 												key={action}
 												variant="ghost"
 												size="sm"
-												className={`justify-start flex items-center gap-2 ${action === "Delete" ? "text-red-600 hover:bg-red-50" : ""}`}
+												className={`justify-start flex items-center gap-2 ${
+													action === "Delete"
+														? "text-red-600 hover:bg-red-50"
+														: ""
+												}`}
 												onClick={(e) => {
 													e.stopPropagation();
 													if (action === "Pin") onTogglePin();
@@ -1249,14 +1253,19 @@ export default function HomePage() {
 			const response = await videoApi.createVideo(youtubeUrl);
 
 			toast({
-				title: "Video Added!",
-				description: `"${response.title}" has been added to your library.`,
+				title: response.alreadyExists ? "Video Found!" : "Video Added!",
+				description: response.alreadyExists
+					? `"${response.title}" was already in your library.`
+					: `"${response.title}" has been added to your library.`,
 			});
 
 			setYoutubeUrl("");
 			setSearchQuery("");
 			setShowYoutubeDialog(false);
 			setIsYoutubeMode(false);
+
+			// Navigate to the video page
+			navigate(`/videos/${response.uuid}`);
 
 			// Refresh content list
 			const data = await fetchContentData();
@@ -1989,12 +1998,6 @@ export default function HomePage() {
 											value={youtubeUrl}
 											onChange={(e) => setYoutubeUrl(e.target.value)}
 										/>
-									</div>
-									<div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
-										<p className="text-sm text-yellow-800">
-											Note: YouTube integration is coming soon! For now, URLs
-											will be saved for future processing.
-										</p>
 									</div>
 								</div>
 								<SheetFooter>

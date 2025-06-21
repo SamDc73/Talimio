@@ -7,12 +7,15 @@ import {
 } from "@/services/videosService";
 import useAppStore from "@/stores/useAppStore";
 import { Clock, Download, FileText } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import CompletionCheckbox from "./CompletionCheckbox";
 import ProgressIndicator from "./ProgressIndicator";
 import SidebarContainer from "./SidebarContainer";
 import SidebarNav from "./SidebarNav";
+
+// Stable empty object to prevent infinite re-renders
+const EMPTY_CHAPTER_COMPLETION = {};
 
 // Migrate completed chapters from localStorage to Zustand (for backwards compatibility)
 const migrateVideoChaptersFromStorage = (videoUuid, setChapterCompletion) => {
@@ -40,30 +43,44 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 	const [isLoadingChapters, setIsLoadingChapters] = useState(false);
 	const [isExtracting, setIsExtracting] = useState(false);
 	const { toast } = useToast();
+	const hasSyncedProgress = useRef(false);
 
 	// Zustand store selectors - use shallow comparison to prevent infinite loops
 	const {
-		videoChapterCompletion,
 		updateVideoChapterCompletion,
 		setVideoChapterStatus,
+		getVideoChapterCompletion,
 	} = useAppStore(
 		useShallow((state) => ({
-			videoChapterCompletion: state.videos.chapterCompletion[video?.uuid] || {},
 			updateVideoChapterCompletion: state.updateVideoChapterCompletion,
 			setVideoChapterStatus: state.setVideoChapterStatus,
+			getVideoChapterCompletion: state.getVideoChapterCompletion,
 		})),
 	);
 
+	// Get video chapter completion separately to avoid new object creation
+	const videoChapterCompletion = useMemo(() => {
+		return video?.uuid
+			? getVideoChapterCompletion(video.uuid)
+			: EMPTY_CHAPTER_COMPLETION;
+	}, [video?.uuid, getVideoChapterCompletion]);
+
 	// Convert store object to Set for backwards compatibility - memoized to prevent infinite loops
-	const completedChapters = useMemo(
-		() =>
-			new Set(
-				Object.entries(videoChapterCompletion)
-					.filter(([_, completed]) => completed)
-					.map(([chapterId, _]) => chapterId),
-			),
-		[videoChapterCompletion],
-	);
+	const completedChapters = useMemo(() => {
+		const entries = Object.entries(videoChapterCompletion);
+		return new Set(
+			entries
+				.filter(([_, completed]) => completed)
+				.map(([chapterId, _]) => chapterId),
+		);
+	}, [videoChapterCompletion]);
+
+	// Reset sync flag when video changes
+	useEffect(() => {
+		hasSyncedProgress.current = false;
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		// video?.uuid is intentionally the only dependency - we want to reset when video changes
+	}, [video?.uuid]);
 
 	// Fetch API chapters
 	useEffect(() => {
@@ -113,31 +130,12 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 			const extractedChapters = extractChapters(video.description);
 			setChapters(extractedChapters);
 
-			// Try to migrate from localStorage and sync to backend
+			// Migrate from localStorage
 			if (extractedChapters.length > 0) {
 				migrateVideoChaptersFromStorage(
 					video.uuid,
 					updateVideoChapterCompletion,
 				);
-
-				// Sync existing store progress to backend
-				const storeCompleted = Object.entries(videoChapterCompletion)
-					.filter(([_, completed]) => completed)
-					.map(([chapterId, _]) => chapterId);
-
-				if (storeCompleted.length > 0) {
-					// Sync existing progress to backend
-					syncVideoChapterProgress(
-						video.uuid,
-						storeCompleted,
-						extractedChapters.length,
-					).catch((error) => {
-						console.error(
-							"Failed to sync existing chapter progress to backend:",
-							error,
-						);
-					});
-				}
 			}
 		} else if (apiChapters.length > 0) {
 			// Convert API chapters to the expected format
@@ -154,7 +152,6 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 		video?.description,
 		apiChapters,
 		video?.uuid,
-		videoChapterCompletion,
 		updateVideoChapterCompletion,
 	]);
 
@@ -254,7 +251,8 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 			// This is a description-based chapter, sync to backend
 			try {
 				// Sync to backend for homepage progress
-				const currentCompleted = Object.entries(videoChapterCompletion)
+				const currentCompletion = getVideoChapterCompletion(video.uuid);
+				const currentCompleted = Object.entries(currentCompletion)
 					.filter(([_, completed]) => completed)
 					.map(([chapterId, _]) => chapterId);
 				const totalChapters = chapters.length;
@@ -332,7 +330,11 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 
 	return (
 		<SidebarContainer>
-			<ProgressIndicator progress={getProgress()} />
+			<ProgressIndicator
+				progress={getProgress()}
+				variant="video"
+				suffix="Watched"
+			/>
 
 			{/* Video info */}
 			<div className="px-4 py-3 border-b border-border">
@@ -356,7 +358,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 							type="button"
 							onClick={handleExtractChapters}
 							disabled={isExtracting}
-							className="mt-4 px-4 py-2 bg-video text-white rounded-lg text-sm hover:bg-video-accent disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
+							className="mt-4 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
 						>
 							<Download className="w-4 h-4" />
 							{isExtracting ? "Extracting..." : "Extract Chapters"}
@@ -364,83 +366,76 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 					</div>
 				) : (
 					<div className="space-y-2">
-						<div className="rounded-2xl border border-border bg-white shadow-sm overflow-hidden">
-							<div className="p-3">
-								<h4 className="text-sm font-semibold text-zinc-700 mb-2 flex items-center">
-									<FileText className="w-4 h-4 mr-2" />
-									Chapters
-								</h4>
-								<div className="space-y-1">
-									{chapters.map((chapter, index) => {
-										const isCompleted = completedChapters.has(chapter.id);
-										const isActive = activeChapter === index;
+						<h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-2">
+							Chapters
+						</h4>
+						{chapters.map((chapter, index) => {
+							const isCompleted = completedChapters.has(chapter.id);
+							const isActive = activeChapter === index;
 
-										return (
-											<div
-												key={chapter.id}
-												className={`flex items-start gap-3 p-2 rounded-lg transition-all duration-200 ${
-													isActive ? "bg-video/10" : "hover:bg-muted"
+							return (
+								<div
+									key={chapter.id}
+									className={`rounded-2xl border ${
+										isActive ? "border-violet-200 bg-violet-50/50" : "border-border bg-white"
+									} shadow-sm overflow-hidden`}
+								>
+									<div className="flex items-center gap-3 px-4 py-3">
+										<CompletionCheckbox
+											isCompleted={isCompleted}
+											onClick={() => toggleChapterCompletion(chapter)}
+											variant="video"
+										/>
+										
+										<button
+											type="button"
+											onClick={() => handleChapterClick(chapter)}
+											className="flex-1 text-left"
+										>
+											<div className="flex items-center gap-2 mb-1">
+												<span
+													className={`text-xs font-mono ${
+														isActive ? "text-violet-600" : "text-zinc-500"
+													}`}
+												>
+													{chapter.timeStr}
+												</span>
+											</div>
+											<h5
+												className={`text-sm font-medium line-clamp-2 ${
+													isCompleted
+														? "text-violet-700"
+														: isActive
+															? "text-violet-600"
+															: "text-zinc-700"
 												}`}
 											>
-												<CompletionCheckbox
-													isCompleted={isCompleted}
-													onClick={() => toggleChapterCompletion(chapter)}
-												/>
-
-												<div className="flex-1 min-w-0">
-													<button
-														type="button"
-														onClick={() => handleChapterClick(chapter)}
-														className="w-full text-left"
-													>
-														<div className="flex items-center gap-2">
-															<span
-																className={`text-xs font-mono ${
-																	isActive ? "text-video-text" : "text-zinc-500"
-																}`}
-															>
-																{chapter.timeStr}
-															</span>
-															<h5
-																className={`text-sm font-medium truncate ${
-																	isCompleted
-																		? "text-emerald-700"
-																		: isActive
-																			? "text-video-text"
-																			: "text-zinc-700"
-																}`}
-															>
-																{chapter.title}
-															</h5>
-														</div>
-
-														{isActive && currentTime !== undefined && (
-															<div className="mt-2">
-																<div className="h-1 bg-zinc-200 rounded-full overflow-hidden">
-																	<div
-																		className="h-full bg-video/100 transition-all duration-300"
-																		style={{
-																			width: `${Math.min(
-																				100,
-																				((currentTime - chapter.timestamp) /
-																					((chapters[index + 1]?.timestamp ||
-																						video.duration) -
-																						chapter.timestamp)) *
-																					100,
-																			)}%`,
-																		}}
-																	/>
-																</div>
-															</div>
-														)}
-													</button>
+												{chapter.title}
+											</h5>
+											{isActive && currentTime !== undefined && (
+												<div className="mt-2">
+													<div className="h-1 bg-zinc-200 rounded-full overflow-hidden">
+														<div
+															className="h-full bg-violet-600 transition-all duration-300"
+															style={{
+																width: `${Math.min(
+																	100,
+																	((currentTime - chapter.timestamp) /
+																		((chapters[index + 1]?.timestamp ||
+																			video.duration) -
+																			chapter.timestamp)) *
+																		100,
+																)}%`,
+															}}
+														/>
+													</div>
 												</div>
-											</div>
-										);
-									})}
+											)}
+										</button>
+									</div>
 								</div>
-							</div>
-						</div>
+							);
+						})}
 					</div>
 				)}
 			</SidebarNav>
