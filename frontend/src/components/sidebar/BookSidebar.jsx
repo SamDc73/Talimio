@@ -79,7 +79,7 @@ function BookSidebarV2({
 		}
 
 		fetchChapters();
-	}, [book?.id, updateChapterStatus, setLoading, chapterCompletion[chapter.id]]);
+	}, [book?.id, updateChapterStatus, setLoading, chapterCompletion]);
 
 	/**
 	 * Extract chapters using AI
