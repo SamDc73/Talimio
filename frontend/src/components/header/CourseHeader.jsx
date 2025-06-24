@@ -1,4 +1,4 @@
-import { FileText, GitBranch, MessageSquare, PanelLeft } from "lucide-react";
+import { FileText, GitBranch, MessageSquare, PanelLeft, Files } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "../../lib/utils";
@@ -92,6 +92,20 @@ export function CourseHeader({
 							<GitBranch className="w-3.5 h-3.5 inline-block mr-1" />
 							<span>Track</span>
 						</button>
+						<button
+							className={cn(
+								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
+								mode === "documents"
+									? "bg-white text-foreground shadow-sm"
+									: "text-slate-500 hover:text-slate-700",
+							)}
+							type="button"
+							onClick={() => mode !== "documents" && onModeChange("documents")}
+							aria-pressed={mode === "documents"}
+						>
+							<Files className="w-3.5 h-3.5 inline-block mr-1" />
+							<span>Documents</span>
+						</button>
 					</div>
 
 					{/* Actions Section */}
@@ -105,20 +119,25 @@ export function CourseHeader({
 											variant="outline"
 											size="icon"
 											className="h-8 w-8 rounded-full"
-											onClick={() =>
-												onModeChange(mode === "outline" ? "track" : "outline")
-											}
+											onClick={() => {
+												const modes = ["outline", "track", "documents"];
+												const currentIndex = modes.indexOf(mode);
+												const nextIndex = (currentIndex + 1) % modes.length;
+												onModeChange(modes[nextIndex]);
+											}}
 										>
 											{mode === "outline" ? (
+												<FileText className="h-4 w-4" />
+											) : mode === "track" ? (
 												<GitBranch className="h-4 w-4" />
 											) : (
-												<FileText className="h-4 w-4" />
+												<Files className="h-4 w-4" />
 											)}
 										</Button>
 									</TooltipTrigger>
 									<TooltipContent>
 										<p>
-											Switch to {mode === "outline" ? "Track" : "Outline"} View
+											Switch View ({mode === "outline" ? "Track" : mode === "track" ? "Documents" : "Outline"} next)
 										</p>
 									</TooltipContent>
 								</Tooltip>

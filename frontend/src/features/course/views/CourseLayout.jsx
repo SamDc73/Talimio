@@ -11,6 +11,7 @@ import { useRoadmapState } from "../hooks/useRoadmapState";
 import { useOutlineData } from "../hooks/useOutlineData";
 import TrackView from "./track";
 import LessonView from "./LessonView";
+import DocumentsView from "./DocumentsView";
 import { useCourseNavigation } from "../../../utils/navigationUtils";
 
 const _BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1";
@@ -86,6 +87,10 @@ const RoadmapFlow = ({ roadmapId, onError, isCourseMode = false }) => {
 						) : mode === "track" ? (
 							<div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
 								<TrackView roadmapId={roadmapId} modules={modules} />
+							</div>
+						) : mode === "documents" ? (
+							<div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
+								<DocumentsView courseId={roadmapId} />
 							</div>
 						) : // Map view temporarily hidden
 						null
