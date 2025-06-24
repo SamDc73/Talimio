@@ -98,7 +98,7 @@ def _build_content_queries(
     if not content_type or content_type == ContentType.BOOK:
         queries.append(_get_book_query(search, include_archived))
 
-    if not content_type or content_type == ContentType.ROADMAP:
+    if not content_type or content_type in (ContentType.ROADMAP, ContentType.COURSE):
         queries.append(_get_roadmap_query(search, include_archived))
 
     return queries
@@ -427,6 +427,7 @@ async def archive_content(content_type: ContentType, content_id: str) -> None:
         ContentType.YOUTUBE: "videos",
         ContentType.FLASHCARDS: "flashcard_decks",
         ContentType.ROADMAP: "roadmaps",
+        ContentType.COURSE: "roadmaps",  # Alias for roadmap
     }
 
     table_name = table_map.get(content_type)
@@ -469,6 +470,7 @@ async def unarchive_content(content_type: ContentType, content_id: str) -> None:
         ContentType.YOUTUBE: "videos",
         ContentType.FLASHCARDS: "flashcard_decks",
         ContentType.ROADMAP: "roadmaps",
+        ContentType.COURSE: "roadmaps",  # Alias for roadmap
     }
 
     table_name = table_map.get(content_type)
@@ -630,8 +632,8 @@ async def delete_content(content_type: ContentType, content_id: str) -> None:
         from src.videos.models import Video as ModelClass
     elif content_type == ContentType.FLASHCARDS:
         from src.flashcards.models import FlashcardDeck as ModelClass
-    elif content_type == ContentType.ROADMAP:
-        from src.roadmaps.models import Roadmap as ModelClass
+    elif content_type in (ContentType.ROADMAP, ContentType.COURSE):
+        from src.courses.models import Roadmap as ModelClass
     else:
         msg = f"Unsupported content type: {content_type}"
         raise ValueError(msg)

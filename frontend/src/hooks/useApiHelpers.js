@@ -40,23 +40,23 @@ export function useNodeApi(nodeId = null) {
 }
 
 /**
- * Hook for roadmap nodes operations
- * @param {string} roadmapId - The roadmap ID
+ * Hook for course modules operations
+ * @param {string} courseId - The course ID
  */
-export function useRoadmapNodesApi(roadmapId = null) {
-	const getRoadmapNodes = useApi("/roadmaps/{roadmapId}/nodes");
+export function useRoadmapNodesApi(courseId = null) {
+	const getCourseModules = useApi("/courses/{courseId}/modules");
 
 	return {
-		// Get all nodes for a roadmap
+		// Get all modules for a course
 		async fetchNodes() {
-			if (!roadmapId) throw new Error("Roadmap ID required");
-			return await getRoadmapNodes.execute(null, { pathParams: { roadmapId } });
+			if (!courseId) throw new Error("Course ID required");
+			return await getCourseModules.execute(null, { pathParams: { courseId } });
 		},
 
 		// Loading states
-		isLoading: getRoadmapNodes.isLoading,
-		error: getRoadmapNodes.error,
-		data: getRoadmapNodes.data,
+		isLoading: getCourseModules.isLoading,
+		error: getCourseModules.error,
+		data: getCourseModules.data,
 	};
 }
 
@@ -185,54 +185,86 @@ export function useVideoChaptersApi(videoUuid = null) {
 }
 
 /**
- * Hook for course operations (UI convenience layer)
- * @param {string} courseId - The course ID (roadmap ID)
+ * Hook for course operations (updated for unified course API)
+ * @param {string} courseId - The course ID
  */
 export function useCourseApi(courseId = null) {
 	const getCourses = useApi("/courses");
-	const getCourse = useApi("/courses/{id}");
-	const getCurriculum = useApi("/courses/{id}/curriculum");
-	const getLesson = useApi("/courses/{id}/lesson/{nodeId}");
+	const getCourse = useApi("/courses/{courseId}");
+	const getModules = useApi("/courses/{courseId}/modules");
+	const getModule = useApi("/courses/{courseId}/modules/{moduleId}");
+	const getLessons = useApi("/courses/{courseId}/modules/{moduleId}/lessons");
+	const getLesson = useApi("/courses/{courseId}/modules/{moduleId}/lessons/{lessonId}");
+	const getCourseProgress = useApi("/courses/{courseId}/progress");
 
 	return {
 		// Get all courses
-		async fetchCourses() {
-			return await getCourses.execute();
+		async fetchCourses(options = {}) {
+			const { page = 1, perPage = 20, search } = options;
+			const queryParams = { page, per_page: perPage };
+			if (search) queryParams.search = search;
+			return await getCourses.execute(null, { queryParams });
 		},
 
 		// Get course details
 		async fetchCourse() {
 			if (!courseId) throw new Error("Course ID required");
-			return await getCourse.execute(null, { pathParams: { id: courseId } });
+			return await getCourse.execute(null, { pathParams: { courseId } });
 		},
 
-		// Get course curriculum
-		async fetchCurriculum() {
+		// Get course modules (replaces curriculum)
+		async fetchModules() {
 			if (!courseId) throw new Error("Course ID required");
-			return await getCurriculum.execute(null, {
-				pathParams: { id: courseId },
+			return await getModules.execute(null, { pathParams: { courseId } });
+		},
+
+		// Get specific module
+		async fetchModule(moduleId) {
+			if (!courseId || !moduleId) throw new Error("Course ID and Module ID required");
+			return await getModule.execute(null, { pathParams: { courseId, moduleId } });
+		},
+
+		// Get lessons for a module
+		async fetchLessons(moduleId) {
+			if (!courseId || !moduleId) throw new Error("Course ID and Module ID required");
+			return await getLessons.execute(null, { pathParams: { courseId, moduleId } });
+		},
+
+		// Get specific lesson
+		async fetchLesson(moduleId, lessonId, options = {}) {
+			if (!courseId || !moduleId || !lessonId) {
+				throw new Error("Course ID, Module ID, and Lesson ID required");
+			}
+			const queryParams = {};
+			if (options.generate) queryParams.generate = true;
+			return await getLesson.execute(null, { 
+				pathParams: { courseId, moduleId, lessonId },
+				queryParams 
 			});
 		},
 
-		// Get lesson for a node
-		async fetchLesson(nodeId) {
-			if (!courseId || !nodeId)
-				throw new Error("Course ID and Node ID required");
-			return await getLesson.execute(null, {
-				pathParams: { id: courseId, nodeId },
-			});
+		// Get course progress
+		async fetchCourseProgress() {
+			if (!courseId) throw new Error("Course ID required");
+			return await getCourseProgress.execute(null, { pathParams: { courseId } });
 		},
 
 		// Loading states
 		isLoading:
 			getCourses.isLoading ||
 			getCourse.isLoading ||
-			getCurriculum.isLoading ||
-			getLesson.isLoading,
+			getModules.isLoading ||
+			getModule.isLoading ||
+			getLessons.isLoading ||
+			getLesson.isLoading ||
+			getCourseProgress.isLoading,
 		error:
 			getCourses.error ||
 			getCourse.error ||
-			getCurriculum.error ||
-			getLesson.error,
+			getModules.error ||
+			getModule.error ||
+			getLessons.error ||
+			getLesson.error ||
+			getCourseProgress.error,
 	};
 }

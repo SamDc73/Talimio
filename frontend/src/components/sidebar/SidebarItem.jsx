@@ -1,6 +1,7 @@
 /**
- * Generic sidebar item component
- * Handles click events and active states
+ * Simple generic sidebar item component
+ * Handles click events and active states following original design
+ * @param {string} variant - Content type variant: 'course', 'book', 'video', 'flashcard'
  */
 function SidebarItem({
 	title,
@@ -11,7 +12,19 @@ function SidebarItem({
 	leftContent,
 	rightContent,
 	className = "",
+	variant = "default",
 }) {
+	// Map variants to colors following the styling guide
+	const variantColors = {
+		default: "text-emerald-700",
+		course: "text-teal-600", // Following styling guide
+		book: "text-blue-600",
+		video: "text-violet-600",
+		flashcard: "text-amber-600",
+	};
+
+	const activeColor = variantColors[variant] || variantColors.default;
+
 	return (
 		<li className={`flex items-start gap-3 ${className}`}>
 			{leftContent}
@@ -19,9 +32,9 @@ function SidebarItem({
 				type="button"
 				className={`text-left flex-1 min-w-0 ${
 					isCompleted
-						? "font-semibold text-emerald-700"
+						? `font-semibold ${activeColor}`
 						: isActive
-							? "font-semibold text-emerald-700"
+							? `font-semibold ${activeColor}`
 							: "text-zinc-800"
 				}`}
 				style={{

@@ -42,7 +42,7 @@ const handleResponse = async (response) => {
 		let errorData;
 		try {
 			errorData = await response.json();
-		} catch (e) {
+		} catch (_e) {
 			// Handle cases where response body is not valid JSON
 			errorData = { message: response.statusText };
 		}

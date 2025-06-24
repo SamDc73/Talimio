@@ -1,7 +1,7 @@
 import ErrorBoundary from "@/components/ErrorBoundary";
 import RoadmapPromptModal from "@/features/roadmap/RoadmapPromptModal";
 import logger from "@/utils/logger";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 // Debug logging for Radix UI component initialization
@@ -27,13 +27,9 @@ import {
 	SheetTitle,
 } from "@/components/sheet";
 import {
-	Tooltip,
-	TooltipContent,
 	TooltipProvider,
-	TooltipTrigger,
 } from "@/components/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { useApi } from "@/hooks/useApi";
 import { fetchContentData, processContentData } from "@/lib/api";
 import { api } from "@/lib/apiClient";
 import { archiveContent, unarchiveContent } from "@/services/contentService";
@@ -45,7 +41,6 @@ import {
 import { videoApi } from "@/services/videoApi";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-	AlertCircle,
 	Archive,
 	ArrowUpDown,
 	BookOpen,
@@ -55,9 +50,7 @@ import {
 	ChevronDown,
 	ChevronUp,
 	Clock,
-	Code,
 	FileText,
-	Info,
 	Layers,
 	MoreHorizontal,
 	Pause,
@@ -752,120 +745,98 @@ export default function HomePage() {
 		loadContentData();
 	}, [toast, archiveFilter]);
 
-	// Apply filters and sorting
-	const filteredAndSortedContent = (
-		Array.isArray(contentItems) ? contentItems : []
-	)
-		.filter((item) => {
-			// Apply content type filter
-			if (activeFilter === "all") return true;
-			if (activeFilter === "course")
-				return item.type === "course" || item.type === "roadmap";
-			return item.type === activeFilter;
-		})
-		.filter((item) => {
-			// Apply archive filter
-			const isArchived = Boolean(item.archived);
-			console.log("🔍 Archive filter check:", {
-				itemTitle: item.title,
-				itemArchived: isArchived,
-				archiveFilter,
-				willShow:
-					archiveFilter === "active"
-						? !isArchived
-						: archiveFilter === "archived"
-							? isArchived
-							: true,
+	// Apply filters and sorting with memoization to prevent infinite re-renders
+	const filteredAndSortedContent = useMemo(() => {
+		return (Array.isArray(contentItems) ? contentItems : [])
+			.filter((item) => {
+				// Apply content type filter
+				if (activeFilter === "all") return true;
+				if (activeFilter === "course")
+					return item.type === "course" || item.type === "roadmap";
+				return item.type === activeFilter;
+			})
+			.filter((item) => {
+				// Apply archive filter
+				const isArchived = Boolean(item.archived);
+				if (archiveFilter === "active") return !isArchived;
+				if (archiveFilter === "archived") return isArchived;
+				return true; // "all" shows both archived and active
+			})
+			.filter((item) => {
+				if (!searchQuery) return true;
+
+				const query = searchQuery.toLowerCase();
+				const title = item.title.toLowerCase();
+				const tags = item.tags
+					? item.tags.some((tag) => tag.toLowerCase().includes(query))
+					: false;
+
+				if (item.type === "course") {
+					return (
+						title.includes(query) ||
+						item.description.toLowerCase().includes(query) ||
+						tags
+					);
+				}
+				if (item.type === "book") {
+					return (
+						title.includes(query) ||
+						item.author?.toLowerCase().includes(query) ||
+						tags
+					);
+				}
+				if (item.type === "youtube") {
+					const channelName = item.channelName || item.channel || "";
+					return (
+						title.includes(query) ||
+						channelName?.toLowerCase().includes(query) ||
+						tags
+					);
+				}
+				if (item.type === "flashcards") {
+					return (
+						title.includes(query) ||
+						item.description.toLowerCase().includes(query) ||
+						tags
+					);
+				}
+				return true;
+			})
+			.filter((item) => {
+				// Apply tag filter
+				if (!tagFilter) return true;
+
+				return item.tags?.some((tag) =>
+					tag.toLowerCase().includes(tagFilter.toLowerCase()),
+				);
+			})
+			.sort((a, b) => {
+				const direction = sortDirection === "asc" ? 1 : -1;
+
+				switch (activeSort) {
+					case "last-accessed":
+						return (
+							direction *
+							(new Date(a.lastAccessedDate).getTime() -
+								new Date(b.lastAccessedDate).getTime())
+						);
+					case "created":
+						return (
+							direction *
+							(new Date(a.createdDate).getTime() -
+								new Date(b.createdDate).getTime())
+						);
+					case "progress":
+						return direction * (a.progress - b.progress);
+					case "title":
+						return direction * a.title.localeCompare(b.title);
+					default:
+						return 0;
+				}
 			});
+	}, [contentItems, activeFilter, archiveFilter, searchQuery, tagFilter, sortDirection, activeSort]);
 
-			if (archiveFilter === "active") return !isArchived;
-			if (archiveFilter === "archived") return isArchived;
-			return true; // "all" shows both archived and active
-		})
-		.filter((item) => {
-			if (!searchQuery) return true;
-
-			const query = searchQuery.toLowerCase();
-			const title = item.title.toLowerCase();
-			const tags = item.tags
-				? item.tags.some((tag) => tag.toLowerCase().includes(query))
-				: false;
-
-			if (item.type === "course") {
-				return (
-					title.includes(query) ||
-					item.description.toLowerCase().includes(query) ||
-					tags
-				);
-			}
-			if (item.type === "book") {
-				return (
-					title.includes(query) ||
-					item.author?.toLowerCase().includes(query) ||
-					tags
-				);
-			}
-			if (item.type === "youtube") {
-				const channelName = item.channelName || item.channel || "";
-				return (
-					title.includes(query) ||
-					channelName?.toLowerCase().includes(query) ||
-					tags
-				);
-			}
-			if (item.type === "flashcards") {
-				return (
-					title.includes(query) ||
-					item.description.toLowerCase().includes(query) ||
-					tags
-				);
-			}
-			return true;
-		})
-		.filter((item) => {
-			// Apply tag filter
-			if (!tagFilter) return true;
-
-			return item.tags?.some((tag) =>
-				tag.toLowerCase().includes(tagFilter.toLowerCase()),
-			);
-		})
-		.sort((a, b) => {
-			const direction = sortDirection === "asc" ? 1 : -1;
-
-			switch (activeSort) {
-				case "last-accessed":
-					return (
-						direction *
-						(new Date(a.lastAccessedDate).getTime() -
-							new Date(b.lastAccessedDate).getTime())
-					);
-				case "created":
-					return (
-						direction *
-						(new Date(a.createdDate).getTime() -
-							new Date(b.createdDate).getTime())
-					);
-				case "progress":
-					return direction * (a.progress - b.progress);
-				case "title":
-					return direction * a.title.localeCompare(b.title);
-				default:
-					return 0;
-			}
-		});
-
-	// Log final filtering results
-	console.log("📋 Final filtered content:", {
-		totalItems: contentItems.length,
-		filteredItems: filteredAndSortedContent.length,
-		archiveFilter,
-		activeFilter,
-		breakdown: {
-			archived: filteredAndSortedContent.filter((item) => item.archived).length,
-			active: filteredAndSortedContent.filter((item) => !item.archived).length,
-		},
-	});
+	// Removed debug logging for performance
 
 	const handleGenerateCourse = async () => {
 		if (!searchQuery.trim()) return;
@@ -873,7 +844,7 @@ export default function HomePage() {
 		setIsGenerating(true);
 
 		try {
-			const response = await api.post("/assistant/generate-course", {
+			const _response = await api.post("/assistant/generate-course", {
 				topic: searchQuery,
 				level: "beginner",
 			});
@@ -904,7 +875,7 @@ export default function HomePage() {
 					overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
 				})),
 			);
-		} catch (error) {
+		} catch (_error) {
 			toast({
 				title: "Error",
 				description: "Failed to generate course. Please try again.",
@@ -934,7 +905,7 @@ export default function HomePage() {
 	};
 
 	// Handle roadmap creation success
-	const handleRoadmapCreated = async (newRoadmap) => {
+	const _handleRoadmapCreated = async (_newRoadmap) => {
 		try {
 			// Refresh content list to include the new roadmap
 			const data = await fetchContentData();
@@ -994,14 +965,13 @@ export default function HomePage() {
 
 	const handleCardClick = (item) => {
 		// Navigate to the appropriate page based on item type
-		if (item.type === "course") {
-			navigate(`/courses/${item.id}`);
+		if (item.type === "course" || item.type === "roadmap") {
+			// Use the new course routes for both course and roadmap types
+			navigate(`/course/${item.id}`);
 		} else if (item.type === "youtube") {
 			navigate(`/videos/${item.uuid || item.id}`);
 		} else if (item.type === "book") {
 			navigate(`/books/${item.id}`);
-		} else if (item.type === "roadmap") {
-			navigate(`/roadmap/${item.id}`);
 		} else if (item.type === "flashcards") {
 			navigate(`/flashcards/${item.id}`);
 		}
@@ -1082,7 +1052,7 @@ export default function HomePage() {
 		}
 	};
 
-	const handleTagsUpdated = async (itemId, contentType, newTags) => {
+	const handleTagsUpdated = async (itemId, _contentType, newTags) => {
 		// Update the specific item's tags in the content list
 		setContentItems((prevItems) => {
 			return prevItems.map((item) => {
@@ -1349,7 +1319,7 @@ export default function HomePage() {
 					overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
 				})),
 			);
-		} catch (error) {
+		} catch (_error) {
 			toast({
 				title: "Error",
 				description: "Failed to create flashcard deck. Please try again.",

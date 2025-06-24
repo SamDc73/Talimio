@@ -5,7 +5,7 @@ import { useApi } from "@/hooks/useApi";
 import useAppStore from "@/stores/useAppStore";
 
 export function useOnboarding() {
-	const { execute: fetchRoadmap } = useApi("/api/v1/roadmaps", {
+	const { execute: fetchRoadmap } = useApi("/api/v1/courses", {
 		method: "GET",
 	});
 	const [topic, setTopic] = useState("");

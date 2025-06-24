@@ -9,7 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { api } from "@/lib/apiClient";
 import { motion } from "framer-motion";
 import { Sparkles, Wand2 } from "lucide-react";
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const RoadmapPromptModal = ({ isOpen, onClose }) => {
@@ -33,18 +33,17 @@ const RoadmapPromptModal = ({ isOpen, onClose }) => {
 
 		try {
 			// Generate roadmap with AI using the prompt
-			const response = await api.post("/roadmaps", {
-				userPrompt: prompt.trim(),
-				skillLevel: "beginner", // Default, will be editable in preview
+			const response = await api.post("/courses/", {
+				prompt: prompt.trim(),
 			});
 
 			toast({
-				title: "Roadmap Generated!",
-				description: "Review and customize your learning roadmap.",
+				title: "Course Generated!",
+				description: "Review and customize your learning course.",
 			});
 
-			// Navigate to roadmap preview page for editing
-			navigate(`/roadmap/preview/${response.id}`, {
+			// Navigate to course preview page for editing
+			navigate(`/course/preview/${response.id}`, {
 				state: {
 					isNew: true,
 					originalPrompt: prompt.trim(),
@@ -54,10 +53,10 @@ const RoadmapPromptModal = ({ isOpen, onClose }) => {
 			onClose();
 			setPrompt("");
 		} catch (error) {
-			console.error("Error generating roadmap:", error);
+			console.error("Error generating course:", error);
 			toast({
 				title: "Generation Failed",
-				description: "Failed to generate roadmap. Please try again.",
+				description: "Failed to generate course. Please try again.",
 				variant: "destructive",
 			});
 		} finally {
@@ -80,11 +79,11 @@ const RoadmapPromptModal = ({ isOpen, onClose }) => {
 						<div className="p-2 bg-gradient-to-br from-cyan-500 to-teal-500 rounded-lg">
 							<Wand2 className="h-6 w-6 text-white" />
 						</div>
-						Generate Learning Roadmap
+						Generate Learning Course
 					</DialogTitle>
 					<p className="text-muted-foreground text-sm">
 						Tell us what you want to learn, and AI will create a personalized
-						roadmap for you
+						course for you
 					</p>
 				</DialogHeader>
 
@@ -167,7 +166,7 @@ const RoadmapPromptModal = ({ isOpen, onClose }) => {
 							) : (
 								<div className="flex items-center gap-2">
 									<Sparkles className="h-4 w-4" />
-									Generate Roadmap
+									Generate Course
 								</div>
 							)}
 						</Button>

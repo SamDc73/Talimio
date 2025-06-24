@@ -1,23 +1,12 @@
-import { deleteApi } from "@/services/deleteApi";
 import { ChevronRight, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { KebabMenu } from "./KebabMenu";
 import { TagChip } from "./TagChip";
 
-export function CourseCard({ course, onDelete, onArchive, className = "" }) {
+export function CourseCard({ course, onArchive, className = "" }) {
 	const [showMenu, setShowMenu] = useState(false);
 
-	const handleDelete = async (itemType, itemId) => {
-		try {
-			await deleteApi.deleteItem(itemType, itemId);
-			if (onDelete) {
-				onDelete(itemId, itemType);
-			}
-		} catch (error) {
-			console.error("Failed to delete course:", error);
-		}
-	};
 
 	return (
 		<div
@@ -35,9 +24,8 @@ export function CourseCard({ course, onDelete, onArchive, className = "" }) {
 
 			<KebabMenu
 				showMenu={showMenu}
-				onDelete={handleDelete}
-				onArchive={onArchive}
-				itemType="roadmap"
+					onArchive={onArchive}
+				itemType="course"
 				itemId={course.id}
 				itemTitle={course.title}
 				isArchived={course.archived || false}
@@ -85,7 +73,7 @@ export function CourseCard({ course, onDelete, onArchive, className = "" }) {
 					{course.modules || 0} modules
 				</span>
 				<Link
-					to={`/courses/${course.id}`}
+					to={`/course/${course.id}`}
 					className="flex items-center gap-1 text-course hover:text-course-accent text-sm font-medium transition-colors"
 				>
 					Resume

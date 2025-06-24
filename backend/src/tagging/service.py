@@ -467,7 +467,7 @@ async def update_content_tags_json(
     elif content_type == "roadmap":
         from sqlalchemy import update
 
-        from src.roadmaps.models import Roadmap
+        from src.courses.models import Roadmap
 
         await session.execute(
             update(Roadmap).where(Roadmap.id == content_id).values(tags_json=tags_json),

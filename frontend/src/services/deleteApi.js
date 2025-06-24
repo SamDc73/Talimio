@@ -58,8 +58,6 @@ export const deleteApi = {
 			book: "book",
 			roadmap: "roadmap",
 			flashcard: "flashcards",
-			lesson: "course",
-			course: "course",
 			youtube: "youtube",
 			flashcards: "flashcards",
 		};

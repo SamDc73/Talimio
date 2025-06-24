@@ -1,16 +1,17 @@
-import React, {
+import {
 	createContext,
 	useContext,
 	useEffect,
 	useState,
 	useCallback,
 } from "react";
-import { getRoadmapNodes, updateNodeStatus } from "../services/progressService";
+import { updateModuleStatus } from "../services/progressService";
+import { getCourseWithModules } from "../utils/courseDetection";
 import { useToast } from "./use-toast";
 
 const ProgressContext = createContext(null);
 
-export function ProgressProvider({ children, courseId }) {
+export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 	const [lessonStatuses, setLessonStatuses] = useState({});
 	const [courseProgress, setCourseProgress] = useState({
 		totalLessons: 0,
@@ -19,7 +20,10 @@ export function ProgressProvider({ children, courseId }) {
 	});
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState(null);
+	const [_detectedCourseMode, setDetectedCourseMode] = useState(null);
 	const { toast } = useToast();
+	
+	// Note: We use getCourseWithModules for consistent course data fetching
 
 	const fetchAllProgressData = useCallback(
 		async (currentCourseId) => {
@@ -37,24 +41,68 @@ export function ProgressProvider({ children, courseId }) {
 			console.log(
 				"ProgressProvider - starting data fetch for courseId:",
 				currentCourseId,
+				"isCourseMode:",
+				isCourseMode,
 			);
 			setIsLoading(true);
 			setError(null);
 
 			try {
-				const nodes = await getRoadmapNodes(currentCourseId);
+				// Use course data fetching - assumes we're in course mode
+				const { data, modules } = await getCourseWithModules(currentCourseId);
+				
+				// Store detected mode for use in other functions - always true for course API
+				const detectedMode = true;
+				setDetectedCourseMode(detectedMode);
+				
+				// Validate modules array
+				if (!Array.isArray(modules)) {
+					throw new Error(`Invalid modules data: expected array, got ${typeof modules}`);
+				}
 
-				// Transform nodes to lesson statuses format
+				// For course mode, we need to collect all lessons from all modules
+				let allLessons = [];
+				if (detectedMode) {
+					// Course mode: flatten the hierarchy (modules -> lessons)
+					for (const module of modules) {
+						// Add the module itself as a lesson
+						allLessons.push({
+							id: module.id,
+							status: module.status || "not_started",
+							title: module.title
+						});
+						
+						// Add all sub-lessons
+						if (module.lessons && Array.isArray(module.lessons)) {
+							for (const lesson of module.lessons) {
+								allLessons.push({
+									id: lesson.id,
+									status: lesson.status || "not_started",
+									title: lesson.title
+								});
+							}
+						}
+					}
+				} else {
+					// Legacy mode: modules are the lessons
+					allLessons = modules.map(module => ({
+						id: module.id,
+						status: module.status || "not_started",
+						title: module.title
+					}));
+				}
+
+				// Transform to lesson statuses format
 				const statusMap = {};
-				for (const node of nodes) {
-					statusMap[node.id] = node.status || "not_started";
+				for (const lesson of allLessons) {
+					statusMap[lesson.id] = lesson.status;
 				}
 				setLessonStatuses(statusMap);
 
-				// Calculate progress from nodes
-				const totalLessons = nodes.length;
-				const completedLessons = nodes.filter(
-					(node) => node.status === "done",
+				// Calculate progress from all lessons
+				const totalLessons = allLessons.length;
+				const completedLessons = allLessons.filter(
+					(lesson) => lesson.status === "done",
 				).length;
 				const progressPercentage =
 					totalLessons > 0
@@ -82,7 +130,7 @@ export function ProgressProvider({ children, courseId }) {
 				setIsLoading(false);
 			}
 		},
-		[toast],
+		[toast, isCourseMode],
 	);
 
 	useEffect(() => {
@@ -123,8 +171,10 @@ export function ProgressProvider({ children, courseId }) {
 				}));
 
 				// Update server in background without waiting
-				updateNodeStatus(lessonId, newStatus).catch((err) => {
-					console.error("Failed to update node status:", err);
+				const updatePromise = updateModuleStatus(courseId, lessonId, newStatus);
+					
+				updatePromise.catch((err) => {
+					console.error("Failed to update module/node status:", err);
 					// Revert on error
 					setLessonStatuses(originalLessonStatuses);
 					setCourseProgress(originalCourseProgress);

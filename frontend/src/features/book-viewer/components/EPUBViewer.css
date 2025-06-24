@@ -128,17 +128,17 @@
 
 /* React Reader specific styles */
 .epub-reader-wrapper .ReactReader--container {
-	height: 100% !important;
-	background-color: var(--background) !important;
+	height: 100%;
+	background-color: var(--background);
 }
 
 .epub-reader-wrapper .ReactReader--viewer {
-	background-color: var(--background) !important;
+	background-color: var(--background);
 }
 
 /* Override EpubJS iframe styles */
 .epub-reader-wrapper iframe {
-	background-color: var(--background) !important;
+	background-color: var(--background);
 }
 
 /* Firefox specific fixes */

@@ -240,7 +240,7 @@
 		rgba(0, 0, 0, 0.05);
 	background: white;
 	max-width: 100%;
-	height: auto !important;
+	height: auto;
 	/* Prevent white flash during zoom */
 	will-change: transform;
 	backface-visibility: hidden;
@@ -323,11 +323,11 @@
 
 /* Prevent white flash during zoom */
 .pdf-viewer-wrapper.is-zooming .pdf-page canvas {
-	transition: none !important;
+	transition: none;
 }
 
 .pdf-viewer-wrapper.is-zooming .react-pdf__Page {
-	opacity: 1 !important;
+	opacity: 1;
 }
 
 /* Disable text layer during fast scroll */

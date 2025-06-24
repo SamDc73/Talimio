@@ -376,7 +376,7 @@ export async function forceSyncAll() {
 	// Cancel all pending debounced syncs
 	for (const [key, timer] of syncTimers.entries()) {
 		clearTimeout(timer);
-		const [resourceType, resourceId] = key.split(":");
+		const [_resourceType, _resourceId] = key.split(":");
 		// We don't have the data here, so this is more for cleanup
 	}
 	syncTimers.clear();

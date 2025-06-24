@@ -1,5 +1,4 @@
 import { BookOpen, Maximize, MessageSquare, PanelLeft } from "lucide-react";
-import React from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../button";
 import {

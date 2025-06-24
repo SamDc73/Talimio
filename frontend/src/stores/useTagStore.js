@@ -34,7 +34,7 @@ const useTagStore = create(
 			// ========== ACTIONS ==========
 
 			// User Tags Management
-			async fetchUserTags(userId = DEFAULT_USER_ID) {
+			async fetchUserTags(_userId = DEFAULT_USER_ID) {
 				set((state) => {
 					state.loading.tags = true;
 				});
@@ -101,7 +101,7 @@ const useTagStore = create(
 				}
 			},
 
-			async updateTag(tagId, updateData) {
+			async updateTag(_tagId, _updateData) {
 				// Tag updates are not supported in our current backend
 				// Tags are managed through content associations
 				console.warn(
@@ -110,7 +110,7 @@ const useTagStore = create(
 				return null;
 			},
 
-			async deleteTag(tagId) {
+			async deleteTag(_tagId) {
 				// Tag deletion is not supported in our current backend
 				// Tags are managed through content associations
 				console.warn(

@@ -65,7 +65,7 @@ const progressCache = new Cache(CACHE_CONFIG.maxAge, CACHE_CONFIG.maxSize);
  * @typedef {Object} Progress
  * @property {string} id - The unique identifier for the progress record
  * @property {string} userId - The ID of the user
- * @property {string} nodeId - The ID of the node
+ * @property {string} moduleId - The ID of the module
  * @property {string} status - The current progress status
  * @property {Date} updatedAt - Last update timestamp
  */
@@ -97,41 +97,41 @@ async function fetchWithTimeout(url, options = {}) {
 }
 
 /**
- * Get progress for a specific user and node
- * @param {string} userId - The ID of the user
- * @param {string} nodeId - The ID of the node
- * @returns {Promise<Progress>} The progress data
+ * Get progress for a specific module
+ * @param {string} courseId - The ID of the course
+ * @param {string} moduleId - The ID of the module
+ * @returns {Promise<Module>} The module data
  * @throws {Error} If the request fails
  */
-export async function getNodeProgress(nodeId) {
-	const cacheKey = `node-${nodeId}`;
+export async function getModuleProgress(courseId, moduleId) {
+	const cacheKey = `course-${courseId}-module-${moduleId}`;
 	const cachedData = progressCache.get(cacheKey);
 	if (cachedData) {
 		return cachedData;
 	}
 
 	try {
-		const response = await fetchWithTimeout(`${API_BASE}/nodes/${nodeId}`);
+		const response = await fetchWithTimeout(`${API_BASE}/courses/${courseId}/modules/${moduleId}`);
 		if (!response.ok) {
-			throw new Error(`Failed to fetch node: ${response.statusText}`);
+			throw new Error(`Failed to fetch module: ${response.statusText}`);
 		}
 		const data = await response.json();
 		progressCache.set(cacheKey, data);
 		return data;
 	} catch (error) {
-		console.error("Error fetching node:", error);
+		console.error("Error fetching module:", error);
 		throw error;
 	}
 }
 
 /**
- * Get nodes for a roadmap with their progress
- * @param {string} roadmapId - The ID of the roadmap
- * @returns {Promise<Node[]>} Array of nodes with progress
+ * Get modules for a course with their progress
+ * @param {string} courseId - The ID of the course
+ * @returns {Promise<Module[]>} Array of modules with progress
  * @throws {Error} If the request fails
  */
-export async function getRoadmapNodes(roadmapId) {
-	const cacheKey = `roadmap-nodes-${roadmapId}`;
+export async function getCourseModules(courseId) {
+	const cacheKey = `course-${courseId}-modules`;
 	const cachedData = progressCache.get(cacheKey);
 	if (cachedData) {
 		return cachedData;
@@ -139,40 +139,42 @@ export async function getRoadmapNodes(roadmapId) {
 
 	try {
 		const response = await fetchWithTimeout(
-			`${API_BASE}/roadmaps/${roadmapId}/nodes`,
+			`${API_BASE}/courses/${courseId}/modules`,
 		);
 		if (!response.ok) {
-			throw new Error(`Failed to fetch roadmap nodes: ${response.statusText}`);
+			throw new Error(`Failed to fetch course modules: ${response.statusText}`);
 		}
 		const data = await response.json();
 		progressCache.set(cacheKey, data);
 		return data;
 	} catch (error) {
-		console.error("Error fetching roadmap nodes:", error);
+		console.error("Error fetching course modules:", error);
 		throw error;
 	}
 }
 
+
 /**
- * Update node status
- * @param {string} nodeId - The ID of the node
+ * Update module status
+ * @param {string} courseId - The ID of the course
+ * @param {string} moduleId - The ID of the module
  * @param {string} status - The new status (not_started, in_progress, completed)
  * @returns {Promise<Object>} The update response
  * @throws {Error} If the request fails
  */
-export async function updateNodeStatus(nodeId, status) {
+export async function updateModuleStatus(courseId, moduleId, status) {
 	try {
 		const response = await fetchWithTimeout(
-			`${API_BASE}/nodes/${nodeId}/status`,
+			`${API_BASE}/courses/${courseId}/modules/${moduleId}`,
 			{
-				method: "PUT",
+				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ status }),
 			},
 		);
 
 		if (!response.ok) {
-			throw new Error(`Failed to update node status: ${response.statusText}`);
+			throw new Error(`Failed to update module status: ${response.statusText}`);
 		}
 		const data = await response.json();
 
@@ -180,28 +182,30 @@ export async function updateNodeStatus(nodeId, status) {
 		progressCache.clear();
 		return data;
 	} catch (error) {
-		console.error("Error updating node status:", error);
+		console.error("Error updating module status:", error);
 		throw error;
 	}
 }
 
+
 /**
- * Update a node
- * @param {string} nodeId - The ID of the node to update
+ * Update a module
+ * @param {string} courseId - The ID of the course
+ * @param {string} moduleId - The ID of the module to update
  * @param {Object} updateData - The data to update
- * @returns {Promise<Node>} The updated node
+ * @returns {Promise<Module>} The updated module
  * @throws {Error} If the request fails
  */
-export async function updateNode(nodeId, updateData) {
+export async function updateModule(courseId, moduleId, updateData) {
 	try {
-		const response = await fetchWithTimeout(`${API_BASE}/nodes/${nodeId}`, {
+		const response = await fetchWithTimeout(`${API_BASE}/courses/${courseId}/modules/${moduleId}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify(updateData),
 		});
 
 		if (!response.ok) {
-			throw new Error(`Failed to update node: ${response.statusText}`);
+			throw new Error(`Failed to update module: ${response.statusText}`);
 		}
 		const data = await response.json();
 
@@ -209,10 +213,11 @@ export async function updateNode(nodeId, updateData) {
 		progressCache.clear();
 		return data;
 	} catch (error) {
-		console.error("Error updating node:", error);
+		console.error("Error updating module:", error);
 		throw error;
 	}
 }
+
 
 // Export for testing
 export const _progressCache = progressCache;

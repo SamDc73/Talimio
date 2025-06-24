@@ -11,7 +11,7 @@ from src.ai.rag.ingest import DocumentProcessor
 from src.ai.rag.retriever import DocumentRetriever
 from src.ai.rag.schemas import DocumentResponse, SearchResult
 from src.ai.rag.vector_store import VectorStore
-from src.roadmaps.models import RoadmapDocument
+from src.courses.models import RoadmapDocument
 
 
 class RAGService:
@@ -64,7 +64,7 @@ class RAGService:
             processed_at=doc.processed_at,
             embedded_at=doc.embedded_at,
             status=doc.status,
-            doc_metadata=doc.doc_metadata if hasattr(doc, 'doc_metadata') else None
+            doc_metadata=doc.doc_metadata if hasattr(doc, "doc_metadata") else None
         )
 
     async def process_document(self, session: AsyncSession, document_id: int) -> None:
@@ -155,20 +155,20 @@ class RAGService:
         for row in result.fetchall():
             row_dict = dict(row)
             docs.append(DocumentResponse(
-                id=row_dict['id'],
-                roadmap_id=row_dict['roadmap_id'],
-                document_type=row_dict['document_type'],
-                title=row_dict['title'],
-                file_path=row_dict.get('file_path'),
-                url=row_dict.get('url'),
-                source_url=row_dict.get('source_url'),
-                crawl_date=row_dict.get('crawl_date'),
-                content_hash=row_dict.get('content_hash'),
-                created_at=row_dict['created_at'],
-                processed_at=row_dict.get('processed_at'),
-                embedded_at=row_dict.get('embedded_at'),
-                status=row_dict['status'],
-                doc_metadata=row_dict.get('metadata')
+                id=row_dict["id"],
+                roadmap_id=row_dict["roadmap_id"],
+                document_type=row_dict["document_type"],
+                title=row_dict["title"],
+                file_path=row_dict.get("file_path"),
+                url=row_dict.get("url"),
+                source_url=row_dict.get("source_url"),
+                crawl_date=row_dict.get("crawl_date"),
+                content_hash=row_dict.get("content_hash"),
+                created_at=row_dict["created_at"],
+                processed_at=row_dict.get("processed_at"),
+                embedded_at=row_dict.get("embedded_at"),
+                status=row_dict["status"],
+                doc_metadata=row_dict.get("metadata")
             ))
         return docs
 

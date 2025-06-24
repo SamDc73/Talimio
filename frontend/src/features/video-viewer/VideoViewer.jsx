@@ -165,7 +165,7 @@ function VideoViewerContentV2() {
 								setCurrentTime(newTime);
 							}
 						}
-					} catch (e) {
+					} catch (_e) {
 						// Ignore non-JSON messages
 					}
 				};

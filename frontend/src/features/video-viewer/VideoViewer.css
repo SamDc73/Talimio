@@ -59,7 +59,7 @@
 
 /* Ensure lite-youtube fills container */
 .video-player lite-youtube {
-	max-width: none !important;
+	max-width: none;
 }
 
 /* Override default lite-youtube background for better loading state */
@@ -71,7 +71,7 @@ lite-youtube:not([activated]) {
 
 /* Ensure play button is centered and visible */
 lite-youtube::before {
-	border-color: transparent transparent transparent #fff !important;
+	border-color: transparent transparent transparent #fff;
 }
 
 /* Custom thumbnail styling */
@@ -163,7 +163,7 @@ lite-youtube img[slot="image"] {
 /* Responsive design */
 @media (max-width: 768px) {
 	.content-with-sidebar {
-		margin-left: 0 !important;
+		margin-left: 0;
 	}
 
 	.video-player-section {

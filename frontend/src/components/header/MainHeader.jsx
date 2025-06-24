@@ -23,7 +23,7 @@ import {
 	X,
 	Youtube,
 } from "lucide-react";
-import React, {
+import {
 	useState,
 	useEffect,
 	useRef,

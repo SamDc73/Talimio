@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.roadmaps.models import Roadmap
+from src.courses.models import Roadmap
 
 
 logger = logging.getLogger(__name__)

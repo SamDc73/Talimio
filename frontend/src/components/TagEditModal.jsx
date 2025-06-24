@@ -1,5 +1,5 @@
 import { Loader2, Tag as TagIcon } from "lucide-react";
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useToast } from "../hooks/use-toast";
 import useTagStore from "../stores/useTagStore";
 import { TagList } from "./Tag";
@@ -31,16 +31,7 @@ const TagEditModal = ({
 
 	const { toast } = useToast();
 
-	// Load content tags when modal opens
-	useEffect(() => {
-		if (open && contentType && contentId) {
-			loadContentTags();
-			// Also ensure we have user tags loaded
-			fetchUserTags();
-		}
-	}, [open, contentType, contentId, fetchUserTags]);
-
-	const loadContentTags = async () => {
+	const loadContentTags = useCallback(async () => {
 		setIsLoading(true);
 		try {
 			const tags = await fetchContentTags(contentType, contentId);
@@ -55,7 +46,16 @@ const TagEditModal = ({
 		} finally {
 			setIsLoading(false);
 		}
-	};
+	}, [fetchContentTags, contentType, contentId, toast]);
+
+	// Load content tags when modal opens
+	useEffect(() => {
+		if (open && contentType && contentId) {
+			loadContentTags();
+			// Also ensure we have user tags loaded
+			fetchUserTags();
+		}
+	}, [open, contentType, contentId, fetchUserTags, loadContentTags]);
 
 	const handleSave = async () => {
 		setIsSaving(true);

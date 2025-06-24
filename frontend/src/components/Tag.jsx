@@ -1,5 +1,4 @@
 import { X } from "lucide-react";
-import React from "react";
 
 /**
  * Reusable Tag component for displaying tags with different variants and interactions

@@ -1,8 +1,6 @@
 import { useToast } from "@/hooks/use-toast";
 import { extractBookChapters, getBookChapters } from "@/services/booksService";
 import {
-	getChapterProgress,
-	updateSectionProgress,
 	useTocProgress,
 } from "@/services/tocProgressService";
 import useAppStore from "@/stores/useAppStore";
@@ -32,7 +30,7 @@ function BookSidebarV2({
 }) {
 	const [expandedChapters, setExpandedChapters] = useState([0]);
 	const [apiChapters, setApiChapters] = useState([]);
-	const [isLoadingChapters, setIsLoadingChapters] = useState(false);
+	const [_isLoadingChapters, setIsLoadingChapters] = useState(false);
 	const [isExtracting, setIsExtracting] = useState(false);
 	const { toast } = useToast();
 
@@ -81,7 +79,7 @@ function BookSidebarV2({
 		}
 
 		fetchChapters();
-	}, [book?.id, updateChapterStatus, setLoading]);
+	}, [book?.id, updateChapterStatus, setLoading, chapterCompletion[chapter.id]]);
 
 	/**
 	 * Extract chapters using AI
@@ -100,7 +98,7 @@ function BookSidebarV2({
 			// Refresh chapters
 			const chapters = await getBookChapters(book.id);
 			setApiChapters(chapters || []);
-		} catch (error) {
+		} catch (_error) {
 			toast({
 				title: "Error",
 				description: "Failed to extract chapters",
@@ -197,16 +195,45 @@ function BookSidebarV2({
 	 * Check if current page is in chapter range
 	 */
 	const isPageInRange = (page, chapter) => {
+		// If chapter has start and end page, check if current page is within range
 		if (chapter.startPage && chapter.endPage) {
 			return page >= chapter.startPage && page <= chapter.endPage;
 		}
-		return page === chapter.page;
+		// If chapter has only one page, check exact match
+		if (chapter.page) {
+			return page === chapter.page;
+		}
+		// If chapter has children (sections), check if any section contains the current page
+		if (chapter.children && chapter.children.length > 0) {
+			return chapter.children.some((section) => {
+				if (section.startPage && section.endPage) {
+					return page >= section.startPage && page <= section.endPage;
+				}
+				return page === section.page;
+			});
+		}
+		return false;
 	};
+
+	// Auto-expand chapter containing current page
+	useEffect(() => {
+		if (chapters.length > 0 && currentPage) {
+			const currentChapterIndex = chapters.findIndex((chapter) =>
+				isPageInRange(currentPage, chapter),
+			);
+			if (
+				currentChapterIndex >= 0 &&
+				!expandedChapters.includes(currentChapterIndex)
+			) {
+				setExpandedChapters((prev) => [...prev, currentChapterIndex]);
+			}
+		}
+	}, [currentPage, chapters, expandedChapters, isPageInRange]);
 
 	/**
 	 * Count all sections/chapters for progress calculation
 	 */
-	const countAllSections = (chapters) => {
+	const _countAllSections = (chapters) => {
 		let count = 0;
 		for (const ch of chapters) {
 			if (ch.children && ch.children.length > 0) {
@@ -221,7 +248,7 @@ function BookSidebarV2({
 	/**
 	 * Count completed sections matching the same logic
 	 */
-	const countCompletedSections = (chapters) => {
+	const _countCompletedSections = (chapters) => {
 		let count = 0;
 		for (const ch of chapters) {
 			if (ch.children && ch.children.length > 0) {
@@ -248,7 +275,11 @@ function BookSidebarV2({
 
 	return (
 		<SidebarContainer>
-			<ProgressIndicator progress={overallProgress} suffix="Read">
+			<ProgressIndicator
+				progress={overallProgress}
+				variant="book"
+				suffix="Read"
+			>
 				<span className="text-xs text-zinc-500">
 					{currentPage && book.totalPages
 						? `Page ${currentPage} of ${book.totalPages}`
@@ -275,6 +306,7 @@ function BookSidebarV2({
 							onToggle={() => handleToggleChapter(chapterIndex)}
 							isActive={isCurrentChapter}
 							showExpandButton={hasChildren}
+							variant="book"
 							headerContent={
 								<button
 									type="button"
@@ -287,11 +319,12 @@ function BookSidebarV2({
 											);
 										}
 									}}
-									className="cursor-pointer hover:text-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded bg-transparent border-none p-0"
+									className="cursor-pointer hover:text-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded bg-transparent border-none p-0"
 								>
 									<ProgressCircle
 										number={chapterIndex + 1}
 										progress={chapterProgress}
+										variant="book"
 									/>
 								</button>
 							}
@@ -302,7 +335,16 @@ function BookSidebarV2({
 										const isCompleted = tocProgressUtils.isCompleted(
 											section.id,
 										);
-										const isCurrentSection = currentPage === section.page;
+										// Better section detection: check if current page is within section range
+										const isCurrentSection = (() => {
+											if (section.startPage && section.endPage) {
+												return (
+													currentPage >= section.startPage &&
+													currentPage <= section.endPage
+												);
+											}
+											return currentPage === section.page;
+										})();
 
 										return (
 											<SidebarItem
@@ -312,7 +354,7 @@ function BookSidebarV2({
 														<span className="line-clamp-2 text-sm">
 															{section.title}
 														</span>
-														<span className="text-xs text-zinc-500 ml-2">
+														<span className="text-xs text-blue-500 ml-2">
 															p. {section.page}
 														</span>
 													</>
@@ -322,6 +364,7 @@ function BookSidebarV2({
 												onClick={() =>
 													handleSectionClick(section, section.page)
 												}
+												variant="book"
 												leftContent={
 													<CompletionCheckbox
 														isCompleted={isCompleted}
@@ -329,6 +372,7 @@ function BookSidebarV2({
 															e.stopPropagation();
 															handleCompletionToggle(section);
 														}}
+														variant="book"
 													/>
 												}
 											/>
