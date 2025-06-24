@@ -17,7 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from src.ai.client import ModelManager, create_lesson_body
 from src.ai.memory import Mem0Wrapper
-from src.courses.models import Node, Roadmap
+from src.courses.models import LessonProgress as Progress, Node, Roadmap
 from src.courses.schemas import (
     CourseCreate,
     CourseProgressResponse,
@@ -31,7 +31,6 @@ from src.courses.schemas import (
     ModuleResponse,
 )
 from src.courses.services.interface import ICourseService
-from src.progress.models import Progress
 from src.storage.lesson_dao import LessonDAO
 
 
@@ -679,7 +678,7 @@ class CourseService(ICourseService):
         # Check if progress record exists
         stmt = select(Progress).where(
             Progress.lesson_id == str(lesson_id),
-            Progress.course_id == str(module_id),  # Note: Progress.course_id stores module_id
+            Progress.course_id == str(module_id),  # Note: course_id field stores module_id
         )
         result = await self.session.execute(stmt)
         progress = result.scalar_one_or_none()
@@ -718,8 +717,8 @@ class CourseService(ICourseService):
     ) -> LessonStatusResponse:
         """Get the status of a specific lesson."""
         stmt = select(Progress).where(
-            Progress.lesson_id == str(lesson_id),
-            Progress.course_id == str(module_id),  # Note: Progress.course_id stores module_id
+            Progress.lesson_id == lesson_id,
+            Progress.course_id == module_id,  # Note: course_id field stores module_id
         )
         result = await self.session.execute(stmt)
         progress = result.scalar_one_or_none()

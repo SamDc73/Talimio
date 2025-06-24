@@ -3,7 +3,7 @@
  */
 
 import { Brain, ChevronLeft, Eye, RotateCcw, Save, Trash2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { toast } from "../hooks/use-toast";
 import {
 	clearUserMemory,
@@ -33,19 +33,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 	const [memories, setMemories] = useState([]);
 	const [isLoadingMemories, setIsLoadingMemories] = useState(false);
 
-	// Load user settings when dialog opens
-	useEffect(() => {
-		if (open) {
-			loadUserSettings();
-		}
-	}, [open]);
-
-	// Track changes
-	useEffect(() => {
-		setHasChanges(instructions !== originalInstructions);
-	}, [instructions, originalInstructions]);
-
-	const loadUserSettings = async () => {
+	const loadUserSettings = useCallback(async () => {
 		setIsLoading(true);
 		try {
 			const settings = await getUserSettings();
@@ -61,7 +49,19 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		} finally {
 			setIsLoading(false);
 		}
-	};
+	}, [toast]);
+
+	// Load user settings when dialog opens
+	useEffect(() => {
+		if (open) {
+			loadUserSettings();
+		}
+	}, [open, loadUserSettings]);
+
+	// Track changes
+	useEffect(() => {
+		setHasChanges(instructions !== originalInstructions);
+	}, [instructions, originalInstructions]);
 
 	const handleSave = async () => {
 		setIsSaving(true);

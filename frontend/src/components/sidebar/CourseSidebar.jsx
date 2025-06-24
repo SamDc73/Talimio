@@ -80,7 +80,7 @@ function CourseSidebar({
 											<CompletionCheckbox
 												isCompleted={isLessonCompleted(lesson.id)}
 												isLocked={lesson.status === "locked"}
-												onClick={() => toggleLessonCompletion(lesson.id)}
+												onClick={() => toggleLessonCompletion(lesson.id, module.id)}
 												variant="course"
 											/>
 										}

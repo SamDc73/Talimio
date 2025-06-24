@@ -5,7 +5,7 @@ import {
 	useState,
 	useCallback,
 } from "react";
-import { updateModuleStatus } from "../services/progressService";
+import { updateLessonStatus } from "../services/progressService";
 import { getCourseWithModules } from "../utils/courseDetection";
 import { useToast } from "./use-toast";
 
@@ -49,7 +49,7 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 
 			try {
 				// Use course data fetching - assumes we're in course mode
-				const { data, modules } = await getCourseWithModules(currentCourseId);
+				const { modules } = await getCourseWithModules(currentCourseId);
 				
 				// Store detected mode for use in other functions - always true for course API
 				const detectedMode = true;
@@ -102,7 +102,7 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 				// Calculate progress from all lessons
 				const totalLessons = allLessons.length;
 				const completedLessons = allLessons.filter(
-					(lesson) => lesson.status === "done",
+					(lesson) => lesson.status === "completed",
 				).length;
 				const progressPercentage =
 					totalLessons > 0
@@ -138,15 +138,15 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 	}, [courseId, fetchAllProgressData]);
 
 	const toggleLessonCompletion = useCallback(
-		async (lessonId) => {
-			if (!courseId) return;
+		async (lessonId, moduleId) => {
+			if (!courseId || !moduleId) return;
 
 			const originalLessonStatuses = { ...lessonStatuses };
 			const originalCourseProgress = { ...courseProgress };
 
 			try {
 				const currentStatus = lessonStatuses[lessonId] || "not_started";
-				const newStatus = currentStatus === "done" ? "not_started" : "done";
+				const newStatus = currentStatus === "completed" ? "not_started" : "completed";
 
 				// Update UI immediately
 				setLessonStatuses((prev) => ({
@@ -155,7 +155,7 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 				}));
 
 				// Calculate client-side progress for immediate feedback
-				const completedDelta = newStatus === "done" ? 1 : -1;
+				const completedDelta = newStatus === "completed" ? 1 : -1;
 				const newCompletedLessons = Math.max(
 					0,
 					courseProgress.completedLessons + completedDelta,
@@ -171,10 +171,10 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 				}));
 
 				// Update server in background without waiting
-				const updatePromise = updateModuleStatus(courseId, lessonId, newStatus);
+				const updatePromise = updateLessonStatus(courseId, moduleId, lessonId, newStatus);
 					
 				updatePromise.catch((err) => {
-					console.error("Failed to update module/node status:", err);
+					console.error("Failed to update lesson status:", err);
 					// Revert on error
 					setLessonStatuses(originalLessonStatuses);
 					setCourseProgress(originalCourseProgress);
@@ -202,7 +202,7 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 
 	const isLessonCompleted = useCallback(
 		(lessonId) => {
-			return lessonStatuses[lessonId] === "done";
+			return lessonStatuses[lessonId] === "completed";
 		},
 		[lessonStatuses],
 	);

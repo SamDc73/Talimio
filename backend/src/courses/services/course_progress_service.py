@@ -9,12 +9,12 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.courses.models import LessonProgress as Progress
 from src.courses.schemas import (
     CourseProgressResponse,
     LessonStatusResponse,
     LessonStatusUpdate,
 )
-from src.progress.models import Progress
 
 
 class CourseProgressService:
