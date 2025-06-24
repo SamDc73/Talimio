@@ -1,3 +1,7 @@
+import { motion } from "framer-motion";
+import { ArrowLeft, BookOpen, RefreshCw, Save, Target } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/button";
 import {
 	Dialog,
@@ -7,13 +11,8 @@ import {
 } from "@/components/dialog";
 import { Input } from "@/components/input";
 import { Label } from "@/components/label";
-import { RadioGroup, RadioGroupItem } from "@/components/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { api } from "@/lib/apiClient";
-import { motion } from "framer-motion";
-import { ArrowLeft, BookOpen, RefreshCw, Save, Target } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 const RoadmapPreviewPage = () => {
 	const { roadmapId } = useParams();
@@ -34,7 +33,6 @@ const RoadmapPreviewPage = () => {
 	const [formData, setFormData] = useState({
 		title: "",
 		description: "",
-		skillLevel: "beginner",
 		tags: [],
 	});
 
@@ -57,7 +55,6 @@ const RoadmapPreviewPage = () => {
 				setFormData({
 					title: response.title,
 					description: response.description,
-					skillLevel: response.skill_level,
 					tags: tags,
 				});
 			} catch (error) {
@@ -93,7 +90,6 @@ const RoadmapPreviewPage = () => {
 			await api.patch(`/courses/${roadmapId}`, {
 				title: formData.title,
 				description: formData.description,
-				skill_level: formData.skillLevel,
 			});
 
 			toast({
@@ -123,7 +119,6 @@ const RoadmapPreviewPage = () => {
 		try {
 			const response = await api.post("/courses", {
 				userPrompt: originalPrompt,
-				skill_level: formData.skillLevel,
 			});
 
 			toast({
@@ -213,29 +208,6 @@ const RoadmapPreviewPage = () => {
 								className="w-full px-4 py-3 text-sm border border-input bg-background rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring transition-all resize-none placeholder:text-muted-foreground/60"
 							/>
 						</div>
-
-						<div className="space-y-2">
-							<Label className="text-sm font-medium">Skill Level</Label>
-							<RadioGroup
-								value={formData.skillLevel}
-								onValueChange={(value) =>
-									setFormData({ ...formData, skillLevel: value })
-								}
-								className="flex gap-6"
-							>
-								{["beginner", "intermediate", "advanced"].map((level) => (
-									<div key={level} className="flex items-center space-x-2">
-										<RadioGroupItem value={level} id={level} />
-										<Label
-											htmlFor={level}
-											className="capitalize text-sm font-normal cursor-pointer"
-										>
-											{level}
-										</Label>
-									</div>
-								))}
-							</RadioGroup>
-						</div>
 					</div>
 
 					{/* Course Overview */}
@@ -247,7 +219,10 @@ const RoadmapPreviewPage = () => {
 							</div>
 							<div className="bg-muted/30 rounded-lg p-4 space-y-2 max-h-48 overflow-y-auto">
 								{roadmap.modules.map((module, index) => (
-									<div key={module.id} className="flex items-start gap-3 text-sm">
+									<div
+										key={module.id}
+										className="flex items-start gap-3 text-sm"
+									>
 										<div className="flex-shrink-0 w-6 h-6 bg-cyan-100 text-cyan-700 rounded-full flex items-center justify-center text-xs font-medium mt-0.5">
 											{index + 1}
 										</div>
