@@ -7,7 +7,7 @@ import {
 } from "@/services/videosService";
 import useAppStore from "@/stores/useAppStore";
 import { Clock, Download, } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import CompletionCheckbox from "./CompletionCheckbox";
 import ProgressIndicator from "./ProgressIndicator";
@@ -49,21 +49,17 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 	const {
 		updateVideoChapterCompletion,
 		setVideoChapterStatus,
-		getVideoChapterCompletion,
 	} = useAppStore(
 		useShallow((state) => ({
 			updateVideoChapterCompletion: state.updateVideoChapterCompletion,
 			setVideoChapterStatus: state.setVideoChapterStatus,
-			getVideoChapterCompletion: state.getVideoChapterCompletion,
 		})),
 	);
 
-	// Get video chapter completion separately to avoid new object creation
-	const videoChapterCompletion = useMemo(() => {
-		return video?.uuid
-			? getVideoChapterCompletion(video.uuid)
-			: EMPTY_CHAPTER_COMPLETION;
-	}, [video?.uuid, getVideoChapterCompletion]);
+	// Get video chapter completion with reactive selector (like BookViewer)
+	const videoChapterCompletion = useAppStore((state) => 
+		video?.uuid ? (state.videos.chapterCompletion[video.uuid] || EMPTY_CHAPTER_COMPLETION) : EMPTY_CHAPTER_COMPLETION
+	);
 
 	// Convert store object to Set for backwards compatibility - memoized to prevent infinite loops
 	const completedChapters = useMemo(() => {
@@ -74,6 +70,62 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 				.map(([chapterId, _]) => chapterId),
 		);
 	}, [videoChapterCompletion]);
+
+	// Helper functions defined before their usage in effects
+	const extractChapters = useCallback((description) => {
+		if (!description) return [];
+
+		const timestampRegex =
+			/(?:^|\n)(?:[^\d]*)?(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–—]?\s*(.+?)(?=\n|$)/gm;
+
+		const chapters = [];
+		let match;
+
+		match = timestampRegex.exec(description);
+		while (match !== null) {
+			const timeStr = match[1];
+			const title = match[2].trim();
+
+			const parts = timeStr.split(":").map(Number);
+			let timestamp = 0;
+
+			if (parts.length === 3) {
+				timestamp = parts[0] * 3600 + parts[1] * 60 + parts[2];
+			} else if (parts.length === 2) {
+				timestamp = parts[0] * 60 + parts[1];
+			}
+
+			const cleanTitle = title
+				.replace(/^[^\w\s]+\s*/, "")
+				.replace(/^\([^)]+\)\s*/, "")
+				.trim();
+
+			if (cleanTitle && timestamp >= 0) {
+				chapters.push({
+					id: `chapter-${timestamp}`,
+					timestamp,
+					timeStr,
+					title: cleanTitle,
+				});
+			}
+
+			match = timestampRegex.exec(description);
+		}
+
+		return chapters.sort((a, b) => a.timestamp - b.timestamp);
+	}, []);
+
+	// Helper function to format seconds to time string
+	const formatTime = useCallback((seconds) => {
+		const hours = Math.floor(seconds / 3600);
+		const minutes = Math.floor((seconds % 3600) / 60);
+		const secs = Math.floor(seconds % 60);
+
+		if (hours > 0) {
+			return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+		}
+		return `${minutes}:${secs.toString().padStart(2, "0")}`;
+	}, []);
 
 	// Reset sync flag when video changes
 	useEffect(() => {
@@ -168,49 +220,6 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 		}
 	}, [currentTime, chapters]);
 
-	const extractChapters = (description) => {
-		if (!description) return [];
-
-		const timestampRegex =
-			/(?:^|\n)(?:[^\d]*)?(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–—]?\s*(.+?)(?=\n|$)/gm;
-
-		const chapters = [];
-		let match;
-
-		match = timestampRegex.exec(description);
-		while (match !== null) {
-			const timeStr = match[1];
-			const title = match[2].trim();
-
-			const parts = timeStr.split(":").map(Number);
-			let timestamp = 0;
-
-			if (parts.length === 3) {
-				timestamp = parts[0] * 3600 + parts[1] * 60 + parts[2];
-			} else if (parts.length === 2) {
-				timestamp = parts[0] * 60 + parts[1];
-			}
-
-			const cleanTitle = title
-				.replace(/^[^\w\s]+\s*/, "")
-				.replace(/^\([^)]+\)\s*/, "")
-				.trim();
-
-			if (cleanTitle && timestamp >= 0) {
-				chapters.push({
-					id: `chapter-${timestamp}`,
-					timestamp,
-					timeStr,
-					title: cleanTitle,
-				});
-			}
-
-			match = timestampRegex.exec(description);
-		}
-
-		return chapters.sort((a, b) => a.timestamp - b.timestamp);
-	};
-
 	const handleChapterClick = (chapter) => {
 		if (onSeek) {
 			onSeek(chapter.timestamp);
@@ -221,6 +230,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 		const chapterId = chapter.id || chapter.chapter_id;
 		const isCompleted = completedChapters.has(chapterId);
 		const newStatus = isCompleted ? "not_started" : "done";
+
 
 		// Optimistic update to store
 		setVideoChapterStatus(video.uuid, chapterId, !isCompleted);
@@ -251,8 +261,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 			// This is a description-based chapter, sync to backend
 			try {
 				// Sync to backend for homepage progress
-				const currentCompletion = getVideoChapterCompletion(video.uuid);
-				const currentCompleted = Object.entries(currentCompletion)
+				const currentCompleted = Object.entries(videoChapterCompletion)
 					.filter(([_, completed]) => completed)
 					.map(([chapterId, _]) => chapterId);
 				const totalChapters = chapters.length;
@@ -309,18 +318,6 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 		}
 	};
 
-	// Helper function to format seconds to time string
-	const formatTime = (seconds) => {
-		const hours = Math.floor(seconds / 3600);
-		const minutes = Math.floor((seconds % 3600) / 60);
-		const secs = Math.floor(seconds % 60);
-
-		if (hours > 0) {
-			return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-		}
-		return `${minutes}:${secs.toString().padStart(2, "0")}`;
-	};
-
 	const getProgress = () => {
 		if (chapters.length === 0) return 0;
 		return Math.round((completedChapters.size / chapters.length) * 100);
@@ -370,7 +367,8 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 							Chapters
 						</h4>
 						{chapters.map((chapter, index) => {
-							const isCompleted = completedChapters.has(chapter.id);
+							const chapterId = chapter.id || chapter.chapter_id;
+							const isCompleted = completedChapters.has(chapterId);
 							const isActive = activeChapter === index;
 
 							return (
