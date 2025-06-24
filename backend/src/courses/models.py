@@ -106,19 +106,16 @@ class Lesson(Base):
     )
 
 
-# Progress Model - simplified for now
+# Progress Model - matches actual database schema
 class LessonProgress(Base):
     """Model for lesson progress tracking."""
 
     __tablename__ = "progress"
 
     id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID | None] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    roadmap_id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("roadmaps.id"))
-    lesson_id: Mapped[uuid.UUID | None] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("lessons.id"))
-    is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
-    quiz_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    time_spent_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    course_id: Mapped[str] = mapped_column(String)  # Actually stores module_id - varchar in DB
+    lesson_id: Mapped[str | None] = mapped_column(String, nullable=True)  # varchar in DB
+    status: Mapped[str] = mapped_column(String(50), default="not_started")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

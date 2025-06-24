@@ -47,7 +47,7 @@ export const useAppState = () => {
 			title: "Reset Complete",
 			description: "Starting fresh with a new roadmap.",
 		});
-	}, [setActiveRoadmap, updatePreference, setShowOnboarding, resetOnboarding, toast]);
+	}, [setActiveRoadmap, updatePreference, resetOnboarding, toast]);
 
 	// Check for existing roadmap on mount
 	useEffect(() => {

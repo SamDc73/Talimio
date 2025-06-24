@@ -189,6 +189,40 @@ export async function updateModuleStatus(courseId, moduleId, status) {
 
 
 /**
+ * Update lesson status
+ * @param {string} courseId - The ID of the course
+ * @param {string} moduleId - The ID of the module
+ * @param {string} lessonId - The ID of the lesson
+ * @param {string} status - The new status (not_started, in_progress, completed)
+ * @returns {Promise<Object>} The update response
+ * @throws {Error} If the request fails
+ */
+export async function updateLessonStatus(courseId, moduleId, lessonId, status) {
+	try {
+		const response = await fetchWithTimeout(
+			`${API_BASE}/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/status`,
+			{
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ status }),
+			},
+		);
+
+		if (!response.ok) {
+			throw new Error(`Failed to update lesson status: ${response.statusText}`);
+		}
+		const data = await response.json();
+
+		// Invalidate relevant cache entries
+		progressCache.clear();
+		return data;
+	} catch (error) {
+		console.error("Error updating lesson status:", error);
+		throw error;
+	}
+}
+
+/**
  * Update a module
  * @param {string} courseId - The ID of the course
  * @param {string} moduleId - The ID of the module to update
