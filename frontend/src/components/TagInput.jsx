@@ -1,5 +1,5 @@
 import { Plus, Search, X } from "lucide-react";
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import useTagStore from "../stores/useTagStore";
 import Tag, { TagList } from "./Tag";
 
@@ -75,7 +75,7 @@ const TagInput = ({
 	};
 
 	// Handle input blur
-	const handleInputBlur = (e) => {
+	const handleInputBlur = (_e) => {
 		// Delay closing to allow click on suggestions
 		setTimeout(() => {
 			if (!dropdownRef.current?.contains(document.activeElement)) {

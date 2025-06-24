@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import HomePage from "./features/home";
 import "@xyflow/react/dist/style.css";
@@ -10,11 +10,8 @@ import {
 import { Toaster } from "./components/toaster";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { BookViewer } from "./features/book-viewer";
-// Sidebar import removed - now imported in individual components
-import { OnboardingFlow } from "./features/onboarding";
-import RoadmapFlow from "./features/roadmap";
 import RoadmapPreviewPage from "./features/roadmap/RoadmapPreviewPage";
-import { useOutlineData } from "./features/roadmap/outline/useOutlineData";
+import { CourseLayout as RoadmapFlow } from "./features/course";
 import { VideoViewer } from "./features/video-viewer";
 import { useAppState } from "./hooks/useAppState";
 import useAppStore from "./stores/useAppStore";
@@ -23,19 +20,10 @@ function RoadmapPage() {
 	const { roadmapId } = useParams();
 	const flowRef = useRef(null);
 	const { handleResetOnboarding } = useAppState();
-	const { modules, isLoading } = useOutlineData(roadmapId);
 
 	if (!roadmapId) {
 		console.warn("RoadmapPage rendered without roadmapId, redirecting.");
 		return <Navigate to="/" replace />;
-	}
-
-	if (isLoading) {
-		return (
-			<div className="flex items-center justify-center h-screen">
-				Loading...
-			</div>
-		);
 	}
 
 	return (
@@ -64,11 +52,23 @@ export default function App() {
 			<ChatSidebarProvider>
 				<div className="app-container">
 					<Routes>
+						{/* Legacy roadmap routes - maintained for backward compatibility */}
 						<Route
 							path="/roadmap/preview/:roadmapId"
 							element={<RoadmapPreviewPage />}
 						/>
 						<Route path="/roadmap/:roadmapId" element={<RoadmapPage />} />
+						<Route path="/roadmap/:roadmapId/lesson/:lessonId" element={<RoadmapPage />} />
+						
+						{/* New course routes - using same components with course IDs */}
+						<Route
+							path="/course/preview/:roadmapId"
+							element={<RoadmapPreviewPage />}
+						/>
+						<Route path="/course/:roadmapId" element={<RoadmapPage />} />
+						<Route path="/course/:roadmapId/lesson/:lessonId" element={<RoadmapPage />} />
+						
+						{/* Other content routes */}
 						<Route path="/books/:bookId" element={<BookViewer />} />
 						<Route path="/videos/:videoId" element={<VideoViewer />} />
 						<Route path="/" element={<HomePage />} />

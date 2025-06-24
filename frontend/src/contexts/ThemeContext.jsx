@@ -1,5 +1,5 @@
 import useAppStore from "@/stores/useAppStore";
-import React, { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useEffect } from "react";
 
 /**
  * Enhanced ThemeProvider using Zustand for state management

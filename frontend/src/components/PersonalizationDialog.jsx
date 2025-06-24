@@ -3,7 +3,7 @@
  */
 
 import { Brain, ChevronLeft, Eye, RotateCcw, Save, Trash2 } from "lucide-react";
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "../hooks/use-toast";
 import {
 	clearUserMemory,
@@ -19,7 +19,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "./dialog";
-import { Input } from "./input";
 import { Label } from "./label";
 
 export function PersonalizationDialog({ open, onOpenChange }) {
@@ -53,7 +52,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			setInstructions(settings.custom_instructions || "");
 			setOriginalInstructions(settings.custom_instructions || "");
 			setMemoryCount(settings.memory_count || 0);
-		} catch (error) {
+		} catch (_error) {
 			toast({
 				title: "Error",
 				description: "Failed to load personalization settings",
@@ -73,7 +72,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 				title: "Success",
 				description: "Your AI personalization has been saved",
 			});
-		} catch (error) {
+		} catch (_error) {
 			toast({
 				title: "Error",
 				description: "Failed to save personalization settings",
@@ -101,7 +100,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 				title: "Success",
 				description: "Your learning history has been cleared",
 			});
-		} catch (error) {
+		} catch (_error) {
 			toast({
 				title: "Error",
 				description: "Failed to clear learning history",
@@ -127,7 +126,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			const userMemories = await getUserMemories();
 			setMemories(userMemories);
 			setShowMemories(true);
-		} catch (error) {
+		} catch (_error) {
 			toast({
 				title: "Error",
 				description: "Failed to load memories",
@@ -142,10 +141,10 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		if (!timestamp) return "Unknown time";
 		try {
 			const date = new Date(timestamp);
-			return date.toLocaleDateString() + " " + date.toLocaleTimeString([], { 
-				hour: '2-digit', 
-				minute: '2-digit' 
-			});
+			return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {
+				hour: "2-digit",
+				minute: "2-digit",
+			})}`;
 		} catch {
 			return timestamp;
 		}
@@ -173,10 +172,9 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 						{showMemories ? "Your Learning Memories" : "Personalize Talimio"}
 					</DialogTitle>
 					<DialogDescription>
-						{showMemories 
+						{showMemories
 							? "Review your stored learning interactions and preferences"
-							: "Customize how AI responds to you based on your learning preferences and history."
-						}
+							: "Customize how AI responds to you based on your learning preferences and history."}
 					</DialogDescription>
 				</DialogHeader>
 
@@ -216,43 +214,38 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 												{memory.source}
 											</span>
 										</div>
-										{memory.metadata && Object.keys(memory.metadata).length > 0 && (
-											<div className="mt-2 flex flex-wrap gap-1">
-												{Object.entries(memory.metadata)
-													.filter(([key, value]) => 
-														key !== 'timestamp' && 
-														key !== 'source' && 
-														value && 
-														value !== 'now'
-													)
-													.map(([key, value]) => (
-														<span
-															key={key}
-															className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded"
-														>
-															{key}: {value}
-														</span>
-													))
-												}
-											</div>
-										)}
+										{memory.metadata &&
+											Object.keys(memory.metadata).length > 0 && (
+												<div className="mt-2 flex flex-wrap gap-1">
+													{Object.entries(memory.metadata)
+														.filter(
+															([key, value]) =>
+																key !== "timestamp" &&
+																key !== "source" &&
+																value &&
+																value !== "now",
+														)
+														.map(([key, value]) => (
+															<span
+																key={key}
+																className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded"
+															>
+																{key}: {value}
+															</span>
+														))}
+												</div>
+											)}
 									</div>
 								))}
 							</div>
 						)}
-						
+
 						<div className="flex justify-between pt-4">
-							<Button
-								variant="outline"
-								onClick={() => setShowMemories(false)}
-							>
+							<Button variant="outline" onClick={() => setShowMemories(false)}>
 								<ChevronLeft className="h-4 w-4 mr-2" />
 								Back to Settings
 							</Button>
-							<Button
-								variant="outline"
-								onClick={() => onOpenChange(false)}
-							>
+							<Button variant="outline" onClick={() => onOpenChange(false)}>
 								Close
 							</Button>
 						</div>
@@ -303,10 +296,9 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 												{memoryCount} memories stored
 											</p>
 											<p className="text-xs text-muted-foreground">
-												{memoryCount > 0 
+												{memoryCount > 0
 													? "Click to view your stored learning interactions"
-													: "AI learns from your interactions to provide personalized responses"
-												}
+													: "AI learns from your interactions to provide personalized responses"}
 											</p>
 										</button>
 									</div>

@@ -43,13 +43,13 @@ const RoadmapPreviewPage = () => {
 		const loadRoadmap = async () => {
 			try {
 				setIsLoading(true);
-				const response = await api.get(`/roadmaps/${roadmapId}`);
+				const response = await api.get(`/courses/${roadmapId}`);
 				setRoadmap(response);
 
 				// Parse tags from JSON string
 				let tags = [];
 				try {
-					tags = response.tagsJson ? JSON.parse(response.tagsJson) : [];
+					tags = response.tags_json ? JSON.parse(response.tags_json) : [];
 				} catch (e) {
 					console.warn("Failed to parse tags:", e);
 				}
@@ -57,7 +57,7 @@ const RoadmapPreviewPage = () => {
 				setFormData({
 					title: response.title,
 					description: response.description,
-					skillLevel: response.skillLevel,
+					skillLevel: response.skill_level,
 					tags: tags,
 				});
 			} catch (error) {
@@ -90,10 +90,10 @@ const RoadmapPreviewPage = () => {
 		setIsSaving(true);
 
 		try {
-			await api.patch(`/roadmaps/${roadmapId}`, {
+			await api.patch(`/courses/${roadmapId}`, {
 				title: formData.title,
 				description: formData.description,
-				skillLevel: formData.skillLevel,
+				skill_level: formData.skillLevel,
 			});
 
 			toast({
@@ -121,9 +121,9 @@ const RoadmapPreviewPage = () => {
 		setIsRegenerating(true);
 
 		try {
-			const response = await api.post("/roadmaps", {
+			const response = await api.post("/courses", {
 				userPrompt: originalPrompt,
-				skillLevel: formData.skillLevel,
+				skill_level: formData.skillLevel,
 			});
 
 			toast({
@@ -238,23 +238,23 @@ const RoadmapPreviewPage = () => {
 						</div>
 					</div>
 
-					{/* Roadmap Overview */}
-					{roadmap?.nodes && roadmap.nodes.length > 0 && (
+					{/* Course Overview */}
+					{roadmap?.modules && roadmap.modules.length > 0 && (
 						<div className="space-y-3">
 							<div className="flex items-center gap-2 text-sm font-medium">
 								<Target className="h-4 w-4 text-cyan-500" />
-								Learning Path Overview ({roadmap.nodes.length} topics)
+								Learning Path Overview ({roadmap.modules.length} modules)
 							</div>
 							<div className="bg-muted/30 rounded-lg p-4 space-y-2 max-h-48 overflow-y-auto">
-								{roadmap.nodes.map((node, index) => (
-									<div key={node.id} className="flex items-start gap-3 text-sm">
+								{roadmap.modules.map((module, index) => (
+									<div key={module.id} className="flex items-start gap-3 text-sm">
 										<div className="flex-shrink-0 w-6 h-6 bg-cyan-100 text-cyan-700 rounded-full flex items-center justify-center text-xs font-medium mt-0.5">
 											{index + 1}
 										</div>
 										<div className="space-y-1">
-											<div className="font-medium">{node.title}</div>
+											<div className="font-medium">{module.title}</div>
 											<div className="text-muted-foreground text-xs leading-relaxed">
-												{node.description}
+												{module.description}
 											</div>
 										</div>
 									</div>

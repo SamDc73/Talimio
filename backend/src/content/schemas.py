@@ -11,6 +11,7 @@ class ContentType(str, Enum):
     FLASHCARDS = "flashcards"
     BOOK = "book"
     ROADMAP = "roadmap"
+    COURSE = "course"  # Alias for roadmap to support frontend course terminology
 
 
 class ContentItemBase(BaseModel):
@@ -71,10 +72,20 @@ class RoadmapContent(ContentItemBase):
     model_config = {"populate_by_name": True}
 
 
+class CourseContent(ContentItemBase):
+    """Model for course content items (alias for roadmap)."""
+
+    type: ContentType = ContentType.COURSE
+    node_count: int = Field(alias="nodeCount")
+    completed_nodes: int = Field(0, alias="completedNodes")
+
+    model_config = {"populate_by_name": True}
+
+
 class ContentListResponse(BaseModel):
     """Response model for paginated content list."""
 
-    items: list[YoutubeContent | FlashcardContent | BookContent | RoadmapContent]
+    items: list[YoutubeContent | FlashcardContent | BookContent | RoadmapContent | CourseContent]
     total: int
     page: int
     page_size: int = Field(alias="pageSize")

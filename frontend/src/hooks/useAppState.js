@@ -15,16 +15,39 @@ export const useAppState = () => {
 
 	// Zustand store selectors and actions
 	const activeRoadmapId = useAppStore(
-		(state) => state.roadmaps.activeRoadmapId,
+		(state) => state.preferences?.userPreferences?.roadmapId || null,
 	);
 	const userPreferences = useAppStore(
-		(state) => state.preferences.userPreferences,
+		(state) => state.preferences?.userPreferences || null,
 	);
 	const onboardingCompleted = useAppStore(
-		(state) => state.preferences.onboardingCompleted,
+		(state) => state.preferences?.onboardingCompleted || false,
 	);
-	const setActiveRoadmap = useAppStore((state) => state.setActiveRoadmap);
 	const updatePreference = useAppStore((state) => state.updatePreference);
+	
+	// Create a setActiveRoadmap function using updatePreference
+	const setActiveRoadmap = useCallback((roadmapId) => {
+		const currentPrefs = userPreferences || {};
+		updatePreference("userPreferences", {
+			...currentPrefs,
+			roadmapId: roadmapId
+		});
+	}, [updatePreference, userPreferences]);
+
+	const handleResetOnboarding = useCallback(() => {
+		// Reset in Zustand store
+		setActiveRoadmap(null);
+		updatePreference("onboardingCompleted", false);
+		updatePreference("userPreferences", null);
+		setShowOnboarding(true);
+		setCurrentRoadmapId(null);
+		resetOnboarding();
+
+		toast({
+			title: "Reset Complete",
+			description: "Starting fresh with a new roadmap.",
+		});
+	}, [setActiveRoadmap, updatePreference, setShowOnboarding, resetOnboarding, toast]);
 
 	// Check for existing roadmap on mount
 	useEffect(() => {
@@ -55,26 +78,12 @@ export const useAppState = () => {
 			}
 		}
 	}, [
-		activeRoadmapId,
-		onboardingCompleted,
-		setActiveRoadmap,
+		activeRoadmapId, 
+		onboardingCompleted, 
+		setActiveRoadmap, 
 		updatePreference,
+		handleResetOnboarding
 	]);
-
-	const handleResetOnboarding = useCallback(() => {
-		// Reset in Zustand store
-		setActiveRoadmap(null);
-		updatePreference("onboardingCompleted", false);
-		updatePreference("userPreferences", null);
-		setShowOnboarding(true);
-		setCurrentRoadmapId(null);
-		resetOnboarding();
-
-		toast({
-			title: "Reset Complete",
-			description: "Starting fresh with a new roadmap.",
-		});
-	}, [resetOnboarding, toast, setActiveRoadmap, updatePreference]);
 
 	const handleOnboardingComplete = async (answers) => {
 		if (isLoading) return;
@@ -174,5 +183,6 @@ export const useAppState = () => {
 		isLoading,
 		handleOnboardingComplete,
 		handleResetOnboarding,
+		activeRoadmapId,
 	};
 };

@@ -21,15 +21,19 @@ from .books.router import router as books_router
 from .config.settings import get_settings
 from .content.router import router as content_router
 from .core.exceptions import ResourceNotFoundError
+from .courses.models import (  # noqa: F401
+    DocumentChunk,
+    Lesson,
+    LessonProgress as Progress,
+    Node,
+    Roadmap,
+    RoadmapDocument,
+)
 from .database.base import Base
 from .database.session import engine
 from .flashcards.models import FlashcardCard, FlashcardDeck, FlashcardReview  # noqa: F401
 from .flashcards.router import router as flashcards_router
-from .lessons import router as lessons_router
 from .onboarding.router import router as onboarding_router
-from .progress.models import Progress  # noqa: F401
-from .roadmaps.models import DocumentChunk, Node, Roadmap, RoadmapDocument  # noqa: F401
-from .roadmaps.router import nodes_router, router as roadmaps_router
 from .tagging.models import Tag, TagAssociation  # noqa: F401
 from .tagging.router import router as tagging_router
 from .user.router import router as user_router
@@ -89,6 +93,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             from src.database.migrations.add_rag_system import add_rag_system
 
             await add_rag_system()
+
+            # Run course references migration
+            from src.database.migrations.fix_course_refs import fix_course_references
+
+            await fix_course_references()
+
+            # Run timezone migration for datetime columns
+            from src.database.migrations.add_timezone_to_datetime_columns import add_timezone_to_datetime_columns
+
+            await add_timezone_to_datetime_columns(engine)
 
             break  # Success - exit the retry loop
 
@@ -162,10 +176,15 @@ def create_app() -> FastAPI:
     app.include_router(content_router)
     app.include_router(flashcards_router)
     app.include_router(rag_router)  # RAG system
-    app.include_router(roadmaps_router)
-    app.include_router(nodes_router)  # Phase 2.1: Direct node access
+
+    # Course management - new unified API
+    from src.courses.router import router as courses_router
+
+    app.include_router(courses_router)
+
+    # Legacy roadmaps API has been removed - all functionality moved to courses API
+
     app.include_router(onboarding_router)
-    app.include_router(lessons_router)
     app.include_router(tagging_router)
     app.include_router(user_router)
     app.include_router(videos_router)

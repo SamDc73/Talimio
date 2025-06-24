@@ -10,7 +10,7 @@ const handleResponse = async (response) => {
 		let errorData;
 		try {
 			errorData = await response.json();
-		} catch (e) {
+		} catch (_e) {
 			errorData = { message: response.statusText };
 		}
 		const error = new Error(

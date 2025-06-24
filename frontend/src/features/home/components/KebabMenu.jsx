@@ -1,4 +1,5 @@
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
+import TagEditModal from "@/components/TagEditModal";
 import { Button } from "@/components/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover";
 import { useToast } from "@/hooks/use-toast";
@@ -9,6 +10,7 @@ import {
 	MoreHorizontal,
 	PauseCircle,
 	PlayCircle,
+	Tag,
 	Trash2,
 } from "lucide-react";
 import { useState } from "react";
@@ -27,6 +29,7 @@ export function KebabMenu({
 }) {
 	const [open, setOpen] = useState(false);
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+	const [showTagEditModal, setShowTagEditModal] = useState(false);
 	const [isArchiving, setIsArchiving] = useState(false);
 	const { toast } = useToast();
 
@@ -83,6 +86,11 @@ export function KebabMenu({
 		setOpen(false);
 	};
 
+	const handleEditTags = () => {
+		setShowTagEditModal(true);
+		setOpen(false);
+	};
+
 	return (
 		<div
 			className="absolute top-3 right-3 z-10"
@@ -113,8 +121,10 @@ export function KebabMenu({
 						<Button
 							variant="ghost"
 							size="sm"
-							className="justify-start font-normal"
+							className="justify-start font-normal flex items-center gap-2"
+							onClick={handleEditTags}
 						>
+							<Tag className="h-4 w-4" />
 							Edit Tags
 						</Button>
 						<Button
@@ -148,15 +158,17 @@ export function KebabMenu({
 							)}
 							{isPaused ? "Resume" : "Pause"}
 						</Button>
-						<Button
-							variant="ghost"
-							size="sm"
-							className="justify-start font-normal text-red-600 hover:text-red-700 hover:bg-red-50 flex items-center gap-2"
-							onClick={handleDeleteClick}
-						>
-							<Trash2 className="h-4 w-4" />
-							Delete
-						</Button>
+						{itemType !== "course" && (
+							<Button
+								variant="ghost"
+								size="sm"
+								className="justify-start font-normal text-red-600 hover:text-red-700 hover:bg-red-50 flex items-center gap-2"
+								onClick={handleDeleteClick}
+							>
+								<Trash2 className="h-4 w-4" />
+								Delete
+							</Button>
+						)}
 					</div>
 				</PopoverContent>
 			</Popover>
@@ -168,6 +180,14 @@ export function KebabMenu({
 				description="This action cannot be undone. This item will be permanently removed from your library."
 				itemName={itemTitle}
 				onConfirm={handleConfirmDelete}
+			/>
+
+			<TagEditModal
+				open={showTagEditModal}
+				onOpenChange={setShowTagEditModal}
+				contentType={itemType}
+				contentId={itemId}
+				contentTitle={itemTitle}
 			/>
 		</div>
 	);

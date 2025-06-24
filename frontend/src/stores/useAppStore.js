@@ -424,32 +424,32 @@ const useAppStore = create(
 					});
 				},
 
-				// ========== ROADMAPS SLICE ==========
-				roadmaps: {
-					// Roadmap progress: roadmapId -> { nodeId -> completed }
-					nodeCompletion: {},
-					// Active roadmap being viewed
-					activeRoadmapId: null,
+				// ========== COURSE INTEGRATION ==========
+				// Lightweight course integration for basic tracking
+				course: {
+					// Currently active course ID (maps to useCourseStore)
+					activeCourseId: null,
+					// Last viewed course for restoration
+					lastViewedCourseId: null,
 				},
 
-				// Roadmap actions
-				updateNodeCompletion: (roadmapId, nodeId, completed) => {
+				// Course integration actions
+				setActiveCourse: (courseId) => {
 					set((state) => {
-						if (!state.roadmaps.nodeCompletion[roadmapId]) {
-							state.roadmaps.nodeCompletion[roadmapId] = {};
+						state.course.activeCourseId = courseId;
+						if (courseId) {
+							state.course.lastViewedCourseId = courseId;
 						}
-						state.roadmaps.nodeCompletion[roadmapId][nodeId] = completed;
 					});
-					// Sync to API
-					syncToAPI("roadmaps", roadmapId, {
-						nodeStatus: { nodeId, completed },
-					});
+					
+					// Forward to course store if available
+					if (typeof window !== "undefined" && window.__courseStore) {
+						window.__courseStore.getState().setActiveCourse(courseId);
+					}
 				},
 
-				setActiveRoadmap: (roadmapId) => {
-					set((state) => {
-						state.roadmaps.activeRoadmapId = roadmapId;
-					});
+				getActiveCourse: () => {
+					return get().course.activeCourseId;
 				},
 
 				// ========== CLEANUP ACTIONS ==========
@@ -510,7 +510,7 @@ const useAppStore = create(
 							metadata: {},
 							chapterCompletion: {},
 						};
-						state.roadmaps = { nodeCompletion: {}, activeRoadmapId: null };
+						state.course = { activeCourseId: null, lastViewedCourseId: null };
 						state.ui.errors = [];
 						state.ui.loading = {};
 					});
@@ -540,10 +540,10 @@ const useAppStore = create(
 										...serverData.preferences,
 									};
 								}
-								if (serverData.roadmaps) {
-									state.roadmaps = {
-										...state.roadmaps,
-										...serverData.roadmaps,
+								if (serverData.course) {
+									state.course = {
+										...state.course,
+										...serverData.course,
 									};
 								}
 							});
@@ -566,7 +566,7 @@ const useAppStore = create(
 					books: state.books,
 					videos: state.videos,
 					preferences: state.preferences,
-					roadmaps: state.roadmaps,
+					course: state.course,
 					// Don't persist UI state
 				}),
 			},

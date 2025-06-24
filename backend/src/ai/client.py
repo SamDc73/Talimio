@@ -562,8 +562,8 @@ class ModelManager:
 
 
 async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]]:
-    """
-    Generate a comprehensive lesson in Markdown format based on node metadata.
+    """Generate a comprehensive lesson in Markdown format based on node metadata.
+
     Includes RAG context from roadmap documents if roadmap_id is provided.
 
     Args:
@@ -585,25 +585,43 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
         skill_level = node_meta.get("skill_level", "beginner")
         roadmap_id = node_meta.get("roadmap_id")
 
+        # Extract course context
+        course_outline = node_meta.get("course_outline", [])
+        current_module_index = node_meta.get("current_module_index", -1)
+        course_title = node_meta.get("course_title", "")
+
         from src.ai.prompts import LESSON_GENERATION_PROMPT
 
         # Create a more detailed prompt for lesson generation
         content_info = f"{node_title} - {node_description} (Skill Level: {skill_level})"
-        
+
+        # Add course context to help AI understand where this lesson fits
+        if course_outline:
+            content_info += f"\n\nThis lesson is part of the course: {course_title}"
+            if current_module_index > 0:
+                content_info += "\n\nPrevious topics covered:"
+                for i in range(max(0, current_module_index - 2), current_module_index):
+                    content_info += f"\n- {course_outline[i]['title']}: {course_outline[i]['description']}"
+            if current_module_index < len(course_outline) - 1:
+                content_info += "\n\nUpcoming topics:"
+                for i in range(current_module_index + 1, min(len(course_outline), current_module_index + 3)):
+                    content_info += f"\n- {course_outline[i]['title']}: {course_outline[i]['description']}"
+
         # Get RAG context and citations if roadmap_id is provided
         rag_context = ""
         citations_info = []
         if roadmap_id:
             try:
                 from uuid import UUID
+
                 from src.ai.rag.service import RAGService
                 from src.database.session import async_session_maker
-                
+
                 rag_service = RAGService()
-                
+
                 # Create query from lesson topic
                 lesson_query = f"{node_title} {node_description}"
-                
+
                 async with async_session_maker() as session:
                     # Get search results with full metadata
                     search_results = await rag_service.search_documents(
@@ -612,33 +630,33 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
                         query=lesson_query,
                         top_k=5
                     )
-                    
+
                     if search_results:
                         # Build context from search results
                         context_parts = []
                         for result in search_results:
                             context_parts.append(f"[Source: {result.document_title}]\n{result.chunk_content}\n")
-                            
+
                             # Store citation info for return
                             citations_info.append({
                                 "document_id": result.document_id,
                                 "document_title": result.document_title,
                                 "similarity_score": result.similarity_score
                             })
-                        
-                        rag_context = f"\n\nReference Materials:\n" + "\n".join(context_parts)
+
+                        rag_context = "\n\nReference Materials:\n" + "\n".join(context_parts)
                         logging.info(f"Added RAG context for lesson '{node_title}' from roadmap {roadmap_id} with {len(citations_info)} citations")
-                    
+
             except Exception as e:
                 logging.warning(f"Failed to get RAG context for lesson generation: {e}")
                 # Continue without RAG context
-                
+
         prompt = LESSON_GENERATION_PROMPT.format(content=content_info + rag_context)
 
         messages = [
             {
                 "role": "system",
-                "content": "You are an expert educator creating high-quality, comprehensive learning materials. Your lessons are detailed, well-structured, and include practical examples and exercises. When reference materials are provided, incorporate them naturally into your lesson content and cite sources appropriately.",
+                "content": "You are an expert educator creating high-quality, comprehensive learning materials. Your lessons are detailed, well-structured, and include practical examples and exercises. When reference materials are provided, incorporate them naturally into your lesson content and cite sources appropriately. Pay attention to the course context - consider what students have already learned and what they will learn next to ensure proper knowledge progression and avoid redundancy.",
             },
             {"role": "user", "content": prompt},
         ]

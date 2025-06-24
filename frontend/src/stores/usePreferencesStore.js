@@ -16,7 +16,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { subscribeWithSelector } from "zustand/middleware";
 
 // Helper to clean up old entries
-const cleanupOldEntries = (state, keyPrefix, expiryDays) => {
+const cleanupOldEntries = (state, _keyPrefix, expiryDays) => {
 	const now = Date.now();
 	const maxAge = expiryDays * 24 * 60 * 60 * 1000;
 	const cleaned = {};
@@ -175,7 +175,7 @@ const usePreferencesStore = create(
 					theme: state.theme,
 					globalZoom: state.globalZoom,
 				}),
-				onRehydrateStorage: (state) => {
+				onRehydrateStorage: (_state) => {
 					return (state, error) => {
 						if (!error && state) {
 							// Clean up expired entries on load

@@ -44,7 +44,7 @@ function CourseSidebar({
 
 	return (
 		<SidebarContainer>
-			<ProgressIndicator progress={progress} />
+			<ProgressIndicator progress={progress} variant="course" />
 
 			<SidebarNav>
 				{modules.map((module, index) => {
@@ -57,12 +57,17 @@ function CourseSidebar({
 							title={module.title}
 							isExpanded={isExpanded}
 							onToggle={() => handleToggleModule(module.id)}
+							variant="course"
 							headerContent={
-								<ProgressCircle number={index + 1} progress={moduleProgress} />
+								<ProgressCircle
+									number={index + 1}
+									progress={moduleProgress}
+									variant="course"
+								/>
 							}
 						>
 							<ol>
-								{module.lessons.map((lesson) => (
+								{(module.lessons || []).map((lesson) => (
 									<SidebarItem
 										key={lesson.id}
 										title={lesson.title}
@@ -70,11 +75,13 @@ function CourseSidebar({
 										isCompleted={isLessonCompleted(lesson.id)}
 										isLocked={lesson.status === "locked"}
 										onClick={() => onLessonClick?.(module.id, lesson.id)}
+										variant="course"
 										leftContent={
 											<CompletionCheckbox
 												isCompleted={isLessonCompleted(lesson.id)}
 												isLocked={lesson.status === "locked"}
 												onClick={() => toggleLessonCompletion(lesson.id)}
+												variant="course"
 											/>
 										}
 									/>

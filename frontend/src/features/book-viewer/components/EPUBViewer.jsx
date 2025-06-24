@@ -41,7 +41,7 @@ const EPUBViewerV2 = ({ url, bookInfo, onLocationChange }) => {
 			document.addEventListener("keydown", handleKeyPress);
 			return () => document.removeEventListener("keydown", handleKeyPress);
 		}
-	}, []);
+	}, [gotoNext, gotoPrevious]);
 
 	/**
 	 * Handle location changes with store persistence
@@ -240,7 +240,8 @@ const EPUBViewerV2 = ({ url, bookInfo, onLocationChange }) => {
 			// Re-apply theme when theme preference changes
 			onRendition(renditionRef.current);
 		}
-	}, [preferences.theme]);
+	}, [// Re-apply theme when theme preference changes
+			onRendition]);
 
 	return (
 		<div className="epub-viewer-container">

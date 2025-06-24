@@ -1,5 +1,5 @@
 import { FileText, GitBranch, MessageSquare, PanelLeft } from "lucide-react";
-import React, { useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "../../lib/utils";
 import { Button } from "../button";
@@ -22,7 +22,7 @@ export function CourseHeader({
 	toggleSidebar = () => {},
 }) {
 	const { toggleChat } = useChatSidebar();
-	const [showFullTitle, setShowFullTitle] = useState(false);
+	const [_showFullTitle, _setShowFullTitle] = useState(false);
 
 	return (
 		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-border shadow-sm">

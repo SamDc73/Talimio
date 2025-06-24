@@ -8,8 +8,8 @@
 		@apply bg-background text-foreground;
 		font-feature-settings: "rlig" 1, "calt" 1;
 		font-family: var(--font-sans);
-		margin-top: 0 !important;
-		padding-top: 0 !important;
+		margin-top: 0;
+		padding-top: 0;
 	}
 
 	h1,
@@ -26,8 +26,8 @@
 html,
 body,
 #root {
-	margin: 0 !important;
-	padding: 0 !important;
+	margin: 0;
+	padding: 0;
 	width: 100%;
 	overflow-x: hidden;
 }

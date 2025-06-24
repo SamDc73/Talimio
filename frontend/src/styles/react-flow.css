@@ -10,10 +10,10 @@
 	):not(.react-flow__selection):not(.react-flow__controls):not(
 		.react-flow__minimap
 	) {
-	display: none !important;
-	opacity: 0 !important;
-	visibility: hidden !important;
-	pointer-events: none !important;
+	display: none;
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
 }
 
 /* Position React Flow controls and minimap */

@@ -6,7 +6,7 @@ import {
 	updateVideoChapterStatus,
 } from "@/services/videosService";
 import useAppStore from "@/stores/useAppStore";
-import { Clock, Download, FileText } from "lucide-react";
+import { Clock, Download, } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import CompletionCheckbox from "./CompletionCheckbox";
@@ -40,7 +40,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 	const [chapters, setChapters] = useState([]);
 	const [apiChapters, setApiChapters] = useState([]);
 	const [activeChapter, setActiveChapter] = useState(null);
-	const [isLoadingChapters, setIsLoadingChapters] = useState(false);
+	const [_isLoadingChapters, setIsLoadingChapters] = useState(false);
 	const [isExtracting, setIsExtracting] = useState(false);
 	const { toast } = useToast();
 	const hasSyncedProgress = useRef(false);
@@ -80,7 +80,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 		hasSyncedProgress.current = false;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		// video?.uuid is intentionally the only dependency - we want to reset when video changes
-	}, [video?.uuid]);
+	}, []);
 
 	// Fetch API chapters
 	useEffect(() => {
@@ -122,7 +122,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 		}
 
 		fetchApiChapters();
-	}, [video?.uuid]);
+	}, [video?.uuid, updateVideoChapterCompletion]);
 
 	// Extract chapters from description as fallback
 	useEffect(() => {
@@ -149,10 +149,10 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 			setChapters(formattedChapters);
 		}
 	}, [
-		video?.description,
-		apiChapters,
-		video?.uuid,
-		updateVideoChapterCompletion,
+		video?.description, 
+		apiChapters, 
+		video?.uuid, 
+		updateVideoChapterCompletion, extractChapters, formatTime
 	]);
 
 	useEffect(() => {
@@ -237,7 +237,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 					title: "Chapter updated",
 					description: `Chapter marked as ${newStatus.replace("_", " ")}`,
 				});
-			} catch (error) {
+			} catch (_error) {
 				// Revert optimistic update
 				setVideoChapterStatus(video.uuid, chapterId, isCompleted);
 
@@ -273,7 +273,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 					title: "Chapter updated",
 					description: `Chapter marked as ${newStatus.replace("_", " ")}`,
 				});
-			} catch (error) {
+			} catch (_error) {
 				// Revert optimistic update
 				setVideoChapterStatus(video.uuid, chapterId, isCompleted);
 
@@ -298,7 +298,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 			// Refresh chapters
 			const chapters = await getVideoChapters(video.uuid);
 			setApiChapters(chapters || []);
-		} catch (error) {
+		} catch (_error) {
 			toast({
 				title: "Error",
 				description: "Failed to extract chapters",

@@ -1,0 +1,196 @@
+"""SQLAlchemy models for the unified courses API.
+
+This module contains all models related to courses, lessons, and document management.
+Based on the actual working roadmaps.bck models to match database schema.
+"""
+
+import uuid
+from datetime import datetime
+
+from sqlalchemy import (
+    TIMESTAMP,
+    Boolean,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID as SA_UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from src.database.base import Base
+
+
+# Main Course Model (formerly Roadmap) - matches actual database schema
+class Course(Base):
+    """Model for courses (formerly roadmaps)."""
+
+    __tablename__ = "roadmaps"
+
+    id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(String, nullable=False)
+    skill_level: Mapped[str] = mapped_column(
+        Enum("beginner", "intermediate", "advanced", name="skill_level_enum"),
+        nullable=False,
+    )
+    tags_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of tags
+    archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rag_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # RAG integration flag
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    documents: Mapped[list["CourseDocument"]] = relationship(
+        "CourseDocument", back_populates="roadmap", cascade="all, delete-orphan"
+    )
+    nodes: Mapped[list["CourseModule"]] = relationship(
+        "CourseModule", back_populates="roadmap", cascade="all, delete-orphan"
+    )
+
+
+# Course Module Model (formerly Node) - matches actual database schema
+class CourseModule(Base):
+    """Model for course modules (formerly nodes)."""
+
+    __tablename__ = "nodes"
+
+    id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    roadmap_id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("roadmaps.id"))
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    order: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(50), default="not_started")
+    completion_percentage: Mapped[float] = mapped_column(Float, default=0.0)
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("nodes.id"), nullable=True)
+    label_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    # Relationships - keep original names
+    roadmap: Mapped["Course"] = relationship("Course", back_populates="nodes")
+
+
+# Lesson Model - simplified for now
+class Lesson(Base):
+    """Model for lessons."""
+
+    __tablename__ = "lessons"
+
+    id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    roadmap_id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("roadmaps.id"))
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    quiz_questions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    order: Mapped[int] = mapped_column(Integer, default=0)  # Keep consistent naming
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+
+# Progress Model - simplified for now
+class LessonProgress(Base):
+    """Model for lesson progress tracking."""
+
+    __tablename__ = "progress"
+
+    id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    roadmap_id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("roadmaps.id"))
+    lesson_id: Mapped[uuid.UUID | None] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("lessons.id"))
+    is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    quiz_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    time_spent_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+
+# Document Management Models for RAG - from working backup
+class CourseDocument(Base):
+    """Model for course documents (formerly RoadmapDocument)."""
+
+    __tablename__ = "roadmap_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    roadmap_id: Mapped[uuid.UUID] = mapped_column(SA_UUID, ForeignKey("roadmaps.id", ondelete="CASCADE"))
+    document_type: Mapped[str] = mapped_column(String(20))  # 'pdf', 'url'
+    title: Mapped[str] = mapped_column(String(255))
+    file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    crawl_date: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    parsed_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    doc_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    embedded_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # 'pending', 'processing', 'embedded', 'failed'
+
+    # Relationships
+    roadmap: Mapped["Course"] = relationship("Course", back_populates="documents")
+    chunks: Mapped[list["DocumentChunk"]] = relationship(
+        "DocumentChunk", back_populates="document", cascade="all, delete-orphan"
+    )
+
+
+class DocumentChunk(Base):
+    """Text chunk from a document with embeddings for vector search."""
+
+    __tablename__ = "document_chunks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(Integer, ForeignKey("roadmap_documents.id", ondelete="CASCADE"))
+    node_id: Mapped[str] = mapped_column(String(255), unique=True)
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    content: Mapped[str] = mapped_column(Text)
+    # Note: embedding vector column is handled by pgvector extension directly
+    token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    doc_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+
+    # Relationships
+    document: Mapped["CourseDocument"] = relationship("CourseDocument", back_populates="chunks")
+
+
+# Create aliases for backward compatibility
+Roadmap = Course
+RoadmapDocument = CourseDocument
+Node = CourseModule
+
+
+# Re-export all models
+__all__ = [
+    "Course",
+    "CourseDocument",
+    "CourseModule",
+    "DocumentChunk",
+    "Lesson",
+    "LessonProgress",
+    "Node",
+    "Roadmap",
+    "RoadmapDocument",
+]

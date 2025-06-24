@@ -21,6 +21,7 @@ class ChatRequest(BaseModel):
 
 class Citation(BaseModel):
     """Schema for document citation."""
+
     document_id: int
     document_title: str
     similarity_score: float

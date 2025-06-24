@@ -18,6 +18,9 @@ class LessonDAO:
         # Use DATABASE_URL if available, otherwise fallback to individual settings
         connection_string = os.getenv("DATABASE_URL")
         if connection_string:
+            # Convert SQLAlchemy-style URL to asyncpg-compatible URL
+            if connection_string.startswith("postgresql+asyncpg://"):
+                connection_string = connection_string.replace("postgresql+asyncpg://", "postgresql://")
             logging.info("Connecting to database using DATABASE_URL")
         else:
             # Default to localhost if not specified
@@ -50,15 +53,16 @@ class LessonDAO:
             row = await conn.fetchrow(
                 """
                 INSERT INTO lesson (
-                    id, course_id, slug, md_source, html_cache,
+                    id, course_id, slug, md_source, node_id, html_cache,
                     created_at, updated_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 RETURNING *
                 """,
                 lesson_data["id"],
                 lesson_data["course_id"],
                 lesson_data["slug"],
                 lesson_data["md_source"],
+                lesson_data.get("node_id"),
                 lesson_data.get("html_cache"),
                 lesson_data["created_at"],
                 lesson_data["updated_at"],

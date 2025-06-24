@@ -40,13 +40,14 @@ export function clearUserId() {
  */
 export function getUserHeaders() {
 	// In self-hosting mode, don't send user ID header so backend uses its default
-	const isSelfHosting = import.meta.env.VITE_AUTH_DISABLED === 'true' || 
-						  import.meta.env.VITE_SELF_HOSTING === 'true';
-	
+	const isSelfHosting =
+		import.meta.env.VITE_AUTH_DISABLED === "true" ||
+		import.meta.env.VITE_SELF_HOSTING === "true";
+
 	if (isSelfHosting) {
 		return {}; // No user header, let backend use default
 	}
-	
+
 	return {
 		"x-user-id": getUserId(),
 	};

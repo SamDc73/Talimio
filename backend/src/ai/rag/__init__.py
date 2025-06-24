@@ -3,7 +3,7 @@
 # Main service interface
 # Modular components (for direct access if needed)
 # Database models and schemas
-from src.roadmaps.models import DocumentChunk, RoadmapDocument
+from src.courses.models import DocumentChunk, RoadmapDocument
 
 from .chunker import BasicChunker, ChunkerFactory, LlamaIndexChunker
 from .ingest import DocumentProcessor, PDFIngestor, URLIngestor
