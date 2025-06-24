@@ -49,7 +49,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		} finally {
 			setIsLoading(false);
 		}
-	}, [toast]);
+	}, []);
 
 	// Load user settings when dialog opens
 	useEffect(() => {

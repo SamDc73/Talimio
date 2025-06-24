@@ -153,7 +153,7 @@ class RAGService:
 
         docs = []
         for row in result.fetchall():
-            row_dict = dict(row)
+            row_dict = row._asdict()
             docs.append(DocumentResponse(
                 id=row_dict["id"],
                 roadmap_id=row_dict["roadmap_id"],
@@ -168,7 +168,7 @@ class RAGService:
                 processed_at=row_dict.get("processed_at"),
                 embedded_at=row_dict.get("embedded_at"),
                 status=row_dict["status"],
-                doc_metadata=row_dict.get("metadata")
+                doc_metadata=row_dict.get("doc_metadata")
             ))
         return docs
 

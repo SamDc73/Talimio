@@ -1,37 +1,48 @@
 /**
  * Course Creation Modal - Enhanced for document uploads and prompt-based creation
  * 
- * This modal supports both:
+ * This modal supports three modes:
  * 1. AI-generated courses from prompts (existing functionality)
- * 2. Document-based course creation (new functionality)
+ * 2. Document-based course creation (existing functionality)
+ * 3. RAG-enhanced course creation with multiple documents (new functionality)
  */
 
 import { useState, useCallback } from "react";
-import { X, Upload, FileText, Sparkles, AlertCircle } from "lucide-react";
+import { X, Upload, FileText, Sparkles, AlertCircle, BookOpen } from "lucide-react";
 import { Button } from "../../components/button";
 import { useCourseService } from "./api/courseApi";
+import { useDocumentsService } from "./api/documentsApi";
 import { useCourseNavigation } from "../../utils/navigationUtils";
 import { useToast } from "../../hooks/use-toast";
+import DocumentUploader from "./components/DocumentUploader";
+import { DocumentStatusSummary } from "./components/DocumentStatusBadge";
 
 const CourseCreationModal = ({ 
   isOpen, 
   onClose, 
   onSuccess,
   defaultPrompt = "",
-  defaultMode = "prompt" // "prompt" or "document"
+  defaultMode = "prompt" // "prompt", "document", or "rag"
 }) => {
   const [creationMode, setCreationMode] = useState(defaultMode);
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
   
-  // Document upload states
+  // Document upload states (legacy single document)
   const [selectedFile, setSelectedFile] = useState(null);
   const [courseTitle, setCourseTitle] = useState("");
   const [courseDescription, setCourseDescription] = useState("");
   const [isExtractingMetadata, setIsExtractingMetadata] = useState(false);
   
+  // RAG documents states (new multi-document support)
+  const [ragDocuments, setRagDocuments] = useState([]);
+  const [ragCourseTitle, setRagCourseTitle] = useState("");
+  const [ragCourseDescription, setRagCourseDescription] = useState("");
+  const [isUploadingDocuments, setIsUploadingDocuments] = useState(false);
+  
   const courseService = useCourseService();
+  const documentsService = useDocumentsService();
   const { goToCoursePreview } = useCourseNavigation();
   const { toast } = useToast();
 
@@ -82,6 +93,75 @@ const CourseCreationModal = ({
       setIsExtractingMetadata(false);
     }
   }, [courseService, toast]);
+
+  // Handle RAG documents change
+  const handleRagDocumentsChange = useCallback((documents) => {
+    setRagDocuments(documents);
+    
+    // Auto-suggest course title from first document if not set
+    if (!ragCourseTitle && documents.length > 0) {
+      setRagCourseTitle(documents[0].title || "New Course");
+    }
+  }, [ragCourseTitle]);
+
+  // Handle RAG-enhanced course creation
+  const handleRagSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (ragDocuments.length === 0 || !ragCourseTitle.trim()) {
+      setError("Please add at least one document and provide a course title");
+      return;
+    }
+
+    setIsUploadingDocuments(true);
+    setError("");
+
+    try {
+      // Step 1: Create the course with RAG enabled
+      const courseData = await courseService.createCourse({
+        prompt: ragCourseDescription.trim() || `Create a course based on uploaded documents: ${ragCourseTitle}`,
+        title: ragCourseTitle.trim(),
+        description: ragCourseDescription.trim(),
+        rag_enabled: true // Auto-enable RAG when documents are present
+      });
+
+      if (!courseData?.id) {
+        throw new Error("Failed to create course - no response data");
+      }
+
+      // Step 2: Upload documents to the course
+      const documentService = useDocumentsService(courseData.id);
+      const uploadResults = await documentService.uploadMultipleDocuments(
+        ragDocuments.map((doc, index) => ({ ...doc, index }))
+      );
+
+      // Check upload results
+      if (uploadResults.errors.length > 0) {
+        toast({
+          title: "Some documents failed to upload",
+          description: `${uploadResults.results.length} documents uploaded successfully, ${uploadResults.errors.length} failed.`,
+          variant: "destructive",
+        });
+        
+        // Still proceed to course but warn user
+        console.warn("Document upload errors:", uploadResults.errors);
+      } else {
+        toast({
+          title: "Course Created with Documents!",
+          description: `"${ragCourseTitle}" has been created with ${ragDocuments.length} document(s).`,
+        });
+      }
+
+      if (onSuccess) onSuccess(courseData);
+      goToCoursePreview(courseData.id);
+      onClose();
+    } catch (err) {
+      console.error("RAG course creation failed:", err);
+      setError(err.message || "Failed to create course with documents. Please try again.");
+    } finally {
+      setIsUploadingDocuments(false);
+    }
+  };
 
   // Handle prompt-based course creation
   const handlePromptSubmit = async (e) => {
@@ -162,19 +242,22 @@ const CourseCreationModal = ({
   };
 
   const handleClose = () => {
-    if (!isGenerating && !isExtractingMetadata) {
+    if (!isGenerating && !isExtractingMetadata && !isUploadingDocuments) {
       // Reset all states
       setPrompt("");
       setSelectedFile(null);
       setCourseTitle("");
       setCourseDescription("");
+      setRagDocuments([]);
+      setRagCourseTitle("");
+      setRagCourseDescription("");
       setError("");
       setCreationMode(defaultMode);
       onClose();
     }
   };
 
-  const isProcessing = isGenerating || isExtractingMetadata;
+  const isProcessing = isGenerating || isExtractingMetadata || isUploadingDocuments;
 
   if (!isOpen) return null;
 
@@ -198,12 +281,12 @@ const CourseCreationModal = ({
 
         {/* Mode Selection */}
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex space-x-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
+          <div className="grid grid-cols-3 gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
             <button
               type="button"
               onClick={() => setCreationMode("prompt")}
               disabled={isProcessing}
-              className={`flex-1 flex items-center justify-center space-x-2 py-2 px-4 rounded-md text-sm font-medium transition-colors disabled:opacity-50 ${
+              className={`flex items-center justify-center space-x-2 py-2 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-50 ${
                 creationMode === "prompt"
                   ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm"
                   : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
@@ -216,14 +299,27 @@ const CourseCreationModal = ({
               type="button"
               onClick={() => setCreationMode("document")}
               disabled={isProcessing}
-              className={`flex-1 flex items-center justify-center space-x-2 py-2 px-4 rounded-md text-sm font-medium transition-colors disabled:opacity-50 ${
+              className={`flex items-center justify-center space-x-2 py-2 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-50 ${
                 creationMode === "document"
                   ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm"
                   : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
               }`}
             >
               <Upload className="h-4 w-4" />
-              <span>Upload Document</span>
+              <span>Single Document</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCreationMode("rag")}
+              disabled={isProcessing}
+              className={`flex items-center justify-center space-x-2 py-2 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-50 ${
+                creationMode === "rag"
+                  ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+              }`}
+            >
+              <BookOpen className="h-4 w-4" />
+              <span>Multi-Document RAG</span>
             </button>
           </div>
         </div>
@@ -348,6 +444,76 @@ const CourseCreationModal = ({
                 </p>
               </div>
             </form>
+          ) : creationMode === "rag" ? (
+            /* RAG multi-document creation form */
+            <form onSubmit={handleRagSubmit}>
+              {/* Document Uploader */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                  Course Documents
+                </label>
+                <DocumentUploader
+                  onDocumentsChange={handleRagDocumentsChange}
+                  initialDocuments={ragDocuments}
+                  maxFiles={10}
+                  disabled={isProcessing}
+                  showPreview={true}
+                />
+                
+                {/* Document Status Summary */}
+                {ragDocuments.length > 0 && (
+                  <div className="mt-3">
+                    <DocumentStatusSummary documents={ragDocuments} />
+                  </div>
+                )}
+              </div>
+
+              {/* Course Title */}
+              <div className="mb-4">
+                <label htmlFor="rag-course-title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Course Title *
+                </label>
+                <input
+                  id="rag-course-title"
+                  type="text"
+                  value={ragCourseTitle}
+                  onChange={(e) => setRagCourseTitle(e.target.value)}
+                  placeholder="Enter course title..."
+                  disabled={isProcessing}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50"
+                  maxLength={200}
+                />
+              </div>
+
+              {/* Course Description */}
+              <div className="mb-4">
+                <label htmlFor="rag-course-description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Course Description (Optional)
+                </label>
+                <textarea
+                  id="rag-course-description"
+                  value={ragCourseDescription}
+                  onChange={(e) => setRagCourseDescription(e.target.value)}
+                  placeholder="Describe what the course should focus on, or leave blank to auto-generate from documents..."
+                  disabled={isProcessing}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-none disabled:opacity-50"
+                  rows={3}
+                  maxLength={500}
+                />
+                <div className="text-right text-xs text-gray-500 mt-1">
+                  {ragCourseDescription.length}/500 characters
+                </div>
+              </div>
+
+              {/* Info for RAG creation */}
+              <div className="mb-6 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md">
+                <p className="text-sm text-purple-700 dark:text-purple-300">
+                  <strong>RAG-Enhanced Course:</strong> Your documents will be processed and integrated 
+                  into an AI-powered course that can answer questions and generate lessons based on your content.
+                  Documents will be automatically searchable during lessons and assistant conversations.
+                </p>
+              </div>
+            </form>
           )}
 
           {/* Processing Status */}
@@ -357,6 +523,17 @@ const CourseCreationModal = ({
                 <div className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin" />
                 <p className="text-sm text-yellow-700 dark:text-yellow-300">
                   Analyzing document and extracting metadata...
+                </p>
+              </div>
+            </div>
+          )}
+
+          {isUploadingDocuments && (
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Creating course and uploading documents...
                 </p>
               </div>
             </div>
@@ -384,11 +561,16 @@ const CourseCreationModal = ({
             </Button>
             <Button
               type="submit"
-              onClick={creationMode === "prompt" ? handlePromptSubmit : handleDocumentSubmit}
+              onClick={
+                creationMode === "prompt" ? handlePromptSubmit : 
+                creationMode === "document" ? handleDocumentSubmit : 
+                handleRagSubmit
+              }
               disabled={
                 isProcessing || 
                 (creationMode === "prompt" && !prompt.trim()) ||
-                (creationMode === "document" && (!selectedFile || !courseTitle.trim()))
+                (creationMode === "document" && (!selectedFile || !courseTitle.trim())) ||
+                (creationMode === "rag" && (ragDocuments.length === 0 || !ragCourseTitle.trim()))
               }
               className="min-w-[120px]"
             >
@@ -396,7 +578,12 @@ const CourseCreationModal = ({
                 <div className="flex items-center space-x-2">
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   <span>
-                    {isExtractingMetadata ? "Analyzing..." : "Creating..."}
+                    {isExtractingMetadata 
+                      ? "Analyzing..." 
+                      : isUploadingDocuments 
+                      ? "Uploading..." 
+                      : "Creating..."
+                    }
                   </span>
                 </div>
               ) : (
