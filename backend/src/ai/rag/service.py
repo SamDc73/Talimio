@@ -88,9 +88,9 @@ class RAGService:
 
             # Process document using appropriate ingestor
             if doc_row.document_type == "pdf":
-                markdown_content = await self.document_processor.process_pdf_document(doc_row.file_path)
+                text_content = await self.document_processor.process_pdf_document(doc_row.file_path)
             else:  # url
-                markdown_content, crawl_date = await self.document_processor.process_url_document(doc_row.url)
+                text_content, crawl_date = await self.document_processor.process_url_document(doc_row.url)
                 await session.execute(
                     text("UPDATE roadmap_documents SET crawl_date = :crawl_date WHERE id = :doc_id"),
                     {"crawl_date": crawl_date, "doc_id": document_id},
@@ -99,11 +99,11 @@ class RAGService:
             # Store parsed content
             await session.execute(
                 text("UPDATE roadmap_documents SET parsed_content = :content WHERE id = :doc_id"),
-                {"content": markdown_content, "doc_id": document_id},
+                {"content": text_content, "doc_id": document_id},
             )
 
             # Chunk text using modular chunker
-            chunks = self.chunker.chunk_text(markdown_content)
+            chunks = self.chunker.chunk_text(text_content)
 
             # Store chunks with embeddings using vector store
             await self.vector_store.store_chunks_with_embeddings(session, document_id, chunks)
