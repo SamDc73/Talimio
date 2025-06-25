@@ -4,10 +4,8 @@ import hashlib
 import uuid
 from datetime import UTC, datetime
 
-import aiohttp
 import fitz  # PyMuPDF
-from markdownify import markdownify
-from readabilipy import simple_json_from_html_string
+from goose3 import Goose
 
 from src.ai.constants import rag_config
 
@@ -45,23 +43,28 @@ class PDFIngestor:
 class URLIngestor:
     """Extract clean content from web URLs."""
 
+    def __init__(self) -> None:
+        """Initialize URLIngestor with Goose3 configuration."""
+        self.goose = Goose()
+
     async def process_url(self, url: str) -> tuple[str, datetime]:
-        """Extract clean webpage content as markdown."""
-        async with (
-            aiohttp.ClientSession() as session,
-            session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response,
-        ):
-            response.raise_for_status()
-            content = await response.read()
+        """Extract clean webpage content as plain text using Goose3."""
+        # Goose3 is synchronous, so we'll run it in the current thread
+        # For production use, consider running in executor for true async
+        article = self.goose.extract(url=url)
 
-        # Extract clean content using ReadabiliPy
-        article = simple_json_from_html_string(content, use_readability=True)
+        # Get clean text content from the article
+        clean_text = article.cleaned_text
 
-        # Convert to markdown
-        markdown_content = markdownify(article["content"])
+        # Also get metadata if needed
+        # title = article.title
+        # meta_description = article.meta_description
+        # authors = article.authors
+        # publish_date = article.publish_date
+
         crawl_date = datetime.now(tz=UTC)
 
-        return markdown_content, crawl_date
+        return clean_text, crawl_date
 
 
 class DocumentProcessor:
