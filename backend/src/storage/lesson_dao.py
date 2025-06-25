@@ -47,7 +47,7 @@ class LessonDAO:
 
     @classmethod
     async def insert(cls, lesson_data: dict[str, Any]) -> dict[str, Any] | None:
-        """Insert a new lesson into the database."""
+        """Insert a new lesson into the database or return existing one if it already exists."""
         conn = await cls.get_connection()
         try:
             row = await conn.fetchrow(
@@ -56,6 +56,7 @@ class LessonDAO:
                     id, course_id, slug, md_source, node_id, html_cache,
                     created_at, updated_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ON CONFLICT (id) DO NOTHING
                 RETURNING *
                 """,
                 lesson_data["id"],
@@ -67,6 +68,11 @@ class LessonDAO:
                 lesson_data["created_at"],
                 lesson_data["updated_at"],
             )
+            
+            # If insert was skipped due to conflict, fetch the existing record
+            if row is None:
+                row = await conn.fetchrow("SELECT * FROM lesson WHERE id = $1", lesson_data["id"])
+            
             return cls._record_to_dict(row)
         finally:
             await conn.close()
