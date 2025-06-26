@@ -67,7 +67,7 @@ class Mem0Wrapper:
             },
             "embedder": {
                 "provider": "openai",
-                "config": {"model": os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"), "embedding_dims": 1536},
+                "config": {"model": os.getenv("MEMORY_EMBEDDING_MODEL", "text-embedding-3-small"), "embedding_dims": 1536},
             },
         }
 
