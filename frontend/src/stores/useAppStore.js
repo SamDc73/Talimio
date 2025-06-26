@@ -338,6 +338,10 @@ const useAppStore = create(
 					userPreferences: null,
 					// UI preferences
 					sidebarOpen: true,
+					// Assistant preferences
+					assistantSidebarPinned: false,
+					assistantModel: null, // Will be set from available models
+					assistantSidebarWidth: 400, // Default width in pixels
 				},
 
 				// Preferences actions
@@ -358,6 +362,31 @@ const useAppStore = create(
 								? "system"
 								: "light";
 					get().updatePreference("theme", next);
+				},
+
+				// Assistant preference actions
+				toggleAssistantSidebarPin: () => {
+					const current = get().preferences.assistantSidebarPinned;
+					get().updatePreference("assistantSidebarPinned", !current);
+				},
+
+				setAssistantModel: (modelId) => {
+					get().updatePreference("assistantModel", modelId);
+				},
+
+				setAssistantSidebarWidth: (width) => {
+					// Ensure width is within reasonable bounds
+					const clampedWidth = Math.max(300, Math.min(800, width));
+					get().updatePreference("assistantSidebarWidth", clampedWidth);
+				},
+
+				getAssistantPreferences: () => {
+					const { assistantSidebarPinned, assistantModel, assistantSidebarWidth } = get().preferences;
+					return {
+						sidebarPinned: assistantSidebarPinned,
+						model: assistantModel,
+						sidebarWidth: assistantSidebarWidth,
+					};
 				},
 
 				// ========== UI SLICE ==========
@@ -588,5 +617,13 @@ export const selectTocProgress = (bookId) => (state) =>
 	state.books.tocProgress[bookId] || {};
 export const selectProgressStats = (bookId) => (state) =>
 	state.books.progressStats[bookId];
+
+// Assistant selectors
+export const selectAssistantSidebarPinned = (state) => 
+	state.preferences.assistantSidebarPinned;
+export const selectAssistantModel = (state) => 
+	state.preferences.assistantModel;
+export const selectAssistantPreferences = (state) => 
+	state.getAssistantPreferences();
 
 export default useAppStore;

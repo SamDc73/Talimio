@@ -4,6 +4,7 @@ import {
 	Bot,
 	Brain,
 	FileText,
+	GripVertical,
 	HelpCircle,
 	Layers,
 	LogOut,
@@ -27,6 +28,7 @@ import {
 	useState,
 	useEffect,
 	useRef,
+	useCallback,
 	createContext,
 	useContext,
 } from "react";
@@ -35,6 +37,7 @@ import { useTheme } from "../../contexts/ThemeContext";
 import { cn } from "../../lib/utils";
 import { useAssistantChat } from "../../services/assistantApi";
 import { PersonalizationDialog } from "../PersonalizationDialog";
+import useAppStore from "../../stores/useAppStore";
 import { Button } from "../button";
 import {
 	DropdownMenu,
@@ -230,8 +233,74 @@ export function ChatSidebar() {
 	const messagesEndRef = useRef(null);
 	const { theme } = useTheme();
 	const isDarkMode = theme === "dark";
-	const [isPinned, setIsPinned] = useState(false);
-	const { sendMessage } = useAssistantChat();
+	const assistantSidebarPinned = useAppStore((state) => state.preferences.assistantSidebarPinned);
+	const assistantSidebarWidth = useAppStore((state) => state.preferences.assistantSidebarWidth);
+	const toggleAssistantSidebarPin = useAppStore((state) => state.toggleAssistantSidebarPin);
+	const setAssistantSidebarWidth = useAppStore((state) => state.setAssistantSidebarWidth);
+	const { sendMessage, sendStreamingMessage } = useAssistantChat();
+	const [useStreaming, _setUseStreaming] = useState(true); // Default to streaming
+	const [isResizing, setIsResizing] = useState(false);
+	const [startX, setStartX] = useState(0);
+	const [startWidth, setStartWidth] = useState(0);
+
+	// Resize handlers
+	const handleResizeStart = useCallback((e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		setIsResizing(true);
+		setStartX(e.clientX);
+		setStartWidth(assistantSidebarWidth);
+		document.body.style.userSelect = "none"; // Prevent text selection during resize
+		document.body.style.cursor = "col-resize"; // Set global cursor
+	}, [assistantSidebarWidth]);
+
+	const handleResizeMove = useCallback((e) => {
+		if (!isResizing) return;
+		e.preventDefault();
+		
+		// Calculate new width (drag left to make wider, right to make narrower)
+		const deltaX = startX - e.clientX;
+		const newWidth = startWidth + deltaX;
+		
+		// Apply width with constraints (min: 300px, max: 800px)
+		const clampedWidth = Math.max(300, Math.min(800, newWidth));
+		setAssistantSidebarWidth(clampedWidth);
+	}, [isResizing, startX, startWidth, setAssistantSidebarWidth]);
+
+	const handleResizeEnd = useCallback(() => {
+		if (!isResizing) return;
+		setIsResizing(false);
+		document.body.style.userSelect = ""; // Restore text selection
+		document.body.style.cursor = ""; // Reset global cursor
+	}, [isResizing]);
+
+	// Keyboard resize handler
+	const handleKeyDown = useCallback((e) => {
+		if (e.key === 'ArrowLeft') {
+			e.preventDefault();
+			const newWidth = assistantSidebarWidth + (e.shiftKey ? 50 : 10);
+			const clampedWidth = Math.max(300, Math.min(800, newWidth));
+			setAssistantSidebarWidth(clampedWidth);
+		} else if (e.key === 'ArrowRight') {
+			e.preventDefault();
+			const newWidth = assistantSidebarWidth - (e.shiftKey ? 50 : 10);
+			const clampedWidth = Math.max(300, Math.min(800, newWidth));
+			setAssistantSidebarWidth(clampedWidth);
+		}
+	}, [assistantSidebarWidth, setAssistantSidebarWidth]);
+
+	// Add event listeners for resize
+	useEffect(() => {
+		if (isResizing) {
+			document.addEventListener("mousemove", handleResizeMove);
+			document.addEventListener("mouseup", handleResizeEnd);
+			
+			return () => {
+				document.removeEventListener("mousemove", handleResizeMove);
+				document.removeEventListener("mouseup", handleResizeEnd);
+			};
+		}
+	}, [isResizing, handleResizeEnd, handleResizeMove]);
 
 	// Scroll to bottom when messages change
 	useEffect(() => {
@@ -249,6 +318,7 @@ export function ChatSidebar() {
 			timestamp: new Date(),
 		};
 		setMessages((prev) => [...prev, userMessage]);
+		const userInput = inputValue; // Save input before clearing
 		setInputValue("");
 		setIsLoading(true);
 
@@ -258,18 +328,46 @@ export function ChatSidebar() {
 				role: msg.role,
 				content: msg.content,
 			}));
-			conversationHistory.push({ role: "user", content: inputValue });
 
-			// Send message to API
-			const response = await sendMessage(inputValue, conversationHistory);
+			if (useStreaming) {
+				// Add placeholder for assistant message
+				const assistantMessageId = (Date.now() + 1).toString();
+				const assistantMessage = {
+					id: assistantMessageId,
+					content: "",
+					role: "assistant",
+					timestamp: new Date(),
+				};
+				setMessages((prev) => [...prev, assistantMessage]);
+				setIsLoading(false); // Turn off loading immediately since we have a placeholder
 
-			const assistantMessage = {
-				id: (Date.now() + 1).toString(),
-				content: response.response,
-				role: "assistant",
-				timestamp: new Date(),
-			};
-			setMessages((prev) => [...prev, assistantMessage]);
+				// Send streaming message
+				await sendStreamingMessage(
+					userInput,
+					conversationHistory,
+					(_chunk, fullResponse) => {
+						// Update the assistant message with streaming content
+						setMessages((prev) =>
+							prev.map((msg) =>
+								msg.id === assistantMessageId
+									? { ...msg, content: fullResponse }
+									: msg,
+							),
+						);
+					},
+				);
+			} else {
+				// Send regular message
+				const response = await sendMessage(userInput, conversationHistory);
+
+				const assistantMessage = {
+					id: (Date.now() + 1).toString(),
+					content: response.response,
+					role: "assistant",
+					timestamp: new Date(),
+				};
+				setMessages((prev) => [...prev, assistantMessage]);
+			}
 		} catch (error) {
 			console.error("Failed to send message:", error);
 			const errorMessage = {
@@ -286,8 +384,8 @@ export function ChatSidebar() {
 
 	useEffect(() => {
 		// Add padding to main content when sidebar is pinned and open
-		if (isPinned && isChatOpen) {
-			document.body.style.paddingRight = "384px"; // 96 * 4 = 384px (for md:w-96)
+		if (assistantSidebarPinned && isChatOpen) {
+			document.body.style.paddingRight = `${assistantSidebarWidth}px`;
 		} else {
 			document.body.style.paddingRight = "0";
 		}
@@ -295,13 +393,13 @@ export function ChatSidebar() {
 		return () => {
 			document.body.style.paddingRight = "0";
 		};
-	}, [isPinned, isChatOpen]);
+	}, [assistantSidebarPinned, isChatOpen, assistantSidebarWidth]);
 
 	return (
 		<>
 			{/* Overlay when sidebar is open on mobile */}
 			<AnimatePresence>
-				{isChatOpen && !isPinned && (
+				{isChatOpen && !assistantSidebarPinned && (
 					<motion.div
 						initial={{ opacity: 0 }}
 						animate={{ opacity: 0.5 }}
@@ -315,21 +413,56 @@ export function ChatSidebar() {
 			{/* Chat Sidebar */}
 			<motion.div
 				className={cn(
-					"fixed top-0 right-0 z-50 h-screen shadow-xl",
+					"fixed top-0 right-0 z-50 h-screen shadow-xl relative",
 					isDarkMode ? "bg-zinc-900 text-white" : "bg-white text-foreground",
 					"border-l",
 					isDarkMode ? "border-zinc-800" : "border-slate-200",
-					isPinned ? "w-80 md:w-96" : "w-80 md:w-96",
 				)}
+				style={{ 
+					width: `${assistantSidebarWidth}px`,
+					transition: isResizing ? "none" : "width 0.2s ease-out"
+				}}
 				initial={{ x: "100%" }}
 				animate={{
 					x: isChatOpen ? 0 : "100%",
-					position: isPinned && isChatOpen ? "fixed" : "fixed",
+					position: assistantSidebarPinned && isChatOpen ? "fixed" : "fixed",
 					boxShadow:
-						isPinned && isChatOpen ? "none" : "-4px 0 15px rgba(0, 0, 0, 0.1)",
+						assistantSidebarPinned && isChatOpen ? "none" : "-4px 0 15px rgba(0, 0, 0, 0.1)",
 				}}
 				transition={{ type: "spring", damping: 20, stiffness: 300 }}
 			>
+				{/* Resize Handle */}
+				<div
+					role="slider"
+					aria-orientation="vertical"
+					aria-label="Resize sidebar width"
+					aria-valuemin={300}
+					aria-valuemax={800}
+					aria-valuenow={assistantSidebarWidth}
+					tabIndex={0}
+					className={cn(
+						"absolute left-0 top-0 bottom-0 w-3 cursor-col-resize z-10 group",
+						"hover:bg-blue-500/50 transition-colors duration-150",
+						"active:bg-blue-600/70 focus:outline-none focus:ring-2 focus:ring-blue-500",
+						isDarkMode ? "bg-zinc-700/30" : "bg-slate-300/30",
+						isResizing && "bg-blue-500/70"
+					)}
+					onMouseDown={handleResizeStart}
+					onKeyDown={handleKeyDown}
+					style={{
+						touchAction: 'none', // Prevent touch scrolling
+					}}
+					title="Drag to resize sidebar (Arrow keys to resize, Shift+Arrow for larger steps)"
+				>
+					<div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+						<GripVertical className={cn(
+							"h-5 w-5 transition-opacity duration-150",
+							isDarkMode ? "text-zinc-400" : "text-slate-500",
+							"group-hover:opacity-100",
+							isResizing ? "opacity-100" : "opacity-50"
+						)} />
+					</div>
+				</div>
 				{/* Header */}
 				<div
 					className={cn(
@@ -350,20 +483,20 @@ export function ChatSidebar() {
 						<Button
 							variant="ghost"
 							size="icon"
-							onClick={() => setIsPinned(!isPinned)}
+							onClick={toggleAssistantSidebarPin}
 							className={cn(
 								isDarkMode
 									? "text-zinc-400 hover:text-white"
 									: "text-muted-foreground hover:text-foreground",
 							)}
 						>
-							{isPinned ? (
+							{assistantSidebarPinned ? (
 								<PinOff className="h-5 w-5" />
 							) : (
 								<Pin className="h-5 w-5" />
 							)}
 							<span className="sr-only">
-								{isPinned ? "Unpin Chat" : "Pin Chat"}
+								{assistantSidebarPinned ? "Unpin Chat" : "Pin Chat"}
 							</span>
 						</Button>
 						<Button
@@ -396,16 +529,6 @@ export function ChatSidebar() {
 										: "bg-slate-100",
 							)}
 						>
-							<div className="flex items-center gap-2 mb-1">
-								{message.role === "assistant" ? (
-									<Bot className="h-4 w-4" />
-								) : (
-									<User className="h-4 w-4" />
-								)}
-								<span className="text-xs opacity-70">
-									{message.role === "assistant" ? "Assistant" : "You"}
-								</span>
-							</div>
 							<p className="text-sm">{message.content}</p>
 						</div>
 					))}
@@ -416,11 +539,7 @@ export function ChatSidebar() {
 								isDarkMode ? "bg-zinc-800" : "bg-slate-100",
 							)}
 						>
-							<div className="flex items-center gap-2 mb-1">
-								<Bot className="h-4 w-4" />
-								<span className="text-xs opacity-70">Assistant</span>
-							</div>
-							<div className="flex gap-1 mt-2">
+							<div className="flex gap-1">
 								<div className="h-2 w-2 rounded-full bg-current animate-bounce" />
 								<div className="h-2 w-2 rounded-full bg-current animate-bounce delay-75" />
 								<div className="h-2 w-2 rounded-full bg-current animate-bounce delay-150" />
