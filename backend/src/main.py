@@ -66,6 +66,15 @@ async def create_tables() -> None:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events."""
     # Startup
+    # Validate RAG configuration
+    try:
+        from src.ai.constants import rag_config
+        rag_config.validate_config()
+        logger.info("RAG configuration validated successfully")
+    except ValueError as e:
+        logger.error(f"Invalid RAG configuration: {e}")
+        raise
+
     max_retries = 5
     retry_delay = 1  # seconds
 
