@@ -64,7 +64,7 @@ The frontend uses Vite for configuration. All frontend environment variables mus
 | `JWT_SECRET_KEY` | Secret key for JWT tokens | `test-secret-key-change-in-production` | `your-secret-key` |
 | `JWT_ALGORITHM` | JWT signing algorithm | `HS256` | `HS256` |
 | `JWT_EXPIRE_HOURS` | JWT token expiration in hours | `24` | `72` |
-| `AUTH_DISABLED` | Disable authentication (dev only) | `false` | `true` |
+| `AUTH_DISABLED` | Disable authentication for single-user mode | `false` | `true` |
 
 ### AI Model API Keys
 
@@ -82,10 +82,28 @@ The frontend uses Vite for configuration. All frontend environment variables mus
 
 | Variable | Description | Default | Example |
 |----------|-------------|---------|---------|
-| `MEMORY_EMBEDDING_MODEL` | Model for memory embeddings | `huggingface/Qwen/Qwen3-Embedding-8B` | `openai/text-embedding-3-small` |
+| `MEMORY_EMBEDDING_MODEL` | Model for memory embeddings | `text-embedding-3-small` | `openai/text-embedding-3-small` |
 | `MEMORY_LLM_MODEL` | LLM model for memory processing | `openai/gpt-4o-mini` | `anthropic/claude-3-sonnet` |
 | `MAX_MEMORIES_PER_USER` | Maximum memories per user | `1000` | `500` |
 | `MEMORY_RELEVANCE_THRESHOLD` | Relevance threshold for memory retrieval | `0.7` | `0.8` |
+
+### RAG System Settings
+
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `RAG_LLM_MODEL` | LLM model for RAG responses | `gpt-4o-mini` | `openai/gpt-4o-mini` |
+| `RAG_EMBEDDING_MODEL` | Model for document embeddings | `text-embedding-3-small` | `openai/text-embedding-3-small` |
+| `RAG_EMBEDDING_OUTPUT_DIM` | Embedding dimensions | `1536` | `1536` |
+| `RAG_EMBED_INSTRUCTION` | Instruction prefix for embeddings | `Represent the query for semantic retrieval:` | `Search for:` |
+| `RAG_CHUNK_SIZE` | Document chunk size in tokens | `1000` | `2000` |
+| `RAG_CHUNK_OVERLAP` | Overlap between chunks | `100` | `200` |
+| `RAG_TOP_K` | Number of chunks to retrieve | `50` | `100` |
+| `RAG_RERANK_K` | Number of chunks after reranking | `5` | `10` |
+| `RAG_RERANK_MODEL` | Model for reranking results | `Qwen3-Reranker-0.6B` | `Qwen3-Reranker-0.6B` |
+| `RAG_RERANK_ENABLED` | Enable reranking | `false` | `true` |
+| `RAG_KEEP_ORIGINAL_FILES` | Store original uploaded files | `true` | `false` |
+| `RAG_COLD_STORAGE_DAYS` | Days before moving to cold storage | `90` | `30` |
+| `RAG_MAX_FILE_SIZE_MB` | Maximum file size for uploads in MB | `50` | `100` |
 
 ## Deployment Scenarios
 

@@ -1,8 +1,11 @@
 """RAG system service layer - lightweight orchestrator."""
 
+import mimetypes
+import os
 import uuid
 from pathlib import Path
 
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,12 +20,93 @@ from src.courses.models import RoadmapDocument
 class RAGService:
     """Lightweight RAG service orchestrator using modular components."""
 
+    # Supported file types with their MIME types
+    SUPPORTED_FILE_TYPES = {
+        ".pdf": ["application/pdf"],
+        ".txt": ["text/plain"],
+        ".md": ["text/markdown", "text/x-markdown", "text/plain"],
+        ".epub": ["application/epub+zip"],
+        ".docx": ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+    }
+
     def __init__(self) -> None:
         """Initialize RAG service with component instances."""
         self.document_processor = DocumentProcessor()
         self.chunker = ChunkerFactory.get_default_chunker()
         self.vector_store = VectorStore()
         self.retriever = DocumentRetriever()
+
+        # Get file size limit from environment (default 50MB)
+        self.max_file_size_mb = int(os.getenv("RAG_MAX_FILE_SIZE_MB", "50"))
+        self.max_file_size_bytes = self.max_file_size_mb * 1024 * 1024
+
+    def _validate_file_type(self, filename: str, file_content: bytes | None = None) -> str:
+        """Validate file type and return the detected extension."""
+        if not filename:
+            raise HTTPException(status_code=400, detail="Filename is required")
+
+        # Get file extension
+        file_path = Path(filename.lower())
+        extension = file_path.suffix
+
+        if extension not in self.SUPPORTED_FILE_TYPES:
+            supported_exts = ", ".join(self.SUPPORTED_FILE_TYPES.keys())
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type '{extension}'. Supported formats: {supported_exts}"
+            )
+
+        # MIME type validation if file content is provided
+        if file_content:
+            # Detect MIME type from content
+            detected_mime = mimetypes.guess_type(filename)[0]
+
+            # For files without clear MIME detection, check magic bytes
+            if not detected_mime:
+                detected_mime = self._detect_mime_from_content(file_content)
+
+            if detected_mime and detected_mime not in self.SUPPORTED_FILE_TYPES[extension]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File content does not match expected type for {extension} files. Detected: {detected_mime}"
+                )
+
+        return extension
+
+    def _detect_mime_from_content(self, file_content: bytes) -> str | None:
+        """Detect MIME type from file content using magic bytes."""
+        if not file_content:
+            return None
+
+        # PDF magic bytes
+        if file_content.startswith(b"%PDF"):
+            return "application/pdf"
+
+        # ZIP-based formats (EPUB, DOCX)
+        if file_content.startswith((b"PK\x03\x04", b"PK\x05\x06")):
+            # Further differentiate between EPUB and DOCX by checking internal structure
+            if b"mimetype" in file_content[:1000] and b"application/epub+zip" in file_content[:1000]:
+                return "application/epub+zip"
+            if b"word/" in file_content[:1000] or b"[Content_Types].xml" in file_content[:1000]:
+                return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            return "application/zip"
+
+        # Text files - check if content is valid UTF-8
+        try:
+            file_content.decode("utf-8")
+            return "text/plain"
+        except UnicodeDecodeError:
+            pass
+
+        return None
+
+    def _validate_file_size(self, file_content: bytes) -> None:
+        """Validate file size against configured limits."""
+        if len(file_content) > self.max_file_size_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File size ({len(file_content) / 1024 / 1024:.1f}MB) exceeds maximum allowed size ({self.max_file_size_mb}MB)"
+            )
 
     async def upload_document(
         self,
@@ -32,18 +116,44 @@ class RAGService:
         title: str,
         file_content: bytes | None = None,
         url: str | None = None,
+        filename: str | None = None,
     ) -> DocumentResponse:
         """Upload and store a document for processing."""
+        # Validate file upload if file content is provided
+        if file_content:
+            if not filename:
+                raise HTTPException(status_code=400, detail="Filename is required for file uploads")
+
+            # Validate file size
+            self._validate_file_size(file_content)
+
+            # Validate file type and get extension
+            extension = self._validate_file_type(filename, file_content)
+
+            # Update document_type based on validated extension
+            document_type = extension.lstrip(".")
+
         # Create document record
         doc = RoadmapDocument(
             roadmap_id=roadmap_id, document_type=document_type, title=title, url=url, status="pending"
         )
 
-        if file_content and document_type == "pdf":
-            # Save PDF file using document processor
-            file_path, content_hash = self.document_processor.save_pdf_file(file_content)
-            doc.file_path = file_path
-            doc.content_hash = content_hash
+        if file_content:
+            try:
+                # Save file using document processor
+                if document_type == "pdf":
+                    file_path, content_hash = self.document_processor.save_pdf_file(file_content)
+                else:
+                    # For other file types, we'll extend the document processor
+                    file_path, content_hash = self.document_processor.save_file(file_content, filename)
+
+                doc.file_path = file_path
+                doc.content_hash = content_hash
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to process file: {e!s}"
+                ) from e
 
         session.add(doc)
         await session.commit()
@@ -87,9 +197,18 @@ class RAGService:
             await session.commit()
 
             # Process document using appropriate ingestor
-            if doc_row.document_type == "pdf":
-                text_content = await self.document_processor.process_pdf_document(doc_row.file_path)
-            else:  # url
+            if doc_row.file_path:
+                # File-based document
+                try:
+                    text_content = await self.document_processor.process_document(
+                        doc_row.file_path, doc_row.document_type
+                    )
+                except ValueError as e:
+                    # Re-raise as more specific error for better error handling
+                    msg = f"Failed to process {doc_row.document_type} file: {e!s}"
+                    raise ValueError(msg) from e
+            else:
+                # URL-based document
                 text_content, crawl_date = await self.document_processor.process_url_document(doc_row.url)
                 await session.execute(
                     text("UPDATE roadmap_documents SET crawl_date = :crawl_date WHERE id = :doc_id"),

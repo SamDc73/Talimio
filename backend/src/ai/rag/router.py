@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai.rag.ingest import URLIngestor
 from src.ai.rag.schemas import (
     DocumentList,
     DocumentResponse,
@@ -19,6 +20,15 @@ from src.database.session import get_db_session
 router = APIRouter(prefix="/api/v1", tags=["rag"])
 rag_service = RAGService()
 
+# Lazy initialization for URLIngestor to avoid initialization issues
+_url_ingestor = None
+
+def get_url_ingestor():
+    global _url_ingestor
+    if _url_ingestor is None:
+        _url_ingestor = URLIngestor()
+    return _url_ingestor
+
 
 @router.post("/roadmaps/{roadmap_id}/documents")
 async def upload_document(
@@ -30,15 +40,18 @@ async def upload_document(
     session: Annotated[AsyncSession, Depends(get_db_session)] = None,
 ) -> DocumentResponse:
     """Upload a document to a roadmap."""
-    if document_type == "pdf" and not file:
-        raise HTTPException(status_code=400, detail="PDF file required for PDF documents")
+    # For file uploads, document_type might be generic "file" or specific like "pdf"
+    if document_type != "url" and not file:
+        raise HTTPException(status_code=400, detail="File required for file uploads")
 
     if document_type == "url" and not url:
         raise HTTPException(status_code=400, detail="URL required for URL documents")
 
     file_content = None
+    filename = None
     if file:
         file_content = await file.read()
+        filename = file.filename
 
     try:
         document = await rag_service.upload_document(
@@ -48,6 +61,7 @@ async def upload_document(
             title=title,
             file_content=file_content,
             url=url,
+            filename=filename,
         )
 
         # TODO: Add to background job queue for processing
@@ -133,3 +147,14 @@ async def get_document(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/extract-title")
+async def extract_title_from_url(url: Annotated[str, Form()]) -> dict:
+    """Extract title from a given URL."""
+    try:
+        url_ingestor = get_url_ingestor()
+        title = url_ingestor.extract_title_from_url(url)
+        return {"title": title}
+    except Exception as e:
+        return {"title": "Untitled Document", "error": str(e)}
