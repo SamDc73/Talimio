@@ -1,7 +1,7 @@
-import { deleteApi } from "@/services/deleteApi";
 import { ChevronRight, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { deleteApi } from "@/services/deleteApi";
 import { KebabMenu } from "./KebabMenu";
 import { TagChip } from "./TagChip";
 

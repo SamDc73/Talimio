@@ -26,10 +26,13 @@ class ErrorBoundary extends React.Component {
 						Something went wrong
 					</h2>
 					<p className="text-sm text-muted-foreground mb-3">
-						Don't worry - this error has been contained and won't break the rest of the app.
+						Don't worry - this error has been contained and won't break the rest
+						of the app.
 					</p>
-					<button 
-						onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
+					<button
+						onClick={() =>
+							this.setState({ hasError: false, error: null, errorInfo: null })
+						}
 						className="px-3 py-1 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90 mb-3"
 					>
 						Try Again

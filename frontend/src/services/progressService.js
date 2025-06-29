@@ -111,7 +111,9 @@ export async function getModuleProgress(courseId, moduleId) {
 	}
 
 	try {
-		const response = await fetchWithTimeout(`${API_BASE}/courses/${courseId}/modules/${moduleId}`);
+		const response = await fetchWithTimeout(
+			`${API_BASE}/courses/${courseId}/modules/${moduleId}`,
+		);
 		if (!response.ok) {
 			throw new Error(`Failed to fetch module: ${response.statusText}`);
 		}
@@ -153,7 +155,6 @@ export async function getCourseModules(courseId) {
 	}
 }
 
-
 /**
  * Update module status
  * @param {string} courseId - The ID of the course
@@ -186,7 +187,6 @@ export async function updateModuleStatus(courseId, moduleId, status) {
 		throw error;
 	}
 }
-
 
 /**
  * Update lesson status
@@ -232,11 +232,14 @@ export async function updateLessonStatus(courseId, moduleId, lessonId, status) {
  */
 export async function updateModule(courseId, moduleId, updateData) {
 	try {
-		const response = await fetchWithTimeout(`${API_BASE}/courses/${courseId}/modules/${moduleId}`, {
-			method: "PATCH",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify(updateData),
-		});
+		const response = await fetchWithTimeout(
+			`${API_BASE}/courses/${courseId}/modules/${moduleId}`,
+			{
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(updateData),
+			},
+		);
 
 		if (!response.ok) {
 			throw new Error(`Failed to update module: ${response.statusText}`);
@@ -251,7 +254,6 @@ export async function updateModule(courseId, moduleId, updateData) {
 		throw error;
 	}
 }
-
 
 // Export for testing
 export const _progressCache = progressCache;

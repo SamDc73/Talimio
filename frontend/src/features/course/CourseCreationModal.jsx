@@ -7,15 +7,15 @@
  * 3. RAG-enhanced course creation with multiple documents (new functionality)
  */
 
-import { useState, useCallback } from "react";
-import { X, Upload, FileText, Sparkles, AlertCircle, BookOpen } from "lucide-react";
+import { AlertCircle, BookOpen, FileText, Sparkles, Upload, X } from "lucide-react";
+import { useCallback, useState } from "react";
 import { Button } from "../../components/button";
+import { useToast } from "../../hooks/use-toast";
+import { useCourseNavigation } from "../../utils/navigationUtils";
 import { useCourseService } from "./api/courseApi";
 import { useDocumentsService } from "./api/documentsApi";
-import { useCourseNavigation } from "../../utils/navigationUtils";
-import { useToast } from "../../hooks/use-toast";
-import DocumentUploader from "./components/DocumentUploader";
 import { DocumentStatusSummary } from "./components/DocumentStatusBadge";
+import DocumentUploader from "./components/DocumentUploader";
 
 const CourseCreationModal = ({ 
   isOpen, 

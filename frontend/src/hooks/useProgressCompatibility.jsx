@@ -6,8 +6,7 @@
  */
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { useCourseProgressSafe } from "./useCourseProgress";
-import { progressUtils } from "./useCourseProgress";
+import { progressUtils, useCourseProgressSafe } from "./useCourseProgress";
 import { useProgressSafe } from "./useProgress";
 
 const ProgressCompatibilityContext = createContext(null);
@@ -91,7 +90,8 @@ export function ProgressCompatibilityProvider({
 		isLessonCompleted: (moduleId, lessonId) => {
 			if (activeSystem === "new") {
 				return newProgress.isLessonCompleted(moduleId, lessonId);
-			}if (activeSystem === "legacy") {
+			}
+			if (activeSystem === "legacy") {
 				// Convert new format to legacy nodeId
 				const nodeId = convertToLegacyNodeId(moduleId, lessonId, mappings);
 				return legacyProgress.isLessonCompleted(nodeId);
@@ -103,7 +103,8 @@ export function ProgressCompatibilityProvider({
 		getLessonStatus: (moduleId, lessonId) => {
 			if (activeSystem === "new") {
 				return newProgress.getLessonStatus(moduleId, lessonId);
-			}if (activeSystem === "legacy") {
+			}
+			if (activeSystem === "legacy") {
 				const nodeId = convertToLegacyNodeId(moduleId, lessonId, mappings);
 				const legacyStatus =
 					legacyProgress.lessonStatuses[nodeId] || "not_started";
@@ -116,7 +117,8 @@ export function ProgressCompatibilityProvider({
 		toggleLessonCompletion: async (moduleId, lessonId) => {
 			if (activeSystem === "new") {
 				return await newProgress.toggleLessonCompletion(moduleId, lessonId);
-			}if (activeSystem === "legacy") {
+			}
+			if (activeSystem === "legacy") {
 				const nodeId = convertToLegacyNodeId(moduleId, lessonId, mappings);
 				return await legacyProgress.toggleLessonCompletion(nodeId);
 			}
@@ -127,7 +129,8 @@ export function ProgressCompatibilityProvider({
 		markLessonCompleted: async (moduleId, lessonId) => {
 			if (activeSystem === "new") {
 				return await newProgress.markLessonCompleted(moduleId, lessonId);
-			}if (activeSystem === "legacy") {
+			}
+			if (activeSystem === "legacy") {
 				const nodeId = convertToLegacyNodeId(moduleId, lessonId, mappings);
 				return await legacyProgress.toggleLessonCompletion(nodeId);
 			}
@@ -138,7 +141,8 @@ export function ProgressCompatibilityProvider({
 		markLessonInProgress: async (moduleId, lessonId) => {
 			if (activeSystem === "new") {
 				return await newProgress.markLessonInProgress(moduleId, lessonId);
-			}if (activeSystem === "legacy") {
+			}
+			if (activeSystem === "legacy") {
 				// Legacy system doesn't have explicit "in progress" - just mark as not completed
 				return Promise.resolve();
 			}
@@ -157,7 +161,8 @@ export function ProgressCompatibilityProvider({
 		refreshProgress: async () => {
 			if (activeSystem === "new") {
 				return await newProgress.refreshProgress();
-			}if (activeSystem === "legacy") {
+			}
+			if (activeSystem === "legacy") {
 				return await legacyProgress.fetchAllProgressData(roadmapId);
 			}
 			return Promise.resolve();

@@ -1,8 +1,8 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import { CheckCircle } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import { useProgress } from "../../../../hooks/useProgress";
 import { useCourseNavigation } from "../../../../utils/navigationUtils";
 

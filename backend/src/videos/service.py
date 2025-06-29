@@ -1,7 +1,9 @@
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 import yt_dlp
 from sqlalchemy import or_, select
@@ -9,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.pagination import Paginator
+from src.database.session import async_session_maker
 from src.videos.models import Video, VideoChapter
 from src.videos.schemas import (
     VideoChapterResponse,
@@ -21,6 +24,137 @@ from src.videos.schemas import (
 
 
 logger = logging.getLogger(__name__)
+
+
+async def _process_video_rag_background(video_uuid: UUID) -> None:
+    """Process video transcript for RAG in background (non-blocking)."""
+    try:
+        async with async_session_maker() as session:
+            # Update status to processing
+            video_query = select(Video).where(Video.uuid == video_uuid)
+            result = await session.execute(video_query)
+            video = result.scalar_one_or_none()
+
+            if not video:
+                logger.error(f"Video {video_uuid} not found for RAG processing")
+                return
+
+            video.rag_status = "processing"
+            await session.commit()
+
+            # Extract transcript using yt-dlp
+            transcript_content = await _extract_video_transcript(video.url)
+
+            if not transcript_content:
+                logger.warning(f"No transcript found for video {video_uuid}, skipping RAG processing")
+                video.rag_status = "completed"  # Mark as completed since there's nothing to process
+                video.rag_processed_at = datetime.now(UTC)
+                await session.commit()
+                return
+
+            # Import RAG components
+            from src.ai.rag.chunker import ChunkerFactory
+            from src.ai.rag.vector_store import VectorStore
+
+            # Initialize components
+            chunker = ChunkerFactory.get_default_chunker()
+            vector_store = VectorStore()
+
+            # Chunk the transcript
+            chunks = chunker.chunk_text(transcript_content)
+
+            # Store chunks with embeddings using doc_type='video' and doc_id=video.uuid
+            await vector_store.store_video_chunks_with_embeddings(session, video_uuid, chunks)
+
+            # Update status to completed
+            video.rag_status = "completed"
+            video.rag_processed_at = datetime.now(UTC)
+            await session.commit()
+
+            logger.info(f"Successfully processed video {video_uuid} for RAG with {len(chunks)} chunks")
+
+    except Exception as e:
+        logger.exception(f"Failed to process video {video_uuid} for RAG: {e}")
+        # Update status to failed
+        try:
+            async with async_session_maker() as session:
+                video_query = select(Video).where(Video.uuid == video_uuid)
+                result = await session.execute(video_query)
+                video = result.scalar_one_or_none()
+                if video:
+                    video.rag_status = "failed"
+                    await session.commit()
+        except Exception as update_error:
+            logger.exception(f"Failed to update video {video_uuid} status to failed: {update_error}")
+
+
+async def _extract_video_transcript(video_url: str) -> str | None:
+    """Extract transcript from YouTube video using yt-dlp."""
+    try:
+        ydl_opts = {
+            "writesubtitles": True,
+            "writeautomaticsub": True,
+            "subtitleslangs": ["en"],  # English transcripts
+            "skip_download": True,
+            "quiet": True,
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # Get video info with subtitles
+            info = ydl.extract_info(video_url, download=False)
+
+            # Try to get subtitles
+            subtitles = info.get("subtitles", {})
+            automatic_captions = info.get("automatic_captions", {})
+
+            # Prefer manual subtitles over automatic ones
+            subs_to_use = subtitles.get("en") or automatic_captions.get("en")
+
+            if not subs_to_use:
+                return None
+
+            # Find the best subtitle format (prefer VTT)
+            subtitle_url = None
+            for sub in subs_to_use:
+                if sub.get("ext") == "vtt":
+                    subtitle_url = sub.get("url")
+                    break
+
+            # Fallback to any available subtitle
+            if not subtitle_url and subs_to_use:
+                subtitle_url = subs_to_use[0].get("url")
+
+            if not subtitle_url:
+                return None
+
+            # Download and parse subtitle content
+            import aiohttp
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(subtitle_url) as response:
+                    if response.status == 200:
+                        content = await response.text()
+                        # Simple VTT parser - extract text lines
+                        lines = content.split("\n")
+                        transcript_lines = []
+
+                        for line in lines:
+                            line = line.strip()
+                            # Skip timestamp lines and metadata
+                            if (not line or
+                                line.startswith("WEBVTT") or
+                                "-->" in line or
+                                line.isdigit()):
+                                continue
+                            transcript_lines.append(line)
+
+                        return " ".join(transcript_lines)
+
+    except Exception as e:
+        logger.exception(f"Failed to extract transcript for {video_url}: {e}")
+        return None
+
+    return None
 
 
 class VideoService:
@@ -144,6 +278,9 @@ class VideoService:
 
         # Ensure video object is refreshed before validation
         await db.refresh(video)
+
+        # Trigger background RAG processing
+        asyncio.create_task(_process_video_rag_background(video.uuid))
 
         # Convert to dict first to avoid SQLAlchemy lazy loading issues
         return VideoResponse.model_validate(self._video_to_dict(video))

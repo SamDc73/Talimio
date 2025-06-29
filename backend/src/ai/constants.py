@@ -15,7 +15,8 @@ class RAGConfig:
 
         # Embedding Configuration
         self.embedding_model = os.getenv("RAG_EMBEDDING_MODEL", "text-embedding-3-small")
-        self.embedding_dim = int(os.getenv("RAG_EMBEDDING_OUTPUT_DIM", "1536"))
+        # Don't force dimensions - use model's default
+        self.embedding_dim = None
         self.embed_instruction = os.getenv("RAG_EMBED_INSTRUCTION", "Represent the query for semantic retrieval:")
 
         # Chunking Configuration
@@ -37,6 +38,7 @@ class RAGConfig:
         # File Storage Paths
         self.upload_dir = Path("uploads/roadmap_docs")
         self.upload_dir.mkdir(parents=True, exist_ok=True)
+
 
     @property
     def words_per_chunk(self) -> int:
@@ -73,8 +75,8 @@ class RAGConfig:
             if not provider or not model:
                 raise ValueError(f"Invalid embedding model format: {self.embedding_model}. Expected format: provider/model-name")
 
-        # Validate embedding dimensions
-        if self.embedding_dim <= 0:
+        # Validate embedding dimensions if set
+        if self.embedding_dim is not None and self.embedding_dim <= 0:
             raise ValueError(f"Invalid embedding dimensions: {self.embedding_dim}. Must be positive.")
 
         # Validate chunk settings

@@ -1,11 +1,11 @@
+import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { VideoHeader } from "@/components/header/VideoHeader";
 import { VideoSidebar } from "@/components/sidebar";
 import { useToast } from "@/hooks/use-toast";
 import { videoApi } from "@/services/videoApi";
 import useAppStore from "@/stores/useAppStore";
-import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
 import "@justinribeiro/lite-youtube";
 import "./VideoViewer.css";
 

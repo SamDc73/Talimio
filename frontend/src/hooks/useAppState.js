@@ -24,15 +24,18 @@ export const useAppState = () => {
 		(state) => state.preferences?.onboardingCompleted || false,
 	);
 	const updatePreference = useAppStore((state) => state.updatePreference);
-	
+
 	// Create a setActiveRoadmap function using updatePreference
-	const setActiveRoadmap = useCallback((roadmapId) => {
-		const currentPrefs = userPreferences || {};
-		updatePreference("userPreferences", {
-			...currentPrefs,
-			roadmapId: roadmapId
-		});
-	}, [updatePreference, userPreferences]);
+	const setActiveRoadmap = useCallback(
+		(roadmapId) => {
+			const currentPrefs = userPreferences || {};
+			updatePreference("userPreferences", {
+				...currentPrefs,
+				roadmapId: roadmapId,
+			});
+		},
+		[updatePreference, userPreferences],
+	);
 
 	const handleResetOnboarding = useCallback(() => {
 		// Reset in Zustand store
@@ -78,11 +81,11 @@ export const useAppState = () => {
 			}
 		}
 	}, [
-		activeRoadmapId, 
-		onboardingCompleted, 
-		setActiveRoadmap, 
+		activeRoadmapId,
+		onboardingCompleted,
+		setActiveRoadmap,
 		updatePreference,
-		handleResetOnboarding
+		handleResetOnboarding,
 	]);
 
 	const handleOnboardingComplete = async (answers) => {

@@ -4,6 +4,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.rag.ingest import URLIngestor
@@ -23,8 +24,10 @@ rag_service = RAGService()
 # Lazy initialization for URLIngestor to avoid initialization issues
 _url_ingestor = None
 
-def get_url_ingestor():
-    global _url_ingestor
+
+def get_url_ingestor() -> URLIngestor:
+    """Get or create URLIngestor instance."""
+    global _url_ingestor  # noqa: PLW0603
     if _url_ingestor is None:
         _url_ingestor = URLIngestor()
     return _url_ingestor
@@ -133,8 +136,6 @@ async def get_document(
 ) -> DocumentResponse:
     """Get document details."""
     try:
-        from sqlalchemy import text
-
         result = await session.execute(
             text("SELECT * FROM roadmap_documents WHERE id = :doc_id"), {"doc_id": document_id}
         )

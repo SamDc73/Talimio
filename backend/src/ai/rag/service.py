@@ -26,7 +26,7 @@ class RAGService:
         ".txt": ["text/plain"],
         ".md": ["text/markdown", "text/x-markdown", "text/plain"],
         ".epub": ["application/epub+zip"],
-        ".docx": ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+        ".docx": ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
     }
 
     def __init__(self) -> None:
@@ -52,8 +52,7 @@ class RAGService:
         if extension not in self.SUPPORTED_FILE_TYPES:
             supported_exts = ", ".join(self.SUPPORTED_FILE_TYPES.keys())
             raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported file type '{extension}'. Supported formats: {supported_exts}"
+                status_code=400, detail=f"Unsupported file type '{extension}'. Supported formats: {supported_exts}"
             )
 
         # MIME type validation if file content is provided
@@ -68,7 +67,7 @@ class RAGService:
             if detected_mime and detected_mime not in self.SUPPORTED_FILE_TYPES[extension]:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"File content does not match expected type for {extension} files. Detected: {detected_mime}"
+                    detail=f"File content does not match expected type for {extension} files. Detected: {detected_mime}",
                 )
 
         return extension
@@ -78,34 +77,36 @@ class RAGService:
         if not file_content:
             return None
 
+        mime_type = None
+
         # PDF magic bytes
         if file_content.startswith(b"%PDF"):
-            return "application/pdf"
-
+            mime_type = "application/pdf"
         # ZIP-based formats (EPUB, DOCX)
-        if file_content.startswith((b"PK\x03\x04", b"PK\x05\x06")):
+        elif file_content.startswith((b"PK\x03\x04", b"PK\x05\x06")):
             # Further differentiate between EPUB and DOCX by checking internal structure
             if b"mimetype" in file_content[:1000] and b"application/epub+zip" in file_content[:1000]:
-                return "application/epub+zip"
-            if b"word/" in file_content[:1000] or b"[Content_Types].xml" in file_content[:1000]:
-                return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            return "application/zip"
+                mime_type = "application/epub+zip"
+            elif b"word/" in file_content[:1000] or b"[Content_Types].xml" in file_content[:1000]:
+                mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            else:
+                mime_type = "application/zip"
+        else:
+            # Text files - check if content is valid UTF-8
+            try:
+                file_content.decode("utf-8")
+                mime_type = "text/plain"
+            except UnicodeDecodeError:
+                pass
 
-        # Text files - check if content is valid UTF-8
-        try:
-            file_content.decode("utf-8")
-            return "text/plain"
-        except UnicodeDecodeError:
-            pass
-
-        return None
+        return mime_type
 
     def _validate_file_size(self, file_content: bytes) -> None:
         """Validate file size against configured limits."""
         if len(file_content) > self.max_file_size_bytes:
             raise HTTPException(
                 status_code=413,
-                detail=f"File size ({len(file_content) / 1024 / 1024:.1f}MB) exceeds maximum allowed size ({self.max_file_size_mb}MB)"
+                detail=f"File size ({len(file_content) / 1024 / 1024:.1f}MB) exceeds maximum allowed size ({self.max_file_size_mb}MB)",
             )
 
     async def upload_document(
@@ -150,10 +151,7 @@ class RAGService:
                 doc.file_path = file_path
                 doc.content_hash = content_hash
             except Exception as e:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Failed to process file: {e!s}"
-                ) from e
+                raise HTTPException(status_code=400, detail=f"Failed to process file: {e!s}") from e
 
         session.add(doc)
         await session.commit()
@@ -174,7 +172,7 @@ class RAGService:
             processed_at=doc.processed_at,
             embedded_at=doc.embedded_at,
             status=doc.status,
-            doc_metadata=doc.doc_metadata if hasattr(doc, "doc_metadata") else None
+            doc_metadata=doc.doc_metadata if hasattr(doc, "doc_metadata") else None,
         )
 
     async def process_document(self, session: AsyncSession, document_id: int) -> None:
@@ -273,22 +271,24 @@ class RAGService:
         docs = []
         for row in result.fetchall():
             row_dict = row._asdict()
-            docs.append(DocumentResponse(
-                id=row_dict["id"],
-                roadmap_id=row_dict["roadmap_id"],
-                document_type=row_dict["document_type"],
-                title=row_dict["title"],
-                file_path=row_dict.get("file_path"),
-                url=row_dict.get("url"),
-                source_url=row_dict.get("source_url"),
-                crawl_date=row_dict.get("crawl_date"),
-                content_hash=row_dict.get("content_hash"),
-                created_at=row_dict["created_at"],
-                processed_at=row_dict.get("processed_at"),
-                embedded_at=row_dict.get("embedded_at"),
-                status=row_dict["status"],
-                doc_metadata=row_dict.get("doc_metadata")
-            ))
+            docs.append(
+                DocumentResponse(
+                    id=row_dict["id"],
+                    roadmap_id=row_dict["roadmap_id"],
+                    document_type=row_dict["document_type"],
+                    title=row_dict["title"],
+                    file_path=row_dict.get("file_path"),
+                    url=row_dict.get("url"),
+                    source_url=row_dict.get("source_url"),
+                    crawl_date=row_dict.get("crawl_date"),
+                    content_hash=row_dict.get("content_hash"),
+                    created_at=row_dict["created_at"],
+                    processed_at=row_dict.get("processed_at"),
+                    embedded_at=row_dict.get("embedded_at"),
+                    status=row_dict["status"],
+                    doc_metadata=row_dict.get("doc_metadata"),
+                )
+            )
         return docs
 
     async def delete_document(self, session: AsyncSession, document_id: int) -> None:

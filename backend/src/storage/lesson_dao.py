@@ -68,11 +68,11 @@ class LessonDAO:
                 lesson_data["created_at"],
                 lesson_data["updated_at"],
             )
-            
+
             # If insert was skipped due to conflict, fetch the existing record
             if row is None:
                 row = await conn.fetchrow("SELECT * FROM lesson WHERE id = $1", lesson_data["id"])
-            
+
             return cls._record_to_dict(row)
         finally:
             await conn.close()

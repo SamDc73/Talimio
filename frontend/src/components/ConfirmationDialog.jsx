@@ -1,3 +1,4 @@
+import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/button";
 import {
 	Dialog,
@@ -7,7 +8,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/dialog";
-import { AlertTriangle } from "lucide-react";
 
 export function ConfirmationDialog({
 	open,

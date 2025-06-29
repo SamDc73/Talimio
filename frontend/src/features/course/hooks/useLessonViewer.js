@@ -1,6 +1,6 @@
+import { useCallback, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useState, useCallback } from "react";
-import { fetchLesson, } from "../api/lessonsApi";
+import { fetchLesson } from "../api/lessonsApi";
 
 /**
  *  lesson viewer hook
@@ -14,29 +14,32 @@ export function useLessonViewer(courseId) {
 	/**
 	 * Load a lesson by ID, generate if needed
 	 */
-	const loadLesson = useCallback(async (lessonId) => {
-		if (!courseId || !lessonId) {
-			setError("Missing required IDs");
-			return;
-		}
+	const loadLesson = useCallback(
+		async (lessonId) => {
+			if (!courseId || !lessonId) {
+				setError("Missing required IDs");
+				return;
+			}
 
-		setIsLoading(true);
-		setError(null);
+			setIsLoading(true);
+			setError(null);
 
-		try {
-			const lessonData = await fetchLesson(courseId, lessonId);
-			setLesson(lessonData);
-		} catch (err) {
-			setError(err.message);
-			toast({
-				title: "Error",
-				description: err.message,
-				variant: "destructive",
-			});
-		} finally {
-			setIsLoading(false);
-		}
-	}, [courseId, toast]);
+			try {
+				const lessonData = await fetchLesson(courseId, lessonId);
+				setLesson(lessonData);
+			} catch (err) {
+				setError(err.message);
+				toast({
+					title: "Error",
+					description: err.message,
+					variant: "destructive",
+				});
+			} finally {
+				setIsLoading(false);
+			}
+		},
+		[courseId, toast],
+	);
 
 	/**
 	 * Generate a new lesson (requires moduleId, so disabled for now)

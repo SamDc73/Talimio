@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import logging
@@ -35,6 +36,70 @@ DEFAULT_USER_ID = "default_user"  # For now, use default user
 UPLOAD_DIR = Path("backend/uploads/books")
 ALLOWED_EXTENSIONS = {".pdf", ".epub"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+
+logger = logging.getLogger(__name__)
+
+
+async def _process_book_rag_background(book_id: UUID) -> None:
+    """Process book for RAG in background (non-blocking)."""
+    try:
+        async with async_session_maker() as session:
+            # Update status to processing
+            book_query = select(Book).where(Book.id == book_id)
+            result = await session.execute(book_query)
+            book = result.scalar_one_or_none()
+
+            if not book:
+                logger.error(f"Book {book_id} not found for RAG processing")
+                return
+
+            book.rag_status = "processing"
+            await session.commit()
+
+            # Import RAG components
+            from src.ai.rag.chunker import ChunkerFactory
+            from src.ai.rag.ingest import DocumentProcessor
+            from src.ai.rag.vector_store import VectorStore
+
+            # Initialize components
+            document_processor = DocumentProcessor()
+            chunker = ChunkerFactory.get_default_chunker()
+            vector_store = VectorStore()
+
+            # Process the book file
+            file_path = Path(book.file_path)
+            if not file_path.exists():
+                raise FileNotFoundError(f"Book file not found: {book.file_path}")
+
+            # Extract text content
+            text_content = await document_processor.process_document(str(file_path), book.file_type)
+
+            # Chunk the text
+            chunks = chunker.chunk_text(text_content)
+
+            # Store chunks with embeddings using doc_type='book' and doc_id=book.id
+            await vector_store.store_book_chunks_with_embeddings(session, book_id, chunks)
+
+            # Update status to completed
+            book.rag_status = "completed"
+            book.rag_processed_at = datetime.now(UTC)
+            await session.commit()
+
+            logger.info(f"Successfully processed book {book_id} for RAG with {len(chunks)} chunks")
+
+    except Exception as e:
+        logger.exception(f"Failed to process book {book_id} for RAG: {e}")
+        # Update status to failed
+        try:
+            async with async_session_maker() as session:
+                book_query = select(Book).where(Book.id == book_id)
+                result = await session.execute(book_query)
+                book = result.scalar_one_or_none()
+                if book:
+                    book.rag_status = "failed"
+                    await session.commit()
+        except Exception as update_error:
+            logger.exception(f"Failed to update book {book_id} status to failed: {update_error}")
 
 
 def _book_to_response(book: Book) -> BookResponse:
@@ -107,6 +172,10 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
             await session.refresh(book)
 
             await _apply_automatic_tagging(session, book, metadata)
+
+            # Trigger background RAG processing
+            asyncio.create_task(_process_book_rag_background(book.id))
+
             return _book_to_response(book)
 
     except HTTPException:

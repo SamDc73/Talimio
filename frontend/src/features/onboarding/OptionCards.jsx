@@ -1,5 +1,3 @@
-
-
 import { Card, CardContent } from "@/components/card";
 
 export const OptionCards = ({ options, value, onChange }) => (

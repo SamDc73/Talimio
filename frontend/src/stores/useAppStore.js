@@ -381,7 +381,11 @@ const useAppStore = create(
 				},
 
 				getAssistantPreferences: () => {
-					const { assistantSidebarPinned, assistantModel, assistantSidebarWidth } = get().preferences;
+					const {
+						assistantSidebarPinned,
+						assistantModel,
+						assistantSidebarWidth,
+					} = get().preferences;
 					return {
 						sidebarPinned: assistantSidebarPinned,
 						model: assistantModel,
@@ -470,7 +474,7 @@ const useAppStore = create(
 							state.course.lastViewedCourseId = courseId;
 						}
 					});
-					
+
 					// Forward to course store if available
 					if (typeof window !== "undefined" && window.__courseStore) {
 						window.__courseStore.getState().setActiveCourse(courseId);
@@ -619,11 +623,10 @@ export const selectProgressStats = (bookId) => (state) =>
 	state.books.progressStats[bookId];
 
 // Assistant selectors
-export const selectAssistantSidebarPinned = (state) => 
+export const selectAssistantSidebarPinned = (state) =>
 	state.preferences.assistantSidebarPinned;
-export const selectAssistantModel = (state) => 
-	state.preferences.assistantModel;
-export const selectAssistantPreferences = (state) => 
+export const selectAssistantModel = (state) => state.preferences.assistantModel;
+export const selectAssistantPreferences = (state) =>
 	state.getAssistantPreferences();
 
 export default useAppStore;

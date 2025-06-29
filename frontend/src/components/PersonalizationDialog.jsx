@@ -3,7 +3,7 @@
  */
 
 import { Brain, ChevronLeft, Eye, RotateCcw, Save, Trash2 } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "../hooks/use-toast";
 import {
 	clearUserMemory,

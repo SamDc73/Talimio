@@ -194,7 +194,9 @@ export function useCourseApi(courseId = null) {
 	const getModules = useApi("/courses/{courseId}/modules");
 	const getModule = useApi("/courses/{courseId}/modules/{moduleId}");
 	const getLessons = useApi("/courses/{courseId}/modules/{moduleId}/lessons");
-	const getLesson = useApi("/courses/{courseId}/modules/{moduleId}/lessons/{lessonId}");
+	const getLesson = useApi(
+		"/courses/{courseId}/modules/{moduleId}/lessons/{lessonId}",
+	);
 	const getCourseProgress = useApi("/courses/{courseId}/progress");
 
 	return {
@@ -220,14 +222,20 @@ export function useCourseApi(courseId = null) {
 
 		// Get specific module
 		async fetchModule(moduleId) {
-			if (!courseId || !moduleId) throw new Error("Course ID and Module ID required");
-			return await getModule.execute(null, { pathParams: { courseId, moduleId } });
+			if (!courseId || !moduleId)
+				throw new Error("Course ID and Module ID required");
+			return await getModule.execute(null, {
+				pathParams: { courseId, moduleId },
+			});
 		},
 
 		// Get lessons for a module
 		async fetchLessons(moduleId) {
-			if (!courseId || !moduleId) throw new Error("Course ID and Module ID required");
-			return await getLessons.execute(null, { pathParams: { courseId, moduleId } });
+			if (!courseId || !moduleId)
+				throw new Error("Course ID and Module ID required");
+			return await getLessons.execute(null, {
+				pathParams: { courseId, moduleId },
+			});
 		},
 
 		// Get specific lesson
@@ -237,16 +245,18 @@ export function useCourseApi(courseId = null) {
 			}
 			const queryParams = {};
 			if (options.generate) queryParams.generate = true;
-			return await getLesson.execute(null, { 
+			return await getLesson.execute(null, {
 				pathParams: { courseId, moduleId, lessonId },
-				queryParams 
+				queryParams,
 			});
 		},
 
 		// Get course progress
 		async fetchCourseProgress() {
 			if (!courseId) throw new Error("Course ID required");
-			return await getCourseProgress.execute(null, { pathParams: { courseId } });
+			return await getCourseProgress.execute(null, {
+				pathParams: { courseId },
+			});
 		},
 
 		// Loading states

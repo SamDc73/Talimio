@@ -1,20 +1,18 @@
-
-
 // Constants for status values
 export const LESSON_STATUS = {
-  NOT_STARTED: 'not_started',
-  IN_PROGRESS: 'in_progress',
-  DONE: 'done'
+	NOT_STARTED: "not_started",
+	IN_PROGRESS: "in_progress",
+	DONE: "done",
 };
 
 export const MODULE_STATUS = {
-  NOT_STARTED: 'not_started',
-  IN_PROGRESS: 'in_progress',
-  COMPLETED: 'completed'
+	NOT_STARTED: "not_started",
+	IN_PROGRESS: "in_progress",
+	COMPLETED: "completed",
 };
 
 export const SKILL_LEVELS = {
-  BEGINNER: 'beginner',
-  INTERMEDIATE: 'intermediate',
-  ADVANCED: 'advanced'
+	BEGINNER: "beginner",
+	INTERMEDIATE: "intermediate",
+	ADVANCED: "advanced",
 };

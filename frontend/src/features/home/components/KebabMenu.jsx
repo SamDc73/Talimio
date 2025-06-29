@@ -1,9 +1,3 @@
-import { ConfirmationDialog } from "@/components/ConfirmationDialog";
-import TagEditModal from "@/components/TagEditModal";
-import { Button } from "@/components/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover";
-import { useToast } from "@/hooks/use-toast";
-import { archiveContent, unarchiveContent } from "@/services/contentService";
 import {
 	Archive,
 	ArchiveRestore,
@@ -14,6 +8,12 @@ import {
 	Trash2,
 } from "lucide-react";
 import { useState } from "react";
+import { Button } from "@/components/button";
+import { ConfirmationDialog } from "@/components/ConfirmationDialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover";
+import TagEditModal from "@/components/TagEditModal";
+import { useToast } from "@/hooks/use-toast";
+import { archiveContent, unarchiveContent } from "@/services/contentService";
 
 export function KebabMenu({
 	onMouseEnter,

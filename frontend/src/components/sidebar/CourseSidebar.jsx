@@ -1,5 +1,5 @@
-import { useProgressSafe } from "@/hooks/useProgress";
 import { useState } from "react";
+import { useProgressSafe } from "@/hooks/useProgress";
 import CompletionCheckbox from "./CompletionCheckbox";
 import ExpandableSection from "./ExpandableSection";
 import ProgressCircle from "./ProgressCircle";
@@ -80,7 +80,9 @@ function CourseSidebar({
 											<CompletionCheckbox
 												isCompleted={isLessonCompleted(lesson.id)}
 												isLocked={lesson.status === "locked"}
-												onClick={() => toggleLessonCompletion(lesson.id, module.id)}
+												onClick={() =>
+													toggleLessonCompletion(lesson.id, module.id)
+												}
 												variant="course"
 											/>
 										}

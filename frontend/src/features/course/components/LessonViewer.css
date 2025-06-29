@@ -75,8 +75,9 @@ p > code {
 pre {
 	margin: 0 0 1rem 0;
 	border-radius: 0.5rem;
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-		"Liberation Mono", "Courier New", monospace;
+	font-family:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+		"Courier New", monospace;
 	font-size: 0.875rem;
 	line-height: 1.5;
 	overflow-x: auto;
@@ -116,8 +117,9 @@ pre {
 .markdown-content pre {
 	margin: 0 0 1rem 0;
 	border-radius: 0.5rem;
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-		"Liberation Mono", "Courier New", monospace;
+	font-family:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+		"Courier New", monospace;
 	font-size: 0.875rem;
 	line-height: 1.5;
 	overflow-x: auto;

@@ -114,7 +114,7 @@ class EPUBIngestor:
             msg = f"Failed to process EPUB file: {e!s}"
             raise ValueError(msg) from e
 
-    def save_file(self, file_content: bytes, filename: str) -> tuple[str, str]:
+    def save_file(self, file_content: bytes, filename: str) -> tuple[str, str]:  # noqa: ARG002
         """Save EPUB file to disk and return path and content hash."""
         # Generate unique filename
         file_id = str(uuid.uuid4())
@@ -149,7 +149,7 @@ class DOCXIngestor:
             msg = f"Failed to process DOCX file: {e!s}"
             raise ValueError(msg) from e
 
-    def save_file(self, file_content: bytes, filename: str) -> tuple[str, str]:
+    def save_file(self, file_content: bytes, filename: str) -> tuple[str, str]:  # noqa: ARG002
         """Save DOCX file to disk and return path and content hash."""
         # Generate unique filename
         file_id = str(uuid.uuid4())

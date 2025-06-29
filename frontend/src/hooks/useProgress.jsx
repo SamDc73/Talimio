@@ -1,9 +1,9 @@
 import {
 	createContext,
+	useCallback,
 	useContext,
 	useEffect,
 	useState,
-	useCallback,
 } from "react";
 import { updateLessonStatus } from "../services/progressService";
 import { getCourseWithModules } from "../utils/courseDetection";
@@ -22,7 +22,7 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 	const [error, setError] = useState(null);
 	const [_detectedCourseMode, setDetectedCourseMode] = useState(null);
 	const { toast } = useToast();
-	
+
 	// Note: We use getCourseWithModules for consistent course data fetching
 
 	const fetchAllProgressData = useCallback(
@@ -50,14 +50,16 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 			try {
 				// Use course data fetching - assumes we're in course mode
 				const { modules } = await getCourseWithModules(currentCourseId);
-				
+
 				// Store detected mode for use in other functions - always true for course API
 				const detectedMode = true;
 				setDetectedCourseMode(detectedMode);
-				
+
 				// Validate modules array
 				if (!Array.isArray(modules)) {
-					throw new Error(`Invalid modules data: expected array, got ${typeof modules}`);
+					throw new Error(
+						`Invalid modules data: expected array, got ${typeof modules}`,
+					);
 				}
 
 				// For course mode, we need to collect all lessons from all modules
@@ -69,26 +71,26 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 						allLessons.push({
 							id: module.id,
 							status: module.status || "not_started",
-							title: module.title
+							title: module.title,
 						});
-						
+
 						// Add all sub-lessons
 						if (module.lessons && Array.isArray(module.lessons)) {
 							for (const lesson of module.lessons) {
 								allLessons.push({
 									id: lesson.id,
 									status: lesson.status || "not_started",
-									title: lesson.title
+									title: lesson.title,
 								});
 							}
 						}
 					}
 				} else {
 					// Legacy mode: modules are the lessons
-					allLessons = modules.map(module => ({
+					allLessons = modules.map((module) => ({
 						id: module.id,
 						status: module.status || "not_started",
-						title: module.title
+						title: module.title,
 					}));
 				}
 
@@ -146,7 +148,8 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 
 			try {
 				const currentStatus = lessonStatuses[lessonId] || "not_started";
-				const newStatus = currentStatus === "completed" ? "not_started" : "completed";
+				const newStatus =
+					currentStatus === "completed" ? "not_started" : "completed";
 
 				// Update UI immediately
 				setLessonStatuses((prev) => ({
@@ -171,8 +174,13 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 				}));
 
 				// Update server in background without waiting
-				const updatePromise = updateLessonStatus(courseId, moduleId, lessonId, newStatus);
-					
+				const updatePromise = updateLessonStatus(
+					courseId,
+					moduleId,
+					lessonId,
+					newStatus,
+				);
+
 				updatePromise.catch((err) => {
 					console.error("Failed to update lesson status:", err);
 					// Revert on error

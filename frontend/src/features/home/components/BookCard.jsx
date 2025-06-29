@@ -1,11 +1,11 @@
+import { BookOpen, ChevronRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { deleteApi } from "@/services/deleteApi";
 import {
 	calculateBookProgress,
 	getBookProgressStats,
 } from "@/services/tocProgressService";
-import { BookOpen, ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { KebabMenu } from "./KebabMenu";
 import { TagChip } from "./TagChip";
 

@@ -1,10 +1,10 @@
-import { useCourseService } from "../api/courseApi";
 import { useCallback, useEffect, useState } from "react";
+import { useCourseService } from "../api/courseApi";
 
 /**
  * Common hook for fetching course data with module progress
  * This can be used by both map and outline views
- * 
+ *
  * @param {string} courseId - The ID of the course to fetch
  * @returns {Object} - Object containing course data, modules, and utility functions
  */
@@ -13,7 +13,7 @@ export function useRoadmapData(courseId) {
 	const [nodes, setNodes] = useState([]);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState(null);
-	
+
 	// Use course service for all operations
 	const courseService = useCourseService(courseId);
 
