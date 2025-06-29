@@ -54,20 +54,24 @@ class Mem0Wrapper:
                     "host": self._extract_db_host(),
                     "port": self._extract_db_port(),
                     "collection_name": "learning_memories",
-                    "embedding_model_dims": 1536,
+                    "embedding_model_dims": int(os.getenv("MEMORY_EMBEDDING_OUTPUT_DIM", "1536")),
                 },
             },
             "llm": {
                 "provider": "litellm",
                 "config": {
-                    "model": os.getenv("MEMORY_LLM_MODEL", "openai/gpt-4o-mini"),
+                    "model": self._get_memory_llm_model(),
                     "temperature": 0.2,
                     "max_tokens": 2000,
                 },
             },
+            # TODO: switch to litellm when it's avalible: https://github.com/mem0ai/mem0/issues/3069
             "embedder": {
                 "provider": "openai",
-                "config": {"model": os.getenv("MEMORY_EMBEDDING_MODEL", "text-embedding-3-small"), "embedding_dims": 1536},
+                "config": {
+                    "model": os.getenv("MEMORY_EMBEDDING_MODEL"),
+                    "embedding_dims": int(os.getenv("MEMORY_EMBEDDING_OUTPUT_DIM")),
+                },
             },
         }
 
@@ -115,6 +119,12 @@ class Mem0Wrapper:
             # Remove any query parameters
             return db_part.split("?")[0]
         return os.getenv("DB_NAME", "neondb")
+
+    def _get_memory_llm_model(self) -> str:
+        """Get the LLM model for memory processing."""
+        memory_model = os.getenv("MEMORY_LLM_MODEL", "openai/gpt-4o-mini")
+        self._logger.info(f"Using memory LLM model: {memory_model}")
+        return memory_model
 
     async def get_memory_client(self) -> AsyncMemory:
         """Get or create Mem0 client instance."""
@@ -193,6 +203,12 @@ class Mem0Wrapper:
 
         except Exception as e:
             self._logger.exception(f"Error adding memory for user {user_id}: {e}")
+            # Check if it's a rate limit error and provide helpful message
+            if "quota" in str(e).lower() or "rate limit" in str(e).lower():
+                self._logger.warning(
+                    "LLM quota exceeded. Switch to a different provider by setting MEMORY_LLM_MODEL in .env"
+                )
+                self._logger.warning("Example: MEMORY_LLM_MODEL=deepseek/deepseek-chat")
             msg = f"Failed to add memory: {e}"
             raise AIMemoryError(msg) from e
 
@@ -429,6 +445,10 @@ class Mem0Wrapper:
         except Exception as e:
             # Log error but don't raise - tracking failures shouldn't break user experience
             self._logger.exception(f"Error tracking interaction for user {user_id}: {e}")
+            if "quota" in str(e).lower() or "rate limit" in str(e).lower():
+                self._logger.info(
+                    "Memory tracking disabled due to LLM quota limits. Switch provider via MEMORY_LLM_MODEL in .env"
+                )
 
 
 # Global instance for dependency injection
