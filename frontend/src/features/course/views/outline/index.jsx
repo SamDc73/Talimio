@@ -1,7 +1,6 @@
-
 import { useProgress } from "../../../../hooks/useProgress";
-import OutlineNode from "../../components/navigation/OutlineNode";
 import { useCourseNavigation } from "../../../../utils/navigationUtils";
+import OutlineNode from "../../components/navigation/OutlineNode";
 
 /**
  * OutlineView renders the full roadmap outline, with all modules and their lessons
@@ -24,7 +23,7 @@ function OutlineView({ roadmapId, modules = [] }) {
 				console.error("Lesson ID is missing:", lessonId);
 				return;
 			}
-			
+
 			// Navigate to the lesson using simplified URL routing
 			console.log("Navigating to lesson:", roadmapId, lessonId);
 			goToLesson(roadmapId, lessonId);
@@ -32,7 +31,6 @@ function OutlineView({ roadmapId, modules = [] }) {
 			console.error("Error handling lesson click:", err);
 		}
 	};
-
 
 	if (!modules || modules.length === 0) {
 		return (

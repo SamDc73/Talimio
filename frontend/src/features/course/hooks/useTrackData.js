@@ -36,17 +36,17 @@ export function useTrackData(courseId) {
 				// Normalize module data for track view
 				// Course API returns flat modules, we need to build hierarchy
 				const flatModules = Array.isArray(moduleData) ? moduleData : [];
-				
+
 				// Find root modules (those without parent_id)
-				const rootModules = flatModules.filter(module => !module.parent_id);
+				const rootModules = flatModules.filter((module) => !module.parent_id);
 
 				// Helper function to build module hierarchy
 				const buildModuleHierarchy = (module) => {
 					// Find child modules of this module
 					const childModules = flatModules
-						.filter(child => child.parent_id === module.id)
+						.filter((child) => child.parent_id === module.id)
 						.sort((a, b) => (a.order || 0) - (b.order || 0));
-					
+
 					return {
 						id: module.id,
 						title: module.title || "Untitled",
@@ -54,13 +54,13 @@ export function useTrackData(courseId) {
 						order: module.order || 0,
 						status: module.status || "not_started",
 						// Include children for track view
-						children: childModules.map(child => buildModuleHierarchy(child))
+						children: childModules.map((child) => buildModuleHierarchy(child)),
 					};
 				};
 
 				// Process and sort root modules
 				const normalizedModules = rootModules
-					.map(module => buildModuleHierarchy(module))
+					.map((module) => buildModuleHierarchy(module))
 					.sort((a, b) => (a.order || 0) - (b.order || 0));
 
 				setModules(normalizedModules);

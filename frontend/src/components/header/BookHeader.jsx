@@ -7,8 +7,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "../tooltip";
-import { useChatSidebar } from "./MainHeader";
-import { UserAvatarMenu } from "./MainHeader";
+import { UserAvatarMenu, useChatSidebar } from "./MainHeader";
 
 export function BookHeader({
 	bookTitle,

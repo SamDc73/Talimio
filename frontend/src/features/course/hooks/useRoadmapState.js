@@ -50,7 +50,7 @@ const createReactFlowNode = (apiNode, nodePositions, nodeRelationships) => {
 		id: apiNode.id,
 		type:
 			nodeRelationships.has(apiNode.id) &&
-				nodeRelationships.get(apiNode.id).length > 0
+			nodeRelationships.get(apiNode.id).length > 0
 				? "decision"
 				: "task",
 		position,

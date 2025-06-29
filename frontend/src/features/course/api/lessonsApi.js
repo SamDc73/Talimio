@@ -1,4 +1,5 @@
 const BASE = import.meta.env.VITE_API_BASE || "/api/v1";
+
 import { getCourseWithModules } from "@/utils/courseDetection";
 
 /**
@@ -43,7 +44,9 @@ export async function fetchLesson(courseId, lessonId) {
 	// Try to find the moduleId for this lesson using efficient method
 	const moduleId = await findModuleIdForLesson(courseId, lessonId);
 	if (!moduleId) {
-		throw new Error(`Could not find module for lesson ${lessonId} in course ${courseId}`);
+		throw new Error(
+			`Could not find module for lesson ${lessonId} in course ${courseId}`,
+		);
 	}
 
 	// Use the full endpoint with moduleId
@@ -58,7 +61,9 @@ export async function fetchLessonFull(courseId, moduleId, lessonId) {
 		throw new Error("Course ID, Module ID, and Lesson ID are required");
 	}
 
-	const res = await fetch(`${BASE}/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}?generate=true`);
+	const res = await fetch(
+		`${BASE}/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}?generate=true`,
+	);
 	if (!res.ok) {
 		throw new Error(`Failed to fetch lesson: ${res.status}`);
 	}
@@ -73,7 +78,9 @@ export async function fetchLessons(courseId, moduleId) {
 		throw new Error("Course ID and Module ID are required");
 	}
 
-	const res = await fetch(`${BASE}/courses/${courseId}/modules/${moduleId}/lessons`);
+	const res = await fetch(
+		`${BASE}/courses/${courseId}/modules/${moduleId}/lessons`,
+	);
 	if (!res.ok) {
 		throw new Error(`Failed to fetch lessons: ${res.status}`);
 	}
@@ -88,10 +95,13 @@ export async function generateLesson(courseId, moduleId) {
 		throw new Error("Course ID and Module ID are required");
 	}
 
-	const res = await fetch(`${BASE}/courses/${courseId}/modules/${moduleId}/lessons`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-	});
+	const res = await fetch(
+		`${BASE}/courses/${courseId}/modules/${moduleId}/lessons`,
+		{
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+		},
+	);
 	if (!res.ok) {
 		throw new Error(`Failed to generate lesson: ${res.status}`);
 	}

@@ -1,11 +1,11 @@
 import { Loader2, Tag as TagIcon } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useToast } from "../hooks/use-toast";
 import useTagStore from "../stores/useTagStore";
-import { TagList } from "./Tag";
-import TagInput from "./TagInput";
 import { Button } from "./button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./dialog";
+import { TagList } from "./Tag";
+import TagInput from "./TagInput";
 
 /**
  * Modal for editing tags on content items

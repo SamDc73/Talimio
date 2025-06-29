@@ -1,11 +1,9 @@
-import { useToast } from "@/hooks/use-toast";
-import { extractBookChapters, getBookChapters } from "@/services/booksService";
-import {
-	useTocProgress,
-} from "@/services/tocProgressService";
-import useAppStore from "@/stores/useAppStore";
 import { Download, FileText } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useToast } from "@/hooks/use-toast";
+import { extractBookChapters, getBookChapters } from "@/services/booksService";
+import { useTocProgress } from "@/services/tocProgressService";
+import useAppStore from "@/stores/useAppStore";
 import CompletionCheckbox from "./CompletionCheckbox";
 import ExpandableSection from "./ExpandableSection";
 import ProgressCircle from "./ProgressCircle";

@@ -1,6 +1,3 @@
-
-
-
 import { Input } from "@/components/input";
 
 export const TextInput = ({ value, onChange, placeholder }) => (

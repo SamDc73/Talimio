@@ -25,18 +25,18 @@ import {
 	Youtube,
 } from "lucide-react";
 import {
-	useState,
+	createContext,
+	useCallback,
+	useContext,
 	useEffect,
 	useRef,
-	useCallback,
-	createContext,
-	useContext,
+	useState,
 } from "react";
 import { Link } from "react-router-dom";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useCurrentContext } from "../../hooks/useCurrentContext";
 import { cn } from "../../lib/utils";
 import { useAssistantChat } from "../../services/assistantApi";
-import { PersonalizationDialog } from "../PersonalizationDialog";
 import useAppStore from "../../stores/useAppStore";
 import { Button } from "../button";
 import {
@@ -49,6 +49,7 @@ import {
 	DropdownMenuTrigger,
 } from "../drop-menu";
 import { Input } from "../input";
+import { PersonalizationDialog } from "../PersonalizationDialog";
 import { Sheet, SheetContent, SheetTrigger } from "../sheet";
 import { Switch } from "../switch";
 import {
@@ -220,52 +221,111 @@ export function Logo({ className, size = "md", href = "/" }) {
 // Chat Sidebar Component
 export function ChatSidebar() {
 	const { isChatOpen, toggleChat } = useChatSidebar();
-	const [messages, setMessages] = useState([
-		{
-			id: "1",
-			content: "Hello! I'm your learning assistant. How can I help you today?",
-			role: "assistant",
-			timestamp: new Date(),
-		},
-	]);
 	const [inputValue, setInputValue] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
 	const messagesEndRef = useRef(null);
 	const { theme } = useTheme();
 	const isDarkMode = theme === "dark";
-	const assistantSidebarPinned = useAppStore((state) => state.preferences.assistantSidebarPinned);
-	const assistantSidebarWidth = useAppStore((state) => state.preferences.assistantSidebarWidth);
-	const toggleAssistantSidebarPin = useAppStore((state) => state.toggleAssistantSidebarPin);
-	const setAssistantSidebarWidth = useAppStore((state) => state.setAssistantSidebarWidth);
+	const assistantSidebarPinned = useAppStore(
+		(state) => state.preferences.assistantSidebarPinned,
+	);
+	const assistantSidebarWidth = useAppStore(
+		(state) => state.preferences.assistantSidebarWidth,
+	);
+	const toggleAssistantSidebarPin = useAppStore(
+		(state) => state.toggleAssistantSidebarPin,
+	);
+	const setAssistantSidebarWidth = useAppStore(
+		(state) => state.setAssistantSidebarWidth,
+	);
 	const { sendMessage, sendStreamingMessage } = useAssistantChat();
 	const [useStreaming, _setUseStreaming] = useState(true); // Default to streaming
 	const [isResizing, setIsResizing] = useState(false);
 	const [startX, setStartX] = useState(0);
 	const [startWidth, setStartWidth] = useState(0);
 
-	// Resize handlers
-	const handleResizeStart = useCallback((e) => {
-		e.preventDefault();
-		e.stopPropagation();
-		setIsResizing(true);
-		setStartX(e.clientX);
-		setStartWidth(assistantSidebarWidth);
-		document.body.style.userSelect = "none"; // Prevent text selection during resize
-		document.body.style.cursor = "col-resize"; // Set global cursor
-	}, [assistantSidebarWidth]);
+	// Get current page context for context-aware assistance
+	const currentContext = useCurrentContext();
 
-	const handleResizeMove = useCallback((e) => {
-		if (!isResizing) return;
-		e.preventDefault();
-		
-		// Calculate new width (drag left to make wider, right to make narrower)
-		const deltaX = startX - e.clientX;
-		const newWidth = startWidth + deltaX;
-		
-		// Apply width with constraints (min: 300px, max: 800px)
-		const clampedWidth = Math.max(300, Math.min(800, newWidth));
-		setAssistantSidebarWidth(clampedWidth);
-	}, [isResizing, startX, startWidth, setAssistantSidebarWidth]);
+	// Create a unique conversation key based on context
+	const conversationKey = currentContext
+		? `${currentContext.contextType}-${currentContext.contextId}`
+		: "general";
+
+	// Store conversations per context
+	const [conversations, setConversations] = useState({});
+
+	// Initialize conversation for current context if it doesn't exist
+	const initializeConversation = useCallback(() => {
+		setConversations((prev) => {
+			if (!prev[conversationKey]) {
+				const initialMessage = {
+					id: "1",
+					content: currentContext
+						? `Hello! I can see you're viewing a ${currentContext.contextType}. How can I help you with this content?`
+						: "Hello! I'm your learning assistant. How can I help you today?",
+					role: "assistant",
+					timestamp: new Date(),
+				};
+
+				return {
+					...prev,
+					[conversationKey]: [initialMessage],
+				};
+			}
+			return prev;
+		});
+	}, [conversationKey, currentContext]);
+
+	// Initialize conversation when context changes
+	useEffect(() => {
+		initializeConversation();
+	}, [initializeConversation]);
+
+	// Get current conversation
+	const messages = conversations[conversationKey] || [];
+
+	const setMessages = (updateFn) => {
+		setConversations((prev) => {
+			const currentMessages = prev[conversationKey] || [];
+			const newMessages =
+				typeof updateFn === "function" ? updateFn(currentMessages) : updateFn;
+			return {
+				...prev,
+				[conversationKey]: newMessages,
+			};
+		});
+	};
+
+	// Resize handlers
+	const handleResizeStart = useCallback(
+		(e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			setIsResizing(true);
+			setStartX(e.clientX);
+			setStartWidth(assistantSidebarWidth);
+			document.body.style.userSelect = "none"; // Prevent text selection during resize
+			document.body.style.cursor = "col-resize"; // Set global cursor
+		},
+		[assistantSidebarWidth],
+	);
+
+	const handleResizeMove = useCallback(
+		(e) => {
+			if (!isResizing) return;
+			e.preventDefault();
+
+			// Calculate new width (drag left to make wider, right to make narrower)
+			const deltaX = startX - e.clientX;
+			const newWidth = startWidth + deltaX;
+
+			// Apply width with constraints (min: 300px, max: 800px)
+			const clampedWidth = Math.max(300, Math.min(800, newWidth));
+			setAssistantSidebarWidth(clampedWidth);
+		},
+		[isResizing, startX, startWidth, setAssistantSidebarWidth],
+	);
 
 	const handleResizeEnd = useCallback(() => {
 		if (!isResizing) return;
@@ -275,26 +335,29 @@ export function ChatSidebar() {
 	}, [isResizing]);
 
 	// Keyboard resize handler
-	const handleKeyDown = useCallback((e) => {
-		if (e.key === 'ArrowLeft') {
-			e.preventDefault();
-			const newWidth = assistantSidebarWidth + (e.shiftKey ? 50 : 10);
-			const clampedWidth = Math.max(300, Math.min(800, newWidth));
-			setAssistantSidebarWidth(clampedWidth);
-		} else if (e.key === 'ArrowRight') {
-			e.preventDefault();
-			const newWidth = assistantSidebarWidth - (e.shiftKey ? 50 : 10);
-			const clampedWidth = Math.max(300, Math.min(800, newWidth));
-			setAssistantSidebarWidth(clampedWidth);
-		}
-	}, [assistantSidebarWidth, setAssistantSidebarWidth]);
+	const handleKeyDown = useCallback(
+		(e) => {
+			if (e.key === "ArrowLeft") {
+				e.preventDefault();
+				const newWidth = assistantSidebarWidth + (e.shiftKey ? 50 : 10);
+				const clampedWidth = Math.max(300, Math.min(800, newWidth));
+				setAssistantSidebarWidth(clampedWidth);
+			} else if (e.key === "ArrowRight") {
+				e.preventDefault();
+				const newWidth = assistantSidebarWidth - (e.shiftKey ? 50 : 10);
+				const clampedWidth = Math.max(300, Math.min(800, newWidth));
+				setAssistantSidebarWidth(clampedWidth);
+			}
+		},
+		[assistantSidebarWidth, setAssistantSidebarWidth],
+	);
 
 	// Add event listeners for resize
 	useEffect(() => {
 		if (isResizing) {
 			document.addEventListener("mousemove", handleResizeMove);
 			document.addEventListener("mouseup", handleResizeEnd);
-			
+
 			return () => {
 				document.removeEventListener("mousemove", handleResizeMove);
 				document.removeEventListener("mouseup", handleResizeEnd);
@@ -329,6 +392,11 @@ export function ChatSidebar() {
 				content: msg.content,
 			}));
 
+			// Debug: Log context being sent
+			if (currentContext) {
+				console.log("Sending context to assistant:", currentContext);
+			}
+
 			if (useStreaming) {
 				// Add placeholder for assistant message
 				const assistantMessageId = (Date.now() + 1).toString();
@@ -341,7 +409,7 @@ export function ChatSidebar() {
 				setMessages((prev) => [...prev, assistantMessage]);
 				setIsLoading(false); // Turn off loading immediately since we have a placeholder
 
-				// Send streaming message
+				// Send streaming message with context
 				await sendStreamingMessage(
 					userInput,
 					conversationHistory,
@@ -355,16 +423,22 @@ export function ChatSidebar() {
 							),
 						);
 					},
+					currentContext, // Pass context data
 				);
 			} else {
-				// Send regular message
-				const response = await sendMessage(userInput, conversationHistory);
+				// Send regular message with context
+				const response = await sendMessage(
+					userInput,
+					conversationHistory,
+					currentContext,
+				);
 
 				const assistantMessage = {
 					id: (Date.now() + 1).toString(),
 					content: response.response,
 					role: "assistant",
 					timestamp: new Date(),
+					contextSource: response.context_source || null,
 				};
 				setMessages((prev) => [...prev, assistantMessage]);
 			}
@@ -418,16 +492,18 @@ export function ChatSidebar() {
 					"border-l",
 					isDarkMode ? "border-zinc-800" : "border-slate-200",
 				)}
-				style={{ 
+				style={{
 					width: `${assistantSidebarWidth}px`,
-					transition: isResizing ? "none" : "width 0.2s ease-out"
+					transition: isResizing ? "none" : "width 0.2s ease-out",
 				}}
 				initial={{ x: "100%" }}
 				animate={{
 					x: isChatOpen ? 0 : "100%",
 					position: assistantSidebarPinned && isChatOpen ? "fixed" : "fixed",
 					boxShadow:
-						assistantSidebarPinned && isChatOpen ? "none" : "-4px 0 15px rgba(0, 0, 0, 0.1)",
+						assistantSidebarPinned && isChatOpen
+							? "none"
+							: "-4px 0 15px rgba(0, 0, 0, 0.1)",
 				}}
 				transition={{ type: "spring", damping: 20, stiffness: 300 }}
 			>
@@ -445,22 +521,24 @@ export function ChatSidebar() {
 						"hover:bg-blue-500/50 transition-colors duration-150",
 						"active:bg-blue-600/70 focus:outline-none focus:ring-2 focus:ring-blue-500",
 						isDarkMode ? "bg-zinc-700/30" : "bg-slate-300/30",
-						isResizing && "bg-blue-500/70"
+						isResizing && "bg-blue-500/70",
 					)}
 					onMouseDown={handleResizeStart}
 					onKeyDown={handleKeyDown}
 					style={{
-						touchAction: 'none', // Prevent touch scrolling
+						touchAction: "none", // Prevent touch scrolling
 					}}
 					title="Drag to resize sidebar (Arrow keys to resize, Shift+Arrow for larger steps)"
 				>
 					<div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-						<GripVertical className={cn(
-							"h-5 w-5 transition-opacity duration-150",
-							isDarkMode ? "text-zinc-400" : "text-slate-500",
-							"group-hover:opacity-100",
-							isResizing ? "opacity-100" : "opacity-50"
-						)} />
+						<GripVertical
+							className={cn(
+								"h-5 w-5 transition-opacity duration-150",
+								isDarkMode ? "text-zinc-400" : "text-slate-500",
+								"group-hover:opacity-100",
+								isResizing ? "opacity-100" : "opacity-50",
+							)}
+						/>
 					</div>
 				</div>
 				{/* Header */}
@@ -530,6 +608,19 @@ export function ChatSidebar() {
 							)}
 						>
 							<p className="text-sm">{message.content}</p>
+							{/* Show context source for assistant messages */}
+							{message.role === "assistant" && message.contextSource && (
+								<div
+									className={cn(
+										"text-xs mt-2 pt-2 border-t opacity-70",
+										isDarkMode
+											? "border-zinc-700 text-zinc-400"
+											: "border-slate-200 text-slate-500",
+									)}
+								>
+									📄 Context: {message.contextSource}
+								</div>
+							)}
 						</div>
 					))}
 					{isLoading && (

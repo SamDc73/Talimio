@@ -1,3 +1,5 @@
+import { MessageSquare, PanelRight } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/button";
 import {
 	Tooltip,
@@ -5,10 +7,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/tooltip";
-import { MessageSquare, PanelRight } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
-import { useChatSidebar } from "./MainHeader";
-import { UserAvatarMenu } from "./MainHeader";
+import { UserAvatarMenu, useChatSidebar } from "./MainHeader";
 
 export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
 	const _navigate = useNavigate();

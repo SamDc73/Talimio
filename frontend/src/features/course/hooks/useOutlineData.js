@@ -24,9 +24,9 @@ export function useOutlineData(courseId) {
 			setError(null);
 			try {
 				// Use getCourseWithModules to get structured data with lessons
-				const { modules: structuredModules } = await getCourseWithModules(courseId);
+				const { modules: structuredModules } =
+					await getCourseWithModules(courseId);
 				setModules(structuredModules || []);
-				
 			} catch (err) {
 				console.error("Failed to load course data:", err);
 				setError(err.message || "Failed to load course data");

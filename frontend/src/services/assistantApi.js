@@ -1,12 +1,32 @@
 import { useApi } from "../hooks/useApi";
-import { getUserHeaders } from "../utils/userUtils";
 import useAppStore from "../stores/useAppStore";
+import { getUserHeaders } from "../utils/userUtils";
 
 export const assistantApi = {
-	async chat(message, conversationHistory = [], stream = false) {
+	async chat(
+		message,
+		conversationHistory = [],
+		stream = false,
+		contextData = null,
+	) {
 		// Get user's preferred model from store
 		const assistantModel = useAppStore.getState().preferences.assistantModel;
-		
+
+		const requestBody = {
+			message,
+			conversation_history: conversationHistory,
+			user_id: getUserHeaders()["x-user-id"] || null,
+			model: assistantModel, // Include preferred model
+			stream, // Enable streaming if requested
+		};
+
+		// Add context data if provided
+		if (contextData) {
+			requestBody.context_type = contextData.contextType;
+			requestBody.context_id = contextData.contextId;
+			requestBody.context_meta = contextData.contextMeta;
+		}
+
 		const response = await fetch(
 			`${import.meta.env.VITE_API_BASE || "/api/v1"}/assistant/chat`,
 			{
@@ -15,13 +35,7 @@ export const assistantApi = {
 					"Content-Type": "application/json",
 					...getUserHeaders(),
 				},
-				body: JSON.stringify({
-					message,
-					conversation_history: conversationHistory,
-					user_id: getUserHeaders()["x-user-id"] || null,
-					model: assistantModel, // Include preferred model
-					stream, // Enable streaming if requested
-				}),
+				body: JSON.stringify(requestBody),
 			},
 		);
 
@@ -37,9 +51,14 @@ export const assistantApi = {
 		return response.json();
 	},
 
-	async *chatStream(message, conversationHistory = []) {
-		const response = await this.chat(message, conversationHistory, true);
-		
+	async *chatStream(message, conversationHistory = [], contextData = null) {
+		const response = await this.chat(
+			message,
+			conversationHistory,
+			true,
+			contextData,
+		);
+
 		if (!response.body) {
 			throw new Error("No response body for streaming");
 		}
@@ -55,7 +74,7 @@ export const assistantApi = {
 
 				buffer += decoder.decode(value, { stream: true });
 				const lines = buffer.split("\n");
-				
+
 				// Process all complete lines
 				for (let i = 0; i < lines.length - 1; i++) {
 					const line = lines[i].trim();
@@ -72,7 +91,7 @@ export const assistantApi = {
 						}
 					}
 				}
-				
+
 				// Keep the last incomplete line in the buffer
 				buffer = lines[lines.length - 1];
 			}
@@ -104,15 +123,33 @@ export const assistantApi = {
 export function useAssistantChat() {
 	const { execute, loading, error } = useApi();
 
-	const sendMessage = async (message, conversationHistory = []) => {
+	const sendMessage = async (
+		message,
+		conversationHistory = [],
+		contextData = null,
+	) => {
 		return execute(async () => {
-			return assistantApi.chat(message, conversationHistory);
+			return assistantApi.chat(
+				message,
+				conversationHistory,
+				false,
+				contextData,
+			);
 		});
 	};
 
-	const sendStreamingMessage = async (message, conversationHistory = [], onChunk) => {
+	const sendStreamingMessage = async (
+		message,
+		conversationHistory = [],
+		onChunk,
+		contextData = null,
+	) => {
 		try {
-			const stream = assistantApi.chatStream(message, conversationHistory);
+			const stream = assistantApi.chatStream(
+				message,
+				conversationHistory,
+				contextData,
+			);
 			let fullResponse = "";
 
 			for await (const chunk of stream) {

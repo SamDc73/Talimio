@@ -1,44 +1,14 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import RoadmapPromptModal from "@/features/roadmap/RoadmapPromptModal";
 import logger from "@/utils/logger";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 // Debug logging for Radix UI component initialization
 if (import.meta.env.VITE_DEBUG_MODE === "true") {
 	logger.debug("Initializing Radix UI components in HomePage");
 }
-import { ConfirmationDialog } from "@/components/ConfirmationDialog";
-import TagEditModal from "@/components/TagEditModal";
-import { Badge } from "@/components/badge";
-import { Button } from "@/components/button";
-import { MainHeader } from "@/components/header/MainHeader";
-import { Input } from "@/components/input";
-import { Label } from "@/components/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover";
-import { RadioGroup, RadioGroupItem } from "@/components/radio-group";
-import { Separator } from "@/components/separator";
-import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetFooter,
-	SheetHeader,
-	SheetTitle,
-} from "@/components/sheet";
-import {
-	TooltipProvider,
-} from "@/components/tooltip";
-import { useToast } from "@/hooks/use-toast";
-import { fetchContentData, processContentData } from "@/lib/api";
-import { api } from "@/lib/apiClient";
-import { archiveContent, unarchiveContent } from "@/services/contentService";
-import { deleteApi } from "@/services/deleteApi";
-import {
-	calculateBookProgress,
-	getBookProgressStats,
-} from "@/services/tocProgressService";
-import { videoApi } from "@/services/videoApi";
+
 import { AnimatePresence, motion } from "framer-motion";
 import {
 	Archive,
@@ -64,6 +34,35 @@ import {
 	X,
 	Youtube,
 } from "lucide-react";
+import { Badge } from "@/components/badge";
+import { Button } from "@/components/button";
+import { ConfirmationDialog } from "@/components/ConfirmationDialog";
+import { MainHeader } from "@/components/header/MainHeader";
+import { Input } from "@/components/input";
+import { Label } from "@/components/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover";
+import { RadioGroup, RadioGroupItem } from "@/components/radio-group";
+import { Separator } from "@/components/separator";
+import {
+	Sheet,
+	SheetContent,
+	SheetDescription,
+	SheetFooter,
+	SheetHeader,
+	SheetTitle,
+} from "@/components/sheet";
+import TagEditModal from "@/components/TagEditModal";
+import { TooltipProvider } from "@/components/tooltip";
+import { useToast } from "@/hooks/use-toast";
+import { fetchContentData, processContentData } from "@/lib/api";
+import { api } from "@/lib/apiClient";
+import { archiveContent, unarchiveContent } from "@/services/contentService";
+import { deleteApi } from "@/services/deleteApi";
+import {
+	calculateBookProgress,
+	getBookProgressStats,
+} from "@/services/tocProgressService";
+import { videoApi } from "@/services/videoApi";
 
 const VARIANTS = {
 	course: {
@@ -834,7 +833,15 @@ export default function HomePage() {
 						return 0;
 				}
 			});
-	}, [contentItems, activeFilter, archiveFilter, searchQuery, tagFilter, sortDirection, activeSort]);
+	}, [
+		contentItems,
+		activeFilter,
+		archiveFilter,
+		searchQuery,
+		tagFilter,
+		sortDirection,
+		activeSort,
+	]);
 
 	// Removed debug logging for performance
 

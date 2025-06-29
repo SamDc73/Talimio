@@ -1,6 +1,6 @@
-import useAppStore from "@/stores/useAppStore";
 import { useEffect, useRef, useState } from "react";
 import { ReactReader } from "react-reader";
+import useAppStore from "@/stores/useAppStore";
 import "./EPUBViewer.css";
 
 /**
@@ -240,8 +240,10 @@ const EPUBViewerV2 = ({ url, bookInfo, onLocationChange }) => {
 			// Re-apply theme when theme preference changes
 			onRendition(renditionRef.current);
 		}
-	}, [// Re-apply theme when theme preference changes
-			onRendition]);
+	}, [
+		// Re-apply theme when theme preference changes
+		onRendition,
+	]);
 
 	return (
 		<div className="epub-viewer-container">

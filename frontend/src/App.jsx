@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import HomePage from "./features/home";
 import "@xyflow/react/dist/style.css";
@@ -10,8 +10,8 @@ import {
 import { Toaster } from "./components/toaster";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { BookViewer } from "./features/book-viewer";
-import RoadmapPreviewPage from "./features/roadmap/RoadmapPreviewPage";
 import { CourseLayout as RoadmapFlow } from "./features/course";
+import RoadmapPreviewPage from "./features/roadmap/RoadmapPreviewPage";
 import { VideoViewer } from "./features/video-viewer";
 import { useAppState } from "./hooks/useAppState";
 import useAppStore from "./stores/useAppStore";
@@ -58,16 +58,22 @@ export default function App() {
 							element={<RoadmapPreviewPage />}
 						/>
 						<Route path="/roadmap/:roadmapId" element={<RoadmapPage />} />
-						<Route path="/roadmap/:roadmapId/lesson/:lessonId" element={<RoadmapPage />} />
-						
+						<Route
+							path="/roadmap/:roadmapId/lesson/:lessonId"
+							element={<RoadmapPage />}
+						/>
+
 						{/* New course routes - using same components with course IDs */}
 						<Route
 							path="/course/preview/:roadmapId"
 							element={<RoadmapPreviewPage />}
 						/>
 						<Route path="/course/:roadmapId" element={<RoadmapPage />} />
-						<Route path="/course/:roadmapId/lesson/:lessonId" element={<RoadmapPage />} />
-						
+						<Route
+							path="/course/:roadmapId/lesson/:lessonId"
+							element={<RoadmapPage />}
+						/>
+
 						{/* Other content routes */}
 						<Route path="/books/:bookId" element={<BookViewer />} />
 						<Route path="/videos/:videoId" element={<VideoViewer />} />

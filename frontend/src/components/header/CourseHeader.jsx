@@ -1,4 +1,10 @@
-import { FileText, GitBranch, MessageSquare, PanelLeft, Files } from "lucide-react";
+import {
+	Files,
+	FileText,
+	GitBranch,
+	MessageSquare,
+	PanelLeft,
+} from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "../../lib/utils";
@@ -9,8 +15,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "../tooltip";
-import { useChatSidebar } from "./MainHeader";
-import { UserAvatarMenu } from "./MainHeader";
+import { UserAvatarMenu, useChatSidebar } from "./MainHeader";
 
 export function CourseHeader({
 	courseName,
@@ -137,7 +142,13 @@ export function CourseHeader({
 									</TooltipTrigger>
 									<TooltipContent>
 										<p>
-											Switch View ({mode === "outline" ? "Track" : mode === "track" ? "Documents" : "Outline"} next)
+											Switch View (
+											{mode === "outline"
+												? "Track"
+												: mode === "track"
+													? "Documents"
+													: "Outline"}{" "}
+											next)
 										</p>
 									</TooltipContent>
 								</Tooltip>

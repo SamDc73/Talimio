@@ -1,3 +1,7 @@
+import { motion } from "framer-motion";
+import { Sparkles, Wand2 } from "lucide-react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/button";
 import {
 	Dialog,
@@ -7,10 +11,6 @@ import {
 } from "@/components/dialog";
 import { toast } from "@/hooks/use-toast";
 import { api } from "@/lib/apiClient";
-import { motion } from "framer-motion";
-import { Sparkles, Wand2 } from "lucide-react";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 const RoadmapPromptModal = ({ isOpen, onClose }) => {
 	const [prompt, setPrompt] = useState("");

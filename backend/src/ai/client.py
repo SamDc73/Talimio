@@ -2,15 +2,27 @@ import json
 import logging
 import os
 import re
-from collections.abc import Sequence
+from collections.abc import AsyncGenerator, Sequence
 from typing import Any
 from uuid import UUID
 
 from litellm import acompletion
 
+from src.ai.prompts import (
+    CONTENT_TAGGING_PROMPT,
+    CONTENT_TAGGING_WITH_CONFIDENCE_PROMPT,
+    LESSON_GENERATION_PROMPT,
+    ONBOARDING_QUESTIONS_PROMPT,
+    PRACTICE_EXERCISES_PROMPT,
+    ROADMAP_GENERATION_PROMPT,
+    ROADMAP_NODE_CONTENT_PROMPT,
+    ROADMAP_TITLE_GENERATION_PROMPT,
+)
+from src.ai.rag.service import RAGService
 from src.config.settings import get_settings
 from src.core.exceptions import DomainError, ValidationError
 from src.core.validators import validate_uuid
+from src.database.session import async_session_maker
 
 
 # Constants
@@ -188,7 +200,7 @@ class ModelManager:
                 model=self.model,
                 messages=list(messages),  # Convert to list for litellm
                 temperature=0.7,
-                max_tokens=8000,
+                max_tokens=4000,  # Reduced for Claude compatibility
             )
 
             # Extract content from response
@@ -212,10 +224,84 @@ class ModelManager:
             msg = f"Failed to generate content: {e!s}"
             raise AIError(msg) from e
 
+    async def get_streaming_completion(
+        self,
+        messages: list[dict[str, str]] | Sequence[dict[str, str]],
+    ) -> AsyncGenerator[str, None]:
+        """Get streaming completion from AI model."""
+        try:
+            response = await acompletion(
+                model=self.model,
+                messages=list(messages),  # Convert to list for litellm
+                temperature=0.7,
+                max_tokens=8000,
+                stream=True,
+            )
+
+            async for chunk in response:
+                if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+
+        except Exception as e:
+            self._logger.exception("Error getting streaming completion from AI")
+            msg = f"Failed to generate streaming content: {e!s}"
+            raise AIError(msg) from e
+
+    async def get_streaming_completion_with_memory(
+        self,
+        messages: list[dict[str, str]] | Sequence[dict[str, str]],
+        user_id: str | None = None,
+        *,
+        track_interaction: bool = True,
+    ) -> AsyncGenerator[str, None]:
+        """Get streaming completion with memory integration and tracking."""
+        # Build memory context if user_id and memory_wrapper are provided
+        if user_id and self.memory_wrapper:
+            try:
+                # Extract query from last user message for memory search
+                user_messages = [msg for msg in messages if msg.get("role") == "user"]
+                current_query = user_messages[-1].get("content", "") if user_messages else ""
+
+                # Get memory context
+                memory_context = await self.memory_wrapper.build_memory_context(user_id, current_query)
+
+                # Prepend memory context to system message if available
+                if memory_context:
+                    messages = list(messages)  # Convert to mutable list
+
+                    # Find existing system message or create new one
+                    system_message_idx = next(
+                        (i for i, msg in enumerate(messages) if msg.get("role") == "system"), None
+                    )
+
+                    memory_prompt = f"Personal Context:\n{memory_context}\n\nPlease use this context to personalize your response appropriately."
+
+                    if system_message_idx is not None:
+                        # Append to existing system message
+                        messages[system_message_idx]["content"] += f"\n\n{memory_prompt}"
+                    else:
+                        # Insert new system message at the beginning
+                        messages.insert(0, {"role": "system", "content": memory_prompt})
+
+                # Track the interaction if enabled
+                if track_interaction and current_query:
+                    await self.memory_wrapper.track_learning_interaction(
+                        user_id=user_id,
+                        interaction_type="ai_query",
+                        content=f"User asked: {current_query}",
+                        metadata={"model": self.model, "timestamp": "now"},
+                    )
+
+            except Exception as e:
+                self._logger.exception(f"Error integrating memory for user {user_id}: {e}")
+                # Continue without memory integration on error
+
+        # Get streaming completion using existing method
+        async for chunk in self.get_streaming_completion(messages):
+            yield chunk
+
     async def generate_onboarding_questions(self, topic: str) -> list[dict[str, Any]]:
         """Generate personalized onboarding questions."""
-        from src.ai.prompts import ONBOARDING_QUESTIONS_PROMPT
-
         prompt = ONBOARDING_QUESTIONS_PROMPT.format(topic=topic)
 
         messages = [
@@ -229,7 +315,7 @@ class ModelManager:
             raise AIError(msg)
         return result
 
-    async def generate_roadmap_content(
+    async def generate_roadmap_content(  # noqa: C901
         self,
         title: str,
         skill_level: str,
@@ -259,7 +345,6 @@ class ModelManager:
         if sub_min > sub_max:
             msg = "sub_min cannot be greater than sub_max"
             raise ValidationError(msg)
-        from src.ai.prompts import ROADMAP_GENERATION_PROMPT
 
         prompt = ROADMAP_GENERATION_PROMPT.format(
             title=title,
@@ -337,8 +422,6 @@ class ModelManager:
         ------
             RoadmapGenerationError: If title/description generation fails
         """
-        from src.ai.prompts import ROADMAP_TITLE_GENERATION_PROMPT
-
         prompt = ROADMAP_TITLE_GENERATION_PROMPT.format(
             user_prompt=user_prompt,
             skill_level=skill_level,
@@ -379,8 +462,6 @@ class ModelManager:
             msg = "Invalid node ID"
             raise ValidationError(msg)
 
-        from src.ai.prompts import PRACTICE_EXERCISES_PROMPT
-
         prompt = PRACTICE_EXERCISES_PROMPT.format(
             topic=topic,
             difficulty=difficulty,
@@ -411,7 +492,6 @@ class ModelManager:
         if not validate_uuid(roadmap_id):
             msg = "Invalid roadmap ID"
             raise ValidationError(msg)
-        from src.ai.prompts import ROADMAP_NODE_CONTENT_PROMPT
 
         # Build node details and roadmap structure for the prompt
         node_details = {"title": current_node}
@@ -464,8 +544,6 @@ class ModelManager:
         ------
             TagGenerationError: If tag generation fails
         """
-        from src.ai.prompts import CONTENT_TAGGING_PROMPT
-
         prompt = CONTENT_TAGGING_PROMPT.format(
             content_type=content_type,
             title=title,
@@ -520,8 +598,6 @@ class ModelManager:
         ------
             TagGenerationError: If tag generation fails
         """
-        from src.ai.prompts import CONTENT_TAGGING_WITH_CONFIDENCE_PROMPT
-
         prompt = CONTENT_TAGGING_WITH_CONFIDENCE_PROMPT.format(
             content_type=content_type,
             title=title,
@@ -561,7 +637,7 @@ class ModelManager:
             raise TagGenerationError from e
 
 
-async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]]:
+async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]]:  # noqa: C901, PLR0912, PLR0915
     """Generate a comprehensive lesson in Markdown format based on node metadata.
 
     Includes RAG context from roadmap documents if roadmap_id is provided.
@@ -590,8 +666,6 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
         current_module_index = node_meta.get("current_module_index", -1)
         course_title = node_meta.get("course_title", "")
 
-        from src.ai.prompts import LESSON_GENERATION_PROMPT
-
         # Create a more detailed prompt for lesson generation
         content_info = f"{node_title} - {node_description} (Skill Level: {skill_level})"
 
@@ -612,11 +686,6 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
         citations_info = []
         if roadmap_id:
             try:
-                from uuid import UUID
-
-                from src.ai.rag.service import RAGService
-                from src.database.session import async_session_maker
-
                 rag_service = RAGService()
 
                 # Create query from lesson topic

@@ -1,5 +1,5 @@
 import { Plus, Search, X } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import useTagStore from "../stores/useTagStore";
 import Tag, { TagList } from "./Tag";
 

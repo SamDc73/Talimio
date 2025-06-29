@@ -4,8 +4,15 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from asyncpg.exceptions import ConnectionDoesNotExistError
 from dotenv import load_dotenv
+
+
+# Load .env FIRST before any other imports that might need env vars
+BACKEND_DIR = Path(__file__).parent.parent
+ENV_PATH = BACKEND_DIR / ".env"
+load_dotenv(ENV_PATH)
+
+from asyncpg.exceptions import ConnectionDoesNotExistError
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -41,15 +48,27 @@ from .videos.models import Video  # noqa: F401
 from .videos.router import router as videos_router
 
 
-# Load .env from backend directory (parent of src)
-BACKEND_DIR = Path(__file__).parent.parent
-ENV_PATH = BACKEND_DIR / ".env"
-load_dotenv(ENV_PATH)
-
-
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Suppress LiteLLM capability detection warnings for Cohere embeddings
+# These warnings occur during startup when LiteLLM tests if models support certain parameters
+litellm_logger = logging.getLogger("LiteLLM")
+litellm_logger.setLevel(logging.ERROR)  # Only show errors, not warnings
+
+# Alternatively, create a custom filter for specific Cohere embedding errors
+class CohereEmbeddingWarningFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Filter out specific Cohere embedding capability detection warnings
+        message = str(record.getMessage())
+        return not (
+            "Could not detect capabilities for cohere/embed" in message
+            or "output_dimension is not supported" in message
+        )
+
+# Apply the filter to the root logger to catch all instances
+logging.getLogger().addFilter(CohereEmbeddingWarningFilter())
 
 
 async def create_tables() -> None:
@@ -112,6 +131,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             from src.database.migrations.add_timezone_to_datetime_columns import add_timezone_to_datetime_columns
 
             await add_timezone_to_datetime_columns(engine)
+
+            # Run RAG status columns migration
+            from src.database.migrations.add_rag_status_columns import run_rag_status_migrations
+
+            await run_rag_status_migrations(engine)
 
             break  # Success - exit the retry loop
 

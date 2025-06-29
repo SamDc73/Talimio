@@ -5,7 +5,7 @@
 # Database models and schemas
 from src.courses.models import DocumentChunk, RoadmapDocument
 
-from .chunker import BasicChunker, ChunkerFactory, LlamaIndexChunker
+from .chunker import BasicChunker, ChunkerFactory
 from .ingest import DocumentProcessor, PDFIngestor, URLIngestor
 from .retriever import DocumentRetriever, Reranker
 from .schemas import (
@@ -30,7 +30,6 @@ __all__ = [
     "DocumentRetriever",
     "DocumentUpload",
     "EmbeddingGenerator",
-    "LlamaIndexChunker",
     "PDFIngestor",
     "Reranker",
     "RoadmapDocument",

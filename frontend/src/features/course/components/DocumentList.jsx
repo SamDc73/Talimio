@@ -1,6 +1,6 @@
 /**
  * DocumentList Component
- * 
+ *
  * Displays and manages a list of documents for a course:
  * - Shows document status with badges
  * - Supports sorting and filtering
@@ -10,388 +10,393 @@
  * - Pagination for large lists
  */
 
-import { useState, useMemo } from 'react';
-import { 
-  FileText, 
-  Link2, 
-  Search, 
-  MoreVertical, 
-  Download, 
-  Eye, 
-  Trash2, 
-  Filter,
-  Calendar,
-  ArrowUp,
-  ArrowDown
-} from 'lucide-react';
-import { Button } from '../../../components/button';
-import { Input } from '../../../components/input';
-import DocumentStatusBadge, { 
-  DocumentStatusSummary,
-  isDocumentReady,
-  isDocumentProcessing,
-  isDocumentFailed 
-} from './DocumentStatusBadge';
-import { Card } from '../../../components/card';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../../../components/drop-menu';
+	ArrowDown,
+	ArrowUp,
+	Calendar,
+	Download,
+	Eye,
+	FileText,
+	Filter,
+	Link2,
+	MoreVertical,
+	Search,
+	Trash2,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import { Button } from "../../../components/button";
+import { Card } from "../../../components/card";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "../../../components/drop-menu";
+import { Input } from "../../../components/input";
+import DocumentStatusBadge, {
+	DocumentStatusSummary,
+	isDocumentFailed,
+	isDocumentProcessing,
+	isDocumentReady,
+} from "./DocumentStatusBadge";
 
-const DocumentList = ({ 
-  documents = [], 
-  onRemoveDocument, 
-  onViewDocument,
-  onDownloadDocument,
-  isLoading = false,
-  emptyMessage = "No documents uploaded yet",
-  showActions = true,
-  showSearch = true,
-  showFilter = true,
-  showSorting = true,
-  className = ""
+const DocumentList = ({
+	documents = [],
+	onRemoveDocument,
+	onViewDocument,
+	onDownloadDocument,
+	isLoading = false,
+	emptyMessage = "No documents uploaded yet",
+	showActions = true,
+	showSearch = true,
+	showFilter = true,
+	showSorting = true,
+	className = "",
 }) => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("created_at");
-  const [sortOrder, setSortOrder] = useState("desc");
+	const [searchTerm, setSearchTerm] = useState("");
+	const [statusFilter, setStatusFilter] = useState("all");
+	const [sortBy, setSortBy] = useState("created_at");
+	const [sortOrder, setSortOrder] = useState("desc");
 
-  // Filter and sort documents
-  const filteredDocuments = useMemo(() => {
-    let filtered = documents;
+	// Filter and sort documents
+	const filteredDocuments = useMemo(() => {
+		let filtered = documents;
 
-    // Apply search filter
-    if (searchTerm.trim()) {
-      const search = searchTerm.toLowerCase();
-      filtered = filtered.filter(doc => 
-        doc.title?.toLowerCase().includes(search) ||
-        doc.document_type?.toLowerCase().includes(search) ||
-        doc.url?.toLowerCase().includes(search)
-      );
-    }
+		// Apply search filter
+		if (searchTerm.trim()) {
+			const search = searchTerm.toLowerCase();
+			filtered = filtered.filter(
+				(doc) =>
+					doc.title?.toLowerCase().includes(search) ||
+					doc.document_type?.toLowerCase().includes(search) ||
+					doc.url?.toLowerCase().includes(search),
+			);
+		}
 
-    // Apply status filter
-    if (statusFilter !== "all") {
-      filtered = filtered.filter(doc => {
-        switch (statusFilter) {
-          case "ready":
-            return isDocumentReady(doc);
-          case "processing":
-            return isDocumentProcessing(doc);
-          case "failed":
-            return isDocumentFailed(doc);
-          default:
-            return true;
-        }
-      });
-    }
+		// Apply status filter
+		if (statusFilter !== "all") {
+			filtered = filtered.filter((doc) => {
+				switch (statusFilter) {
+					case "ready":
+						return isDocumentReady(doc);
+					case "processing":
+						return isDocumentProcessing(doc);
+					case "failed":
+						return isDocumentFailed(doc);
+					default:
+						return true;
+				}
+			});
+		}
 
-    // Apply sorting
-    filtered.sort((a, b) => {
-      let aValue = a[sortBy];
-      let bValue = b[sortBy];
+		// Apply sorting
+		filtered.sort((a, b) => {
+			let aValue = a[sortBy];
+			let bValue = b[sortBy];
 
-      // Handle date sorting
-      if (sortBy.includes('_at')) {
-        aValue = new Date(aValue);
-        bValue = new Date(bValue);
-      }
+			// Handle date sorting
+			if (sortBy.includes("_at")) {
+				aValue = new Date(aValue);
+				bValue = new Date(bValue);
+			}
 
-      // Handle string sorting
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
-        aValue = aValue.toLowerCase();
-        bValue = bValue.toLowerCase();
-      }
+			// Handle string sorting
+			if (typeof aValue === "string" && typeof bValue === "string") {
+				aValue = aValue.toLowerCase();
+				bValue = bValue.toLowerCase();
+			}
 
-      if (sortOrder === 'asc') {
-        return aValue > bValue ? 1 : -1;
-      } else {
-        return aValue < bValue ? 1 : -1;
-      }
-    });
+			if (sortOrder === "asc") {
+				return aValue > bValue ? 1 : -1;
+			} else {
+				return aValue < bValue ? 1 : -1;
+			}
+		});
 
-    return filtered;
-  }, [documents, searchTerm, statusFilter, sortBy, sortOrder]);
+		return filtered;
+	}, [documents, searchTerm, statusFilter, sortBy, sortOrder]);
 
-  // Get file type icon
-  const getFileTypeIcon = (doc) => {
-    if (doc.document_type === 'url') {
-      return <Link2 className="w-5 h-5 text-green-500" />;
-    }
-    return <FileText className="w-5 h-5 text-blue-500" />;
-  };
+	// Get file type icon
+	const getFileTypeIcon = (doc) => {
+		if (doc.document_type === "url") {
+			return <Link2 className="w-5 h-5 text-green-500" />;
+		}
+		return <FileText className="w-5 h-5 text-blue-500" />;
+	};
 
-  // Format file size
-  const formatFileSize = (bytes) => {
-    if (!bytes) return 'Unknown size';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
-  };
+	// Format file size
+	const formatFileSize = (bytes) => {
+		if (!bytes) return "Unknown size";
+		const k = 1024;
+		const sizes = ["Bytes", "KB", "MB", "GB"];
+		const i = Math.floor(Math.log(bytes) / Math.log(k));
+		return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
+	};
 
-  // Format date
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Unknown';
-    return new Date(dateString).toLocaleDateString();
-  };
+	// Format date
+	const formatDate = (dateString) => {
+		if (!dateString) return "Unknown";
+		return new Date(dateString).toLocaleDateString();
+	};
 
-  // Handle sort change
-  const handleSort = (field) => {
-    if (sortBy === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(field);
-      setSortOrder('desc');
-    }
-  };
+	// Handle sort change
+	const handleSort = (field) => {
+		if (sortBy === field) {
+			setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+		} else {
+			setSortBy(field);
+			setSortOrder("desc");
+		}
+	};
 
-  // Get sort icon
-  const getSortIcon = (field) => {
-    if (sortBy !== field) return null;
-    return sortOrder === 'asc' ? 
-      <ArrowUp className="w-4 h-4" /> : 
-      <ArrowDown className="w-4 h-4" />;
-  };
+	// Get sort icon
+	const getSortIcon = (field) => {
+		if (sortBy !== field) return null;
+		return sortOrder === "asc" ? (
+			<ArrowUp className="w-4 h-4" />
+		) : (
+			<ArrowDown className="w-4 h-4" />
+		);
+	};
 
-  if (isLoading) {
-    return (
-      <Card className={className}>
-        <div className="p-6 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading documents...</p>
-        </div>
-      </Card>
-    );
-  }
+	if (isLoading) {
+		return (
+			<Card className={className}>
+				<div className="p-6 text-center">
+					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+					<p className="text-gray-600">Loading documents...</p>
+				</div>
+			</Card>
+		);
+	}
 
-  return (
-    <div className={className}>
-      {/* Header with controls */}
-      <div className="mb-4 space-y-4">
-        {/* Summary */}
-        <div className="flex items-center justify-between">
-          <DocumentStatusSummary documents={documents} />
-          {documents.length > 0 && (
-            <span className="text-sm text-gray-500">
-              {filteredDocuments.length} of {documents.length} documents
-            </span>
-          )}
-        </div>
+	return (
+		<div className={className}>
+			{/* Header with controls */}
+			<div className="mb-4 space-y-4">
+				{/* Summary */}
+				<div className="flex items-center justify-between">
+					<DocumentStatusSummary documents={documents} />
+					{documents.length > 0 && (
+						<span className="text-sm text-gray-500">
+							{filteredDocuments.length} of {documents.length} documents
+						</span>
+					)}
+				</div>
 
-        {/* Search and Filter Controls */}
-        {(showSearch || showFilter) && documents.length > 0 && (
-          <div className="flex flex-col sm:flex-row gap-3">
-            {/* Search */}
-            {showSearch && (
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  type="text"
-                  placeholder="Search documents..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            )}
+				{/* Search and Filter Controls */}
+				{(showSearch || showFilter) && documents.length > 0 && (
+					<div className="flex flex-col sm:flex-row gap-3">
+						{/* Search */}
+						{showSearch && (
+							<div className="flex-1 relative">
+								<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+								<Input
+									type="text"
+									placeholder="Search documents..."
+									value={searchTerm}
+									onChange={(e) => setSearchTerm(e.target.value)}
+									className="pl-10"
+								/>
+							</div>
+						)}
 
-            {/* Filter */}
-            {showFilter && (
-              <div className="flex items-center space-x-2">
-                <Filter className="w-4 h-4 text-gray-400" />
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Status</option>
-                  <option value="ready">Ready</option>
-                  <option value="processing">Processing</option>
-                  <option value="failed">Failed</option>
-                </select>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+						{/* Filter */}
+						{showFilter && (
+							<div className="flex items-center space-x-2">
+								<Filter className="w-4 h-4 text-gray-400" />
+								<select
+									value={statusFilter}
+									onChange={(e) => setStatusFilter(e.target.value)}
+									className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+								>
+									<option value="all">All Status</option>
+									<option value="ready">Ready</option>
+									<option value="processing">Processing</option>
+									<option value="failed">Failed</option>
+								</select>
+							</div>
+						)}
+					</div>
+				)}
+			</div>
 
-      {/* Document List */}
-      {filteredDocuments.length === 0 ? (
-        <Card>
-          {(searchTerm || statusFilter !== "all") ? (
-            <div className="p-8 text-center">
-              <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 mb-2">
-                No documents match your criteria
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSearchTerm("");
-                  setStatusFilter("all");
-                }}
-              >
-                Clear filters
-              </Button>
-            </div>
-          ) : (
-            typeof emptyMessage === 'string' ? (
-              <div className="p-8 text-center">
-                <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 mb-2">{emptyMessage}</p>
-              </div>
-            ) : (
-              emptyMessage
-            )
-          )}
-        </Card>
-      ) : (
-        <Card>
-          <div className="overflow-hidden">
-            {/* Sort Header */}
-            {showSorting && (
-              <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-700">
-                <div className="grid grid-cols-12 gap-4">
-                  <div className="col-span-5">
-                    <button
-                      onClick={() => handleSort('title')}
-                      className="flex items-center space-x-1 hover:text-gray-900"
-                    >
-                      <span>Document</span>
-                      {getSortIcon('title')}
-                    </button>
-                  </div>
-                  <div className="col-span-2">
-                    <button
-                      onClick={() => handleSort('document_type')}
-                      className="flex items-center space-x-1 hover:text-gray-900"
-                    >
-                      <span>Type</span>
-                      {getSortIcon('document_type')}
-                    </button>
-                  </div>
-                  <div className="col-span-2">
-                    <button
-                      onClick={() => handleSort('status')}
-                      className="flex items-center space-x-1 hover:text-gray-900"
-                    >
-                      <span>Status</span>
-                      {getSortIcon('status')}
-                    </button>
-                  </div>
-                  <div className="col-span-2">
-                    <button
-                      onClick={() => handleSort('created_at')}
-                      className="flex items-center space-x-1 hover:text-gray-900"
-                    >
-                      <span>Date</span>
-                      {getSortIcon('created_at')}
-                    </button>
-                  </div>
-                  {showActions && (
-                    <div className="col-span-1 text-right">Actions</div>
-                  )}
-                </div>
-              </div>
-            )}
+			{/* Document List */}
+			{filteredDocuments.length === 0 ? (
+				<Card>
+					{searchTerm || statusFilter !== "all" ? (
+						<div className="p-8 text-center">
+							<FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+							<p className="text-gray-600 mb-2">
+								No documents match your criteria
+							</p>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => {
+									setSearchTerm("");
+									setStatusFilter("all");
+								}}
+							>
+								Clear filters
+							</Button>
+						</div>
+					) : typeof emptyMessage === "string" ? (
+						<div className="p-8 text-center">
+							<FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+							<p className="text-gray-600 mb-2">{emptyMessage}</p>
+						</div>
+					) : (
+						emptyMessage
+					)}
+				</Card>
+			) : (
+				<Card>
+					<div className="overflow-hidden">
+						{/* Sort Header */}
+						{showSorting && (
+							<div className="px-6 py-3 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-700">
+								<div className="grid grid-cols-12 gap-4">
+									<div className="col-span-5">
+										<button
+											onClick={() => handleSort("title")}
+											className="flex items-center space-x-1 hover:text-gray-900"
+										>
+											<span>Document</span>
+											{getSortIcon("title")}
+										</button>
+									</div>
+									<div className="col-span-2">
+										<button
+											onClick={() => handleSort("document_type")}
+											className="flex items-center space-x-1 hover:text-gray-900"
+										>
+											<span>Type</span>
+											{getSortIcon("document_type")}
+										</button>
+									</div>
+									<div className="col-span-2">
+										<button
+											onClick={() => handleSort("status")}
+											className="flex items-center space-x-1 hover:text-gray-900"
+										>
+											<span>Status</span>
+											{getSortIcon("status")}
+										</button>
+									</div>
+									<div className="col-span-2">
+										<button
+											onClick={() => handleSort("created_at")}
+											className="flex items-center space-x-1 hover:text-gray-900"
+										>
+											<span>Date</span>
+											{getSortIcon("created_at")}
+										</button>
+									</div>
+									{showActions && (
+										<div className="col-span-1 text-right">Actions</div>
+									)}
+								</div>
+							</div>
+						)}
 
-            {/* Document Items */}
-            <div className="divide-y divide-gray-200">
-              {filteredDocuments.map((doc) => (
-                <div key={doc.id} className="px-6 py-4 hover:bg-gray-50">
-                  <div className="grid grid-cols-12 gap-4 items-center">
-                    {/* Document Info */}
-                    <div className="col-span-5">
-                      <div className="flex items-center space-x-3">
-                        <div className="flex-shrink-0">
-                          {getFileTypeIcon(doc)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {doc.title || 'Untitled Document'}
-                          </p>
-                          {doc.document_type === 'url' && doc.url && (
-                            <p className="text-xs text-gray-500 truncate">
-                              {doc.url}
-                            </p>
-                          )}
-                          {doc.file_path && (
-                            <p className="text-xs text-gray-500">
-                              {formatFileSize(doc.size)}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+						{/* Document Items */}
+						<div className="divide-y divide-gray-200">
+							{filteredDocuments.map((doc) => (
+								<div key={doc.id} className="px-6 py-4 hover:bg-gray-50">
+									<div className="grid grid-cols-12 gap-4 items-center">
+										{/* Document Info */}
+										<div className="col-span-5">
+											<div className="flex items-center space-x-3">
+												<div className="flex-shrink-0">
+													{getFileTypeIcon(doc)}
+												</div>
+												<div className="min-w-0 flex-1">
+													<p className="text-sm font-medium text-gray-900 truncate">
+														{doc.title || "Untitled Document"}
+													</p>
+													{doc.document_type === "url" && doc.url && (
+														<p className="text-xs text-gray-500 truncate">
+															{doc.url}
+														</p>
+													)}
+													{doc.file_path && (
+														<p className="text-xs text-gray-500">
+															{formatFileSize(doc.size)}
+														</p>
+													)}
+												</div>
+											</div>
+										</div>
 
-                    {/* Type */}
-                    <div className="col-span-2">
-                      <span className="text-sm text-gray-600 capitalize">
-                        {doc.document_type || 'Unknown'}
-                      </span>
-                    </div>
+										{/* Type */}
+										<div className="col-span-2">
+											<span className="text-sm text-gray-600 capitalize">
+												{doc.document_type || "Unknown"}
+											</span>
+										</div>
 
-                    {/* Status */}
-                    <div className="col-span-2">
-                      <DocumentStatusBadge status={doc.status} size="sm" />
-                    </div>
+										{/* Status */}
+										<div className="col-span-2">
+											<DocumentStatusBadge status={doc.status} size="sm" />
+										</div>
 
-                    {/* Date */}
-                    <div className="col-span-2">
-                      <div className="flex items-center text-sm text-gray-500">
-                        <Calendar className="w-4 h-4 mr-1" />
-                        {formatDate(doc.created_at)}
-                      </div>
-                    </div>
+										{/* Date */}
+										<div className="col-span-2">
+											<div className="flex items-center text-sm text-gray-500">
+												<Calendar className="w-4 h-4 mr-1" />
+												{formatDate(doc.created_at)}
+											</div>
+										</div>
 
-                    {/* Actions */}
-                    {showActions && (
-                      <div className="col-span-1 text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {isDocumentReady(doc) && onViewDocument && (
-                              <DropdownMenuItem onClick={() => onViewDocument(doc)}>
-                                <Eye className="w-4 h-4 mr-2" />
-                                View
-                              </DropdownMenuItem>
-                            )}
-                            {doc.file_path && onDownloadDocument && (
-                              <DropdownMenuItem onClick={() => onDownloadDocument(doc)}>
-                                <Download className="w-4 h-4 mr-2" />
-                                Download
-                              </DropdownMenuItem>
-                            )}
-                            {onRemoveDocument && (
-                              <DropdownMenuItem 
-                                onClick={() => onRemoveDocument(doc)}
-                                className="text-red-600 hover:text-red-800"
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Remove
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
-      )}
-    </div>
-  );
+										{/* Actions */}
+										{showActions && (
+											<div className="col-span-1 text-right">
+												<DropdownMenu>
+													<DropdownMenuTrigger asChild>
+														<Button variant="ghost" size="sm">
+															<MoreVertical className="w-4 h-4" />
+														</Button>
+													</DropdownMenuTrigger>
+													<DropdownMenuContent align="end">
+														{isDocumentReady(doc) && onViewDocument && (
+															<DropdownMenuItem
+																onClick={() => onViewDocument(doc)}
+															>
+																<Eye className="w-4 h-4 mr-2" />
+																View
+															</DropdownMenuItem>
+														)}
+														{doc.file_path && onDownloadDocument && (
+															<DropdownMenuItem
+																onClick={() => onDownloadDocument(doc)}
+															>
+																<Download className="w-4 h-4 mr-2" />
+																Download
+															</DropdownMenuItem>
+														)}
+														{onRemoveDocument && (
+															<DropdownMenuItem
+																onClick={() => onRemoveDocument(doc)}
+																className="text-red-600 hover:text-red-800"
+															>
+																<Trash2 className="w-4 h-4 mr-2" />
+																Remove
+															</DropdownMenuItem>
+														)}
+													</DropdownMenuContent>
+												</DropdownMenu>
+											</div>
+										)}
+									</div>
+								</div>
+							))}
+						</div>
+					</div>
+				</Card>
+			)}
+		</div>
+	);
 };
 
 export default DocumentList;

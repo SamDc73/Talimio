@@ -1,6 +1,6 @@
+import { ArrowLeft, CheckCircle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/button";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CheckCircle, RotateCcw } from "lucide-react";
 import { ContentRenderer } from "./ContentRenderer";
 import "./LessonViewer.css";
 
@@ -36,7 +36,11 @@ export function LessonViewer({
 					<div className="max-w-3xl mx-auto p-6 bg-red-50 rounded-lg border border-red-200">
 						<h2 className="text-xl font-semibold mb-4">Error loading lesson</h2>
 						<p className="mb-4">{error}</p>
-						<Button onClick={onBack} variant="outline" className="flex items-center gap-2">
+						<Button
+							onClick={onBack}
+							variant="outline"
+							className="flex items-center gap-2"
+						>
 							<ArrowLeft className="w-4 h-4" />
 							Back
 						</Button>
@@ -54,7 +58,11 @@ export function LessonViewer({
 					<div className="max-w-3xl mx-auto p-6 bg-zinc-50 rounded-lg border border-zinc-200">
 						<h2 className="text-xl font-semibold mb-4">No lesson available</h2>
 						<p className="mb-4">This lesson could not be loaded.</p>
-						<Button onClick={onBack} variant="outline" className="flex items-center gap-2">
+						<Button
+							onClick={onBack}
+							variant="outline"
+							className="flex items-center gap-2"
+						>
 							<ArrowLeft className="w-4 h-4" />
 							Back
 						</Button>
@@ -110,7 +118,7 @@ export function LessonViewer({
 										Regenerate
 									</Button>
 								)}
-								
+
 								{onMarkComplete && (
 									<Button
 										onClick={() => onMarkComplete(lesson.id)}

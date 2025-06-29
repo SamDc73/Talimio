@@ -12,8 +12,11 @@
  */
 
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
-import { subscribeWithSelector } from "zustand/middleware";
+import {
+	createJSONStorage,
+	persist,
+	subscribeWithSelector,
+} from "zustand/middleware";
 
 // Helper to clean up old entries
 const cleanupOldEntries = (state, _keyPrefix, expiryDays) => {

@@ -1,3 +1,6 @@
+import { Clock, Download } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useToast } from "@/hooks/use-toast";
 import {
 	extractVideoChapters,
@@ -6,9 +9,6 @@ import {
 	updateVideoChapterStatus,
 } from "@/services/videosService";
 import useAppStore from "@/stores/useAppStore";
-import { Clock, Download, } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useShallow } from "zustand/react/shallow";
 import CompletionCheckbox from "./CompletionCheckbox";
 import ProgressIndicator from "./ProgressIndicator";
 import SidebarContainer from "./SidebarContainer";
@@ -46,10 +46,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 	const hasSyncedProgress = useRef(false);
 
 	// Zustand store selectors - use shallow comparison to prevent infinite loops
-	const {
-		updateVideoChapterCompletion,
-		setVideoChapterStatus,
-	} = useAppStore(
+	const { updateVideoChapterCompletion, setVideoChapterStatus } = useAppStore(
 		useShallow((state) => ({
 			updateVideoChapterCompletion: state.updateVideoChapterCompletion,
 			setVideoChapterStatus: state.setVideoChapterStatus,
@@ -57,8 +54,10 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 	);
 
 	// Get video chapter completion with reactive selector (like BookViewer)
-	const videoChapterCompletion = useAppStore((state) => 
-		video?.uuid ? (state.videos.chapterCompletion[video.uuid] || EMPTY_CHAPTER_COMPLETION) : EMPTY_CHAPTER_COMPLETION
+	const videoChapterCompletion = useAppStore((state) =>
+		video?.uuid
+			? state.videos.chapterCompletion[video.uuid] || EMPTY_CHAPTER_COMPLETION
+			: EMPTY_CHAPTER_COMPLETION,
 	);
 
 	// Convert store object to Set for backwards compatibility - memoized to prevent infinite loops
@@ -201,10 +200,12 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 			setChapters(formattedChapters);
 		}
 	}, [
-		video?.description, 
-		apiChapters, 
-		video?.uuid, 
-		updateVideoChapterCompletion, extractChapters, formatTime
+		video?.description,
+		apiChapters,
+		video?.uuid,
+		updateVideoChapterCompletion,
+		extractChapters,
+		formatTime,
 	]);
 
 	useEffect(() => {
@@ -230,7 +231,6 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 		const chapterId = chapter.id || chapter.chapter_id;
 		const isCompleted = completedChapters.has(chapterId);
 		const newStatus = isCompleted ? "not_started" : "done";
-
 
 		// Optimistic update to store
 		setVideoChapterStatus(video.uuid, chapterId, !isCompleted);
@@ -375,7 +375,9 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 								<div
 									key={chapter.id}
 									className={`rounded-2xl border ${
-										isActive ? "border-violet-200 bg-violet-50/50" : "border-border bg-white"
+										isActive
+											? "border-violet-200 bg-violet-50/50"
+											: "border-border bg-white"
 									} shadow-sm overflow-hidden`}
 								>
 									<div className="flex items-center gap-3 px-4 py-3">
@@ -384,7 +386,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 											onClick={() => toggleChapterCompletion(chapter)}
 											variant="video"
 										/>
-										
+
 										<button
 											type="button"
 											onClick={() => handleChapterClick(chapter)}

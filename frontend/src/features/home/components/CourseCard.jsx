@@ -7,7 +7,6 @@ import { TagChip } from "./TagChip";
 export function CourseCard({ course, onArchive, className = "" }) {
 	const [showMenu, setShowMenu] = useState(false);
 
-
 	return (
 		<div
 			className={`bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 p-6 relative ${className}`}
@@ -24,7 +23,7 @@ export function CourseCard({ course, onArchive, className = "" }) {
 
 			<KebabMenu
 				showMenu={showMenu}
-					onArchive={onArchive}
+				onArchive={onArchive}
 				itemType="course"
 				itemId={course.id}
 				itemTitle={course.title}

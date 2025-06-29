@@ -1,9 +1,4 @@
 import { useState } from "react";
-
-import { OptionCards } from "./OptionCards";
-import { TextInput } from "./TextInput";
-import { useOnboarding } from "./useOnboarding";
-
 import { Button } from "@/components/button";
 import {
 	Dialog,
@@ -15,6 +10,9 @@ import {
 } from "@/components/dialog";
 import { Progress } from "@/components/progress";
 import { useToast } from "@/hooks/use-toast";
+import { OptionCards } from "./OptionCards";
+import { TextInput } from "./TextInput";
+import { useOnboarding } from "./useOnboarding";
 
 export const OnboardingFlow = ({ isOpen, onComplete }) => {
 	const { topic, setTopic, getQuestions } = useOnboarding();

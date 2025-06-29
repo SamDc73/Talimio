@@ -30,6 +30,8 @@ class Book(Base):
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     table_of_contents: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    rag_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")  # pending, processing, completed, failed
+    rag_processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

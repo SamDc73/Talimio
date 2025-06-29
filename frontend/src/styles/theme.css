@@ -31,8 +31,9 @@
 		--radius: 0.5rem;
 
 		/* Typography */
-		--font-sans: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
-			Roboto, "Helvetica Neue", Arial, sans-serif;
+		--font-sans:
+			"Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+			"Helvetica Neue", Arial, sans-serif;
 		--font-display: "Comfortaa", var(--font-sans);
 
 		/* Chart Colors */

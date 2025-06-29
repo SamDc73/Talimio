@@ -8,10 +8,10 @@
 
 import {
 	createContext,
+	useCallback,
 	useContext,
 	useEffect,
 	useState,
-	useCallback,
 } from "react";
 import { useCourseProgressService } from "../features/course";
 import { useToast } from "./use-toast";
