@@ -244,8 +244,7 @@
 	background: white;
 	max-width: 100%;
 	height: auto;
-	/* Prevent white flash during zoom */
-	will-change: transform;
+	/* Prevent white flash during zoom - removed will-change to prevent memory warnings */
 	backface-visibility: hidden;
 	-webkit-backface-visibility: hidden;
 	transform: translateZ(0);
@@ -265,8 +264,7 @@
 	color: var(--muted-foreground);
 	font-size: 0.875rem;
 	position: relative;
-	/* Prevent white flash */
-	will-change: transform;
+	/* Prevent white flash - removed will-change to prevent memory warnings */
 	backface-visibility: hidden;
 }
 
@@ -314,9 +312,9 @@
 	border: 1px solid var(--destructive);
 }
 
-/* Performance optimizations */
+/* Performance optimizations - only apply will-change to visible pages */
 .pdf-page-wrapper {
-	will-change: transform;
+	/* Removed global will-change to prevent memory consumption warnings */
 }
 
 /* More specific selector to fix specificity issue */
@@ -325,7 +323,11 @@
 	image-rendering: crisp-edges;
 }
 
-/* Prevent white flash during zoom */
+/* Prevent white flash during zoom - only apply will-change when actively zooming */
+.pdf-viewer-wrapper.is-zooming .pdf-page {
+	will-change: transform;
+}
+
 .pdf-viewer-wrapper.is-zooming .pdf-page canvas {
 	transition: none;
 }
