@@ -53,13 +53,35 @@ class ModelManager:
 
     def __init__(self, memory_wrapper: Any = None) -> None:
         self.settings = get_settings()
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        if not self.api_key:
-            msg = "OPENAI_API_KEY not found in environment variables"
-            raise ValidationError(msg)
-
-        os.environ["OPENAI_API_KEY"] = self.api_key
         self.model = os.getenv("PRIMARY_LLM_MODEL", "openai/gpt-4o")
+
+        # Set appropriate API key based on model provider
+        if self.model.startswith("openrouter/"):
+            self.api_key = os.getenv("OPENROUTER_API_KEY")
+            if not self.api_key:
+                msg = "OPENROUTER_API_KEY not found in environment variables"
+                raise ValidationError(msg)
+            os.environ["OPENROUTER_API_KEY"] = self.api_key
+        elif self.model.startswith("anthropic/") or self.model.startswith("claude"):
+            self.api_key = os.getenv("ANTHROPIC_API_KEY")
+            if not self.api_key:
+                msg = "ANTHROPIC_API_KEY not found in environment variables"
+                raise ValidationError(msg)
+            os.environ["ANTHROPIC_API_KEY"] = self.api_key
+        elif self.model.startswith("deepseek/"):
+            self.api_key = os.getenv("DEEPSEEK_API_KEY")
+            if not self.api_key:
+                msg = "DEEPSEEK_API_KEY not found in environment variables"
+                raise ValidationError(msg)
+            os.environ["DEEPSEEK_API_KEY"] = self.api_key
+        else:
+            # Default to OpenAI for openai/ models and others
+            self.api_key = os.getenv("OPENAI_API_KEY")
+            if not self.api_key:
+                msg = "OPENAI_API_KEY not found in environment variables"
+                raise ValidationError(msg)
+            os.environ["OPENAI_API_KEY"] = self.api_key
+
         self._logger = logging.getLogger(__name__)
         self.memory_wrapper = memory_wrapper
 
@@ -324,6 +346,39 @@ class ModelManager:
             raise RoadmapGenerationError from e
         else:
             return validated_nodes
+
+    def _process_subtopics(self, subtopics: list[Any]) -> list[dict[str, Any]]:
+        """Process and validate subtopics for roadmap nodes.
+        
+        Args:
+            subtopics: List of subtopic data from AI response
+            
+        Returns
+        -------
+            List of validated subtopic dictionaries
+        """
+        processed_children = []
+        for j, subtopic in enumerate(subtopics):
+            if isinstance(subtopic, dict):
+                processed_children.append({
+                    "title": str(subtopic.get("title", f"Lesson {j + 1}")),
+                    "description": str(subtopic.get("description", "")),
+                    "content": str(subtopic.get("content", "")),
+                    "order": j,
+                    "prerequisite_ids": [],
+                    "children": [],  # Lessons don't have children in this implementation
+                })
+            elif isinstance(subtopic, str):
+                # Handle simple string subtopics
+                processed_children.append({
+                    "title": str(subtopic),
+                    "description": "",
+                    "content": "",
+                    "order": j,
+                    "prerequisite_ids": [],
+                    "children": [],
+                })
+        return processed_children
 
     async def generate_roadmap_title_description(
         self,

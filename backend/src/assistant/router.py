@@ -5,7 +5,14 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.ai.constants import rag_config
-from src.ai.rag.reprocess_books import reprocess_book
+
+
+# from src.ai.rag.reprocess_books import reprocess_book  # TODO: Fix import
+
+# Temporary implementation until reprocess_books module is available
+async def reprocess_book(book_id: UUID) -> dict:
+    """Temporary implementation for reprocess_book."""
+    return {"status": "error", "message": "Reprocess functionality not yet implemented"}
 
 from .schemas import (
     BatchCitationRequest,
