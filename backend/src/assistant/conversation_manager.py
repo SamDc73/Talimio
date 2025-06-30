@@ -1,5 +1,5 @@
 """
-Conversation Management for Phase 4 Assistant Features.
+Conversation Management.
 
 This module provides per-resource conversation history, context switching,
 conversation summarization, and smart context pruning.
@@ -121,7 +121,11 @@ class ConversationManager:
                 # Remove context-specific fields for cleaner history
                 cleaned_messages = []
                 for msg in messages:
-                    cleaned_msg = {k: v for k, v in msg.items() if k not in ["context_type", "context_id", "token_count", "timestamp"]}
+                    cleaned_msg = {
+                        k: v
+                        for k, v in msg.items()
+                        if k not in ["context_type", "context_id", "token_count", "timestamp"]
+                    }
                     cleaned_messages.append(cleaned_msg)
                 return cleaned_messages
 
@@ -186,7 +190,7 @@ class ConversationManager:
 
             # Simple summarization: keep recent messages and create summary of older ones
             recent_messages = messages[-20:]  # Keep last 20 messages
-            older_messages = messages[:-20]   # Summarize older messages
+            older_messages = messages[:-20]  # Summarize older messages
 
             # Create summary of older messages
             summary_parts = []
@@ -201,13 +205,19 @@ class ConversationManager:
                 if msg.get("role") == "user":
                     user_questions.append(msg.get("content", ""))
                 elif msg.get("role") == "assistant":
-                    assistant_responses.append(msg.get("content", "")[:100] + "..." if len(msg.get("content", "")) > 100 else msg.get("content", ""))
+                    assistant_responses.append(
+                        msg.get("content", "")[:100] + "..."
+                        if len(msg.get("content", "")) > 100
+                        else msg.get("content", "")
+                    )
 
             if user_questions:
                 summary_parts.append(f"User discussed: {'; '.join(user_questions[-5:])}")  # Last 5 questions
 
             if assistant_responses:
-                summary_parts.append(f"Assistant helped with: {'; '.join(assistant_responses[-3:])}")  # Last 3 responses
+                summary_parts.append(
+                    f"Assistant helped with: {'; '.join(assistant_responses[-3:])}"
+                )  # Last 3 responses
 
             # Update conversation data
             conversation_data["summary"] = "\n".join(summary_parts)
@@ -250,7 +260,12 @@ class ConversationManager:
             if messages:
                 recent_user_messages = [msg for msg in messages[-10:] if msg.get("role") == "user"]
                 if recent_user_messages:
-                    recent_topics = [msg.get("content", "")[:50] + "..." if len(msg.get("content", "")) > 50 else msg.get("content", "") for msg in recent_user_messages[-3:]]
+                    recent_topics = [
+                        msg.get("content", "")[:50] + "..."
+                        if len(msg.get("content", "")) > 50
+                        else msg.get("content", "")
+                        for msg in recent_user_messages[-3:]
+                    ]
                     summary_parts.append(f"Recent topics: {'; '.join(recent_topics)}")
 
             # Add context switch information
@@ -317,7 +332,9 @@ class ConversationManager:
                 importance_score = 0
 
                 # Higher score for questions
-                if msg.get("role") == "user" and ("?" in content or any(word in content.lower() for word in ["how", "what", "why", "when", "where"])):
+                if msg.get("role") == "user" and (
+                    "?" in content or any(word in content.lower() for word in ["how", "what", "why", "when", "where"])
+                ):
                     importance_score += 2
 
                 # Higher score for error-related content
@@ -344,13 +361,17 @@ class ConversationManager:
             # Combine selected older messages with recent messages
             pruned_messages = selected_older + recent_messages
 
-            self._logger.debug(f"Pruned conversation from {len(messages)} to {len(pruned_messages)} messages for token limit")
+            self._logger.debug(
+                f"Pruned conversation from {len(messages)} to {len(pruned_messages)} messages for token limit"
+            )
             return pruned_messages
 
         except Exception as e:
             self._logger.exception(f"Error pruning context for tokens: {e}")
             # Fallback to simple recent message limiting
-            return await self.get_conversation_history(user_id, context_type, context_id, limit=preserve_recent, include_context=False)
+            return await self.get_conversation_history(
+                user_id, context_type, context_id, limit=preserve_recent, include_context=False
+            )
 
     def get_conversation_stats(self, user_id: str) -> dict[str, Any]:
         """Get statistics about user's conversations across all resources."""
@@ -366,7 +387,7 @@ class ConversationManager:
             # Collect stats from all conversations for this user
             for conversation_key, conversation_data in self._conversations.items():
                 if conversation_key.startswith(f"{user_id}:"):
-                    resource_key = conversation_key[len(f"{user_id}:"):]
+                    resource_key = conversation_key[len(f"{user_id}:") :]
                     stats["total_conversations"] += 1
                     stats["total_messages"] += len(conversation_data["messages"])
                     stats["total_tokens"] += conversation_data["total_tokens"]
