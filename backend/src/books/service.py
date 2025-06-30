@@ -63,7 +63,8 @@ async def _process_book_rag_background(book_id: UUID) -> None:
 
             # Initialize components
             document_processor = DocumentProcessor()
-            chunker = ChunkerFactory.get_default_chunker()
+            # Use BookChunker for position-aware chunking
+            chunker = ChunkerFactory.create_chunker("book")
             vector_store = VectorStore()
 
             # Process the book file
@@ -71,21 +72,25 @@ async def _process_book_rag_background(book_id: UUID) -> None:
             if not file_path.exists():
                 raise FileNotFoundError(f"Book file not found: {book.file_path}")
 
-            # Extract text content
-            text_content = await document_processor.process_document(str(file_path), book.file_type)
+            # Use enhanced chunking with position data for Phase 5
+            enhanced_chunks = chunker.chunk_document(
+                doc_id=book_id,
+                doc_type="book",
+                content=file_path,
+                metadata={"include_positions": True}  # Enable position extraction
+            )
 
-            # Chunk the text
-            chunks = chunker.chunk_text(text_content)
-
-            # Store chunks with embeddings using doc_type='book' and doc_id=book.id
-            await vector_store.store_book_chunks_with_embeddings(session, book_id, chunks)
+            # Store enhanced chunks with embeddings
+            # Extract just the content from DocumentChunk objects
+            chunk_texts = [chunk.content for chunk in enhanced_chunks]
+            await vector_store.store_chunks_with_embeddings(session, book_id, chunk_texts)
 
             # Update status to completed
             book.rag_status = "completed"
             book.rag_processed_at = datetime.now(UTC)
             await session.commit()
 
-            logger.info(f"Successfully processed book {book_id} for RAG with {len(chunks)} chunks")
+            logger.info(f"Successfully processed book {book_id} for RAG with {len(enhanced_chunks)} chunks")
 
     except Exception as e:
         logger.exception(f"Failed to process book {book_id} for RAG: {e}")

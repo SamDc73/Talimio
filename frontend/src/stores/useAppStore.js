@@ -333,8 +333,7 @@ const useAppStore = create(
 					defaultZoomLevel: 1,
 					sidebarCollapsed: false,
 					notificationsEnabled: true,
-					// Onboarding preferences
-					onboardingCompleted: false,
+					// User preferences
 					userPreferences: null,
 					// UI preferences
 					sidebarOpen: true,
@@ -504,7 +503,6 @@ const useAppStore = create(
 									key.startsWith("book_zoom_") ||
 									key.startsWith("toc_progress_") ||
 									key === "user-preferences" || // Remove deprecated preferences store
-									key === "onboarding_preferences" ||
 									key.includes("USER_PREFERENCES"))
 							) {
 								keysToRemove.push(key);

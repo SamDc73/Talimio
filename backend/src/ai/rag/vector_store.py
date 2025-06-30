@@ -1,6 +1,5 @@
 """Vector store operations and embedding generation."""
 
-import json
 import logging
 import os
 import secrets
@@ -242,82 +241,9 @@ class VectorStore:
 
         await session.commit()
 
-    async def store_book_chunks_with_embeddings(self, session: AsyncSession, book_id: uuid.UUID, chunks: list[str]) -> None:
-        """Store book chunks with their embeddings in the rag_document_chunks table."""
-        # Generate embeddings for all chunks
-        embeddings = await self.embedding_generator.generate_embeddings(chunks)
 
-        # Store each chunk with its embedding
-        for i, (chunk, emb) in enumerate(zip(chunks, embeddings, strict=False)):
-            # Create metadata for the book chunk
-            metadata = {
-                "chunk_type": "text",
-                "source": "book_upload"
-            }
 
-            # Insert chunk with embedding using raw SQL for vector column
-            await session.execute(
-                text("""
-                    INSERT INTO rag_document_chunks
-                    (doc_id, doc_type, chunk_index, content, embedding, metadata)
-                    VALUES (:doc_id, :doc_type, :chunk_index, :content, :embedding, :metadata)
-                    ON CONFLICT (doc_id, chunk_index) DO UPDATE SET
-                    content = EXCLUDED.content,
-                    embedding = EXCLUDED.embedding,
-                    metadata = EXCLUDED.metadata
-                """),
-                {
-                    "doc_id": str(book_id),
-                    "doc_type": "book",
-                    "chunk_index": i,
-                    "content": chunk,
-                    "embedding": str(emb),  # pgvector handles list conversion
-                    "metadata": json.dumps(metadata),
-                },
-            )
 
-        await session.commit()
-
-    async def store_video_chunks_with_embeddings(self, session: AsyncSession, video_uuid: uuid.UUID, chunks: list[str]) -> None:
-        """Store video chunks with their embeddings in the rag_document_chunks table."""
-        # Generate embeddings for all chunks
-        embeddings = await self.embedding_generator.generate_embeddings(chunks)
-
-        # Store each chunk with its embedding
-        for i, (chunk, emb) in enumerate(zip(chunks, embeddings, strict=False)):
-            # Create metadata for the video chunk
-            metadata = {
-                "chunk_type": "transcript",
-                "source": "video_upload"
-            }
-
-            # Insert chunk with embedding using raw SQL for vector column
-            await session.execute(
-                text("""
-                    INSERT INTO rag_document_chunks
-                    (doc_id, doc_type, chunk_index, content, embedding, metadata)
-                    VALUES (:doc_id, :doc_type, :chunk_index, :content, :embedding, :metadata)
-                    ON CONFLICT (doc_id, chunk_index) DO UPDATE SET
-                    content = EXCLUDED.content,
-                    embedding = EXCLUDED.embedding,
-                    metadata = EXCLUDED.metadata
-                """),
-                {
-                    "doc_id": str(video_uuid),
-                    "doc_type": "video",
-                    "chunk_index": i,
-                    "content": chunk,
-                    "embedding": str(emb),  # pgvector handles list conversion
-                    "metadata": json.dumps(metadata),
-                },
-            )
-
-        await session.commit()
-
-    async def delete_document_chunks(self, session: AsyncSession, document_id: int) -> None:
-        """Delete all chunks for a document."""
-        await session.execute(text("DELETE FROM document_chunks WHERE document_id = :doc_id"), {"doc_id": document_id})
-        await session.commit()
 
     async def similarity_search(
         self, session: AsyncSession, query_embedding: list[float], roadmap_id: uuid.UUID, top_k: int

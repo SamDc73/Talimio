@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ReactReader } from "react-reader";
-import useAppStore from "@/stores/useAppStore";
 import { useTextSelectionTooltip } from "@/hooks/useTextSelectionTooltip";
+import useAppStore from "@/stores/useAppStore";
 import "./EPUBViewer.css";
 
 /**
@@ -35,7 +35,7 @@ const EPUBViewerV2 = ({ url, bookInfo, onLocationChange }) => {
 		(text) => {
 			console.log("Ask AI about EPUB text:", text);
 			// Add AI functionality here in the future
-		}
+		},
 	);
 
 	/**

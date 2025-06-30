@@ -8,8 +8,8 @@ import {
 	ChatSidebarProvider,
 } from "./components/header/MainHeader";
 import { Toaster } from "./components/toaster";
-import { ThemeProvider } from "./contexts/ThemeContext";
 import { TextSelectionProvider } from "./components/ui/GlobalTextSelectionTooltip";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import { BookViewer } from "./features/book-viewer";
 import { CourseLayout as RoadmapFlow } from "./features/course";
 import RoadmapPreviewPage from "./features/roadmap/RoadmapPreviewPage";
@@ -20,7 +20,7 @@ import useAppStore from "./stores/useAppStore";
 function RoadmapPage() {
 	const { roadmapId } = useParams();
 	const flowRef = useRef(null);
-	const { handleResetOnboarding } = useAppState();
+	const { handleResetRoadmap } = useAppState();
 
 	if (!roadmapId) {
 		console.warn("RoadmapPage rendered without roadmapId, redirecting.");
@@ -32,15 +32,13 @@ function RoadmapPage() {
 			<RoadmapFlow
 				ref={flowRef}
 				roadmapId={roadmapId}
-				onError={handleResetOnboarding}
+				onError={handleResetRoadmap}
 			/>
 		</div>
 	);
 }
 
 export default function App() {
-	const { showOnboarding, currentRoadmapId, handleOnboardingComplete } =
-		useAppState();
 	const cleanupOldStorage = useAppStore((state) => state.cleanupOldStorage);
 
 	// Clean up old localStorage on app startup

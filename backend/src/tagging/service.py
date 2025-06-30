@@ -12,7 +12,6 @@ from src.ai.client import ModelManager, TagGenerationError
 from src.ai.constants import TAG_CATEGORIES, TAG_CATEGORY_COLORS
 
 from .models import Tag, TagAssociation
-from .schemas import TagWithConfidence
 
 
 logger = logging.getLogger(__name__)
@@ -38,7 +37,7 @@ class TaggingService:
         title: str = "",
         content_preview: str = "",
     ) -> list[str]:
-        """Generate and store tags for content.
+        """Generate and store tags for content with confidence scores.
 
         Args:
             content_id: ID of the content to tag
@@ -51,60 +50,8 @@ class TaggingService:
             List of generated tag names
         """
         try:
-            # Generate tags using AI
-            tags = await self.model_manager.generate_content_tags(
-                content_type=content_type,
-                title=title,
-                content_preview=content_preview,
-            )
-
-            # Store tags in database
-            tag_objects = await self._get_or_create_tags(tags)
-
-            # Create associations
-            for tag_obj in tag_objects:
-                await self._create_tag_association(
-                    tag_id=tag_obj.id,
-                    content_id=content_id,
-                    content_type=content_type,
-                    confidence_score=1.0,
-                    auto_generated=True,
-                )
-
-            await self.session.commit()
-
-            return tags
-
-        except TagGenerationError:
-            logger.exception(f"Failed to generate tags for {content_type} {content_id}")
-            return []
-        except Exception as e:
-            logger.exception(f"Error tagging content {content_id}: {e}")
-            await self.session.rollback()
-            raise
-
-    async def tag_content_with_confidence(
-        self,
-        content_id: UUID,
-        content_type: str,
-        title: str = "",
-        content_preview: str = "",
-    ) -> list[TagWithConfidence]:
-        """Generate and store tags with confidence scores.
-
-        Args:
-            content_id: ID of the content to tag
-            content_type: Type of content (book, video, roadmap)
-            title: Title of the content
-            content_preview: Preview text for tag generation
-
-        Returns
-        -------
-            List of tags with confidence scores
-        """
-        try:
             # Generate tags with confidence using AI
-            tags_with_confidence = await self.model_manager.generate_tags_with_confidence(
+            tags_with_confidence = await self.model_manager.generate_content_tags(
                 content_type=content_type,
                 title=title,
                 content_preview=content_preview,
@@ -118,7 +65,6 @@ class TaggingService:
             tag_map = {tag.name: tag for tag in tag_objects}
 
             # Create associations with confidence scores
-            result = []
             for item in tags_with_confidence:
                 tag_name = item["tag"]
                 confidence = item["confidence"]
@@ -131,11 +77,10 @@ class TaggingService:
                         confidence_score=confidence,
                         auto_generated=True,
                     )
-                    result.append(TagWithConfidence(tag=tag_name, confidence=confidence))
 
             await self.session.commit()
 
-            return result
+            return tag_names
 
         except TagGenerationError:
             logger.exception(f"Failed to generate tags for {content_type} {content_id}")
@@ -144,6 +89,7 @@ class TaggingService:
             logger.exception(f"Error tagging content {content_id}: {e}")
             await self.session.rollback()
             raise
+
 
     async def batch_tag_content(
         self,
@@ -292,11 +238,13 @@ class TaggingService:
             List of suggested tag names
         """
         try:
-            return await self.model_manager.generate_content_tags(
+            tags_with_confidence = await self.model_manager.generate_content_tags(
                 content_type=content_type,
                 title=title,
                 content_preview=content_preview,
             )
+            # Return just the tag names for backward compatibility
+            return [item["tag"] for item in tags_with_confidence]
         except TagGenerationError:
             logger.exception("Failed to generate tag suggestions")
             return []

@@ -13,7 +13,8 @@ from sqlalchemy import text as sql_text
 from src.ai.client import ModelManager
 from src.ai.memory import get_memory_wrapper
 from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT
-from src.ai.rag.retriever import ContextAwareRetriever, SearchResult
+from src.ai.rag.retriever import ContextAwareRetriever
+from src.ai.rag.schemas import SearchResult
 from src.ai.rag.service import RAGService
 from src.courses.schemas import CourseCreate
 from src.courses.services.course_service import CourseService
@@ -481,6 +482,56 @@ class EnhancedAssistantService:
 
         except Exception as e:
             logger.warning(f"Failed to store enhanced chat memory for user {request.user_id}: {e}")
+
+    async def find_book_citations(
+        self, book_id: UUID, response_text: str, similarity_threshold: float = 0.75
+    ) -> list[dict]:
+        """Find text locations in a book for citation highlighting.
+        
+        Args:
+            book_id: UUID of the book
+            response_text: Text to find citations for
+            similarity_threshold: Minimum similarity score for matches
+            
+        Returns
+        -------
+            List of citation matches with page numbers and coordinates
+        """
+        # Validate book exists and has been processed
+        async with async_session_maker() as session:
+            result = await session.execute(
+                sql_text("""
+                    SELECT rag_status 
+                    FROM books 
+                    WHERE id = :book_id
+                """),
+                {"book_id": str(book_id)}
+            )
+            book = result.fetchone()
+
+            if not book:
+                raise ValueError(f"Book not found: {book_id}")
+
+            if book.rag_status != "completed":
+                raise ValueError(f"Book has not been processed for RAG. Current status: {book.rag_status}")
+
+        # Use RAG service to find citations
+        citations = await self.rag_service.find_text_locations(
+            book_id=book_id,
+            response_text=response_text,
+            similarity_threshold=similarity_threshold
+        )
+
+        # Transform to match schema
+        return [
+            {
+                "text": citation["text"],
+                "page": citation["page"],
+                "coordinates": citation["coordinates"],
+                "similarity": citation["similarity"],
+            }
+            for citation in citations
+        ]
 
 
 class StreamingEnhancedAssistantService(EnhancedAssistantService):

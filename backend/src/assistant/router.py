@@ -7,7 +7,13 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from src.ai.constants import rag_config
 from src.ai.rag.reprocess_books import reprocess_book
 
-from .schemas import ChatRequest
+from .schemas import (
+    BatchCitationRequest,
+    BatchCitationResponse,
+    ChatRequest,
+    CitationRequest,
+    CitationResponse,
+)
 from .service import enhanced_assistant_service, get_available_models, streaming_enhanced_assistant_service
 
 
@@ -65,3 +71,50 @@ async def reprocess_book_endpoint(book_id: UUID) -> dict:
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/citations", response_model=CitationResponse)
+async def find_citations(request: CitationRequest) -> CitationResponse:
+    """Find text locations in a book for citation highlighting."""
+    try:
+        # Get citation service
+        citations = await enhanced_assistant_service.find_book_citations(
+            book_id=request.book_id,
+            response_text=request.response_text,
+            similarity_threshold=request.similarity_threshold,
+        )
+
+        return CitationResponse(citations=citations)
+    except ValueError as e:
+        if "Book not found" in str(e):
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        if "not been processed" in str(e):
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to find citations: {e!s}") from e
+
+
+@router.post("/citations/batch", response_model=BatchCitationResponse)
+async def find_batch_citations(request: BatchCitationRequest) -> BatchCitationResponse:
+    """Find text locations for multiple response texts in batch."""
+    try:
+        all_citations = []
+
+        for response_text in request.response_texts:
+            citations = await enhanced_assistant_service.find_book_citations(
+                book_id=request.book_id,
+                response_text=response_text,
+                similarity_threshold=request.similarity_threshold,
+            )
+            all_citations.append(citations)
+
+        return BatchCitationResponse(citations=all_citations)
+    except ValueError as e:
+        if "Book not found" in str(e):
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        if "not been processed" in str(e):
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to find batch citations: {e!s}") from e
