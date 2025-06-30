@@ -2,6 +2,7 @@ import { ArrowLeft, CheckCircle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/button";
 import { cn } from "@/lib/utils";
 import { ContentRenderer } from "./ContentRenderer";
+import { useTextSelectionTooltip } from "@/hooks/useTextSelectionTooltip";
 import "./LessonViewer.css";
 
 /**
@@ -16,6 +17,17 @@ export function LessonViewer({
 	onRegenerate,
 	isDarkMode = false,
 }) {
+	// Set up text selection handlers for lessons
+	useTextSelectionTooltip(
+		(text) => {
+			console.log("Highlight in lesson:", text);
+			// Add highlight functionality here in the future
+		},
+		(text) => {
+			console.log("Ask AI about lesson text:", text);
+			// Add AI functionality here in the future
+		}
+	);
 	// Loading state
 	if (isLoading) {
 		return (

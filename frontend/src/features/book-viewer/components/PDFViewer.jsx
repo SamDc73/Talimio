@@ -10,6 +10,7 @@ import {
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
+import { useTextSelectionTooltip } from "@/hooks/useTextSelectionTooltip";
 import "./PDFViewer.css";
 
 // Configure PDF.js worker
@@ -34,6 +35,18 @@ const PDFViewer = forwardRef(
 		const lastValidPageRef = useRef(1);
 		const scrollingTimeoutRef = useRef(null);
 		const scale = zoom / 100;
+
+		// Set up text selection handlers for PDF
+		useTextSelectionTooltip(
+			(text) => {
+				console.log("Highlight in PDF:", text);
+				// Add highlight functionality here in the future
+			},
+			(text) => {
+				console.log("Ask AI about PDF text:", text);
+				// Add AI functionality here in the future
+			}
+		);
 
 		// Keep pageNumberRef in sync with pageNumber state
 		useEffect(() => {
@@ -310,12 +323,12 @@ const PDFViewer = forwardRef(
 		useEffect(() => {
 			const handleScroll = () => {
 				setIsScrolling(true);
-				
+
 				// Clear existing timeout
 				if (scrollingTimeoutRef.current) {
 					clearTimeout(scrollingTimeoutRef.current);
 				}
-				
+
 				// Set scrolling to false after scrolling stops
 				scrollingTimeoutRef.current = setTimeout(() => {
 					setIsScrolling(false);
@@ -324,12 +337,12 @@ const PDFViewer = forwardRef(
 
 			const container = containerRef.current;
 			if (container) {
-				container.addEventListener('scroll', handleScroll, { passive: true });
+				container.addEventListener("scroll", handleScroll, { passive: true });
 			}
 
 			return () => {
 				if (container) {
-					container.removeEventListener('scroll', handleScroll);
+					container.removeEventListener("scroll", handleScroll);
 				}
 				if (scrollingTimeoutRef.current) {
 					clearTimeout(scrollingTimeoutRef.current);
@@ -373,7 +386,10 @@ const PDFViewer = forwardRef(
 												renderAnnotationLayer={false}
 												onRenderError={(error) => {
 													// Completely suppress AbortException warnings
-													if (error?.name === "AbortException" || error?.message?.includes("cancelled")) {
+													if (
+														error?.name === "AbortException" ||
+														error?.message?.includes("cancelled")
+													) {
 														return; // Silently ignore
 													}
 													console.warn("PDF render error:", error);
