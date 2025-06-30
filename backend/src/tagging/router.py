@@ -44,7 +44,7 @@ async def tag_content(
     """Generate and store tags for a specific content item.
 
     Args:
-        content_type: Type of content (book, video, roadmap)
+        content_type: Type of content (book, video, course)
         content_id: UUID of the content
         background_tasks: FastAPI background tasks
         service: Tagging service instance
@@ -54,7 +54,7 @@ async def tag_content(
         TaggingResponse with generated tags
     """
     # Validate content type
-    if content_type not in ["book", "video", "roadmap"]:
+    if content_type not in ["book", "video", "course"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid content type: {content_type}",
@@ -104,11 +104,25 @@ async def tag_content(
                 content_preview=content_data["content_preview"],
             )
 
-        elif content_type == "roadmap":
-            # TODO: Implement roadmap processor
-            raise HTTPException(
-                status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail="Roadmap tagging not yet implemented",
+        elif content_type == "course":
+            from .processors.course_processor import process_course_for_tagging
+
+            content_data = await process_course_for_tagging(
+                str(content_id),
+                service.session,
+            )
+
+            if not content_data:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Course {content_id} not found",
+                )
+
+            tags = await service.tag_content(
+                content_id=content_id,
+                content_type=content_type,
+                title=content_data["title"],
+                content_preview=content_data["content_preview"],
             )
 
         # Update content's tags field

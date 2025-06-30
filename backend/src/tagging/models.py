@@ -43,7 +43,7 @@ class TagAssociation(Base):
     id: Mapped[UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), primary_key=True, default=uuid4)
     tag_id: Mapped[UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), ForeignKey("tags.id"), nullable=False)
     content_id: Mapped[UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), nullable=False, index=True)
-    content_type: Mapped[str] = mapped_column(String(20), nullable=False)  # book, video, roadmap
+    content_type: Mapped[str] = mapped_column(String(20), nullable=False)  # book, video, course
     confidence_score: Mapped[float] = mapped_column(Float, default=1.0)
     auto_generated: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

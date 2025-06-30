@@ -386,12 +386,12 @@ async def update_content_tags_json(
     """Update the tags_json field for a content item.
 
     This is a utility function to maintain backward compatibility
-    with the existing tags_json fields in Book, Video, and Roadmap models.
+    with the existing tags_json fields in Book, Video, and Course models.
 
     Args:
         session: Database session
         content_id: ID of the content
-        content_type: Type of content (book, video, roadmap)
+        content_type: Type of content (book, video, course)
         tags: List of tag names
     """
     tags_json = json.dumps(tags)
@@ -412,13 +412,13 @@ async def update_content_tags_json(
         await session.execute(
             update(Video).where(Video.uuid == content_id).values(tags=tags_json),
         )
-    elif content_type == "roadmap":
+    elif content_type == "course":
         from sqlalchemy import update
 
-        from src.courses.models import Roadmap
+        from src.courses.models import Course
 
         await session.execute(
-            update(Roadmap).where(Roadmap.id == content_id).values(tags_json=tags_json),
+            update(Course).where(Course.id == content_id).values(tags_json=tags_json),
         )
 
     await session.flush()

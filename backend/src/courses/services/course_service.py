@@ -5,6 +5,7 @@ the new modular service architecture. Can switch between monolithic
 and modular implementations based on feature flags or configuration.
 """
 
+import json
 import os
 import uuid
 from datetime import UTC, datetime
@@ -161,6 +162,38 @@ class CourseService(ICourseService):
                     self.session.add(lesson_node)
 
         await self.session.commit()
+
+        # Generate and apply tags to the course
+        tags_json = "[]"  # Default fallback
+        try:
+            from src.tagging.service import TaggingService
+
+            # Build content preview for tagging
+            content_preview = f"Course: {course_title}\nDescription: {course_description}\nSkill Level: beginner\n\n"
+            content_preview += "Modules:\n"
+            for i, module_data in enumerate(nodes_data[:3]):  # Use first 3 modules
+                content_preview += f"{i+1}. {module_data.get('title', '')}: {module_data.get('description', '')}\n"
+
+            # Initialize tagging service
+            tagging_service = TaggingService(self.session, self.ai_client)
+
+            # Generate tags
+            tag_names = await tagging_service.tag_content(
+                content_id=roadmap.id,
+                content_type="roadmap",
+                title=course_title,
+                content_preview=content_preview[:3000]  # Limit length
+            )
+
+            # Update roadmap with generated tags
+            if tag_names:
+                tags_json = json.dumps(tag_names)
+                roadmap.tags_json = tags_json
+                await self.session.commit()
+
+        except Exception as e:
+            self._logger.warning(f"Failed to generate tags for course {roadmap.id}: {e}")
+            # Continue without tags if tagging fails
 
         # Store course creation in memory for personalization
         if self.memory_service:
