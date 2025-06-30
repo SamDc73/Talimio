@@ -1,8 +1,8 @@
 import { ArrowLeft, CheckCircle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/button";
+import { useTextSelectionTooltip } from "@/hooks/useTextSelectionTooltip";
 import { cn } from "@/lib/utils";
 import { ContentRenderer } from "./ContentRenderer";
-import { useTextSelectionTooltip } from "@/hooks/useTextSelectionTooltip";
 import "./LessonViewer.css";
 
 /**
@@ -26,7 +26,7 @@ export function LessonViewer({
 		(text) => {
 			console.log("Ask AI about lesson text:", text);
 			// Add AI functionality here in the future
-		}
+		},
 	);
 	// Loading state
 	if (isLoading) {

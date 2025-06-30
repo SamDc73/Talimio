@@ -45,7 +45,7 @@ const PDFViewer = forwardRef(
 			(text) => {
 				console.log("Ask AI about PDF text:", text);
 				// Add AI functionality here in the future
-			}
+			},
 		);
 
 		// Keep pageNumberRef in sync with pageNumber state

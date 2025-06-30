@@ -40,7 +40,6 @@ from .database.base import Base
 from .database.session import engine
 from .flashcards.models import FlashcardCard, FlashcardDeck, FlashcardReview  # noqa: F401
 from .flashcards.router import router as flashcards_router
-from .onboarding.router import router as onboarding_router
 from .tagging.models import Tag, TagAssociation  # noqa: F401
 from .tagging.router import router as tagging_router
 from .user.router import router as user_router
@@ -217,7 +216,6 @@ def create_app() -> FastAPI:
 
     # Legacy roadmaps API has been removed - all functionality moved to courses API
 
-    app.include_router(onboarding_router)
     app.include_router(tagging_router)
     app.include_router(user_router)
     app.include_router(videos_router)

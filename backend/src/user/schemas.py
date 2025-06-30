@@ -15,7 +15,6 @@ class UserPreferences(BaseModel):
     sidebar_open: bool = True
     sidebar_collapsed: bool = False
     notifications_enabled: bool = True
-    onboarding_completed: bool = False
     user_preferences: dict[str, Any] | None = None
 
 

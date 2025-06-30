@@ -10,18 +10,13 @@ from litellm import acompletion
 
 from src.ai.prompts import (
     CONTENT_TAGGING_PROMPT,
-    CONTENT_TAGGING_WITH_CONFIDENCE_PROMPT,
     LESSON_GENERATION_PROMPT,
-    ONBOARDING_QUESTIONS_PROMPT,
-    PRACTICE_EXERCISES_PROMPT,
     ROADMAP_GENERATION_PROMPT,
-    ROADMAP_NODE_CONTENT_PROMPT,
     ROADMAP_TITLE_GENERATION_PROMPT,
 )
 from src.ai.rag.service import RAGService
 from src.config.settings import get_settings
 from src.core.exceptions import DomainError, ValidationError
-from src.core.validators import validate_uuid
 from src.database.session import async_session_maker
 
 
@@ -38,21 +33,6 @@ class RoadmapGenerationError(AIError):
 
     def __init__(self, msg: str = "Failed to generate roadmap content") -> None:
         super().__init__(msg)
-
-
-class NodeCustomizationError(AIError):
-    """Exception raised when node customization fails."""
-
-    def __init__(self, msg: str = "Failed to customize node content") -> None:
-        super().__init__(msg)
-
-
-class ExerciseGenerationError(AIError):
-    """Exception raised when exercise generation fails."""
-
-    def __init__(self, msg: str = "Failed to generate exercises") -> None:
-        super().__init__(msg)
-
 
 class LessonGenerationError(AIError):
     """Exception raised when lesson generation fails."""
@@ -82,49 +62,6 @@ class ModelManager:
         self.model = os.getenv("PRIMARY_LLM_MODEL", "openai/gpt-4o")
         self._logger = logging.getLogger(__name__)
         self.memory_wrapper = memory_wrapper
-
-    def _process_subtopics(self, subtopics: Any) -> list[dict[str, Any]]:
-        """Process subtopics into a standardized format.
-
-        Args:
-            subtopics: List of subtopics (can be dicts or strings)
-
-        Returns
-        -------
-            List of properly formatted subtopic dictionaries
-        """
-        processed_children = []
-
-        if not isinstance(subtopics, list):
-            return processed_children
-
-        for j, subtopic in enumerate(subtopics):
-            if isinstance(subtopic, dict):
-                # Subtopic is already a proper object
-                processed_children.append(
-                    {
-                        "title": str(subtopic.get("title", f"Subtopic {j + 1}")),
-                        "description": str(subtopic.get("description", "")),
-                        "content": str(subtopic.get("content", "")),
-                        "order": j,
-                        "prerequisite_ids": [],
-                        "children": [],  # Subtopics don't have further children
-                    }
-                )
-            elif isinstance(subtopic, str):
-                # Legacy: subtopic is just a string, convert to object
-                processed_children.append(
-                    {
-                        "title": str(subtopic),
-                        "description": f"Learn about {subtopic}",
-                        "content": "",
-                        "order": j,
-                        "prerequisite_ids": [],
-                        "children": [],
-                    }
-                )
-
-        return processed_children
 
     async def get_completion_with_memory(
         self,
@@ -300,21 +237,6 @@ class ModelManager:
         async for chunk in self.get_streaming_completion(messages):
             yield chunk
 
-    async def generate_onboarding_questions(self, topic: str) -> list[dict[str, Any]]:
-        """Generate personalized onboarding questions."""
-        prompt = ONBOARDING_QUESTIONS_PROMPT.format(topic=topic)
-
-        messages = [
-            {"role": "system", "content": "You are an expert curriculum designer."},
-            {"role": "user", "content": prompt},
-        ]
-
-        result = await self.get_completion(messages, expect_list=True)
-        if not isinstance(result, list):
-            msg = "Expected list response from AI model"
-            raise AIError(msg)
-        return result
-
     async def generate_roadmap_content(  # noqa: C901
         self,
         title: str,
@@ -451,139 +373,13 @@ class ModelManager:
             self._logger.exception("Error generating roadmap title and description")
             raise RoadmapGenerationError from e
 
-    async def generate_practice_exercises(
-        self,
-        node_id: UUID,
-        topic: str,
-        difficulty: str,
-    ) -> list[dict[str, str]]:
-        """Generate practice exercises for a node."""
-        if not validate_uuid(node_id):
-            msg = "Invalid node ID"
-            raise ValidationError(msg)
-
-        prompt = PRACTICE_EXERCISES_PROMPT.format(
-            topic=topic,
-            difficulty=difficulty,
-        )
-
-        messages = [
-            {"role": "system", "content": "You are an expert at creating educational exercises."},
-            {"role": "user", "content": prompt},
-        ]
-
-        try:
-            result = await self.get_completion(messages)
-            if not isinstance(result, list):
-                msg = "Expected list response from AI model"
-                raise ExerciseGenerationError
-            return result
-        except Exception as e:
-            self._logger.exception("Error generating exercises")
-            raise ExerciseGenerationError from e
-
-    async def generate_node_content(
-        self,
-        roadmap_id: UUID,
-        current_node: str,
-        progress_level: str,
-    ) -> dict[str, Any]:
-        """Generate customized content for a new node."""
-        if not validate_uuid(roadmap_id):
-            msg = "Invalid roadmap ID"
-            raise ValidationError(msg)
-
-        # Build node details and roadmap structure for the prompt
-        node_details = {"title": current_node}
-        roadmap_json = f"roadmap_id={roadmap_id}, skill_level={progress_level}"
-        parent_info = "(parent information not available)"
-
-        prompt = ROADMAP_NODE_CONTENT_PROMPT.format(
-            parent_info=parent_info,
-            node_details=node_details,
-            roadmap_json=roadmap_json,
-        )
-        messages = [
-            {"role": "system", "content": "You are an expert curriculum designer."},
-            {"role": "user", "content": prompt},
-        ]
-        try:
-            response = await self.get_completion(messages)
-            if not isinstance(response, dict):
-                msg = "Expected dict response from AI model"
-                raise NodeCustomizationError(msg)
-
-            return {
-                "title": str(response.get("title", current_node)),
-                "description": str(response.get("description", "")),
-                "content": str(response.get("content", "")),
-                "prerequisites": response.get("prerequisites", []),
-            }
-        except Exception as e:
-            self._logger.exception("Error generating node content")
-            raise NodeCustomizationError from e
-
     async def generate_content_tags(
         self,
         content_type: str,
         title: str,
         content_preview: str,
-    ) -> list[str]:
-        """Generate subject-based tags for content using LiteLLM.
-
-        Args:
-            content_type: Type of content (book, video, roadmap)
-            title: Title of the content
-            content_preview: Preview or excerpt of the content
-
-        Returns
-        -------
-            List of generated tags
-
-        Raises
-        ------
-            TagGenerationError: If tag generation fails
-        """
-        prompt = CONTENT_TAGGING_PROMPT.format(
-            content_type=content_type,
-            title=title,
-            preview=content_preview[:3000],  # Limit preview length
-        )
-
-        messages = [
-            {"role": "system", "content": "You are an expert at categorizing educational content."},
-            {"role": "user", "content": prompt},
-        ]
-
-        try:
-            result = await self.get_completion(messages)
-            if not isinstance(result, list):
-                msg = "Expected list response from AI model"
-                raise TagGenerationError(msg)
-
-            # Normalize tags: lowercase, hyphenated
-            normalized_tags = []
-            for tag in result:
-                if isinstance(tag, str):
-                    normalized = tag.lower().strip().replace(" ", "-")
-                    # Remove any special characters except hyphens
-                    normalized = re.sub(r"[^a-z0-9-]", "", normalized)
-                    if normalized:
-                        normalized_tags.append(normalized)
-
-            return normalized_tags[:7]  # Limit to max 7 tags
-
-        except Exception as e:
-            self._logger.exception("Error generating content tags")
-            raise TagGenerationError from e
-
-    async def generate_tags_with_confidence(
-        self,
-        content_type: str,
-        title: str,
-        content_preview: str,
     ) -> list[dict[str, Any]]:
-        """Generate tags with confidence scores.
+        """Generate subject-based tags with confidence scores for content.
 
         Args:
             content_type: Type of content (book, video, roadmap)
@@ -598,10 +394,10 @@ class ModelManager:
         ------
             TagGenerationError: If tag generation fails
         """
-        prompt = CONTENT_TAGGING_WITH_CONFIDENCE_PROMPT.format(
+        prompt = CONTENT_TAGGING_PROMPT.format(
             content_type=content_type,
             title=title,
-            preview=content_preview[:3000],
+            preview=content_preview[:3000],  # Limit preview length
         )
 
         messages = [
@@ -630,11 +426,12 @@ class ModelManager:
                             },
                         )
 
-            return processed_tags[:7]
+            return processed_tags[:3]  # Limit to max 7 tags
 
         except Exception as e:
-            self._logger.exception("Error generating tags with confidence")
+            self._logger.exception("Error generating content tags")
             raise TagGenerationError from e
+
 
 
 async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]]:  # noqa: C901, PLR0912, PLR0915
@@ -694,10 +491,7 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
                 async with async_session_maker() as session:
                     # Get search results with full metadata
                     search_results = await rag_service.search_documents(
-                        session=session,
-                        roadmap_id=UUID(roadmap_id),
-                        query=lesson_query,
-                        top_k=5
+                        session=session, roadmap_id=UUID(roadmap_id), query=lesson_query, top_k=5
                     )
 
                     if search_results:
@@ -707,14 +501,18 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
                             context_parts.append(f"[Source: {result.document_title}]\n{result.chunk_content}\n")
 
                             # Store citation info for return
-                            citations_info.append({
-                                "document_id": result.document_id,
-                                "document_title": result.document_title,
-                                "similarity_score": result.similarity_score
-                            })
+                            citations_info.append(
+                                {
+                                    "document_id": result.document_id,
+                                    "document_title": result.document_title,
+                                    "similarity_score": result.similarity_score,
+                                }
+                            )
 
                         rag_context = "\n\nReference Materials:\n" + "\n".join(context_parts)
-                        logging.info(f"Added RAG context for lesson '{node_title}' from roadmap {roadmap_id} with {len(citations_info)} citations")
+                        logging.info(
+                            f"Added RAG context for lesson '{node_title}' from roadmap {roadmap_id} with {len(citations_info)} citations"
+                        )
 
             except Exception as e:
                 logging.warning(f"Failed to get RAG context for lesson generation: {e}")

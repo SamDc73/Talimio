@@ -5,24 +5,6 @@ All AI prompts are defined here for consistency and maintainability.
 
 # Content Tagging Prompts
 CONTENT_TAGGING_PROMPT = """You are an expert educator and content classifier.
-Given the title and preview of educational content (book, video, or roadmap), generate 3-7 highly relevant subject-based tags.
-
-Rules:
-- Tags should be lowercase, hyphenated (e.g., "web-development", "machine-learning")
-- Focus on: technical subjects, programming languages, frameworks, domains, methodologies
-- Be specific and accurate based on the actual content
-- Do not include meta tags like "tutorial", "course", "video", etc.
-- Only include tags that are directly related to the content
-
-Example tags: "python", "data-science", "react", "aws", "devops", "algorithms"
-
-Respond with only a JSON array of tags, nothing else.
-Example: ["python", "machine-learning", "tensorflow"]
-
-Title: {title}
-Preview: {preview}"""
-
-CONTENT_TAGGING_WITH_CONFIDENCE_PROMPT = """You are an expert educator and content classifier.
 Given the title and preview of educational content (book, video, or roadmap), generate 3-7 highly relevant subject-based tags with confidence scores.
 
 Rules:
@@ -120,64 +102,6 @@ Generate a JSON response with a hierarchical roadmap structure:
 Remember: You're designing a roadmap that will shape someone's learning journey. Make it exceptional.
 """
 
-ROADMAP_SUB_NODES_PROMPT = """Generate 2-3 appropriate sub-nodes for the target node in this roadmap.
-
-Roadmap: {roadmap_json}
-Target Node ID: {target_node_id}
-
-Rules:
-1. Sub-nodes should logically extend the target node's topic
-2. Each sub-node should be specific and focused
-3. Include practical, real-world applications
-4. Ensure proper learning progression
-
-Respond with a JSON array of nodes, each with:
-- title
-- description (2-3 sentences)
-- estimatedHours
-- parentId (the target node ID)
-"""
-
-ROADMAP_NODE_CONTENT_PROMPT = """Generate comprehensive learning content for this roadmap node.
-
-Parent node: {parent_info}
-New node details: {node_details}
-Roadmap structure: {roadmap_json}
-
-Create content that:
-1. Builds on prerequisites from the parent node
-2. Introduces concepts progressively
-3. Includes practical examples
-4. Prepares for subsequent topics
-
-Respond with:
-- title: Clear, specific title
-- description: Detailed learning objectives (3-4 sentences)
-- content: In-depth explanation of what will be covered
-- prerequisites: Array of specific skills/knowledge required
-"""
-
-# Onboarding Prompts
-ONBOARDING_QUESTIONS_PROMPT = """You are an expert educational consultant designing a personalized learning experience.
-Generate exactly 5 onboarding questions to understand the learner's:
-1. Current experience level in {topic}
-2. Specific learning goals and desired outcomes
-3. Preferred learning style (visual, hands-on, theoretical, etc.)
-4. Available time commitment (hours per week)
-5. Related skills or background that might help
-
-Make questions engaging, specific to {topic}, and easy to answer.
-Each question should have 3-4 multiple choice options.
-
-Format as JSON array with structure:
-[
-  {{
-    "question": "Question text",
-    "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-    "category": "experience|goals|style|time|background"
-  }}
-]
-"""
 
 # Lesson Generation Prompts
 LESSON_GENERATION_PROMPT = """You are an expert educator creating a comprehensive lesson on the topic: {content}
@@ -325,22 +249,6 @@ Format as JSON array:
 ]
 """
 
-# Exercise Generation Prompts
-PRACTICE_EXERCISES_PROMPT = """Generate 3 practice exercises for the topic: {topic}
-Difficulty level: {difficulty}
-
-Create exercises that:
-1. Test understanding of key concepts
-2. Build practical skills
-3. Progress in complexity
-
-Format each exercise with:
-- Clear problem statement
-- Any necessary context or constraints
-- Expected solution approach
-
-Make exercises engaging and relevant to real-world applications.
-"""
 
 # Roadmap Title and Description Generation
 ROADMAP_TITLE_GENERATION_PROMPT = """You are an expert educational content strategist with deep expertise in creating compelling learning program titles and descriptions.

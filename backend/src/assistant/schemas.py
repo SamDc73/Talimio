@@ -42,3 +42,40 @@ class ChatResponse(BaseModel):
     conversation_id: UUID | None = None
     citations: list[Citation] = []  # Citations from RAG documents
     context_source: str | None = None  # Source of context used (e.g., "PDF page 5", "Video 02:15-03:45")
+
+
+class CitationRequest(BaseModel):
+    """Request schema for citation finding endpoint."""
+
+    book_id: UUID
+    response_text: str
+    similarity_threshold: float = 0.75
+
+
+class BatchCitationRequest(BaseModel):
+    """Request schema for batch citation finding."""
+
+    book_id: UUID
+    response_texts: list[str]
+    similarity_threshold: float = 0.75
+
+
+class CitationMatch(BaseModel):
+    """Schema for a single citation match with position data."""
+
+    text: str
+    page: int
+    coordinates: list[dict]  # List of bounding boxes with format [{"bbox": [x0, y0, x1, y1], "text": "..."}]
+    similarity: float
+
+
+class CitationResponse(BaseModel):
+    """Response schema for citation endpoint."""
+
+    citations: list[CitationMatch]
+
+
+class BatchCitationResponse(BaseModel):
+    """Response schema for batch citation endpoint."""
+
+    citations: list[list[CitationMatch]]  # List of citation lists, one per response text
