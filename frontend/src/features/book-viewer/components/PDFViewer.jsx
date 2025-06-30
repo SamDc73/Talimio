@@ -25,15 +25,20 @@ const PDFViewer = forwardRef(
 		const [visiblePages, setVisiblePages] = useState(new Set([1, 2, 3]));
 		const [pageWidth, setPageWidth] = useState(null);
 		const [isZooming, setIsZooming] = useState(false);
+		const [isScrolling, setIsScrolling] = useState(false);
 		const containerRef = useRef(null);
 		const pagesRef = useRef({});
 		const zoomPointRef = useRef(null);
 		const pageNumberRef = useRef(1);
+		const scrollTimeoutRef = useRef(null);
+		const lastValidPageRef = useRef(1);
+		const scrollingTimeoutRef = useRef(null);
 		const scale = zoom / 100;
 
 		// Keep pageNumberRef in sync with pageNumber state
 		useEffect(() => {
 			pageNumberRef.current = pageNumber;
+			lastValidPageRef.current = pageNumber;
 		}, [pageNumber]);
 
 		// Memoize document options to prevent re-renders
@@ -66,6 +71,7 @@ const PDFViewer = forwardRef(
 
 			// Set initial page number
 			setPageNumber(initialPage);
+			lastValidPageRef.current = initialPage;
 			if (onPageChange && initialPage === 1) {
 				onPageChange(initialPage);
 			}
@@ -216,7 +222,7 @@ const PDFViewer = forwardRef(
 
 			const observer = new IntersectionObserver((entries) => {
 				const newVisiblePages = new Set();
-				let mostVisiblePage = 1;
+				let mostVisiblePage = lastValidPageRef.current; // Use last valid page instead of 1
 				let maxVisibleHeight = 0;
 
 				// First pass: collect all visible pages
@@ -259,13 +265,25 @@ const PDFViewer = forwardRef(
 					});
 				}
 
-				// Update current page number
-				if (mostVisiblePage !== pageNumberRef.current) {
-					pageNumberRef.current = mostVisiblePage;
-					setPageNumber(mostVisiblePage);
-					if (onPageChange) {
-						onPageChange(mostVisiblePage);
+				// Debounce page number updates during scrolling
+				if (mostVisiblePage !== pageNumberRef.current && maxVisibleHeight > 0) {
+					// Clear any existing timeout
+					if (scrollTimeoutRef.current) {
+						clearTimeout(scrollTimeoutRef.current);
 					}
+
+					// Set a new timeout to update the page after scrolling stabilizes
+					scrollTimeoutRef.current = setTimeout(() => {
+						// Double-check that this is still the most visible page
+						if (mostVisiblePage > 0 && mostVisiblePage <= numPages) {
+							pageNumberRef.current = mostVisiblePage;
+							lastValidPageRef.current = mostVisiblePage;
+							setPageNumber(mostVisiblePage);
+							if (onPageChange) {
+								onPageChange(mostVisiblePage);
+							}
+						}
+					}, 100); // 100ms debounce delay
 				}
 			}, observerOptions);
 
@@ -282,15 +300,49 @@ const PDFViewer = forwardRef(
 
 			return () => {
 				observer.disconnect();
+				if (scrollTimeoutRef.current) {
+					clearTimeout(scrollTimeoutRef.current);
+				}
 			};
 		}, [numPages, onPageChange]); // Remove pageNumber from deps to avoid re-creating observer
+
+		// Add scroll event listener to detect scrolling
+		useEffect(() => {
+			const handleScroll = () => {
+				setIsScrolling(true);
+				
+				// Clear existing timeout
+				if (scrollingTimeoutRef.current) {
+					clearTimeout(scrollingTimeoutRef.current);
+				}
+				
+				// Set scrolling to false after scrolling stops
+				scrollingTimeoutRef.current = setTimeout(() => {
+					setIsScrolling(false);
+				}, 150);
+			};
+
+			const container = containerRef.current;
+			if (container) {
+				container.addEventListener('scroll', handleScroll, { passive: true });
+			}
+
+			return () => {
+				if (container) {
+					container.removeEventListener('scroll', handleScroll);
+				}
+				if (scrollingTimeoutRef.current) {
+					clearTimeout(scrollingTimeoutRef.current);
+				}
+			};
+		}, []);
 
 		// Removed unused page navigation functions
 
 		return (
 			<div className="pdf-viewer-container">
 				<div
-					className={`pdf-viewer-wrapper ${isZooming ? "is-zooming" : ""}`}
+					className={`pdf-viewer-wrapper ${isZooming ? "is-zooming" : ""} ${isScrolling ? "is-scrolling" : ""}`}
 					ref={containerRef}
 				>
 					<Document
@@ -317,13 +369,14 @@ const PDFViewer = forwardRef(
 												pageNumber={pageNum}
 												className="pdf-page"
 												scale={scale}
-												renderTextLayer={true}
+												renderTextLayer={!isScrolling} // Disable text layer during fast scrolling
 												renderAnnotationLayer={false}
-												onRenderTextLayerError={(error) => {
-													// Suppress AbortException warnings for TextLayer
-													if (error.name !== "AbortException") {
-														console.warn("TextLayer render error:", error);
+												onRenderError={(error) => {
+													// Completely suppress AbortException warnings
+													if (error?.name === "AbortException" || error?.message?.includes("cancelled")) {
+														return; // Silently ignore
 													}
+													console.warn("PDF render error:", error);
 												}}
 												loading={
 													<div
