@@ -21,7 +21,7 @@ class ChatRequest(BaseModel):
     stream: bool = False  # Enable streaming response
     model: str | None = None  # Optional model ID to use for the request
 
-    # Phase 2: Context-aware fields
+    # Context-aware fields
     context_type: Literal["book", "video", "course"] | None = None
     context_id: UUID | None = None
     context_meta: dict[str, Any] | None = None  # position info like page, timestamp, lesson_id

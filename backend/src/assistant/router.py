@@ -61,8 +61,6 @@ async def chat_endpoint(request: ChatRequest) -> StreamingResponse | JSONRespons
                 "Access-Control-Allow-Headers": "*",
             },
         )
-
-    # Use enhanced Phase 3 service for non-streaming
     return await enhanced_assistant_service.chat_with_assistant_enhanced(request)
 
 

@@ -144,8 +144,8 @@ class EnhancedAssistantService:
         Enhanced chat with context-aware RAG integration.
 
         This service combines:
-        1. Phase 2 context-aware content (current page/timestamp context)
-        2. Phase 3 RAG system (semantic document chunks)
+        1. context-aware content (current page/timestamp context)
+        2. RAG system (semantic document chunks)
         3. Memory integration
         4. Course generation detection
         """
@@ -153,27 +153,20 @@ class EnhancedAssistantService:
             memory_wrapper = get_memory_wrapper()
             model_manager = ModelManager(memory_wrapper=memory_wrapper)
 
-            # Phase 2: Get immediate context (current page/timestamp)
             immediate_context = await self._get_immediate_context(request)
 
-            # Phase 3: Get relevant semantic chunks
             semantic_context = await self._get_semantic_context(request)
 
-            # Legacy RAG support for roadmaps
             roadmap_context = await self._get_roadmap_context(request)
 
-            # Build enhanced messages
             messages = await self._build_enhanced_messages(
                 request, immediate_context, semantic_context, roadmap_context
             )
 
-            # Generate response
             response = await self._generate_response(request, messages, model_manager)
 
-            # Collect all citations
             citations = self._collect_citations(semantic_context, roadmap_context, request)
 
-            # Store conversation in memory
             await self._store_conversation_memory(request, response, memory_wrapper)
 
             return ChatResponse(
@@ -193,7 +186,7 @@ class EnhancedAssistantService:
             ) from e
 
     async def _get_immediate_context(self, request: ChatRequest) -> ContextData | None:
-        """Get immediate context from Phase 2 (current page/timestamp)."""
+        """Get immediate context from current page/timestamp."""
         if not (request.context_type and request.context_id):
             return None
 
@@ -212,7 +205,7 @@ class EnhancedAssistantService:
             return None
 
     async def _get_semantic_context(self, request: ChatRequest) -> list[SearchResult]:
-        """Get semantic context from Phase 3 RAG system."""
+        """Get semantic context from the RAG system."""
         if not (request.context_type and request.context_id):
             return []
 
@@ -239,9 +232,10 @@ class EnhancedAssistantService:
         except Exception as e:
             error_str = str(e).lower()
             # Check for dimension mismatch or embedding errors
-            if any(keyword in error_str for keyword in [
-                "dimension", "vector", "embedding", "quota", "rate", "insufficient"
-            ]):
+            if any(
+                keyword in error_str
+                for keyword in ["dimension", "vector", "embedding", "quota", "rate", "insufficient"]
+            ):
                 logger.exception(f"Vector search failed with embedding/dimension error: {e}")
                 logger.info("Forcing text-based fallback due to embedding issues")
                 # Force text-based fallback for embedding-related errors
@@ -275,7 +269,9 @@ class EnhancedAssistantService:
                 if "probabilities" in query_lower:
                     if "where" in query_lower:
                         # This is likely the "Where Do the Probabilities Come From" section
-                        search_terms.extend(["Where Do the Probabilities", "probabilities come from", "letter", "English text"])
+                        search_terms.extend(
+                            ["Where Do the Probabilities", "probabilities come from", "letter", "English text"]
+                        )
                     else:
                         search_terms.append("probabilities")
                 if "chatgpt" in query_lower:
@@ -306,11 +302,7 @@ class EnhancedAssistantService:
                 logger.error(f"Search terms: {search_terms}")
 
                 result = await session.execute(
-                    sql_text(query),
-                    {
-                        "doc_id": str(request.context_id),
-                        "doc_type": request.context_type
-                    }
+                    sql_text(query), {"doc_id": str(request.context_id), "doc_type": request.context_type}
                 )
 
                 rows = result.fetchall()
@@ -323,7 +315,7 @@ class EnhancedAssistantService:
                         content=row.content,
                         metadata=row.metadata or {},
                         similarity_score=0.8,  # Fake score for text match
-                        final_score=0.8
+                        final_score=0.8,
                     )
                     for row in rows
                 ]
@@ -351,14 +343,16 @@ class EnhancedAssistantService:
                         f"[Source: {result.document_title}]\n{result.chunk_content}\n" for result in search_results
                     ]
 
-                    citations.extend([
-                        Citation(
-                            document_id=result.document_id,
-                            document_title=result.document_title,
-                            similarity_score=result.similarity_score,
-                        )
-                        for result in search_results
-                    ])
+                    citations.extend(
+                        [
+                            Citation(
+                                document_id=result.document_id,
+                                document_title=result.document_title,
+                                similarity_score=result.similarity_score,
+                            )
+                            for result in search_results
+                        ]
+                    )
 
                     context = "\n\nRelevant roadmap materials:\n" + "\n".join(context_parts)
                     logger.info(f"Retrieved roadmap context with {len(citations)} citations")
@@ -401,11 +395,11 @@ class EnhancedAssistantService:
         # Build enhanced user message
         user_message = request.message
 
-        # Add immediate context (Phase 2)
+        # Add immediate context
         if immediate_context:
             user_message += f"\n\nCurrent {request.context_type} context from {immediate_context.source}:\n{immediate_context.content}"
 
-        # Add semantic context (Phase 3)
+        # Add semantic context
         if semantic_context:
             semantic_parts = []
             for i, result in enumerate(semantic_context[:3]):  # Limit to top 3
@@ -444,14 +438,16 @@ class EnhancedAssistantService:
         citations = []
 
         # Add semantic context citations
-        citations.extend([
-            Citation(
-                document_id=result.chunk_id,
-                document_title=f"{result.doc_type.title()}: {result.doc_id}",
-                similarity_score=result.final_score or result.similarity_score,
-            )
-            for result in semantic_context
-        ])
+        citations.extend(
+            [
+                Citation(
+                    document_id=result.chunk_id,
+                    document_title=f"{result.doc_type.title()}: {result.doc_id}",
+                    similarity_score=result.final_score or result.similarity_score,
+                )
+                for result in semantic_context
+            ]
+        )
 
         # Add roadmap citations
         citations.extend(roadmap_context[1])
@@ -487,12 +483,12 @@ class EnhancedAssistantService:
         self, book_id: UUID, response_text: str, similarity_threshold: float = 0.75
     ) -> list[dict]:
         """Find text locations in a book for citation highlighting.
-        
+
         Args:
             book_id: UUID of the book
             response_text: Text to find citations for
             similarity_threshold: Minimum similarity score for matches
-            
+
         Returns
         -------
             List of citation matches with page numbers and coordinates
@@ -501,25 +497,26 @@ class EnhancedAssistantService:
         async with async_session_maker() as session:
             result = await session.execute(
                 sql_text("""
-                    SELECT rag_status 
-                    FROM books 
+                    SELECT rag_status
+                    FROM books
                     WHERE id = :book_id
                 """),
-                {"book_id": str(book_id)}
+                {"book_id": str(book_id)},
             )
             book = result.fetchone()
 
             if not book:
-                raise ValueError(f"Book not found: {book_id}")
+                msg = f"Book not found: {book_id}"
+                raise ValueError(msg)
 
             if book.rag_status != "completed":
-                raise ValueError(f"Book has not been processed for RAG. Current status: {book.rag_status}")
+                msg = f"Book has not been processed for RAG. Current status: {book.rag_status}"
+                raise ValueError(msg)
 
         # Use RAG service to find citations
-        citations = await self.rag_service.find_text_locations(
-            book_id=book_id,
-            response_text=response_text,
-            similarity_threshold=similarity_threshold
+        rag_service = RAGService()
+        citations = await rag_service.find_text_locations(
+            book_id=book_id, response_text=response_text, similarity_threshold=similarity_threshold
         )
 
         # Transform to match schema
