@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ReactReader } from "react-reader";
 import useAppStore from "@/stores/useAppStore";
+import { useTextSelectionTooltip } from "@/hooks/useTextSelectionTooltip";
 import "./EPUBViewer.css";
 
 /**
@@ -23,6 +24,18 @@ const EPUBViewerV2 = ({ url, bookInfo, onLocationChange }) => {
 	const [location, setLocation] = useState(epubState.location || null);
 	const [fontSize, setFontSize] = useState(
 		epubState.fontSize || preferences.defaultZoomLevel * 100 || 100,
+	);
+
+	// Set up text selection handlers for EPUB
+	useTextSelectionTooltip(
+		(text) => {
+			console.log("Highlight in EPUB:", text);
+			// Add highlight functionality here in the future
+		},
+		(text) => {
+			console.log("Ask AI about EPUB text:", text);
+			// Add AI functionality here in the future
+		}
 	);
 
 	/**
