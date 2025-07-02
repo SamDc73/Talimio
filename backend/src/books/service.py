@@ -1,4 +1,4 @@
-import asyncio
+
 import hashlib
 import json
 import logging
@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from fastapi import HTTPException, UploadFile, status
+from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 async def _process_book_rag_background(book_id: UUID) -> None:
     """Process book for RAG in background (non-blocking)."""
     try:
+        # Create a new async session for background task
         async with async_session_maker() as session:
             # Update status to processing
             book_query = select(Book).where(Book.id == book_id)
@@ -62,7 +63,7 @@ async def _process_book_rag_background(book_id: UUID) -> None:
             from src.ai.rag.vector_store import VectorStore
 
             # Initialize components
-            document_processor = DocumentProcessor()
+            DocumentProcessor()
             # Use BookChunker for position-aware chunking
             chunker = ChunkerFactory.create_chunker("book")
             vector_store = VectorStore()
@@ -70,7 +71,8 @@ async def _process_book_rag_background(book_id: UUID) -> None:
             # Process the book file
             file_path = Path(book.file_path)
             if not file_path.exists():
-                raise FileNotFoundError(f"Book file not found: {book.file_path}")
+                msg = f"Book file not found: {book.file_path}"
+                raise FileNotFoundError(msg)
 
             # Use enhanced chunking with position data for Phase 5
             enhanced_chunks = chunker.chunk_document(
@@ -109,6 +111,24 @@ async def _process_book_rag_background(book_id: UUID) -> None:
 
 def _book_to_response(book: Book) -> BookResponse:
     """Convert Book model to BookResponse with proper tags handling."""
+    # Extract all attributes while we have them loaded
+    book_id = book.id
+    title = book.title
+    subtitle = book.subtitle
+    author = book.author
+    description = book.description
+    isbn = book.isbn
+    language = book.language
+    publication_year = book.publication_year
+    publisher = book.publisher
+    file_path = book.file_path
+    file_type = book.file_type
+    file_size = book.file_size
+    total_pages = book.total_pages
+    cover_image_path = book.cover_image_path
+    created_at = book.created_at
+    updated_at = book.updated_at
+
     tags_list = []
     if book.tags:
         try:
@@ -127,28 +147,28 @@ def _book_to_response(book: Book) -> BookResponse:
             toc_list = None
 
     return BookResponse(
-        id=book.id,
-        title=book.title,
-        subtitle=book.subtitle,
-        author=book.author,
-        description=book.description,
-        isbn=book.isbn,
-        language=book.language,
-        publication_year=book.publication_year,
-        publisher=book.publisher,
+        id=book_id,
+        title=title,
+        subtitle=subtitle,
+        author=author,
+        description=description,
+        isbn=isbn,
+        language=language,
+        publication_year=publication_year,
+        publisher=publisher,
         tags=tags_list,
-        file_path=book.file_path,
-        file_type=book.file_type,
-        file_size=book.file_size,
-        total_pages=book.total_pages,
-        cover_image_path=book.cover_image_path,
+        file_path=file_path,
+        file_type=file_type,
+        file_size=file_size,
+        total_pages=total_pages,
+        cover_image_path=cover_image_path,
         table_of_contents=toc_list,
-        created_at=book.created_at,
-        updated_at=book.updated_at,
+        created_at=created_at,
+        updated_at=updated_at,
     )
 
 
-async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
+async def create_book(book_data: BookCreate, file: UploadFile, background_tasks: BackgroundTasks) -> BookResponse:
     """
     Create a new book with uploaded file.
 
@@ -176,12 +196,21 @@ async def create_book(book_data: BookCreate, file: UploadFile) -> BookResponse:
             await session.commit()
             await session.refresh(book)
 
+            # Apply tagging (modifies book.tags)
             await _apply_automatic_tagging(session, book, metadata)
 
-            # Trigger background RAG processing
-            asyncio.create_task(_process_book_rag_background(book.id))
+            # Commit the tagging changes and refresh
+            await session.commit()
+            await session.refresh(book)
 
-            return _book_to_response(book)
+            # Convert to response while session is still active
+            book_response = _book_to_response(book)
+            book_id = book.id  # Store ID for background task
+
+        # Trigger background RAG processing after session is closed
+        background_tasks.add_task(_process_book_rag_background, book_id)
+
+        return book_response
 
     except HTTPException:
         raise
@@ -298,7 +327,7 @@ async def _apply_automatic_tagging(session: AsyncSession, book: Book, metadata: 
 
         if tags:
             book.tags = json.dumps(tags)
-            await session.commit()
+            # Don't commit here - let the caller handle it
 
         logging.info(f"Successfully tagged book {book.id} with tags: {tags}")
 
