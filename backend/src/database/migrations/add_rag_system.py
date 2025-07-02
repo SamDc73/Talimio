@@ -15,9 +15,13 @@ logger = logging.getLogger(__name__)
 async def add_rag_system() -> None:
     """Add RAG system tables and pgvector extension to the database."""
     async with engine.begin() as conn:
-        # Enable pgvector extension
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        logger.info("pgvector extension enabled")
+        # Enable pgvector extension FIRST - this is critical
+        try:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            logger.info("pgvector extension enabled")
+        except Exception as e:
+            logger.error(f"Failed to create pgvector extension: {e}")
+            raise
 
         # Extend roadmaps table with RAG support
         await conn.execute(
