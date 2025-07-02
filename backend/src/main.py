@@ -98,6 +98,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     for attempt in range(max_retries):
         try:
+            # Initialize database with required extensions FIRST
+            from src.database.migrations.init_database import init_database
+
+            await init_database(engine)
+            
+            # Create all tables
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
 
@@ -116,7 +122,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
             await run_archive_migrations(engine)
 
-            # Run RAG system migration
+            # Run RAG system migration (pgvector is already enabled by init_database)
             from src.database.migrations.add_rag_system import add_rag_system
 
             await add_rag_system()
@@ -135,6 +141,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             from src.database.migrations.add_rag_status_columns import run_rag_status_migrations
 
             await run_rag_status_migrations(engine)
+
+            # Run transcript URL migration
+            from src.database.migrations.add_transcript_url import run_transcript_url_migration
+
+            await run_transcript_url_migration(engine)
 
             break  # Success - exit the retry loop
 
