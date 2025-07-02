@@ -7,7 +7,9 @@ import { useToast } from "@/hooks/use-toast";
 import { videoApi } from "@/services/videoApi";
 import useAppStore from "@/stores/useAppStore";
 import "@justinribeiro/lite-youtube";
+import { CollapsibleDescription } from "./CollapsibleDescription";
 import "./VideoViewer.css";
+import VideoTranscript from "./VideoTranscript";
 
 /**
  * Enhanced VideoViewer using Zustand for state management
@@ -51,9 +53,7 @@ function VideoViewerContentV2() {
 				setAppLoading("video-fetch", true);
 				setError(null);
 
-				console.log("Loading video with ID:", videoId);
 				const data = await videoApi.getVideo(videoId);
-				console.log("Video loaded:", data);
 				setVideo(data);
 
 				// Initialize video duration in store if not already set
@@ -123,75 +123,83 @@ function VideoViewerContentV2() {
 	);
 
 	/**
-	 * Set up YouTube player communication
+	 * Initialize YouTube IFrame API for real-time updates
 	 */
 	useEffect(() => {
-		if (!video || !playerRef.current) return;
+		if (!video) return;
 
-		const handleLiteYoutubeActivate = () => {
-			// Player is activated (user clicked play)
-			const iframe = playerRef.current.querySelector("iframe");
-			if (iframe) {
-				// Set up postMessage communication with the YouTube iframe
-				const intervalId = setInterval(() => {
-					iframe.contentWindow?.postMessage(
-						JSON.stringify({
-							event: "listening",
-							id: 1,
-							channel: "widget",
-						}),
-						"*",
-					);
-				}, 1000);
+		// Load YouTube IFrame API script
+		if (!window.YT) {
+			const tag = document.createElement('script');
+			tag.src = 'https://www.youtube.com/iframe_api';
+			const firstScriptTag = document.getElementsByTagName('script')[0];
+			firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+		}
 
-				// Handle messages from YouTube iframe
-				const handleMessage = (event) => {
-					if (event.origin !== "https://www.youtube.com") return;
+		let ytPlayer = null;
+		let intervalId = null;
 
-					try {
-						const data = JSON.parse(event.data);
-						if (
-							data.event === "infoDelivery" &&
-							data.info &&
-							data.info.currentTime !== undefined
-						) {
-							const newTime = Math.floor(data.info.currentTime);
+		// Wait for lite-youtube to load the iframe
+		const handleIframeLoaded = async (_event) => {
+			console.log('lite-youtube iframe loaded');
+			
+			// Wait a bit for YouTube API to be ready
+			setTimeout(() => {
+				try {
+					// Get the iframe from the shadow DOM
+					const iframe = playerRef.current?.shadowRoot?.querySelector('iframe');
+					if (!iframe || !window.YT || !window.YT.Player) {
+						console.warn('YouTube API or iframe not ready');
+						return;
+					}
 
-							// Auto-save progress every 10 seconds of playback
-							if (newTime > 0 && newTime % 10 === 0) {
-								handleProgressUpdate(newTime);
-							} else {
-								// Update local state for immediate feedback
-								setCurrentTime(newTime);
+					// Create YouTube player instance
+					ytPlayer = new window.YT.Player(iframe, {
+						events: {
+							onReady: () => {
+								console.log('YouTube player ready');
+								
+								// Start polling for time updates
+								intervalId = setInterval(() => {
+									if (ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
+										try {
+											const time = ytPlayer.getCurrentTime();
+											if (typeof time === 'number' && !Number.isNaN(time)) {
+												setCurrentTime(time);
+											}
+										} catch (err) {
+											console.error('Error getting current time:', err);
+										}
+									}
+								}, 250); // Poll every 250ms
+							},
+							onStateChange: (event) => {
+								console.log('Player state changed:', event.data);
 							}
 						}
-					} catch (_e) {
-						// Ignore non-JSON messages
-					}
-				};
+					});
+				} catch (err) {
+					console.error('Failed to create YouTube player:', err);
+				}
+			}, 1000);
+		};
 
-				window.addEventListener("message", handleMessage);
+		// Listen for lite-youtube iframe loaded event
+		if (playerRef.current) {
+			playerRef.current.addEventListener('liteYoutubeIframeLoaded', handleIframeLoaded);
+		}
 
-				return () => {
-					clearInterval(intervalId);
-					window.removeEventListener("message", handleMessage);
-				};
+		// Cleanup
+		return () => {
+			if (intervalId) {
+				clearInterval(intervalId);
+			}
+			if (playerRef.current) {
+				playerRef.current.removeEventListener('liteYoutubeIframeLoaded', handleIframeLoaded);
 			}
 		};
+	}, [video]);
 
-		// Listen for when lite-youtube activates
-		playerRef.current.addEventListener(
-			"liteYoutubeActivate",
-			handleLiteYoutubeActivate,
-		);
-
-		return () => {
-			playerRef.current?.removeEventListener(
-				"liteYoutubeActivate",
-				handleLiteYoutubeActivate,
-			);
-		};
-	}, [video, handleProgressUpdate]);
 
 	/**
 	 * Save progress on page unload using beacon API
@@ -229,7 +237,10 @@ function VideoViewerContentV2() {
 	const handleSeekToChapter = useCallback(
 		(timestamp) => {
 			const iframe = playerRef.current?.querySelector("iframe");
+			
+			// Check if iframe exists (player is activated)
 			if (iframe?.contentWindow) {
+				console.log('Seeking to timestamp:', timestamp);
 				// Use postMessage to control YouTube player
 				iframe.contentWindow.postMessage(
 					JSON.stringify({
@@ -237,15 +248,22 @@ function VideoViewerContentV2() {
 						func: "seekTo",
 						args: [timestamp, true],
 					}),
-					"*",
+					"https://www.youtube.com",
 				);
 
 				// Update both local state and store
 				setCurrentTime(timestamp);
 				handleProgressUpdate(timestamp);
+			} else {
+				console.warn('YouTube player not ready yet. Please start playing the video first.');
+				toast({
+					title: "Start video first",
+					description: "Please click play on the video before seeking",
+					variant: "default",
+				});
 			}
 		},
-		[handleProgressUpdate],
+		[handleProgressUpdate, toast],
 	);
 
 	/**
@@ -352,14 +370,18 @@ function VideoViewerContentV2() {
 								</>
 							)}
 						</div>
-						{video.description && (
-							<div className="video-description">
-								<h3>Description</h3>
-								<p>{video.description}</p>
-							</div>
-						)}
-					</div>
-				</div>
+						</div>
+        </div>
+				{/* Video Transcript */}
+				<VideoTranscript
+          key={video.uuid} // Force re-mount on video change
+          videoUuid={video.uuid}
+          currentTime={currentTime}
+          onSeek={handleSeekToChapter}
+        />
+        {video.description && (
+          <CollapsibleDescription description={video.description} />
+        )}
 			</main>
 		</div>
 	);
