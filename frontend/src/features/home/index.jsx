@@ -574,6 +574,7 @@ export default function HomePage() {
 	const [bookTitle, setBookTitle] = useState("");
 	const [bookAuthor, setBookAuthor] = useState("");
 	const [isExtractingMetadata, setIsExtractingMetadata] = useState(false);
+	const [isUploadingBook, setIsUploadingBook] = useState(false);
 	const [youtubeUrl, setYoutubeUrl] = useState("");
 	const [isAddingVideo, setIsAddingVideo] = useState(false);
 	const [isFabExpanded, setIsFabExpanded] = useState(false);
@@ -1143,6 +1144,7 @@ export default function HomePage() {
 	const handleUpload = async () => {
 		if (!selectedFile || !bookTitle.trim() || !bookAuthor.trim()) return;
 
+		setIsUploadingBook(true);
 		try {
 			const formData = new FormData();
 			formData.append("file", selectedFile);
@@ -1172,35 +1174,26 @@ export default function HomePage() {
 				);
 			}
 
+			// Parse the response to get the book data
+			const bookData = await response.json();
+
+			// Close the dialog first
+			setShowUploadDialog(false);
+			setSelectedFile(null);
+			setBookTitle("");
+			setBookAuthor("");
+
 			toast({
 				title: "Book Uploaded!",
 				description: `"${bookTitle}" by ${bookAuthor} has been added to your library.`,
 			});
 
-			setSelectedFile(null);
-			setBookTitle("");
-			setBookAuthor("");
-			setShowUploadDialog(false);
-
-			// Refresh content list
-			const data = await fetchContentData();
-			const { content } = processContentData(data);
-			setContentItems(
-				content.map((item) => ({
-					...item,
-					dueDate:
-						Math.random() > 0.7
-							? new Date(
-									Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000,
-								).toISOString()
-							: null,
-					isPaused: Math.random() > 0.9,
-					totalCards: item.cardCount,
-					due: item.dueCount || Math.floor(Math.random() * 10),
-					overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
-				})),
-			);
+			// Small delay to ensure dialog closes before navigation
+			setTimeout(() => {
+				navigate(`/books/${bookData.id}`);
+			}, 100);
 		} catch (error) {
+			setIsUploadingBook(false);
 			toast({
 				title: "Error",
 				description:
@@ -1881,8 +1874,19 @@ export default function HomePage() {
 						)}
 
 						{/* Upload Book Dialog */}
-						<Sheet open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+						<Sheet open={showUploadDialog} onOpenChange={(open) => {
+							if (!isUploadingBook) setShowUploadDialog(open);
+						}}>
 							<SheetContent side="bottom" className="sm:max-w-lg mx-auto">
+								{isUploadingBook && (
+									<div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg">
+										<div className="flex flex-col items-center gap-4">
+											<div className="animate-spin rounded-full h-10 w-10 border-b-2 border-book" />
+											<p className="text-lg font-medium">Uploading your book...</p>
+											<p className="text-sm text-muted-foreground">This may take a few moments</p>
+										</div>
+									</div>
+								)}
 								<SheetHeader>
 									<SheetTitle>Upload a Book</SheetTitle>
 									<SheetDescription>
@@ -1940,17 +1944,25 @@ export default function HomePage() {
 									<Button
 										variant="outline"
 										onClick={() => setShowUploadDialog(false)}
+										disabled={isUploadingBook}
 									>
 										Cancel
 									</Button>
 									<Button
 										onClick={handleUpload}
 										disabled={
-											!selectedFile || !bookTitle.trim() || !bookAuthor.trim()
+											!selectedFile || !bookTitle.trim() || !bookAuthor.trim() || isUploadingBook
 										}
 										className="bg-book hover:bg-book-accent text-white"
 									>
-										Upload Book
+										{isUploadingBook ? (
+											<span className="flex items-center">
+												<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+												Uploading...
+											</span>
+										) : (
+											"Upload Book"
+										)}
 									</Button>
 								</SheetFooter>
 							</SheetContent>
