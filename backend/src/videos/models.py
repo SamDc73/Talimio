@@ -33,6 +33,7 @@ class Video(Base):
     thumbnail_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array stored as text
+    transcript_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # RAG processing status
     rag_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")  # pending, processing, completed, failed

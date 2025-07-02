@@ -14,11 +14,13 @@ from src.database.pagination import Paginator
 from src.database.session import async_session_maker
 from src.videos.models import Video, VideoChapter
 from src.videos.schemas import (
+    TranscriptSegment,
     VideoChapterResponse,
     VideoCreate,
     VideoListResponse,
     VideoProgressUpdate,
     VideoResponse,
+    VideoTranscriptResponse,
     VideoUpdate,
 )
 
@@ -91,10 +93,12 @@ async def _process_video_rag_background(video_uuid: UUID) -> None:
 async def _extract_video_transcript(video_url: str) -> str | None:
     """Extract transcript from YouTube video using yt-dlp."""
     try:
+        # Updated options for cleaner subtitles - using SRT format
         ydl_opts = {
             "writesubtitles": True,
             "writeautomaticsub": True,
-            "subtitleslangs": ["en"],  # English transcripts
+            "subtitlesformat": "srt",  # Use SRT format to avoid VTT redundancy issues
+            "subtitleslangs": ["en"],
             "skip_download": True,
             "quiet": True,
         }
@@ -106,17 +110,17 @@ async def _extract_video_transcript(video_url: str) -> str | None:
             # Try to get subtitles
             subtitles = info.get("subtitles", {})
             automatic_captions = info.get("automatic_captions", {})
-
+            
             # Prefer manual subtitles over automatic ones
             subs_to_use = subtitles.get("en") or automatic_captions.get("en")
 
             if not subs_to_use:
                 return None
 
-            # Find the best subtitle format (prefer VTT)
+            # Find the best subtitle format (prefer SRT to avoid VTT issues)
             subtitle_url = None
             for sub in subs_to_use:
-                if sub.get("ext") == "vtt":
+                if sub.get("ext") == "srt":
                     subtitle_url = sub.get("url")
                     break
 
@@ -134,15 +138,14 @@ async def _extract_video_transcript(video_url: str) -> str | None:
                 async with session.get(subtitle_url) as response:
                     if response.status == 200:
                         content = await response.text()
-                        # Simple VTT parser - extract text lines
+                        # Simple SRT parser - extract text lines
                         lines = content.split("\n")
                         transcript_lines = []
 
                         for line in lines:
                             line = line.strip()
-                            # Skip timestamp lines and metadata
+                            # Skip timestamp lines and sequence numbers
                             if (not line or
-                                line.startswith("WEBVTT") or
                                 "-->" in line or
                                 line.isdigit()):
                                 continue
@@ -647,6 +650,138 @@ class VideoService:
             await db.refresh(chapter)
 
         return [VideoChapterResponse.model_validate(chapter) for chapter in chapters]
+
+    async def get_video_transcript_segments(self, db: AsyncSession, video_uuid: str) -> VideoTranscriptResponse:
+        """Get transcript segments with timestamps for a video."""
+        # Get video to ensure it exists
+        result = await db.execute(
+            select(Video).where(Video.uuid == video_uuid),
+        )
+        video = result.scalar_one_or_none()
+
+        if not video:
+            msg = f"Video with UUID {video_uuid} not found"
+            raise ValueError(msg)
+
+        try:
+            segments = await self._extract_video_transcript_segments(video.url)
+            return VideoTranscriptResponse(
+                videoUuid=video_uuid,
+                segments=segments,
+                totalSegments=len(segments),
+            )
+        except Exception as e:
+            logger.exception(f"Failed to extract transcript segments for video {video_uuid}")
+            msg = f"Failed to extract transcript segments: {e!s}"
+            raise ValueError(msg) from e
+
+    async def _extract_video_transcript_segments(self, video_url: str) -> list[TranscriptSegment]:
+        """Extract transcript segments with timestamps from YouTube video using yt-dlp."""
+        try:
+            import aiohttp
+
+            # Updated options for cleaner subtitles - using SRT format
+            ydl_opts = {
+                "writesubtitles": True,
+                "writeautomaticsub": True,
+                "subtitlesformat": "srt",  # Use SRT format to avoid VTT redundancy issues
+                "subtitleslangs": ["en"],
+                "skip_download": True,
+                "quiet": True,
+            }
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # Get video info with subtitles
+                info = ydl.extract_info(video_url, download=False)
+
+                # Try to get subtitles
+                subtitles = info.get("subtitles", {})
+                automatic_captions = info.get("automatic_captions", {})
+                
+                # Prefer manual subtitles over automatic ones
+                subs_to_use = subtitles.get("en") or automatic_captions.get("en")
+
+                if not subs_to_use:
+                    return []
+
+                # Find the best subtitle format (prefer SRT to avoid VTT issues)
+                subtitle_url = None
+                for sub in subs_to_use:
+                    if sub.get("ext") == "srt":
+                        subtitle_url = sub.get("url")
+                        break
+
+                # Fallback to any available subtitle
+                if not subtitle_url and subs_to_use:
+                    subtitle_url = subs_to_use[0].get("url")
+
+                if not subtitle_url:
+                    return []
+
+                # Download and parse subtitle content
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(subtitle_url) as response:
+                        if response.status == 200:
+                            content = await response.text()
+                            return self._parse_srt_segments(content)
+
+        except Exception as e:
+            logger.exception(f"Failed to extract transcript segments for {video_url}: {e}")
+            return []
+
+        return []
+
+    def _parse_vtt_segments(self, vtt_content: str) -> list[TranscriptSegment]:
+        """Parse VTT content to extract transcript segments with timestamps."""
+        from io import StringIO
+
+        import webvtt
+
+        segments = []
+        for caption in webvtt.read_buffer(StringIO(vtt_content)):
+            segments.append(TranscriptSegment(
+                start_time=caption.start_in_seconds,
+                end_time=caption.end_in_seconds,
+                text=caption.text
+            ))
+        return segments
+
+    def _parse_srt_segments(self, srt_content: str) -> list[TranscriptSegment]:
+        """Parse SRT content to extract transcript segments with timestamps."""
+        import re
+        
+        segments = []
+        # Split into subtitle blocks
+        blocks = re.split(r'\n\n+', srt_content.strip())
+        
+        for block in blocks:
+            lines = block.strip().split('\n')
+            if len(lines) >= 3 and '-->' in lines[1]:
+                # Parse timestamp line
+                timestamp_match = re.match(r'(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})', lines[1])
+                if timestamp_match:
+                    start_str, end_str = timestamp_match.groups()
+                    
+                    # Convert timestamp to seconds
+                    def timestamp_to_seconds(ts):
+                        h, m, s = ts.replace(',', '.').split(':')
+                        return float(h) * 3600 + float(m) * 60 + float(s)
+                    
+                    start_time = timestamp_to_seconds(start_str)
+                    end_time = timestamp_to_seconds(end_str)
+                    
+                    # Join remaining lines as text
+                    text = ' '.join(lines[2:])
+                    
+                    segments.append(TranscriptSegment(
+                        start_time=start_time,
+                        end_time=end_time,
+                        text=text
+                    ))
+        
+        return segments
+
+
 
     async def _fetch_video_chapters(self, url: str) -> list[dict[str, Any]]:
         """Fetch video chapter information using yt-dlp."""

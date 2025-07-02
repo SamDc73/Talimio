@@ -14,6 +14,7 @@ from src.videos.schemas import (
     VideoListResponse,
     VideoProgressUpdate,
     VideoResponse,
+    VideoTranscriptResponse,
     VideoUpdate,
 )
 from src.videos.service import video_service
@@ -200,3 +201,18 @@ async def sync_video_chapter_progress(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.get("/{video_uuid}/transcript")
+async def get_video_transcript(
+    video_uuid: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> VideoTranscriptResponse:
+    """Get transcript segments with timestamps for a video."""
+    try:
+        return await video_service.get_video_transcript_segments(db, video_uuid)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(f"Error fetching transcript for video {video_uuid}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e

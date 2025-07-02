@@ -91,4 +91,14 @@ export const videoApi = {
 			throw new Error("Failed to delete video");
 		}
 	},
+
+	async fetchTranscript(id) {
+		const response = await fetch(`${BASE_URL}/videos/${id}/transcript`);
+
+		if (!response.ok) {
+			throw new Error("Failed to fetch transcript");
+		}
+
+		return response.json();
+	},
 };

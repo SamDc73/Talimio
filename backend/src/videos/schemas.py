@@ -143,3 +143,21 @@ class VideoChapterProgressSync(BaseModel):
         ..., description="List of completed chapter IDs", alias="completedChapterIds"
     )
     total_chapters: int = Field(..., gt=0, description="Total number of chapters", alias="totalChapters")
+
+
+class TranscriptSegment(BaseModel):
+    """Schema for video transcript segment with timestamp."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    start_time: float = Field(..., ge=0, description="Start time in seconds", alias="startTime")
+    end_time: float = Field(..., ge=0, description="End time in seconds", alias="endTime")
+    text: str = Field(..., description="Transcript text for this segment")
+
+
+class VideoTranscriptResponse(BaseModel):
+    """Schema for video transcript response."""
+
+    video_uuid: str = Field(..., alias="videoUuid")
+    segments: list[TranscriptSegment] = Field(..., description="List of transcript segments")
+    total_segments: int = Field(..., alias="totalSegments")
