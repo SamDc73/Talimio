@@ -5,19 +5,25 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.ai.client import ModelManager
+from src.ai.rag.chunker import ChunkerFactory
+from src.ai.rag.ingest import DocumentProcessor
+from src.ai.rag.vector_store import VectorStore
 from src.database.session import async_session_maker
+from src.tagging.service import TaggingService
 
 
 if TYPE_CHECKING:
     from src.books.metadata import BookMetadata
 
+from .metadata import extract_metadata
 from .models import Book, BookChapter, BookProgress
 from .schemas import (
     BookChapterResponse,
@@ -57,11 +63,6 @@ async def _process_book_rag_background(book_id: UUID) -> None:
             book.rag_status = "processing"
             await session.commit()
 
-            # Import RAG components
-            from src.ai.rag.chunker import ChunkerFactory
-            from src.ai.rag.ingest import DocumentProcessor
-            from src.ai.rag.vector_store import VectorStore
-
             # Initialize components
             DocumentProcessor()
             # Use BookChunker for position-aware chunking
@@ -78,8 +79,7 @@ async def _process_book_rag_background(book_id: UUID) -> None:
             enhanced_chunks = chunker.chunk_document(
                 doc_id=book_id,
                 doc_type="book",
-                content=file_path,
-                metadata={"include_positions": True}  # Enable position extraction
+                content=file_path
             )
 
             # Store enhanced chunks with embeddings
@@ -265,8 +265,6 @@ async def _check_duplicate_book(file_hash: str) -> None:
 
 def _save_file_to_disk(file_content: bytes, file_extension: str) -> Path:
     """Save file to disk and return path."""
-    from uuid import uuid4
-
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     unique_filename = f"{uuid4()}{file_extension}"
     file_path = UPLOAD_DIR / unique_filename
@@ -276,8 +274,6 @@ def _save_file_to_disk(file_content: bytes, file_extension: str) -> Path:
 
 def _extract_file_metadata(file_content: bytes, file_extension: str) -> "BookMetadata":
     """Extract metadata from file content."""
-    from .metadata import extract_metadata
-
     return extract_metadata(file_content, file_extension)
 
 
@@ -311,9 +307,6 @@ def _create_book_record(
 async def _apply_automatic_tagging(session: AsyncSession, book: Book, metadata: "BookMetadata") -> None:
     """Apply automatic tagging to the book."""
     try:
-        from src.ai.client import ModelManager
-        from src.tagging.service import TaggingService
-
         model_manager = ModelManager()
         tagging_service = TaggingService(session, model_manager)
 
@@ -697,8 +690,6 @@ async def extract_and_update_toc(book_id: UUID) -> BookResponse:
             file_extension = f".{book.file_type}"
 
             # Extract metadata including table of contents
-            from .metadata import extract_metadata
-
             metadata = extract_metadata(file_content, file_extension)
 
             # Update book with table of contents
@@ -930,8 +921,6 @@ async def extract_and_create_chapters(book_id: UUID) -> list[BookChapterResponse
                 )
 
             # Parse table of contents
-            import json
-
             try:
                 toc_data = json.loads(book.table_of_contents)
             except (json.JSONDecodeError, TypeError) as e:

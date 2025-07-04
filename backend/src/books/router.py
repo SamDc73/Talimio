@@ -1,7 +1,9 @@
+import json
+from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -22,6 +24,7 @@ from .service import (
     batch_update_chapter_statuses,
     create_book,
     extract_and_create_chapters,
+    extract_and_update_toc,
     get_book,
     get_book_chapter,
     get_book_chapters,
@@ -90,8 +93,6 @@ async def extract_book_metadata(
 
     # If no title was extracted, use filename without extension
     if not metadata.title:
-        from pathlib import Path
-
         metadata.title = Path(file.filename).stem
 
     return BookMetadataResponse(
@@ -108,6 +109,7 @@ async def extract_book_metadata(
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_book_endpoint(
+    background_tasks: BackgroundTasks,
     file: Annotated[UploadFile, File(description="Book file (PDF or EPUB)")],
     title: Annotated[str, Form(description="Book title")],
     author: Annotated[str, Form(description="Book author")],
@@ -121,8 +123,6 @@ async def create_book_endpoint(
 ) -> BookResponse:
     """Add a new book (PDF, EPUB)."""
     # Parse tags from JSON string
-    import json
-
     try:
         tags_list = json.loads(tags) if tags else []
     except json.JSONDecodeError:
@@ -158,7 +158,7 @@ async def create_book_endpoint(
         file_type=file_extension,
     )
 
-    return await create_book(book_data, file)
+    return await create_book(book_data, file, background_tasks)
 
 
 @router.patch("/{book_id}")
@@ -197,8 +197,6 @@ async def serve_book_file(book_id: UUID) -> FileResponse:
         )
 
     # Ensure the file exists
-    from pathlib import Path
-
     file_path = Path(book.file_path)
     if not file_path.exists():
         raise HTTPException(
@@ -219,8 +217,6 @@ async def serve_book_file(book_id: UUID) -> FileResponse:
 @router.post("/{book_id}/extract-toc")
 async def extract_table_of_contents(book_id: UUID) -> BookResponse:
     """Extract and update table of contents for an existing book."""
-    from .service import extract_and_update_toc
-
     return await extract_and_update_toc(book_id)
 
 

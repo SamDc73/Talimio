@@ -7,6 +7,7 @@ supporting books, videos, and courses with intelligent chunking and metadata.
 
 import asyncio
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -28,17 +29,21 @@ async def add_phase3_rag_schema() -> None:
     async with engine.begin() as conn:
         logger.info("Starting RAG schema migration...")
 
+        # Get embedding dimensions from environment
+        embedding_dim = int(os.getenv("RAG_EMBEDDING_OUTPUT_DIM", "1536"))
+        logger.info(f"Creating RAG tables with {embedding_dim} dimensional embeddings")
+
         # Create enhanced RAG document chunks table
         await conn.execute(
-            text("""
+            text(f"""
             CREATE TABLE IF NOT EXISTS rag_document_chunks (
                 id SERIAL PRIMARY KEY,
                 doc_id UUID NOT NULL,
                 doc_type VARCHAR(20) NOT NULL CHECK (doc_type IN ('book', 'video', 'course')),
                 chunk_index INTEGER NOT NULL,
                 content TEXT NOT NULL,
-                embedding vector(384),  -- Using smaller embedding dimension for efficiency
-                metadata JSONB NOT NULL DEFAULT '{}',
+                embedding vector({embedding_dim}),
+                metadata JSONB NOT NULL DEFAULT '{{}}',
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 
                 -- Ensure unique chunks per document

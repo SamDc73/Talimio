@@ -206,19 +206,21 @@ class EnhancedAssistantService:
 
     async def _get_semantic_context(self, request: ChatRequest) -> list[SearchResult]:
         """Get semantic context from the RAG system."""
+        logger.info(f"Getting semantic context for request: {request}")
         if not (request.context_type and request.context_id):
+            logger.info("No context_type or context_id in request, returning empty list.")
             return []
 
         try:
+            logger.info(f"Retrieving context with context_retriever: {self.context_retriever}")
             results = await self.context_retriever.retrieve_context(
                 query=request.message,
                 context_type=request.context_type,
                 context_id=request.context_id,
                 context_meta=request.context_meta,
                 max_chunks=5,
-                relevance_threshold=0.01,  # Extremely low threshold for debugging
+                relevance_threshold=0.4,  # Lower threshold for better recall
             )
-
             logger.info(f"Retrieved {len(results)} semantic chunks for context")
 
             # If vector search failed, try text-based fallback
@@ -227,6 +229,7 @@ class EnhancedAssistantService:
                 results = await self._text_based_fallback_search(request)
                 logger.error(f"Text-based fallback returned {len(results)} results")
 
+            logger.info(f"Final semantic context results: {results}")
             return results
 
         except Exception as e:
@@ -264,33 +267,29 @@ class EnhancedAssistantService:
                 # Search for chunks containing relevant keywords from the query
                 query_lower = request.message.lower()
 
-                # Extract key terms and be more specific
+                # Extract key terms - be more general
                 search_terms = []
-                if "probabilities" in query_lower:
-                    if "where" in query_lower:
-                        # This is likely the "Where Do the Probabilities Come From" section
-                        search_terms.extend(
-                            ["Where Do the Probabilities", "probabilities come from", "letter", "English text"]
-                        )
-                    else:
-                        search_terms.append("probabilities")
-                if "chatgpt" in query_lower:
-                    search_terms.append("ChatGPT")
 
-                # If no specific terms, try to extract any meaningful words
-                if not search_terms:
-                    words = query_lower.split()
-                    search_terms = [word for word in words if len(word) > 3]
+                # Common book-related queries
+                if any(word in query_lower for word in ["about", "book", "what"]):
+                    # For general "what is this book about" queries
+                    search_terms.extend(["AI", "engineering", "foundation", "model", "application", "build"])
+
+                # Add any specific terms from the query
+                stop_words = {"the", "is", "this", "what", "book", "about", "it", "a", "an", "of", "in"}
+                words = query_lower.split()
+                specific_terms = [word for word in words if len(word) > 3 and word not in stop_words]
+                search_terms.extend(specific_terms)
 
                 # Build ILIKE conditions (case-insensitive)
                 conditions = " OR ".join([f"content ILIKE '%{term}%'" for term in search_terms])
 
                 if not conditions:
-                    # Generic search - just get some chunks
-                    conditions = "content ILIKE '%ChatGPT%'"
+                    # Generic search - get any chunks with common AI/book terms
+                    conditions = "content ILIKE '%AI%' OR content ILIKE '%engineering%' OR content ILIKE '%book%'"
 
                 query = f"""
-                    SELECT id, doc_id, doc_type, content, metadata
+                    SELECT id, doc_id, doc_type, chunk_index, content, metadata
                     FROM rag_document_chunks
                     WHERE doc_id = :doc_id
                     AND doc_type = :doc_type
@@ -309,13 +308,11 @@ class EnhancedAssistantService:
 
                 return [
                     SearchResult(
-                        chunk_id=row.id,
-                        doc_id=UUID(row.doc_id),
-                        doc_type=row.doc_type,
-                        content=row.content,
-                        metadata=row.metadata or {},
+                        document_id=row.id,
+                        document_title=f"Book chunk {row.chunk_index}",  # Fallback title
+                        chunk_content=row.content,
                         similarity_score=0.8,  # Fake score for text match
-                        final_score=0.8,
+                        doc_metadata=row.metadata or {},
                     )
                     for row in rows
                 ]
@@ -403,7 +400,7 @@ class EnhancedAssistantService:
         if semantic_context:
             semantic_parts = []
             for i, result in enumerate(semantic_context[:3]):  # Limit to top 3
-                semantic_parts.append(f"[Relevant content {i + 1} - Score: {result.final_score:.2f}]\n{result.content}")
+                semantic_parts.append(f"[Relevant content {i + 1} - Score: {result.similarity_score:.2f}]\n{result.chunk_content}")
             user_message += "\n\nSemantically related content:\n" + "\n\n".join(semantic_parts)
 
         # Add roadmap context (legacy)
@@ -420,16 +417,44 @@ class EnhancedAssistantService:
             course_result = await trigger_course_generation(request.message, request.user_id)
             return course_result["message"]
 
-        # Get standard AI response with memory
-        response = await model_manager.get_completion_with_memory(messages, user_id=request.user_id, format_json=False)
+        try:
+            # Get standard AI response with memory
+            response = await model_manager.get_completion_with_memory(messages, user_id=request.user_id, format_json=False)
 
-        if not response or not isinstance(response, str):
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to get response from assistant",
-            )
+            if not response or not isinstance(response, str):
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to get response from assistant",
+                )
 
-        return response
+            return response
+
+        except Exception:
+            # Log the error but don't fail completely
+            logger.exception("AI model error")
+
+            # Extract context from messages to provide a useful fallback
+            context_info = []
+            for msg in messages:
+                if msg["role"] == "user" and "Semantically related content:" in msg["content"]:
+                    # Extract the semantic content
+                    parts = msg["content"].split("Semantically related content:")
+                    if len(parts) > 1:
+                        context_info.append(parts[1].strip())
+
+            if context_info:
+                fallback_response = (
+                    "I found relevant information from your documents, but I'm currently unable to generate a complete response "
+                    "due to a temporary AI service issue. Here's the relevant content I found:\n\n"
+                    + "\n".join(context_info)
+                )
+            else:
+                fallback_response = (
+                    "I'm experiencing a temporary issue connecting to the AI service. "
+                    "Please try again in a moment, or check your AI model configuration."
+                )
+
+            return fallback_response
 
     def _collect_citations(
         self, semantic_context: list[SearchResult], roadmap_context: tuple[str, list[Citation]], _request: ChatRequest
@@ -441,9 +466,9 @@ class EnhancedAssistantService:
         citations.extend(
             [
                 Citation(
-                    document_id=result.chunk_id,
-                    document_title=f"{result.doc_type.title()}: {result.doc_id}",
-                    similarity_score=result.final_score or result.similarity_score,
+                    document_id=result.document_id,
+                    document_title=result.document_title,
+                    similarity_score=result.similarity_score,
                 )
                 for result in semantic_context
             ]
@@ -559,13 +584,42 @@ class StreamingEnhancedAssistantService(EnhancedAssistantService):
 
             # Stream response from AI with memory integration
             full_response = ""
-            async for chunk in model_manager.get_streaming_completion_with_memory(messages, user_id=request.user_id):
-                full_response += chunk
-                # Send chunk in Server-Sent Events format
-                yield f"data: {json.dumps({'content': chunk, 'done': False})}\n\n"
+            try:
+                async for chunk in model_manager.get_streaming_completion_with_memory(messages, user_id=request.user_id):
+                    full_response += chunk
+                    # Send chunk in Server-Sent Events format
+                    yield f"data: {json.dumps({'content': chunk, 'done': False})}\n\n"
 
-            # Send final message indicating completion
-            yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
+                # Send final message indicating completion
+                yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
+
+            except Exception:
+                logger.exception("AI streaming error")
+
+                # Provide fallback response with context
+                context_info = []
+                for msg in messages:
+                    if msg["role"] == "user" and "Semantically related content:" in msg["content"]:
+                        parts = msg["content"].split("Semantically related content:")
+                        if len(parts) > 1:
+                            context_info.append(parts[1].strip())
+
+                if context_info:
+                    fallback_msg = (
+                        "I found relevant information from your documents, but I'm currently unable to generate a complete response "
+                        "due to a temporary AI service issue. Here's the relevant content I found:\n\n"
+                        + "\n".join(context_info)
+                    )
+                else:
+                    fallback_msg = (
+                        "I'm experiencing a temporary issue connecting to the AI service. "
+                        "Please try again in a moment, or check your AI model configuration."
+                    )
+
+                # Send fallback as a single chunk
+                yield f"data: {json.dumps({'content': fallback_msg, 'done': False})}\n\n"
+                yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
+                full_response = fallback_msg
 
             # Store the conversation in memory for future context
             if request.user_id and full_response:
