@@ -430,7 +430,7 @@ export function ChatSidebar() {
 				const response = await sendMessage(
 					userInput,
 					conversationHistory,
-					currentContext,
+					currentContext, // Pass context data
 				);
 
 				const assistantMessage = {

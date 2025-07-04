@@ -55,32 +55,91 @@ export default function App() {
 							{/* Legacy roadmap routes - maintained for backward compatibility */}
 							<Route
 								path="/roadmap/preview/:roadmapId"
-								element={<RoadmapPreviewPage />}
+								element={
+									<>
+										<RoadmapPreviewPage />
+										<ChatSidebar />
+									</>
+								}
 							/>
-							<Route path="/roadmap/:roadmapId" element={<RoadmapPage />} />
+							<Route
+								path="/roadmap/:roadmapId"
+								element={
+									<>
+										<RoadmapPage />
+										<ChatSidebar />
+									</>
+								}
+							/>
 							<Route
 								path="/roadmap/:roadmapId/lesson/:lessonId"
-								element={<RoadmapPage />}
+								element={
+									<>
+										<RoadmapPage />
+										<ChatSidebar />
+									</>
+								}
 							/>
 
 							{/* New course routes - using same components with course IDs */}
 							<Route
 								path="/course/preview/:roadmapId"
-								element={<RoadmapPreviewPage />}
+								element={
+									<>
+										<RoadmapPreviewPage />
+										<ChatSidebar />
+									</>
+								}
 							/>
-							<Route path="/course/:roadmapId" element={<RoadmapPage />} />
+							<Route
+								path="/course/:roadmapId"
+								element={
+									<>
+										<RoadmapPage />
+										<ChatSidebar />
+									</>
+								}
+							/>
 							<Route
 								path="/course/:roadmapId/lesson/:lessonId"
-								element={<RoadmapPage />}
+								element={
+									<>
+										<RoadmapPage />
+										<ChatSidebar />
+									</>
+								}
 							/>
 
 							{/* Other content routes */}
-							<Route path="/books/:bookId" element={<BookViewer />} />
-							<Route path="/videos/:videoId" element={<VideoViewer />} />
-							<Route path="/" element={<HomePage />} />
+							<Route
+								path="/books/:bookId"
+								element={
+									<>
+										<BookViewer />
+										<ChatSidebar />
+									</>
+								}
+							/>
+							<Route
+								path="/videos/:videoId"
+								element={
+									<>
+										<VideoViewer />
+										<ChatSidebar />
+									</>
+								}
+							/>
+							<Route
+								path="/"
+								element={
+									<>
+										<HomePage />
+										<ChatSidebar />
+									</>
+								}
+							/>
 						</Routes>
 						<Toaster />
-						<ChatSidebar />
 					</div>
 				</ChatSidebarProvider>
 			</TextSelectionProvider>

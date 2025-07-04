@@ -130,9 +130,9 @@ function VideoViewerContentV2() {
 
 		// Load YouTube IFrame API script
 		if (!window.YT) {
-			const tag = document.createElement('script');
-			tag.src = 'https://www.youtube.com/iframe_api';
-			const firstScriptTag = document.getElementsByTagName('script')[0];
+			const tag = document.createElement("script");
+			tag.src = "https://www.youtube.com/iframe_api";
+			const firstScriptTag = document.getElementsByTagName("script")[0];
 			firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 		}
 
@@ -141,15 +141,15 @@ function VideoViewerContentV2() {
 
 		// Wait for lite-youtube to load the iframe
 		const handleIframeLoaded = async (_event) => {
-			console.log('lite-youtube iframe loaded');
-			
+			console.log("lite-youtube iframe loaded");
+
 			// Wait a bit for YouTube API to be ready
 			setTimeout(() => {
 				try {
 					// Get the iframe from the shadow DOM
-					const iframe = playerRef.current?.shadowRoot?.querySelector('iframe');
+					const iframe = playerRef.current?.shadowRoot?.querySelector("iframe");
 					if (!iframe || !window.YT || !window.YT.Player) {
-						console.warn('YouTube API or iframe not ready');
+						console.warn("YouTube API or iframe not ready");
 						return;
 					}
 
@@ -157,36 +157,42 @@ function VideoViewerContentV2() {
 					ytPlayer = new window.YT.Player(iframe, {
 						events: {
 							onReady: () => {
-								console.log('YouTube player ready');
-								
+								console.log("YouTube player ready");
+
 								// Start polling for time updates
 								intervalId = setInterval(() => {
-									if (ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
+									if (
+										ytPlayer &&
+										typeof ytPlayer.getCurrentTime === "function"
+									) {
 										try {
 											const time = ytPlayer.getCurrentTime();
-											if (typeof time === 'number' && !Number.isNaN(time)) {
+											if (typeof time === "number" && !Number.isNaN(time)) {
 												setCurrentTime(time);
 											}
 										} catch (err) {
-											console.error('Error getting current time:', err);
+											console.error("Error getting current time:", err);
 										}
 									}
-								}, 250); // Poll every 250ms
+								}, 100); // Poll every 100ms
 							},
 							onStateChange: (event) => {
-								console.log('Player state changed:', event.data);
-							}
-						}
+								console.log("Player state changed:", event.data);
+							},
+						},
 					});
 				} catch (err) {
-					console.error('Failed to create YouTube player:', err);
+					console.error("Failed to create YouTube player:", err);
 				}
 			}, 1000);
 		};
 
 		// Listen for lite-youtube iframe loaded event
 		if (playerRef.current) {
-			playerRef.current.addEventListener('liteYoutubeIframeLoaded', handleIframeLoaded);
+			playerRef.current.addEventListener(
+				"liteYoutubeIframeLoaded",
+				handleIframeLoaded,
+			);
 		}
 
 		// Cleanup
@@ -195,11 +201,13 @@ function VideoViewerContentV2() {
 				clearInterval(intervalId);
 			}
 			if (playerRef.current) {
-				playerRef.current.removeEventListener('liteYoutubeIframeLoaded', handleIframeLoaded);
+				playerRef.current.removeEventListener(
+					"liteYoutubeIframeLoaded",
+					handleIframeLoaded,
+				);
 			}
 		};
 	}, [video]);
-
 
 	/**
 	 * Save progress on page unload using beacon API
@@ -237,10 +245,10 @@ function VideoViewerContentV2() {
 	const handleSeekToChapter = useCallback(
 		(timestamp) => {
 			const iframe = playerRef.current?.querySelector("iframe");
-			
+
 			// Check if iframe exists (player is activated)
 			if (iframe?.contentWindow) {
-				console.log('Seeking to timestamp:', timestamp);
+				console.log("Seeking to timestamp:", timestamp);
 				// Use postMessage to control YouTube player
 				iframe.contentWindow.postMessage(
 					JSON.stringify({
@@ -255,7 +263,9 @@ function VideoViewerContentV2() {
 				setCurrentTime(timestamp);
 				handleProgressUpdate(timestamp);
 			} else {
-				console.warn('YouTube player not ready yet. Please start playing the video first.');
+				console.warn(
+					"YouTube player not ready yet. Please start playing the video first.",
+				);
 				toast({
 					title: "Start video first",
 					description: "Please click play on the video before seeking",
@@ -370,18 +380,18 @@ function VideoViewerContentV2() {
 								</>
 							)}
 						</div>
-						</div>
-        </div>
+					</div>
+				</div>
 				{/* Video Transcript */}
 				<VideoTranscript
-          key={video.uuid} // Force re-mount on video change
-          videoUuid={video.uuid}
-          currentTime={currentTime}
-          onSeek={handleSeekToChapter}
-        />
-        {video.description && (
-          <CollapsibleDescription description={video.description} />
-        )}
+					key={video.uuid} // Force re-mount on video change
+					videoUuid={video.uuid}
+					currentTime={currentTime}
+					onSeek={handleSeekToChapter}
+				/>
+				{video.description && (
+					<CollapsibleDescription description={video.description} />
+				)}
 			</main>
 		</div>
 	);
