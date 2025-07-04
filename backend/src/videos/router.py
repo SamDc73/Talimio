@@ -1,7 +1,7 @@
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.session import get_db_session
@@ -54,10 +54,11 @@ router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
 async def create_video(
     video_data: VideoCreate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    background_tasks: BackgroundTasks,
 ) -> VideoResponse:
     """Add a YouTube video to the library."""
     try:
-        return await video_service.create_video(db, video_data)
+        return await video_service.create_video(db, video_data, background_tasks)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:

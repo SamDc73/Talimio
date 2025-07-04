@@ -10,6 +10,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.ai.constants import rag_config
 from src.ai.rag.schemas import SearchResult as BaseSearchResult
 from src.ai.rag.vector_store import VectorStore
+from src.database.session import async_session_maker
+
+
+# Optional import for CrossEncoder reranking
+try:
+    from sentence_transformers import CrossEncoder
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    CrossEncoder = None
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
 
 
 logger = logging.getLogger(__name__)
@@ -153,6 +163,11 @@ class ContextAwareRetriever:
             "video": "video",
             "article": "article",
             "web": "web",
+            "course": "course",
+            "lesson": "lesson",
+            "roadmap": "roadmap",
+            "flashcard": "flashcard",
+            "tag": "tag",
         }
 
         doc_type = doc_type_mapping.get(context_type, context_type)
@@ -169,15 +184,42 @@ class ContextAwareRetriever:
                 # For video timestamps, prioritize nearby timestamps
                 metadata_filters["_timestamp_context"] = context_meta["timestamp"]
 
-        # For now, just use document retriever with empty session and roadmap
-        # This is a simplified implementation
-        results = []
+        # Use vector store to search for chunks
+
+        async with async_session_maker() as session:
+            try:
+                # Search for chunks based on the context
+                results = await self.vector_store.search_document_chunks(
+                    session=session,
+                    doc_id=context_id,
+                    doc_type=doc_type,
+                    query=query,
+                    top_k=max_chunks or 10,
+                    relevance_threshold=relevance_threshold or 0.5
+                )
+            except Exception as e:
+                logger.exception(f"Failed to retrieve document chunks: {e}")
+                results = []
+
+        # Convert dict results to BaseSearchResult objects
+        search_results = []
+        for result in results:
+            if isinstance(result, dict):
+                search_results.append(BaseSearchResult(
+                    document_id=result["document_id"],
+                    document_title=result["document_title"],
+                    chunk_content=result["content"],
+                    similarity_score=result["similarity_score"],
+                    doc_metadata=result.get("doc_metadata", {}),
+                ))
+            else:
+                search_results.append(result)
 
         # Post-process for context-aware scoring
         if context_meta:
-            results = self._apply_context_aware_scoring(results, context_meta)
+            search_results = self._apply_context_aware_scoring(search_results, context_meta)
 
-        return results
+        return search_results
 
     def _apply_context_aware_scoring(  # noqa: C901, PLR0912
         self, results: list[BaseSearchResult], context_meta: dict[str, Any]

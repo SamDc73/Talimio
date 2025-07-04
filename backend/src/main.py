@@ -93,6 +93,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.error(f"Invalid RAG configuration: {e}")
         raise
 
+    # Run automatic migrations
+    try:
+        from src.database.auto_migrate import run_auto_migrations
+        await run_auto_migrations()
+        logger.info("Database migrations completed")
+    except Exception as e:
+        logger.error(f"Failed to run migrations: {e}")
+        # Continue startup even if migrations fail
+
     max_retries = 5
     retry_delay = 1  # seconds
 
@@ -102,7 +111,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             from src.database.migrations.init_database import init_database
 
             await init_database(engine)
-            
+
             # Create all tables
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
