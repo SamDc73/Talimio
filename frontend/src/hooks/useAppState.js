@@ -5,7 +5,7 @@ import useAppStore from "@/stores/useAppStore";
 
 export const useAppState = () => {
 	const [currentRoadmapId, setCurrentRoadmapId] = useState(null);
-	const [isLoading, setIsLoading] = useState(false);
+	const [isLoading, _setIsLoading] = useState(false);
 
 	const { toast } = useToast();
 

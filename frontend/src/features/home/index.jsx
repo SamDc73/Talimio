@@ -1874,16 +1874,23 @@ export default function HomePage() {
 						)}
 
 						{/* Upload Book Dialog */}
-						<Sheet open={showUploadDialog} onOpenChange={(open) => {
-							if (!isUploadingBook) setShowUploadDialog(open);
-						}}>
+						<Sheet
+							open={showUploadDialog}
+							onOpenChange={(open) => {
+								if (!isUploadingBook) setShowUploadDialog(open);
+							}}
+						>
 							<SheetContent side="bottom" className="sm:max-w-lg mx-auto">
 								{isUploadingBook && (
 									<div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg">
 										<div className="flex flex-col items-center gap-4">
 											<div className="animate-spin rounded-full h-10 w-10 border-b-2 border-book" />
-											<p className="text-lg font-medium">Uploading your book...</p>
-											<p className="text-sm text-muted-foreground">This may take a few moments</p>
+											<p className="text-lg font-medium">
+												Uploading your book...
+											</p>
+											<p className="text-sm text-muted-foreground">
+												This may take a few moments
+											</p>
 										</div>
 									</div>
 								)}
@@ -1951,7 +1958,10 @@ export default function HomePage() {
 									<Button
 										onClick={handleUpload}
 										disabled={
-											!selectedFile || !bookTitle.trim() || !bookAuthor.trim() || isUploadingBook
+											!selectedFile ||
+											!bookTitle.trim() ||
+											!bookAuthor.trim() ||
+											isUploadingBook
 										}
 										className="bg-book hover:bg-book-accent text-white"
 									>
