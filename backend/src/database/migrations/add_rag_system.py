@@ -75,16 +75,26 @@ async def add_rag_system() -> None:
         logger.info("Created document_chunks table")
 
         # Create indexes for roadmap_documents
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_roadmap_documents_roadmap_id ON roadmap_documents(roadmap_id)"))
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_roadmap_documents_roadmap_id ON roadmap_documents(roadmap_id)")
+        )
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_roadmap_documents_status ON roadmap_documents(status)"))
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_roadmap_documents_content_hash ON roadmap_documents(content_hash)"))
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_roadmap_documents_content_hash ON roadmap_documents(content_hash)")
+        )
 
         # Create indexes for document_chunks
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id ON document_chunks(document_id)"))
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id ON document_chunks(document_id)")
+        )
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_document_chunks_node_id ON document_chunks(node_id)"))
 
         # Create HNSW index for vector similarity search
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding ON document_chunks USING hnsw (embedding vector_cosine_ops)"))
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding ON document_chunks USING hnsw (embedding vector_cosine_ops)"
+            )
+        )
 
         logger.info("Successfully created RAG system tables and indexes")
 

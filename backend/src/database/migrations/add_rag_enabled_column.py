@@ -19,7 +19,6 @@ async def add_rag_enabled_column() -> None:
             ADD COLUMN IF NOT EXISTS rag_enabled BOOLEAN NOT NULL DEFAULT FALSE;
         """)
 
-
         # Verify the column was added
         result = await connection.fetch("""
             SELECT column_name, data_type, is_nullable, column_default
@@ -38,4 +37,5 @@ async def add_rag_enabled_column() -> None:
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(add_rag_enabled_column())

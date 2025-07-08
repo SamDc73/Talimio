@@ -23,7 +23,8 @@ async def add_embedding_versions() -> None:
     """Add embedding versioning support."""
     async with engine.begin() as conn:
         # Create embedding models table
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS embedding_models (
                 id SERIAL PRIMARY KEY,
                 model_name VARCHAR(255) NOT NULL,
@@ -32,20 +33,25 @@ async def add_embedding_versions() -> None:
                 is_active BOOLEAN DEFAULT false,
                 UNIQUE(model_name, dimensions)
             )
-        """))
+        """)
+        )
 
         # Add embedding_model_id to chunks table
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             ALTER TABLE rag_document_chunks 
             ADD COLUMN IF NOT EXISTS embedding_model_id INTEGER 
             REFERENCES embedding_models(id)
-        """))
+        """)
+        )
 
         # Create index for efficient filtering
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE INDEX IF NOT EXISTS idx_chunks_embedding_model 
             ON rag_document_chunks(embedding_model_id)
-        """))
+        """)
+        )
 
         logger.info("Added embedding versioning support")
 

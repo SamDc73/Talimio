@@ -81,8 +81,6 @@ class BasicChunker(BaseChunker, EnhancedChunker):
         return document_chunks
 
 
-
-
 class BookChunker(EnhancedChunker):
     """Specialized chunker for book PDFs with chapter awareness."""
 
@@ -92,7 +90,7 @@ class BookChunker(EnhancedChunker):
     def chunk_document(self, doc_id: UUID, doc_type: str, content: str | Path) -> list[DocumentChunk]:
         """Chunk book PDF with chapter awareness."""
         if not isinstance(content, Path) or not content.exists():
-            logger.error(f"Invalid file path for book {doc_id}")
+            logger.error("Invalid file path for book %s", doc_id)
             return []
 
         try:
@@ -129,11 +127,11 @@ class BookChunker(EnhancedChunker):
                     chunk_index += 1
 
             doc.close()
-            logger.info(f"Chunked book {doc_id} into {len(document_chunks)} chunks with chapter awareness")
+            logger.info("Chunked book %s into %s chunks with chapter awareness", doc_id, len(document_chunks))
             return document_chunks
 
-        except Exception as e:
-            logger.exception(f"Failed to chunk book {doc_id}: {e}")
+        except Exception:
+            logger.exception("Failed to chunk book %s", doc_id)
             # Fallback to basic chunking
             basic_chunker = BasicChunker(self.chunk_size, self.chunk_overlap)
             return basic_chunker.chunk_document(doc_id, doc_type, content)
@@ -172,8 +170,6 @@ class BookChunker(EnhancedChunker):
         return chunks
 
 
-
-
 class ChunkerFactory:
     """Factory class for creating appropriate chunker instances."""
 
@@ -197,4 +193,3 @@ class ChunkerFactory:
     def get_default_chunker() -> EnhancedChunker:
         """Get the default chunker (basic for now)."""
         return BasicChunker()
-

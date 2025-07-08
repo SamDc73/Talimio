@@ -2,7 +2,7 @@
 
 import hashlib
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, UTC
 from pathlib import Path
 
 import ebooklib
@@ -15,7 +15,26 @@ from goose3 import Goose
 from src.ai.constants import rag_config
 
 
-class PDFIngestor:
+class BaseIngestor:
+    """Base class for document ingestors with common functionality."""
+
+    def save_file_base(self, file_content: bytes, extension: str) -> tuple[str, str]:
+        """Base save method for binary files - implements DRY principle."""
+        # Generate unique filename
+        file_id = str(uuid.uuid4())
+        file_path = rag_config.upload_dir / f"{file_id}.{extension}"
+
+        # Save file
+        with file_path.open("wb") as f:
+            f.write(file_content)
+
+        # Generate content hash for deduplication
+        content_hash = hashlib.sha256(file_content).hexdigest()
+
+        return str(file_path), content_hash
+
+
+class PDFIngestor(BaseIngestor):
     """Extract text from PDF documents."""
 
     async def process_pdf(self, file_path: str) -> str:
@@ -31,21 +50,10 @@ class PDFIngestor:
 
     def save_file(self, file_content: bytes) -> tuple[str, str]:
         """Save PDF file to disk and return path and content hash."""
-        # Generate unique filename
-        file_id = str(uuid.uuid4())
-        file_path = rag_config.upload_dir / f"{file_id}.pdf"
-
-        # Save file
-        with file_path.open("wb") as f:
-            f.write(file_content)
-
-        # Generate content hash for deduplication
-        content_hash = hashlib.sha256(file_content).hexdigest()
-
-        return str(file_path), content_hash
+        return self.save_file_base(file_content, "pdf")
 
 
-class TextIngestor:
+class TextIngestor(BaseIngestor):
     """Extract text from plain text and markdown files."""
 
     async def process_text(self, file_path: str) -> str:
@@ -87,7 +95,7 @@ class TextIngestor:
         return str(file_path), content_hash
 
 
-class EPUBIngestor:
+class EPUBIngestor(BaseIngestor):
     """Extract text from EPUB documents."""
 
     async def process_epub(self, file_path: str) -> str:
@@ -116,21 +124,10 @@ class EPUBIngestor:
 
     def save_file(self, file_content: bytes, filename: str) -> tuple[str, str]:  # noqa: ARG002
         """Save EPUB file to disk and return path and content hash."""
-        # Generate unique filename
-        file_id = str(uuid.uuid4())
-        file_path = rag_config.upload_dir / f"{file_id}.epub"
-
-        # Save file
-        with file_path.open("wb") as f:
-            f.write(file_content)
-
-        # Generate content hash for deduplication
-        content_hash = hashlib.sha256(file_content).hexdigest()
-
-        return str(file_path), content_hash
+        return self.save_file_base(file_content, "epub")
 
 
-class DOCXIngestor:
+class DOCXIngestor(BaseIngestor):
     """Extract text from DOCX documents."""
 
     async def process_docx(self, file_path: str) -> str:
@@ -151,18 +148,7 @@ class DOCXIngestor:
 
     def save_file(self, file_content: bytes, filename: str) -> tuple[str, str]:  # noqa: ARG002
         """Save DOCX file to disk and return path and content hash."""
-        # Generate unique filename
-        file_id = str(uuid.uuid4())
-        file_path = rag_config.upload_dir / f"{file_id}.docx"
-
-        # Save file
-        with file_path.open("wb") as f:
-            f.write(file_content)
-
-        # Generate content hash for deduplication
-        content_hash = hashlib.sha256(file_content).hexdigest()
-
-        return str(file_path), content_hash
+        return self.save_file_base(file_content, "docx")
 
 
 class URLIngestor:
@@ -226,9 +212,7 @@ class DocumentProcessor:
             msg = f"Failed to process {document_type} document: {e!s}"
             raise ValueError(msg) from e
 
-    async def process_pdf_document(self, file_path: str) -> str:
-        """Process a PDF document and return extracted text."""
-        return await self.pdf_ingestor.process_pdf(file_path)
+    # Removed unused process_pdf_document method - use process_document instead
 
     async def process_url_document(self, url: str) -> tuple[str, datetime]:
         """Process a URL document and return extracted content with crawl date."""
@@ -249,6 +233,4 @@ class DocumentProcessor:
         msg = f"Unsupported file type: {file_ext}"
         raise ValueError(msg)
 
-    def save_pdf_file(self, file_content: bytes) -> tuple[str, str]:
-        """Save PDF file and return path and content hash."""
-        return self.pdf_ingestor.save_file(file_content)
+    # Removed unused save_pdf_file method - use save_file instead

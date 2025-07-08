@@ -56,21 +56,27 @@ async def add_phase3_rag_schema() -> None:
         # Create indexes for efficient querying
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rag_chunks_doc_id ON rag_document_chunks(doc_id)"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rag_chunks_doc_type ON rag_document_chunks(doc_type)"))
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rag_chunks_metadata ON rag_document_chunks USING gin(metadata)"))
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_rag_chunks_metadata ON rag_document_chunks USING gin(metadata)")
+        )
 
         # Create HNSW index for vector similarity search with appropriate parameters
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE INDEX IF NOT EXISTS idx_rag_chunks_embedding_hnsw 
             ON rag_document_chunks USING hnsw (embedding vector_cosine_ops)
             WITH (m = 16, ef_construction = 64)
-        """))
+        """)
+        )
 
         # Create IVFFlat index as alternative for better recall
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE INDEX IF NOT EXISTS idx_rag_chunks_embedding_ivfflat 
             ON rag_document_chunks USING ivfflat (embedding vector_cosine_ops)
             WITH (lists = 100)
-        """))
+        """)
+        )
 
         logger.info("Created indexes for rag_document_chunks table")
 
@@ -98,7 +104,11 @@ async def add_phase3_rag_schema() -> None:
 
         # Create indexes for processing queue
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_chunk_queue_status ON chunk_processing_queue(status)"))
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_chunk_queue_priority ON chunk_processing_queue(priority DESC, created_at ASC)"))
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_chunk_queue_priority ON chunk_processing_queue(priority DESC, created_at ASC)"
+            )
+        )
 
         logger.info("Successfully completed RAG schema migration")
 
