@@ -1,41 +1,21 @@
 """RAG system for per-roadmap document processing and retrieval."""
 
-# Main service interface
-# Modular components (for direct access if needed)
-# Database models and schemas
-from src.courses.models import DocumentChunk, RoadmapDocument
+# Only export what's actually used outside this module
+# Other components are imported directly from their submodules when needed
 
-from .chunker import BasicChunker, ChunkerFactory
-from .ingest import DocumentProcessor, PDFIngestor, URLIngestor
-from .retriever import DocumentRetriever, Reranker
-from .schemas import (
-    DocumentList,
-    DocumentResponse,
-    DocumentUpload,
-    SearchRequest,
-    SearchResponse,
-    SearchResult,
-)
-from .vector_store import EmbeddingGenerator, VectorStore
+from .chunker import ChunkerFactory
+from .ingest import DocumentProcessor
+from .retriever import ContextAwareRetriever
+from .schemas import SearchResult
+from .service import RAGService
+from .vector_store import VectorStore
 
 
-# Public helpers for direct component access
 __all__ = [
-    "BasicChunker",
     "ChunkerFactory",
-    "DocumentChunk",
-    "DocumentList",
+    "ContextAwareRetriever",
     "DocumentProcessor",
-    "DocumentResponse",
-    "DocumentRetriever",
-    "DocumentUpload",
-    "EmbeddingGenerator",
-    "PDFIngestor",
-    "Reranker",
-    "RoadmapDocument",
-    "SearchRequest",
-    "SearchResponse",
+    "RAGService",
     "SearchResult",
-    "URLIngestor",
     "VectorStore",
 ]

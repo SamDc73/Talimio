@@ -44,19 +44,7 @@ class DocumentList(BaseModel):
     size: int
 
 
-class DocumentChunkResponse(BaseModel):
-    """Schema for document chunk response."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    document_id: int
-    node_id: str
-    chunk_index: int
-    content: str
-    token_count: int | None = None
-    doc_metadata: dict | None = Field(alias="metadata", default=None)
-    created_at: datetime
+# Removed unused DocumentChunkResponse class
 
 
 class SearchRequest(BaseModel):
@@ -69,7 +57,7 @@ class SearchRequest(BaseModel):
 class SearchResult(BaseModel):
     """Schema for RAG search result."""
 
-    document_id: int
+    document_id: int | uuid.UUID | str
     document_title: str
     chunk_content: str
     similarity_score: float

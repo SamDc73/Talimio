@@ -13,18 +13,10 @@ from src.ai.rag.vector_store import VectorStore
 from src.database.session import async_session_maker
 
 
-# Optional import for CrossEncoder reranking
-try:
-    from sentence_transformers import CrossEncoder
-    SENTENCE_TRANSFORMERS_AVAILABLE = True
-except ImportError:
-    CrossEncoder = None
-    SENTENCE_TRANSFORMERS_AVAILABLE = False
+# Removed unused CrossEncoder import
 
 
 logger = logging.getLogger(__name__)
-
-
 
 
 class Reranker:
@@ -47,36 +39,7 @@ class Reranker:
         return sorted_candidates[:top_k]
 
 
-class CrossEncoderReranker:
-    """Reranking using CrossEncoder for better relevance scoring."""
-
-    def __init__(self, model_name: str | None = None) -> None:
-        if not SENTENCE_TRANSFORMERS_AVAILABLE:
-            msg = "sentence-transformers required for reranking"
-            raise ImportError(msg)
-
-        self.model = CrossEncoder(model_name or "cross-encoder/ms-marco-MiniLM-L-6-v2")
-
-    async def rerank(self, query: str, results: list["BaseSearchResult"]) -> list["BaseSearchResult"]:
-        """Rerank results using cross-encoder."""
-        try:
-            # Prepare pairs for scoring
-            pairs = [[query, result.content] for result in results]
-
-            # Get reranking scores
-            scores = self.model.predict(pairs)
-
-            # Update results with rerank scores
-            for result, score in zip(results, scores, strict=False):
-                result.rerank_score = float(score)
-
-            # Sort by rerank score
-            results.sort(key=lambda x: x.rerank_score or 0, reverse=True)
-
-            return results
-        except Exception as e:
-            logger.warning(f"Reranking failed: {e}")
-            return results
+# Removed unused CrossEncoderReranker class
 
 
 class DocumentRetriever:
@@ -157,13 +120,45 @@ class ContextAwareRetriever:
         relevance_threshold: float | None = None,
     ) -> list[BaseSearchResult]:
         """Retrieve relevant context for a query within a specific document/resource."""
+        logger.debug(
+            'ContextAwareRetriever.retrieve_context called with context_type=%s, context_id=%s, query="%s", max_chunks=%s, relevance_threshold=%s',
+            context_type,
+            context_id,
+            query,
+            max_chunks,
+            relevance_threshold,
+        )
+        method = "course" if context_type == "course" else "vector"
+        logger.debug("ContextAwareRetriever.retrieve_context: selected retrieval method=%s", method)
+        # For course context, use the document retriever to search across all course documents
+        if context_type == "course":
+            async with async_session_maker() as session:
+                try:
+                    # Use document retriever for semantic search
+                    results = await self.document_retriever.search_documents(
+                        session=session,
+                        roadmap_id=context_id,  # context_id is the course/roadmap ID
+                        query=query,
+                        top_k=max_chunks or 5,
+                    )
+                    logger.debug(
+                        "ContextAwareRetriever.retrieve_context: method=course, context_type=%s, context_id=%s, returned=%d results",
+                        context_type,
+                        context_id,
+                        len(results),
+                    )
+                    return results
+                except Exception:
+                    logger.exception("Failed to retrieve course documents:")
+                    return []
+
+        # For other context types (book, video, etc.), use document-specific search
         # Map context type to doc type
         doc_type_mapping = {
             "book": "book",
             "video": "video",
             "article": "article",
             "web": "web",
-            "course": "course",
             "lesson": "lesson",
             "roadmap": "roadmap",
             "flashcard": "flashcard",
@@ -171,47 +166,63 @@ class ContextAwareRetriever:
         }
 
         doc_type = doc_type_mapping.get(context_type, context_type)
-
-        # Build metadata filters from context meta
-        metadata_filters = {}
-        if context_meta:
-            if "page" in context_meta:
-                # For page-based context, prioritize nearby pages
-                page = context_meta["page"]
-                # We'll handle page proximity in post-processing
-                metadata_filters["_page_context"] = page
-            if "timestamp" in context_meta:
-                # For video timestamps, prioritize nearby timestamps
-                metadata_filters["_timestamp_context"] = context_meta["timestamp"]
-
-        # Use vector store to search for chunks
+        logger.debug(
+            "Retrieving '%s' context via vector store: context_type=%s, context_id=%s, top_k=%s",
+            doc_type,
+            context_type,
+            context_id,
+            max_chunks or 10,
+        )
 
         async with async_session_maker() as session:
             try:
-                # Search for chunks based on the context
-                results = await self.vector_store.search_document_chunks(
-                    session=session,
-                    doc_id=context_id,
-                    doc_type=doc_type,
-                    query=query,
-                    top_k=max_chunks or 10,
-                    relevance_threshold=relevance_threshold or 0.5
+                query_embedding = await self.vector_store.embedding_generator.generate_query_embedding(query)
+                logger.debug(
+                    "Generated query embedding length=%d for context_type=%s, context_id=%s",
+                    len(query_embedding),
+                    context_type,
+                    context_id,
                 )
-            except Exception as e:
-                logger.exception(f"Failed to retrieve document chunks: {e}")
+                # Search for chunks based on the context
+                candidates = await self.vector_store.similarity_search(
+                    session=session,
+                    query_embedding=query_embedding,
+                    top_k=max_chunks or 10,
+                    doc_type=doc_type,
+                )
+                logger.debug(
+                    "Vector store similarity_search returned %d candidates for doc_type=%s, context_type=%s, context_id=%s",
+                    len(candidates),
+                    doc_type,
+                    context_type,
+                    context_id,
+                )
+                results = self._to_search_results(candidates)
+                logger.debug(
+                    "ContextAwareRetriever.retrieve_context: method=vector, context_type=%s, context_id=%s, doc_type=%s, returned=%d results",
+                    context_type,
+                    context_id,
+                    doc_type,
+                    len(results),
+                )
+
+            except Exception:
+                logger.exception("Failed to retrieve document chunks:")
                 results = []
 
         # Convert dict results to BaseSearchResult objects
         search_results = []
         for result in results:
             if isinstance(result, dict):
-                search_results.append(BaseSearchResult(
-                    document_id=result["document_id"],
-                    document_title=result["document_title"],
-                    chunk_content=result["content"],
-                    similarity_score=result["similarity_score"],
-                    doc_metadata=result.get("doc_metadata", {}),
-                ))
+                search_results.append(
+                    BaseSearchResult(
+                        document_id=result["document_id"],
+                        document_title=result["document_title"],
+                        chunk_content=result["content"],
+                        similarity_score=result["similarity_score"],
+                        doc_metadata=result.get("doc_metadata", {}),
+                    )
+                )
             else:
                 search_results.append(result)
 
@@ -221,7 +232,7 @@ class ContextAwareRetriever:
 
         return search_results
 
-    def _apply_context_aware_scoring(  # noqa: C901, PLR0912
+    def _apply_context_aware_scoring(
         self, results: list[BaseSearchResult], context_meta: dict[str, Any]
     ) -> list[BaseSearchResult]:
         """Apply context-aware scoring based on proximity to current context."""
@@ -272,3 +283,56 @@ class ContextAwareRetriever:
         # Re-sort by boosted scores
         results.sort(key=lambda x: x.final_score or 0, reverse=True)
         return results
+
+    def _to_search_results(self, candidates: list[dict]) -> list[BaseSearchResult]:
+        """Convert a list of candidate dicts to a list of BaseSearchResult objects."""
+        results = []
+        for candidate in candidates:
+            result = BaseSearchResult(
+                document_id=candidate["document_id"],
+                document_title=candidate["document_title"],
+                chunk_content=candidate["content"],
+                similarity_score=candidate["similarity_score"],
+                doc_metadata=candidate["doc_metadata"],
+            )
+            results.append(result)
+        return results
+
+
+    async def global_retrieve(
+        self,
+        query: str,
+        user_id: str | None = None,
+        max_chunks: int = 10,
+        relevance_threshold: float = 0.4,
+    ) -> list[BaseSearchResult]:
+        """Retrieve relevant content from ALL documents (not limited to a specific context)."""
+        async with async_session_maker() as session:
+            try:
+                # Use vector store's global search
+                results = await self.vector_store.global_search(
+                    session=session,
+                    query=query,
+                    top_k=max_chunks,
+                    user_id=user_id,
+                )
+
+                return [
+                    BaseSearchResult(
+                        document_id=result["document_id"],
+                        document_title=result["document_title"],
+                        chunk_content=result["content"],
+                        similarity_score=result["similarity_score"],
+                        doc_metadata={
+                            **result.get("doc_metadata", {}),
+                            "doc_type": result["doc_type"],
+                            "chunk_index": result["chunk_index"],
+                        },
+                    )
+                    for result in results
+                    if result["similarity_score"] >= relevance_threshold
+                ]
+
+            except Exception:
+                logger.exception("Failed to retrieve global content:")
+                return []
