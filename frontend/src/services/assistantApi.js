@@ -23,8 +23,18 @@ export const assistantApi = {
 		// Add context data if provided
 		if (contextData) {
 			requestBody.context_type = contextData.contextType;
-			requestBody.context_id = contextData.contextId;
+			// Ensure context_id is a string (in case it's passed as an object)
+			requestBody.context_id = String(contextData.contextId);
 			requestBody.context_meta = contextData.contextMeta;
+
+			// Debug logging for context
+			console.log("[AssistantAPI] Sending request with context:", {
+				type: contextData.contextType,
+				id: contextData.contextId,
+				meta: contextData.contextMeta,
+			});
+		} else {
+			console.log("[AssistantAPI] No context provided for this request");
 		}
 
 		const response = await fetch(

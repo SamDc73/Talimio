@@ -9,10 +9,12 @@ from src.ai.constants import rag_config
 
 # from src.ai.rag.reprocess_books import reprocess_book  # TODO: Fix import
 
+
 # Temporary implementation until reprocess_books module is available
 async def reprocess_book(book_id: UUID) -> dict:
     """Temporary implementation for reprocess_book."""
     return {"status": "error", "message": "Reprocess functionality not yet implemented"}
+
 
 from .schemas import (
     BatchCitationRequest,
@@ -37,7 +39,6 @@ async def get_models() -> dict:
 async def debug_config() -> dict:
     """Debug endpoint to check configuration."""
     try:
-
         return {
             "env_var": os.getenv("RAG_EMBEDDING_OUTPUT_DIM"),
             "rag_config_dim": rag_config.embedding_dim,

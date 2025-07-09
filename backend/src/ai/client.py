@@ -12,7 +12,6 @@ from src.ai.prompts import (
     CONTENT_TAGGING_PROMPT,
     LESSON_GENERATION_PROMPT,
     ROADMAP_GENERATION_PROMPT,
-    ROADMAP_TITLE_GENERATION_PROMPT,
 )
 from src.ai.rag.service import RAGService
 from src.config.settings import get_settings
@@ -34,6 +33,7 @@ class RoadmapGenerationError(AIError):
     def __init__(self, msg: str = "Failed to generate roadmap content") -> None:
         super().__init__(msg)
 
+
 class LessonGenerationError(AIError):
     """Exception raised when lesson generation fails."""
 
@@ -53,7 +53,7 @@ class ModelManager:
 
     def __init__(self, memory_wrapper: Any = None) -> None:
         self.settings = get_settings()
-        self.model = os.getenv("PRIMARY_LLM_MODEL", "openai/gpt-4o")
+        self.model = self.settings.primary_llm_model
 
         # Set appropriate API key based on model provider
         if self.model.startswith("openrouter/"):
@@ -85,6 +85,71 @@ class ModelManager:
         self._logger = logging.getLogger(__name__)
         self.memory_wrapper = memory_wrapper
 
+    async def _integrate_memory_context(
+        self,
+        messages: list[dict[str, str]] | Sequence[dict[str, str]],
+        user_id: str | None = None,
+        track_interaction: bool = True,
+    ) -> list[dict[str, str]]:
+        """Integrate memory context into messages.
+
+        Args:
+            messages: Original messages
+            user_id: User ID for memory lookup
+            track_interaction: Whether to track this interaction
+
+        Returns
+        -------
+            Modified messages with memory context integrated
+        """
+        # Return original messages if no user_id or memory_wrapper
+        if not (user_id and self.memory_wrapper):
+            return list(messages)
+
+        try:
+            # Extract query from last user message for memory search
+            user_messages = [msg for msg in messages if msg.get("role") == "user"]
+            current_query = user_messages[-1].get("content", "") if user_messages else ""
+
+            # Get memory context
+            memory_context = await self.memory_wrapper.build_memory_context(user_id, current_query)
+
+            # Prepend memory context to system message if available
+            if memory_context:
+                messages = list(messages)  # Convert to mutable list
+
+                # Find existing system message or create new one
+                system_message_idx = next(
+                    (i for i, msg in enumerate(messages) if msg.get("role") == "system"), None
+                )
+
+                memory_prompt = f"""Personal Context:
+{memory_context}
+
+Please use this context to personalize your response appropriately."""
+
+                if system_message_idx is not None:
+                    # Append to existing system message
+                    messages[system_message_idx]["content"] += f"\n\n{memory_prompt}"
+                else:
+                    # Insert new system message at the beginning
+                    messages.insert(0, {"role": "system", "content": memory_prompt})
+
+            # Track the interaction if enabled
+            if track_interaction and current_query:
+                await self.memory_wrapper.track_learning_interaction(
+                    user_id=user_id,
+                    interaction_type="ai_query",
+                    content=f"User asked: {current_query}",
+                    metadata={"model": self.model, "timestamp": "now"},
+                )
+
+        except Exception:
+            self._logger.exception("Error integrating memory for user %s", user_id)
+            # Continue without memory integration on error
+
+        return messages
+
     async def get_completion_with_memory(
         self,
         messages: list[dict[str, str]] | Sequence[dict[str, str]],
@@ -94,46 +159,8 @@ class ModelManager:
         track_interaction: bool = True,
     ) -> str | dict[str, Any] | list[Any]:
         """Get completion with memory integration and tracking."""
-        # Build memory context if user_id and memory_wrapper are provided
-        if user_id and self.memory_wrapper:
-            try:
-                # Extract query from last user message for memory search
-                user_messages = [msg for msg in messages if msg.get("role") == "user"]
-                current_query = user_messages[-1].get("content", "") if user_messages else ""
-
-                # Get memory context
-                memory_context = await self.memory_wrapper.build_memory_context(user_id, current_query)
-
-                # Prepend memory context to system message if available
-                if memory_context:
-                    messages = list(messages)  # Convert to mutable list
-
-                    # Find existing system message or create new one
-                    system_message_idx = next(
-                        (i for i, msg in enumerate(messages) if msg.get("role") == "system"), None
-                    )
-
-                    memory_prompt = f"Personal Context:\n{memory_context}\n\nPlease use this context to personalize your response appropriately."
-
-                    if system_message_idx is not None:
-                        # Append to existing system message
-                        messages[system_message_idx]["content"] += f"\n\n{memory_prompt}"
-                    else:
-                        # Insert new system message at the beginning
-                        messages.insert(0, {"role": "system", "content": memory_prompt})
-
-                # Track the interaction if enabled
-                if track_interaction and current_query:
-                    await self.memory_wrapper.track_learning_interaction(
-                        user_id=user_id,
-                        interaction_type="ai_query",
-                        content=f"User asked: {current_query}",
-                        metadata={"model": self.model, "timestamp": "now"},
-                    )
-
-            except Exception as e:
-                self._logger.exception(f"Error integrating memory for user {user_id}: {e}")
-                # Continue without memory integration on error
+        # Integrate memory context
+        messages = await self._integrate_memory_context(messages, user_id, track_interaction)
 
         # Get completion using existing method
         return await self.get_completion(messages, format_json=format_json)
@@ -144,44 +171,180 @@ class ModelManager:
         *,
         format_json: bool = True,
     ) -> str | dict[str, Any] | list[Any]:
-        """Get completion from AI model."""
+        """Get completion from the specified AI model."""
         try:
-            if format_json:
-                messages = [
-                    *list(messages),
-                    {
-                        "role": "system",
-                        "content": "Always respond with valid JSON only, no additional text or markdown, and do not wrap in code fences",
-                    },
-                ]
-
             response = await acompletion(
                 model=self.model,
-                messages=list(messages),  # Convert to list for litellm
+                messages=list(messages),
                 temperature=0.7,
-                max_tokens=4000,  # Reduced for Claude compatibility
+                max_tokens=4000,
             )
 
-            # Extract content from response
-            content = str(getattr(response, "choices", [{}])[0].get("message", {}).get("content", ""))
-            if not content:
-                msg = "No content received from AI model"
-                raise AIError(msg)
+            content = getattr(response, "choices", [{}])[0].get("message", {}).get("content", "")
 
-            if format_json:
-                # Clean up JSON response and strip code fences
+            if format_json and content:
                 content = content.strip()
-                # Remove any Markdown code fences
                 content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.IGNORECASE)
                 content = re.sub(r"\s*```$", "", content, flags=re.IGNORECASE)
-            else:
-                return content
-            return json.loads(content.strip())
+                return json.loads(content.strip())
+
+            return content or "No response from AI model"
 
         except Exception as e:
             self._logger.exception("Error getting completion from AI")
             msg = f"Failed to generate content: {e!s}"
             raise AIError(msg) from e
+
+    async def get_completion_with_tools(
+        self,
+        messages: list[dict[str, str]] | Sequence[dict[str, str]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str = "auto",
+        user_id: str | None = None,
+        *,
+        format_json: bool = True,
+        track_interaction: bool = True,
+        max_function_calls: int = 5,
+    ) -> str | dict[str, Any] | list[Any]:
+        """Get completion with function calling support.
+
+        Args:
+            messages: Conversation messages
+            tools: List of function schemas in OpenAI format
+            tool_choice: Tool choice strategy ("auto", "none", or specific tool)
+            user_id: User ID for memory integration
+            format_json: Whether to format response as JSON
+            track_interaction: Whether to track interaction for memory
+            max_function_calls: Maximum number of function calls to prevent loops
+
+        Returns
+        -------
+            AI response content (string or parsed JSON)
+        """
+        from src.ai.functions import execute_function
+
+        # Integrate memory context
+        messages = await self._integrate_memory_context(messages, user_id, track_interaction)
+
+        # Convert messages to list for processing
+        messages = list(messages)
+        function_call_count = 0
+
+        while function_call_count < max_function_calls:
+            try:
+                # Prepare request parameters
+                request_params = {
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 4000,
+                }
+
+                # Add tools if provided and model supports them
+                if tools and self._supports_function_calling():
+                    # Convert to OpenAI/OpenRouter format if needed
+                    formatted_tools = []
+                    for tool in tools:
+                        if "function" not in tool:
+                            # Wrap in function key for OpenRouter compatibility
+                            formatted_tools.append({
+                                "type": "function",
+                                "function": {
+                                    "name": tool.get("name"),
+                                    "description": tool.get("description"),
+                                    "parameters": tool.get("parameters", {})
+                                }
+                            })
+                        else:
+                            formatted_tools.append(tool)
+
+                    request_params["tools"] = formatted_tools
+                    request_params["tool_choice"] = tool_choice
+
+                # Make API call
+                response = await acompletion(**request_params)
+
+                # Extract response content
+                choice = getattr(response, "choices", [{}])[0]
+                message = choice.get("message", {})
+                content = message.get("content", "")
+                tool_calls = message.get("tool_calls", [])
+
+                # If no tool calls, return final response
+                if not tool_calls:
+                    if format_json and content:
+                        # Clean up JSON response
+                        content = content.strip()
+                        content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.IGNORECASE)
+                        content = re.sub(r"\s*```$", "", content, flags=re.IGNORECASE)
+                        return json.loads(content.strip())
+                    return content or "No response from AI model"
+
+                # Process tool calls
+                messages.append({"role": "assistant", "content": content, "tool_calls": tool_calls})
+
+                # Execute each tool call
+                for tool_call in tool_calls:
+                    function_name = tool_call.get("function", {}).get("name")
+                    function_args_str = tool_call.get("function", {}).get("arguments", "{}")
+                    tool_call_id = tool_call.get("id", "")
+
+                    try:
+                        # Parse function arguments
+                        function_args = json.loads(function_args_str)
+
+                        # Execute function
+                        result = await execute_function(function_name, function_args)
+
+                        # Add tool response to messages
+                        messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": json.dumps(result)})
+
+                        self._logger.info("Tool call executed: %s", function_name)
+
+                    except Exception as e:
+                        # Add error response to messages
+                        error_result = {"success": False, "error": str(e), "function_name": function_name}
+                        messages.append(
+                            {"role": "tool", "tool_call_id": tool_call_id, "content": json.dumps(error_result)}
+                        )
+
+                        self._logger.exception("Error executing tool call %s", function_name)
+
+                function_call_count += 1
+
+            except Exception as e:
+                self._logger.exception("Error in function calling loop")
+
+                # Check if it's a quota error
+                if "insufficient_quota" in str(e) or "429" in str(e):
+                    self._logger.exception("API Quota exceeded for model: %s", self.model)
+                    self._logger.exception("OpenAI API quota has been exceeded. Please check your billing at https://platform.openai.com/usage")
+                    msg = "OpenAI API quota exceeded. Please check your OpenAI account billing and usage limits."
+                    raise AIError(msg) from e
+
+                # Fallback to regular completion on error
+                if function_call_count == 0:
+                    return await self.get_completion_with_memory(
+                        messages, user_id=user_id, format_json=format_json, track_interaction=False
+                    )
+
+                # If we've already made some function calls, return error
+                return {"error": f"Function calling failed: {e!s}"}
+
+        # If we've exhausted max function calls, return final response
+        self._logger.warning("Maximum function calls (%s) exceeded", max_function_calls)
+        return {"error": "Maximum function calls exceeded"}
+
+    def _supports_function_calling(self) -> bool:
+        """Check if the current model supports function calling."""
+        return (
+            self.model.startswith("openai/")
+            or self.model.startswith("gpt-")
+            or (
+                self.model.startswith("openrouter/")
+                and any(provider in self.model for provider in ["openai", "anthropic", "meta"])
+            )
+        )
 
     async def get_streaming_completion(
         self,
@@ -210,79 +373,47 @@ class ModelManager:
         self,
         messages: list[dict[str, str]] | Sequence[dict[str, str]],
         user_id: str | None = None,
-        *,
         track_interaction: bool = True,
     ) -> AsyncGenerator[str, None]:
-        """Get streaming completion with memory integration and tracking."""
-        # Build memory context if user_id and memory_wrapper are provided
-        if user_id and self.memory_wrapper:
-            try:
-                # Extract query from last user message for memory search
-                user_messages = [msg for msg in messages if msg.get("role") == "user"]
-                current_query = user_messages[-1].get("content", "") if user_messages else ""
+        """Get streaming completion with memory integration."""
+        # Integrate memory context
+        messages = await self._integrate_memory_context(messages, user_id, track_interaction)
 
-                # Get memory context
-                memory_context = await self.memory_wrapper.build_memory_context(user_id, current_query)
-
-                # Prepend memory context to system message if available
-                if memory_context:
-                    messages = list(messages)  # Convert to mutable list
-
-                    # Find existing system message or create new one
-                    system_message_idx = next(
-                        (i for i, msg in enumerate(messages) if msg.get("role") == "system"), None
-                    )
-
-                    memory_prompt = f"Personal Context:\n{memory_context}\n\nPlease use this context to personalize your response appropriately."
-
-                    if system_message_idx is not None:
-                        # Append to existing system message
-                        messages[system_message_idx]["content"] += f"\n\n{memory_prompt}"
-                    else:
-                        # Insert new system message at the beginning
-                        messages.insert(0, {"role": "system", "content": memory_prompt})
-
-                # Track the interaction if enabled
-                if track_interaction and current_query:
-                    await self.memory_wrapper.track_learning_interaction(
-                        user_id=user_id,
-                        interaction_type="ai_query",
-                        content=f"User asked: {current_query}",
-                        metadata={"model": self.model, "timestamp": "now"},
-                    )
-
-            except Exception as e:
-                self._logger.exception(f"Error integrating memory for user {user_id}: {e}")
-                # Continue without memory integration on error
-
-        # Get streaming completion using existing method
+        # Stream the response
         async for chunk in self.get_streaming_completion(messages):
             yield chunk
 
-    async def generate_roadmap_content(  # noqa: C901
+    async def generate_roadmap_content(
         self,
-        title: str,
+        user_prompt: str,
         skill_level: str,
-        description: str,
+        description: str = "",
         *,
         min_core_topics: int = 4,
         max_core_topics: int = 14,
         sub_min: int = 3,
         sub_max: int = 13,
-    ) -> list[dict[str, Any]]:
-        """Generate a detailed hierarchical roadmap as JSON.
+        use_tools: bool = False,
+    ) -> dict[str, Any]:
+        """Generate a detailed hierarchical roadmap as JSON with title and description.
 
         Args:
-            title: The title of the roadmap
+            user_prompt: The user's learning topic/prompt
             skill_level: The skill level (beginner, intermediate, advanced)
-            description: Description of the roadmap
+            description: Additional context for the roadmap
             min_core_topics: Minimum number of core topics (default: 4)
             max_core_topics: Maximum number of core topics (default: 4)
             sub_min: Minimum number of subtopics per core topic (default: 3)
             sub_max: Maximum number of subtopics per core topic (default: 3)
+            use_tools: Enable function calling for content discovery (default: False)
 
-        The output JSON follows JSON Schema Draft-07 format as specified in the template.
+        Returns
+        -------
+            Dict containing title, description, and coreTopics array
         """
+        self._logger.info("Generating roadmap for: %s...", user_prompt[:100])
+        self._logger.info("Model: %s, Function calling requested: %s", self.model, use_tools)
+
         if min_core_topics > max_core_topics:
             msg = "min_core_topics cannot be greater than max_core_topics"
             raise ValidationError(msg)
@@ -290,14 +421,46 @@ class ModelManager:
             msg = "sub_min cannot be greater than sub_max"
             raise ValidationError(msg)
 
+        # If tools enabled, enhance the prompt with discovered content
+        if use_tools and self._supports_function_calling():
+            self._logger.info("Using function calling to discover content for roadmap generation")
+            from src.ai.functions import get_roadmap_functions
+
+            tools = get_roadmap_functions(user_prompt)
+            self._logger.info("Available tools for discovery: %s", [t["name"] for t in tools])
+
+            # Build enhanced prompt with function calling
+            enhanced_messages = [
+                {"role": "system", "content": "You are a curriculum design expert. Use the content discovery tools to find relevant learning resources and incorporate them into your roadmap design."},
+                {"role": "user", "content": f"Create a comprehensive learning roadmap for '{user_prompt}' at {skill_level} level. Search for existing courses, YouTube videos, articles, and other resources to inform your curriculum design."}
+            ]
+
+            try:
+                # Get AI response with tools
+                discovery_response = await self.get_completion_with_tools(
+                    messages=enhanced_messages,
+                    tools=tools,
+                    tool_choice="auto",
+                    format_json=False
+                )
+                self._logger.info("Function calling completed successfully")
+
+                # Add discovered content to the original prompt
+                description = f"{description}\n\nDiscovered Resources:\n{discovery_response}"
+            except Exception:
+                self._logger.exception("Function calling failed")
+                # Continue without function calling on error
+                self._logger.info("Continuing without function calling due to error")
+
         prompt = ROADMAP_GENERATION_PROMPT.format(
-            title=title,
+            user_prompt=user_prompt,
             skill_level=skill_level,
             description=description,
         )
 
+        # Include JSON instruction in the main prompt for better compliance
         messages = [
-            {"role": "system", "content": "You are a curriculum design expert."},
+            {"role": "system", "content": "You are a curriculum design expert. You must always respond with valid JSON only, no other text."},
             {"role": "user", "content": prompt},
         ]
 
@@ -307,21 +470,57 @@ class ModelManager:
                 msg = "Invalid response format from AI model"
                 raise RoadmapGenerationError(msg)
 
+            # Log the response to debug
+            self._logger.info("AI Response type: %s", type(response))
+            self._logger.info(
+                "AI Response keys: %s", list(response.keys()) if isinstance(response, dict) else "Not a dict"
+            )
+            if isinstance(response, dict) and len(str(response)) < 500:
+                self._logger.info("AI Response content: %s", response)
+
             # Handle both direct list and coreTopics dictionary format
             if isinstance(response, dict):
                 if "coreTopics" in response:
-                    response = response["coreTopics"]
+                    # Extract title and description from the response
+                    roadmap_title = response.get("title", "")
+                    roadmap_description = response.get("description", "")
+                    core_topics = response["coreTopics"]
+                elif "core_topics" in response:
+                    # Handle snake_case variant
+                    roadmap_title = response.get("title", "")
+                    roadmap_description = response.get("description", "")
+                    core_topics = response["core_topics"]
+                elif "topics" in response:
+                    # Handle simplified variant
+                    roadmap_title = response.get("title", "")
+                    roadmap_description = response.get("description", "")
+                    core_topics = response["topics"]
+                elif isinstance(response.get("response"), dict):
+                    # Handle nested response
+                    inner_response = response["response"]
+                    if "coreTopics" in inner_response:
+                        roadmap_title = inner_response.get("title", "")
+                        roadmap_description = inner_response.get("description", "")
+                        core_topics = inner_response["coreTopics"]
+                    else:
+                        msg = f"Expected 'coreTopics' key in nested response. Got keys: {list(inner_response.keys())}"
+                        raise RoadmapGenerationError(msg)
                 else:
-                    msg = "Expected 'coreTopics' key in response dictionary"
+                    msg = f"Expected 'coreTopics' key in response dictionary. Got keys: {list(response.keys())}"
                     raise RoadmapGenerationError(msg)
+            else:
+                # Fallback for direct list format
+                roadmap_title = ""
+                roadmap_description = ""
+                core_topics = response
 
-            if not isinstance(response, list):
-                msg = "Expected list response from AI model"
+            if not isinstance(core_topics, list):
+                msg = "Expected list for coreTopics"
                 raise RoadmapGenerationError(msg)
 
             # Ensure proper formatting of node data
             validated_nodes = []
-            for i, node in enumerate(response):
+            for i, node in enumerate(core_topics):
                 if not isinstance(node, dict):
                     msg = "Expected dict node from AI model"
                     raise RoadmapGenerationError(msg)
@@ -345,14 +544,18 @@ class ModelManager:
             self._logger.exception("Error generating roadmap content")
             raise RoadmapGenerationError from e
         else:
-            return validated_nodes
+            return {
+                "title": roadmap_title,
+                "description": roadmap_description,
+                "coreTopics": validated_nodes
+            }
 
     def _process_subtopics(self, subtopics: list[Any]) -> list[dict[str, Any]]:
         """Process and validate subtopics for roadmap nodes.
-        
+
         Args:
             subtopics: List of subtopic data from AI response
-            
+
         Returns
         -------
             List of validated subtopic dictionaries
@@ -360,73 +563,30 @@ class ModelManager:
         processed_children = []
         for j, subtopic in enumerate(subtopics):
             if isinstance(subtopic, dict):
-                processed_children.append({
-                    "title": str(subtopic.get("title", f"Lesson {j + 1}")),
-                    "description": str(subtopic.get("description", "")),
-                    "content": str(subtopic.get("content", "")),
-                    "order": j,
-                    "prerequisite_ids": [],
-                    "children": [],  # Lessons don't have children in this implementation
-                })
+                processed_children.append(
+                    {
+                        "title": str(subtopic.get("title", f"Lesson {j + 1}")),
+                        "description": str(subtopic.get("description", "")),
+                        "content": str(subtopic.get("content", "")),
+                        "order": j,
+                        "prerequisite_ids": [],
+                        "children": [],  # Lessons don't have children in this implementation
+                    }
+                )
             elif isinstance(subtopic, str):
                 # Handle simple string subtopics
-                processed_children.append({
-                    "title": str(subtopic),
-                    "description": "",
-                    "content": "",
-                    "order": j,
-                    "prerequisite_ids": [],
-                    "children": [],
-                })
+                processed_children.append(
+                    {
+                        "title": str(subtopic),
+                        "description": "",
+                        "content": "",
+                        "order": j,
+                        "prerequisite_ids": [],
+                        "children": [],
+                    }
+                )
         return processed_children
 
-    async def generate_roadmap_title_description(
-        self,
-        user_prompt: str,
-        skill_level: str,
-    ) -> dict[str, str]:
-        """Generate a professional title and description for a roadmap.
-
-        Args:
-            user_prompt: The user's raw learning topic/prompt
-            skill_level: The skill level (beginner, intermediate, advanced)
-
-        Returns
-        -------
-            Dict with 'title' and 'description' keys
-
-        Raises
-        ------
-            RoadmapGenerationError: If title/description generation fails
-        """
-        prompt = ROADMAP_TITLE_GENERATION_PROMPT.format(
-            user_prompt=user_prompt,
-            skill_level=skill_level,
-        )
-
-        messages = [
-            {"role": "system", "content": "You are an expert educational content strategist."},
-            {"role": "user", "content": prompt},
-        ]
-
-        try:
-            response = await self.get_completion(messages, format_json=True)
-            if not isinstance(response, dict):
-                msg = "Invalid response format from AI model for title generation"
-                raise RoadmapGenerationError(msg)
-
-            if "title" not in response or "description" not in response:
-                msg = "Missing title or description in AI response"
-                raise RoadmapGenerationError(msg)
-
-            return {
-                "title": str(response["title"]),
-                "description": str(response["description"]),
-            }
-
-        except Exception as e:
-            self._logger.exception("Error generating roadmap title and description")
-            raise RoadmapGenerationError from e
 
     async def generate_content_tags(
         self,
@@ -488,8 +648,7 @@ class ModelManager:
             raise TagGenerationError from e
 
 
-
-async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]]:  # noqa: C901, PLR0912, PLR0915
+async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]]:  # noqa: PLR0912
     """Generate a comprehensive lesson in Markdown format based on node metadata.
 
     Includes RAG context from roadmap documents if roadmap_id is provided.
@@ -517,9 +676,14 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
         course_outline = node_meta.get("course_outline", [])
         current_module_index = node_meta.get("current_module_index", -1)
         course_title = node_meta.get("course_title", "")
+        original_user_prompt = node_meta.get("original_user_prompt", "")
 
         # Create a more detailed prompt for lesson generation
         content_info = f"{node_title} - {node_description} (Skill Level: {skill_level})"
+
+        # Add original user preferences if available
+        if original_user_prompt:
+            content_info += f"\n\nOriginal course request: {original_user_prompt}"
 
         # Add course context to help AI understand where this lesson fits
         if course_outline:
@@ -527,11 +691,11 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
             if current_module_index > 0:
                 content_info += "\n\nPrevious topics covered:"
                 for i in range(max(0, current_module_index - 2), current_module_index):
-                    content_info += f"\n- {course_outline[i]['title']}: {course_outline[i]['description']}"
+                    content_info += f"\n- {course_outline[i]["title"]}: {course_outline[i]["description"]}"
             if current_module_index < len(course_outline) - 1:
                 content_info += "\n\nUpcoming topics:"
                 for i in range(current_module_index + 1, min(len(course_outline), current_module_index + 3)):
-                    content_info += f"\n- {course_outline[i]['title']}: {course_outline[i]['description']}"
+                    content_info += f"\n- {course_outline[i]["title"]}: {course_outline[i]["description"]}"
 
         # Get RAG context and citations if roadmap_id is provided
         rag_context = ""
@@ -566,11 +730,14 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
 
                         rag_context = "\n\nReference Materials:\n" + "\n".join(context_parts)
                         logging.info(
-                            f"Added RAG context for lesson '{node_title}' from roadmap {roadmap_id} with {len(citations_info)} citations"
+                            "Added RAG context for lesson '%s' from roadmap %s with %s citations",
+                            node_title,
+                            roadmap_id,
+                            len(citations_info),
                         )
 
             except Exception as e:
-                logging.warning(f"Failed to get RAG context for lesson generation: {e}")
+                logging.warning("Failed to get RAG context for lesson generation: %s", e)
                 # Continue without RAG context
 
         prompt = LESSON_GENERATION_PROMPT.format(content=content_info + rag_context)
@@ -578,17 +745,161 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
         messages = [
             {
                 "role": "system",
-                "content": "You are an expert educator creating high-quality, comprehensive learning materials. Your lessons are detailed, well-structured, and include practical examples and exercises. When reference materials are provided, incorporate them naturally into your lesson content and cite sources appropriately. Pay attention to the course context - consider what students have already learned and what they will learn next to ensure proper knowledge progression and avoid redundancy.",
+                "content": "You are an expert educator creating high-quality, comprehensive learning materials. Your lessons are detailed, well-structured, and include practical examples and exercises. When reference materials are provided, incorporate them naturally into your lesson content and cite sources appropriately. Pay attention to the course context - consider what students have already learned and what they will learn next to ensure proper knowledge progression and avoid redundancy.\n\nIMPORTANT: You are generating content for a specific lesson that already has a title and description. DO NOT regenerate or modify the lesson title or description - focus only on creating the lesson content that matches the given title and description.",
             },
             {"role": "user", "content": prompt},
         ]
 
-        logging.info(f"Generating lesson for '{node_title}' with skill level '{skill_level}'")
+        logging.info("Generating lesson for '%s' with skill level '%s'", node_title, skill_level)
 
-        # Get completion without JSON formatting
-        lesson_model = os.getenv("LESSON_GENERATION_MODEL", "openai/gpt-4o")
+        # Analyze content preferences from user prompt
+        content_preferences = {
+            "videos": False,
+            "articles": False,
+            "hackernews": False,
+            "existing_content": False,
+            "all_content": False  # If true, use all discovery functions
+        }
+
+        if original_user_prompt:
+            prompt_lower = original_user_prompt.lower()
+
+            # Check for video preferences
+            video_keywords = ["video", "videos", "youtube", "watch", "tutorial video", "focus on video", "video content", "video-based"]
+            content_preferences["videos"] = any(keyword in prompt_lower for keyword in video_keywords)
+
+            # Check for article/documentation preferences
+            article_keywords = ["article", "articles", "documentation", "docs", "blog", "tutorial", "guide", "resource", "reading"]
+            content_preferences["articles"] = any(keyword in prompt_lower for keyword in article_keywords)
+
+            # Check for technical/developer content
+            tech_keywords = ["technical", "developer", "programming", "hackernews", "hacker news", "tech news"]
+            content_preferences["hackernews"] = any(keyword in prompt_lower for keyword in tech_keywords)
+
+            # Check for comprehensive content
+            comprehensive_keywords = ["comprehensive", "all resources", "various sources", "multiple sources", "diverse content"]
+            content_preferences["all_content"] = any(keyword in prompt_lower for keyword in comprehensive_keywords)
+
+            logging.info("Original prompt: %s", original_user_prompt)
+            logging.info("Content preferences: %s", content_preferences)
+
+        # Also check course title for content hints
+        if course_title:
+            title_lower = course_title.lower()
+            if not content_preferences["videos"]:
+                content_preferences["videos"] = any(keyword in title_lower for keyword in ["video", "youtube"])
+            if not content_preferences["articles"]:
+                content_preferences["articles"] = any(keyword in title_lower for keyword in ["guide", "documentation"])
+
+        # TEMPORARY: Force video inclusion for testing
+        if str(roadmap_id) == "427f65b4-924f-4d54-a76d-994f06908e31":
+            content_preferences["videos"] = True
+            logging.info("FORCING video inclusion for course 427f65b4-924f-4d54-a76d-994f06908e31")
+
+        # If no specific preference, enable article discovery by default
+        if not any(content_preferences.values()):
+            content_preferences["articles"] = True
+            logging.info("No specific content preference found, defaulting to article discovery")
+
+        # Get completion with or without function calling
+        settings = get_settings()
+
+        # Use function calling if any content preference is enabled
+        if any(content_preferences.values()):
+            # Use function calling to discover content
+            logging.info(
+                "Using function calling for lesson '%s' with preferences: %s",
+                node_title,
+                [k for k, v in content_preferences.items() if v],
+            )
+            from src.ai.functions import get_lesson_functions
+
+            # Create ModelManager instance for function calling
+            model_manager = ModelManager()
+
+            # Prepare search query
+            search_query = f"{node_title} {node_description}"
+
+            # Get available tools
+            tools = get_lesson_functions(node_title)
+
+            # Build a comprehensive discovery prompt based on preferences
+            discovery_prompts = []
+
+            if content_preferences.get("all_content"):
+                discovery_prompts.append(f"Find comprehensive learning resources about {search_query} including videos, articles, tutorials, and technical discussions")
+            else:
+                if content_preferences.get("videos"):
+                    discovery_prompts.append(f"Find YouTube videos and video tutorials about {search_query}")
+                if content_preferences.get("articles"):
+                    discovery_prompts.append(f"Find high-quality articles, guides, and documentation about {search_query}")
+                if content_preferences.get("hackernews"):
+                    discovery_prompts.append(f"Find technical discussions and developer insights about {search_query}")
+                if content_preferences.get("existing_content"):
+                    discovery_prompts.append(f"Find existing courses and learning materials about {search_query}")
+
+            # Combine all prompts
+            full_discovery_prompt = " AND ".join(discovery_prompts) if discovery_prompts else f"Find learning resources about {search_query}"
+
+            discovery_messages = [
+                {"role": "system", "content": "You are helping discover educational content for a lesson. Use all available tools to find relevant resources."},
+                {"role": "user", "content": full_discovery_prompt}
+            ]
+
+            try:
+                # Get content discovery results
+                discovery_result = await model_manager.get_completion_with_tools(
+                    messages=discovery_messages,
+                    tools=tools,
+                    tool_choice="auto",
+                    format_json=False
+                )
+
+                # Process discovery results
+                if discovery_result:
+                    discovered_content_prompt = "IMPORTANT: Include the following discovered resources in your lesson:\n\n"
+
+                    if isinstance(discovery_result, str):
+                        discovered_content_prompt += discovery_result
+                    elif isinstance(discovery_result, dict):
+                        # Handle structured responses
+                        if "videos" in discovery_result:
+                            videos = discovery_result.get("videos", [])
+                            if videos:
+                                discovered_content_prompt += "\nYouTube Videos:\n"
+                                for v in videos[:5]:
+                                    discovered_content_prompt += f"- {v.get('title', 'Untitled')} by {v.get('channel', 'Unknown')}\n"
+
+                        if "articles" in discovery_result:
+                            articles = discovery_result.get("articles", [])
+                            if articles:
+                                discovered_content_prompt += "\nArticles & Guides:\n"
+                                for a in articles[:5]:
+                                    discovered_content_prompt += f"- {a.get('title', 'Untitled')} - {a.get('url', '')}\n"
+
+                        if "hackernews" in discovery_result:
+                            hn_items = discovery_result.get("hackernews", [])
+                            if hn_items:
+                                discovered_content_prompt += "\nTechnical Discussions:\n"
+                                for item in hn_items[:3]:
+                                    discovered_content_prompt += f"- {item.get('title', 'Untitled')} ({item.get('points', 0)} points)\n"
+
+                    discovered_content_prompt += "\n\nIntegrate these resources naturally into the lesson content, providing context and building upon them."
+
+                    messages.append({
+                        "role": "system",
+                        "content": discovered_content_prompt
+                    })
+
+                    logging.info("Added content discovery results for lesson '%s'", node_title)
+
+            except Exception as e:
+                logging.warning("Content discovery failed for lesson '%s': %s", node_title, e)
+                # Continue without discovered content
+
+        # Generate lesson content
         response = await acompletion(
-            model=lesson_model,
+            model=settings.primary_llm_model,
             messages=messages,
             temperature=0.7,
             max_tokens=8000,
@@ -620,11 +931,12 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
 
         if not isinstance(markdown_content, str) or len(markdown_content.strip()) < MIN_LESSON_CONTENT_LENGTH:
             logging.error(
-                f"Invalid or too short lesson content received: {markdown_content[:MIN_LESSON_CONTENT_LENGTH]}...",
+                "Invalid or too short lesson content received: %s...",
+                markdown_content[:MIN_LESSON_CONTENT_LENGTH],
             )
             raise LessonGenerationError
 
-        logging.info(f"Successfully generated lesson content ({len(markdown_content)} characters)")
+        logging.info("Successfully generated lesson content (%s characters)", len(markdown_content))
         return markdown_content.strip(), citations_info
 
     except Exception as e:

@@ -70,7 +70,7 @@ class Mem0Wrapper:
                 "provider": "openai",
                 "config": {
                     "model": os.getenv("MEMORY_EMBEDDING_MODEL"),
-                    "embedding_dims": int(os.getenv("MEMORY_EMBEDDING_OUTPUT_DIM")),
+                    "embedding_dims": int(os.getenv("MEMORY_EMBEDDING_OUTPUT_DIM", "1536")),
                 },
             },
         }
@@ -451,10 +451,13 @@ class Mem0Wrapper:
                 )
 
 
-# Global instance for dependency injection
-memory_wrapper = Mem0Wrapper()
+# Global instance for dependency injection - lazy initialization
+_memory_wrapper: Mem0Wrapper | None = None
 
 
 def get_memory_wrapper() -> Mem0Wrapper:
-    """Dependency injection for memory wrapper."""
-    return memory_wrapper
+    """Dependency injection for memory wrapper with lazy initialization."""
+    global _memory_wrapper
+    if _memory_wrapper is None:
+        _memory_wrapper = Mem0Wrapper()
+    return _memory_wrapper

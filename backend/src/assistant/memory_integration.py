@@ -57,10 +57,12 @@ class ContextAwareMemoryManager:
 
             # Add context information if available
             if context_type and context_id:
-                enhanced_metadata.update({
-                    "context_type": context_type,
-                    "context_id": str(context_id),
-                })
+                enhanced_metadata.update(
+                    {
+                        "context_type": context_type,
+                        "context_id": str(context_id),
+                    }
+                )
 
                 # Add specific context metadata
                 if context_meta:
@@ -81,7 +83,9 @@ class ContextAwareMemoryManager:
                 if context_data:
                     enhanced_metadata["context_source"] = context_data.source
                     # Store a snippet of context for better memory retrieval
-                    context_snippet = context_data.content[:200] + "..." if len(context_data.content) > 200 else context_data.content
+                    context_snippet = (
+                        context_data.content[:200] + "..." if len(context_data.content) > 200 else context_data.content
+                    )
                     enhanced_metadata["context_snippet"] = context_snippet
 
             # Add memory with enhanced metadata
@@ -316,9 +320,10 @@ class ContextAwareMemoryManager:
             # Analyze content-specific patterns if in specific context
             if context_type and context_id:
                 context_memories = [
-                    m for m in recent_memories
-                    if m.get("metadata", {}).get("context_type") == context_type and
-                       m.get("metadata", {}).get("context_id") == str(context_id)
+                    m
+                    for m in recent_memories
+                    if m.get("metadata", {}).get("context_type") == context_type
+                    and m.get("metadata", {}).get("context_id") == str(context_id)
                 ]
 
                 if context_memories:
