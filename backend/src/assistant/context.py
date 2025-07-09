@@ -2,7 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import UTC, datetime
+from datetime import datetime, UTC
 from typing import Any
 from uuid import UUID
 
@@ -121,7 +121,7 @@ class BookContextStrategy(ContextRetriever):
 class VideoContextStrategy(ContextRetriever):
     """Context retrieval strategy for video transcripts."""
 
-    async def retrieve_context(  # noqa: C901
+    async def retrieve_context(
         self, resource_id: UUID, context_meta: dict[str, Any] | None = None
     ) -> ContextData | None:
         """
@@ -204,7 +204,7 @@ class VideoContextStrategy(ContextRetriever):
 class CourseContextStrategy(ContextRetriever):
     """Enhanced context retrieval strategy for course lessons with hierarchical context and progress tracking."""
 
-    async def retrieve_context(  # noqa: C901, PLR0915, PLR0912
+    async def retrieve_context(  # noqa: PLR0915, PLR0912
         self, resource_id: UUID, context_meta: dict[str, Any] | None = None
     ) -> ContextData | None:
         """
@@ -281,8 +281,11 @@ class CourseContextStrategy(ContextRetriever):
                             lessons_response = await lesson_dao.get_lessons_by_roadmap_id(str(resource_id))
                             if lessons_response and hasattr(lessons_response, "lessons"):
                                 # Filter lessons that belong to this module (simplified approach)
-                                module_lessons = [lesson for lesson in lessons_response.lessons
-                                                if lesson.order >= module.order * 10 and lesson.order < (module.order + 1) * 10]
+                                module_lessons = [
+                                    lesson
+                                    for lesson in lessons_response.lessons
+                                    if lesson.order >= module.order * 10 and lesson.order < (module.order + 1) * 10
+                                ]
                         except Exception as e:
                             logging.warning(f"Could not fetch lessons for module {module.id}: {e}")
                             module_lessons = []
@@ -303,13 +306,15 @@ class CourseContextStrategy(ContextRetriever):
 
                 # If specific lesson requested, focus on that context
                 if lesson_id and target_lesson:
-                    metadata.update({
-                        "lesson_id": str(target_lesson.id),
-                        "lesson_title": target_lesson.title,
-                        "lesson_order": target_lesson.order,
-                        "module_id": str(target_module.id),
-                        "module_title": target_module.title,
-                    })
+                    metadata.update(
+                        {
+                            "lesson_id": str(target_lesson.id),
+                            "lesson_title": target_lesson.title,
+                            "lesson_order": target_lesson.order,
+                            "module_id": str(target_module.id),
+                            "module_title": target_module.title,
+                        }
+                    )
 
                     # Current lesson content
                     if hasattr(target_lesson, "status"):
@@ -318,7 +323,9 @@ class CourseContextStrategy(ContextRetriever):
                             lesson_content = "[Lesson is being generated...]"
                         elif lesson_status == "generating":
                             lesson_content = "[Lesson is currently being generated...]"
-                        elif lesson_status == "complete" and hasattr(target_lesson, "content") and target_lesson.content:
+                        elif (
+                            lesson_status == "complete" and hasattr(target_lesson, "content") and target_lesson.content
+                        ):
                             lesson_content = target_lesson.content
                         else:
                             lesson_content = "[Lesson content not available]"
@@ -350,10 +357,12 @@ class CourseContextStrategy(ContextRetriever):
 
                 # If module requested (no specific lesson), show module overview
                 elif module_id and target_module:
-                    metadata.update({
-                        "module_id": str(target_module.id),
-                        "module_title": target_module.title,
-                    })
+                    metadata.update(
+                        {
+                            "module_id": str(target_module.id),
+                            "module_title": target_module.title,
+                        }
+                    )
 
                     content_parts.append(f"=== MODULE: {target_module.title} ===")
                     if hasattr(target_module, "description") and target_module.description:
@@ -378,7 +387,7 @@ class CourseContextStrategy(ContextRetriever):
 
                     if include_hierarchy:
                         for i, module in enumerate(course.modules if hasattr(course, "modules") else course.nodes):
-                            content_parts.append(f"\nModule {i+1}: {module.title}")
+                            content_parts.append(f"\nModule {i + 1}: {module.title}")
                             if hasattr(module, "description") and module.description:
                                 content_parts.append(f"  Description: {module.description}")
 
@@ -389,7 +398,9 @@ class CourseContextStrategy(ContextRetriever):
                     if total_lessons > 0:
                         progress_percent = (completed_lessons / total_lessons) * 100
                         content_parts.append("=== PROGRESS SUMMARY ===")
-                        content_parts.append(f"Completed: {completed_lessons}/{total_lessons} lessons ({progress_percent:.1f}%)")
+                        content_parts.append(
+                            f"Completed: {completed_lessons}/{total_lessons} lessons ({progress_percent:.1f}%)"
+                        )
                         metadata["progress_completed"] = completed_lessons
                         metadata["progress_total"] = total_lessons
                         metadata["progress_percentage"] = progress_percent
@@ -415,7 +426,7 @@ class CourseContextStrategy(ContextRetriever):
             return None
 
 
-def validate_context_request(context_type: str, context_id: UUID, context_meta: dict[str, Any] | None) -> bool:  # noqa: C901
+def validate_context_request(context_type: str, context_id: UUID, context_meta: dict[str, Any] | None) -> bool:
     """
     Validate context request parameters with enhanced support for dynamic context updates.
 
@@ -526,6 +537,7 @@ class DynamicContextManager:
             return None
 
         try:
+            logging.debug(f"DynamicContextManager.get_context: context_type={context_type}, resource_id={resource_id}, context_meta={context_meta}")
             strategy = self._strategies[context_type]
             context_data = await strategy.retrieve_context(resource_id, context_meta)
 
@@ -622,28 +634,25 @@ class DynamicContextManager:
         if history_key not in self._context_history:
             self._context_history[history_key] = []
 
-        self._context_history[history_key].append({
-            "timestamp": datetime.now(UTC),
-            "meta": context_meta,
-            "type": "access"
-        })
+        self._context_history[history_key].append(
+            {"timestamp": datetime.now(UTC), "meta": context_meta, "type": "access"}
+        )
 
         # Keep only recent history (last 50 entries)
         self._context_history[history_key] = self._context_history[history_key][-50:]
 
-    def _track_context_switch(self, context_type: str, resource_id: UUID, old_meta: dict | None, new_meta: dict) -> None:
+    def _track_context_switch(
+        self, context_type: str, resource_id: UUID, old_meta: dict | None, new_meta: dict
+    ) -> None:
         """Track context switches for pattern analysis."""
         history_key = f"{context_type}:{resource_id}"
 
         if history_key not in self._context_history:
             self._context_history[history_key] = []
 
-        self._context_history[history_key].append({
-            "timestamp": datetime.now(UTC),
-            "old_meta": old_meta,
-            "new_meta": new_meta,
-            "type": "switch"
-        })
+        self._context_history[history_key].append(
+            {"timestamp": datetime.now(UTC), "old_meta": old_meta, "new_meta": new_meta, "type": "switch"}
+        )
 
     def get_context_patterns(self, context_type: str, resource_id: UUID) -> dict[str, Any]:
         """
@@ -677,11 +686,10 @@ class DynamicContextManager:
             "total_accesses": total_accesses,
             "switches": switches,
             "time_patterns": time_patterns,
-            "last_access": history[-1]["timestamp"] if history else None
+            "last_access": history[-1]["timestamp"] if history else None,
         }
 
 
 # Maintain backward compatibility
 class ContextManager(DynamicContextManager):
     """Backward compatible context manager that inherits enhanced functionality."""
-

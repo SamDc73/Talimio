@@ -12,7 +12,7 @@ from sqlalchemy import text as sql_text
 
 from src.ai.client import ModelManager
 from src.ai.memory import get_memory_wrapper
-from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT
+from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT, RAG_ASSISTANT_PROMPT
 from src.ai.rag.retriever import ContextAwareRetriever
 from src.ai.rag.schemas import SearchResult
 from src.ai.rag.service import RAGService
@@ -196,23 +196,36 @@ class EnhancedAssistantService:
             )
 
             if context_data:
-                logger.info(f"Retrieved immediate context: {context_data.source}")
+                logger.info("Retrieved immediate context: %s", context_data.source)
 
             return context_data
 
         except Exception as e:
-            logger.warning(f"Failed to get immediate context: {e}")
+            logger.warning("Failed to get immediate context: %s", e)
             return None
 
     async def _get_semantic_context(self, request: ChatRequest) -> list[SearchResult]:
         """Get semantic context from the RAG system."""
-        logger.info(f"Getting semantic context for request: {request}")
+        logger.info("Getting semantic context for request: %s", request)
+
+        # If no specific context, do global search
         if not (request.context_type and request.context_id):
-            logger.info("No context_type or context_id in request, returning empty list.")
-            return []
+            logger.info("No context_type or context_id in request, performing global search.")
+            try:
+                results = await self.context_retriever.global_retrieve(
+                    query=request.message,
+                    user_id=request.user_id,
+                    max_chunks=5,
+                    relevance_threshold=0.4,
+                )
+                logger.info("Global search returned %d results", len(results))
+                return results
+            except Exception:
+                logger.exception("Global search failed:")
+                return []
 
         try:
-            logger.info(f"Retrieving context with context_retriever: {self.context_retriever}")
+            logger.info("Retrieving context with context_retriever: %s", self.context_retriever)
             results = await self.context_retriever.retrieve_context(
                 query=request.message,
                 context_type=request.context_type,
@@ -221,15 +234,15 @@ class EnhancedAssistantService:
                 max_chunks=5,
                 relevance_threshold=0.4,  # Lower threshold for better recall
             )
-            logger.info(f"Retrieved {len(results)} semantic chunks for context")
+            logger.info("Retrieved %d semantic chunks for context", len(results))
 
             # If vector search failed, try text-based fallback
             if not results:
                 logger.error("Vector search returned no results, trying text-based fallback")
                 results = await self._text_based_fallback_search(request)
-                logger.error(f"Text-based fallback returned {len(results)} results")
+                logger.error("Text-based fallback returned %d results", len(results))
 
-            logger.info(f"Final semantic context results: {results}")
+            logger.info("Final semantic context results: %s", results)
             return results
 
         except Exception as e:
@@ -239,25 +252,25 @@ class EnhancedAssistantService:
                 keyword in error_str
                 for keyword in ["dimension", "vector", "embedding", "quota", "rate", "insufficient"]
             ):
-                logger.exception(f"Vector search failed with embedding/dimension error: {e}")
+                logger.exception("Vector search failed with embedding/dimension error:")
                 logger.info("Forcing text-based fallback due to embedding issues")
                 # Force text-based fallback for embedding-related errors
                 try:
                     results = await self._text_based_fallback_search(request)
-                    logger.info(f"Text-based fallback returned {len(results)} results")
+                    logger.info("Text-based fallback returned %d results", len(results))
                     return results
-                except Exception as fallback_error:
-                    logger.exception(f"Text-based fallback also failed: {fallback_error}")
+                except Exception:
+                    logger.exception("Text-based fallback also failed:")
                     return []
             else:
-                logger.warning(f"Failed to get semantic context: {e}")
+                logger.warning("Failed to get semantic context: %s", e)
                 # Try text-based fallback on any other error
                 try:
                     results = await self._text_based_fallback_search(request)
-                    logger.info(f"Text-based fallback returned {len(results)} results")
+                    logger.info("Text-based fallback returned %d results", len(results))
                     return results
                 except Exception as fallback_error:
-                    logger.warning(f"Text-based fallback also failed: {fallback_error}")
+                    logger.warning("Text-based fallback also failed: %s", fallback_error)
                     return []
 
     async def _text_based_fallback_search(self, request: ChatRequest) -> list[SearchResult]:
@@ -281,12 +294,22 @@ class EnhancedAssistantService:
                 specific_terms = [word for word in words if len(word) > 3 and word not in stop_words]
                 search_terms.extend(specific_terms)
 
-                # Build ILIKE conditions (case-insensitive)
-                conditions = " OR ".join([f"content ILIKE '%{term}%'" for term in search_terms])
+                # Build ILIKE conditions with placeholders
+                conditions = " OR ".join([f"content ILIKE :term_{i}" for i in range(len(search_terms))])
+                params = {f"term_{i}": f"%{term}%" for i, term in enumerate(search_terms)}
 
                 if not conditions:
                     # Generic search - get any chunks with common AI/book terms
-                    conditions = "content ILIKE '%AI%' OR content ILIKE '%engineering%' OR content ILIKE '%book%'"
+                    conditions = "content ILIKE :term_ai OR content ILIKE :term_eng OR content ILIKE :term_book"
+                    params = {
+                        "term_ai": "%AI%",
+                        "term_eng": "%engineering%",
+                        "term_book": "%book%",
+                    }
+
+                # Add doc_id and doc_type to params
+                params["doc_id"] = str(request.context_id)
+                params["doc_type"] = request.context_type
 
                 query = f"""
                     SELECT id, doc_id, doc_type, chunk_index, content, metadata
@@ -297,12 +320,10 @@ class EnhancedAssistantService:
                     LIMIT 5
                 """
 
-                logger.error(f"Fallback query: {query}")
-                logger.error(f"Search terms: {search_terms}")
+                logger.error("Fallback query: %s", query)
+                logger.error("Search params: %s", params)
 
-                result = await session.execute(
-                    sql_text(query), {"doc_id": str(request.context_id), "doc_type": request.context_type}
-                )
+                result = await session.execute(sql_text(query), params)
 
                 rows = result.fetchall()
 
@@ -317,8 +338,8 @@ class EnhancedAssistantService:
                     for row in rows
                 ]
 
-        except Exception as e:
-            logger.exception(f"Text-based fallback search failed: {e}")
+        except Exception:
+            logger.exception("Text-based fallback search failed:")
             return []
 
     async def _get_roadmap_context(self, request: ChatRequest) -> tuple[str, list[Citation]]:
@@ -352,13 +373,13 @@ class EnhancedAssistantService:
                     )
 
                     context = "\n\nRelevant roadmap materials:\n" + "\n".join(context_parts)
-                    logger.info(f"Retrieved roadmap context with {len(citations)} citations")
+                    logger.info("Retrieved roadmap context with %d citations", len(citations))
                     return context, citations
 
             return "", []
 
         except Exception as e:
-            logger.warning(f"Failed to get roadmap context: {e}")
+            logger.warning("Failed to get roadmap context: %s", e)
             return "", []
 
     async def _build_enhanced_messages(
@@ -371,18 +392,18 @@ class EnhancedAssistantService:
         """Build enhanced message list with all context types."""
         messages = []
 
-        # Enhanced system prompt
-        system_content = ASSISTANT_CHAT_SYSTEM_PROMPT
-
-        # Add context descriptions to system prompt
-        if roadmap_context[0]:
-            system_content += "\n\nYou have access to relevant course materials. Use them to provide more specific and accurate answers. When referencing materials, cite the source documents appropriately."
-
-        if immediate_context:
-            system_content += f"\n\nYou have access to the user's current context in the {request.context_type}. Use this context to provide relevant assistance related to what they're currently viewing."
-
+        # RAG-specific system prompt
         if semantic_context:
-            system_content += "\n\nYou also have access to semantically related content from the document. Use this to provide comprehensive and contextually relevant answers."
+            system_content = RAG_ASSISTANT_PROMPT
+        else:
+            system_content = ASSISTANT_CHAT_SYSTEM_PROMPT
+
+            # Add context descriptions to system prompt
+            if roadmap_context[0]:
+                system_content += "\n\nYou have access to relevant course materials. Use them to provide more specific and accurate answers. When referencing materials, cite the source documents appropriately."
+
+            if immediate_context:
+                system_content += f"\n\nYou have access to the user's current context in the {request.context_type}. Use this context to provide relevant assistance related to what they're currently viewing."
 
         messages.append({"role": "system", "content": system_content})
 
@@ -400,7 +421,9 @@ class EnhancedAssistantService:
         if semantic_context:
             semantic_parts = []
             for i, result in enumerate(semantic_context[:3]):  # Limit to top 3
-                semantic_parts.append(f"[Relevant content {i + 1} - Score: {result.similarity_score:.2f}]\n{result.chunk_content}")
+                semantic_parts.append(
+                    f"[Relevant content {i + 1} - Score: {result.similarity_score:.2f}]\n{result.chunk_content}"
+                )
             user_message += "\n\nSemantically related content:\n" + "\n\n".join(semantic_parts)
 
         # Add roadmap context (legacy)
@@ -419,7 +442,9 @@ class EnhancedAssistantService:
 
         try:
             # Get standard AI response with memory
-            response = await model_manager.get_completion_with_memory(messages, user_id=request.user_id, format_json=False)
+            response = await model_manager.get_completion_with_memory(
+                messages, user_id=request.user_id, format_json=False
+            )
 
             if not response or not isinstance(response, str):
                 raise HTTPException(
@@ -502,7 +527,7 @@ class EnhancedAssistantService:
             )
 
         except Exception as e:
-            logger.warning(f"Failed to store enhanced chat memory for user {request.user_id}: {e}")
+            logger.warning("Failed to store enhanced chat memory for user %s: %s", request.user_id, e)
 
     async def find_book_citations(
         self, book_id: UUID, response_text: str, similarity_threshold: float = 0.75
@@ -585,7 +610,9 @@ class StreamingEnhancedAssistantService(EnhancedAssistantService):
             # Stream response from AI with memory integration
             full_response = ""
             try:
-                async for chunk in model_manager.get_streaming_completion_with_memory(messages, user_id=request.user_id):
+                async for chunk in model_manager.get_streaming_completion_with_memory(
+                    messages, user_id=request.user_id
+                ):
                     full_response += chunk
                     # Send chunk in Server-Sent Events format
                     yield f"data: {json.dumps({'content': chunk, 'done': False})}\n\n"

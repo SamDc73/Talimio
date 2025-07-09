@@ -43,14 +43,16 @@ export function useCurrentContext() {
 			};
 		}
 
-		// Course context: /courses/:courseId
-		if (pathname.startsWith("/courses/") && params.courseId) {
-			// For courses, we need the current lesson ID
-			// This might need to be extracted from the URL or passed down
-			// For now, we'll check if there's a lessonId in params
+		// Course context: /course/:roadmapId or /courses/:courseId
+		// Handle both singular and plural forms, and both roadmapId and courseId params
+		if (
+			(pathname.startsWith("/course/") || pathname.startsWith("/courses/")) &&
+			(params.roadmapId || params.courseId)
+		) {
+			const courseId = params.roadmapId || params.courseId;
 			return {
 				contextType: "course",
-				contextId: params.courseId,
+				contextId: courseId,
 				contextMeta: {
 					lesson_id: params.lessonId || null,
 				},
