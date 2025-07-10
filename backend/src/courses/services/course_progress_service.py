@@ -3,7 +3,7 @@
 Handles progress tracking and status updates for courses, modules, and lessons.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime, UTC
 from uuid import UUID
 
 from sqlalchemy import select
@@ -45,6 +45,7 @@ class CourseProgressService:
 
         # Get all lessons for all modules
         from src.courses.services.course_lesson_service import CourseLessonService
+
         lesson_service = CourseLessonService(self.session, user_id)
 
         total_lessons = 0
@@ -75,7 +76,12 @@ class CourseProgressService:
         )
 
     async def update_lesson_status(
-        self, course_id: UUID, module_id: UUID, lesson_id: UUID, request: LessonStatusUpdate, _user_id: str | None = None
+        self,
+        course_id: UUID,
+        module_id: UUID,
+        lesson_id: UUID,
+        request: LessonStatusUpdate,
+        _user_id: str | None = None,
     ) -> LessonStatusResponse:
         """Update the status of a specific lesson."""
         # Check if progress record exists

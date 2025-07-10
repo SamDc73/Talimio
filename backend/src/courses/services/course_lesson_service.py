@@ -4,7 +4,7 @@ Handles CRUD operations for lessons within course modules.
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, UTC
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -47,8 +47,7 @@ class CourseLessonService:
         conn = await LessonDAO.get_connection()
         try:
             rows = await conn.fetch(
-                "SELECT * FROM lesson WHERE course_id = $1 ORDER BY created_at DESC",
-                str(course_id)
+                "SELECT * FROM lesson WHERE course_id = $1 ORDER BY created_at DESC", str(course_id)
             )
             lesson_data_list = [dict(row) for row in rows]
         finally:
@@ -70,7 +69,12 @@ class CourseLessonService:
         ]
 
     async def get_lesson(
-        self, course_id: UUID, lesson_id: UUID, generate: bool = False, user_id: str | None = None, module_id: UUID | None = None
+        self,
+        course_id: UUID,
+        lesson_id: UUID,
+        generate: bool = False,
+        user_id: str | None = None,
+        module_id: UUID | None = None,
     ) -> LessonResponse:
         """Get a specific lesson, optionally generating if missing."""
         try:
@@ -117,6 +121,7 @@ class CourseLessonService:
             if lesson_data:
                 # Find which module this lesson belongs to by checking all modules
                 from src.courses.services.course_module_service import CourseModuleService
+
                 module_service = CourseModuleService(self.session, user_id)
                 modules = await module_service.list_modules(course_id, user_id)
                 if not modules:
@@ -140,6 +145,7 @@ class CourseLessonService:
             if e.status_code == 404 and generate:
                 # Generate lesson using first available module
                 from src.courses.services.course_module_service import CourseModuleService
+
                 module_service = CourseModuleService(self.session, user_id)
                 modules = await module_service.list_modules(course_id, user_id)
                 if not modules:
@@ -169,11 +175,7 @@ class CourseLessonService:
         module_node, roadmap = row
 
         # Get full course outline for context
-        all_modules_query = (
-            select(Node)
-            .where(Node.roadmap_id == course_id)
-            .order_by(Node.order)
-        )
+        all_modules_query = select(Node).where(Node.roadmap_id == course_id).order_by(Node.order)
         modules_result = await self.session.execute(all_modules_query)
         all_modules = modules_result.scalars().all()
 
@@ -181,12 +183,14 @@ class CourseLessonService:
         course_outline = []
         current_module_index = -1
         for i, module in enumerate(all_modules):
-            course_outline.append({
-                "title": module.title,
-                "description": module.description,
-                "order": module.order,
-                "is_current": module.id == module_id
-            })
+            course_outline.append(
+                {
+                    "title": module.title,
+                    "description": module.description,
+                    "order": module.order,
+                    "is_current": module.id == module_id,
+                }
+            )
             if module.id == module_id:
                 current_module_index = i
 

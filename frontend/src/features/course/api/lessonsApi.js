@@ -1,37 +1,7 @@
 const BASE = import.meta.env.VITE_API_BASE || "/api/v1";
 
-import { getCourseWithModules } from "@/utils/courseDetection";
-
-/**
- * Find moduleId for a lesson by using cached course data (more efficient)
- */
-async function findModuleIdForLesson(courseId, lessonId) {
-	try {
-		// Use the cached getCourseWithModules which is more efficient
-		const { modules } = await getCourseWithModules(courseId);
-
-		const findParentModuleId = (modulesToSearch, id) => {
-			for (const module of modulesToSearch) {
-				if (module.lessons?.some((lesson) => lesson.id === id)) {
-					return module.id;
-				}
-
-				if (module.lessons) {
-					const parentId = findParentModuleId(module.lessons, id);
-					if (parentId) {
-						return parentId;
-					}
-				}
-			}
-			return null;
-		};
-
-		return findParentModuleId(modules, lessonId);
-	} catch (err) {
-		console.error("Error finding module for lesson:", err);
-		return null;
-	}
-}
+// Removed findModuleIdForLesson as it's no longer needed in the simplified backend
+// where modules ARE lessons
 
 /**
  * Fetch a specific lesson by just lesson ID (optimized lookup)
@@ -41,16 +11,15 @@ export async function fetchLesson(courseId, lessonId) {
 		throw new Error("Course ID and Lesson ID are required");
 	}
 
-	// Try to find the moduleId for this lesson using efficient method
-	const moduleId = await findModuleIdForLesson(courseId, lessonId);
-	if (!moduleId) {
-		throw new Error(
-			`Could not find module for lesson ${lessonId} in course ${courseId}`,
-		);
+	// In the simplified backend, modules ARE lessons, so we use the simplified endpoint
+	// that treats lesson_id as a module/node ID
+	const res = await fetch(
+		`${BASE}/courses/${courseId}/lessons/${lessonId}?generate=true`,
+	);
+	if (!res.ok) {
+		throw new Error(`Failed to fetch lesson: ${res.status}`);
 	}
-
-	// Use the full endpoint with moduleId
-	return fetchLessonFull(courseId, moduleId, lessonId);
+	return res.json();
 }
 
 /**
@@ -61,6 +30,8 @@ export async function fetchLessonFull(courseId, moduleId, lessonId) {
 		throw new Error("Course ID, Module ID, and Lesson ID are required");
 	}
 
+	// The backend endpoint accepts the module_id in the path but actually uses lesson_id
+	// In our simplified system, modules ARE lessons, so lesson_id is what matters
 	const res = await fetch(
 		`${BASE}/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}?generate=true`,
 	);

@@ -5,10 +5,9 @@ Based on the actual working roadmaps.bck models to match database schema.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 
 from sqlalchemy import (
-    TIMESTAMP,
     Boolean,
     DateTime,
     Enum,
@@ -17,6 +16,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    TIMESTAMP,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as SA_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -41,12 +41,12 @@ class Course(Base):
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rag_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # RAG integration flag
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     documents: Mapped[list["CourseDocument"]] = relationship(
@@ -73,12 +73,12 @@ class CourseModule(Base):
     completion_percentage: Mapped[float] = mapped_column(Float, default=0.0)
     parent_id: Mapped[uuid.UUID | None] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("nodes.id"), nullable=True)
     label_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     # Relationships - keep original names
@@ -97,12 +97,12 @@ class Lesson(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     quiz_questions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     order: Mapped[int] = mapped_column(Integer, default=0)  # Keep consistent naming
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -116,12 +116,12 @@ class LessonProgress(Base):
     course_id: Mapped[str] = mapped_column(String)  # Actually stores module_id - varchar in DB
     lesson_id: Mapped[str | None] = mapped_column(String, nullable=True)  # varchar in DB
     status: Mapped[str] = mapped_column(String(50), default="not_started")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
 
@@ -142,36 +142,13 @@ class CourseDocument(Base):
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     parsed_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     doc_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=lambda: datetime.now(UTC))
     processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     embedded_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # 'pending', 'processing', 'embedded', 'failed'
 
     # Relationships
     roadmap: Mapped["Course"] = relationship("Course", back_populates="documents")
-    chunks: Mapped[list["DocumentChunk"]] = relationship(
-        "DocumentChunk", back_populates="document", cascade="all, delete-orphan"
-    )
-
-
-class DocumentChunk(Base):
-    """Text chunk from a document with embeddings for vector search."""
-
-    __tablename__ = "document_chunks"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    document_id: Mapped[int] = mapped_column(Integer, ForeignKey("roadmap_documents.id", ondelete="CASCADE"))
-    node_id: Mapped[str] = mapped_column(String(255), unique=True)
-    chunk_index: Mapped[int] = mapped_column(Integer)
-    content: Mapped[str] = mapped_column(Text)
-    # Note: embedding vector column is handled by pgvector extension directly
-    token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    doc_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=datetime.utcnow)
-
-    # Relationships
-    document: Mapped["CourseDocument"] = relationship("CourseDocument", back_populates="chunks")
-
 
 # Create aliases for backward compatibility
 Roadmap = Course
@@ -184,7 +161,6 @@ __all__ = [
     "Course",
     "CourseDocument",
     "CourseModule",
-    "DocumentChunk",
     "Lesson",
     "LessonProgress",
     "Node",

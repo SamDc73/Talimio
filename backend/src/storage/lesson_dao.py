@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime, UTC
 from typing import Any, cast
 from uuid import UUID
 
@@ -7,6 +7,10 @@ import asyncpg
 
 class LessonDAO:
     """Data Access Object for lesson-related database operations."""
+
+    def __init__(self, session):
+        """Initialize LessonDAO with a database session."""
+        self.session = session
 
     @staticmethod
     async def get_connection() -> asyncpg.Connection:
@@ -98,6 +102,16 @@ class LessonDAO:
         try:
             rows = await conn.fetch("SELECT * FROM lesson WHERE course_id = $1 ORDER BY created_at DESC", node_id)
             return [cast("dict[str, Any]", cls._record_to_dict(row)) for row in rows if row is not None]
+        finally:
+            await conn.close()
+
+    @classmethod
+    async def get_by_node_id(cls, node_id: UUID) -> dict[str, Any] | None:
+        """Retrieve a single lesson by its node_id."""
+        conn = await cls.get_connection()
+        try:
+            row = await conn.fetchrow("SELECT * FROM lesson WHERE node_id = $1", node_id)
+            return cls._record_to_dict(row)
         finally:
             await conn.close()
 
