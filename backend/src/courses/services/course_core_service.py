@@ -3,7 +3,7 @@
 Handles CRUD operations for courses (roadmaps).
 """
 
-from datetime import UTC, datetime
+from datetime import datetime, UTC
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -187,7 +187,9 @@ class CourseCoreService:
 
         return courses, total
 
-    async def update_course(self, course_id: UUID, request: CourseUpdate, _user_id: str | None = None) -> CourseResponse:
+    async def update_course(
+        self, course_id: UUID, request: CourseUpdate, _user_id: str | None = None
+    ) -> CourseResponse:
         """Update a course with improved validation and error handling."""
         query = select(Roadmap).where(Roadmap.id == course_id)
         result = await self.session.execute(query)
@@ -207,4 +209,3 @@ class CourseCoreService:
 
         # Return updated course
         return await self.get_course(course_id, _user_id)
-

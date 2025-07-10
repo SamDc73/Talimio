@@ -6,9 +6,10 @@ and modular implementations based on feature flags or configuration.
 """
 
 import json
+import logging
 import os
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, UTC
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -16,7 +17,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.ai.client import ModelManager, create_lesson_body
+from src.ai.client import AIError, create_lesson_body, ModelManager
 from src.ai.memory import Mem0Wrapper
 from src.courses.models import LessonProgress as Progress, Node, Roadmap
 from src.courses.schemas import (
@@ -53,6 +54,7 @@ class CourseService(ICourseService):
         self.user_id = user_id
         self.ai_client = ModelManager()
         self.memory_service = Mem0Wrapper() if user_id else None
+        self._logger = logging.getLogger(__name__)
 
         # Check if modular implementation should be used
         self._use_modular = os.getenv("USE_MODULAR_COURSE_SERVICE", "false").lower() == "true"
@@ -61,6 +63,7 @@ class CourseService(ICourseService):
         if self._use_modular:
             # Lazy import to avoid circular dependencies
             from src.courses.services.course_service_modular import CourseServiceModular
+
             self._modular_service = CourseServiceModular(session, user_id)
 
     async def create_course(self, request: CourseCreate, _user_id: str | None = None) -> CourseResponse:
@@ -73,6 +76,9 @@ class CourseService(ICourseService):
         if self._use_modular and self._modular_service:
             return await self._modular_service.create_course(request, _user_id)
         # Use the provided user_id or fall back to the service's user_id
+
+        self._logger.info("Creating course for user %s with prompt: %s...", _user_id, request.prompt[:100])
+        self._logger.info("Current AI model: %s", self.ai_client.model)
 
         # Enhanced AI prompt for better course generation
         enhanced_prompt = f"""
@@ -88,26 +94,38 @@ class CourseService(ICourseService):
         Course request: {request.prompt}
         """
 
-        # Generate title and description using AI
-        try:
-            title_description = await self.ai_client.generate_roadmap_title_description(
-                user_prompt=request.prompt, skill_level="beginner"
-            )
-            course_title = title_description["title"]
-            course_description = title_description["description"]
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to generate course title: {e!s}"
-            ) from e
+        # Function calling is always enabled
+        use_tools = True
+        self._logger.info("Function calling enabled: %s", use_tools)
 
-        # Generate course structure using AI
+        # Generate course structure using AI with title and description
         try:
-            nodes_data = await self.ai_client.generate_roadmap_content(
-                title=course_title, skill_level="beginner", description=enhanced_prompt
+            roadmap_response = await self.ai_client.generate_roadmap_content(
+                user_prompt=request.prompt,
+                skill_level="beginner",
+                description=enhanced_prompt,
+                use_tools=use_tools  # NEW: Enable content discovery
             )
-        except Exception as e:
+            course_title = roadmap_response["title"]
+            course_description = roadmap_response["description"]
+            nodes_data = roadmap_response["coreTopics"]
+        except AIError as e:
+            self._logger.exception("AI error while generating course")
+            # Check if it's a quota error
+            if "quota exceeded" in str(e).lower():
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="OpenAI API quota exceeded. Please try again later or contact support to upgrade your plan."
+                ) from e
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to generate course structure: {e!s}"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to generate course: {e!s}"
+            ) from e
+        except Exception as e:
+            self._logger.exception("Unexpected error while generating course")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An unexpected error occurred while generating the course. Please try again."
             ) from e
 
         # Create the course (roadmap) in database
@@ -172,7 +190,7 @@ class CourseService(ICourseService):
             content_preview = f"Course: {course_title}\nDescription: {course_description}\nSkill Level: beginner\n\n"
             content_preview += "Modules:\n"
             for i, module_data in enumerate(nodes_data[:3]):  # Use first 3 modules
-                content_preview += f"{i+1}. {module_data.get('title', '')}: {module_data.get('description', '')}\n"
+                content_preview += f"{i + 1}. {module_data.get('title', '')}: {module_data.get('description', '')}\n"
 
             # Initialize tagging service
             tagging_service = TaggingService(self.session, self.ai_client)
@@ -182,7 +200,7 @@ class CourseService(ICourseService):
                 content_id=roadmap.id,
                 content_type="roadmap",
                 title=course_title,
-                content_preview=content_preview[:3000]  # Limit length
+                content_preview=content_preview[:3000],  # Limit length
             )
 
             # Update roadmap with generated tags
@@ -192,7 +210,7 @@ class CourseService(ICourseService):
                 await self.session.commit()
 
         except Exception as e:
-            self._logger.warning(f"Failed to generate tags for course {roadmap.id}: {e}")
+            self._logger.warning("Failed to generate tags for course %s: %s", roadmap.id, e)
             # Continue without tags if tagging fails
 
         # Store course creation in memory for personalization
@@ -233,7 +251,7 @@ class CourseService(ICourseService):
                 course_id=roadmap.id,
                 title=node.title,
                 description=node.description,
-                content=node.content,
+                content=None,  # Exclude full content for performance
                 order=node.order,
                 status=node.status,
                 completion_percentage=node.completion_percentage,
@@ -295,7 +313,7 @@ class CourseService(ICourseService):
                     course_id=roadmap.id,
                     title=node.title,
                     description=node.description,
-                    content=node.content,
+                    content=None,  # Exclude full content for performance
                     order=node.order,
                     status=node.status,
                     completion_percentage=node.completion_percentage,
@@ -324,7 +342,9 @@ class CourseService(ICourseService):
 
         return courses, total
 
-    async def update_course(self, course_id: UUID, request: CourseUpdate, _user_id: str | None = None) -> CourseResponse:
+    async def update_course(
+        self, course_id: UUID, request: CourseUpdate, _user_id: str | None = None
+    ) -> CourseResponse:
         """Update a course with improved validation and error handling."""
         query = select(Roadmap).where(Roadmap.id == course_id)
         result = await self.session.execute(query)
@@ -368,7 +388,6 @@ class CourseService(ICourseService):
             for node in nodes
         ]
 
-
     async def list_lessons(self, course_id: UUID, _user_id: str | None = None) -> list[LessonResponse]:
         """List all lessons for a course."""
         # Verify course exists
@@ -380,11 +399,11 @@ class CourseService(ICourseService):
         # Get lessons for this course
         lesson_data_list = []
         from src.storage.lesson_dao import LessonDAO
+
         conn = await LessonDAO.get_connection()
         try:
             rows = await conn.fetch(
-                "SELECT * FROM lesson WHERE course_id = $1 ORDER BY created_at DESC",
-                str(course_id)
+                "SELECT * FROM lesson WHERE course_id = $1 ORDER BY created_at DESC", str(course_id)
             )
             lesson_data_list = [dict(row) for row in rows]
         finally:
@@ -460,53 +479,52 @@ class CourseService(ICourseService):
     async def get_lesson_simplified(
         self, course_id: UUID, lesson_id: UUID, generate: bool = False, _user_id: str | None = None
     ) -> LessonResponse:
-        """Get a lesson without requiring module_id."""
-        try:
-            # Try to get existing lesson directly
-            lesson_data = await LessonDAO.get_by_id(lesson_id)
-            if lesson_data:
-                # Find which module this lesson belongs to by checking all modules
-                modules = await self.list_modules(course_id, _user_id)
-                if not modules:
-                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No modules found for course")
+        """Get a lesson by treating lesson_id as a module/node ID."""
+        # First, verify the module exists and belongs to this course
+        module_query = select(Node).where(
+            and_(Node.id == lesson_id, Node.roadmap_id == course_id)
+        )
+        result = await self.session.execute(module_query)
+        module = result.scalar_one_or_none()
 
-                # Use first module as fallback - lesson exists so module relationship isn't critical
-                return LessonResponse(
-                    id=lesson_data["id"],
-                    course_id=course_id,
-                    module_id=modules[0].id,
-                    slug=lesson_data["slug"],
-                    md_source=lesson_data["md_source"],
-                    html_cache=lesson_data.get("html_cache"),
-                    citations=lesson_data.get("citations") or [],
-                    created_at=lesson_data["created_at"],
-                    updated_at=lesson_data["updated_at"],
-                )
-            # Lesson not found, raise 404 to trigger generation if needed
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
-        except HTTPException as e:
-            if e.status_code == 404 and generate:
-                # Generate lesson using first available module
-                modules = await self.list_modules(course_id, _user_id)
-                if not modules:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND, detail="No modules available for lesson generation"
-                    ) from None
+        if not module:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module/lesson not found")
 
-                return await self.generate_lesson(
-                    course_id,
-                    modules[0].id,
-                    LessonCreate(
-                        slug=f"lesson-{str(lesson_id)[:8]}",
-                        node_meta={
-                            "lesson_id": str(lesson_id),
-                            "course_id": str(course_id),
-                            "module_id": str(modules[0].id),
-                        },
-                    ),
-                    _user_id,
-                )
-            raise
+        # Check if we have generated content for this module
+        lesson_data = await LessonDAO.get_by_node_id(lesson_id)
+
+        if lesson_data:
+            # Return existing generated content
+            return LessonResponse(
+                id=lesson_data["id"],
+                course_id=course_id,
+                module_id=module.id,
+                slug=lesson_data["slug"],
+                md_source=lesson_data["md_source"],
+                html_cache=lesson_data.get("html_cache"),
+                citations=lesson_data.get("citations") or [],
+                created_at=lesson_data["created_at"],
+                updated_at=lesson_data["updated_at"],
+                title=module.title,
+                description=module.description,
+            )
+        if generate:
+            # Generate content for this module
+            return await self.generate_lesson(
+                course_id,
+                module.id,
+                LessonCreate(
+                    slug=f"lesson-{str(module.id)[:8]}",
+                    node_meta={
+                        "lesson_id": str(module.id),
+                        "course_id": str(course_id),
+                        "module_id": str(module.id),
+                    },
+                ),
+                _user_id,
+            )
+        # No content exists and generate=false
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson content not generated")
 
     async def generate_lesson(
         self, course_id: UUID, module_id: UUID, request: LessonCreate, _user_id: str | None = None
@@ -527,11 +545,7 @@ class CourseService(ICourseService):
         module_node, roadmap = row
 
         # Get full course outline for context
-        all_modules_query = (
-            select(Node)
-            .where(Node.roadmap_id == course_id)
-            .order_by(Node.order)
-        )
+        all_modules_query = select(Node).where(Node.roadmap_id == course_id).order_by(Node.order)
         modules_result = await self.session.execute(all_modules_query)
         all_modules = modules_result.scalars().all()
 
@@ -539,18 +553,33 @@ class CourseService(ICourseService):
         course_outline = []
         current_module_index = -1
         for i, module in enumerate(all_modules):
-            course_outline.append({
-                "title": module.title,
-                "description": module.description,
-                "order": module.order,
-                "is_current": module.id == module_id
-            })
+            course_outline.append(
+                {
+                    "title": module.title,
+                    "description": module.description,
+                    "order": module.order,
+                    "is_current": module.id == module_id,
+                }
+            )
             if module.id == module_id:
                 current_module_index = i
 
         # Extract lesson_id from the request if it exists
         lesson_id_str = request.node_meta.get("lesson_id")
         lesson_id = UUID(lesson_id_str) if lesson_id_str else None
+
+        # Try to retrieve original user prompt from memory
+        original_prompt = None
+        if self.memory_service:
+            try:
+                # Search for course creation memory
+                memories = await self.memory_service.search_memories(
+                    f"Created course: {roadmap.title}", limit=1
+                )
+                if memories and len(memories) > 0 and "metadata" in memories[0]:
+                    original_prompt = memories[0]["metadata"].get("prompt")
+            except Exception as e:
+                self._logger.warning("Failed to retrieve original prompt from memory: %s", e)
 
         # Generate lesson content using AI with full course context
         lesson_context = {
@@ -565,6 +594,9 @@ class CourseService(ICourseService):
             "total_modules": len(all_modules),
             "course_title": roadmap.title,
             "course_description": roadmap.description,
+            "original_user_prompt": original_prompt,  # Include original prompt if available
+            # Note: We preserve the original title/description from course generation
+            # The AI should generate content for this specific lesson, not regenerate metadata
         }
 
         # Generate lesson body using AI
@@ -597,6 +629,8 @@ class CourseService(ICourseService):
             citations=saved_lesson.get("citations") or [],
             created_at=saved_lesson["created_at"],
             updated_at=saved_lesson["updated_at"],
+            title=module_node.title,  # Use module title as lesson title
+            description=module_node.description,
         )
 
     async def regenerate_lesson(
@@ -705,7 +739,12 @@ class CourseService(ICourseService):
         )
 
     async def update_lesson_status(
-        self, course_id: UUID, module_id: UUID, lesson_id: UUID, request: LessonStatusUpdate, _user_id: str | None = None
+        self,
+        course_id: UUID,
+        module_id: UUID,
+        lesson_id: UUID,
+        request: LessonStatusUpdate,
+        _user_id: str | None = None,
     ) -> LessonStatusResponse:
         """Update the status of a specific lesson."""
         # Check if progress record exists

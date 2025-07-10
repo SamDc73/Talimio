@@ -67,7 +67,6 @@ class CourseServiceModular(ICourseService):
         """Update a course with improved validation and error handling."""
         return await self._core_service.update_course(course_id, request, user_id)
 
-
     # Lesson operations - delegate to lesson service
     async def list_lessons(self, course_id: UUID, user_id: str | None = None) -> list[LessonResponse]:
         """List all lessons for a course."""
