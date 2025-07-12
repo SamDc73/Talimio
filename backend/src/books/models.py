@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, func, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID  # noqa: N811
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,7 +30,9 @@ class Book(Base):
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     table_of_contents: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
-    rag_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")  # pending, processing, completed, failed
+    rag_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending"
+    )  # pending, processing, completed, failed
     rag_processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

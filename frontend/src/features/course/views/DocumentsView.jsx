@@ -10,14 +10,17 @@
  */
 
 import { CheckCircle2, Plus, RefreshCw, Search } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../../components/button";
 import { Card } from "../../../components/card";
 import { useToast } from "../../../hooks/use-toast";
+import { usePolling } from "../../../hooks/usePolling";
 import { useDocumentsService } from "../api/documentsApi";
 import DocumentList from "../components/DocumentList";
 import { DocumentStatusSummary } from "../components/DocumentStatusBadge";
 import DocumentUploadModal from "../components/DocumentUploadModal";
+
+const POLLING_INTERVAL = 5000; // 5 seconds
 
 const DocumentsView = ({ courseId }) => {
 	const [documents, setDocuments] = useState([]);
@@ -29,7 +32,17 @@ const DocumentsView = ({ courseId }) => {
 	const documentsService = useDocumentsService(courseId);
 	const { toast } = useToast();
 
-	// Load documents from API
+	// Use refs to maintain stable references
+	const documentsServiceRef = useRef(documentsService);
+	const toastRef = useRef(toast);
+
+	// Update refs when dependencies change
+	useEffect(() => {
+		documentsServiceRef.current = documentsService;
+		toastRef.current = toast;
+	}, [documentsService, toast]);
+
+	// Stable loadDocuments function that won't cause re-renders
 	const loadDocuments = useCallback(
 		async (showRefreshIndicator = false) => {
 			try {
@@ -39,8 +52,8 @@ const DocumentsView = ({ courseId }) => {
 					setIsLoading(true);
 				}
 
-				const response = await documentsService.fetchDocuments({
-					limit: 50, // Get more documents for the main view
+				const response = await documentsServiceRef.current.fetchDocuments({
+					limit: 50,
 				});
 
 				if (response?.documents) {
@@ -50,7 +63,7 @@ const DocumentsView = ({ courseId }) => {
 				}
 			} catch (error) {
 				console.error("Failed to load documents:", error);
-				toast({
+				toastRef.current({
 					title: "Failed to load documents",
 					description:
 						error.message ||
@@ -62,34 +75,50 @@ const DocumentsView = ({ courseId }) => {
 				setIsRefreshing(false);
 			}
 		},
-		[documentsService, toast],
+		[], // No dependencies - uses refs instead
 	);
 
-	// Load documents on mount and when courseId changes
+	const { startPolling, stopPolling } = usePolling(
+		() => loadDocuments(true),
+		POLLING_INTERVAL,
+		[loadDocuments],
+	);
+
+	const documentsProcessing = useMemo(() => {
+		return documents.some((doc) => documentsService.isDocumentProcessing(doc));
+	}, [documents, documentsService]);
+
 	useEffect(() => {
 		if (courseId) {
 			loadDocuments();
 		}
-	}, [courseId, loadDocuments]);
+	}, [courseId, loadDocuments]); // loadDocuments is now stable
 
-	// Handle document upload completion
-	const handleDocumentsUploaded = async (uploadedDocuments) => {
-		// Add new documents to the list
-		setDocuments((prev) => [...uploadedDocuments, ...prev]);
+	useEffect(() => {
+		if (documentsProcessing) {
+			startPolling();
+		} else {
+			stopPolling();
+		}
 
-		toast({
-			title: "Documents uploaded!",
-			description: `${uploadedDocuments.length} document(s) added to the course.`,
-		});
+		return () => {
+			stopPolling();
+		};
+	}, [documentsProcessing, startPolling, stopPolling]);
 
-		// Refresh the list to get updated status
-		setTimeout(() => {
-			loadDocuments(true);
-		}, 1000);
-	};
+	const handleDocumentsUploaded = useCallback(
+		async (uploadedDocuments) => {
+			setDocuments((prev) => [...uploadedDocuments, ...prev]);
+			toastRef.current({
+				title: "Documents uploaded!",
+				description: `${uploadedDocuments.length} document(s) added to the course.`,
+			});
+			startPolling();
+		},
+		[startPolling],
+	);
 
-	// Handle document removal
-	const handleRemoveDocument = async (document) => {
+	const handleRemoveDocument = useCallback(async (document) => {
 		if (
 			!window.confirm(
 				`Are you sure you want to remove "${document.title}"? This action cannot be undone.`,
@@ -99,49 +128,43 @@ const DocumentsView = ({ courseId }) => {
 		}
 
 		try {
-			await documentsService.deleteDocument(document.id);
-
-			// Remove from local state
+			await documentsServiceRef.current.deleteDocument(document.id);
 			setDocuments((prev) => prev.filter((doc) => doc.id !== document.id));
-
-			toast({
+			toastRef.current({
 				title: "Document removed",
 				description: `"${document.title}" has been removed from the course.`,
 			});
 		} catch (error) {
 			console.error("Failed to remove document:", error);
-			toast({
+			toastRef.current({
 				title: "Failed to remove document",
 				description:
 					error.message || "Unable to remove document. Please try again.",
 				variant: "destructive",
 			});
 		}
-	};
+	}, []);
 
-	// Handle document view (placeholder for future implementation)
-	const handleViewDocument = (document) => {
+	const handleViewDocument = useCallback((document) => {
 		setSelectedDocument(document);
-		toast({
+		toastRef.current({
 			title: "Document view",
 			description: "Document preview will be available in a future update.",
 		});
-	};
+	}, []);
 
-	// Handle document download (placeholder for future implementation)
-	const handleDownloadDocument = (_document) => {
-		toast({
+	const handleDownloadDocument = useCallback((_document) => {
+		toastRef.current({
 			title: "Download requested",
 			description: "Document download will be available in a future update.",
 		});
-	};
+	}, []);
 
-	// Get RAG status
-	const getRagStatus = () => {
-		const readyDocs = documents.filter(
-			(doc) => doc.status === "embedded",
-		).length;
+	const ragStatus = useMemo(() => {
 		const totalDocs = documents.length;
+		const readyDocs = documents.filter((doc) =>
+			documentsService.isDocumentReady(doc),
+		).length;
 
 		if (totalDocs === 0) {
 			return {
@@ -149,7 +172,7 @@ const DocumentsView = ({ courseId }) => {
 				message: "No documents uploaded",
 				color: "gray",
 			};
-		} else if (readyDocs === 0) {
+		} else if (documentsProcessing) {
 			return {
 				status: "processing",
 				message: "Documents processing...",
@@ -164,9 +187,7 @@ const DocumentsView = ({ courseId }) => {
 				color: "orange",
 			};
 		}
-	};
-
-	const ragStatus = getRagStatus();
+	}, [documents, documentsService, documentsProcessing]);
 
 	return (
 		<div className="flex-1 flex flex-col h-full bg-gray-50">

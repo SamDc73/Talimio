@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime  # noqa: TC003
 from uuid import UUID as UUID_TYPE
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, func, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,7 +36,9 @@ class Video(Base):
     transcript_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # RAG processing status
-    rag_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")  # pending, processing, completed, failed
+    rag_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending"
+    )  # pending, processing, completed, failed
     rag_processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Archive status
