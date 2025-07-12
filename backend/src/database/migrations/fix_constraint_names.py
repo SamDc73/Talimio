@@ -27,13 +27,17 @@ async def fix_constraint_names() -> None:
         try:
             # Rename primary key constraint
             await conn.execute(
-                text("ALTER TABLE rag_document_chunks RENAME CONSTRAINT phase3_document_chunks_pkey TO rag_document_chunks_pkey")
+                text(
+                    "ALTER TABLE rag_document_chunks RENAME CONSTRAINT phase3_document_chunks_pkey TO rag_document_chunks_pkey"
+                )
             )
             logger.info("Renamed primary key constraint")
 
             # Rename unique constraint
             await conn.execute(
-                text("ALTER TABLE rag_document_chunks RENAME CONSTRAINT phase3_document_chunks_doc_id_chunk_index_key TO rag_document_chunks_doc_id_chunk_index_key")
+                text(
+                    "ALTER TABLE rag_document_chunks RENAME CONSTRAINT phase3_document_chunks_doc_id_chunk_index_key TO rag_document_chunks_doc_id_chunk_index_key"
+                )
             )
             logger.info("Renamed unique constraint")
 

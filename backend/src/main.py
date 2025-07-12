@@ -29,7 +29,6 @@ from .config.settings import get_settings
 from .content.router import router as content_router
 from .core.exceptions import ResourceNotFoundError
 from .courses.models import (  # noqa: F401
-    DocumentChunk,
     Lesson,
     LessonProgress as Progress,
     Node,
@@ -56,6 +55,7 @@ logger = logging.getLogger(__name__)
 litellm_logger = logging.getLogger("LiteLLM")
 litellm_logger.setLevel(logging.ERROR)  # Only show errors, not warnings
 
+
 # Alternatively, create a custom filter for specific Cohere embedding errors
 class CohereEmbeddingWarningFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
@@ -65,6 +65,7 @@ class CohereEmbeddingWarningFilter(logging.Filter):
             "Could not detect capabilities for cohere/embed" in message
             or "output_dimension is not supported" in message
         )
+
 
 # Apply the filter to the root logger to catch all instances
 logging.getLogger().addFilter(CohereEmbeddingWarningFilter())
@@ -87,6 +88,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Validate RAG configuration
     try:
         from src.ai.constants import rag_config
+
         rag_config.validate_config()
         logger.info("RAG configuration validated successfully")
     except ValueError as e:
@@ -96,6 +98,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Run automatic migrations
     try:
         from src.database.auto_migrate import run_auto_migrations
+
         await run_auto_migrations()
         logger.info("Database migrations completed")
     except Exception as e:

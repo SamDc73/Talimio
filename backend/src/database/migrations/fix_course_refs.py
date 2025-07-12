@@ -31,7 +31,7 @@ async def check_table_exists(conn: Any, table_name: str) -> bool:
                 AND table_name = :table_name
             )
         """),
-        {"table_name": table_name}
+        {"table_name": table_name},
     )
     return result.scalar()
 
@@ -47,7 +47,7 @@ async def check_column_exists(conn: Any, table_name: str, column_name: str) -> b
                 AND column_name = :column_name
             )
         """),
-        {"table_name": table_name, "column_name": column_name}
+        {"table_name": table_name, "column_name": column_name},
     )
     return result.scalar()
 

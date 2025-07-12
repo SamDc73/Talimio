@@ -24,7 +24,7 @@ async def check_table_exists(table_name: str) -> bool:
                     AND table_name = :table_name
                 )
             """),
-            {"table_name": table_name}
+            {"table_name": table_name},
         )
         return result.scalar()
 
@@ -51,9 +51,7 @@ async def create_migrations_table() -> None:
 async def get_applied_migrations() -> list[str]:
     """Get list of already applied migrations."""
     async with engine.begin() as conn:
-        result = await conn.execute(
-            text("SELECT migration_name FROM schema_migrations ORDER BY applied_at")
-        )
+        result = await conn.execute(text("SELECT migration_name FROM schema_migrations ORDER BY applied_at"))
         return [row[0] for row in result.fetchall()]
 
 
@@ -66,7 +64,7 @@ async def mark_migration_applied(migration_name: str) -> None:
                 VALUES (:name)
                 ON CONFLICT (migration_name) DO NOTHING
             """),
-            {"name": migration_name}
+            {"name": migration_name},
         )
 
 
@@ -76,6 +74,7 @@ async def run_migration(migration_path: Path) -> None:
 
     # Import and run the migration
     import importlib.util
+
     spec = importlib.util.spec_from_file_location(migration_name, migration_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -158,16 +157,22 @@ async def ensure_rag_tables() -> None:
 
             # Create indexes
             await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rag_chunks_doc_id ON rag_document_chunks(doc_id)"))
-            await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rag_chunks_doc_type ON rag_document_chunks(doc_type)"))
-            await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_rag_chunks_metadata ON rag_document_chunks USING gin(metadata)"))
+            await conn.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_rag_chunks_doc_type ON rag_document_chunks(doc_type)")
+            )
+            await conn.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_rag_chunks_metadata ON rag_document_chunks USING gin(metadata)")
+            )
 
             # Only create vector indexes if we have embeddings
             if embedding_dim > 0:
-                await conn.execute(text("""
+                await conn.execute(
+                    text("""
                     CREATE INDEX IF NOT EXISTS idx_rag_chunks_embedding_hnsw 
                     ON rag_document_chunks USING hnsw (embedding vector_cosine_ops)
                     WITH (m = 16, ef_construction = 64)
-                """))
+                """)
+                )
 
             logger.info(f"Created rag_document_chunks table with {embedding_dim} dimensions")
 
@@ -197,8 +202,14 @@ async def ensure_rag_tables() -> None:
             )
 
             # Create indexes
-            await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_chunk_queue_status ON chunk_processing_queue(status)"))
-            await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_chunk_queue_priority ON chunk_processing_queue(priority DESC, created_at ASC)"))
+            await conn.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_chunk_queue_status ON chunk_processing_queue(status)")
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_chunk_queue_priority ON chunk_processing_queue(priority DESC, created_at ASC)"
+                )
+            )
 
             logger.info("Created chunk_processing_queue table")
 

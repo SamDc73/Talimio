@@ -90,7 +90,6 @@ class TaggingService:
             await self.session.rollback()
             raise
 
-
     async def batch_tag_content(
         self,
         content_items: list[dict[str, Any]],

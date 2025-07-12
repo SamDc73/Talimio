@@ -1,6 +1,6 @@
 """Utility functions for authentication."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 import jwt
 from passlib.context import CryptContext

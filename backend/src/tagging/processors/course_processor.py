@@ -39,9 +39,7 @@ class CourseProcessor:
         try:
             # Get course modules for more detailed content
             result = await self.session.execute(
-                select(CourseModule)
-                .where(CourseModule.roadmap_id == course.id)
-                .order_by(CourseModule.order)
+                select(CourseModule).where(CourseModule.roadmap_id == course.id).order_by(CourseModule.order)
             )
             modules = result.scalars().all()
 

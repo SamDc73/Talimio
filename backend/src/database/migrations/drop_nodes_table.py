@@ -3,6 +3,7 @@
 This migration removes the nodes table and all related constraints
 since we're removing the module functionality from the application.
 """
+
 import asyncpg
 
 
@@ -13,7 +14,7 @@ async def migrate() -> None:
         port=5432,
         user="postgres",
         password="postgres",  # noqa: S106
-        database="learning_roadmap"
+        database="learning_roadmap",
     )
 
     try:
@@ -35,4 +36,5 @@ async def migrate() -> None:
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(migrate())

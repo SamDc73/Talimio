@@ -1,6 +1,6 @@
 from typing import TypeVar
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import func, Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 

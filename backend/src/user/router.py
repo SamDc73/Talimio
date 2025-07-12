@@ -1,7 +1,6 @@
 """User API endpoints for settings and memory management."""
 
 import logging
-from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, status
 
@@ -11,20 +10,26 @@ from src.user.schemas import (
     CustomInstructionsResponse,
     PreferencesUpdateRequest,
     PreferencesUpdateResponse,
+    UserCreate,
     UserSettingsResponse,
+    UserUpdate,
 )
 from src.user.service import (
     clear_user_memory,
+    create_user,
+    delete_user,
+    get_user,
     get_user_memories,
     get_user_settings,
     update_custom_instructions,
+    update_user,
     update_user_preferences,
 )
 
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/user", tags=["user"])
+router = APIRouter(prefix="/api/v1/users", tags=["user"])
 
 
 def get_user_id_from_header(x_user_id: str | None = Header(None)) -> str:
@@ -36,13 +41,34 @@ def get_user_id_from_header(x_user_id: str | None = Header(None)) -> str:
     return x_user_id
 
 
-@router.get("/settings")
-async def get_settings(user_id: Annotated[str, Header(alias="x-user-id")] = "demo_user_123") -> UserSettingsResponse:
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def create_user_endpoint(user: UserCreate):
+    return await create_user(user)
+
+
+@router.get("/{user_id}")
+async def get_user_endpoint(user_id: str):
+    return await get_user(user_id)
+
+
+@router.put("/{user_id}")
+async def update_user_endpoint(user_id: str, user: UserUpdate):
+    return await update_user(user_id, user)
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user_endpoint(user_id: str):
+    await delete_user(user_id)
+    return {"message": "User deleted successfully"}
+
+
+@router.get("/{user_id}/settings")
+async def get_settings(user_id: str) -> UserSettingsResponse:
     """
     Get user settings including custom instructions and memory count.
 
-    Headers:
-        x-user-id: User identifier (optional, defaults to demo_user_123)
+    Args:
+        user_id: User identifier
 
     Returns
     -------
@@ -57,17 +83,15 @@ async def get_settings(user_id: Annotated[str, Header(alias="x-user-id")] = "dem
         ) from e
 
 
-@router.put("/settings/instructions")
+@router.put("/{user_id}/settings/instructions")
 async def update_instructions(
-    request: CustomInstructionsRequest, user_id: Annotated[str, Header(alias="x-user-id")] = "demo_user_123"
+    user_id: str, request: CustomInstructionsRequest
 ) -> CustomInstructionsResponse:
     """
     Update custom instructions for AI personalization.
 
-    Headers:
-        x-user-id: User identifier (optional, defaults to demo_user_123)
-
     Args:
+        user_id: User identifier
         request: Custom instructions to set
 
     Returns
@@ -83,13 +107,13 @@ async def update_instructions(
         ) from e
 
 
-@router.delete("/memory")
-async def clear_memory(user_id: Annotated[str, Header(alias="x-user-id")] = "demo_user_123") -> ClearMemoryResponse:
+@router.delete("/{user_id}/memory")
+async def clear_memory(user_id: str) -> ClearMemoryResponse:
     """
     Clear all stored memories for the user.
 
-    Headers:
-        x-user-id: User identifier (optional, defaults to demo_user_123)
+    Args:
+        user_id: User identifier
 
     Returns
     -------
@@ -104,13 +128,13 @@ async def clear_memory(user_id: Annotated[str, Header(alias="x-user-id")] = "dem
         ) from e
 
 
-@router.get("/settings/instructions")
-async def get_instructions(user_id: Annotated[str, Header(alias="x-user-id")] = "demo_user_123") -> dict[str, str]:
+@router.get("/{user_id}/settings/instructions")
+async def get_instructions(user_id: str) -> dict[str, str]:
     """
     Get custom instructions for the user.
 
-    Headers:
-        x-user-id: User identifier (optional, defaults to demo_user_123)
+    Args:
+        user_id: User identifier
 
     Returns
     -------
@@ -126,13 +150,13 @@ async def get_instructions(user_id: Annotated[str, Header(alias="x-user-id")] = 
         ) from e
 
 
-@router.get("/memories")
-async def get_memories(user_id: Annotated[str, Header(alias="x-user-id")] = "demo_user_123") -> list[dict]:
+@router.get("/{user_id}/memories")
+async def get_memories(user_id: str) -> list[dict]:
     """
     Get all memories for the user.
 
-    Headers:
-        x-user-id: User identifier (optional, defaults to demo_user_123)
+    Args:
+        user_id: User identifier
 
     Returns
     -------
@@ -147,17 +171,15 @@ async def get_memories(user_id: Annotated[str, Header(alias="x-user-id")] = "dem
         ) from e
 
 
-@router.put("/preferences")
+@router.put("/{user_id}/preferences")
 async def update_preferences(
-    request: PreferencesUpdateRequest, user_id: Annotated[str, Header(alias="x-user-id")] = "demo_user_123"
+    user_id: str, request: PreferencesUpdateRequest
 ) -> PreferencesUpdateResponse:
     """
     Update user preferences.
 
-    Headers:
-        x-user-id: User identifier (optional, defaults to demo_user_123)
-
     Args:
+        user_id: User identifier
         request: User preferences to update
 
     Returns
@@ -171,3 +193,4 @@ async def update_preferences(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update preferences: {e}"
         ) from e
+
