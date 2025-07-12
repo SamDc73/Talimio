@@ -1,13 +1,12 @@
-
 import hashlib
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from fastapi import BackgroundTasks, HTTPException, UploadFile, status
+from fastapi import BackgroundTasks, HTTPException, status, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -76,11 +75,7 @@ async def _process_book_rag_background(book_id: UUID) -> None:
                 raise FileNotFoundError(msg)
 
             # Use enhanced chunking with position data for Phase 5
-            enhanced_chunks = chunker.chunk_document(
-                doc_id=book_id,
-                doc_type="book",
-                content=file_path
-            )
+            enhanced_chunks = chunker.chunk_document(doc_id=book_id, doc_type="book", content=file_path)
 
             # Store enhanced chunks with embeddings
             # Extract just the content from DocumentChunk objects

@@ -259,6 +259,7 @@ const DocumentList = ({
 								<div className="grid grid-cols-12 gap-4">
 									<div className="col-span-5">
 										<button
+											type="button"
 											onClick={() => handleSort("title")}
 											className="flex items-center space-x-1 hover:text-gray-900"
 										>
@@ -268,6 +269,7 @@ const DocumentList = ({
 									</div>
 									<div className="col-span-2">
 										<button
+											type="button"
 											onClick={() => handleSort("document_type")}
 											className="flex items-center space-x-1 hover:text-gray-900"
 										>
@@ -277,6 +279,7 @@ const DocumentList = ({
 									</div>
 									<div className="col-span-2">
 										<button
+											type="button"
 											onClick={() => handleSort("status")}
 											className="flex items-center space-x-1 hover:text-gray-900"
 										>
@@ -286,6 +289,7 @@ const DocumentList = ({
 									</div>
 									<div className="col-span-2">
 										<button
+											type="button"
 											onClick={() => handleSort("created_at")}
 											className="flex items-center space-x-1 hover:text-gray-900"
 										>
@@ -320,7 +324,7 @@ const DocumentList = ({
 															{doc.url}
 														</p>
 													)}
-													{doc.file_path && (
+													{doc.file_path && doc.size && (
 														<p className="text-xs text-gray-500">
 															{formatFileSize(doc.size)}
 														</p>

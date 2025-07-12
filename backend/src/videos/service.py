@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from datetime import UTC, datetime
+from datetime import datetime, UTC
 from io import StringIO
 from typing import Any
 from uuid import UUID
@@ -137,22 +137,20 @@ async def _extract_video_transcript(video_url: str) -> str | None:
 
             # Download and parse subtitle content
             async with aiohttp.ClientSession() as session, session.get(subtitle_url) as response:
-                    if response.status == 200:
-                        content = await response.text()
-                        # Simple SRT parser - extract text lines
-                        lines = content.split("\n")
-                        transcript_lines = []
+                if response.status == 200:
+                    content = await response.text()
+                    # Simple SRT parser - extract text lines
+                    lines = content.split("\n")
+                    transcript_lines = []
 
-                        for line_text in lines:
-                            line = line_text.strip()
-                            # Skip timestamp lines and sequence numbers
-                            if (not line or
-                                "-->" in line or
-                                line.isdigit()):
-                                continue
-                            transcript_lines.append(line)
+                    for line_text in lines:
+                        line = line_text.strip()
+                        # Skip timestamp lines and sequence numbers
+                        if not line or "-->" in line or line.isdigit():
+                            continue
+                        transcript_lines.append(line)
 
-                        return " ".join(transcript_lines)
+                    return " ".join(transcript_lines)
 
     except Exception as e:
         logger.exception(f"Failed to extract transcript for {video_url}: {e}")
@@ -187,7 +185,9 @@ class VideoService:
             "completion_percentage": video.completion_percentage,
         }
 
-    async def create_video(self, db: AsyncSession, video_data: VideoCreate, background_tasks: BackgroundTasks) -> VideoResponse:
+    async def create_video(
+        self, db: AsyncSession, video_data: VideoCreate, background_tasks: BackgroundTasks
+    ) -> VideoResponse:
         """Create a new video by fetching metadata from YouTube."""
         # Extract video info using yt-dlp
         video_info = await self.fetch_video_info(video_data.url)
@@ -716,9 +716,9 @@ class VideoService:
 
                 # Download and parse subtitle content
                 async with aiohttp.ClientSession() as session, session.get(subtitle_url) as response:
-                        if response.status == 200:
-                            content = await response.text()
-                            return self._parse_srt_segments(content)
+                    if response.status == 200:
+                        content = await response.text()
+                        return self._parse_srt_segments(content)
 
         except Exception as e:
             logger.exception(f"Failed to extract transcript segments for {video_url}: {e}")
@@ -729,11 +729,7 @@ class VideoService:
     def _parse_vtt_segments(self, vtt_content: str) -> list[TranscriptSegment]:
         """Parse VTT content to extract transcript segments with timestamps."""
         return [
-            TranscriptSegment(
-                start_time=caption.start_in_seconds,
-                end_time=caption.end_in_seconds,
-                text=caption.text
-            )
+            TranscriptSegment(start_time=caption.start_in_seconds, end_time=caption.end_in_seconds, text=caption.text)
             for caption in webvtt.read_buffer(StringIO(vtt_content))
         ]
 
@@ -762,15 +758,9 @@ class VideoService:
                     # Join remaining lines as text
                     text = " ".join(lines[2:])
 
-                    segments.append(TranscriptSegment(
-                        start_time=start_time,
-                        end_time=end_time,
-                        text=text
-                    ))
+                    segments.append(TranscriptSegment(start_time=start_time, end_time=end_time, text=text))
 
         return segments
-
-
 
     async def _fetch_video_chapters(self, url: str) -> list[dict[str, Any]]:
         """Fetch video chapter information using yt-dlp."""

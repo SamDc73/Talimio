@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, UTC
 from typing import Any
 
 from sqlalchemy import text
@@ -660,6 +660,39 @@ async def delete_content(content_type: ContentType, content_id: str) -> None:
             msg = f"Content with ID {content_id} not found"
             raise ValueError(msg)
 
-        # Delete using ORM to ensure proper cascade deletion
-        await session.delete(content_obj)
+        # Special handling for roadmaps to fix foreign key constraint issues
+        if content_type in (ContentType.ROADMAP, ContentType.COURSE):
+            # First, delete all nodes that reference this roadmap in correct order
+            # Delete child nodes first, then parent nodes to avoid foreign key violations
+            await session.execute(
+                text("""
+                    WITH RECURSIVE node_hierarchy AS (
+                        -- Find leaf nodes (no children)
+                        SELECT id, parent_id, 0 as level
+                        FROM nodes
+                        WHERE roadmap_id = :roadmap_id
+                        AND id NOT IN (SELECT parent_id FROM nodes WHERE parent_id IS NOT NULL AND roadmap_id = :roadmap_id)
+
+                        UNION ALL
+
+                        -- Find parent nodes
+                        SELECT n.id, n.parent_id, nh.level + 1
+                        FROM nodes n
+                        JOIN node_hierarchy nh ON n.id = nh.parent_id
+                        WHERE n.roadmap_id = :roadmap_id
+                    )
+                    DELETE FROM nodes WHERE id IN (SELECT id FROM node_hierarchy)
+                """),
+                {"roadmap_id": uuid_id}
+            )
+
+            # Now delete the roadmap itself
+            await session.execute(
+                text("DELETE FROM roadmaps WHERE id = :roadmap_id"),
+                {"roadmap_id": uuid_id}
+            )
+        else:
+            # Delete using ORM to ensure proper cascade deletion for other content types
+            await session.delete(content_obj)
+
         await session.commit()
