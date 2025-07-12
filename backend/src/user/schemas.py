@@ -2,7 +2,27 @@
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
+
+
+class UserBase(BaseModel):
+    email: EmailStr
+    name: str | None = None
+
+
+class UserCreate(UserBase):
+    pass
+
+
+class UserUpdate(UserBase):
+    pass
+
+
+class User(UserBase):
+    id: str
+
+    class Config:
+        from_attributes = True
 
 
 class UserPreferences(BaseModel):

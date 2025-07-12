@@ -247,6 +247,11 @@ export function ChatSidebar() {
 	// Get current page context for context-aware assistance
 	const currentContext = useCurrentContext();
 
+	// Debug logging
+	useEffect(() => {
+		console.log("[ChatSidebar] Current context:", currentContext);
+	}, [currentContext]);
+
 	// Create a unique conversation key based on context
 	const conversationKey = currentContext
 		? `${currentContext.contextType}-${currentContext.contextId}`

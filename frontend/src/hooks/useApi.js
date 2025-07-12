@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1";
@@ -72,10 +72,13 @@ export function useApi(endpoint, options = {}) {
 	const { toast } = useToast();
 	const abortControllerRef = useRef(null);
 
+	// Memoize the options object to prevent unnecessary re-renders
+	const memoizedOptions = useMemo(() => options, [JSON.stringify(options)]);
+
 	const execute = useCallback(
 		async (body = null, callOptions = {}) => {
 			// Combine hook options and call-specific options
-			const combinedOptions = { ...options, ...callOptions };
+			const combinedOptions = { ...memoizedOptions, ...callOptions };
 			const { method = "GET", pathParams, ...fetchOptions } = combinedOptions;
 
 			// Abort previous request if it's still running
@@ -117,7 +120,7 @@ export function useApi(endpoint, options = {}) {
 				abortControllerRef.current = null; // Clear the controller
 			}
 		},
-		[endpoint, options, toast], // Dependencies for useCallback
+		[endpoint, memoizedOptions, toast], // Dependencies for useCallback
 	);
 
 	return { data, isLoading, error, execute };

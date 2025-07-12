@@ -26,7 +26,15 @@ export function CourseHeader({
 	isOpen = true,
 	toggleSidebar = () => {},
 }) {
-	const { toggleChat } = useChatSidebar();
+	let toggleChat = () => {};
+
+	try {
+		const chatContext = useChatSidebar();
+		toggleChat = chatContext.toggleChat;
+	} catch (error) {
+		console.warn("ChatSidebar context not available:", error);
+	}
+
 	const [_showFullTitle, _setShowFullTitle] = useState(false);
 
 	return (

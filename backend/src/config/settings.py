@@ -17,17 +17,23 @@ class Settings(PydanticBaseSettings):  # type: ignore[misc]
     # OpenAI Settings
     openai_api_key: str | None = None
 
+    # LLM Model Settings
+    primary_llm_model: str = Field(default="openai/gpt-4o", description="Primary LLM model for content generation")
+
     # Authentication Settings
     jwt_secret_key: str = Field(default="any-random-string-for-now", description="JWT secret key")
     jwt_algorithm: str = Field(default="HS256", description="JWT algorithm")
     jwt_expire_hours: int = Field(default=24, description="JWT token expiration in hours")
     auth_disabled: bool = Field(default=False, description="Disable authentication for single-user mode")
 
+    # Function Calling Settings - Always enabled
+    # Removed enable_function_calling - function calling is now always enabled
+
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.local"),
         env_file_encoding="utf-8",
         extra="allow",
-        case_sensitive=True,
+        case_sensitive=False,
     )
 
 

@@ -9,8 +9,10 @@ from src.user.schemas import (
     ClearMemoryResponse,
     CustomInstructionsResponse,
     PreferencesUpdateResponse,
+    UserCreate,
     UserPreferences,
     UserSettingsResponse,
+    UserUpdate,
 )
 
 
@@ -51,6 +53,22 @@ async def _save_user_preferences(user_id: str, preferences: UserPreferences) -> 
     except Exception as e:
         logger.exception(f"Failed to save preferences for user {user_id}: {e}")
         return False
+
+
+async def create_user(user: UserCreate):
+    """Create a new user."""
+
+
+async def get_user(user_id: str):
+    """Get a user by ID."""
+
+
+async def update_user(user_id: str, user: UserUpdate):
+    """Update a user."""
+
+
+async def delete_user(user_id: str):
+    """Delete a user."""
 
 
 async def get_user_settings(user_id: str) -> UserSettingsResponse:

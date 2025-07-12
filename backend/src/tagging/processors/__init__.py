@@ -3,7 +3,7 @@
 from .book_processor import BookProcessor, process_book_for_tagging
 from .course_processor import CourseProcessor, process_course_for_tagging
 from .flashcard_processor import process_flashcard_for_tagging
-from .video_processor import VideoProcessor, process_video_for_tagging
+from .video_processor import process_video_for_tagging, VideoProcessor
 
 
 __all__ = [
