@@ -52,31 +52,33 @@ class ModelManager:
     """Manage AI model interactions for the learning roadmap platform."""
 
     def __init__(self, memory_wrapper: Any = None) -> None:
+        from src.config import env
         self.settings = get_settings()
-        self.model = self.settings.primary_llm_model
+        self.model = env("PRIMARY_LLM_MODEL")
 
         # Set appropriate API key based on model provider
+
         if self.model.startswith("openrouter/"):
-            self.api_key = os.getenv("OPENROUTER_API_KEY")
+            self.api_key = env("OPENROUTER_API_KEY")
             if not self.api_key:
                 msg = "OPENROUTER_API_KEY not found in environment variables"
                 raise ValidationError(msg)
             os.environ["OPENROUTER_API_KEY"] = self.api_key
         elif self.model.startswith("anthropic/") or self.model.startswith("claude"):
-            self.api_key = os.getenv("ANTHROPIC_API_KEY")
+            self.api_key = env("ANTHROPIC_API_KEY")
             if not self.api_key:
                 msg = "ANTHROPIC_API_KEY not found in environment variables"
                 raise ValidationError(msg)
             os.environ["ANTHROPIC_API_KEY"] = self.api_key
         elif self.model.startswith("deepseek/"):
-            self.api_key = os.getenv("DEEPSEEK_API_KEY")
+            self.api_key = env("DEEPSEEK_API_KEY")
             if not self.api_key:
                 msg = "DEEPSEEK_API_KEY not found in environment variables"
                 raise ValidationError(msg)
             os.environ["DEEPSEEK_API_KEY"] = self.api_key
         else:
             # Default to OpenAI for openai/ models and others
-            self.api_key = os.getenv("OPENAI_API_KEY")
+            self.api_key = env("OPENAI_API_KEY")
             if not self.api_key:
                 msg = "OPENAI_API_KEY not found in environment variables"
                 raise ValidationError(msg)
@@ -898,8 +900,9 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
                 # Continue without discovered content
 
         # Generate lesson content
+        from src.config import env
         response = await acompletion(
-            model=settings.primary_llm_model,
+            model=env("PRIMARY_LLM_MODEL"),
             messages=messages,
             temperature=0.7,
             max_tokens=8000,

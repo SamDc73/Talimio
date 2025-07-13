@@ -1,7 +1,6 @@
 """RAG system service layer - FIXED VERSION with proper lazy initialization."""
 
 import logging
-import os
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -15,6 +14,7 @@ from src.ai.rag.ingest import DocumentProcessor
 from src.ai.rag.retriever import DocumentRetriever
 from src.ai.rag.schemas import DocumentResponse, SearchResult
 from src.ai.rag.vector_store import VectorStore
+from src.config import env
 from src.courses.models import RoadmapDocument
 
 
@@ -47,7 +47,7 @@ class RAGService:
         """Initialize RAG service - lazy initialization of components."""
         if not self._initialized:
             # Store config but don't create components yet
-            self.max_file_size_mb = int(os.getenv("RAG_MAX_FILE_SIZE_MB", "50"))
+            self.max_file_size_mb = int(env("RAG_MAX_FILE_SIZE_MB", "50"))
             self.max_file_size_bytes = self.max_file_size_mb * 1024 * 1024
 
             # Components will be created on first use

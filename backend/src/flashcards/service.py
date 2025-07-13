@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status

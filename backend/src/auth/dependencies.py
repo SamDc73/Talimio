@@ -68,7 +68,7 @@ async def get_current_user_optional(
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> User | None:
     """Get current user if auth enabled, or None if disabled."""
-    if settings.auth_disabled:
+    if settings.AUTH_DISABLED:
         return None
 
     if not token:

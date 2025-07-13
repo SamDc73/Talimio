@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -17,10 +17,14 @@ class LessonDAO:
         """Get a database connection from the pool."""
         # Use environment variables for connection
         import logging
-        import os
+
+        from src.config import env
+        from src.config.settings import get_settings
+
+        settings = get_settings()
 
         # Use DATABASE_URL if available, otherwise fallback to individual settings
-        connection_string = os.getenv("DATABASE_URL")
+        connection_string = settings.DATABASE_URL
         if connection_string:
             # Convert SQLAlchemy-style URL to asyncpg-compatible URL
             if connection_string.startswith("postgresql+asyncpg://"):
@@ -28,11 +32,11 @@ class LessonDAO:
             logging.info("Connecting to database using DATABASE_URL")
         else:
             # Default to localhost if not specified
-            host = os.getenv("POSTGRES_HOST", "localhost")
-            port = os.getenv("POSTGRES_PORT", "5432")
-            user = os.getenv("POSTGRES_USER", "postgres")
-            password = os.getenv("POSTGRES_PASSWORD", "postgres")
-            dbname = os.getenv("POSTGRES_DB", "postgres")
+            host = env("POSTGRES_HOST", "localhost")
+            port = env("POSTGRES_PORT", "5432")
+            user = env("POSTGRES_USER", "postgres")
+            password = env("POSTGRES_PASSWORD", "postgres")
+            dbname = env("POSTGRES_DB", "postgres")
             connection_string = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
             logging.info(f"Connecting to database at {host}:{port}/{dbname}")
 

@@ -4,7 +4,7 @@ Handles CRUD operations for lessons within course modules.
 """
 
 import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status

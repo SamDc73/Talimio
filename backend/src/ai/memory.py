@@ -6,12 +6,12 @@ across all AI endpoints in the learning roadmap platform.
 """
 
 import logging
-import os
 from typing import Any
 
 import asyncpg
 from mem0 import AsyncMemory
 
+from src.config import env
 from src.config.settings import get_settings
 
 
@@ -54,7 +54,7 @@ class Mem0Wrapper:
                     "host": self._extract_db_host(),
                     "port": self._extract_db_port(),
                     "collection_name": "learning_memories",
-                    "embedding_model_dims": int(os.getenv("MEMORY_EMBEDDING_OUTPUT_DIM", "1536")),
+                    "embedding_model_dims": int(env("MEMORY_EMBEDDING_OUTPUT_DIM", "1536")),
                 },
             },
             "llm": {
@@ -69,60 +69,60 @@ class Mem0Wrapper:
             "embedder": {
                 "provider": "openai",
                 "config": {
-                    "model": os.getenv("MEMORY_EMBEDDING_MODEL"),
-                    "embedding_dims": int(os.getenv("MEMORY_EMBEDDING_OUTPUT_DIM", "1536")),
+                    "model": env("MEMORY_EMBEDDING_MODEL"),
+                    "embedding_dims": int(env("MEMORY_EMBEDDING_OUTPUT_DIM", "1536")),
                 },
             },
         }
 
     def _extract_db_user(self) -> str:
         """Extract database user from DATABASE_URL."""
-        database_url = os.getenv("DATABASE_URL", "")
+        database_url = self.settings.DATABASE_URL
         if "://" in database_url:
             # Extract from URL format: postgresql+asyncpg://user:pass@host:port/db
             auth_part = database_url.split("://")[1].split("@")[0]
             return auth_part.split(":")[0]
-        return os.getenv("DB_USER", "postgres")
+        return env("DB_USER", "postgres")
 
     def _extract_db_password(self) -> str:
         """Extract database password from DATABASE_URL."""
-        database_url = os.getenv("DATABASE_URL", "")
+        database_url = self.settings.DATABASE_URL
         if "://" in database_url:
             auth_part = database_url.split("://")[1].split("@")[0]
             if ":" in auth_part:
                 return auth_part.split(":", 1)[1]
-        return os.getenv("DB_PASSWORD", "")
+        return env("DB_PASSWORD", "")
 
     def _extract_db_host(self) -> str:
         """Extract database host from DATABASE_URL."""
-        database_url = os.getenv("DATABASE_URL", "")
+        database_url = self.settings.DATABASE_URL
         if "://" in database_url:
             host_part = database_url.split("@")[1].split("/")[0]
             return host_part.split(":")[0]
-        return os.getenv("DB_HOST", "localhost")
+        return env("DB_HOST", "localhost")
 
     def _extract_db_port(self) -> str:
         """Extract database port from DATABASE_URL."""
-        database_url = os.getenv("DATABASE_URL", "")
+        database_url = self.settings.DATABASE_URL
         if "://" in database_url:
             host_part = database_url.split("@")[1].split("/")[0]
             if ":" in host_part:
                 return host_part.split(":")[1]
-        return os.getenv("DB_PORT", "5432")
+        return env("DB_PORT", "5432")
 
     def _extract_db_name(self) -> str:
         """Extract database name from DATABASE_URL."""
-        database_url = os.getenv("DATABASE_URL", "")
+        database_url = self.settings.DATABASE_URL
         if "://" in database_url:
             # Extract from URL format: postgresql+asyncpg://user:pass@host:port/dbname
             db_part = database_url.split("/")[-1]
             # Remove any query parameters
             return db_part.split("?")[0]
-        return os.getenv("DB_NAME", "neondb")
+        return env("DB_NAME", "neondb")
 
     def _get_memory_llm_model(self) -> str:
         """Get the LLM model for memory processing."""
-        memory_model = os.getenv("MEMORY_LLM_MODEL", "openai/gpt-4o-mini")
+        memory_model = env("MEMORY_LLM_MODEL", "openai/gpt-4o-mini")
         self._logger.info(f"Using memory LLM model: {memory_model}")
         return memory_model
 
@@ -156,7 +156,7 @@ class Mem0Wrapper:
 
     async def _get_db_connection(self) -> asyncpg.Connection:
         """Get database connection for custom instructions."""
-        database_url = os.getenv("DATABASE_URL")
+        database_url = self.settings.DATABASE_URL
         if database_url:
             asyncpg_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
             return await asyncpg.connect(asyncpg_url)
@@ -166,7 +166,7 @@ class Mem0Wrapper:
             port=int(self._extract_db_port()),
             user=self._extract_db_user(),
             password=self._extract_db_password(),
-            database=os.getenv("DB_NAME", "neondb"),
+            database=env("DB_NAME", "neondb"),
         )
 
     async def add_memory(self, user_id: str, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:

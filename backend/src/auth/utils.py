@@ -1,6 +1,6 @@
 """Utility functions for authentication."""
 
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from passlib.context import CryptContext
@@ -27,14 +27,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(user_id: str, username: str) -> str:
     """Create a JWT access token."""
-    expire = datetime.now(UTC) + timedelta(hours=settings.jwt_expire_hours)
+    expire = datetime.now(UTC) + timedelta(hours=settings.JWT_EXPIRE_HOURS)
     data = {
         "sub": user_id,  # subject (user ID)
         "username": username,
         "exp": expire,
         "iat": datetime.now(UTC),  # issued at
     }
-    return jwt.encode(data, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(data, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
 def decode_token(token: str) -> dict:
@@ -42,8 +42,8 @@ def decode_token(token: str) -> dict:
     try:
         return jwt.decode(
             token,
-            settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm],
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
         )
     except jwt.ExpiredSignatureError:
         msg = "Token has expired"

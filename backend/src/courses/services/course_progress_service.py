@@ -3,7 +3,7 @@
 Handles progress tracking and status updates for courses, modules, and lessons.
 """
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select

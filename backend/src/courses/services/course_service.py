@@ -7,9 +7,8 @@ and modular implementations based on feature flags or configuration.
 
 import json
 import logging
-import os
 import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -17,8 +16,9 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.ai.client import AIError, create_lesson_body, ModelManager
+from src.ai.client import AIError, ModelManager, create_lesson_body
 from src.ai.memory import Mem0Wrapper
+from src.config import env
 from src.courses.models import LessonProgress as Progress, Node, Roadmap
 from src.courses.schemas import (
     CourseCreate,
@@ -57,7 +57,7 @@ class CourseService(ICourseService):
         self._logger = logging.getLogger(__name__)
 
         # Check if modular implementation should be used
-        self._use_modular = os.getenv("USE_MODULAR_COURSE_SERVICE", "false").lower() == "true"
+        self._use_modular = env("USE_MODULAR_COURSE_SERVICE", "false").lower() == "true"
         self._modular_service = None
 
         if self._use_modular:

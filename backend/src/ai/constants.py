@@ -1,7 +1,8 @@
 """Constants for AI module configuration."""
 
-import os
 from pathlib import Path
+
+from src.config import env
 
 
 # RAG Configuration Class
@@ -11,29 +12,29 @@ class RAGConfig:
     def __init__(self) -> None:
         """Initialize RAG configuration from environment variables."""
         # LLM Models
-        self.llm_model = os.getenv("RAG_LLM_MODEL", "gpt-4o-mini")
+        self.llm_model = env("RAG_LLM_MODEL", "gpt-4o-mini")
 
         # Embedding Configuration
-        self.embedding_model = os.getenv("RAG_EMBEDDING_MODEL", "text-embedding-3-small")
+        self.embedding_model = env("RAG_EMBEDDING_MODEL", "text-embedding-3-small")
         # Don't force dimensions - use model's default
         self.embedding_dim = None
-        self.embed_instruction = os.getenv("RAG_EMBED_INSTRUCTION", "Represent the query for semantic retrieval:")
+        self.embed_instruction = env("RAG_EMBED_INSTRUCTION", "Represent the query for semantic retrieval:")
 
         # Chunking Configuration
-        self.chunk_size = int(os.getenv("RAG_CHUNK_SIZE", "1000"))
-        self.chunk_overlap = int(os.getenv("RAG_CHUNK_OVERLAP", "100"))
+        self.chunk_size = int(env("RAG_CHUNK_SIZE", "1000"))
+        self.chunk_overlap = int(env("RAG_CHUNK_OVERLAP", "100"))
 
         # Search Configuration
-        self.top_k = int(os.getenv("RAG_TOP_K", "50"))
-        self.rerank_k = int(os.getenv("RAG_RERANK_K", "5"))
+        self.top_k = int(env("RAG_TOP_K", "50"))
+        self.rerank_k = int(env("RAG_RERANK_K", "5"))
 
         # Reranker Configuration
-        self.rerank_model = os.getenv("RAG_RERANK_MODEL", "Qwen3-Reranker-0.6B")
-        self.rerank_enabled = os.getenv("RAG_RERANK_ENABLED", "false").lower() == "true"
+        self.rerank_model = env("RAG_RERANK_MODEL", "Qwen3-Reranker-0.6B")
+        self.rerank_enabled = env("RAG_RERANK_ENABLED", "false").lower() == "true"
 
         # Storage Configuration
-        self.keep_original_files = os.getenv("RAG_KEEP_ORIGINAL_FILES", "true").lower() == "true"
-        self.cold_storage_days = int(os.getenv("RAG_COLD_STORAGE_DAYS", "90"))
+        self.keep_original_files = env("RAG_KEEP_ORIGINAL_FILES", "true").lower() == "true"
+        self.cold_storage_days = int(env("RAG_COLD_STORAGE_DAYS", "90"))
 
         # File Storage Paths
         self.upload_dir = Path("uploads/roadmap_docs")
