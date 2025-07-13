@@ -2,13 +2,13 @@
 
 import json
 import logging
-import os
 import uuid
 from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import env
 from src.database.session import async_session_maker
 
 
@@ -32,9 +32,9 @@ class EmbeddingGenerator:
     def __init__(self) -> None:
         """Initialize embedding generator with configuration."""
         if not self._initialized:
-            self.model = os.getenv("RAG_EMBEDDING_MODEL", "text-embedding-3-small")
-            self.dimensions = int(os.getenv("RAG_EMBEDDING_OUTPUT_DIM")) if os.getenv("RAG_EMBEDDING_OUTPUT_DIM") else None
-            self.instruction = os.getenv("RAG_EMBED_INSTRUCTION", "Represent the query for semantic retrieval:")
+            self.model = env("RAG_EMBEDDING_MODEL", "text-embedding-3-small")
+            self.dimensions = int(env("RAG_EMBEDDING_OUTPUT_DIM")) if env("RAG_EMBEDDING_OUTPUT_DIM") else None
+            self.instruction = env("RAG_EMBED_INSTRUCTION", "Represent the query for semantic retrieval:")
             self._initialized = True
             # NO logging or API calls during init!
 

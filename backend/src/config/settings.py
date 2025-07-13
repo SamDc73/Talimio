@@ -1,33 +1,19 @@
 from functools import lru_cache
 
-from pydantic import Field
-from pydantic_settings import BaseSettings as PydanticBaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(PydanticBaseSettings):  # type: ignore[misc]
-    """Application settings."""
+class Settings(BaseSettings):
+    """Application settings - only define what needs validation."""
 
-    # API Settings
+    # Critical configs that need validation/type conversion
+    DATABASE_URL: str  # Required, validated
     DEBUG: bool = False
-    ENVIRONMENT: str = "development"
+    API_PORT: int = 8080
 
-    # Database Settings
-    DATABASE_URL: str = ""
-
-    # OpenAI Settings
-    openai_api_key: str | None = None
-
-    # LLM Model Settings
-    primary_llm_model: str = Field(default="openai/gpt-4o", description="Primary LLM model for content generation")
-
-    # Authentication Settings
-    jwt_secret_key: str = Field(default="any-random-string-for-now", description="JWT secret key")
-    jwt_algorithm: str = Field(default="HS256", description="JWT algorithm")
-    jwt_expire_hours: int = Field(default=24, description="JWT token expiration in hours")
-    auth_disabled: bool = Field(default=False, description="Disable authentication for single-user mode")
-
-    # Function Calling Settings - Always enabled
-    # Removed enable_function_calling - function calling is now always enabled
+    # Auth settings (need type conversion)
+    JWT_EXPIRE_HOURS: int = 24
+    AUTH_DISABLED: bool = False
 
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.local"),

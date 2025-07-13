@@ -2,11 +2,11 @@
 
 import asyncio
 import logging
-import os
 from pathlib import Path
 
 from sqlalchemy import text
 
+from src.config import env
 from src.database.engine import engine
 
 
@@ -133,7 +133,7 @@ async def ensure_rag_tables() -> None:
         logger.info("Creating rag_document_chunks table...")
 
         # Get configured embedding dimensions
-        embedding_dim = int(os.getenv("RAG_EMBEDDING_OUTPUT_DIM", "1024"))
+        embedding_dim = int(env("RAG_EMBEDDING_OUTPUT_DIM", "1024"))
 
         async with engine.begin() as conn:
             # Create the table with correct dimensions

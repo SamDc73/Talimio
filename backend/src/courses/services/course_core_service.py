@@ -3,7 +3,7 @@
 Handles CRUD operations for courses (roadmaps).
 """
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status

@@ -1,10 +1,10 @@
-import os
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.ai.constants import rag_config
+from src.config import env
 
 
 # from src.ai.rag.reprocess_books import reprocess_book  # TODO: Fix import
@@ -40,7 +40,7 @@ async def debug_config() -> dict:
     """Debug endpoint to check configuration."""
     try:
         return {
-            "env_var": os.getenv("RAG_EMBEDDING_OUTPUT_DIM"),
+            "env_var": env("RAG_EMBEDDING_OUTPUT_DIM"),
             "rag_config_dim": rag_config.embedding_dim,
             "rag_config_model": rag_config.embedding_model,
         }

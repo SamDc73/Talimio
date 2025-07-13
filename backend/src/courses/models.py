@@ -5,9 +5,10 @@ Based on the actual working roadmaps.bck models to match database schema.
 """
 
 import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 from sqlalchemy import (
+    TIMESTAMP,
     Boolean,
     DateTime,
     Enum,
@@ -16,7 +17,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    TIMESTAMP,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as SA_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship

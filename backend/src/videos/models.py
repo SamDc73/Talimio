@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime  # noqa: TC003
 from uuid import UUID as UUID_TYPE
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, func, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
