@@ -4,8 +4,10 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
+
+from src.storage.factory import get_storage_provider
 
 from .metadata import extract_metadata
 from .schemas import (
@@ -167,6 +169,9 @@ async def update_book_endpoint(book_id: UUID, book_data: BookUpdate) -> BookResp
     return await update_book(book_id, book_data)
 
 
+
+
+
 @router.put("/{book_id}/progress")
 async def update_book_progress_endpoint(
     book_id: UUID,
@@ -185,8 +190,8 @@ async def update_book_progress_post_endpoint(
     return await update_book_progress(book_id, progress_data)
 
 
-@router.get("/{book_id}/file")
-async def serve_book_file(book_id: UUID) -> FileResponse:
+@router.get("/{book_id}/file", response_model=None)
+async def serve_book_file(book_id: UUID) -> FileResponse | RedirectResponse:
     """Serve the actual book file for viewing."""
     book = await get_book(book_id)
 
@@ -196,19 +201,20 @@ async def serve_book_file(book_id: UUID) -> FileResponse:
             detail="Book file not found",
         )
 
-    # Ensure the file exists
-    file_path = Path(book.file_path)
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Book file not found on disk",
-        )
+    # Get storage provider and download URL
+    storage = get_storage_provider()
+    # The book.file_path now holds the storage key
+    url = await storage.get_download_url(book.file_path)
 
+    if url.startswith("http"):
+        # For R2 storage, redirect to the presigned URL
+        return RedirectResponse(url)
+    # For local storage, url is an absolute path
     # Determine media type based on file extension
     media_type = "application/pdf" if book.file_type == "pdf" else "application/epub+zip"
 
     return FileResponse(
-        path=str(file_path),
+        path=url,
         media_type=media_type,
         headers={"Content-Disposition": "inline"},
     )

@@ -33,7 +33,7 @@ from src.courses.schemas import (
     ModuleResponse,
 )
 from src.courses.services.interface import ICourseService
-from src.storage.lesson_dao import LessonDAO
+from src.courses.services.lesson_dao import LessonDAO
 
 
 class CourseService(ICourseService):
@@ -398,7 +398,7 @@ class CourseService(ICourseService):
 
         # Get lessons for this course
         lesson_data_list = []
-        from src.storage.lesson_dao import LessonDAO
+        from src.courses.services.lesson_dao import LessonDAO
 
         conn = await LessonDAO.get_connection()
         try:
