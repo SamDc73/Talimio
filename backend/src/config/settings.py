@@ -15,6 +15,17 @@ class Settings(BaseSettings):
     JWT_EXPIRE_HOURS: int = 24
     AUTH_DISABLED: bool = False
 
+    # Storage settings
+    STORAGE_PROVIDER: str = "local"  # "r2" or "local"
+    LOCAL_STORAGE_PATH: str = "backend/uploads"
+
+    # R2 Configuration (optional)
+    R2_ACCOUNT_ID: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET_NAME: str = "talimio-books"
+    R2_REGION: str = "auto"
+
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.local"),
         env_file_encoding="utf-8",

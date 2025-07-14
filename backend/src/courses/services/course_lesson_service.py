@@ -18,7 +18,7 @@ from src.courses.schemas import (
     LessonResponse,
     LessonUpdate,
 )
-from src.storage.lesson_dao import LessonDAO
+from src.courses.services.lesson_dao import LessonDAO
 
 
 class CourseLessonService:

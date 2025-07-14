@@ -16,6 +16,7 @@ from src.ai.rag.chunker import ChunkerFactory
 from src.ai.rag.ingest import DocumentProcessor
 from src.ai.rag.vector_store import VectorStore
 from src.database.session import async_session_maker
+from src.storage.factory import get_storage_provider
 from src.tagging.service import TaggingService
 
 
@@ -38,7 +39,6 @@ from .schemas import (
 
 
 DEFAULT_USER_ID = "default_user"  # For now, use default user
-UPLOAD_DIR = Path("backend/uploads/books")
 ALLOWED_EXTENSIONS = {".pdf", ".epub"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
@@ -182,11 +182,16 @@ async def create_book(book_data: BookCreate, file: UploadFile, background_tasks:
     try:
         file_content, file_extension, file_hash = await _validate_and_process_file(file)
         await _check_duplicate_book(file_hash)
-        file_path = _save_file_to_disk(file_content, file_extension)
+
+        # Generate a unique book ID
+        book_id = uuid4()
+
+        # Upload file using storage provider
+        storage_key = await _upload_file_to_storage(file_content, book_id, file_extension)
         metadata = _extract_file_metadata(file_content, file_extension)
 
         async with async_session_maker() as session:
-            book = _create_book_record(book_data, file_path, file_content, file_hash, metadata)
+            book = _create_book_record(book_data, storage_key, file_content, file_hash, metadata, book_id)
             session.add(book)
             await session.commit()
             await session.refresh(book)
@@ -258,13 +263,12 @@ async def _check_duplicate_book(file_hash: str) -> None:
             )
 
 
-def _save_file_to_disk(file_content: bytes, file_extension: str) -> Path:
-    """Save file to disk and return path."""
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    unique_filename = f"{uuid4()}{file_extension}"
-    file_path = UPLOAD_DIR / unique_filename
-    file_path.write_bytes(file_content)
-    return file_path
+async def _upload_file_to_storage(file_content: bytes, book_id: UUID, file_extension: str) -> str:
+    """Upload file to storage and return the storage key."""
+    storage = get_storage_provider()
+    storage_key = f"{book_id}{file_extension}"
+    await storage.upload(file_content, storage_key)
+    return storage_key
 
 
 def _extract_file_metadata(file_content: bytes, file_extension: str) -> "BookMetadata":
@@ -274,19 +278,21 @@ def _extract_file_metadata(file_content: bytes, file_extension: str) -> "BookMet
 
 def _create_book_record(
     book_data: BookCreate,
-    file_path: Path,
+    storage_key: str,
     file_content: bytes,
     file_hash: str,
     metadata: "BookMetadata",
+    book_id: UUID,
 ) -> Book:
     """Create book database record."""
     return Book(
+        id=book_id,
         title=book_data.title,
         subtitle=book_data.subtitle,
         author=book_data.author,
         description=book_data.description,
         isbn=book_data.isbn,
-        file_path=str(file_path),
+        file_path=storage_key,
         file_type=book_data.file_type,
         file_size=len(file_content),
         file_hash=file_hash,
@@ -505,49 +511,7 @@ async def update_book(book_id: UUID, book_data: BookUpdate) -> BookResponse:
         ) from e
 
 
-async def delete_book(book_id: UUID) -> None:
-    """
-    Delete a book and its associated file.
 
-    Args:
-        book_id: Book ID
-
-    Raises
-    ------
-        HTTPException: If book not found or deletion fails
-    """
-    try:
-        async with async_session_maker() as session:
-            query = select(Book).where(Book.id == book_id)
-            result = await session.execute(query)
-            book = result.scalar_one_or_none()
-
-            if not book:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Book {book_id} not found",
-                )
-
-            # Delete file if it exists
-            try:
-                file_path = Path(book.file_path)
-                if file_path.exists():
-                    file_path.unlink()
-            except Exception as file_error:
-                logging.warning(f"Failed to delete book file {book.file_path}: {file_error}")
-
-            # Delete book record (progress records will be cascade deleted)
-            await session.delete(book)
-            await session.commit()
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.exception(f"Error deleting book {book_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete book: {e!s}",
-        ) from e
 
 
 async def update_book_progress(book_id: UUID, progress_data: BookProgressUpdate) -> BookProgressResponse:

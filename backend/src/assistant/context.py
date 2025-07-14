@@ -11,8 +11,8 @@ from pydantic import BaseModel
 
 from src.books.service import get_book
 from src.courses.services.course_service import CourseService
+from src.courses.services.lesson_dao import LessonDAO
 from src.database.session import async_session_maker
-from src.storage.lesson_dao import LessonDAO
 from src.videos.service import VideoService
 
 
