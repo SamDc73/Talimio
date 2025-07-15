@@ -260,17 +260,21 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 		} else {
 			// This is a description-based chapter, sync to backend
 			try {
-				// Sync to backend for homepage progress
-				const currentCompleted = Object.entries(videoChapterCompletion)
-					.filter(([_, completed]) => completed)
-					.map(([chapterId, _]) => chapterId);
+				// Create a new Set with the latest completed chapters
+				const updatedCompletedSet = new Set(completedChapters);
+				if (isCompleted) {
+					updatedCompletedSet.delete(chapterId);
+				} else {
+					updatedCompletedSet.add(chapterId);
+				}
+				const updatedCompletedIds = Array.from(updatedCompletedSet);
 				const totalChapters = chapters.length;
 
 				if (totalChapters > 0) {
 					// Don't await - let it sync in background
 					syncVideoChapterProgress(
 						video.uuid,
-						currentCompleted,
+						updatedCompletedIds,
 						totalChapters,
 					).catch((error) => {
 						console.error("Failed to sync chapter progress to backend:", error);
