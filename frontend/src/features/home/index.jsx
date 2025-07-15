@@ -63,6 +63,7 @@ import {
 	getBookProgressStats,
 } from "@/services/tocProgressService";
 import { videoApi } from "@/services/videoApi";
+import useAppStore from "@/stores/useAppStore";
 
 const VARIANTS = {
 	course: {
@@ -221,6 +222,9 @@ const BaseCard = ({
 	const [showTagEditModal, setShowTagEditModal] = useState(false);
 	const [isArchiving, setIsArchiving] = useState(false);
 	const { toast } = useToast();
+	const videoProgress = useAppStore((state) =>
+		item.type === "youtube" ? state.videos.progress[item.uuid] : null,
+	);
 
 	// Always log archive state for debugging
 	console.log(`🃏 BaseCard for "${item.title}":`, {
@@ -257,7 +261,9 @@ const BaseCard = ({
 					// Otherwise, no progress yet
 					return 0;
 				})()
-			: item.progress || item.completionPercentage || 0;
+			: item.type === "youtube"
+				? videoProgress?.percentage || item.progress || 0
+				: item.progress || item.completionPercentage || 0;
 
 	const handleDeleteClick = () => {
 		setShowDeleteConfirm(true);
