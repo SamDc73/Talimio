@@ -5,7 +5,7 @@ from datetime import datetime  # noqa: TC003
 from uuid import UUID as UUID_TYPE
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.base import Base
@@ -33,6 +33,10 @@ class Video(Base):
     thumbnail_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array stored as text
+    transcript: Mapped[str | None] = mapped_column(Text, nullable=True)  # Full transcript content
+    transcript_data: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True
+    )  # Structured transcript data with segments (JSONB)
     transcript_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # RAG processing status
