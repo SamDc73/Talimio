@@ -5,11 +5,11 @@ from uuid import UUID
 import asyncpg
 
 
-class LessonDAO:
-    """Data Access Object for lesson-related database operations."""
+class LessonRepository:
+    """Repository for lesson-related database operations."""
 
     def __init__(self, session):
-        """Initialize LessonDAO with a database session."""
+        """Initialize LessonRepository with a database session."""
         self.session = session
 
     @staticmethod
