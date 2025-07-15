@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from src.books.service import get_book
 from src.courses.services.course_service import CourseService
-from src.courses.services.lesson_dao import LessonDAO
+from src.database.lesson_repository import LessonRepository
 from src.database.session import async_session_maker
 from src.videos.service import VideoService
 
@@ -276,15 +276,16 @@ class CourseContextStrategy(ContextRetriever):
                         module_lessons = module.lessons
                     else:
                         # If using nodes structure, get lessons from lesson DAO
-                        lesson_dao = LessonDAO(session)
+                        lesson_dao = LessonRepository(session)
                         try:
-                            lessons_response = await lesson_dao.get_lessons_by_roadmap_id(str(resource_id))
-                            if lessons_response and hasattr(lessons_response, "lessons"):
+                            # Use list_lessons instead since get_lessons_by_roadmap_id doesn't exist
+                            lessons_response = await lesson_dao.list_lessons()
+                            if lessons_response:
                                 # Filter lessons that belong to this module (simplified approach)
                                 module_lessons = [
                                     lesson
-                                    for lesson in lessons_response.lessons
-                                    if lesson.order >= module.order * 10 and lesson.order < (module.order + 1) * 10
+                                    for lesson in lessons_response
+                                    if lesson.get("order", 0) >= module.order * 10 and lesson.get("order", 0) < (module.order + 1) * 10
                                 ]
                         except Exception as e:
                             logging.warning(f"Could not fetch lessons for module {module.id}: {e}")

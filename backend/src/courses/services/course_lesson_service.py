@@ -18,7 +18,7 @@ from src.courses.schemas import (
     LessonResponse,
     LessonUpdate,
 )
-from src.courses.services.lesson_dao import LessonDAO
+from src.database.lesson_repository import LessonRepository
 
 
 class CourseLessonService:
@@ -44,7 +44,7 @@ class CourseLessonService:
 
         # Get lessons for this course
         lesson_data_list = []
-        conn = await LessonDAO.get_connection()
+        conn = await LessonRepository.get_connection()
         try:
             rows = await conn.fetch(
                 "SELECT * FROM lesson WHERE course_id = $1 ORDER BY created_at DESC", str(course_id)
@@ -79,7 +79,7 @@ class CourseLessonService:
         """Get a specific lesson, optionally generating if missing."""
         try:
             # Try to get existing lesson
-            lesson_data = await LessonDAO.get_by_id(lesson_id)
+            lesson_data = await LessonRepository.get_by_id(lesson_id)
             if lesson_data:
                 return LessonResponse(
                     id=lesson_data["id"],
@@ -117,7 +117,7 @@ class CourseLessonService:
         """Get a lesson without requiring module_id."""
         try:
             # Try to get existing lesson directly
-            lesson_data = await LessonDAO.get_by_id(lesson_id)
+            lesson_data = await LessonRepository.get_by_id(lesson_id)
             if lesson_data:
                 # Find which module this lesson belongs to by checking all modules
                 from src.courses.services.course_module_service import CourseModuleService
@@ -231,7 +231,7 @@ class CourseLessonService:
         }
 
         # Save lesson to database
-        saved_lesson = await LessonDAO.insert(lesson_data)
+        saved_lesson = await LessonRepository.insert(lesson_data)
 
         return LessonResponse(
             id=saved_lesson["id"],
@@ -284,8 +284,8 @@ class CourseLessonService:
         update_data = request.model_dump(exclude_unset=True)
         update_data["updated_at"] = datetime.now(UTC)
 
-        # Update using LessonDAO
-        lesson_data = await LessonDAO.update(lesson_id, update_data)
+        # Update using LessonRepository
+        lesson_data = await LessonRepository.update(lesson_id, update_data)
 
         if not lesson_data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
@@ -307,9 +307,9 @@ class CourseLessonService:
     ) -> bool:
         """Delete a lesson."""
         # Verify lesson exists first
-        lesson_data = await LessonDAO.get_by_id(lesson_id)
+        lesson_data = await LessonRepository.get_by_id(lesson_id)
         if not lesson_data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
-        # Delete using LessonDAO
-        return await LessonDAO.delete(lesson_id)
+        # Delete using LessonRepository
+        return await LessonRepository.delete(lesson_id)
