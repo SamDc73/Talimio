@@ -52,8 +52,14 @@ async def _process_video_rag_background(video_uuid: UUID) -> None:
             video.rag_status = "processing"
             await session.commit()
 
-            # Extract transcript using yt-dlp
-            transcript_content = await _extract_video_transcript(video.url)
+            # Use saved transcript or extract if not available
+            transcript_content = video.transcript
+            if not transcript_content:
+                transcript_content = await _extract_video_transcript(video.url)
+                # Save transcript if extracted successfully
+                if transcript_content:
+                    video.transcript = transcript_content
+                    await session.commit()
 
             if not transcript_content:
                 logger.warning(f"No transcript found for video {video_uuid}, skipping RAG processing")
@@ -70,7 +76,7 @@ async def _process_video_rag_background(video_uuid: UUID) -> None:
             chunks = chunker.chunk_text(transcript_content)
 
             # Store chunks with embeddings using doc_type='video' and doc_id=video.uuid
-            await vector_store.store_video_chunks_with_embeddings(session, video_uuid, chunks)
+            await vector_store.store_chunks_with_embeddings(session, video_uuid, chunks)
 
             # Update status to completed
             video.rag_status = "completed"
@@ -176,6 +182,8 @@ class VideoService:
             "thumbnail_url": video.thumbnail_url,
             "description": video.description,
             "tags": video.tags,
+            "transcript": video.transcript,
+            "transcript_data": video.transcript_data,
             "archived": video.archived,
             "archived_at": video.archived_at,
             "published_at": video.published_at,
@@ -203,6 +211,9 @@ class VideoService:
             video_dict["already_exists"] = True
             return VideoResponse.model_validate(video_dict)
 
+        # Extract transcript immediately (simple approach)
+        transcript_content = await _extract_video_transcript(video_data.url)
+
         # Create video record
         video = Video(
             youtube_id=video_info["youtube_id"],
@@ -215,6 +226,7 @@ class VideoService:
             description=video_info.get("description"),
             tags=json.dumps(video_info.get("tags", [])),
             published_at=video_info.get("published_at"),
+            transcript=transcript_content,
         )
 
         db.add(video)
@@ -662,15 +674,33 @@ class VideoService:
             raise ValueError(msg)
 
         try:
+            # Use JSONB data if available (fast path)
+            if video.transcript_data and video.transcript_data.get("segments"):
+                segments = [
+                    TranscriptSegment(
+                        start_time=seg["start"],
+                        end_time=seg["end"],
+                        text=seg["text"]
+                    )
+                    for seg in video.transcript_data["segments"]
+                ]
+                return VideoTranscriptResponse(
+                    video_uuid=video_uuid,
+                    segments=segments,
+                    total_segments=video.transcript_data.get("total_segments", len(segments)),
+                )
+
+            # Fallback: extract segments from video URL (backward compatibility)
+            logger.info(f"No JSONB data found for video {video_uuid}, extracting segments from URL")
             segments = await self._extract_video_transcript_segments(video.url)
             return VideoTranscriptResponse(
-                videoUuid=video_uuid,
+                video_uuid=video_uuid,
                 segments=segments,
-                totalSegments=len(segments),
+                total_segments=len(segments),
             )
         except Exception as e:
-            logger.exception(f"Failed to extract transcript segments for video {video_uuid}")
-            msg = f"Failed to extract transcript segments: {e!s}"
+            logger.exception(f"Failed to get transcript segments for video {video_uuid}")
+            msg = f"Failed to get transcript segments: {e!s}"
             raise ValueError(msg) from e
 
     async def _extract_video_transcript_segments(self, video_url: str) -> list[TranscriptSegment]:

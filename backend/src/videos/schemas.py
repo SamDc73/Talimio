@@ -20,6 +20,7 @@ class VideoBase(BaseModel):
     thumbnail_url: str | None = Field(None, max_length=500, alias="thumbnailUrl")
     description: str | None = None
     tags: list[str] | None = Field(default_factory=list)
+    transcript: str | None = None
     published_at: datetime | None = Field(None, alias="publishedAt")
 
 
@@ -157,6 +158,8 @@ class TranscriptSegment(BaseModel):
 
 class VideoTranscriptResponse(BaseModel):
     """Schema for video transcript response."""
+
+    model_config = ConfigDict(populate_by_name=True)
 
     video_uuid: str = Field(..., alias="videoUuid")
     segments: list[TranscriptSegment] = Field(..., description="List of transcript segments")
