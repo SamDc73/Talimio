@@ -559,10 +559,38 @@ async def update_book_progress(book_id: UUID, progress_data: BookProgressUpdate)
                 session.add(progress)
 
             # Update progress fields
+            # Update progress fields
             update_data = progress_data.model_dump(exclude_unset=True)
+            logger.info(f"Received progress update data: {update_data}")
             for field, value in update_data.items():
                 if field == "bookmarks" and value is not None:
                     setattr(progress, field, json.dumps(value))
+                elif field == "toc_progress" and value is not None:
+                    logger.info(f"Updating toc_progress. Received value: {value}")
+                    # Merge the new toc_progress with the existing one
+                    existing_toc_progress = progress.toc_progress or {}
+                    if isinstance(existing_toc_progress, str):
+                        try:
+                            existing_toc_progress = json.loads(existing_toc_progress)
+                        except json.JSONDecodeError:
+                            existing_toc_progress = {}
+
+                    logger.info(f"Existing toc_progress: {existing_toc_progress}")
+
+                    if isinstance(value, str):
+                        try:
+                            value = json.loads(value)
+                        except json.JSONDecodeError:
+                            value = {}
+
+                    if isinstance(existing_toc_progress, dict) and isinstance(value, dict):
+                        existing_toc_progress.update(value)
+                        setattr(progress, field, existing_toc_progress)
+                        logger.info(f"Merged toc_progress: {existing_toc_progress}")
+                    else:
+                        # Fallback if types are not as expected
+                        setattr(progress, field, value)
+                        logger.warning(f"toc_progress update fallback used. Value: {value}")
                 else:
                     setattr(progress, field, value)
 
@@ -573,6 +601,13 @@ async def update_book_progress(book_id: UUID, progress_data: BookProgressUpdate)
             if progress_data.current_page is not None and progress is not None:
                 current_total = progress.total_pages_read if progress.total_pages_read is not None else 0
                 progress.total_pages_read = max(current_total, progress_data.current_page)  # type: ignore[assignment]
+
+                # Calculate progress percentage based on current page vs total pages
+                # Only auto-calculate if progress_percentage wasn't explicitly provided
+                if progress_data.progress_percentage is None and book.total_pages and book.total_pages > 0:
+                    progress.progress_percentage = (progress_data.current_page / book.total_pages) * 100
+                    # Ensure it doesn't exceed 100%
+                    progress.progress_percentage = min(progress.progress_percentage, 100.0)
 
             await session.commit()
             await session.refresh(progress)
@@ -1000,3 +1035,92 @@ async def batch_update_chapter_statuses(book_id: UUID, updates: list[dict[str, s
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to batch update chapters: {e!s}",
         ) from e
+
+
+class BookService:
+    """Service for managing book progress and operations."""
+
+    def __init__(self, session: AsyncSession):
+        """Initialize the book service."""
+        self.session = session
+
+    async def get_book_progress(self, book_id: UUID) -> int:
+        """Calculate book progress based on completed chapters.
+
+        Returns percentage (0-100) of completed chapters.
+        This matches the ProgressCalculator interface.
+        """
+        from sqlalchemy import func
+
+        # Count total and completed chapters
+        stats_query = select(
+            func.count(BookChapter.id).label("total"),
+            func.count(BookChapter.id).filter(BookChapter.status == "completed").label("completed"),
+        ).where(BookChapter.book_id == book_id)
+
+        result = await self.session.execute(stats_query)
+        stats = result.first()
+
+        if not stats or stats.total == 0:
+            # Fallback to page-based progress if no chapters
+            query = (
+                select(BookProgress.progress_percentage)
+                .where(BookProgress.book_id == book_id)
+                .order_by(BookProgress.updated_at.desc())
+                .limit(1)
+            )
+            result = await self.session.execute(query)
+            progress = result.scalar()
+            return int(progress or 0)
+
+        return int((stats.completed / stats.total) * 100)
+
+    async def get_chapter_completion_stats(self, book_id: UUID) -> dict:
+        """Get detailed chapter completion statistics.
+
+        Returns statistics about chapter completion for the book.
+        """
+        from sqlalchemy import func
+
+        # Count total and completed chapters
+        stats_query = select(
+            func.count(BookChapter.id).label("total"),
+            func.count(BookChapter.id).filter(BookChapter.status == "completed").label("completed"),
+            func.count(BookChapter.id).filter(BookChapter.status == "in_progress").label("in_progress"),
+        ).where(BookChapter.book_id == book_id)
+
+        result = await self.session.execute(stats_query)
+        stats = result.first()
+
+        if not stats or stats.total == 0:
+            # Fallback to page-based progress if no chapters
+            query = (
+                select(BookProgress.progress_percentage)
+                .where(BookProgress.book_id == book_id)
+                .order_by(BookProgress.updated_at.desc())
+                .limit(1)
+            )
+            result = await self.session.execute(query)
+            progress = result.scalar() or 0
+
+            return {
+                "total_chapters": 0,
+                "completed_chapters": 0,
+                "in_progress_chapters": 0,
+                "not_started_chapters": 0,
+                "completion_percentage": int(progress),
+                "uses_page_based_progress": True,
+            }
+
+        completed_chapters = stats.completed
+        in_progress_chapters = stats.in_progress
+        not_started_chapters = stats.total - completed_chapters - in_progress_chapters
+
+        return {
+            "total_chapters": stats.total,
+            "completed_chapters": completed_chapters,
+            "in_progress_chapters": in_progress_chapters,
+            "not_started_chapters": not_started_chapters,
+            "completion_percentage": int((completed_chapters / stats.total) * 100) if stats.total > 0 else 0,
+            "uses_page_based_progress": False,
+        }

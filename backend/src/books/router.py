@@ -247,6 +247,7 @@ async def update_book_chapter_status_endpoint(
 ) -> BookChapterResponse:
     """Update the status of a book chapter."""
     return await update_book_chapter_status(book_id, chapter_id, status_data.status)
+    return await update_book_chapter_status(book_id, chapter_id, status_data.status)
 
 
 @router.put("/{book_id}/chapters/batch-status")

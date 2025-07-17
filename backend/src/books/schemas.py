@@ -93,6 +93,7 @@ class BookProgressBase(BaseModel):
     status: str = Field(default="not_started", pattern="^(not_started|reading|completed|paused)$")
     notes: str | None = None
     bookmarks: list[int] = Field(default_factory=list)
+    toc_progress: dict[str, bool] = Field(default_factory=dict, alias="tocProgress")  # Maps section IDs to completion status
 
 
 class BookProgressUpdate(BaseModel):
@@ -104,6 +105,7 @@ class BookProgressUpdate(BaseModel):
     status: str | None = Field(None, pattern="^(not_started|reading|completed|paused)$")
     notes: str | None = None
     bookmarks: list[int] | None = None
+    toc_progress: dict[str, bool] | None = Field(None, alias="tocProgress")  # Maps section IDs to completion status
 
 
 class BookProgressResponse(BookProgressBase):
@@ -136,6 +138,23 @@ class BookProgressResponse(BookProgressBase):
         return []
 
     updated_at: datetime = Field(alias="updatedAt")
+
+    @field_validator("toc_progress", mode="before")
+    @classmethod
+    def validate_toc_progress(cls, v: str | dict[str, bool] | None) -> dict[str, bool]:
+        """Convert toc_progress from JSON string to dict."""
+        if v is None:
+            return {}
+        if isinstance(v, str):
+            import json
+
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        if isinstance(v, dict):
+            return v
+        return {}
 
     @property
     def bookmarks_list(self) -> list[int]:

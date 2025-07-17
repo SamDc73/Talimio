@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID  # noqa: N811
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -77,6 +77,7 @@ class BookProgress(Base):
     status: Mapped[str] = mapped_column(String(20), default="not_started")  # not_started, reading, completed, paused
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     bookmarks: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string of page numbers/locations
+    toc_progress: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=dict)  # Maps section IDs to completion status
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

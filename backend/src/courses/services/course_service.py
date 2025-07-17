@@ -20,7 +20,6 @@ from sqlalchemy.types import String
 from src.ai.client import AIError, ModelManager, create_lesson_body
 from src.ai.memory import Mem0Wrapper
 from src.config import env
-from src.core.progress_calculator import ProgressCalculator
 from src.core.user_utils import resolve_user_id
 from src.courses.models import LessonProgress as Progress, Node, Roadmap
 from src.courses.schemas import (
@@ -35,6 +34,7 @@ from src.courses.schemas import (
     LessonUpdate,
     ModuleResponse,
 )
+from src.courses.services.course_progress_service import CourseProgressService
 from src.courses.services.interface import ICourseService
 from src.database.lesson_repository import LessonRepository
 
@@ -712,9 +712,9 @@ class CourseService(ICourseService):
         if not course:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
-        # Use the ProgressCalculator for accurate progress calculation
-        progress_calc = ProgressCalculator(self.session)
-        completion_percentage = await progress_calc.get_course_progress(course_id, effective_user_id)
+        # Use the CourseProgressService for accurate progress calculation
+        progress_service = CourseProgressService(self.session, effective_user_id)
+        completion_percentage = await progress_service.get_course_progress_percentage(course_id, effective_user_id)
 
         # Get modules for additional stats
         modules = await self.list_modules(course_id, effective_user_id)
