@@ -12,10 +12,12 @@ from src.content.schemas import (
     BookContent,
     ContentListResponse,
     ContentType,
+    CourseContent,
     FlashcardContent,
     RoadmapContent,
     YoutubeContent,
 )
+from src.core.user_context import get_effective_user_id
 from src.database.session import async_session_maker
 
 
@@ -38,6 +40,7 @@ async def list_content_fast(
     page: int = 1,
     page_size: int = 20,
     include_archived: bool = False,
+    current_user_id: str | None = None,
 ) -> ContentListResponse:
     """
     Ultra-fast content listing using raw SQL queries.
@@ -50,20 +53,34 @@ async def list_content_fast(
     """
     offset = (page - 1) * page_size
     search_term = f"%{search}%" if search else None
+    # For content listing, we don't require authentication
+    # If no user is provided, we'll show content with 0% progress
+    try:
+        effective_user_id = get_effective_user_id(current_user_id)
+    except ValueError:
+        # No user authenticated in multi-user mode - show content without progress
+        effective_user_id = None
+    # For content listing, we don't require authentication
+    # If no user is provided, we'll show content with 0% progress
+    try:
+        effective_user_id = get_effective_user_id(current_user_id)
+    except ValueError:
+        # No user authenticated in multi-user mode - show content without progress
+        effective_user_id = None
 
     async with async_session_maker() as session:
         logger.info(
             f"🔍 list_content_fast called with include_archived={include_archived}, search={search}, content_type={content_type}"
         )
 
-        queries = _build_content_queries(content_type, search, include_archived)
+        queries, needs_user_id = _build_content_queries(content_type, search, include_archived, effective_user_id)
 
         if not queries:
             return ContentListResponse(items=[], total=0, page=page, page_size=page_size)
 
         combined_query = " UNION ALL ".join(f"({q})" for q in queries)
-        total = await _get_total_count(session, combined_query, search_term)
-        rows = await _get_paginated_results(session, combined_query, search_term, page_size, offset)
+        total = await _get_total_count(session, combined_query, search_term, effective_user_id)
+        rows = await _get_paginated_results(session, combined_query, search_term, page_size, offset, effective_user_id)
         items = _transform_rows_to_items(rows)
 
         # Log archive status of returned items
@@ -84,10 +101,11 @@ async def list_content_fast(
 
 
 def _build_content_queries(
-    content_type: ContentType | None, search: str | None, include_archived: bool = False
-) -> list[str]:
-    """Build SQL queries for different content types."""
+    content_type: ContentType | None, search: str | None, include_archived: bool = False, user_id: str | None = None
+) -> tuple[list[str], bool]:
+    """Build SQL queries for different content types. Returns queries and whether user_id is needed."""
     queries = []
+    needs_user_id = False
 
     if not content_type or content_type == ContentType.YOUTUBE:
         queries.append(_get_video_query(search, include_archived))
@@ -99,9 +117,10 @@ def _build_content_queries(
         queries.append(_get_book_query(search, include_archived))
 
     if not content_type or content_type in (ContentType.ROADMAP, ContentType.COURSE):
-        queries.append(_get_roadmap_query(search, include_archived))
+        queries.append(_get_roadmap_query(search, include_archived, user_id))
+        needs_user_id = True
 
-    return queries
+    return queries, needs_user_id
 
 
 def _get_video_query(search: str | None, include_archived: bool = False) -> str:
@@ -136,7 +155,7 @@ def _get_youtube_query(search: str | None, archived_only: bool = False, include_
             SELECT
                 video_uuid,
                 COUNT(*) as total_chapters,
-                COUNT(CASE WHEN status = 'done' THEN 1 END) as completed_chapters
+                COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_chapters
             FROM video_chapters
             GROUP BY video_uuid
         ) chapter_stats ON v.uuid = chapter_stats.video_uuid
@@ -151,7 +170,7 @@ def _get_youtube_query(search: str | None, archived_only: bool = False, include_
     # If include_archived is True, don't add any archive filter (show all)
 
     if search:
-        where_conditions.append("(v.title ILIKE %(search)s OR v.channel ILIKE %(search)s)")
+        where_conditions.append("(v.title ILIKE :search OR v.channel ILIKE :search)")
 
     if where_conditions:
         query += " WHERE " + " AND ".join(where_conditions)
@@ -193,7 +212,7 @@ def _get_flashcards_query(search: str | None, archived_only: bool = False, inclu
     # If include_archived is True, don't add any archive filter (show all)
 
     if search:
-        where_conditions.append("(name ILIKE %(search)s OR description ILIKE %(search)s)")
+        where_conditions.append("(name ILIKE :search OR description ILIKE :search)")
 
     if where_conditions:
         query += " WHERE " + " AND ".join(where_conditions)
@@ -247,7 +266,7 @@ def _get_books_query(search: str | None, archived_only: bool = False, include_ar
     # If include_archived is True, don't add any archive filter (show all)
 
     if search:
-        where_conditions.append("(b.title ILIKE %(search)s OR b.author ILIKE %(search)s)")
+        where_conditions.append("(b.title ILIKE :search OR b.author ILIKE :search)")
 
     if where_conditions:
         query += " WHERE " + " AND ".join(where_conditions)
@@ -255,47 +274,72 @@ def _get_books_query(search: str | None, archived_only: bool = False, include_ar
     return query
 
 
-def _get_roadmap_query(search: str | None, include_archived: bool = False) -> str:
+def _get_roadmap_query(search: str | None, include_archived: bool = False, user_id: str | None = None) -> str:
     """Get SQL query for roadmaps."""
-    return _get_roadmaps_query(search, archived_only=False, include_archived=include_archived)
+    return _get_roadmaps_query(search, archived_only=False, include_archived=include_archived, user_id=user_id)
 
 
-def _get_roadmaps_query(search: str | None, archived_only: bool = False, include_archived: bool = False) -> str:
-    """Get SQL query for roadmaps."""
-    query = """
-        SELECT
-            r.id::text,
-            r.title,
-            COALESCE(r.description, '') as description,
-            'roadmap' as type,
-            COALESCE(r.updated_at, r.created_at) as last_accessed,
-            r.created_at,
-            '[]' as tags,
-            '' as extra1,
-            '' as extra2,
-            CASE
-                -- Count total lessons (nodes with parent_id is not null, i.e., leaf nodes)
-                WHEN (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL) > 0
-                THEN (
-                    -- Count completed lessons from progress table
-                    (SELECT COUNT(DISTINCT p.lesson_id)
-                     FROM progress p
-                     WHERE p.course_id = r.id::text
-                       AND p.status = 'done') * 100 /
-                    (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL)
-                )
-                ELSE 0
-            END as progress,
-            -- Total lessons (leaf nodes)
-            (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL) as count1,
-            -- Completed lessons
-            (SELECT COUNT(DISTINCT p.lesson_id)
-             FROM progress p
-             WHERE p.course_id = r.id::text
-               AND p.status = 'done') as count2,
-            COALESCE(r.archived, false) as archived
-        FROM roadmaps r
-    """
+def _get_roadmaps_query(search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: str | None = None) -> str:
+    """Get SQL query for roadmaps with user-specific progress."""
+    # When user_id is None, return 0 progress
+    if user_id is None:
+        query = """
+            SELECT
+                r.id::text,
+                r.title,
+                COALESCE(r.description, '') as description,
+                'roadmap' as type,
+                COALESCE(r.updated_at, r.created_at) as last_accessed,
+                r.created_at,
+                '[]' as tags,
+                '' as extra1,
+                '' as extra2,
+                0 as progress,
+                -- Total lessons (leaf nodes)
+                (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL) as count1,
+                0 as count2,
+                COALESCE(r.archived, false) as archived
+            FROM roadmaps r
+        """
+    else:
+        query = """
+            SELECT
+                r.id::text,
+                r.title,
+                COALESCE(r.description, '') as description,
+                'roadmap' as type,
+                COALESCE(r.updated_at, r.created_at) as last_accessed,
+                r.created_at,
+                '[]' as tags,
+                '' as extra1,
+                '' as extra2,
+                CASE
+                    -- Count total lessons (nodes with parent_id is not null, i.e., leaf nodes)
+                    WHEN (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL) > 0
+                    THEN (
+                        -- Count completed lessons from progress table (updated to match ProgressCalculator)
+                        (SELECT COUNT(DISTINCT p.lesson_id)
+                         FROM progress p
+                         JOIN nodes n ON n.id::text = p.lesson_id
+                         WHERE n.roadmap_id = r.id
+                           AND p.status = 'completed'
+                           AND p.user_id = :user_id) * 100 /
+                        (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL)
+                    )
+                    ELSE 0
+                END as progress,
+                -- Total lessons (leaf nodes)
+                (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL) as count1,
+                -- Completed lessons (updated to match ProgressCalculator)
+                (SELECT COUNT(DISTINCT p.lesson_id)
+                 FROM progress p
+                 JOIN nodes n ON n.id::text = p.lesson_id
+                 WHERE n.roadmap_id = r.id
+                   AND p.status = 'completed'
+                   AND p.user_id = :user_id) as count2,
+                COALESCE(r.archived, false) as archived
+            FROM roadmaps r
+        """
 
     # Build WHERE clause
     where_conditions = []
@@ -306,7 +350,7 @@ def _get_roadmaps_query(search: str | None, archived_only: bool = False, include
     # If include_archived is True, don't add any archive filter (show all)
 
     if search:
-        where_conditions.append("(r.title ILIKE %(search)s OR r.description ILIKE %(search)s)")
+        where_conditions.append("(r.title ILIKE :search OR r.description ILIKE :search)")
 
     if where_conditions:
         query += " WHERE " + " AND ".join(where_conditions)
@@ -314,12 +358,18 @@ def _get_roadmaps_query(search: str | None, archived_only: bool = False, include
     return query
 
 
-async def _get_total_count(session: AsyncSession, combined_query: str, search_term: str | None) -> int:
+async def _get_total_count(session: AsyncSession, combined_query: str, search_term: str | None, user_id: str | None = None) -> int:
     """Get total count of results."""
     count_query = f"SELECT COUNT(*) FROM ({combined_query}) as combined"
+    params = {}
+    if search_term:
+        params["search"] = search_term
+    # Only include user_id if it's not None (since we build different queries based on user_id)
+    if user_id is not None:
+        params["user_id"] = user_id
     count_result = await session.execute(
         text(count_query),
-        {"search": search_term} if search_term else {},
+        params,
     )
     return count_result.scalar() or 0
 
@@ -330,6 +380,7 @@ async def _get_paginated_results(
     search_term: str | None,
     page_size: int,
     offset: int,
+    user_id: str | None = None,
 ) -> list[Any]:
     """Get paginated results."""
     final_query = f"""
@@ -341,6 +392,9 @@ async def _get_paginated_results(
     params: dict[str, Any] = {"limit": page_size, "offset": offset}
     if search_term:
         params["search"] = search_term
+    # Only include user_id if it's not None (since we build different queries based on user_id)
+    if user_id is not None:
+        params["user_id"] = user_id
 
     result = await session.execute(text(final_query), params)
     return list(result.all())
@@ -413,7 +467,8 @@ def _create_book_content(row: Any) -> BookContent:
 
 def _create_roadmap_content(row: Any) -> RoadmapContent:
     """Create RoadmapContent from row data."""
-    return RoadmapContent(
+    # Return CourseContent instead of RoadmapContent for frontend compatibility
+    return CourseContent(
         id=row.id,
         title=row.title,
         description=row.description,
@@ -526,6 +581,7 @@ async def list_archived_content(
     content_type: ContentType | None = None,
     page: int = 1,
     page_size: int = 20,
+    current_user_id: str | None = None,
 ) -> ContentListResponse:
     """
     List only archived content across different types.
@@ -534,6 +590,13 @@ async def list_archived_content(
     """
     offset = (page - 1) * page_size
     search_term = f"%{search}%" if search else None
+    # For content listing, we don't require authentication
+    # If no user is provided, we'll show content with 0% progress
+    try:
+        effective_user_id = get_effective_user_id(current_user_id)
+    except ValueError:
+        # No user authenticated in multi-user mode - show content without progress
+        effective_user_id = None
 
     # Construct the combined query with archived filter
     if content_type:
@@ -544,7 +607,7 @@ async def list_archived_content(
         elif content_type == ContentType.BOOK:
             combined_query = _get_books_query(search, archived_only=True)
         elif content_type == ContentType.ROADMAP:
-            combined_query = _get_roadmaps_query(search, archived_only=True)
+            combined_query = _get_roadmaps_query(search, archived_only=True, user_id=effective_user_id)
         else:
             msg = f"Unsupported content type: {content_type}"
             raise ValueError(msg)
@@ -557,13 +620,13 @@ async def list_archived_content(
             UNION ALL
             {_get_books_query(search, archived_only=True)}
             UNION ALL
-            {_get_roadmaps_query(search, archived_only=True)}
+            {_get_roadmaps_query(search, archived_only=True, user_id=effective_user_id)}
         """
 
     async with async_session_maker() as session:
         # Get total count and paginated results
-        total = await _get_total_count(session, combined_query, search_term)
-        rows = await _get_paginated_results(session, combined_query, search_term, page_size, offset)
+        total = await _get_total_count(session, combined_query, search_term, effective_user_id)
+        rows = await _get_paginated_results(session, combined_query, search_term, page_size, offset, effective_user_id)
 
         # Transform rows to content items
         items = _transform_rows_to_items(rows)
@@ -690,14 +753,11 @@ async def delete_content(content_type: ContentType, content_id: str) -> None:
                     )
                     DELETE FROM nodes WHERE id IN (SELECT id FROM node_hierarchy)
                 """),
-                {"roadmap_id": uuid_id}
+                {"roadmap_id": uuid_id},
             )
 
             # Now delete the roadmap itself
-            await session.execute(
-                text("DELETE FROM roadmaps WHERE id = :roadmap_id"),
-                {"roadmap_id": uuid_id}
-            )
+            await session.execute(text("DELETE FROM roadmaps WHERE id = :roadmap_id"), {"roadmap_id": uuid_id})
         else:
             # Delete using ORM to ensure proper cascade deletion for other content types
             await session.delete(content_obj)

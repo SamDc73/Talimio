@@ -545,7 +545,7 @@ class VideoService:
             raise ValueError(msg)
 
         # Validate status
-        valid_statuses = ["not_started", "in_progress", "done"]
+        valid_statuses = ["not_started", "in_progress", "completed"]
         if status not in valid_statuses:
             msg = f"Invalid status '{status}'. Valid statuses are: {', '.join(valid_statuses)}"
             raise ValueError(msg)
@@ -561,7 +561,7 @@ class VideoService:
         all_chapters = all_chapters_result.scalars().all()
 
         if all_chapters:
-            completed_chapters = len([ch for ch in all_chapters if ch.status == "done"])
+            completed_chapters = len([ch for ch in all_chapters if ch.status == "completed"])
             total_chapters = len(all_chapters)
             completion_percentage = (completed_chapters / total_chapters) * 100
 

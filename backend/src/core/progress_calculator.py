@@ -20,30 +20,38 @@ class ProgressCalculator:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_course_progress(self, course_id: UUID) -> int:
+    async def get_course_progress(self, course_id: UUID, user_id: UUID) -> int:
         """Calculate course progress based on completed lessons.
-        
+
         Returns percentage (0-100) of completed lessons.
         """
         # Count total lessons (nodes with parent_id)
-        total_query = select(func.count(Node.id)).where(
-            Node.roadmap_id == course_id,
-            Node.parent_id.is_not(None)
-        )
+        total_query = select(func.count(Node.id)).where(Node.roadmap_id == course_id, Node.parent_id.is_not(None))
         total_result = await self.session.execute(total_query)
         total_lessons = total_result.scalar() or 0
 
         if total_lessons == 0:
             return 0
 
-        # Count completed lessons from Progress table
-        completed_query = select(func.count(LessonProgress.id)).select_from(
-            LessonProgress
-        ).join(
-            Node, func.cast(Node.id, String) == LessonProgress.lesson_id
-        ).where(
-            Node.roadmap_id == course_id,
-            LessonProgress.status == "completed"
+        # Create a subquery that gets the latest status per lesson
+        latest_status_subquery = (
+            select(
+                LessonProgress.lesson_id,
+                LessonProgress.status,
+                func.row_number()
+                .over(partition_by=LessonProgress.lesson_id, order_by=LessonProgress.updated_at.desc())
+                .label("rn"),
+            )
+            .select_from(LessonProgress)
+            .join(Node, func.cast(Node.id, String) == LessonProgress.lesson_id)
+            .where(Node.roadmap_id == course_id, LessonProgress.user_id == user_id)
+        ).subquery()
+
+        # Count completed lessons (only the latest status per lesson)
+        completed_query = (
+            select(func.count())
+            .select_from(latest_status_subquery)
+            .where(latest_status_subquery.c.rn == 1, latest_status_subquery.c.status == "completed")
         )
         completed_result = await self.session.execute(completed_query)
         completed_lessons = completed_result.scalar() or 0
@@ -52,13 +60,13 @@ class ProgressCalculator:
 
     async def get_video_progress(self, video_id: UUID) -> int:
         """Calculate video progress based on completed chapters.
-        
+
         Returns percentage (0-100) of completed chapters.
         """
         # Count total and completed chapters
         stats_query = select(
             func.count(VideoChapter.id).label("total"),
-            func.count(VideoChapter.id).filter(VideoChapter.status == "done").label("completed")
+            func.count(VideoChapter.id).filter(VideoChapter.status == "completed").label("completed"),
         ).where(VideoChapter.video_uuid == video_id)
 
         result = await self.session.execute(stats_query)
@@ -75,13 +83,13 @@ class ProgressCalculator:
 
     async def get_book_progress(self, book_id: UUID) -> int:
         """Calculate book progress based on completed chapters.
-        
+
         Returns percentage (0-100) of completed chapters.
         """
         # Count total and completed chapters
         stats_query = select(
             func.count(BookChapter.id).label("total"),
-            func.count(BookChapter.id).filter(BookChapter.status == "done").label("completed")
+            func.count(BookChapter.id).filter(BookChapter.status == "completed").label("completed"),
         ).where(BookChapter.book_id == book_id)
 
         result = await self.session.execute(stats_query)
@@ -89,9 +97,12 @@ class ProgressCalculator:
 
         if not stats or stats.total == 0:
             # Fallback to page-based progress if no chapters
-            query = select(BookProgress.progress_percentage).where(
-                BookProgress.book_id == book_id
-            ).order_by(BookProgress.updated_at.desc()).limit(1)
+            query = (
+                select(BookProgress.progress_percentage)
+                .where(BookProgress.book_id == book_id)
+                .order_by(BookProgress.updated_at.desc())
+                .limit(1)
+            )
             result = await self.session.execute(query)
             progress = result.scalar()
             return int(progress or 0)
@@ -100,7 +111,7 @@ class ProgressCalculator:
 
     async def get_flashcard_progress(self, deck_id: UUID) -> int:
         """Calculate flashcard progress.
-        
+
         Currently returns 0 as flashcards use a different progress model
         based on due/overdue cards calculated on the frontend.
         """
@@ -109,11 +120,11 @@ class ProgressCalculator:
 
     async def get_content_progress(self, content_type: str, content_id: str | UUID) -> int:
         """Get progress for any content type.
-        
+
         Args:
             content_type: One of 'course', 'book', 'youtube', 'flashcards'
             content_id: The UUID of the content (as string or UUID)
-            
+
         Returns
         -------
             Progress percentage (0-100)
@@ -138,10 +149,10 @@ class ProgressCalculator:
 
     async def bulk_get_progress(self, items: list[tuple[str, UUID]]) -> dict[str, int]:
         """Get progress for multiple items efficiently.
-        
+
         Args:
             items: List of (content_type, content_id) tuples
-            
+
         Returns
         -------
             Dictionary mapping "type:id" to progress percentage

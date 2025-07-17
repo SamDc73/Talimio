@@ -147,7 +147,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 					// Update completed chapters based on chapter status from API
 					const completed = {};
 					for (const chapter of chapters) {
-						if (chapter.status === "done") {
+						if (chapter.status === "completed") {
 							completed[chapter.id] = true;
 						}
 					}
@@ -230,7 +230,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 	const toggleChapterCompletion = async (chapter) => {
 		const chapterId = chapter.id || chapter.chapter_id;
 		const isCompleted = completedChapters.has(chapterId);
-		const newStatus = isCompleted ? "not_started" : "done";
+		const newStatus = isCompleted ? "not_started" : "completed";
 
 		// Optimistic update to store
 		setVideoChapterStatus(video.uuid, chapterId, !isCompleted);

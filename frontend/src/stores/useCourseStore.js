@@ -288,7 +288,7 @@ const useCourseStore = create(
 							lastUpdated: now,
 							...(status === "in_progress" &&
 								!currentStatus.startedAt && { startedAt: now }),
-							...(status === "done" && { completedAt: now }),
+							...(status === "completed" && { completedAt: now }),
 						};
 
 						// Update progress tracking
@@ -347,7 +347,7 @@ const useCourseStore = create(
 					if (lessons.length === 0) return;
 
 					const completedLessons = Object.values(moduleProgressData).filter(
-						(lesson) => lesson.status === "done",
+						(lesson) => lesson.status === "completed",
 					).length;
 
 					const inProgressLessons = Object.values(moduleProgressData).filter(

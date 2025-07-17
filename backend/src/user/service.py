@@ -55,20 +55,28 @@ async def _save_user_preferences(user_id: str, preferences: UserPreferences) -> 
         return False
 
 
-async def create_user(user: UserCreate):
+async def create_user(user: UserCreate) -> dict:
     """Create a new user."""
+    # For now, we'll just return a dummy user ID
+    return {"id": "a-fake-user-id"}
 
 
-async def get_user(user_id: str):
+async def get_user(user_id: str) -> dict:
     """Get a user by ID."""
+    # For now, we'll just return a dummy user
+    return {"id": user_id, "email": "test@example.com", "name": "Test User"}
 
 
-async def update_user(user_id: str, user: UserUpdate):
+async def update_user(user_id: str, user: UserUpdate) -> dict:
     """Update a user."""
+    # For now, we'll just return the updated user
+    return {"id": user_id, "email": user.email, "name": user.name}
 
 
 async def delete_user(user_id: str):
     """Delete a user."""
+    # For now, we'll just log the deletion
+    logger.info(f"User {user_id} deleted.")
 
 
 async def get_user_settings(user_id: str) -> UserSettingsResponse:

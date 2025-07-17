@@ -143,7 +143,7 @@ export function useLessonData(courseId, moduleId, lessonId) {
 		setActive: () => courseStore.setActiveLesson(lessonId),
 
 		// Status helpers
-		isCompleted: status.status === "done",
+		isCompleted: status.status === "completed",
 		isInProgress: status.status === "in_progress",
 		isNotStarted: status.status === "not_started",
 	};

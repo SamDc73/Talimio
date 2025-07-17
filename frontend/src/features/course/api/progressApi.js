@@ -392,7 +392,7 @@ export function convertLegacyProgressToCourse(
 		module_id: moduleId,
 		course_id: courseId,
 		status:
-			legacyProgress.status === "done"
+			legacyProgress.status === "completed"
 				? "completed"
 				: legacyProgress.status === "in_progress"
 					? "in_progress"
@@ -408,8 +408,7 @@ export function convertLegacyProgressToCourse(
 export function convertCourseProgressToLegacy(courseProgress) {
 	return {
 		nodeId: courseProgress.lesson_id,
-		status:
-			courseProgress.status === "completed" ? "done" : courseProgress.status,
+		status: courseProgress.status,
 		createdAt: courseProgress.created_at,
 		updatedAt: courseProgress.updated_at,
 	};
