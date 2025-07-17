@@ -105,7 +105,6 @@ const STATES = [
 		txt: "text-overdue-text",
 		icon: TimerOff,
 		msg: "You're late – jump back in",
-		btn: true,
 	},
 	{
 		key: "today",
@@ -557,10 +556,12 @@ function formatDuration(seconds) {
 
 	const hours = Math.floor(seconds / 3600);
 	const minutes = Math.floor((seconds % 3600) / 60);
-	const secs = seconds % 60;
+	const secs = Math.round(seconds % 60);
 
 	if (hours > 0) {
-		return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+		return `${hours}:${minutes.toString().padStart(2, "0")}:${secs
+			.toString()
+			.padStart(2, "0")}`;
 	}
 	return `${minutes}:${secs.toString().padStart(2, "0")}`;
 }
@@ -676,7 +677,33 @@ export default function HomePage() {
 					}),
 				);
 
-				setContentItems(transformedContent);
+				const courseItems = transformedContent.filter(
+					(item) => item.type === "course",
+				);
+				if (courseItems.length > 0) {
+					const courseProgressPromises = courseItems.map((course) =>
+						api.get(`/courses/${course.id}/progress`),
+					);
+					const courseProgresses = await Promise.all(courseProgressPromises);
+
+					const coursesWithProgress = courseItems.map((course, index) => ({
+						...course,
+						progress: courseProgresses[index].completion_percentage,
+					}));
+
+					const contentWithProgress = transformedContent.map((item) => {
+						if (item.type === "course") {
+							const courseWithProgress = coursesWithProgress.find(
+								(c) => c.id === item.id,
+							);
+							return courseWithProgress || item;
+						}
+						return item;
+					});
+					setContentItems(contentWithProgress);
+				} else {
+					setContentItems(transformedContent);
+				}
 
 				// Map the filter options with their icons
 				setFilterOptions(
@@ -919,7 +946,7 @@ export default function HomePage() {
 	};
 
 	// Handle roadmap creation success
-	const _handleRoadmapCreated = async (_newRoadmap) => {
+	const handleRoadmapCreated = async (_newRoadmap) => {
 		try {
 			// Refresh content list to include the new roadmap
 			const data = await fetchContentData();
@@ -1299,7 +1326,9 @@ export default function HomePage() {
 
 			toast({
 				title: "Deck Created!",
-				description: `"${newDeckTitle}" has been created with ${newCards.split("\n").filter(Boolean).length} cards.`,
+				description: `"${newDeckTitle}" has been created with ${
+					newCards.split("\n").filter(Boolean).length
+				} cards.`,
 			});
 
 			setNewDeckTitle("");
@@ -1614,7 +1643,7 @@ export default function HomePage() {
 																				/>
 																				<Label
 																					htmlFor={`sort-${option.id}`}
-																					className="flex items-center cursor-pointer"
+																					className="cursor-pointer"
 																				>
 																					{option.icon}
 																					{option.label}
@@ -1879,6 +1908,81 @@ export default function HomePage() {
 							</div>
 						)}
 
+						{/* FAB */}
+						<div className="fixed bottom-8 right-8 z-50">
+							<AnimatePresence>
+								{isFabExpanded && (
+									<motion.div
+										initial={{ opacity: 0, y: 20 }}
+										animate={{ opacity: 1, y: 0 }}
+										exit={{ opacity: 0, y: 20 }}
+										transition={{ duration: 0.2 }}
+										className="flex flex-col items-center gap-3 mb-4"
+									>
+										<Button
+											variant="secondary"
+											className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
+											onClick={() => {
+												setShowRoadmapModal(true);
+												setIsFabExpanded(false);
+											}}
+										>
+											<Sparkles className="h-6 w-6" />
+										</Button>
+										<Button
+											variant="secondary"
+											className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
+											onClick={() => {
+												setShowUploadDialog(true);
+												setSelectedFile(null);
+												setBookTitle("");
+												setBookAuthor("");
+												setIsExtractingMetadata(false);
+												setIsFabExpanded(false);
+											}}
+										>
+											<BookOpen className="h-6 w-6" />
+										</Button>
+										<Button
+											variant="secondary"
+											className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
+											onClick={() => {
+												setShowYoutubeDialog(true);
+												setIsFabExpanded(false);
+											}}
+										>
+											<Youtube className="h-6 w-6" />
+										</Button>
+										<Button
+											variant="secondary"
+											className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
+											onClick={() => {
+												setShowFlashcardDialog(true);
+												setIsFabExpanded(false);
+											}}
+										>
+											<Layers className="h-6 w-6" />
+										</Button>
+									</motion.div>
+								)}
+							</AnimatePresence>
+							<Button
+								className="rounded-full h-16 w-16 shadow-lg"
+								onClick={() => setIsFabExpanded(!isFabExpanded)}
+							>
+								<motion.div
+									animate={{ rotate: isFabExpanded ? 45 : 0 }}
+									transition={{ duration: 0.3 }}
+								>
+									<Plus
+										className={`h-8 w-8 transition-transform duration-300 ${
+											isFabExpanded ? "rotate-45" : ""
+										}`}
+									/>
+								</motion.div>
+							</Button>
+						</div>
+
 						{/* Upload Book Dialog */}
 						<Sheet
 							open={showUploadDialog}
@@ -1969,28 +2073,25 @@ export default function HomePage() {
 											!bookAuthor.trim() ||
 											isUploadingBook
 										}
-										className="bg-book hover:bg-book-accent text-white"
 									>
-										{isUploadingBook ? (
-											<span className="flex items-center">
-												<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-												Uploading...
-											</span>
-										) : (
-											"Upload Book"
-										)}
+										{isUploadingBook ? "Uploading..." : "Upload"}
 									</Button>
 								</SheetFooter>
 							</SheetContent>
 						</Sheet>
 
 						{/* Add YouTube Video Dialog */}
-						<Sheet open={showYoutubeDialog} onOpenChange={setShowYoutubeDialog}>
+						<Sheet
+							open={showYoutubeDialog}
+							onOpenChange={(open) => {
+								if (!isAddingVideo) setShowYoutubeDialog(open);
+							}}
+						>
 							<SheetContent side="bottom" className="sm:max-w-lg mx-auto">
 								<SheetHeader>
-									<SheetTitle>Add YouTube Video</SheetTitle>
+									<SheetTitle>Add a YouTube Video</SheetTitle>
 									<SheetDescription>
-										Paste a YouTube URL to add it to your learning library
+										Enter a YouTube URL to add it to your library
 									</SheetDescription>
 								</SheetHeader>
 								<div className="py-6 space-y-4">
@@ -2002,6 +2103,7 @@ export default function HomePage() {
 											placeholder="https://www.youtube.com/watch?v=..."
 											value={youtubeUrl}
 											onChange={(e) => setYoutubeUrl(e.target.value)}
+											disabled={isAddingVideo}
 										/>
 									</div>
 								</div>
@@ -2009,13 +2111,13 @@ export default function HomePage() {
 									<Button
 										variant="outline"
 										onClick={() => setShowYoutubeDialog(false)}
+										disabled={isAddingVideo}
 									>
 										Cancel
 									</Button>
 									<Button
 										onClick={handleYoutubeAdd}
 										disabled={!youtubeUrl.trim() || isAddingVideo}
-										className="bg-video hover:bg-video-accent text-white"
 									>
 										{isAddingVideo ? "Adding..." : "Add Video"}
 									</Button>
@@ -2030,9 +2132,10 @@ export default function HomePage() {
 						>
 							<SheetContent side="bottom" className="sm:max-w-lg mx-auto">
 								<SheetHeader>
-									<SheetTitle>Create Flashcard Deck</SheetTitle>
+									<SheetTitle>Create a New Flashcard Deck</SheetTitle>
 									<SheetDescription>
-										Create a new deck and optionally add cards
+										Create a new deck and optionally add some cards to get
+										started.
 									</SheetDescription>
 								</SheetHeader>
 								<div className="py-6 space-y-4">
@@ -2040,35 +2143,33 @@ export default function HomePage() {
 										<Label htmlFor="deck-title">Deck Title</Label>
 										<Input
 											id="deck-title"
-											placeholder="e.g., Spanish Vocabulary"
+											type="text"
+											placeholder="e.g. React Hooks"
 											value={newDeckTitle}
 											onChange={(e) => setNewDeckTitle(e.target.value)}
 										/>
 									</div>
 									<div className="space-y-2">
-										<Label htmlFor="deck-description">
-											Description (Optional)
-										</Label>
+										<Label htmlFor="deck-description">Description</Label>
 										<Input
 											id="deck-description"
-											placeholder="e.g., Common Spanish words and phrases"
+											type="text"
+											placeholder="A brief summary of this deck"
 											value={newDeckDescription}
 											onChange={(e) => setNewDeckDescription(e.target.value)}
 										/>
 									</div>
 									<div className="space-y-2">
-										<Label htmlFor="deck-cards">Cards (Optional)</Label>
+										<Label htmlFor="new-cards">
+											Add Cards (Optional, one per line, front|back)
+										</Label>
 										<textarea
-											id="deck-cards"
-											className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-											placeholder="Enter cards (one per line, format: front | back)&#10;Example:&#10;Hello | Hola&#10;Thank you | Gracias"
+											id="new-cards"
+											placeholder="useState | A hook for managing state in functional components"
 											value={newCards}
 											onChange={(e) => setNewCards(e.target.value)}
-											rows={4}
+											className="w-full h-32 p-2 border rounded-md"
 										/>
-										<p className="text-xs text-muted-foreground">
-											Format: front | back (one card per line)
-										</p>
 									</div>
 								</div>
 								<SheetFooter>
@@ -2081,7 +2182,6 @@ export default function HomePage() {
 									<Button
 										onClick={handleCreateDeck}
 										disabled={!newDeckTitle.trim()}
-										className="bg-flashcard hover:bg-flashcard-accent text-white"
 									>
 										Create Deck
 									</Button>
@@ -2089,190 +2189,13 @@ export default function HomePage() {
 							</SheetContent>
 						</Sheet>
 
-						{/* Floating Action Button (FAB) */}
-						<div className="fixed bottom-6 right-6 z-40">
-							<div className="relative">
-								{/* Expanded FAB Options */}
-								<AnimatePresence mode="wait">
-									{isFabExpanded && (
-										<motion.div
-											initial={{ opacity: 0 }}
-											animate={{ opacity: 1 }}
-											exit={{ opacity: 0 }}
-											transition={{ duration: 0.15 }}
-											className="absolute bottom-0 right-0 flex flex-col items-end gap-4 pb-[70px]"
-										>
-											<motion.div
-												initial={{ opacity: 0, scale: 0, y: 280, x: 0 }}
-												animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
-												exit={{ opacity: 0, scale: 0, y: 280, x: 0 }}
-												transition={{
-													delay: 0,
-													duration: 0.3,
-													type: "spring",
-													stiffness: 300,
-													damping: 25,
-												}}
-												className="group relative"
-											>
-												<span className="absolute right-full mr-3 bg-white text-foreground px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-													Generate Roadmap
-												</span>
-												<Button
-													onClick={() => {
-														setShowRoadmapModal(true);
-														setIsFabExpanded(false);
-													}}
-													size="icon"
-													className="h-14 w-14 rounded-full bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white shadow-lg transition-all hover:scale-110"
-												>
-													<Sparkles className="h-6 w-6" />
-												</Button>
-											</motion.div>
-
-											<motion.div
-												initial={{ opacity: 0, scale: 0, y: 210, x: 0 }}
-												animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
-												exit={{ opacity: 0, scale: 0, y: 210, x: 0 }}
-												transition={{
-													delay: 0.05,
-													duration: 0.3,
-													type: "spring",
-													stiffness: 300,
-													damping: 25,
-												}}
-												className="group relative"
-											>
-												<span className="absolute right-full mr-3 bg-white text-foreground px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-													Upload Book
-												</span>
-												<Button
-													onClick={() => {
-														setShowUploadDialog(true);
-														setIsFabExpanded(false);
-														setSelectedFile(null);
-														setBookTitle("");
-														setBookAuthor("");
-														setIsExtractingMetadata(false);
-													}}
-													size="icon"
-													className="h-14 w-14 rounded-full bg-book hover:bg-book-accent text-white shadow-lg transition-all hover:scale-110"
-												>
-													<FileText className="h-6 w-6" />
-												</Button>
-											</motion.div>
-
-											<motion.div
-												initial={{ opacity: 0, scale: 0, y: 140, x: 0 }}
-												animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
-												exit={{ opacity: 0, scale: 0, y: 140, x: 0 }}
-												transition={{
-													delay: 0.1,
-													duration: 0.3,
-													type: "spring",
-													stiffness: 300,
-													damping: 25,
-												}}
-												className="group relative"
-											>
-												<span className="absolute right-full mr-3 bg-white text-foreground px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-													Add YouTube Video
-												</span>
-												<Button
-													onClick={() => {
-														setShowYoutubeDialog(true);
-														setIsFabExpanded(false);
-														setYoutubeUrl("");
-													}}
-													size="icon"
-													className="h-14 w-14 rounded-full bg-video hover:bg-video-accent text-white shadow-lg transition-all hover:scale-110"
-												>
-													<Youtube className="h-6 w-6" />
-												</Button>
-											</motion.div>
-
-											<motion.div
-												initial={{ opacity: 0, scale: 0, y: 70, x: 0 }}
-												animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
-												exit={{ opacity: 0, scale: 0, y: 70, x: 0 }}
-												transition={{
-													delay: 0.15,
-													duration: 0.3,
-													type: "spring",
-													stiffness: 300,
-													damping: 25,
-												}}
-												className="group relative"
-											>
-												<span className="absolute right-full mr-3 bg-white text-foreground px-3 py-2 rounded-lg shadow-lg text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-													Create Flashcards
-												</span>
-												<Button
-													onClick={() => {
-														setShowFlashcardDialog(true);
-														setIsFabExpanded(false);
-														setNewDeckTitle("");
-														setNewDeckDescription("");
-														setNewCards("");
-													}}
-													size="icon"
-													className="h-14 w-14 rounded-full bg-flashcard hover:bg-flashcard-accent text-white shadow-lg transition-all hover:scale-110"
-												>
-													<Layers className="h-6 w-6" />
-												</Button>
-											</motion.div>
-										</motion.div>
-									)}
-								</AnimatePresence>
-
-								{/* Main FAB Button */}
-								<motion.div
-									animate={{ rotate: isFabExpanded ? 45 : 0 }}
-									transition={{
-										duration: 0.2,
-										type: "spring",
-										stiffness: 500,
-										damping: 25,
-									}}
-								>
-									<Button
-										onClick={() => setIsFabExpanded(!isFabExpanded)}
-										size="icon"
-										className={`h-14 w-14 rounded-full shadow-lg transition-all duration-200 hover:scale-110 ${
-											isFabExpanded
-												? "bg-destructive hover:bg-destructive/90"
-												: "bg-gradient-to-r from-course to-completed hover:from-course-accent hover:to-completed"
-										}`}
-									>
-										<Plus className="h-6 w-6 text-white" />
-									</Button>
-								</motion.div>
-							</div>
-						</div>
-
-						<style>{`
-          @keyframes confetti {
-            0% {
-              transform: translateY(0) rotate(0deg);
-              opacity: 1;
-            }
-            100% {
-              transform: translateY(100vh) rotate(720deg);
-              opacity: 0;
-            }
-          }
-          .animate-confetti {
-            animation: confetti 5s ease-in-out forwards;
-          }
-        `}</style>
+						<RoadmapPromptModal
+							isOpen={showRoadmapModal}
+							onClose={() => setShowRoadmapModal(false)}
+							onRoadmapCreated={handleRoadmapCreated}
+						/>
 					</div>
 				</ErrorBoundary>
-
-				{/* Roadmap Prompt Modal */}
-				<RoadmapPromptModal
-					isOpen={showRoadmapModal}
-					onClose={() => setShowRoadmapModal(false)}
-				/>
 			</TooltipProvider>
 		</ErrorBoundary>
 	);

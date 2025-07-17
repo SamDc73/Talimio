@@ -20,7 +20,7 @@ const _BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1";
  * Main container component for the Roadmap feature
  * Handles switching between map and outline views
  */
-const RoadmapFlow = ({ roadmapId, onError, isCourseMode = false }) => {
+const RoadmapFlow = ({ roadmapId, onError }) => {
 	const { lessonId } = useParams(); // Check if we're viewing a lesson
 	const { isLoading: roadmapLoading, roadmap } = useRoadmapState(
 		roadmapId,
@@ -54,7 +54,7 @@ const RoadmapFlow = ({ roadmapId, onError, isCourseMode = false }) => {
 	}
 
 	return (
-		<ProgressProvider courseId={roadmapId} isCourseMode={isCourseMode}>
+		<ProgressProvider courseId={roadmapId} isCourseMode={true}>
 			<div
 				className={`roadmap-container ${isOpen ? "sidebar-open" : "sidebar-closed"}`}
 				style={{ margin: 0, padding: 0 }}

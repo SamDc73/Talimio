@@ -199,8 +199,19 @@ function buildEndpoint(resourceType, resourceId, data) {
 			// Ignore other roadmap sync attempts
 			return null;
 
+		case "courses":
+			if (data.lessonStatus) {
+				// For courses, we need to use the updateLessonStatus endpoint
+				// This is handled by progressService.js already, so we'll skip API sync
+				return null;
+			}
+			// Ignore other course sync attempts
+			return null;
+
 		default:
-			throw new Error(`Unknown resource type: ${resourceType}`);
+			// Don't throw error for unknown types, just skip sync
+			logger.debug(`No sync handler for resource type: ${resourceType}`);
+			return null;
 	}
 }
 

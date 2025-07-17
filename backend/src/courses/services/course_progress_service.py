@@ -87,7 +87,8 @@ class CourseProgressService:
         # Check if progress record exists
         stmt = select(Progress).where(
             Progress.lesson_id == str(lesson_id),
-            Progress.course_id == str(module_id),  # Note: Progress.course_id stores module_id
+            Progress.course_id == str(course_id),
+            Progress.module_id == str(module_id),
         )
         result = await self.session.execute(stmt)
         progress = result.scalar_one_or_none()
@@ -102,7 +103,8 @@ class CourseProgressService:
             # Create new progress record
             progress = Progress(
                 lesson_id=str(lesson_id),
-                course_id=str(module_id),  # Note: storing module_id in course_id field
+                course_id=str(course_id),
+                module_id=str(module_id),
                 status=request.status,
                 created_at=now,
                 updated_at=now,
@@ -127,7 +129,8 @@ class CourseProgressService:
         """Get the status of a specific lesson."""
         stmt = select(Progress).where(
             Progress.lesson_id == str(lesson_id),
-            Progress.course_id == str(module_id),  # Note: Progress.course_id stores module_id
+            Progress.course_id == str(course_id),
+            Progress.module_id == str(module_id),
         )
         result = await self.session.execute(stmt)
         progress = result.scalar_one_or_none()

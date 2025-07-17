@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // Custom hook for polling
-export function usePolling(callback, interval, dependencies = []) {
+export function usePolling(callback, interval, _dependencies = []) {
 	const [isPolling, setIsPolling] = useState(false);
 	const timeoutIdRef = useRef(null);
 	const callbackRef = useRef(callback);

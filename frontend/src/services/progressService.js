@@ -191,16 +191,22 @@ export async function updateModuleStatus(courseId, moduleId, status) {
 /**
  * Update lesson status
  * @param {string} courseId - The ID of the course
- * @param {string} moduleId - The ID of the module
+ * @param {string} moduleId - The ID of the module (optional, for compatibility)
  * @param {string} lessonId - The ID of the lesson
  * @param {string} status - The new status (not_started, in_progress, completed)
  * @returns {Promise<Object>} The update response
  * @throws {Error} If the request fails
  */
-export async function updateLessonStatus(courseId, moduleId, lessonId, status) {
+export async function updateLessonStatus(
+	courseId,
+	_moduleId,
+	lessonId,
+	status,
+) {
 	try {
+		// Use simplified endpoint without moduleId
 		const response = await fetchWithTimeout(
-			`${API_BASE}/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/status`,
+			`${API_BASE}/courses/${courseId}/lessons/${lessonId}/status`,
 			{
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },

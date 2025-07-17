@@ -6,6 +6,7 @@ import {
 	useState,
 } from "react";
 import { updateLessonStatus } from "../services/progressService";
+import useAppStore from "../stores/useAppStore";
 import { getCourseWithModules } from "../utils/courseDetection";
 import { useToast } from "./use-toast";
 
@@ -48,7 +49,7 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 			setError(null);
 
 			try {
-				// Use course data fetching - assumes we're in course mode
+				// First, fetch course structure
 				const { modules } = await getCourseWithModules(currentCourseId);
 
 				// Store detected mode for use in other functions - always true for course API
@@ -62,24 +63,26 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 					);
 				}
 
+				// Get lesson completion from Zustand store
+				const lessonCompletion =
+					useAppStore.getState().getCourseLessonCompletion(currentCourseId) ||
+					{};
+
 				// For course mode, we need to collect all lessons from all modules
 				let allLessons = [];
 				if (detectedMode) {
 					// Course mode: flatten the hierarchy (modules -> lessons)
 					for (const module of modules) {
-						// Add the module itself as a lesson
-						allLessons.push({
-							id: module.id,
-							status: module.status || "not_started",
-							title: module.title,
-						});
+						// Skip adding module itself as a lesson - we only track actual lessons
 
-						// Add all sub-lessons
+						// Add all sub-lessons with their status from store
 						if (module.lessons && Array.isArray(module.lessons)) {
 							for (const lesson of module.lessons) {
 								allLessons.push({
 									id: lesson.id,
-									status: lesson.status || "not_started",
+									status: lessonCompletion[lesson.id]
+										? "completed"
+										: "not_started",
 									title: lesson.title,
 								});
 							}
@@ -89,7 +92,7 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 					// Legacy mode: modules are the lessons
 					allLessons = modules.map((module) => ({
 						id: module.id,
-						status: module.status || "not_started",
+						status: lessonCompletion[module.id] ? "completed" : "not_started",
 						title: module.title,
 					}));
 				}
@@ -156,6 +159,12 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 					...prev,
 					[lessonId]: newStatus,
 				}));
+
+				// Update Zustand store for persistence
+				const isCompleted = newStatus === "completed";
+				useAppStore
+					.getState()
+					.setCourseLessonStatus(courseId, lessonId, isCompleted);
 
 				// Calculate client-side progress for immediate feedback
 				const completedDelta = newStatus === "completed" ? 1 : -1;

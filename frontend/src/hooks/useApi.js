@@ -73,7 +73,7 @@ export function useApi(endpoint, options = {}) {
 	const abortControllerRef = useRef(null);
 
 	// Memoize the options object to prevent unnecessary re-renders
-	const memoizedOptions = useMemo(() => options, [JSON.stringify(options)]);
+	const memoizedOptions = useMemo(() => options, [options]);
 
 	const execute = useCallback(
 		async (body = null, callOptions = {}) => {

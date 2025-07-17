@@ -10,7 +10,6 @@ const cn = (...classes) => classes.filter(Boolean).join(" ");
  * @param {Function} [props.onLessonClick] - Optional handler for lesson click
  * @param {Function} [props.isLessonCompleted] - Function to check if a lesson is completed
  * @param {Function} [props.toggleLessonCompletion] - Function to toggle lesson completion status
- * @param {Object} [props.courseProgress] - Course progress data
  * @returns {JSX.Element}
  */
 function OutlineNode({
@@ -19,7 +18,6 @@ function OutlineNode({
 	onLessonClick,
 	isLessonCompleted,
 	toggleLessonCompletion,
-	courseProgress,
 }) {
 	const moduleId = module.id ?? index + 1;
 	const [expanded, setExpanded] = useState(index === 0); // First module expanded by default
@@ -118,6 +116,7 @@ function OutlineNode({
 		currentLessonIndexStr,
 		idx,
 		onLessonClick,
+		moduleId,
 	}) => {
 		return (
 			<div
@@ -129,10 +128,23 @@ function OutlineNode({
 				)}
 			>
 				<div className="flex items-center gap-3 flex-1 min-w-0">
-					<LessonStatusIndicator
-						isCompleted={isCompleted}
-						indexStr={currentLessonIndexStr}
-					/>
+					<button
+						type="button"
+						onClick={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							if (toggleLessonCompletion) {
+								toggleLessonCompletion(lesson.id, moduleId);
+							}
+						}}
+						className="transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 rounded-full"
+						aria-label={isCompleted ? "Mark as incomplete" : "Mark as complete"}
+					>
+						<LessonStatusIndicator
+							isCompleted={isCompleted}
+							indexStr={currentLessonIndexStr}
+						/>
+					</button>
 					<div className="flex flex-col min-w-0">
 						<span className={cn("font-medium truncate", "text-zinc-800")}>
 							{lesson.title}
@@ -160,6 +172,7 @@ function OutlineNode({
 		depth,
 		parentIndexStr,
 		onLessonClick,
+		moduleId,
 	}) => {
 		const currentLessonIndexStr = parentIndexStr
 			? `${parentIndexStr}.${idx + 1}`
@@ -180,6 +193,7 @@ function OutlineNode({
 					currentLessonIndexStr={currentLessonIndexStr}
 					idx={idx}
 					onLessonClick={onLessonClick}
+					moduleId={moduleId}
 				/>
 
 				{hasNestedLessons && (
@@ -188,6 +202,7 @@ function OutlineNode({
 						depth={depth + 1}
 						parentIndexStr={currentLessonIndexStr}
 						onLessonClick={onLessonClick}
+						moduleId={moduleId}
 					/>
 				)}
 			</div>
@@ -199,6 +214,7 @@ function OutlineNode({
 		depth = 0,
 		parentIndexStr = "",
 		onLessonClick,
+		moduleId,
 	}) => {
 		return (
 			<>
@@ -210,6 +226,7 @@ function OutlineNode({
 						depth={depth}
 						parentIndexStr={parentIndexStr}
 						onLessonClick={onLessonClick}
+						moduleId={moduleId}
 					/>
 				))}
 			</>
@@ -274,6 +291,7 @@ function OutlineNode({
 						<LessonList
 							lessons={module.lessons || []}
 							onLessonClick={onLessonClick}
+							moduleId={module.id}
 						/>
 					</div>
 				)}
