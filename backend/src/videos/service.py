@@ -826,6 +826,81 @@ class VideoService:
             logger.exception(f"Error fetching video chapters: {e}")
             return []
 
+    async def get_video_progress(self, video_id: UUID) -> int:
+        """Calculate video progress based on completed chapters.
+
+        Returns percentage (0-100) of completed chapters.
+        This matches the ProgressCalculator interface.
+        """
+        from sqlalchemy import func
+
+        # Use async session from session maker
+        async with async_session_maker() as session:
+            # Count total and completed chapters
+            stats_query = select(
+                func.count(VideoChapter.id).label("total"),
+                func.count(VideoChapter.id).filter(VideoChapter.status == "completed").label("completed"),
+            ).where(VideoChapter.video_uuid == video_id)
+
+            result = await session.execute(stats_query)
+            stats = result.first()
+
+            if not stats or stats.total == 0:
+                # Fall back to video completion_percentage if no chapters
+                video_query = select(Video.completion_percentage).where(Video.uuid == video_id)
+                video_result = await session.execute(video_query)
+                completion = video_result.scalar()
+                return int(completion or 0)
+
+            return int((stats.completed / stats.total) * 100)
+
+    async def get_chapter_completion_stats(self, video_id: UUID) -> dict:
+        """Get detailed chapter completion statistics.
+
+        Returns statistics about chapter completion for the video.
+        """
+        from sqlalchemy import func
+
+        # Use async session from session maker
+        async with async_session_maker() as session:
+            # Count total and completed chapters
+            stats_query = select(
+                func.count(VideoChapter.id).label("total"),
+                func.count(VideoChapter.id).filter(VideoChapter.status == "completed").label("completed"),
+                func.count(VideoChapter.id).filter(VideoChapter.status == "in_progress").label("in_progress"),
+            ).where(VideoChapter.video_uuid == video_id)
+
+            result = await session.execute(stats_query)
+            stats = result.first()
+
+            if not stats or stats.total == 0:
+                # Fall back to video completion_percentage if no chapters
+                video_query = select(Video.completion_percentage).where(Video.uuid == video_id)
+                video_result = await session.execute(video_query)
+                completion = video_result.scalar() or 0
+
+                return {
+                    "total_chapters": 0,
+                    "completed_chapters": 0,
+                    "in_progress_chapters": 0,
+                    "not_started_chapters": 0,
+                    "completion_percentage": int(completion),
+                    "uses_video_based_progress": True,
+                }
+
+            completed_chapters = stats.completed
+            in_progress_chapters = stats.in_progress
+            not_started_chapters = stats.total - completed_chapters - in_progress_chapters
+
+            return {
+                "total_chapters": stats.total,
+                "completed_chapters": completed_chapters,
+                "in_progress_chapters": in_progress_chapters,
+                "not_started_chapters": not_started_chapters,
+                "completion_percentage": int((completed_chapters / stats.total) * 100) if stats.total > 0 else 0,
+                "uses_video_based_progress": False,
+            }
+
 
 # Service instance
 video_service = VideoService()

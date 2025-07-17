@@ -123,6 +123,119 @@ class CourseProgressService:
             updated_at=progress.updated_at,
         )
 
+    async def get_course_progress_percentage(self, course_id: UUID, user_id: UUID) -> int:
+        """Calculate course progress based on completed lessons.
+
+        Returns percentage (0-100) of completed lessons.
+        This matches the ProgressCalculator interface.
+        """
+        from sqlalchemy import String, func
+
+        from src.courses.models import Node
+
+        # Count total lessons (nodes with parent_id)
+        total_query = select(func.count(Node.id)).where(Node.roadmap_id == course_id, Node.parent_id.is_not(None))
+        total_result = await self.session.execute(total_query)
+        total_lessons = total_result.scalar() or 0
+
+        if total_lessons == 0:
+            return 0
+
+        # Create a subquery that gets the latest status per lesson
+        # Handle legacy records with user_id = None for backward compatibility
+        from src.config.settings import DEFAULT_USER_ID
+        user_filter = (Progress.user_id == user_id) | (Progress.user_id.is_(None) if user_id == DEFAULT_USER_ID else False)
+
+        latest_status_subquery = (
+            select(
+                Progress.lesson_id,
+                Progress.status,
+                func.row_number()
+                .over(partition_by=Progress.lesson_id, order_by=Progress.updated_at.desc())
+                .label("rn"),
+            )
+            .select_from(Progress)
+            .join(Node, func.cast(Node.id, String) == Progress.lesson_id)
+            .where(Node.roadmap_id == course_id, user_filter)
+        ).subquery()
+
+        # Count completed lessons (only the latest status per lesson)
+        completed_query = (
+            select(func.count())
+            .select_from(latest_status_subquery)
+            .where(latest_status_subquery.c.rn == 1, latest_status_subquery.c.status == "completed")
+        )
+        completed_result = await self.session.execute(completed_query)
+        completed_lessons = completed_result.scalar() or 0
+
+        return int((completed_lessons / total_lessons) * 100)
+
+    async def get_lesson_completion_stats(self, course_id: UUID, user_id: UUID) -> dict:
+        """Get detailed lesson completion statistics.
+
+        Returns statistics about lesson completion for the course.
+        """
+        from sqlalchemy import String, func
+
+        from src.courses.models import Node
+
+        # Count total lessons (nodes with parent_id)
+        total_query = select(func.count(Node.id)).where(Node.roadmap_id == course_id, Node.parent_id.is_not(None))
+        total_result = await self.session.execute(total_query)
+        total_lessons = total_result.scalar() or 0
+
+        if total_lessons == 0:
+            return {
+                "total_lessons": 0,
+                "completed_lessons": 0,
+                "in_progress_lessons": 0,
+                "not_started_lessons": 0,
+                "completion_percentage": 0,
+            }
+
+        # Create a subquery that gets the latest status per lesson
+        # Handle legacy records with user_id = None for backward compatibility
+        from src.config.settings import DEFAULT_USER_ID
+        user_filter = (Progress.user_id == user_id) | (Progress.user_id.is_(None) if user_id == DEFAULT_USER_ID else False)
+
+        latest_status_subquery = (
+            select(
+                Progress.lesson_id,
+                Progress.status,
+                func.row_number()
+                .over(partition_by=Progress.lesson_id, order_by=Progress.updated_at.desc())
+                .label("rn"),
+            )
+            .select_from(Progress)
+            .join(Node, func.cast(Node.id, String) == Progress.lesson_id)
+            .where(Node.roadmap_id == course_id, user_filter)
+        ).subquery()
+
+        # Count lessons by status
+        status_query = (
+            select(
+                latest_status_subquery.c.status,
+                func.count().label("count")
+            )
+            .select_from(latest_status_subquery)
+            .where(latest_status_subquery.c.rn == 1)
+            .group_by(latest_status_subquery.c.status)
+        )
+        status_result = await self.session.execute(status_query)
+        status_counts = {row.status: row.count for row in status_result.fetchall()}
+
+        completed_lessons = status_counts.get("completed", 0)
+        in_progress_lessons = status_counts.get("in_progress", 0)
+        not_started_lessons = total_lessons - completed_lessons - in_progress_lessons
+
+        return {
+            "total_lessons": total_lessons,
+            "completed_lessons": completed_lessons,
+            "in_progress_lessons": in_progress_lessons,
+            "not_started_lessons": not_started_lessons,
+            "completion_percentage": int((completed_lessons / total_lessons) * 100) if total_lessons > 0 else 0,
+        }
+
     async def get_lesson_status(
         self, course_id: UUID, module_id: UUID, lesson_id: UUID, _user_id: str | None = None
     ) -> LessonStatusResponse:

@@ -4,6 +4,7 @@ import json
 import logging
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,6 +84,14 @@ async def list_content_fast(
         rows = await _get_paginated_results(session, combined_query, search_term, page_size, offset, effective_user_id)
         items = _transform_rows_to_items(rows)
 
+        # Calculate accurate progress for courses using CourseProgressService
+        if effective_user_id and content_type in (None, "course"):
+            items = await _calculate_course_progress(session, items, effective_user_id)
+
+        # Calculate accurate progress for books using BookProgressService
+        if effective_user_id and content_type in (None, "book"):
+            items = await _calculate_book_progress(session, items, effective_user_id)
+
         # Log archive status of returned items
         archived_count = sum(1 for item in items if hasattr(item, "archived") and item.archived)
         active_count = len(items) - archived_count
@@ -98,6 +107,83 @@ async def list_content_fast(
             page=page,
             page_size=page_size,
         )
+
+
+async def _calculate_course_progress(session, items: list[Any], user_id: str) -> list[Any]:
+    """Calculate accurate course progress using CourseProgressService (DRY)."""
+    from uuid import UUID
+
+    from src.courses.services.course_progress_service import CourseProgressService
+
+    # Filter for course items only (roadmap type in DB, but shows as course in enum)
+    course_items = [item for item in items if hasattr(item, "type") and str(item.type) in ("roadmap", "course", "ContentType.COURSE")]
+
+    if not course_items:
+        return items
+
+    # Initialize progress service
+    progress_service = CourseProgressService(session, user_id)
+
+    # Calculate progress for each course using our DRY service
+    for item in course_items:
+        try:
+            course_id = UUID(item.id)
+            user_uuid = UUID(user_id)
+
+            # Use our DRY CourseProgressService
+            progress = await progress_service.get_course_progress_percentage(course_id, user_uuid)
+            stats = await progress_service.get_lesson_completion_stats(course_id, user_uuid)
+
+            # Update the item's progress
+            item.progress = float(progress)
+            if hasattr(item, "completed_lessons"):
+                item.completed_lessons = stats["completed_lessons"]
+
+        except (ValueError, Exception):
+            # Keep original progress (0) if there's an error
+            pass
+
+    return items
+
+
+async def _calculate_book_progress(session, items: list[Any], user_id: str) -> list[Any]:
+    """Calculate accurate book progress using BookProgressService (matching course pattern)."""
+    from uuid import UUID
+
+    from src.books.book_progress_service import BookProgressService
+
+    # Filter for book items only
+    book_items = [item for item in items if hasattr(item, "type") and str(item.type) == "book"]
+
+    if not book_items:
+        return items
+
+    # Initialize progress service
+    progress_service = BookProgressService(session, user_id)
+
+    # Calculate progress for each book using TOC-based progress
+    for item in book_items:
+        try:
+            book_id = UUID(item.id)
+
+            # Use our BookProgressService for TOC-based progress
+            progress = await progress_service.get_book_toc_progress_percentage(book_id, user_id)
+            stats = await progress_service.get_toc_completion_stats(book_id, user_id)
+
+            # Update the item's progress with TOC-based calculation
+            item.progress = float(progress)
+
+            # Store additional stats for frontend if needed
+            if hasattr(item, "completed_sections"):
+                item.completed_sections = stats["completed_sections"]
+            if hasattr(item, "total_sections"):
+                item.total_sections = stats["total_sections"]
+
+        except (ValueError, Exception) as e:
+            # Keep original progress (page-based) if there's an error
+            logger.debug(f"Error calculating TOC progress for book {item.id}: {e}")
+
+    return items
 
 
 def _build_content_queries(
@@ -280,66 +366,26 @@ def _get_roadmap_query(search: str | None, include_archived: bool = False, user_
 
 
 def _get_roadmaps_query(search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: str | None = None) -> str:
-    """Get SQL query for roadmaps with user-specific progress."""
-    # When user_id is None, return 0 progress
-    if user_id is None:
-        query = """
-            SELECT
-                r.id::text,
-                r.title,
-                COALESCE(r.description, '') as description,
-                'roadmap' as type,
-                COALESCE(r.updated_at, r.created_at) as last_accessed,
-                r.created_at,
-                '[]' as tags,
-                '' as extra1,
-                '' as extra2,
-                0 as progress,
-                -- Total lessons (leaf nodes)
-                (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL) as count1,
-                0 as count2,
-                COALESCE(r.archived, false) as archived
-            FROM roadmaps r
-        """
-    else:
-        query = """
-            SELECT
-                r.id::text,
-                r.title,
-                COALESCE(r.description, '') as description,
-                'roadmap' as type,
-                COALESCE(r.updated_at, r.created_at) as last_accessed,
-                r.created_at,
-                '[]' as tags,
-                '' as extra1,
-                '' as extra2,
-                CASE
-                    -- Count total lessons (nodes with parent_id is not null, i.e., leaf nodes)
-                    WHEN (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL) > 0
-                    THEN (
-                        -- Count completed lessons from progress table (updated to match ProgressCalculator)
-                        (SELECT COUNT(DISTINCT p.lesson_id)
-                         FROM progress p
-                         JOIN nodes n ON n.id::text = p.lesson_id
-                         WHERE n.roadmap_id = r.id
-                           AND p.status = 'completed'
-                           AND p.user_id = :user_id) * 100 /
-                        (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL)
-                    )
-                    ELSE 0
-                END as progress,
-                -- Total lessons (leaf nodes)
-                (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL) as count1,
-                -- Completed lessons (updated to match ProgressCalculator)
-                (SELECT COUNT(DISTINCT p.lesson_id)
-                 FROM progress p
-                 JOIN nodes n ON n.id::text = p.lesson_id
-                 WHERE n.roadmap_id = r.id
-                   AND p.status = 'completed'
-                   AND p.user_id = :user_id) as count2,
-                COALESCE(r.archived, false) as archived
-            FROM roadmaps r
-        """
+    """Get SQL query for roadmaps. Progress will be calculated separately using CourseProgressService."""
+    # Simplified query - progress is calculated post-query using CourseProgressService for DRY
+    query = """
+        SELECT
+            r.id::text,
+            r.title,
+            COALESCE(r.description, '') as description,
+            'roadmap' as type,
+            COALESCE(r.updated_at, r.created_at) as last_accessed,
+            r.created_at,
+            '[]' as tags,
+            '' as extra1,
+            '' as extra2,
+            0 as progress,
+            -- Total lessons (leaf nodes)
+            (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL) as count1,
+            0 as count2,
+            COALESCE(r.archived, false) as archived
+        FROM roadmaps r
+    """
 
     # Build WHERE clause
     where_conditions = []
@@ -763,3 +809,130 @@ async def delete_content(content_type: ContentType, content_id: str) -> None:
             await session.delete(content_obj)
 
         await session.commit()
+
+
+class ContentService:
+    """Service for unified content operations including progress tracking."""
+
+    def __init__(self, session: AsyncSession):
+        """Initialize the content service."""
+        self.session = session
+
+    async def get_content_progress(self, content_type: str, content_id: str | UUID, user_id: str | None = None) -> int:
+        """Unified interface for getting progress across content types.
+        
+        Args:
+            content_type: One of 'course', 'book', 'youtube', 'flashcards'
+            content_id: The UUID of the content (as string or UUID)
+            user_id: User ID for user-specific progress (required for courses)
+            
+        Returns
+        -------
+            Progress percentage (0-100)
+        """
+        from uuid import UUID
+
+        # Convert string to UUID if needed
+        if isinstance(content_id, str):
+            try:
+                content_id = UUID(content_id)
+            except ValueError:
+                # Invalid UUID format
+                return 0
+
+        if content_type == "course":
+            from src.courses.services.course_progress_service import CourseProgressService
+            if user_id is None:
+                return 0  # Course progress requires user context
+            try:
+                user_uuid = UUID(user_id)
+            except ValueError:
+                return 0
+            service = CourseProgressService(self.session, user_id)
+            return await service.get_course_progress_percentage(content_id, user_uuid)
+
+        if content_type == "book":
+            from src.books.service import BookService
+            service = BookService(self.session)
+            return await service.get_book_progress(content_id)
+
+        if content_type == "youtube":
+            from src.videos.service import VideoService
+            service = VideoService()
+            return await service.get_video_progress(content_id)
+
+        if content_type == "flashcards":
+            return 0  # TODO: Implement when flashcard progress is needed
+
+        return 0
+
+    async def bulk_get_progress(self, items: list[tuple[str, str | UUID]], user_id: str | None = None) -> dict[str, int]:
+        """Get progress for multiple items efficiently.
+
+        Args:
+            items: List of (content_type, content_id) tuples
+            user_id: User ID for user-specific progress (required for courses)
+
+        Returns
+        -------
+            Dictionary mapping "type:id" to progress percentage
+        """
+        results = {}
+
+        # Group by type for efficient querying
+        courses = [id for type, id in items if type == "course"]
+        videos = [id for type, id in items if type == "youtube"]
+        books = [id for type, id in items if type == "book"]
+
+        # Process courses
+        if courses and user_id:
+            from src.courses.services.course_progress_service import CourseProgressService
+            try:
+                user_uuid = UUID(user_id)
+                service = CourseProgressService(self.session, user_id)
+                for course_id in courses:
+                    try:
+                        if isinstance(course_id, str):
+                            course_uuid = UUID(course_id)
+                        else:
+                            course_uuid = course_id
+                        progress = await service.get_course_progress_percentage(course_uuid, user_uuid)
+                        results[f"course:{course_id}"] = progress
+                    except (ValueError, Exception):
+                        results[f"course:{course_id}"] = 0
+            except ValueError:
+                # Invalid user_id
+                for course_id in courses:
+                    results[f"course:{course_id}"] = 0
+
+        # Process videos
+        if videos:
+            from src.videos.service import VideoService
+            service = VideoService()
+            for video_id in videos:
+                try:
+                    if isinstance(video_id, str):
+                        video_uuid = UUID(video_id)
+                    else:
+                        video_uuid = video_id
+                    progress = await service.get_video_progress(video_uuid)
+                    results[f"youtube:{video_id}"] = progress
+                except (ValueError, Exception):
+                    results[f"youtube:{video_id}"] = 0
+
+        # Process books
+        if books:
+            from src.books.service import BookService
+            service = BookService(self.session)
+            for book_id in books:
+                try:
+                    if isinstance(book_id, str):
+                        book_uuid = UUID(book_id)
+                    else:
+                        book_uuid = book_id
+                    progress = await service.get_book_progress(book_uuid)
+                    results[f"book:{book_id}"] = progress
+                except (ValueError, Exception):
+                    results[f"book:{book_id}"] = 0
+
+        return results
