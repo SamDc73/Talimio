@@ -147,6 +147,21 @@ async def update_lesson_status(
     return await course_service.update_lesson_status(course_id, module_id, lesson_id, request, user_id)
 
 
+# Simplified lesson status endpoint (without module_id requirement)
+@router.patch("/{course_id}/lessons/{lesson_id}/status")
+async def update_lesson_status_simplified(
+    course_id: UUID,
+    lesson_id: UUID,
+    request: LessonStatusUpdate,
+    course_service: Annotated[CourseService, Depends(get_course_service)],
+    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+) -> LessonStatusResponse:
+    """Update the status of a specific lesson (simplified route without module_id)."""
+    user_id = str(current_user.id) if current_user else None
+    # Pass course_id as module_id for compatibility with existing service
+    return await course_service.update_lesson_status(course_id, course_id, lesson_id, request, user_id)
+
+
 @router.get("/{course_id}/modules/{module_id}/lessons/{lesson_id}/status")
 async def get_lesson_status(
     course_id: UUID,
@@ -158,3 +173,29 @@ async def get_lesson_status(
     """Get the status of a specific lesson."""
     user_id = str(current_user.id) if current_user else None
     return await course_service.get_lesson_status(course_id, module_id, lesson_id, user_id)
+
+
+# Simplified lesson status endpoint (without module_id requirement)
+@router.get("/{course_id}/lessons/{lesson_id}/status")
+async def get_lesson_status_simplified(
+    course_id: UUID,
+    lesson_id: UUID,
+    course_service: Annotated[CourseService, Depends(get_course_service)],
+    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+) -> LessonStatusResponse:
+    """Get the status of a specific lesson (simplified route without module_id)."""
+    user_id = str(current_user.id) if current_user else None
+    # Pass course_id as module_id for compatibility with existing service
+    return await course_service.get_lesson_status(course_id, course_id, lesson_id, user_id)
+
+
+# Get all lesson statuses for a course
+@router.get("/{course_id}/lessons/statuses")
+async def get_all_lesson_statuses(
+    course_id: UUID,
+    course_service: Annotated[CourseService, Depends(get_course_service)],
+    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+) -> dict[str, str]:
+    """Get all lesson statuses for a course."""
+    user_id = str(current_user.id) if current_user else None
+    return await course_service.get_all_lesson_statuses(course_id, user_id)

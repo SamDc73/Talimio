@@ -750,7 +750,7 @@ class CourseService(ICourseService):
         # Check if progress record exists
         stmt = select(Progress).where(
             Progress.lesson_id == str(lesson_id),
-            Progress.course_id == str(module_id),  # Note: course_id field stores module_id
+            Progress.course_id == str(course_id),  # Note: course_id field stores module_id
         )
         result = await self.session.execute(stmt)
         progress = result.scalar_one_or_none()
@@ -765,7 +765,7 @@ class CourseService(ICourseService):
             # Create new progress record
             progress = Progress(
                 lesson_id=str(lesson_id),
-                course_id=str(module_id),  # Note: storing module_id in course_id field
+                course_id=str(course_id),  # Note: storing module_id in course_id field
                 status=request.status,
                 created_at=now,
                 updated_at=now,
@@ -790,7 +790,7 @@ class CourseService(ICourseService):
         """Get the status of a specific lesson."""
         stmt = select(Progress).where(
             Progress.lesson_id == lesson_id,
-            Progress.course_id == module_id,  # Note: course_id field stores module_id
+            Progress.course_id == str(course_id),  # Note: course_id field stores module_id
         )
         result = await self.session.execute(stmt)
         progress = result.scalar_one_or_none()
@@ -815,3 +815,17 @@ class CourseService(ICourseService):
             created_at=progress.created_at,
             updated_at=progress.updated_at,
         )
+
+    async def get_all_lesson_statuses(self, course_id: UUID, _user_id: str | None = None) -> dict[str, str]:
+        """Get all lesson statuses for a course."""
+        # Query all progress records for this course
+        stmt = select(Progress).where(Progress.course_id == str(course_id))
+        result = await self.session.execute(stmt)
+        progress_records = result.scalars().all()
+
+        # Build a dictionary of lesson_id -> status
+        statuses = {}
+        for progress in progress_records:
+            statuses[progress.lesson_id] = progress.status
+
+        return statuses

@@ -274,18 +274,25 @@ def _get_roadmaps_query(search: str | None, archived_only: bool = False, include
             '' as extra1,
             '' as extra2,
             CASE
-                WHEN (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id) > 0
+                -- Count total lessons (nodes with parent_id is not null, i.e., leaf nodes)
+                WHEN (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL) > 0
                 THEN (
-                    (SELECT COUNT(*)
-                     FROM nodes n
-                     WHERE n.roadmap_id = r.id
-                       AND n.status = 'done') * 100 /
-                    (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id)
+                    -- Count completed lessons from progress table
+                    (SELECT COUNT(DISTINCT p.lesson_id)
+                     FROM progress p
+                     WHERE p.course_id = r.id::text
+                       AND p.status = 'done') * 100 /
+                    (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL)
                 )
                 ELSE 0
             END as progress,
-            (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id) as count1,
-            (SELECT COUNT(*) FROM nodes n WHERE n.roadmap_id = r.id AND n.status = 'done') as count2,
+            -- Total lessons (leaf nodes)
+            (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL) as count1,
+            -- Completed lessons
+            (SELECT COUNT(DISTINCT p.lesson_id)
+             FROM progress p
+             WHERE p.course_id = r.id::text
+               AND p.status = 'done') as count2,
             COALESCE(r.archived, false) as archived
         FROM roadmaps r
     """

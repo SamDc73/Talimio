@@ -463,6 +463,8 @@ const useAppStore = create(
 					activeCourseId: null,
 					// Last viewed course for restoration
 					lastViewedCourseId: null,
+					// Lesson completion: courseId -> { lessonId -> completed }
+					lessonCompletion: {},
 				},
 
 				// Course integration actions
@@ -482,6 +484,28 @@ const useAppStore = create(
 
 				getActiveCourse: () => {
 					return get().course.activeCourseId;
+				},
+
+				setCourseLessonStatus: (courseId, lessonId, completed) => {
+					set((state) => {
+						// Ensure lessonCompletion object exists
+						if (!state.course.lessonCompletion) {
+							state.course.lessonCompletion = {};
+						}
+						if (!state.course.lessonCompletion[courseId]) {
+							state.course.lessonCompletion[courseId] = {};
+						}
+						state.course.lessonCompletion[courseId][lessonId] = completed;
+					});
+					// Note: API sync is handled by the updateLessonStatus call in useProgress hook
+				},
+
+				getCourseLessonCompletion: (courseId) => {
+					const courseData = get().course;
+					if (!courseData || !courseData.lessonCompletion) {
+						return {};
+					}
+					return courseData.lessonCompletion[courseId] || {};
 				},
 
 				// ========== CLEANUP ACTIONS ==========
@@ -541,7 +565,11 @@ const useAppStore = create(
 							metadata: {},
 							chapterCompletion: {},
 						};
-						state.course = { activeCourseId: null, lastViewedCourseId: null };
+						state.course = {
+							activeCourseId: null,
+							lastViewedCourseId: null,
+							lessonCompletion: {},
+						};
 						state.ui.errors = [];
 						state.ui.loading = {};
 					});
@@ -600,6 +628,20 @@ const useAppStore = create(
 					course: state.course,
 					// Don't persist UI state
 				}),
+				version: 2, // Increment version to trigger migration
+				migrate: (persistedState, version) => {
+					if (version === 0 || version === 1) {
+						// Migration from version 0 or 1 to 2
+						// Ensure course.lessonCompletion exists
+						if (
+							persistedState.course &&
+							!persistedState.course.lessonCompletion
+						) {
+							persistedState.course.lessonCompletion = {};
+						}
+					}
+					return persistedState;
+				},
 			},
 		),
 		{

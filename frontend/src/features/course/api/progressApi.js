@@ -5,7 +5,7 @@
  * structure instead of the legacy roadmap → node structure.
  */
 
-// Note: useCourseService hook will be used in the hook wrapper, not directly in service
+import { useCourseService } from "./courseApi";
 
 /**
  * Base API URL for progress endpoints
@@ -366,7 +366,6 @@ export class CourseProgressService {
  * Hook for course progress operations
  */
 export function useCourseProgressService(courseId) {
-	const { useCourseService } = require("./courseApi");
 	const courseService = useCourseService(courseId);
 
 	if (!courseId) {
