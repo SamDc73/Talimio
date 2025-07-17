@@ -1,6 +1,11 @@
 from functools import lru_cache
+from uuid import UUID
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# Default user ID for self-hosted deployments with AUTH_DISABLED=True
+DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
 class Settings(BaseSettings):
@@ -13,7 +18,20 @@ class Settings(BaseSettings):
 
     # Auth settings (need type conversion)
     JWT_EXPIRE_HOURS: int = 24
-    AUTH_DISABLED: bool = False
+    AUTH_DISABLED: bool = True
+    AUTH_PROVIDER: str = "none"  # "none", "clerk", "auth0", "supabase", "jwt"
+
+    # Auth provider specific settings
+    CLERK_PUBLISHABLE_KEY: str = ""
+    CLERK_SECRET_KEY: str = ""
+
+    AUTH0_DOMAIN: str = ""
+    AUTH0_AUDIENCE: str = ""
+    AUTH0_CLIENT_ID: str = ""
+    AUTH0_CLIENT_SECRET: str = ""
+
+    SUPABASE_URL: str = ""
+    SUPABASE_ANON_KEY: str = ""
 
     # Storage settings
     STORAGE_PROVIDER: str = "local"  # "r2" or "local"

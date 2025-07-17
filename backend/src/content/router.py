@@ -1,8 +1,10 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
+from src.auth.dependencies import get_current_user_optional
+from src.auth.models import User
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.service import (
     archive_content,
@@ -25,6 +27,7 @@ async def get_all_content(
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
     include_archived: Annotated[bool, Query(description="Include archived content")] = False,
+    current_user: Annotated[User | None, Depends(get_current_user_optional)] = None,
 ) -> ContentListResponse:
     """
     List all content across different types (videos, flashcards, books, roadmaps).
@@ -38,6 +41,7 @@ async def get_all_content(
         page=page,
         page_size=page_size,
         include_archived=include_archived,
+        current_user_id=str(current_user.id) if current_user else None,
     )
 
 

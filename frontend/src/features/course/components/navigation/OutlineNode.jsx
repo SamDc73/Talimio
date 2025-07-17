@@ -25,8 +25,7 @@ function OutlineNode({
 	const isItemCompleted = (item) => {
 		return (
 			isLessonCompleted?.(item.id) ||
-			item.status === "completed" ||
-			item.status === "done"
+			item.status === "completed"
 		);
 	};
 

@@ -57,7 +57,7 @@ class CourseProgressService:
 
             # Count completed lessons by checking progress records
             for lesson in module_lessons:
-                stmt = select(Progress).where(Progress.lesson_id == str(lesson.id), Progress.status == "done")
+                stmt = select(Progress).where(Progress.lesson_id == str(lesson.id), Progress.status == "completed")
                 result = await self.session.execute(stmt)
                 progress = result.scalar_one_or_none()
                 if progress:

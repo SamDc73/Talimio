@@ -41,7 +41,9 @@ class Course(Base):
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rag_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # RAG integration flag
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -73,7 +75,9 @@ class CourseModule(Base):
     completion_percentage: Mapped[float] = mapped_column(Float, default=0.0)
     parent_id: Mapped[uuid.UUID | None] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("nodes.id"), nullable=True)
     label_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -97,7 +101,9 @@ class Lesson(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     quiz_questions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     order: Mapped[int] = mapped_column(Integer, default=0)  # Keep consistent naming
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -116,7 +122,10 @@ class LessonProgress(Base):
     course_id: Mapped[str] = mapped_column(String)  # Actually stores module_id - varchar in DB
     lesson_id: Mapped[str | None] = mapped_column(String, nullable=True)  # varchar in DB
     status: Mapped[str] = mapped_column(String(50), default="not_started")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    user_id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True))  # Fixed: Use UUID type to match database
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -149,6 +158,7 @@ class CourseDocument(Base):
 
     # Relationships
     roadmap: Mapped["Course"] = relationship("Course", back_populates="documents")
+
 
 # Create aliases for backward compatibility
 Roadmap = Course

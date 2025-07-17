@@ -15,10 +15,13 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.types import String
 
 from src.ai.client import AIError, ModelManager, create_lesson_body
 from src.ai.memory import Mem0Wrapper
 from src.config import env
+from src.core.progress_calculator import ProgressCalculator
+from src.core.user_utils import resolve_user_id
 from src.courses.models import LessonProgress as Progress, Node, Roadmap
 from src.courses.schemas import (
     CourseCreate,
@@ -104,7 +107,7 @@ class CourseService(ICourseService):
                 user_prompt=request.prompt,
                 skill_level="beginner",
                 description=enhanced_prompt,
-                use_tools=use_tools  # NEW: Enable content discovery
+                use_tools=use_tools,  # NEW: Enable content discovery
             )
             course_title = roadmap_response["title"]
             course_description = roadmap_response["description"]
@@ -115,17 +118,16 @@ class CourseService(ICourseService):
             if "quota exceeded" in str(e).lower():
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="OpenAI API quota exceeded. Please try again later or contact support to upgrade your plan."
+                    detail="OpenAI API quota exceeded. Please try again later or contact support to upgrade your plan.",
                 ) from e
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to generate course: {e!s}"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to generate course: {e!s}"
             ) from e
         except Exception as e:
             self._logger.exception("Unexpected error while generating course")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="An unexpected error occurred while generating the course. Please try again."
+                detail="An unexpected error occurred while generating the course. Please try again.",
             ) from e
 
         # Create the course (roadmap) in database
@@ -481,9 +483,7 @@ class CourseService(ICourseService):
     ) -> LessonResponse:
         """Get a lesson by treating lesson_id as a module/node ID."""
         # First, verify the module exists and belongs to this course
-        module_query = select(Node).where(
-            and_(Node.id == lesson_id, Node.roadmap_id == course_id)
-        )
+        module_query = select(Node).where(and_(Node.id == lesson_id, Node.roadmap_id == course_id))
         result = await self.session.execute(module_query)
         module = result.scalar_one_or_none()
 
@@ -573,9 +573,7 @@ class CourseService(ICourseService):
         if self.memory_service:
             try:
                 # Search for course creation memory
-                memories = await self.memory_service.search_memories(
-                    f"Created course: {roadmap.title}", limit=1
-                )
+                memories = await self.memory_service.search_memories(f"Created course: {roadmap.title}", limit=1)
                 if memories and len(memories) > 0 and "metadata" in memories[0]:
                     original_prompt = memories[0]["metadata"].get("prompt")
             except Exception as e:
@@ -702,38 +700,55 @@ class CourseService(ICourseService):
         # Delete using LessonRepository
         return await LessonRepository.delete(lesson_id)
 
-    async def get_course_progress(self, course_id: UUID, _user_id: str | None = None) -> CourseProgressResponse:
+    async def get_course_progress(self, course_id: UUID, user_id: str | None = None) -> CourseProgressResponse:
         """Get overall progress for a course."""
-        # Get all modules for the course
-        modules = await self.list_modules(course_id, _user_id)
+        # Resolve user ID for different deployment modes
+        effective_user_id = resolve_user_id(user_id)
+
+        # Verify course exists
+        course_query = select(Roadmap).where(Roadmap.id == course_id)
+        result = await self.session.execute(course_query)
+        course = result.scalar_one_or_none()
+        if not course:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+
+        # Use the ProgressCalculator for accurate progress calculation
+        progress_calc = ProgressCalculator(self.session)
+        completion_percentage = await progress_calc.get_course_progress(course_id, effective_user_id)
+
+        # Get modules for additional stats
+        modules = await self.list_modules(course_id, effective_user_id)
         total_modules = len(modules)
         completed_modules = len([m for m in modules if m.status == "completed"])
         in_progress_modules = len([m for m in modules if m.status == "in_progress"])
 
-        # Get all lessons for all modules
-        total_lessons = 0
-        completed_lessons = 0
+        # Count total lessons (nodes with parent_id)
+        total_lessons_query = select(func.count(Node.id)).where(
+            Node.roadmap_id == course_id, Node.parent_id.is_not(None)
+        )
+        total_lessons_result = await self.session.execute(total_lessons_query)
+        total_lessons = total_lessons_result.scalar() or 0
 
-        for _module in modules:
-            module_lessons = await self.list_lessons(course_id, _user_id)
-            total_lessons += len(module_lessons)
-
-            # Count completed lessons by checking progress records
-            for lesson in module_lessons:
-                stmt = select(Progress).where(Progress.lesson_id == str(lesson.id), Progress.status == "done")
-                result = await self.session.execute(stmt)
-                progress = result.scalar_one_or_none()
-                if progress:
-                    completed_lessons += 1
-
-        completion_percentage = (completed_lessons / total_lessons * 100) if total_lessons > 0 else 0.0
+        # Count completed lessons from Progress table (distinct lessons only)
+        completed_lessons_query = (
+            select(func.count(func.distinct(Progress.lesson_id)))
+            .select_from(Progress)
+            .join(Node, func.cast(Node.id, String) == Progress.lesson_id)
+            .where(
+                Node.roadmap_id == course_id,
+                Progress.status == "completed",  # Fixed: Use correct status value
+                Progress.user_id == effective_user_id,  # Fixed: Use resolved user_id
+            )
+        )
+        completed_lessons_result = await self.session.execute(completed_lessons_query)
+        completed_lessons = completed_lessons_result.scalar() or 0
 
         return CourseProgressResponse(
             course_id=course_id,
             total_modules=total_modules,
             completed_modules=completed_modules,
             in_progress_modules=in_progress_modules,
-            completion_percentage=completion_percentage,
+            completion_percentage=float(completion_percentage),
             total_lessons=total_lessons,
             completed_lessons=completed_lessons,
         )

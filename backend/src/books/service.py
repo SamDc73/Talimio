@@ -819,7 +819,7 @@ async def update_book_chapter_status(book_id: UUID, chapter_id: UUID, chapter_st
                 )
 
             # Validate status
-            valid_statuses = ["not_started", "in_progress", "done"]
+            valid_statuses = ["not_started", "in_progress", "completed"]
             if chapter_status not in valid_statuses:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,

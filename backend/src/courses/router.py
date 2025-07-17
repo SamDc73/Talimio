@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dependencies import get_current_user_optional
 from src.auth.models import User
+from src.core.auth_dependencies import EffectiveUserId
 from src.courses.schemas import (
     CourseCreate,
     CourseListResponse,
@@ -126,10 +127,9 @@ async def get_lesson_simplified(
 async def get_course_progress(
     course_id: UUID,
     course_service: Annotated[CourseService, Depends(get_course_service)],
-    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+    user_id: EffectiveUserId,
 ) -> CourseProgressResponse:
     """Get overall progress for a course."""
-    user_id = str(current_user.id) if current_user else None
     return await course_service.get_course_progress(course_id, user_id)
 
 
