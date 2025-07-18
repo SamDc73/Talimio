@@ -39,51 +39,6 @@ const EPUBViewerV2 = ({ url, bookInfo, onLocationChange }) => {
 	);
 
 	/**
-	 * Set up keyboard navigation
-	 */
-	useEffect(() => {
-		if (renditionRef.current) {
-			const handleKeyPress = (e) => {
-				if (e.key === "ArrowLeft") {
-					gotoPrevious();
-				} else if (e.key === "ArrowRight") {
-					gotoNext();
-				}
-			};
-
-			document.addEventListener("keydown", handleKeyPress);
-			return () => document.removeEventListener("keydown", handleKeyPress);
-		}
-	}, [gotoNext, gotoPrevious]);
-
-	/**
-	 * Handle location changes with store persistence
-	 */
-	const locationChanged = (epubcifi) => {
-		setLocation(epubcifi);
-
-		// Save location to store
-		if (bookInfo?.id) {
-			updateBookProgress(bookInfo.id, {
-				epubState: {
-					...epubState,
-					location: epubcifi,
-					lastUpdated: Date.now(),
-				},
-			});
-
-			// Call parent callback if provided
-			if (onLocationChange) {
-				onLocationChange({
-					location: epubcifi,
-					// Try to extract page info if available
-					currentPage: extractPageFromLocation(epubcifi),
-				});
-			}
-		}
-	};
-
-	/**
 	 * Extract approximate page number from EPUB CFI location
 	 * This is a simplified approximation
 	 */
@@ -105,76 +60,127 @@ const EPUBViewerV2 = ({ url, bookInfo, onLocationChange }) => {
 	};
 
 	/**
-	 * Initialize rendition with theming and saved state
-	 */
-	const onRendition = (rendition) => {
-		renditionRef.current = rendition;
-
-		// Apply theme based on store preferences
-		const themes = rendition.themes;
-		const isDark =
-			preferences.theme === "dark" ||
-			(preferences.theme === "system" &&
-				window.matchMedia("(prefers-color-scheme: dark)").matches);
-
-		themes.default({
-			"::selection": {
-				background: "var(--primary)",
-				color: "var(--primary-foreground)",
-			},
-			body: {
-				color: isDark ? "#e5e5e5" : "#1a1a1a",
-				background: isDark ? "#1a1a1a" : "#ffffff",
-				"font-family": "system-ui, -apple-system, sans-serif",
-				"line-height": "1.6",
-				padding: "20px",
-				transition: "background-color 0.3s ease, color 0.3s ease",
-			},
-			p: {
-				margin: "1em 0",
-			},
-			"h1, h2, h3, h4, h5, h6": {
-				color: isDark ? "#f5f5f5" : "#1a1a1a",
-				margin: "1em 0 0.5em",
-			},
-			a: {
-				color: isDark ? "#60a5fa" : "#2563eb",
-				"text-decoration": "underline",
-			},
-			img: {
-				"max-width": "100%",
-				height: "auto",
-			},
-		});
-
-		// Restore saved location
-		if (epubState.location) {
-			setLocation(epubState.location);
-		}
-
-		// Set font size
-		rendition.themes.fontSize(`${fontSize}%`);
-	};
-
-	/**
 	 * Navigation methods
 	 */
-	const gotoPrevious = () => {
+	const gotoPrevious = useCallback(() => {
 		if (renditionRef.current) {
 			renditionRef.current.prev();
 		}
-	};
+	}, []);
 
-	const gotoNext = () => {
+	const gotoNext = useCallback(() => {
 		if (renditionRef.current) {
 			renditionRef.current.next();
 		}
-	};
+	}, []);
+
+	/**
+	 * Handle location changes with store persistence
+	 */
+	const locationChanged = useCallback(
+		(epubcifi) => {
+			setLocation(epubcifi);
+
+			// Save location to store
+			if (bookInfo?.id) {
+				updateBookProgress(bookInfo.id, {
+					epubState: {
+						...epubState,
+						location: epubcifi,
+						lastUpdated: Date.now(),
+					},
+				});
+
+				// Call parent callback if provided
+				if (onLocationChange) {
+					onLocationChange({
+						location: epubcifi,
+						// Try to extract page info if available
+						currentPage: extractPageFromLocation(epubcifi),
+					});
+				}
+			}
+		},
+		[bookInfo?.id, epubState, onLocationChange, updateBookProgress],
+	);
+
+	/**
+	 * Initialize rendition with theming and saved state
+	 */
+	const onRendition = useCallback(
+		(rendition) => {
+			renditionRef.current = rendition;
+
+			// Apply theme based on store preferences
+			const themes = rendition.themes;
+			const isDark =
+				preferences.theme === "dark" ||
+				(preferences.theme === "system" &&
+					window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+			themes.default({
+				"::selection": {
+					background: "var(--primary)",
+					color: "var(--primary-foreground)",
+				},
+				body: {
+					color: isDark ? "#e5e5e5" : "#1a1a1a",
+					background: isDark ? "#1a1a1a" : "#ffffff",
+					"font-family": "system-ui, -apple-system, sans-serif",
+					"line-height": "1.6",
+					padding: "20px",
+					transition: "background-color 0.3s ease, color 0.3s ease",
+				},
+				p: {
+					margin: "1em 0",
+				},
+				"h1, h2, h3, h4, h5, h6": {
+					color: isDark ? "#f5f5f5" : "#1a1a1a",
+					margin: "1em 0 0.5em",
+				},
+				a: {
+					color: isDark ? "#60a5fa" : "#2563eb",
+					"text-decoration": "underline",
+				},
+				img: {
+					"max-width": "100%",
+					height: "auto",
+				},
+			});
+
+			// Restore saved location
+			if (epubState.location) {
+				setLocation(epubState.location);
+			}
+
+			// Set font size
+			rendition.themes.fontSize(`${fontSize}%`);
+		},
+		[epubState.location, fontSize, preferences.theme],
+	);
+
+	/**
+	 * Set up keyboard navigation
+	 */
+	useEffect(() => {
+		if (renditionRef.current) {
+			const handleKeyPress = (e) => {
+				if (e.key === "ArrowLeft") {
+					gotoPrevious();
+				} else if (e.key === "ArrowRight") {
+					gotoNext();
+				}
+			};
+
+			document.addEventListener("keydown", handleKeyPress);
+			return () => document.removeEventListener("keydown", handleKeyPress);
+		}
+	}, [gotoNext, gotoPrevious]);
 
 	/**
 	 * Font size controls with store persistence
 	 */
-	const increaseFontSize = () => {
+	const increaseFontSize = useCallback(() => {
 		const newSize = Math.min(fontSize + 10, 200);
 		setFontSize(newSize);
 
@@ -191,9 +197,9 @@ const EPUBViewerV2 = ({ url, bookInfo, onLocationChange }) => {
 				},
 			});
 		}
-	};
+	}, [bookInfo?.id, epubState, fontSize, updateBookProgress]);
 
-	const decreaseFontSize = () => {
+	const decreaseFontSize = useCallback(() => {
 		const newSize = Math.max(fontSize - 10, 50);
 		setFontSize(newSize);
 
@@ -210,9 +216,9 @@ const EPUBViewerV2 = ({ url, bookInfo, onLocationChange }) => {
 				},
 			});
 		}
-	};
+	}, [bookInfo?.id, epubState, fontSize, updateBookProgress]);
 
-	const resetFontSize = () => {
+	const resetFontSize = useCallback(() => {
 		const defaultSize = preferences.defaultZoomLevel * 100 || 100;
 		setFontSize(defaultSize);
 
@@ -229,21 +235,26 @@ const EPUBViewerV2 = ({ url, bookInfo, onLocationChange }) => {
 				},
 			});
 		}
-	};
+	}, [
+		bookInfo?.id,
+		epubState,
+		preferences.defaultZoomLevel,
+		updateBookProgress,
+	]);
 
 	/**
 	 * Table of Contents handling
 	 */
-	const getToc = () => {
+	const getToc = useCallback(() => {
 		return tocRef.current || [];
-	};
+	}, []);
 
-	const handleTocSelect = (href) => {
+	const handleTocSelect = useCallback((href) => {
 		if (renditionRef.current) {
 			renditionRef.current.display(href);
 			setShowToc(false);
 		}
-	};
+	}, []);
 
 	/**
 	 * Theme change effect
@@ -253,10 +264,7 @@ const EPUBViewerV2 = ({ url, bookInfo, onLocationChange }) => {
 			// Re-apply theme when theme preference changes
 			onRendition(renditionRef.current);
 		}
-	}, [
-		// Re-apply theme when theme preference changes
-		onRendition,
-	]);
+	}, [onRendition]);
 
 	return (
 		<div className="epub-viewer-container">

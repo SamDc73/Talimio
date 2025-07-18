@@ -7,6 +7,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/tooltip";
+import { formatProgressText, getVideoProgress } from "@/utils/progressUtils";
 import { UserAvatarMenu, useChatSidebar } from "./MainHeader";
 
 export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
@@ -14,7 +15,7 @@ export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
 	const { toggleChat } = useChatSidebar();
 
 	// Calculate progress percentage for display
-	const progress = video ? Math.round(video.completionPercentage || 0) : 0;
+	const progress = getVideoProgress(video);
 
 	return (
 		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-border shadow-sm">
@@ -50,7 +51,7 @@ export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
 									/>
 								</div>
 								<span className="ml-2 text-xs font-medium text-slate-600">
-									{progress}%
+									{formatProgressText(progress)}
 								</span>
 								<span className="ml-3 text-xs text-slate-500">
 									{video.channelName || video.channel}

@@ -11,12 +11,7 @@ import SidebarNav from "./SidebarNav";
 /**
  * Course navigation sidebar that displays a hierarchical view of modules and lessons
  */
-function CourseSidebar({
-	modules = [],
-	onLessonClick,
-	activeLessonId = null,
-	courseId,
-}) {
+function CourseSidebar({ modules = [], onLessonClick, activeLessonId = null }) {
 	const { courseProgress, toggleLessonCompletion, isLessonCompleted } =
 		useProgressSafe();
 
