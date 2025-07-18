@@ -1,5 +1,6 @@
 """Course creation service for creating new courses."""
 
+import json
 import logging
 from datetime import UTC, datetime
 from uuid import UUID
@@ -13,6 +14,7 @@ from src.ai.memory import Mem0Wrapper
 from src.courses.models import Node, Roadmap
 from src.courses.schemas import CourseCreate, CourseResponse, ModuleResponse
 from src.courses.services.course_response_builder import CourseResponseBuilder
+from src.tagging.service import TaggingService
 
 
 class CourseCreationService:
@@ -93,7 +95,6 @@ class CourseCreationService:
             roadmap = Roadmap(
                 title=title,
                 description=course_description,
-                tags_json=str(roadmap_response.get("tags", [])),  # Convert to JSON string
                 skill_level=roadmap_response.get("difficulty", "beginner"),
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC),
@@ -106,6 +107,9 @@ class CourseCreationService:
             modules_data = await self._create_modules_and_lessons(roadmap.id, nodes_data)
 
             await self.session.commit()
+
+            # Apply automatic tagging
+            await self._apply_automatic_tagging(roadmap, modules_data)
 
             # Store in memory service if available
             if self.memory_service:
@@ -210,3 +214,74 @@ class CourseCreationService:
             )
 
         return modules_data
+
+    async def _apply_automatic_tagging(self, roadmap: Roadmap, modules_data: list[ModuleResponse]) -> None:
+        """Apply automatic tagging to the course/roadmap.
+
+        Args:
+            roadmap: The created roadmap
+            modules_data: List of module data for context
+        """
+        try:
+            # Initialize tagging service
+            tagging_service = TaggingService(self.session, self.ai_client)
+
+            # Build content preview from roadmap and modules
+            content_preview = self._build_content_preview(roadmap, modules_data)
+
+            # Generate and store tags
+            tags = await tagging_service.tag_content(
+                content_id=roadmap.id,
+                content_type="roadmap",
+                title=roadmap.title,
+                content_preview=content_preview,
+            )
+
+            if tags:
+                # Update the roadmap's tags_json field
+                roadmap.tags_json = json.dumps(tags)
+                await self.session.commit()
+                self._logger.info("Successfully tagged course %s with tags: %s", roadmap.id, tags)
+
+        except Exception as e:
+            self._logger.exception("Failed to tag course %s: %s", roadmap.id, e)
+            # Don't fail the entire course creation if tagging fails
+
+    def _build_content_preview(self, roadmap: Roadmap, modules_data: list[ModuleResponse]) -> str:
+        """Build content preview for tagging.
+
+        Args:
+            roadmap: The created roadmap
+            modules_data: List of module data
+
+        Returns
+        -------
+            Content preview string
+        """
+        parts = []
+
+        # Add roadmap description
+        parts.append(f"Title: {roadmap.title}")
+        if roadmap.description:
+            parts.append(f"Description: {roadmap.description}")
+
+        # Add skill level
+        parts.append(f"Skill Level: {roadmap.skill_level}")
+
+        # Add module information
+        if modules_data:
+            parts.append("\nCourse Structure:")
+            for i, module in enumerate(modules_data[:10], 1):  # Limit to first 10 modules
+                module_info = f"{i}. {module.title}"
+                if module.description:
+                    module_info += f": {module.description[:100]}"
+                    if len(module.description) > 100:
+                        module_info += "..."
+                parts.append(module_info)
+
+                # Include some lesson titles for better context
+                if module.lessons and i <= 3:  # Only first 3 modules' lessons
+                    for _j, lesson in enumerate(module.lessons[:3], 1):
+                        parts.append(f"   - {lesson.title}")
+
+        return "\n".join(parts)
