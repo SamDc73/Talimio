@@ -1,4 +1,4 @@
-import { CheckCircle, Circle } from "lucide-react";
+import { CheckCircle, Circle, MinusSquare } from "lucide-react";
 
 /**
  * Simple completion checkbox component for sidebar items
@@ -7,6 +7,7 @@ import { CheckCircle, Circle } from "lucide-react";
  */
 function CompletionCheckbox({
 	isCompleted,
+	isIndeterminate = false,
 	isLocked = false,
 	onClick,
 	variant = "default",
@@ -22,6 +23,22 @@ function CompletionCheckbox({
 
 	const completedColor = variantColors[variant] || variantColors.default;
 
+	const renderIcon = () => {
+		if (isIndeterminate) {
+			return <MinusSquare className={`w-5 h-5 ${completedColor}`} />;
+		}
+		if (isCompleted) {
+			return <CheckCircle className={`w-5 h-5 ${completedColor}`} />;
+		}
+		return (
+			<Circle
+				className={`w-5 h-5 ${
+					isLocked ? "text-zinc-200" : "text-zinc-300 hover:text-zinc-400"
+				}`}
+			/>
+		);
+	};
+
 	return (
 		<button
 			type="button"
@@ -31,18 +48,10 @@ function CompletionCheckbox({
 					onClick(e);
 				}
 			}}
-			className="mt-0.5 transition-all duration-200 hover:scale-110"
+			className="mt-0.5 transition-all duration-200 hover:scale-110 hover:bg-zinc-50 rounded-full p-1 -m-1"
 			disabled={isLocked}
 		>
-			{isCompleted ? (
-				<CheckCircle className={`w-5 h-5 ${completedColor}`} />
-			) : (
-				<Circle
-					className={`w-5 h-5 ${
-						isLocked ? "text-zinc-200" : "text-zinc-300 hover:text-zinc-400"
-					}`}
-				/>
-			)}
+			{renderIcon()}
 		</button>
 	);
 }
