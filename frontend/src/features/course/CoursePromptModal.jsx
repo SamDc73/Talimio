@@ -80,6 +80,7 @@ const CoursePromptModal = ({
 						Create New Course
 					</h2>
 					<button
+						type="button"
 						onClick={handleClose}
 						disabled={isGenerating}
 						className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-50"

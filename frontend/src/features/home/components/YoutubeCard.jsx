@@ -2,6 +2,7 @@ import { ChevronRight, Youtube } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { deleteApi } from "@/services/deleteApi";
+import { formatProgressText, getVideoProgress } from "@/utils/progressUtils";
 import { KebabMenu } from "./KebabMenu";
 import { TagChip } from "./TagChip";
 
@@ -33,7 +34,8 @@ export function YoutubeCard({ video, onDelete, onArchive, className = "" }) {
 	};
 
 	return (
-		<div
+		<button
+			type="button"
 			className={`bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 p-6 relative ${className}`}
 			onMouseEnter={() => setShowMenu(true)}
 			onMouseLeave={() => setShowMenu(false)}
@@ -86,12 +88,12 @@ export function YoutubeCard({ video, onDelete, onArchive, className = "" }) {
 						<div
 							className="bg-video h-2 rounded-full transition-all duration-300"
 							style={{
-								width: `${video.progress || video.completionPercentage || 0}%`,
+								width: `${getVideoProgress(video)}%`,
 							}}
 						/>
 					</div>
 					<span className="text-sm text-foreground font-medium">
-						{Math.round(video.progress || video.completionPercentage || 0)}%
+						{formatProgressText(getVideoProgress(video))}
 					</span>
 				</div>
 			</div>
@@ -107,6 +109,6 @@ export function YoutubeCard({ video, onDelete, onArchive, className = "" }) {
 					<ChevronRight className="h-4 w-4" />
 				</Link>
 			</div>
-		</div>
+		</button>
 	);
 }

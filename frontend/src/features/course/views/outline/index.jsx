@@ -14,9 +14,6 @@ function OutlineView({ roadmapId, modules = [] }) {
 		useProgress();
 	const { goToLesson } = useCourseNavigation();
 
-	// Debug: Log modules data to ensure it has the right structure
-	console.log("OutlineView - modules data:", modules);
-
 	const handleLessonClick = async (_moduleIdx, _lessonIdx, lessonId) => {
 		try {
 			if (!lessonId) {

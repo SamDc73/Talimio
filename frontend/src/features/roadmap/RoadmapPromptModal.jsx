@@ -6,6 +6,7 @@ import { Button } from "@/components/button";
 import {
 	Dialog,
 	DialogContent,
+	DialogDescription,
 	DialogHeader,
 	DialogTitle,
 } from "@/components/dialog";
@@ -81,10 +82,10 @@ const RoadmapPromptModal = ({ isOpen, onClose }) => {
 						</div>
 						Generate Learning Course
 					</DialogTitle>
-					<p className="text-muted-foreground text-sm">
+					<DialogDescription className="text-muted-foreground text-sm">
 						Tell us what you want to learn, and AI will create a personalized
 						course for you
-					</p>
+					</DialogDescription>
 				</DialogHeader>
 
 				<form onSubmit={handleSubmit} className="space-y-6">

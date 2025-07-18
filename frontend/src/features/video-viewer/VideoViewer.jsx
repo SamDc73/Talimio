@@ -9,6 +9,7 @@ import useAppStore from "@/stores/useAppStore";
 import "@justinribeiro/lite-youtube";
 import { CollapsibleDescription } from "./CollapsibleDescription";
 import "./VideoViewer.css";
+import { getVideoProgress } from "@/utils/progressUtils";
 import VideoTranscript from "./VideoTranscript";
 
 /**
@@ -110,6 +111,10 @@ function VideoViewerContentV2() {
 				currentTime: Math.floor(newCurrentTime),
 				lastPosition: Math.floor(newCurrentTime),
 				duration: video.duration,
+				percentage:
+					video.duration > 0
+						? Math.round((newCurrentTime / video.duration) * 100)
+						: 0,
 				lastAccessed: Date.now(),
 			};
 
@@ -169,12 +174,14 @@ function VideoViewerContentV2() {
 											const time = ytPlayer.getCurrentTime();
 											if (typeof time === "number" && !Number.isNaN(time)) {
 												setCurrentTime(time);
+												// Also update Zustand store for real-time sync
+												handleProgressUpdate(time);
 											}
 										} catch (err) {
 											console.error("Error getting current time:", err);
 										}
 									}
-								}, 100); // Poll every 100ms
+								}, 1000); // Poll every 1 second (reduced frequency for store updates)
 							},
 							onStateChange: (event) => {
 								console.log("Player state changed:", event.data);
@@ -207,7 +214,7 @@ function VideoViewerContentV2() {
 				);
 			}
 		};
-	}, [video]);
+	}, [video, handleProgressUpdate]);
 
 	/**
 	 * Save progress on page unload using beacon API
@@ -218,6 +225,10 @@ function VideoViewerContentV2() {
 				// Use sendBeacon for reliable delivery during page unload
 				const data = JSON.stringify({
 					lastPosition: Math.floor(currentTime),
+					percentage:
+						video.duration > 0
+							? Math.round((currentTime / video.duration) * 100)
+							: 0,
 				});
 				navigator.sendBeacon(
 					`/api/v1/videos/${videoId}/progress`,
@@ -279,8 +290,11 @@ function VideoViewerContentV2() {
 	/**
 	 * Calculate progress percentage
 	 */
+	// Import the utility at the top of the file
 	const progressPercentage =
-		video?.duration > 0 ? Math.round((currentTime / video.duration) * 100) : 0;
+		video?.duration > 0
+			? Math.round((currentTime / video.duration) * 100)
+			: getVideoProgress(video);
 
 	/**
 	 * Render loading state

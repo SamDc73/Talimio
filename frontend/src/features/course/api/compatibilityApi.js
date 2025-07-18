@@ -222,14 +222,15 @@ export function shouldUseNewCourseAPI() {
  * @param {string} id - The course/roadmap ID
  */
 export function useSmartCourseAPI(id = null) {
+	const courseService = useCourseService(id);
+	const roadmapCompatibilityService = useRoadmapCourseCompatibility(id);
+
 	const useNewAPI = shouldUseNewCourseAPI();
 
 	if (useNewAPI) {
-		return useCourseService(id);
+		return courseService;
 	}
-	// For legacy support, we would import and use the old services here
-	// For now, we'll always use the new API with compatibility layer
-	return useRoadmapCourseCompatibility(id);
+	return roadmapCompatibilityService;
 }
 
 // Functions are already exported above individually
