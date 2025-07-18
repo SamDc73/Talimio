@@ -149,5 +149,6 @@ class ModuleResponse(BaseModel):
     parent_id: UUID | None = Field(None, description="Parent module ID")
     created_at: datetime = Field(..., description="Module creation timestamp")
     updated_at: datetime = Field(..., description="Module last update timestamp")
+    lessons: list["LessonResponse"] = Field(default_factory=list, description="Module lessons")
 
     model_config = ConfigDict(from_attributes=True)
