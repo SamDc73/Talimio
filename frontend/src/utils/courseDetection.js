@@ -40,34 +40,9 @@ export async function fetchCourseData(courseId) {
 export async function getCourseWithModules(courseId) {
 	const data = await fetchCourseData(courseId);
 
-	// Course API returns flat modules that need hierarchical transformation
-	const flatModules = data.modules || [];
-
-	// Build hierarchy: find root modules (those without parent_id)
-	const rootModules = flatModules.filter((module) => !module.parent_id);
-
-	// Helper function to build module hierarchy with lessons
-	const buildModuleHierarchy = (module) => {
-		// Find child modules (lessons) of this module
-		const childModules = flatModules
-			.filter((child) => child.parent_id === module.id)
-			.sort((a, b) => (a.order || 0) - (b.order || 0));
-
-		return {
-			id: module.id,
-			title: module.title || "Untitled",
-			description: module.description || "",
-			order: module.order || 0,
-			status: module.status || "not_started",
-			// Transform child modules into lessons array
-			lessons: childModules.map((child) => buildModuleHierarchy(child)),
-		};
-	};
-
-	// Transform root modules with their lessons
-	const modules = rootModules
-		.map((module) => buildModuleHierarchy(module))
-		.sort((a, b) => (a.order || 0) - (b.order || 0));
+	// The API already returns modules with lessons nested inside them
+	// No transformation needed - just return the modules directly
+	const modules = data.modules || [];
 
 	return {
 		data,

@@ -23,6 +23,12 @@ const DEFAULT_VIDEO_PROGRESS = {
 	volume: 1,
 };
 
+const DEFAULT_AUTH_STATE = {
+	token: null,
+	isAuthenticated: false,
+	user: null,
+};
+
 /**
  * Main application store with all state slices
  * Single source of truth for client-side state
@@ -31,6 +37,30 @@ const useAppStore = create(
 	devtools(
 		persist(
 			immer((set, get) => ({
+				// Authentication state
+				token: DEFAULT_AUTH_STATE.token,
+				isAuthenticated: DEFAULT_AUTH_STATE.isAuthenticated,
+				user: DEFAULT_AUTH_STATE.user,
+
+				// Authentication actions
+				setToken: (token) =>
+					set((state) => {
+						state.token = token;
+						state.isAuthenticated = !!token;
+					}),
+				clearToken: () =>
+					set((state) => {
+						state.token = null;
+						state.isAuthenticated = false;
+					}),
+				setUser: (user) =>
+					set((state) => {
+						state.user = user;
+					}),
+				clearUser: () =>
+					set((state) => {
+						state.user = null;
+					}),
 				// ========== BOOKS SLICE ==========
 				books: {
 					// Book progress: bookId -> { currentPage, totalPages, zoomLevel, scrollPosition, epubState }
@@ -135,9 +165,10 @@ const useAppStore = create(
 					// Recalculate and cache progress stats
 					const state = get();
 					state.recalculateBookProgressStats(bookId);
-					// Sync to API (if endpoint exists)
+					// Sync the entire tocProgress object to the API
+					const tocProgress = state.books.tocProgress[bookId];
 					syncToAPI("books", bookId, {
-						tocProgress: { sectionId, isCompleted },
+						tocProgress,
 					});
 				},
 
@@ -153,12 +184,12 @@ const useAppStore = create(
 						}
 					});
 					// Recalculate stats after batch update
-					const state = get();
-					state.recalculateBookProgressStats(bookId);
+					get().recalculateBookProgressStats(bookId);
 					// Batch sync to API only if not skipped (e.g., during migration)
 					if (!skipSync) {
+						const tocProgress = get().books.tocProgress[bookId];
 						syncToAPI("books", bookId, {
-							tocProgressBatch: updates,
+							tocProgress,
 						});
 					}
 				},
@@ -167,10 +198,11 @@ const useAppStore = create(
 				// Use direct access: state.books.tocProgress[bookId] || {}
 				// For completedSections, use useMemo in components
 
-				// Calculate progress from table of contents
+				// Calculate progress from table of contents - simple and dead simple approach
 				calculateTocProgress: (bookId, tableOfContents) => {
 					if (!tableOfContents)
 						return { totalSections: 0, completedSections: 0, percentage: 0 };
+
 					const tocProgress = get().books.tocProgress[bookId] || {};
 					const completedSections = new Set(
 						Object.entries(tocProgress)
@@ -178,40 +210,64 @@ const useAppStore = create(
 							.map(([sectionId, _]) => sectionId),
 					);
 
-					const countSections = (chapters) => {
-						let total = 0;
-						let completed = 0;
+					// Simple approach: count ALL chapters and sections (flatten the structure)
+					// BUT deduplicate by ID to handle duplicate entries in ToC
+					const getAllChapters = (chapters, seenIds = new Set()) => {
+						const allChapters = [];
+
 						for (const chapter of chapters) {
+							// Only add if we haven't seen this ID before
+							if (!seenIds.has(chapter.id)) {
+								allChapters.push(chapter);
+								seenIds.add(chapter.id);
+							}
+							// If it has children, process them recursively with the same seenIds set
 							if (chapter.children && chapter.children.length > 0) {
-								const [subTotal, subCompleted] = countSections(
-									chapter.children,
-								);
-								total += subTotal;
-								completed += subCompleted;
-							} else {
-								total += 1;
-								if (completedSections.has(chapter.id)) {
-									completed += 1;
-								}
+								const childChapters = getAllChapters(chapter.children, seenIds);
+								allChapters.push(...childChapters);
 							}
 						}
-						return [total, completed];
+						return allChapters;
 					};
 
-					const [totalSections, completed] = countSections(
+					const allChapters = getAllChapters(
 						Array.isArray(tableOfContents)
 							? tableOfContents
 							: [tableOfContents],
 					);
 
-					const percentage =
-						totalSections > 0
-							? Math.round((completed / totalSections) * 100)
-							: 0;
+					const totalChapters = allChapters.length;
+					const completedChapters = allChapters.filter((chapter) =>
+						completedSections.has(chapter.id),
+					).length;
+
+					// Simple rule: if all chapters are done, show 100%
+					let percentage = 0;
+					if (totalChapters > 0) {
+						if (completedChapters === totalChapters) {
+							percentage = 100;
+						} else {
+							percentage = Math.round(
+								(completedChapters / totalChapters) * 100,
+							);
+						}
+					}
+
+					// Debug logging for the specific problematic book
+					if (bookId === "161320ce-b579-49e3-897f-b7ab95d24af5") {
+						console.log(`📊 SIMPLE Progress calculation for book ${bookId}:`, {
+							totalChapters,
+							completedChapters,
+							percentage,
+							allChaptersDone: completedChapters === totalChapters,
+							completedSectionsIds: Array.from(completedSections),
+							allChapterIds: allChapters.map((c) => c.id),
+						});
+					}
 
 					return {
-						totalSections,
-						completedSections: completed,
+						totalSections: totalChapters,
+						completedSections: completedChapters,
 						percentage,
 						lastUpdated: Date.now(),
 					};
@@ -246,6 +302,15 @@ const useAppStore = create(
 					return stats;
 				},
 
+				// Force refresh progress stats (clear cache and recalculate)
+				forceRefreshBookProgress: (bookId) => {
+					set((state) => {
+						// Clear cached progress stats to force fresh calculation
+						delete state.books.progressStats[bookId];
+					});
+					return get().recalculateBookProgressStats(bookId);
+				},
+
 				// Note: getBookProgressStats removed to prevent infinite loops
 				// Use direct access: state.books.progressStats[bookId] || defaultObject
 
@@ -256,8 +321,13 @@ const useAppStore = create(
 					set((state) => {
 						state.books.metadata[bookId] = book;
 					});
-					// Initialize empty progress if none exists
-					if (!get().books.tocProgress[bookId]) {
+					// Initialize ToC progress from server data if available
+					if (book.progress?.tocProgress) {
+						set((state) => {
+							state.books.tocProgress[bookId] = book.progress.tocProgress;
+						});
+					} else if (!get().books.tocProgress[bookId]) {
+						// Initialize empty progress if none exists
 						set((state) => {
 							state.books.tocProgress[bookId] = {};
 						});
@@ -465,6 +535,8 @@ const useAppStore = create(
 					lastViewedCourseId: null,
 					// Lesson completion: courseId -> { lessonId -> completed }
 					lessonCompletion: {},
+					// Course progress cache: courseId -> { completion_percentage, total_lessons, completed_lessons }
+					progressStats: {},
 				},
 
 				// Course integration actions
@@ -506,6 +578,46 @@ const useAppStore = create(
 						return {};
 					}
 					return courseData.lessonCompletion[courseId] || {};
+				},
+
+				// Course progress tracking actions
+				setCourseProgress: (courseId, progressStats) => {
+					set((state) => {
+						state.course.progressStats[courseId] = {
+							...progressStats,
+							lastUpdated: Date.now(),
+						};
+					});
+
+					// Emit custom event for components listening to course progress changes
+					if (typeof window !== "undefined") {
+						window.dispatchEvent(
+							new CustomEvent("courseProgressUpdate", {
+								detail: { courseId, progressStats },
+							}),
+						);
+					}
+				},
+
+				getCourseProgress: (courseId) => {
+					return get().course.progressStats[courseId] || null;
+				},
+
+				// Force refresh course progress (clear cache and emit event)
+				refreshCourseProgress: (courseId) => {
+					set((state) => {
+						// Clear cached progress stats to force fresh fetch
+						delete state.course.progressStats[courseId];
+					});
+
+					// Emit event to notify components to refetch
+					if (typeof window !== "undefined") {
+						window.dispatchEvent(
+							new CustomEvent("courseProgressRefresh", {
+								detail: { courseId },
+							}),
+						);
+					}
 				},
 
 				// ========== CLEANUP ACTIONS ==========
@@ -569,6 +681,7 @@ const useAppStore = create(
 							activeCourseId: null,
 							lastViewedCourseId: null,
 							lessonCompletion: {},
+							progressStats: {},
 						};
 						state.ui.errors = [];
 						state.ui.loading = {};
@@ -626,9 +739,11 @@ const useAppStore = create(
 					videos: state.videos,
 					preferences: state.preferences,
 					course: state.course,
+					token: state.token,
+					user: state.user,
 					// Don't persist UI state
 				}),
-				version: 2, // Increment version to trigger migration
+				version: 3, // Increment version to trigger migration
 				migrate: (persistedState, version) => {
 					if (version === 0 || version === 1) {
 						// Migration from version 0 or 1 to 2
@@ -661,6 +776,8 @@ export const selectTocProgress = (bookId) => (state) =>
 	state.books.tocProgress[bookId] || {};
 export const selectProgressStats = (bookId) => (state) =>
 	state.books.progressStats[bookId];
+export const selectCourseProgress = (courseId) => (state) =>
+	state.course.progressStats[courseId];
 
 // Assistant selectors
 export const selectAssistantSidebarPinned = (state) =>
