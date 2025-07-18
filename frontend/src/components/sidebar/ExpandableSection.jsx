@@ -43,36 +43,25 @@ function ExpandableSection({
 				isActive ? activeStyle : "border-border bg-white"
 			} shadow-sm overflow-hidden ${className}`}
 		>
-			<div
-				className={`flex items-center gap-3 justify-between w-full px-4 py-3 text-left font-semibold text-base text-foreground border-b border-border rounded-t-2xl ${showExpandButton ? "cursor-pointer" : ""}`}
+			<button
+				type="button"
+				className={`flex items-center gap-3 justify-between w-full px-4 py-3 text-left font-semibold text-sm text-foreground ${children && isExpanded ? "border-b border-border" : ""} rounded-t-2xl ${showExpandButton ? "cursor-pointer hover:bg-zinc-50/50" : ""} transition-colors`}
 				style={{ background: isActive ? "transparent" : "#fff" }}
 				onClick={showExpandButton ? onToggle : undefined}
-				role={showExpandButton ? "button" : undefined}
-				tabIndex={showExpandButton ? 0 : undefined}
-				onKeyDown={
-					showExpandButton
-						? (e) => {
-								if (e.key === "Enter" || e.key === " ") {
-									e.preventDefault();
-									onToggle();
-								}
-							}
-						: undefined
-				}
 				aria-expanded={showExpandButton ? isExpanded : undefined}
 			>
 				<div className="flex items-center gap-3 flex-1 min-w-0">
 					{headerContent}
-					<span className="line-clamp-2">{title}</span>
+					<span className="line-clamp-2 text-sm">{title}</span>
 				</div>
 				{showExpandButton && (
 					<ChevronRight
-						className={`w-5 h-5 text-zinc-400 transition-transform duration-200 ${
+						className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${
 							isExpanded ? `rotate-90 ${chevronColor}` : "rotate-0"
 						}`}
 					/>
 				)}
-			</div>
+			</button>
 			{isExpanded && children && (
 				<div className="px-4 py-2 space-y-2">{children}</div>
 			)}
