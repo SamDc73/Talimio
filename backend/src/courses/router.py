@@ -10,8 +10,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.dependencies import get_current_user_optional
-from src.auth.models import User
 from src.core.auth_dependencies import EffectiveUserId
 from src.courses.schemas import (
     CourseCreate,
@@ -35,11 +33,11 @@ router = APIRouter(
 
 
 def get_course_service(
-    session: AsyncSession = Depends(get_db_session), current_user: User | None = Depends(get_current_user_optional)
+    session: AsyncSession = Depends(get_db_session)
 ) -> CourseService:
     """Get course service instance."""
-    user_id = str(current_user.id) if current_user else None
-    return CourseService(session, user_id)
+    # User ID will be passed directly to methods that need it
+    return CourseService(session)
 
 
 # Course operations
@@ -47,23 +45,21 @@ def get_course_service(
 async def create_course(
     request: CourseCreate,
     course_service: Annotated[CourseService, Depends(get_course_service)],
-    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+    user_id: EffectiveUserId,
 ) -> CourseResponse:
     """Create a new course using AI generation."""
-    user_id = str(current_user.id) if current_user else None
     return await course_service.create_course(request, user_id)
 
 
 @router.get("/")
 async def list_courses(
     course_service: Annotated[CourseService, Depends(get_course_service)],
-    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+    user_id: EffectiveUserId,
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     per_page: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
     search: Annotated[str | None, Query(description="Search query")] = None,
 ) -> CourseListResponse:
     """List courses with pagination and optional search."""
-    user_id = str(current_user.id) if current_user else None
     courses, total = await course_service.list_courses(page, per_page, search, user_id)
 
     return CourseListResponse(courses=courses, total=total, page=page, per_page=per_page)
@@ -73,10 +69,9 @@ async def list_courses(
 async def get_course(
     course_id: UUID,
     course_service: Annotated[CourseService, Depends(get_course_service)],
-    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+    user_id: EffectiveUserId,
 ) -> CourseResponse:
     """Get a specific course by ID."""
-    user_id = str(current_user.id) if current_user else None
     return await course_service.get_course(course_id, user_id)
 
 
@@ -85,10 +80,9 @@ async def update_course(
     course_id: UUID,
     request: CourseUpdate,
     course_service: Annotated[CourseService, Depends(get_course_service)],
-    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+    user_id: EffectiveUserId,
 ) -> CourseResponse:
     """Update a course."""
-    user_id = str(current_user.id) if current_user else None
     return await course_service.update_course(course_id, request, user_id)
 
 
@@ -99,11 +93,10 @@ async def get_lesson_full_path(
     module_id: UUID,
     lesson_id: UUID,
     course_service: Annotated[CourseService, Depends(get_course_service)],
-    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+    user_id: EffectiveUserId,
     generate: Annotated[bool, Query(description="Auto-generate if lesson doesn't exist")] = False,
 ) -> LessonResponse:
     """Get a specific lesson by course, module, and lesson ID (full hierarchical route)."""
-    user_id = str(current_user.id) if current_user else None
     # Delegate to the existing lesson service - module_id is just for routing
     return await course_service.get_lesson_simplified(course_id, lesson_id, generate, user_id)
 
@@ -114,11 +107,10 @@ async def get_lesson_simplified(
     course_id: UUID,
     lesson_id: UUID,
     course_service: Annotated[CourseService, Depends(get_course_service)],
-    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+    user_id: EffectiveUserId,
     generate: Annotated[bool, Query(description="Auto-generate if lesson doesn't exist")] = False,
 ) -> LessonResponse:
     """Get a specific lesson by course and lesson ID (simplified route without module_id)."""
-    user_id = str(current_user.id) if current_user else None
     return await course_service.get_lesson_simplified(course_id, lesson_id, generate, user_id)
 
 
@@ -140,10 +132,9 @@ async def update_lesson_status(
     lesson_id: UUID,
     request: LessonStatusUpdate,
     course_service: Annotated[CourseService, Depends(get_course_service)],
-    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+    user_id: EffectiveUserId,
 ) -> LessonStatusResponse:
     """Update the status of a specific lesson."""
-    user_id = str(current_user.id) if current_user else None
     return await course_service.update_lesson_status(course_id, module_id, lesson_id, request, user_id)
 
 
@@ -154,10 +145,9 @@ async def update_lesson_status_simplified(
     lesson_id: UUID,
     request: LessonStatusUpdate,
     course_service: Annotated[CourseService, Depends(get_course_service)],
-    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+    user_id: EffectiveUserId,
 ) -> LessonStatusResponse:
     """Update the status of a specific lesson (simplified route without module_id)."""
-    user_id = str(current_user.id) if current_user else None
     # Pass course_id as module_id for compatibility with existing service
     return await course_service.update_lesson_status(course_id, course_id, lesson_id, request, user_id)
 
@@ -168,10 +158,9 @@ async def get_lesson_status(
     module_id: UUID,
     lesson_id: UUID,
     course_service: Annotated[CourseService, Depends(get_course_service)],
-    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+    user_id: EffectiveUserId,
 ) -> LessonStatusResponse:
     """Get the status of a specific lesson."""
-    user_id = str(current_user.id) if current_user else None
     return await course_service.get_lesson_status(course_id, module_id, lesson_id, user_id)
 
 
@@ -181,10 +170,9 @@ async def get_lesson_status_simplified(
     course_id: UUID,
     lesson_id: UUID,
     course_service: Annotated[CourseService, Depends(get_course_service)],
-    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+    user_id: EffectiveUserId,
 ) -> LessonStatusResponse:
     """Get the status of a specific lesson (simplified route without module_id)."""
-    user_id = str(current_user.id) if current_user else None
     # Pass course_id as module_id for compatibility with existing service
     return await course_service.get_lesson_status(course_id, course_id, lesson_id, user_id)
 
@@ -194,8 +182,7 @@ async def get_lesson_status_simplified(
 async def get_all_lesson_statuses(
     course_id: UUID,
     course_service: Annotated[CourseService, Depends(get_course_service)],
-    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+    user_id: EffectiveUserId,
 ) -> dict[str, str]:
     """Get all lesson statuses for a course."""
-    user_id = str(current_user.id) if current_user else None
     return await course_service.get_all_lesson_statuses(course_id, user_id)
