@@ -1,14 +1,4 @@
-/**
- * Base API URL for progress endpoints
- * @constant
- */
-const API_BASE = "/api/v1";
-
-/**
- * Default timeout for API requests in milliseconds
- * @constant
- */
-const REQUEST_TIMEOUT = 7000;
+import { api } from "../lib/api";
 
 /**
  * Cache configuration
@@ -62,41 +52,6 @@ class Cache {
 const progressCache = new Cache(CACHE_CONFIG.maxAge, CACHE_CONFIG.maxSize);
 
 /**
- * @typedef {Object} Progress
- * @property {string} id - The unique identifier for the progress record
- * @property {string} userId - The ID of the user
- * @property {string} moduleId - The ID of the module
- * @property {string} status - The current progress status
- * @property {Date} updatedAt - Last update timestamp
- */
-
-/**
- * Fetch with timeout wrapper
- * @param {string} url - The URL to fetch
- * @param {Object} options - Fetch options
- * @returns {Promise} The fetch promise with timeout
- */
-async function fetchWithTimeout(url, options = {}) {
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-
-	try {
-		const response = await fetch(url, {
-			...options,
-			signal: controller.signal,
-		});
-		clearTimeout(timeout);
-		return response;
-	} catch (error) {
-		clearTimeout(timeout);
-		if (error.name === "AbortError") {
-			throw new Error(`Request timeout after ${REQUEST_TIMEOUT}ms`);
-		}
-		throw error;
-	}
-}
-
-/**
  * Get progress for a specific module
  * @param {string} courseId - The ID of the course
  * @param {string} moduleId - The ID of the module
@@ -111,13 +66,9 @@ export async function getModuleProgress(courseId, moduleId) {
 	}
 
 	try {
-		const response = await fetchWithTimeout(
+		const data = await api.get(
 			`${API_BASE}/courses/${courseId}/modules/${moduleId}`,
 		);
-		if (!response.ok) {
-			throw new Error(`Failed to fetch module: ${response.statusText}`);
-		}
-		const data = await response.json();
 		progressCache.set(cacheKey, data);
 		return data;
 	} catch (error) {
@@ -140,13 +91,7 @@ export async function getCourseModules(courseId) {
 	}
 
 	try {
-		const response = await fetchWithTimeout(
-			`${API_BASE}/courses/${courseId}/modules`,
-		);
-		if (!response.ok) {
-			throw new Error(`Failed to fetch course modules: ${response.statusText}`);
-		}
-		const data = await response.json();
+		const data = await api.get(`${API_BASE}/courses/${courseId}/modules`);
 		progressCache.set(cacheKey, data);
 		return data;
 	} catch (error) {
@@ -165,19 +110,10 @@ export async function getCourseModules(courseId) {
  */
 export async function updateModuleStatus(courseId, moduleId, status) {
 	try {
-		const response = await fetchWithTimeout(
+		const data = await api.patch(
 			`${API_BASE}/courses/${courseId}/modules/${moduleId}`,
-			{
-				method: "PATCH",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ status }),
-			},
+			{ status },
 		);
-
-		if (!response.ok) {
-			throw new Error(`Failed to update module status: ${response.statusText}`);
-		}
-		const data = await response.json();
 
 		// Invalidate relevant cache entries
 		progressCache.clear();
@@ -204,20 +140,10 @@ export async function updateLessonStatus(
 	status,
 ) {
 	try {
-		// Use simplified endpoint without moduleId
-		const response = await fetchWithTimeout(
-			`${API_BASE}/courses/${courseId}/lessons/${lessonId}/status`,
-			{
-				method: "PATCH",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ status }),
-			},
+		const data = await api.patch(
+			`/api/v1/courses/${courseId}/lessons/${lessonId}/status`,
+			{ status },
 		);
-
-		if (!response.ok) {
-			throw new Error(`Failed to update lesson status: ${response.statusText}`);
-		}
-		const data = await response.json();
 
 		// Invalidate relevant cache entries
 		progressCache.clear();
@@ -238,19 +164,10 @@ export async function updateLessonStatus(
  */
 export async function updateModule(courseId, moduleId, updateData) {
 	try {
-		const response = await fetchWithTimeout(
+		const data = await api.patch(
 			`${API_BASE}/courses/${courseId}/modules/${moduleId}`,
-			{
-				method: "PATCH",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(updateData),
-			},
+			updateData,
 		);
-
-		if (!response.ok) {
-			throw new Error(`Failed to update module: ${response.statusText}`);
-		}
-		const data = await response.json();
 
 		// Invalidate relevant cache entries
 		progressCache.clear();

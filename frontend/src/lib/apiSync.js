@@ -150,6 +150,10 @@ function buildEndpoint(resourceType, resourceId, data) {
 			if (data.progress) {
 				return `${baseUrl}/books/${resourceId}/progress`;
 			}
+			if (data.tocProgress || data.tocProgressBatch) {
+				// ToC progress updates go to the progress endpoint
+				return `${baseUrl}/books/${resourceId}/progress`;
+			}
 			if (data.chapterStatus) {
 				// Only sync chapter status for actual UUID chapter IDs, not ToC section IDs
 				const chapterId = data.chapterStatus.chapterId;
@@ -162,7 +166,7 @@ function buildEndpoint(resourceType, resourceId, data) {
 				}
 				return `${baseUrl}/books/${resourceId}/chapters/${chapterId}/status`;
 			}
-			// For now, ignore other book sync attempts (like tocProgress, epubLocation, etc.)
+			// For now, ignore other book sync attempts (like epubLocation, etc.)
 			// These don't have backend endpoints yet
 			return null;
 
