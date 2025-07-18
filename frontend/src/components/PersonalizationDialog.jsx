@@ -202,7 +202,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 							<div className="space-y-3 max-h-[400px] overflow-y-auto">
 								{memories.map((memory, index) => (
 									<div
-										key={index}
+										key={memory.id || index}
 										className="bg-muted/30 p-3 rounded-lg border-l-2 border-primary/20"
 									>
 										<p className="text-sm font-medium text-foreground mb-2">
@@ -288,6 +288,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 								<div className="flex items-center justify-between">
 									<div className="flex-1">
 										<button
+											type="button"
 											onClick={handleViewMemories}
 											disabled={memoryCount === 0 || isLoadingMemories}
 											className="text-left group disabled:cursor-not-allowed"
