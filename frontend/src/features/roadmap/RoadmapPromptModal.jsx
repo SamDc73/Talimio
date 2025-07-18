@@ -13,7 +13,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { api } from "@/lib/apiClient";
 
-const RoadmapPromptModal = ({ isOpen, onClose }) => {
+const RoadmapPromptModal = ({ open, onOpenChange, onRoadmapCreated }) => {
 	const [prompt, setPrompt] = useState("");
 	const [isGenerating, setIsGenerating] = useState(false);
 	const navigate = useNavigate();
@@ -51,7 +51,10 @@ const RoadmapPromptModal = ({ isOpen, onClose }) => {
 				},
 			});
 
-			onClose();
+			if (onRoadmapCreated) {
+				onRoadmapCreated(response);
+			}
+			onOpenChange(false);
 			setPrompt("");
 		} catch (error) {
 			console.error("Error generating course:", error);
@@ -68,12 +71,12 @@ const RoadmapPromptModal = ({ isOpen, onClose }) => {
 	const handleClose = () => {
 		if (!isGenerating) {
 			setPrompt("");
-			onClose();
+			onOpenChange(false);
 		}
 	};
 
 	return (
-		<Dialog open={isOpen} onOpenChange={handleClose}>
+		<Dialog open={open} onOpenChange={handleClose}>
 			<DialogContent className="sm:max-w-lg">
 				<DialogHeader className="space-y-4">
 					<DialogTitle className="flex items-center gap-3 text-2xl">

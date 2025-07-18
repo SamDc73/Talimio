@@ -47,7 +47,7 @@ export function getBookProgress(book, progressStats = null) {
  * @param {string} type - Content type (video, book, course)
  * @returns {string} Formatted progress text
  */
-export function formatProgressText(percentage, type = "content") {
+export function formatProgressText(percentage, _type = "content") {
 	const rounded = Math.round(percentage);
 	return `${rounded}%`;
 }

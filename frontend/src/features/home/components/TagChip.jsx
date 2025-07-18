@@ -1,29 +1,19 @@
-export function TagChip({ tag, colorClass, contentType, className = "" }) {
-	// If contentType is provided, use semantic colors
-	const getColorClass = () => {
-		if (colorClass) return colorClass;
+const TagChip = ({ tag, contentType }) => (
+	<div
+		className={`text-xs font-medium px-2 py-1 rounded-full ${
+			contentType === "course"
+				? "bg-course/10 text-course-text"
+				: contentType === "book"
+					? "bg-book/10 text-book-text"
+					: contentType === "video"
+						? "bg-video/10 text-video-text"
+						: contentType === "flashcard"
+							? "bg-flashcard/10 text-flashcard-text"
+							: "bg-muted text-muted-foreground"
+		}`}
+	>
+		{tag}
+	</div>
+);
 
-		switch (contentType) {
-			case "course":
-			case "roadmap":
-				return "bg-course/10 text-course-text";
-			case "book":
-				return "bg-book/10 text-book-text";
-			case "video":
-			case "youtube":
-				return "bg-video/10 text-video-text";
-			case "flashcard":
-				return "bg-flashcard/10 text-flashcard-text";
-			default:
-				return "bg-gray-100 text-gray-700";
-		}
-	};
-
-	return (
-		<span
-			className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs transition-colors duration-200 ${getColorClass()} ${className}`}
-		>
-			{tag}
-		</span>
-	);
-}
+export default TagChip;

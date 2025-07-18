@@ -1,9 +1,14 @@
 import { Loader2, Tag as TagIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useToast } from "../hooks/use-toast";
-import useTagStore from "../stores/useTagStore";
-import { Button } from "./button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./dialog";
+import { Button } from "../../../components/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "../../../components/dialog";
+import { useToast } from "../../../hooks/use-toast";
+import useTagStore from "../../../stores/useTagStore";
 import { TagList } from "./Tag";
 import TagInput from "./TagInput";
 

@@ -23,8 +23,8 @@ const checkReactVersion = () => {
 		}
 
 		// Check for specific APIs we're using
-		const requiredAPIs = ["createRoot", "Fragment", "forwardRef"];
-		const missingAPIs = requiredAPIs.filter((api) => !React[api]);
+		const requiredReactAPIs = ["Fragment", "forwardRef", "useState", "useEffect"];
+		const missingAPIs = requiredReactAPIs.filter((api) => !React[api]);
 
 		if (missingAPIs.length > 0) {
 			console.warn("[Warning] Missing required React APIs:", missingAPIs);
