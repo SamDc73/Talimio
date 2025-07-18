@@ -27,7 +27,7 @@ class Reranker:
         self.model = rag_config.rerank_model
         self.enabled = rag_config.rerank_enabled
 
-    async def rerank_results(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:  # noqa: ARG002
+    async def rerank_results(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
         """Rerank candidates using Qwen 3 reranker."""
         if not self.enabled or len(candidates) <= top_k:
             return candidates[:top_k]
