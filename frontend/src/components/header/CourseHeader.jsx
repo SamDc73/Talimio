@@ -21,19 +21,12 @@ export function CourseHeader({
 	courseName,
 	mode,
 	onModeChange,
-	courseId,
 	progress = 0,
 	isOpen = true,
 	toggleSidebar = () => {},
 }) {
-	let toggleChat = () => {};
-
-	try {
-		const chatContext = useChatSidebar();
-		toggleChat = chatContext.toggleChat;
-	} catch (error) {
-		console.warn("ChatSidebar context not available:", error);
-	}
+	const chatContext = useChatSidebar();
+	const toggleChat = chatContext?.toggleChat || (() => {});
 
 	const [_showFullTitle, _setShowFullTitle] = useState(false);
 

@@ -30,6 +30,7 @@ class ErrorBoundary extends React.Component {
 						of the app.
 					</p>
 					<button
+						type="button"
 						onClick={() =>
 							this.setState({ hasError: false, error: null, errorInfo: null })
 						}

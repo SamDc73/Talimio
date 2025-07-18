@@ -208,6 +208,7 @@ export const ModuleNavigation = ({
 				>
 					{/* Module Header */}
 					<button
+						type="button"
 						onClick={() => handleModuleClick(module)}
 						className={`w-full text-left p-3 rounded-t-lg border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
 							currentModuleId === module.id
@@ -237,6 +238,7 @@ export const ModuleNavigation = ({
 						<div className="p-2 space-y-1">
 							{module.lessons.map((lesson, _lessonIndex) => (
 								<button
+									type="button"
 									key={lesson.id}
 									onClick={() => handleLessonClick(module.id, lesson)}
 									className={`w-full text-left p-2 rounded text-sm transition-colors ${

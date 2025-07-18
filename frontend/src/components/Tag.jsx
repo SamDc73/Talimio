@@ -60,8 +60,11 @@ const Tag = ({
 		}
 	};
 
+	const Component = onClick ? "button" : "span";
+
 	return (
-		<span
+		<Component
+			type={onClick ? "button" : undefined}
 			className={`${baseStyles} ${sizeStyles[size]} ${variantStyles[variant]} ${className}`}
 			style={customColorStyles}
 			onClick={handleClick}
@@ -83,7 +86,7 @@ const Tag = ({
 					<X size={size === "small" ? 10 : size === "large" ? 16 : 12} />
 				</button>
 			)}
-		</span>
+		</Component>
 	);
 };
 
