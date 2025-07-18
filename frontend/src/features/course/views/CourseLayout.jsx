@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { forwardRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import RoadmapHeader from "@/components/header/RoadmapHeader";
@@ -20,7 +20,7 @@ const _BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1";
  * Main container component for the Roadmap feature
  * Handles switching between map and outline views
  */
-const RoadmapFlow = ({ roadmapId, onError }) => {
+const RoadmapFlow = forwardRef(({ roadmapId, onError }, _ref) => {
 	const { lessonId } = useParams(); // Check if we're viewing a lesson
 	const { isLoading: roadmapLoading, roadmap } = useRoadmapState(
 		roadmapId,
@@ -97,7 +97,7 @@ const RoadmapFlow = ({ roadmapId, onError }) => {
 			</div>
 		</ProgressProvider>
 	);
-};
+});
 
 RoadmapFlow.displayName = "RoadmapFlow";
 

@@ -40,6 +40,12 @@ function RoadmapPage() {
 
 export default function App() {
 	const cleanupOldStorage = useAppStore((state) => state.cleanupOldStorage);
+	const setToken = useAppStore((state) => state.setToken);
+
+	// Temporary: Set a dummy token for testing until proper login is implemented
+	useEffect(() => {
+		setToken("dummy-token");
+	}, [setToken]);
 
 	// Clean up old localStorage on app startup
 	useEffect(() => {

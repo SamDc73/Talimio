@@ -23,10 +23,7 @@ function OutlineNode({
 	const [expanded, setExpanded] = useState(index === 0); // First module expanded by default
 
 	const isItemCompleted = (item) => {
-		return (
-			isLessonCompleted?.(item.id) ||
-			item.status === "completed"
-		);
+		return isLessonCompleted?.(item.id) || item.status === "completed";
 	};
 
 	const processNestedLessons = (item, counts) => {

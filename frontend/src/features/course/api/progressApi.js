@@ -5,6 +5,7 @@
  * structure instead of the legacy roadmap → node structure.
  */
 
+import useAppStore from "@/stores/useAppStore";
 import { useCourseService } from "./courseApi";
 
 /**
@@ -159,6 +160,10 @@ export class CourseProgressService {
 
 			// Invalidate relevant cache entries
 			this.invalidateProgressCache(moduleId, lessonId);
+
+			// Notify global store to refresh course progress
+			const { refreshCourseProgress } = useAppStore.getState();
+			refreshCourseProgress(this.courseId);
 
 			return result;
 		} catch (error) {
@@ -475,6 +480,10 @@ export async function updateLessonStatusDirect(
 		progressCache.delete(`module-lessons-progress-${courseId}-${moduleId}`);
 		progressCache.delete(`course-progress-${courseId}`);
 		progressCache.delete(`course-modules-progress-${courseId}`);
+
+		// Notify global store to refresh course progress
+		const { refreshCourseProgress } = useAppStore.getState();
+		refreshCourseProgress(courseId);
 
 		return data;
 	} catch (error) {

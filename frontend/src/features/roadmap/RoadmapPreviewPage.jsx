@@ -97,8 +97,8 @@ const RoadmapPreviewPage = () => {
 				description: "Your roadmap has been saved successfully.",
 			});
 
-			// Navigate to the roadmap map view
-			navigate(`/roadmap/${roadmapId}`);
+			// Navigate to the course view
+			navigate(`/course/${roadmapId}`);
 		} catch (error) {
 			console.error("Error updating roadmap:", error);
 			toast({
@@ -126,8 +126,8 @@ const RoadmapPreviewPage = () => {
 				description: "A new roadmap has been generated.",
 			});
 
-			// Navigate to new roadmap preview
-			navigate(`/roadmap/preview/${response.id}`, {
+			// Navigate to new course preview
+			navigate(`/course/preview/${response.id}`, {
 				state: {
 					isNew: true,
 					originalPrompt: originalPrompt,
