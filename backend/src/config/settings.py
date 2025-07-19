@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     # Storage settings
     STORAGE_PROVIDER: str = "local"  # "r2" or "local"
-    LOCAL_STORAGE_PATH: str = "backend/uploads"
+    LOCAL_STORAGE_PATH: str  # Path for local file storage (e.g., "uploads", "/app/uploads")
 
     # R2 Configuration (optional)
     R2_ACCOUNT_ID: str = ""

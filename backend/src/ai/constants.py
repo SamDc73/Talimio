@@ -37,7 +37,9 @@ class RAGConfig:
         self.cold_storage_days = int(env("RAG_COLD_STORAGE_DAYS", "90"))
 
         # File Storage Paths
-        self.upload_dir = Path("uploads/roadmap_docs")
+        from src.config.settings import get_settings
+        settings = get_settings()
+        self.upload_dir = Path(settings.LOCAL_STORAGE_PATH) / "roadmap_docs"
         self.upload_dir.mkdir(parents=True, exist_ok=True)
 
 

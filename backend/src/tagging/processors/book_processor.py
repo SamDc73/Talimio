@@ -7,6 +7,7 @@ import fitz  # PyMuPDF
 from ebooklib import epub
 
 from src.books.models import Book
+from src.config.settings import get_settings
 from src.database.session import AsyncSession
 
 
@@ -267,8 +268,9 @@ async def process_book_for_tagging(
         logger.error(f"Book not found: {book_id}")
         return None
 
-    # Construct file path
-    file_path = f"backend/uploads/books/{book.file_path}"
+    # Construct file path using settings
+    settings = get_settings()
+    file_path = f"{settings.LOCAL_STORAGE_PATH}/books/{book.file_path}"
 
     if not Path(file_path).exists():
         logger.error(f"Book file not found: {file_path}")
