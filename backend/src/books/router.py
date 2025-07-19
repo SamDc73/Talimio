@@ -7,9 +7,9 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
+from src.core.auth_dependencies import CurrentUserId
 from src.storage.factory import get_storage_provider
 
-from .metadata import extract_metadata
 from .schemas import (
     BookChapterBatchUpdateRequest,
     BookChapterResponse,
@@ -27,14 +27,13 @@ from .service import (
     create_book,
     extract_and_create_chapters,
     extract_and_update_toc,
-    get_book,
     get_book_chapter,
     get_book_chapters,
-    get_books,
-    update_book,
     update_book_chapter_status,
     update_book_progress,
 )
+from .services import get_book, get_books, update_book
+from .services.book_metadata_service import BookMetadataService
 
 
 router = APIRouter(prefix="/api/v1/books", tags=["books"])
@@ -63,9 +62,9 @@ async def list_books(
 
 
 @router.get("/{book_id}")
-async def get_book_endpoint(book_id: UUID) -> BookWithProgress:
+async def get_book_endpoint(book_id: UUID, current_user_id: CurrentUserId) -> BookWithProgress:
     """Get book details with progress information."""
-    return await get_book(book_id)
+    return await get_book(book_id, current_user_id)
 
 
 @router.post("/extract-metadata")
@@ -91,7 +90,8 @@ async def extract_book_metadata(
     file_content = await file.read()
 
     # Extract metadata
-    metadata = extract_metadata(file_content, f".{file_extension}")
+    metadata_service = BookMetadataService()
+    metadata = metadata_service.extract_metadata(file_content, f".{file_extension}")
 
     # If no title was extracted, use filename without extension
     if not metadata.title:
