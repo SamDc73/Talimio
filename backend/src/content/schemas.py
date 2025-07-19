@@ -36,7 +36,6 @@ class YoutubeContent(ContentItemBase):
     type: ContentType = ContentType.YOUTUBE
     channel_name: str = Field(alias="channelName")
     duration: int | None = None
-    thumbnail_url: str | None = Field(None, alias="thumbnailUrl")
 
     model_config = {"populate_by_name": True}
 
@@ -58,7 +57,6 @@ class BookContent(ContentItemBase):
     author: str
     page_count: int | None = Field(None, alias="pageCount")
     current_page: int | None = Field(0, alias="currentPage")
-    toc_progress: dict[str, bool] | None = Field(None, alias="tocProgress")
 
     model_config = {"populate_by_name": True}
 
