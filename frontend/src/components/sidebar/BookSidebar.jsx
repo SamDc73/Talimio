@@ -134,7 +134,8 @@ function BookSidebar({
 		}
 
 		fetchChapters();
-	}, [book?.id, setLoading]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [book?.id, setLoading]); // setLoading is stable, intentionally excluded to prevent infinite re-renders
 
 	/**
 	 * Extract chapters using AI
@@ -198,23 +199,39 @@ function BookSidebar({
 	useEffect(() => {
 		const chapters = book?.tableOfContents || apiChapters;
 		if (chapters.length > 0 && currentPage) {
-			const currentChapterIndex = chapters.findIndex((chapter) =>
-				isPageInChapter(chapter),
-			);
-			if (
-				currentChapterIndex >= 0 &&
-				!expandedChapters.includes(currentChapterIndex)
-			) {
-				setExpandedChapters((prev) => [...prev, currentChapterIndex]);
-			}
+			const currentChapterIndex = chapters.findIndex((chapter) => {
+				// Inline isPageInChapter logic to avoid function dependency
+				if (chapter.startPage && chapter.endPage) {
+					return (
+						currentPage >= chapter.startPage && currentPage <= chapter.endPage
+					);
+				}
+				if (chapter.page) {
+					return currentPage === chapter.page;
+				}
+				if (chapter.children?.length > 0) {
+					return chapter.children.some((section) => {
+						if (section.startPage && section.endPage) {
+							return (
+								currentPage >= section.startPage &&
+								currentPage <= section.endPage
+							);
+						}
+						return currentPage === section.page;
+					});
+				}
+				return false;
+			});
+
+			// Only expand if not already expanded to avoid infinite loops
+			setExpandedChapters((prev) => {
+				if (currentChapterIndex >= 0 && !prev.includes(currentChapterIndex)) {
+					return [...prev, currentChapterIndex];
+				}
+				return prev;
+			});
 		}
-	}, [
-		currentPage,
-		book?.tableOfContents,
-		apiChapters,
-		expandedChapters,
-		isPageInChapter,
-	]);
+	}, [currentPage, book?.tableOfContents, apiChapters]);
 
 	if (!book) return null;
 
@@ -283,15 +300,17 @@ function BookSidebar({
 										: "border-border bg-white"
 								} shadow-sm overflow-hidden`}
 							>
-								<button
-									type="button"
+								<div
 									className="flex items-center gap-3 justify-between w-full px-4 py-3 text-left cursor-pointer hover:bg-zinc-50/50 transition-colors"
-									onClick={() =>
-										onChapterClick?.(
-											chapter.page || chapter.startPage,
-											chapter.id,
-										)
-									}
+									onClick={(e) => {
+										// Only navigate if we didn't click on the checkbox
+										if (!e.target.closest("button")) {
+											onChapterClick?.(
+												chapter.page || chapter.startPage,
+												chapter.id,
+											);
+										}
+									}}
 								>
 									<div className="flex items-center gap-3 flex-1 min-w-0">
 										<ProgressCircle
@@ -311,7 +330,7 @@ function BookSidebar({
 											{chapter.title}
 										</span>
 									</div>
-								</button>
+								</div>
 							</div>
 						);
 					}
@@ -327,20 +346,29 @@ function BookSidebar({
 							showExpandButton={true}
 							variant="book"
 							headerContent={
-								<button
-									type="button"
+								<div
 									onClick={(e) => {
 										e.stopPropagation();
 										toggleSectionCompletion(chapter);
 									}}
-									className="hover:scale-110 transition-transform"
+									className="hover:scale-110 transition-transform cursor-pointer"
+									role="button"
+									tabIndex={0}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" || e.key === " ") {
+											e.preventDefault();
+											e.stopPropagation();
+											toggleSectionCompletion(chapter);
+										}
+									}}
+									aria-label={`Toggle completion for ${chapter.title}`}
 								>
 									<ProgressCircle
 										number={chapterIndex + 1}
 										progress={chapterProgress}
 										variant="book"
 									/>
-								</button>
+								</div>
 							}
 						>
 							<ol>

@@ -28,8 +28,7 @@ function SidebarItem({
 	return (
 		<li className={`flex items-start gap-3 ${className}`}>
 			{leftContent}
-			<button
-				type="button"
+			<div
 				className={`text-left flex-1 min-w-0 ${
 					isCompleted
 						? `font-semibold ${activeColor}`
@@ -43,11 +42,19 @@ function SidebarItem({
 					padding: 0,
 					cursor: isLocked ? "not-allowed" : "pointer",
 				}}
-				disabled={isLocked}
 				onClick={() => !isLocked && onClick?.()}
+				role="button"
+				tabIndex={isLocked ? -1 : 0}
+				onKeyDown={(e) => {
+					if ((e.key === "Enter" || e.key === " ") && !isLocked) {
+						e.preventDefault();
+						onClick?.();
+					}
+				}}
+				aria-label={`Navigate to ${title}`}
 			>
 				{title}
-			</button>
+			</div>
 			{rightContent}
 		</li>
 	);

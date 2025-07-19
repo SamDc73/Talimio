@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import and_, select
@@ -13,6 +13,10 @@ from src.ai.constants import TAG_CATEGORIES, TAG_CATEGORY_COLORS
 
 from .models import Tag, TagAssociation
 
+
+if TYPE_CHECKING:
+    from src.books.models import Book
+    from src.books.services.book_metadata_service import BookMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -421,3 +425,41 @@ async def update_content_tags_json(
         )
 
     await session.flush()
+
+async def apply_automatic_tagging(session: AsyncSession, book: "Book", metadata: "BookMetadata") -> None:
+    """Apply automatic tagging to the book."""
+    try:
+        model_manager = ModelManager()
+        tagging_service = TaggingService(session, model_manager)
+
+        content_preview = _build_content_preview(book, metadata)
+        tags = await tagging_service.tag_content(
+            content_id=book.id,
+            content_type="book",
+            title=f"{book.title} {book.subtitle or ''}".strip(),
+            content_preview="\n".join(content_preview),
+        )
+
+        if tags:
+            book.tags = json.dumps(tags)
+            # Don't commit here - let the caller handle it
+
+        logging.info(f"Successfully tagged book {book.id} with tags: {tags}")
+
+    except Exception as e:
+        logging.exception(f"Failed to tag book {book.id}: {e}")
+
+def _build_content_preview(book: "Book", metadata: "BookMetadata") -> list[str]:
+    """Build content preview for tagging."""
+    content_preview = []
+    if book.description:
+        content_preview.append(f"Description: {book.description}")
+
+    if metadata.table_of_contents:
+        toc_list = metadata.table_of_contents
+        if toc_list and len(toc_list) > 0:
+            toc_items = [item.get("title", "") for item in toc_list[:10]]
+            if toc_items:
+                content_preview.append(f"Table of Contents: {', '.join(toc_items)}")
+
+    return content_preview

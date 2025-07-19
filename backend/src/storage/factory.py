@@ -25,7 +25,7 @@ def get_storage_provider() -> AbstractStorage:
 
     # Check if R2 is configured and should be used
     if (
-        settings.STORAGE_PROVIDER == "r2"
+        settings.STORAGE_PROVIDER.lower() == "r2"
         and settings.R2_ACCOUNT_ID
         and settings.R2_ACCESS_KEY_ID
         and settings.R2_SECRET_ACCESS_KEY

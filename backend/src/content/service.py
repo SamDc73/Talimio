@@ -150,7 +150,7 @@ async def _calculate_book_progress(session, items: list[Any], user_id: str) -> l
     """Calculate accurate book progress using BookProgressService (matching course pattern)."""
     from uuid import UUID
 
-    from src.books.book_progress_service import BookProgressService
+    from src.books.services.book_progress_service import BookProgressService
 
     # Filter for book items only
     book_items = [item for item in items if hasattr(item, "type") and str(item.type) == "book"]
@@ -200,7 +200,9 @@ def _build_content_queries(
         queries.append(_get_flashcard_query(search, include_archived))
 
     if not content_type or content_type == ContentType.BOOK:
-        queries.append(_get_book_query(search, include_archived))
+        queries.append(_get_book_query(search, include_archived, user_id))
+        if user_id:
+            needs_user_id = True
 
     if not content_type or content_type in (ContentType.ROADMAP, ContentType.COURSE):
         queries.append(_get_roadmap_query(search, include_archived, user_id))
@@ -235,7 +237,8 @@ def _get_youtube_query(search: str | None, archived_only: bool = False, include_
             END as progress,
             COALESCE(v.duration, 0) as count1,
             0 as count2,
-            COALESCE(v.archived, false) as archived
+            COALESCE(v.archived, false) as archived,
+            NULL::text as toc_progress
         FROM videos v
         LEFT JOIN (
             SELECT
@@ -285,7 +288,8 @@ def _get_flashcards_query(search: str | None, archived_only: bool = False, inclu
             0 as progress,
             (SELECT COUNT(*) FROM flashcard_cards WHERE deck_id = flashcard_decks.id) as count1,
             0 as count2,
-            COALESCE(archived, false) as archived
+            COALESCE(archived, false) as archived,
+            NULL::text as toc_progress
         FROM flashcard_decks
     """
 
@@ -306,14 +310,18 @@ def _get_flashcards_query(search: str | None, archived_only: bool = False, inclu
     return query
 
 
-def _get_book_query(search: str | None, include_archived: bool = False) -> str:
+def _get_book_query(search: str | None, include_archived: bool = False, user_id: str | None = None) -> str:
     """Get SQL query for books."""
-    return _get_books_query(search, archived_only=False, include_archived=include_archived)
+    return _get_books_query(search, archived_only=False, include_archived=include_archived, user_id=user_id)
 
 
-def _get_books_query(search: str | None, archived_only: bool = False, include_archived: bool = False) -> str:
+def _get_books_query(search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: str | None = None) -> str:
     """Get SQL query for books."""
-    query = """
+    # If user_id is provided, filter book_progress by user_id
+    # user_id is stored as VARCHAR in the database
+    user_filter = "AND user_id = :user_id" if user_id else ""
+
+    query = f"""
         SELECT
             b.id::text,
             b.title,
@@ -327,7 +335,7 @@ def _get_books_query(search: str | None, archived_only: bool = False, include_ar
             COALESCE(
                 (SELECT progress_percentage
                  FROM book_progress
-                 WHERE book_id = b.id
+                 WHERE book_id = b.id {user_filter}
                  ORDER BY updated_at DESC
                  LIMIT 1), 0
             )::int as progress,
@@ -335,11 +343,17 @@ def _get_books_query(search: str | None, archived_only: bool = False, include_ar
             COALESCE(
                 (SELECT current_page
                  FROM book_progress
-                 WHERE book_id = b.id
+                 WHERE book_id = b.id {user_filter}
                  ORDER BY updated_at DESC
                  LIMIT 1), 1
             ) as count2,
-            COALESCE(b.archived, false) as archived
+            COALESCE(b.archived, false) as archived,
+            COALESCE(
+                (SELECT toc_progress::text
+                 FROM book_progress
+                 WHERE book_id = b.id {user_filter}
+                 ORDER BY updated_at DESC
+                 LIMIT 1), '{{}}')::text as toc_progress
         FROM books b
     """
 
@@ -383,7 +397,8 @@ def _get_roadmaps_query(search: str | None, archived_only: bool = False, include
             -- Total lessons (leaf nodes)
             (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL) as count1,
             0 as count2,
-            COALESCE(r.archived, false) as archived
+            COALESCE(r.archived, false) as archived,
+            NULL::text as toc_progress
         FROM roadmaps r
     """
 
@@ -496,6 +511,14 @@ def _create_flashcard_content(row: Any) -> FlashcardContent:
 
 def _create_book_content(row: Any) -> BookContent:
     """Create BookContent from row data."""
+    # Parse toc_progress from JSON string
+    toc_progress = None
+    if hasattr(row, "toc_progress") and row.toc_progress:
+        try:
+            toc_progress = json.loads(row.toc_progress)
+        except (json.JSONDecodeError, TypeError):
+            toc_progress = {}
+
     return BookContent(
         id=row.id,
         title=row.title,
@@ -508,6 +531,7 @@ def _create_book_content(row: Any) -> BookContent:
         progress=row.progress,
         tags=_safe_parse_tags(row.tags),
         archived=row.archived,
+        tocProgress=toc_progress,
     )
 
 
@@ -852,7 +876,7 @@ class ContentService:
             return await service.get_course_progress_percentage(content_id, user_uuid)
 
         if content_type == "book":
-            from src.books.service import BookService
+            from src.books.services.book_service import BookService
             service = BookService(self.session)
             return await service.get_book_progress(content_id)
 
@@ -922,7 +946,7 @@ class ContentService:
 
         # Process books
         if books:
-            from src.books.service import BookService
+            from src.books.services.book_service import BookService
             service = BookService(self.session)
             for book_id in books:
                 try:
