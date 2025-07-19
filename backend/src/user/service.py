@@ -1,10 +1,13 @@
 """User service for handling user settings and memory management."""
 
-import json
 import logging
-from pathlib import Path
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.memory import get_memory_wrapper
+from src.auth.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
     ClearMemoryResponse,
     CustomInstructionsResponse,
@@ -18,44 +21,59 @@ from src.user.schemas import (
 
 logger = logging.getLogger(__name__)
 
-# Create preferences storage directory
-PREFERENCES_DIR = Path("data/preferences")
-PREFERENCES_DIR.mkdir(parents=True, exist_ok=True)
 
-
-def _get_preferences_file(user_id: str) -> Path:
-    """Get the preferences file path for a user."""
-    return PREFERENCES_DIR / f"{user_id}_preferences.json"
-
-
-async def _load_user_preferences(user_id: str) -> UserPreferences:
-    """Load user preferences from file storage."""
+async def _load_user_preferences(user_id: str, db_session: AsyncSession) -> UserPreferences:
+    """Load user preferences from database."""
     try:
-        prefs_file = _get_preferences_file(user_id)
-        if prefs_file.exists():
-            with prefs_file.open() as f:
-                data = json.load(f)
-                return UserPreferences(**data)
+        user_uuid = UUID(user_id)
+        stmt = select(UserPreferencesModel).where(UserPreferencesModel.user_id == user_uuid)
+        result = await db_session.execute(stmt)
+        db_preferences = result.scalar_one_or_none()
+
+        if db_preferences:
+            # Convert database JSONB to UserPreferences schema
+            return UserPreferences(**db_preferences.preferences)
+
     except Exception as e:
         logger.warning(f"Failed to load preferences for user {user_id}: {e}")
 
-    # Return default preferences if loading fails or file doesn't exist
+    # Return default preferences if loading fails or no preferences exist
     return UserPreferences()
 
 
-async def _save_user_preferences(user_id: str, preferences: UserPreferences) -> bool:
-    """Save user preferences to file storage."""
+async def _save_user_preferences(user_id: str, preferences: UserPreferences, db_session: AsyncSession) -> bool:
+    """Save user preferences to database."""
     try:
-        prefs_file = _get_preferences_file(user_id)
-        with prefs_file.open("w") as f:
-            json.dump(preferences.model_dump(), f, indent=2)
+        user_uuid = UUID(user_id)
+
+        # Check if preferences already exist
+        stmt = select(UserPreferencesModel).where(UserPreferencesModel.user_id == user_uuid)
+        result = await db_session.execute(stmt)
+        db_preferences = result.scalar_one_or_none()
+
+        preferences_dict = preferences.model_dump()
+
+        if db_preferences:
+            # Update existing preferences
+            db_preferences.preferences = preferences_dict
+        else:
+            # Create new preferences record
+            db_preferences = UserPreferencesModel(
+                user_id=user_uuid,
+                preferences=preferences_dict
+            )
+            db_session.add(db_preferences)
+
+        await db_session.commit()
         return True
+
     except Exception as e:
         logger.exception(f"Failed to save preferences for user {user_id}: {e}")
+        await db_session.rollback()
         return False
 
 
-async def create_user(user: UserCreate) -> dict:
+async def create_user(_user: UserCreate) -> dict:
     """Create a new user."""
     # For now, we'll just return a dummy user ID
     return {"id": "a-fake-user-id"}
@@ -73,18 +91,19 @@ async def update_user(user_id: str, user: UserUpdate) -> dict:
     return {"id": user_id, "email": user.email, "name": user.name}
 
 
-async def delete_user(user_id: str):
+async def delete_user(user_id: str) -> None:
     """Delete a user."""
     # For now, we'll just log the deletion
     logger.info(f"User {user_id} deleted.")
 
 
-async def get_user_settings(user_id: str) -> UserSettingsResponse:
+async def get_user_settings(user_id: str, db_session: AsyncSession) -> UserSettingsResponse:
     """
     Get user settings including custom instructions, memory count, and preferences.
 
     Args:
         user_id: Unique identifier for the user
+        db_session: Database session for accessing user preferences
 
     Returns
     -------
@@ -103,8 +122,8 @@ async def get_user_settings(user_id: str) -> UserSettingsResponse:
             logger.warning(f"Failed to count memories for user {user_id}: {e}")
             memory_count = 0
 
-        # Get user preferences
-        preferences = await _load_user_preferences(user_id)
+        # Get user preferences from database
+        preferences = await _load_user_preferences(user_id, db_session)
 
         return UserSettingsResponse(
             custom_instructions=custom_instructions, memory_count=memory_count, preferences=preferences
@@ -197,20 +216,23 @@ async def get_user_memories(user_id: str) -> list[dict]:
         return []
 
 
-async def update_user_preferences(user_id: str, preferences: UserPreferences) -> PreferencesUpdateResponse:
+async def update_user_preferences(
+    user_id: str, preferences: UserPreferences, db_session: AsyncSession
+) -> PreferencesUpdateResponse:
     """
     Update user preferences.
 
     Args:
         user_id: Unique identifier for the user
         preferences: New preferences to save
+        db_session: Database session for saving preferences
 
     Returns
     -------
         PreferencesUpdateResponse: Updated preferences and success status
     """
     try:
-        success = await _save_user_preferences(user_id, preferences)
+        success = await _save_user_preferences(user_id, preferences, db_session)
         return PreferencesUpdateResponse(preferences=preferences, updated=success)
     except Exception as e:
         logger.exception(f"Error updating preferences for user {user_id}: {e}")

@@ -1,9 +1,12 @@
 """User API endpoints for settings and memory management."""
 
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.database.session import get_db_session
 from src.user.schemas import (
     ClearMemoryResponse,
     CustomInstructionsRequest,
@@ -42,28 +45,67 @@ def get_user_id_from_header(x_user_id: str | None = Header(None)) -> str:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_user_endpoint(user: UserCreate):
+async def create_user_endpoint(user: UserCreate) -> dict:
+    """Create a new user.
+
+    Args:
+        user: User creation data
+
+    Returns
+    -------
+        Dict containing the created user's ID
+    """
     return await create_user(user)
 
 
 @router.get("/{user_id}")
-async def get_user_endpoint(user_id: str):
+async def get_user_endpoint(user_id: str) -> dict:
+    """Get user by ID.
+
+    Args:
+        user_id: User identifier
+
+    Returns
+    -------
+        Dict containing user information
+    """
     return await get_user(user_id)
 
 
 @router.put("/{user_id}")
-async def update_user_endpoint(user_id: str, user: UserUpdate):
+async def update_user_endpoint(user_id: str, user: UserUpdate) -> dict:
+    """Update user information.
+
+    Args:
+        user_id: User identifier
+        user: User update data
+
+    Returns
+    -------
+        Dict containing updated user information
+    """
     return await update_user(user_id, user)
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user_endpoint(user_id: str):
+async def delete_user_endpoint(user_id: str) -> None:
+    """Delete a user.
+
+    Args:
+        user_id: User identifier
+
+    Returns
+    -------
+        None (HTTP 204 No Content)
+    """
     await delete_user(user_id)
-    return {"message": "User deleted successfully"}
 
 
 @router.get("/{user_id}/settings")
-async def get_settings(user_id: str) -> UserSettingsResponse:
+async def get_settings(
+    user_id: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)]
+) -> UserSettingsResponse:
     """
     Get user settings including custom instructions and memory count.
 
@@ -75,7 +117,7 @@ async def get_settings(user_id: str) -> UserSettingsResponse:
         UserSettingsResponse: User's personalization settings
     """
     try:
-        return await get_user_settings(user_id)
+        return await get_user_settings(user_id, db)
     except Exception as e:
         logger.exception(f"Error in get_settings for user {user_id}")
         raise HTTPException(
@@ -129,7 +171,10 @@ async def clear_memory(user_id: str) -> ClearMemoryResponse:
 
 
 @router.get("/{user_id}/settings/instructions")
-async def get_instructions(user_id: str) -> dict[str, str]:
+async def get_instructions(
+    user_id: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)]
+) -> dict[str, str]:
     """
     Get custom instructions for the user.
 
@@ -141,7 +186,7 @@ async def get_instructions(user_id: str) -> dict[str, str]:
         Dict containing the user's custom instructions
     """
     try:
-        settings = await get_user_settings(user_id)
+        settings = await get_user_settings(user_id, db)
         return {"instructions": settings.custom_instructions}
     except Exception as e:
         logger.exception(f"Error in get_instructions for user {user_id}")
@@ -173,7 +218,9 @@ async def get_memories(user_id: str) -> list[dict]:
 
 @router.put("/{user_id}/preferences")
 async def update_preferences(
-    user_id: str, request: PreferencesUpdateRequest
+    user_id: str,
+    request: PreferencesUpdateRequest,
+    db: Annotated[AsyncSession, Depends(get_db_session)]
 ) -> PreferencesUpdateResponse:
     """
     Update user preferences.
@@ -187,7 +234,7 @@ async def update_preferences(
         PreferencesUpdateResponse: Updated preferences and success status
     """
     try:
-        return await update_user_preferences(user_id, request.preferences)
+        return await update_user_preferences(user_id, request.preferences, db)
     except Exception as e:
         logger.exception(f"Error in update_preferences for user {user_id}")
         raise HTTPException(

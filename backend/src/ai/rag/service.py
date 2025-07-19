@@ -140,7 +140,9 @@ class RAGService:
 
             # Store file if provided
             if file_content and filename:
-                upload_dir = Path("uploads") / "documents" / str(roadmap_id)
+                from src.config.settings import get_settings
+                settings = get_settings()
+                upload_dir = Path(settings.LOCAL_STORAGE_PATH) / "documents" / str(roadmap_id)
                 upload_dir.mkdir(parents=True, exist_ok=True)
 
                 file_path = upload_dir / f"{doc.id}_{filename}"
