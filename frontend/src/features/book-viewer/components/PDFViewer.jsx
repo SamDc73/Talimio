@@ -17,10 +17,7 @@ import "./PDFViewer.css";
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 const PDFViewer = forwardRef(
-	(
-		{ url, bookInfo, onPageChange, zoom = 100, onZoomChange, initialPage = 1 },
-		ref,
-	) => {
+	({ url, onPageChange, zoom = 100, onZoomChange, initialPage = 1 }, ref) => {
 		const [numPages, setNumPages] = useState(null);
 		const [pageNumber, setPageNumber] = useState(1);
 		const [visiblePages, setVisiblePages] = useState(new Set([1, 2, 3]));

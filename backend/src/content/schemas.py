@@ -58,6 +58,7 @@ class BookContent(ContentItemBase):
     author: str
     page_count: int | None = Field(None, alias="pageCount")
     current_page: int | None = Field(0, alias="currentPage")
+    toc_progress: dict[str, bool] | None = Field(None, alias="tocProgress")
 
     model_config = {"populate_by_name": True}
 

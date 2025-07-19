@@ -9,7 +9,7 @@ from uuid import UUID
 import pymupdf as fitz
 from pydantic import BaseModel
 
-from src.books.service import get_book
+from src.books.services.book_service import get_book
 from src.courses.services.course_service import CourseService
 from src.database.lesson_repository import LessonRepository
 from src.database.session import async_session_maker

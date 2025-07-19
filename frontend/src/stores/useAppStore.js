@@ -108,6 +108,18 @@ const useAppStore = create(
 					return get().books.progress[bookId] || DEFAULT_BOOK_PROGRESS;
 				},
 
+				setBookZoom: (bookId, zoomLevel) => {
+					set((state) => {
+						if (!state.books.progress[bookId]) {
+							state.books.progress[bookId] = { ...DEFAULT_BOOK_PROGRESS };
+						}
+						state.books.progress[bookId].zoomLevel = zoomLevel;
+						state.books.progress[bookId].lastUpdated = Date.now();
+					});
+					// Sync to API
+					syncToAPI("books", bookId, { progress: { zoomLevel } });
+				},
+
 				// ========== EPUB SPECIFIC ACTIONS ==========
 
 				updateEpubLocation: (bookId, location) => {

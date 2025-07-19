@@ -111,7 +111,7 @@ class R2Storage(AbstractStorage):
         """
         try:
             async with await self._get_client() as client:
-                await client.delete_.object(Bucket=self.bucket_name, Key=key)
+                await client.delete_object(Bucket=self.bucket_name, Key=key)
         except ClientError as e:
             msg = f"Failed to delete from R2: {key}"
             raise FileDeleteError(msg) from e
