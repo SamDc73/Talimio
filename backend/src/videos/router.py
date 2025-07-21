@@ -4,6 +4,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.auth.dependencies import CurrentUserId
 from src.database.session import get_db_session
 from src.videos.models import Video
 from src.videos.schemas import (
@@ -109,8 +110,11 @@ async def update_video_progress(
     video_uuid: str,
     progress_data: VideoProgressUpdate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user_id: CurrentUserId,
 ) -> VideoResponse:
     """Update video watch progress."""
+    # Note: current_user_id is available for future multi-user support
+    # In single-user mode, progress is stored globally per video
     try:
         return await video_service.update_progress(db, video_uuid, progress_data)
     except ValueError as e:
@@ -122,8 +126,10 @@ async def update_video_progress_post(
     video_uuid: str,
     progress_data: VideoProgressUpdate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user_id: CurrentUserId,
 ) -> VideoResponse:
     """Update video watch progress (POST version for sendBeacon compatibility)."""
+    # Note: current_user_id is available for future multi-user support
     try:
         return await video_service.update_progress(db, video_uuid, progress_data)
     except ValueError as e:
@@ -191,8 +197,10 @@ async def sync_video_chapter_progress(
     video_uuid: str,
     progress_data: VideoChapterProgressSync,
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user_id: CurrentUserId,
 ) -> VideoResponse:
     """Sync chapter progress from frontend to update video completion percentage."""
+    # Note: current_user_id is available for future multi-user support
     try:
         return await video_service.sync_chapter_progress(
             db,

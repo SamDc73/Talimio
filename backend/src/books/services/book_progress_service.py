@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book, BookProgress
 from src.books.schemas import BookProgressResponse, BookProgressUpdate
+from src.core.user_utils import normalize_user_id
 
 
 DEFAULT_USER_ID = "default_user"  # For now, use default user (consistent with database)
@@ -33,7 +34,8 @@ class BookProgressService:
             user_id: User ID for user-specific operations
         """
         self.session = session
-        self.user_id = user_id or DEFAULT_USER_ID
+        # Normalize user_id to string for SQL queries
+        self.user_id = normalize_user_id(user_id or DEFAULT_USER_ID)
 
     async def get_book_toc_progress_percentage(self, book_id: UUID, user_id: UUID | str | None = None) -> int:
         """Calculate book progress based on completed TOC sections.

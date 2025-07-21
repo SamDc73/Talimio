@@ -16,10 +16,11 @@ from asyncpg.exceptions import ConnectionDoesNotExistError
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.sessions import SessionMiddleware
 
 from .ai.rag.router import router as rag_router
 from .assistant.router import router as assistant_router
-from .auth.models import User  # noqa: F401
+from .auth.manager import NoAuthProvider, auth_manager
 from .auth.router import router as auth_router
 
 # Import models to register them with SQLAlchemy - MUST be after database.base import
@@ -39,8 +40,12 @@ from .database.base import Base
 from .database.session import engine
 from .flashcards.models import FlashcardCard, FlashcardDeck, FlashcardReview  # noqa: F401
 from .flashcards.router import router as flashcards_router
+from .middleware.auth_error_handler import AuthErrorMiddleware
 from .tagging.models import Tag, TagAssociation  # noqa: F401
 from .tagging.router import router as tagging_router
+
+# Auth models moved to user.models - import for SQLAlchemy registration
+from .user.models import User, UserPreferences  # noqa: F401
 from .user.router import router as user_router
 from .videos.models import Video  # noqa: F401
 from .videos.router import router as videos_router
@@ -207,6 +212,30 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Add session middleware for cookie handling
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.SECRET_KEY,
+        https_only=settings.ENVIRONMENT == "production",
+    )
+
+    # Add auth error handling middleware
+    app.add_middleware(AuthErrorMiddleware)
+
+    # Global auth middleware - Always set user_id, fallback to DEFAULT_USER_ID
+    @app.middleware("http")
+    async def inject_user_context(request: Request, call_next):
+        """Inject user context into every request."""
+        try:
+            user_id = auth_manager.get_effective_user_id(request)
+            request.state.user_id = user_id
+        except Exception as e:
+            logger.warning(f"Auth failed, using default user: {e}")
+            request.state.user_id = NoAuthProvider.DEFAULT_USER_ID
+
+        response = await call_next(request)
+        return response
+
     # Add exception handlers
     @app.exception_handler(ResourceNotFoundError)
     async def resource_not_found_handler(
@@ -225,7 +254,7 @@ def create_app() -> FastAPI:
         return {"status": "healthy"}
 
     # Register routers
-    app.include_router(auth_router)
+    # Note: Auth router removed - using new auth manager system
     app.include_router(assistant_router)
     app.include_router(books_router)
     app.include_router(content_router)
@@ -242,6 +271,7 @@ def create_app() -> FastAPI:
     app.include_router(tagging_router)
     app.include_router(user_router)
     app.include_router(videos_router)
+    app.include_router(auth_router)
 
     # Startup tasks are now handled by the lifespan context manager
 

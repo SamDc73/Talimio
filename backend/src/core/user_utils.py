@@ -57,3 +57,22 @@ def get_user_filter(provided_user_id: str | None = None) -> UUID:
     This is a convenience function that wraps resolve_user_id.
     """
     return resolve_user_id(provided_user_id)
+
+
+def normalize_user_id(user_id: str | UUID | None) -> str | None:
+    """
+    Normalize user ID to string format for SQL queries.
+    
+    asyncpg requires string format for UUID parameters, not UUID objects.
+    This function ensures consistent conversion.
+    
+    Args:
+        user_id: User ID as string, UUID, or None
+        
+    Returns
+    -------
+        str | None: User ID as string or None
+    """
+    if user_id is None:
+        return None
+    return str(user_id)

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book
 from src.config.settings import DEFAULT_USER_ID
+from src.core.user_utils import normalize_user_id
 
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,8 @@ class HighlightService:
     def __init__(self, session: AsyncSession, user_id: str | None = None) -> None:
         """Initialize the highlight service."""
         self.session = session
-        self.user_id = user_id or DEFAULT_USER_ID
+        # Normalize user_id to string for SQL queries
+        self.user_id = normalize_user_id(user_id or DEFAULT_USER_ID)
 
     async def create_highlight(
         self,

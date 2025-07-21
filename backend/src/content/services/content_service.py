@@ -10,7 +10,6 @@ from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_progress_service import _calculate_book_progress, _calculate_course_progress
 from src.content.services.content_transform_service import ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
-from src.core.user_context import get_effective_user_id
 from src.database.session import async_session_maker
 
 
@@ -42,18 +41,8 @@ class ContentService:
         search_term = f"%{search}%" if search else None
         # For content listing, we don't require authentication
         # If no user is provided, we'll show content with 0% progress
-        try:
-            effective_user_id = get_effective_user_id(current_user_id)
-        except ValueError:
-            # No user authenticated in multi-user mode - show content without progress
-            effective_user_id = None
-        # For content listing, we don't require authentication
-        # If no user is provided, we'll show content with 0% progress
-        try:
-            effective_user_id = get_effective_user_id(current_user_id)
-        except ValueError:
-            # No user authenticated in multi-user mode - show content without progress
-            effective_user_id = None
+        # current_user_id is already a string or None from the router
+        effective_user_id = current_user_id
 
         async with async_session_maker() as session:
             logger.info(
@@ -104,6 +93,8 @@ class ContentService:
         user_id: str | None = None,
     ) -> list[Any]:
         """Get paginated results."""
+        from src.core.user_utils import normalize_user_id
+
         final_query = f"""
             SELECT * FROM ({combined_query}) as combined
             ORDER BY last_accessed DESC
@@ -115,7 +106,35 @@ class ContentService:
             params["search"] = search_term
         # Only include user_id if it's not None (since we build different queries based on user_id)
         if user_id is not None:
-            params["user_id"] = user_id
+            params["user_id"] = normalize_user_id(user_id)
 
         result = await session.execute(text(final_query), params)
         return list(result.all())
+
+    @staticmethod
+    async def delete_content(
+        content_type: ContentType,
+        content_id: str,
+        current_user_id: str | None = None,
+    ) -> None:
+        """Delete content by type and ID."""
+        from uuid import UUID
+
+        from src.books.services import delete_book
+        from src.courses.services.course_service import CourseService
+        from src.flashcards.service import delete_deck
+        from src.videos.service import video_service
+
+        async with async_session_maker() as session:
+            if content_type == ContentType.BOOK:
+                await delete_book(UUID(content_id))
+            elif content_type == ContentType.YOUTUBE:
+                await video_service.delete_video(session, content_id)
+            elif content_type == ContentType.FLASHCARDS:
+                await delete_deck(UUID(content_id))
+            elif content_type == ContentType.ROADMAP:
+                course_service = CourseService(session, current_user_id)
+                await course_service.delete_course(UUID(content_id))
+            else:
+                error_msg = f"Unsupported content type: {content_type}"
+                raise ValueError(error_msg)

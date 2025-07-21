@@ -1,136 +1,267 @@
-"""Authentication router."""
+"""Authentication routes for user login, signup, and session management."""
 
-from typing import Annotated
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, EmailStr
+from supabase import Client, create_client
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.auth.dependencies import get_current_user
-from src.auth.models import User
-from src.auth.schemas import PasswordChange, Token, UserRegister, UserResponse, UserUpdate
-from src.auth.utils import create_access_token, hash_password, verify_password
-from src.database.session import get_db_session
+from src.auth.dependencies import CurrentUser, EffectiveUserId, RequiredUser
+from src.config.settings import get_settings
 
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=UserResponse)
-async def register(
-    user_data: UserRegister,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-) -> User:
-    """Register a new user."""
-    # Check if username already exists
-    result = await db.execute(select(User).where(User.username == user_data.username))
-    if result.scalar_one_or_none():
+class LoginRequest(BaseModel):
+    """Login request model."""
+
+    email: EmailStr
+    password: str
+
+
+class SignupRequest(BaseModel):
+    """Signup request model."""
+
+    email: EmailStr
+    password: str
+    username: str | None = None
+
+
+class AuthResponse(BaseModel):
+    """Auth response model."""
+
+    user: dict
+    access_token: str
+    token_type: str = "bearer"  # noqa: S105
+    expires_in: int
+
+
+class SignupResponse(BaseModel):
+    """Signup response model - can handle both immediate auth and email confirmation."""
+
+    user: dict
+    access_token: str | None = None
+    token_type: str = "bearer"  # noqa: S105
+    expires_in: int | None = None
+    email_confirmation_required: bool = False
+    message: str | None = None
+
+
+class UserResponse(BaseModel):
+    """User response model."""
+
+    id: str
+    email: str
+    username: str | None = None
+
+
+def get_supabase_client() -> Client | None:
+    """Get Supabase client if configured."""
+    settings = get_settings()
+    if not settings.SUPABASE_URL or not settings.SUPABASE_SECRET_KEY:
+        return None
+    return create_client(settings.SUPABASE_URL, settings.SUPABASE_SECRET_KEY)
+
+
+@router.post("/signup")
+async def signup(data: SignupRequest) -> SignupResponse:
+    """Create a new user account."""
+    settings = get_settings()
+
+    if settings.AUTH_PROVIDER != "supabase":
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already registered",
+            status_code=400,
+            detail="Signup is only available with Supabase authentication"
         )
 
-    # Check if this is the first user (make them admin)
-    user_count_result = await db.execute(select(User).limit(1))
-    is_first_user = user_count_result.scalar_one_or_none() is None
+    supabase = get_supabase_client()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
 
-    # Create new user
-    new_user = User(
-        username=user_data.username,
-        password_hash=hash_password(user_data.password),
-        role="admin" if is_first_user else "user",
-    )
+    try:
+        # Create user with Supabase Auth
+        auth_response = supabase.auth.sign_up({
+            "email": data.email,
+            "password": data.password,
+            "options": {
+                "data": {
+                    "username": data.username or data.email.split("@")[0]
+                }
+            }
+        })
 
-    db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
 
-    return new_user
+        if not auth_response.user:
+            raise HTTPException(status_code=400, detail="Failed to create user")
+
+        # If email confirmation is enabled, session will be None
+        if not auth_response.session:
+            # Return a special response indicating email confirmation is needed
+            return SignupResponse(
+                user={
+                    "id": str(auth_response.user.id),
+                    "email": auth_response.user.email,
+                    "username": auth_response.user.user_metadata.get("username"),
+                },
+                message="Please check your email to confirm your account",
+                email_confirmation_required=True
+            )
+
+        return SignupResponse(
+            user={
+                "id": str(auth_response.user.id),
+                "email": auth_response.user.email,
+                "username": auth_response.user.user_metadata.get("username"),
+            },
+            access_token=auth_response.session.access_token,
+            expires_in=auth_response.session.expires_in,
+            email_confirmation_required=False
+        )
+
+    except Exception as e:
+
+        # If it's a Supabase auth error, try to get more details
+        error_detail = str(e)
+        if hasattr(e, "message"):
+            error_detail = e.message  # type: ignore[attr-defined]
+        elif hasattr(e, "args") and e.args:
+            error_detail = str(e.args[0])
+
+        raise HTTPException(status_code=400, detail=error_detail) from e
 
 
 @router.post("/login")
-async def login(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-) -> Token:
-    """Login and get JWT token."""
-    # Get user by username
-    result = await db.execute(select(User).where(User.username == form_data.username))
-    user = result.scalar_one_or_none()
-
-    if not user or not verify_password(form_data.password, user.password_hash):
+async def login(data: LoginRequest) -> AuthResponse:
+    """Login with email and password."""
+    settings = get_settings()
+    if settings.AUTH_PROVIDER != "supabase":
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=400,
+            detail="Login is only available with Supabase authentication"
         )
 
-    if not user.is_active:
+    supabase = get_supabase_client()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+
+    try:
+        # Authenticate with Supabase
+        auth_response = supabase.auth.sign_in_with_password({
+            "email": data.email,
+            "password": data.password
+        })
+
+        if not auth_response.user:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        return AuthResponse(
+            user={
+                "id": str(auth_response.user.id),
+                "email": auth_response.user.email,
+                "username": auth_response.user.user_metadata.get("username"),
+            },
+            access_token=auth_response.session.access_token,
+            expires_in=auth_response.session.expires_in
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid credentials") from e
+
+
+@router.post("/logout")
+async def logout(request: Request) -> dict[str, str]:
+    """Logout the current user."""
+    settings = get_settings()
+    if settings.AUTH_PROVIDER != "supabase":
+        return {"message": "Logout not required in current auth mode"}
+
+    supabase = get_supabase_client()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+
+    try:
+        # Extract token from header
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            # Sign out with Supabase
+            supabase.auth.sign_out()
+
+        return {"message": "Successfully logged out"}
+
+    except Exception:
+        # Even if logout fails, we return success
+        return {"message": "Successfully logged out"}
+
+
+@router.get("/me")
+async def get_current_user(user: RequiredUser) -> UserResponse:
+    """Get the current authenticated user."""
+    return UserResponse(
+        id=str(user.id),
+        email=user.email,
+        username=user.name
+    )
+
+
+@router.post("/refresh")
+async def refresh_token(request: Request) -> AuthResponse:
+    """Refresh the access token."""
+    settings = get_settings()
+    if settings.AUTH_PROVIDER != "supabase":
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user",
+            status_code=400,
+            detail="Token refresh is only available with Supabase authentication"
         )
 
-    # Create access token
-    access_token = create_access_token(str(user.id), user.username)
+    supabase = get_supabase_client()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
 
-    return Token(access_token=access_token)
+    try:
+        # Extract refresh token from request
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="No refresh token provided")
 
+        # Refresh the session
+        auth_response = supabase.auth.refresh_session()
 
-@router.get("/me", response_model=UserResponse)
-async def get_current_user_info(
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> User:
-    """Get current user info."""
-    return current_user
+        if not auth_response.user:
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
 
-
-@router.patch("/me", response_model=UserResponse)
-async def update_current_user(
-    user_update: UserUpdate,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-) -> User:
-    """Update current user info (username only)."""
-    if user_update.username:
-        # Check if new username is already taken
-        result = await db.execute(
-            select(User).where(
-                User.username == user_update.username,
-                User.id != current_user.id,
-            )
+        return AuthResponse(
+            user={
+                "id": str(auth_response.user.id),
+                "email": auth_response.user.email,
+                "username": auth_response.user.user_metadata.get("username"),
+            },
+            access_token=auth_response.session.access_token,
+            expires_in=auth_response.session.expires_in
         )
-        if result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username already taken",
-            )
 
-        current_user.username = user_update.username
-
-    await db.commit()
-    await db.refresh(current_user)
-
-    return current_user
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid refresh token") from e
 
 
-@router.post("/change-password")
-async def change_password(
-    password_data: PasswordChange,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db_session)],
+# Debug endpoint to verify authentication
+@router.get("/debug")
+async def debug_auth(
+    request: Request,
+    effective_user_id: EffectiveUserId,
+    current_user: CurrentUser,
 ) -> dict:
-    """Change user password."""
-    # Verify old password
-    if not verify_password(password_data.old_password, current_user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Incorrect old password",
-        )
+    """Debug endpoint to check authentication status."""
+    settings = get_settings()
+    auth_header = request.headers.get("Authorization")
 
-    # Update password
-    current_user.password_hash = hash_password(password_data.new_password)
-    await db.commit()
-
-    return {"message": "Password changed successfully"}
+    return {
+        "auth_provider": settings.AUTH_PROVIDER,
+        "has_auth_header": bool(auth_header),
+        "auth_header_preview": auth_header[:50] + "..." if auth_header and len(auth_header) > 50 else auth_header,
+        "effective_user_id": str(effective_user_id),
+        "current_user": {
+            "id": current_user.id if current_user else None,
+            "email": current_user.email if current_user else None,
+            "name": current_user.name if current_user else None,
+        } if current_user else None,
+        "is_default_user": str(effective_user_id) == "00000000-0000-0000-0000-000000000001",
+    }

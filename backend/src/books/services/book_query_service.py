@@ -12,6 +12,7 @@ from src.books.models import Book, BookProgress
 from src.books.schemas import BookListResponse, BookResponse, BookWithProgress
 from src.books.services.book_response_builder import BookResponseBuilder
 from src.config.settings import DEFAULT_USER_ID
+from src.core.user_utils import normalize_user_id
 
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,8 @@ class BookQueryService:
             user_id: User ID for user-specific operations
         """
         self.session = session
-        self.user_id = user_id or DEFAULT_USER_ID
+        # Normalize user_id to string for SQL queries
+        self.user_id = normalize_user_id(user_id or DEFAULT_USER_ID)
 
     async def get_books_paginated(
         self,

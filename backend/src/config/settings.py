@@ -15,27 +15,21 @@ class Settings(BaseSettings):
     DATABASE_URL: str  # Required, validated
     DEBUG: bool = False
     API_PORT: int = 8080
+    ENVIRONMENT: str = "development"  # "development", "production"
+    SECRET_KEY: str = "your-secret-key-change-in-production"  # For session middleware
 
-    # Auth settings (need type conversion)
-    JWT_EXPIRE_HOURS: int = 24
-    AUTH_DISABLED: bool = True
-    AUTH_PROVIDER: str = "none"  # "none", "clerk", "auth0", "supabase", "jwt"
+    # Auth settings
+    AUTH_DISABLED: bool = False
+    AUTH_PROVIDER: str = "none"  # "none" or "supabase"
 
-    # Auth provider specific settings
-    CLERK_PUBLISHABLE_KEY: str = ""
-    CLERK_SECRET_KEY: str = ""
-
-    AUTH0_DOMAIN: str = ""
-    AUTH0_AUDIENCE: str = ""
-    AUTH0_CLIENT_ID: str = ""
-    AUTH0_CLIENT_SECRET: str = ""
-
+    # Supabase Auth (2025 API patterns)
     SUPABASE_URL: str = ""
-    SUPABASE_ANON_KEY: str = ""
+    SUPABASE_PUBLISHABLE_KEY: str = ""  # Safe for client-side
+    SUPABASE_SECRET_KEY: str = ""  # Backend only
 
     # Storage settings
     STORAGE_PROVIDER: str = "local"  # "r2" or "local"
-    LOCAL_STORAGE_PATH: str  # Path for local file storage (e.g., "uploads", "/app/uploads")
+    LOCAL_STORAGE_PATH: str = "uploads"  # Path for local file storage (e.g., "uploads", "/app/uploads")
 
     # R2 Configuration (optional)
     R2_ACCOUNT_ID: str = ""

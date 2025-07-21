@@ -192,9 +192,12 @@ function buildEndpoint(resourceType, resourceId, data) {
 			// Ignore other video sync attempts
 			return null;
 
-		case "preferences":
-			// Sync preferences to user settings endpoint
-			return `${baseUrl}/user/preferences`;
+		case "preferences": {
+			// For now, use the default user ID for single-user mode
+			// TODO: Get actual user ID from auth context when multi-user is implemented
+			const defaultUserId = "00000000-0000-0000-0000-000000000001";
+			return `${baseUrl}/users/${defaultUserId}/preferences`;
+		}
 
 		case "roadmaps":
 			if (data.nodeStatus) {

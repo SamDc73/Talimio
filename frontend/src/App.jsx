@@ -7,9 +7,12 @@ import {
 	ChatSidebar,
 	ChatSidebarProvider,
 } from "./components/header/MainHeader";
+import ProtectedRoute from "./components/ProtectedRoute";
 import { Toaster } from "./components/toaster";
 import { TextSelectionProvider } from "./components/ui/GlobalTextSelectionTooltip";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import AuthPage from "./features/auth/AuthPage";
 import { BookViewer } from "./features/book-viewer";
 import { CourseLayout as RoadmapFlow } from "./features/course";
 import RoadmapPreviewPage from "./features/roadmap/RoadmapPreviewPage";
@@ -38,14 +41,10 @@ function RoadmapPage() {
 	);
 }
 
-export default function App() {
+// Create a separate component for the main app content
+function AppContent() {
 	const cleanupOldStorage = useAppStore((state) => state.cleanupOldStorage);
-	const setToken = useAppStore((state) => state.setToken);
-
-	// Temporary: Set a dummy token for testing until proper login is implemented
-	useEffect(() => {
-		setToken("dummy-token");
-	}, [setToken]);
+	const { isAuthenticated } = useAuth();
 
 	// Clean up old localStorage on app startup
 	useEffect(() => {
@@ -53,102 +52,120 @@ export default function App() {
 	}, [cleanupOldStorage]);
 
 	return (
+		<TextSelectionProvider>
+			<ChatSidebarProvider>
+				<div className="app-container">
+					<Routes>
+						{/* Auth route */}
+						<Route
+							path="/auth"
+							element={
+								isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />
+							}
+						/>
+
+						{/* Protected routes */}
+						<Route
+							path="/"
+							element={
+								<ProtectedRoute>
+									<HomePage />
+									<ChatSidebar />
+								</ProtectedRoute>
+							}
+						/>
+
+						{/* Legacy roadmap routes - maintained for backward compatibility */}
+						<Route
+							path="/roadmap/preview/:roadmapId"
+							element={
+								<ProtectedRoute>
+									<RoadmapPreviewPage />
+									<ChatSidebar />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path="/roadmap/:roadmapId"
+							element={
+								<ProtectedRoute>
+									<RoadmapPage />
+									<ChatSidebar />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path="/roadmap/:roadmapId/lesson/:lessonId"
+							element={
+								<ProtectedRoute>
+									<RoadmapPage />
+									<ChatSidebar />
+								</ProtectedRoute>
+							}
+						/>
+
+						{/* New course routes */}
+						<Route
+							path="/course/preview/:roadmapId"
+							element={
+								<ProtectedRoute>
+									<RoadmapPreviewPage />
+									<ChatSidebar />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path="/course/:roadmapId"
+							element={
+								<ProtectedRoute>
+									<RoadmapPage />
+									<ChatSidebar />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path="/course/:roadmapId/lesson/:lessonId"
+							element={
+								<ProtectedRoute>
+									<RoadmapPage />
+									<ChatSidebar />
+								</ProtectedRoute>
+							}
+						/>
+
+						{/* Other content routes */}
+						<Route
+							path="/books/:bookId"
+							element={
+								<ProtectedRoute>
+									<BookViewer />
+									<ChatSidebar />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path="/videos/:videoId"
+							element={
+								<ProtectedRoute>
+									<VideoViewer />
+									<ChatSidebar />
+								</ProtectedRoute>
+							}
+						/>
+					</Routes>
+					<Toaster />
+				</div>
+			</ChatSidebarProvider>
+		</TextSelectionProvider>
+	);
+}
+
+export default function App() {
+	return (
 		<ThemeProvider>
-			<TextSelectionProvider>
-				<ChatSidebarProvider>
-					<div className="app-container">
-						<Routes>
-							{/* Legacy roadmap routes - maintained for backward compatibility */}
-							<Route
-								path="/roadmap/preview/:roadmapId"
-								element={
-									<>
-										<RoadmapPreviewPage />
-										<ChatSidebar />
-									</>
-								}
-							/>
-							<Route
-								path="/roadmap/:roadmapId"
-								element={
-									<>
-										<RoadmapPage />
-										<ChatSidebar />
-									</>
-								}
-							/>
-							<Route
-								path="/roadmap/:roadmapId/lesson/:lessonId"
-								element={
-									<>
-										<RoadmapPage />
-										<ChatSidebar />
-									</>
-								}
-							/>
-
-							{/* New course routes - using same components with course IDs */}
-							<Route
-								path="/course/preview/:roadmapId"
-								element={
-									<>
-										<RoadmapPreviewPage />
-										<ChatSidebar />
-									</>
-								}
-							/>
-							<Route
-								path="/course/:roadmapId"
-								element={
-									<>
-										<RoadmapPage />
-										<ChatSidebar />
-									</>
-								}
-							/>
-							<Route
-								path="/course/:roadmapId/lesson/:lessonId"
-								element={
-									<>
-										<RoadmapPage />
-										<ChatSidebar />
-									</>
-								}
-							/>
-
-							{/* Other content routes */}
-							<Route
-								path="/books/:bookId"
-								element={
-									<>
-										<BookViewer />
-										<ChatSidebar />
-									</>
-								}
-							/>
-							<Route
-								path="/videos/:videoId"
-								element={
-									<>
-										<VideoViewer />
-										<ChatSidebar />
-									</>
-								}
-							/>
-							<Route
-								path="/"
-								element={
-									<>
-										<HomePage />
-										<ChatSidebar />
-									</>
-								}
-							/>
-						</Routes>
-						<Toaster />
-					</div>
-				</ChatSidebarProvider>
-			</TextSelectionProvider>
+			<AuthProvider>
+				<AppContent />
+			</AuthProvider>
 		</ThemeProvider>
 	);
 }

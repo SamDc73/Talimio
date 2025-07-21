@@ -122,3 +122,45 @@ class CourseManagementService:
             HTTPException: If course not found
         """
         return await self.query_service.list_modules(course_id, user_id)
+
+    async def delete_course(self, course_id: UUID, user_id: str | None = None) -> None:
+        """Delete a course.
+
+        Args:
+            course_id: Course ID
+            user_id: User ID (optional override)
+
+        Raises
+        ------
+            HTTPException: If course not found or deletion fails
+        """
+        from sqlalchemy import delete
+
+        from src.courses.models import Course, CourseModule, Lesson, LessonProgress
+
+        # Check if course exists using query service
+        try:
+            course = await self.query_service.get_course(course_id, user_id)
+        except Exception:
+            error_msg = f"Course with ID {course_id} not found"
+            raise ValueError(error_msg)
+
+        # Delete related records first to avoid foreign key constraints
+        # 1. Delete progress records (uses string course_id/module_id)
+        await self.session.execute(
+            delete(LessonProgress).where(LessonProgress.course_id == str(course_id))
+        )
+
+        # 2. Delete lessons
+        await self.session.execute(
+            delete(Lesson).where(Lesson.roadmap_id == course_id)
+        )
+
+        # 3. Delete modules/nodes
+        await self.session.execute(
+            delete(CourseModule).where(CourseModule.roadmap_id == course_id)
+        )
+
+        # 4. Finally delete the course (documents should cascade)
+        await self.session.execute(delete(Course).where(Course.id == course_id))
+        await self.session.commit()

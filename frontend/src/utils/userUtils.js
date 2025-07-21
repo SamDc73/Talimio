@@ -36,18 +36,18 @@ export function clearUserId() {
 
 /**
  * Get headers with user ID for API requests
- * @returns {Object} Headers object with x-user-id (only if not in self-hosting mode)
+ * @returns {Object} Headers object with x-user-id (only if auth is disabled)
  */
 export function getUserHeaders() {
-	// In self-hosting mode, don't send user ID header so backend uses its default
-	const isSelfHosting =
-		import.meta.env.VITE_AUTH_DISABLED === "true" ||
-		import.meta.env.VITE_SELF_HOSTING === "true";
+	// When auth is enabled, user identification is handled by auth tokens
+	// When auth is disabled, we use a local user ID for personalization
+	const authEnabled = import.meta.env.VITE_ENABLE_AUTH === "true";
 
-	if (isSelfHosting) {
-		return {}; // No user header, let backend use default
+	if (authEnabled) {
+		return {}; // Auth tokens handle user identification
 	}
 
+	// In no-auth mode, use local user ID for personalization features
 	return {
 		"x-user-id": getUserId(),
 	};

@@ -80,7 +80,19 @@ class ModelManager:
             # Default to OpenAI for openai/ models and others
             self.api_key = env("OPENAI_API_KEY")
             if not self.api_key:
-                msg = "OPENAI_API_KEY not found in environment variables"
+                msg = (
+                    "OPENAI_API_KEY not found in environment variables. "
+                    "Please set OPENAI_API_KEY in your .env file. "
+                    "You can get an API key from: https://platform.openai.com/api-keys"
+                )
+                raise ValidationError(msg)
+            # Validate API key format
+            if self.api_key.startswith("sk-proj-") and len(self.api_key) > 200:
+                msg = (
+                    "Invalid OPENAI_API_KEY format detected. "
+                    "Please ensure you copied the complete API key correctly. "
+                    "API keys should start with 'sk-' and be around 50 characters long."
+                )
                 raise ValidationError(msg)
             os.environ["OPENAI_API_KEY"] = self.api_key
 
@@ -194,7 +206,17 @@ Please use this context to personalize your response appropriately."""
 
         except Exception as e:
             self._logger.exception("Error getting completion from AI")
-            msg = f"Failed to generate content: {e!s}"
+            # Provide more helpful error messages for common issues
+            if "AuthenticationError" in str(e) or "401" in str(e):
+                msg = (
+                    "AI API authentication failed. Please check your API key configuration:\n"
+                    f"1. Ensure {self.model.split('/')[0].upper()}_API_KEY is set in your .env file\n"
+                    "2. Verify the API key is valid and not expired\n"
+                    "3. For OpenAI: keys should start with 'sk-' and be ~50 characters\n"
+                    "4. Check your API account has credits/quota available"
+                )
+            else:
+                msg = f"Failed to generate content: {e!s}"
             raise AIError(msg) from e
 
     async def get_completion_with_tools(

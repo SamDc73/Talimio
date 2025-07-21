@@ -706,32 +706,11 @@ const useAppStore = create(
 						set((state) => {
 							state.ui.loading.hydration = true;
 						});
-						// Fetch all user data from server
-						const response = await fetch("/api/v1/user/state");
-						if (response.ok) {
-							const serverData = await response.json();
-							set((state) => {
-								// Merge server data with local state
-								if (serverData.books) {
-									state.books = { ...state.books, ...serverData.books };
-								}
-								if (serverData.videos) {
-									state.videos = { ...state.videos, ...serverData.videos };
-								}
-								if (serverData.preferences) {
-									state.preferences = {
-										...state.preferences,
-										...serverData.preferences,
-									};
-								}
-								if (serverData.course) {
-									state.course = {
-										...state.course,
-										...serverData.course,
-									};
-								}
-							});
-						}
+						// TODO: Implement server state hydration endpoint
+						// For now, skip server hydration - app works with local state
+						console.log(
+							"Server state hydration disabled - using local state only",
+						);
 					} catch (error) {
 						console.error("Failed to hydrate from server:", error);
 						get().addError("Failed to sync with server");

@@ -1,47 +1,66 @@
+"""Pydantic models for authentication."""
+
 from datetime import datetime
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgresUUID  # noqa: N811
-from sqlalchemy.orm import Mapped, mapped_column
-
-from src.database.base import Base
+from pydantic import BaseModel, EmailStr, Field
 
 
-class User(Base):
-    """Model for users."""
+class UserBase(BaseModel):
+    """Base user model."""
 
-    __tablename__ = "users"
-
-    id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True, default=uuid4)
-    username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
-    email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(String(50), nullable=False, default="user")  # user, admin
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
+    email: EmailStr
+    username: str | None = None
 
 
-class UserPreferences(Base):
-    """Model for user preferences stored in database."""
+class UserCreate(UserBase):
+    """User creation model."""
 
-    __tablename__ = "user_preferences"
+    password: str = Field(..., min_length=8)
 
-    user_id: Mapped[UUID] = mapped_column(
-        PostgresUUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        primary_key=True
-    )
-    preferences: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
+
+class UserUpdate(BaseModel):
+    """User update model."""
+
+    email: EmailStr | None = None
+    username: str | None = None
+    password: str | None = Field(None, min_length=8)
+
+
+class UserInDB(UserBase):
+    """User model as stored in database."""
+
+    id: UUID
+    created_at: datetime
+    updated_at: datetime | None = None
+    is_active: bool = True
+    is_verified: bool = False
+    metadata: dict[str, Any] | None = None
+
+
+class UserResponse(UserBase):
+    """User response model for API."""
+
+    id: UUID
+    created_at: datetime
+    is_verified: bool = False
+
+
+class TokenData(BaseModel):
+    """Token payload data."""
+
+    sub: str  # User ID
+    email: str | None = None
+    exp: int | None = None
+    iat: int | None = None
+
+
+class UserPreferences(BaseModel):
+    """User preferences model."""
+
+    theme: str = "light"
+    language: str = "en"
+    notifications_enabled: bool = True
+    email_notifications: bool = True
+    global_zoom: int = 100
