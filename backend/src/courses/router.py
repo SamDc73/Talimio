@@ -10,7 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.auth_dependencies import EffectiveUserId
+from src.auth.dependencies import EffectiveUserId
 from src.courses.schemas import (
     CourseCreate,
     CourseListResponse,

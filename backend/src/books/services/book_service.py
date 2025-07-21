@@ -306,7 +306,15 @@ async def delete_book(book_id: UUID) -> None:
                     detail=f"Book {book_id} not found",
                 )
 
-            # Delete the book
+            # Delete dependent records first to avoid FK constraint violations
+            # 1. Delete book progress records
+            from src.books.models import BookChapter, BookProgress
+            await session.execute(delete(BookProgress).where(BookProgress.book_id == book_id))
+
+            # 2. Delete book chapters (these should CASCADE but be explicit)
+            await session.execute(delete(BookChapter).where(BookChapter.book_id == book_id))
+
+            # 3. Finally delete the book
             delete_query = delete(Book).where(Book.id == book_id)
             await session.execute(delete_query)
             await session.commit()

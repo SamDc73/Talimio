@@ -32,7 +32,8 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useCurrentContext } from "../../hooks/useCurrentContext";
 import { cn } from "../../lib/utils";
@@ -92,9 +93,29 @@ export function useChatSidebar() {
 
 // User Avatar Menu Component
 export function UserAvatarMenu() {
+	const { user, logout } = useAuth();
+	const navigate = useNavigate();
 	const { theme, setTheme } = useTheme();
 	const [open, setOpen] = useState(false);
 	const [personalizationOpen, setPersonalizationOpen] = useState(false);
+
+	const handleLogout = async () => {
+		await logout();
+		navigate("/auth");
+	};
+
+	// Get user initials
+	const getUserInitials = () => {
+		if (!user) return "U";
+		if (user.username) {
+			return user.username.substring(0, 2).toUpperCase();
+		}
+		if (user.email) {
+			const name = user.email.split("@")[0];
+			return name.substring(0, 2).toUpperCase();
+		}
+		return "U";
+	};
 
 	return (
 		<DropdownMenu open={open} onOpenChange={setOpen}>
@@ -108,7 +129,7 @@ export function UserAvatarMenu() {
 							>
 								<div className="h-8 w-8 rounded-full bg-white flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
 									<div className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500 font-semibold text-sm">
-										JD
+										{getUserInitials()}
 									</div>
 								</div>
 							</button>
@@ -122,9 +143,11 @@ export function UserAvatarMenu() {
 			<DropdownMenuContent className="w-56" align="end" forceMount>
 				<DropdownMenuLabel className="font-normal">
 					<div className="flex flex-col space-y-1">
-						<p className="text-sm font-medium leading-none">John Doe</p>
+						<p className="text-sm font-medium leading-none">
+							{user?.username || user?.email?.split("@")[0] || "User"}
+						</p>
 						<p className="text-xs leading-none text-muted-foreground">
-							john.doe@example.com
+							{user?.email || "Not logged in"}
 						</p>
 					</div>
 				</DropdownMenuLabel>
@@ -171,7 +194,10 @@ export function UserAvatarMenu() {
 					<span>Help & Support</span>
 				</DropdownMenuItem>
 				<DropdownMenuSeparator />
-				<DropdownMenuItem className="text-destructive focus:text-destructive">
+				<DropdownMenuItem
+					className="text-destructive focus:text-destructive"
+					onClick={handleLogout}
+				>
 					<LogOut className="mr-2 h-4 w-4" />
 					<span>Log out</span>
 				</DropdownMenuItem>

@@ -221,9 +221,13 @@ class BookUploadService:
         from src.books.schemas import TableOfContentsItem
 
         result = []
-        for item in toc_data:
+        for index, item in enumerate(toc_data):
             if isinstance(item, dict):
+                # Generate ID if not present - use existing id or create one based on index and title
+                item_id = item.get("id", f"toc-{index}-{item.get('title', 'untitled').lower().replace(' ', '-')[:20]}")
+
                 toc_item = TableOfContentsItem(
+                    id=item_id,
                     title=item.get("title", ""),
                     page=item.get("page", 0),
                     level=item.get("level", 0),

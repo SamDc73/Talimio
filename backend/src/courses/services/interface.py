@@ -43,6 +43,10 @@ class ICourseService(Protocol):
         """Update a course."""
         ...
 
+    async def delete_course(self, course_id: UUID, user_id: str | None = None) -> None:
+        """Delete a course and all its associated data."""
+        ...
+
     # Lesson operations
     async def list_lessons(self, course_id: UUID, user_id: str | None = None) -> list[LessonResponse]:
         """List all lessons for a course."""

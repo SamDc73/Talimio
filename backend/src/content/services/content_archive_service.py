@@ -8,7 +8,6 @@ from sqlalchemy import text
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_transform_service import ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
-from src.core.user_context import get_effective_user_id
 from src.database.session import async_session_maker
 
 
@@ -131,11 +130,8 @@ class ContentArchiveService:
         search_term = f"%{search}%" if search else None
         # For content listing, we don't require authentication
         # If no user is provided, we'll show content with 0% progress
-        try:
-            effective_user_id = get_effective_user_id(current_user_id)
-        except ValueError:
-            # No user authenticated in multi-user mode - show content without progress
-            effective_user_id = None
+        # current_user_id is already a string or None from the router
+        effective_user_id = current_user_id
 
         # Construct the combined query with archived filter
         if content_type:

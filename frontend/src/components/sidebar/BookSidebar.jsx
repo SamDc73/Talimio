@@ -1,5 +1,5 @@
 import { FileText } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { extractBookChapters, getBookChapters } from "@/services/booksService";
 import { useTocProgress } from "@/services/tocProgressService";
 import useAppStore from "@/stores/useAppStore";
@@ -10,6 +10,15 @@ import ProgressIndicator from "./ProgressIndicator";
 import SidebarContainer from "./SidebarContainer";
 import SidebarItem from "./SidebarItem";
 import SidebarNav from "./SidebarNav";
+
+// Stable default objects to prevent re-renders
+const DEFAULT_STATS = {
+	totalSections: 0,
+	completedSections: 0,
+	percentage: 0,
+};
+
+const EMPTY_TOC_PROGRESS = {};
 
 /**
  * Clean BookSidebar matching the course sidebar design
@@ -25,12 +34,13 @@ function BookSidebar({
 	const [isExtracting, setIsExtracting] = useState(false);
 
 	const stats = useAppStore(
-		(state) =>
-			state.books.progressStats[book?.id] || {
-				totalSections: 0,
-				completedSections: 0,
-				percentage: 0,
+		useCallback(
+			(state) => {
+				if (!book?.id) return DEFAULT_STATS;
+				return state.books.progressStats[book.id] || DEFAULT_STATS;
 			},
+			[book?.id]
+		),
 	);
 
 	// Zustand store actions
@@ -43,12 +53,21 @@ function BookSidebar({
 	const tocProgressUtils = useTocProgress(book?.id);
 	// Get completedSections directly from store to ensure reactivity
 	const tocProgress = useAppStore(
-		(state) => state.books.tocProgress[book?.id] || {},
+		useCallback(
+			(state) => {
+				if (!book?.id) return EMPTY_TOC_PROGRESS;
+				return state.books.tocProgress[book.id] || EMPTY_TOC_PROGRESS;
+			},
+			[book?.id]
+		),
 	);
-	const completedSections = new Set(
-		Object.entries(tocProgress)
-			.filter(([_, completed]) => completed)
-			.map(([sectionId, _]) => sectionId),
+	const completedSections = useMemo(
+		() => new Set(
+			Object.entries(tocProgress)
+				.filter(([_, completed]) => completed)
+				.map(([sectionId, _]) => sectionId),
+		),
+		[tocProgress]
 	);
 
 	/**

@@ -3,7 +3,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.session import get_db_session
@@ -35,13 +35,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/users", tags=["user"])
 
 
-def get_user_id_from_header(x_user_id: str | None = Header(None)) -> str:
-    """Extract user_id from header, with fallback to default."""
-    if not x_user_id:
-        # For development/demo purposes, use a default user ID that has existing memories
-        # In production, this should be extracted from JWT token or session
-        return "demo_user_123"
-    return x_user_id
+# Note: User management endpoints use explicit user_id path parameters.
+# For single-user system, this typically would be the DEFAULT_USER_ID.
+# Auth dependency available for any endpoints that need current user context.
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

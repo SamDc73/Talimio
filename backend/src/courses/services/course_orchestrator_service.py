@@ -75,6 +75,10 @@ class CourseOrchestratorService(ICourseService):
         """Update a course."""
         return await self.course_management.update_course(course_id, request, user_id)
 
+    async def delete_course(self, course_id: UUID, user_id: str | None = None) -> None:
+        """Delete a course and all its associated data."""
+        await self.course_management.delete_course(course_id, user_id)
+
     # Module operations
     async def list_modules(self, course_id: UUID, user_id: str | None = None) -> list[ModuleResponse]:
         """List all modules for a course."""

@@ -1,75 +1,47 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api/v1";
+import api from "./api";
 
 export const deleteApi = {
 	async deleteVideo(id) {
-		const response = await fetch(`${BASE_URL}/content/youtube/${id}`, {
-			method: "DELETE",
-		});
-
-		if (!response.ok) {
-			throw new Error("Failed to delete video");
-		}
+		return this.deleteItem("youtube", id);
 	},
 
 	async deleteBook(id) {
-		const response = await fetch(`${BASE_URL}/content/book/${id}`, {
-			method: "DELETE",
-		});
-
-		if (!response.ok) {
-			throw new Error("Failed to delete book");
-		}
+		return this.deleteItem("book", id);
 	},
 
 	async deleteRoadmap(id) {
-		const response = await fetch(`${BASE_URL}/content/roadmap/${id}`, {
-			method: "DELETE",
-		});
-
-		if (!response.ok) {
-			throw new Error("Failed to delete roadmap");
-		}
+		return this.deleteItem("roadmap", id);
 	},
 
 	async deleteFlashcardDeck(id) {
-		const response = await fetch(`${BASE_URL}/content/flashcards/${id}`, {
-			method: "DELETE",
-		});
-
-		if (!response.ok) {
-			throw new Error("Failed to delete flashcard deck");
-		}
+		return this.deleteItem("flashcards", id);
 	},
 
 	async deleteLesson(id) {
-		const response = await fetch(`${BASE_URL}/content/course/${id}`, {
-			method: "DELETE",
-		});
-
-		if (!response.ok) {
-			throw new Error("Failed to delete lesson");
-		}
+		return this.deleteItem("roadmap", id);
 	},
 
 	async deleteItem(itemType, id) {
 		// Map frontend item types to backend content types
 		const contentTypeMap = {
 			video: "youtube",
+			youtube: "youtube",
 			book: "book",
 			roadmap: "roadmap",
 			flashcard: "flashcards",
-			youtube: "youtube",
 			flashcards: "flashcards",
+			course: "roadmap",
 		};
 
 		const contentType = contentTypeMap[itemType] || itemType;
 
-		const response = await fetch(`${BASE_URL}/content/${contentType}/${id}`, {
-			method: "DELETE",
-		});
-
-		if (!response.ok) {
-			const errorMsg = `Failed to delete ${itemType}`;
+		try {
+			const response = await api.delete(`/content/${contentType}/${id}`);
+			// DELETE endpoints typically return 204 No Content, which is a success
+			return response;
+		} catch (error) {
+			console.error(`Failed to delete ${itemType}:`, error);
+			const errorMsg = error.response?.data?.detail || `Failed to delete ${itemType}`;
 			throw new Error(errorMsg);
 		}
 	},

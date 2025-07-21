@@ -251,13 +251,15 @@ class QueryBuilderService:
     @staticmethod
     async def get_total_count(session: AsyncSession, combined_query: str, search_term: str | None, user_id: str | None = None) -> int:
         """Get total count of results."""
+        from src.core.user_utils import normalize_user_id
+
         count_query = f"SELECT COUNT(*) FROM ({combined_query}) as combined"
         params = {}
         if search_term:
             params["search"] = search_term
         # Only include user_id if it's not None (since we build different queries based on user_id)
         if user_id is not None:
-            params["user_id"] = user_id
+            params["user_id"] = normalize_user_id(user_id)
         count_result = await session.execute(
             text(count_query),
             params,

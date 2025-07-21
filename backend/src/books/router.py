@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
-from src.core.auth_dependencies import CurrentUserId
+from src.auth.dependencies import CurrentUserId
 from src.storage.factory import get_storage_provider
 
 from .schemas import (

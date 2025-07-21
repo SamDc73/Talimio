@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.memory import get_memory_wrapper
-from src.auth.models import UserPreferences as UserPreferencesModel
+from src.user.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
     ClearMemoryResponse,
     CustomInstructionsResponse,
