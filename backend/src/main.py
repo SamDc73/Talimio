@@ -47,6 +47,7 @@ from .tagging.router import router as tagging_router
 # Auth models moved to user.models - import for SQLAlchemy registration
 from .user.models import User, UserPreferences  # noqa: F401
 from .user.router import router as user_router
+from .user.current_user_router import router as current_user_router
 from .videos.models import Video  # noqa: F401
 from .videos.router import router as videos_router
 
@@ -164,6 +165,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
             await run_transcript_url_migration(engine)
 
+            # Run user custom instructions migration
+            from src.database.migrations.add_user_custom_instructions import run_migration as run_custom_instructions_migration
+
+            await run_custom_instructions_migration(engine)
+
             break  # Success - exit the retry loop
 
         except ConnectionDoesNotExistError:
@@ -270,6 +276,7 @@ def create_app() -> FastAPI:
 
     app.include_router(tagging_router)
     app.include_router(user_router)
+    app.include_router(current_user_router)  # Current user endpoints
     app.include_router(videos_router)
     app.include_router(auth_router)
 

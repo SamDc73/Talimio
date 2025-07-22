@@ -147,8 +147,8 @@ class CourseProgressService:
 
         from src.courses.models import Node
 
-        # Count total lessons (nodes with parent_id)
-        total_query = select(func.count(Node.id)).where(Node.roadmap_id == course_id, Node.parent_id.is_not(None))
+        # Count total lessons (all nodes in course - simplified backend)
+        total_query = select(func.count(Node.id)).where(Node.roadmap_id == course_id)
         total_result = await self.session.execute(total_query)
         total_lessons = total_result.scalar() or 0
 
@@ -193,8 +193,8 @@ class CourseProgressService:
 
         from src.courses.models import Node
 
-        # Count total lessons (nodes with parent_id)
-        total_query = select(func.count(Node.id)).where(Node.roadmap_id == course_id, Node.parent_id.is_not(None))
+        # Count total lessons (all nodes in course - simplified backend)
+        total_query = select(func.count(Node.id)).where(Node.roadmap_id == course_id)
         total_result = await self.session.execute(total_query)
         total_lessons = total_result.scalar() or 0
 
