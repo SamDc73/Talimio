@@ -11,7 +11,7 @@ class ContentType(str, Enum):
     FLASHCARDS = "flashcards"
     BOOK = "book"
     ROADMAP = "roadmap"
-    COURSE = "course"  # Alias for roadmap to support frontend course terminology
+    COURSE = "course"  # Alias for roadmap to support web app course terminology
 
 
 class ContentItemBase(BaseModel):

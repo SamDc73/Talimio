@@ -198,7 +198,7 @@ async def get_user_memories(user_id: str) -> list[dict]:
             allow_empty=True,  # Allow empty query
         )
 
-        # Format memories for frontend consumption
+        # Format memories for web app consumption
         formatted_memories = []
         for memory in memories:
             formatted_memory = {

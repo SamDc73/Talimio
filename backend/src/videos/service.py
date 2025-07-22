@@ -581,7 +581,7 @@ class VideoService:
         completed_chapter_ids: list[str],
         total_chapters: int,
     ) -> VideoResponse:
-        """Sync chapter progress from frontend and update video completion percentage."""
+        """Sync chapter progress from web app and update video completion percentage."""
         # Verify video exists
         video_result = await db.execute(select(Video).where(Video.uuid == video_uuid))
         video = video_result.scalar_one_or_none()

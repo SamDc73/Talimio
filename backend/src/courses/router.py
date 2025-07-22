@@ -86,7 +86,7 @@ async def update_course(
     return await course_service.update_course(course_id, request, user_id)
 
 
-# Full lesson access (with module_id for frontend compatibility)
+# Full lesson access (with module_id for web app compatibility)
 @router.get("/{course_id}/modules/{module_id}/lessons/{lesson_id}")
 async def get_lesson_full_path(
     course_id: UUID,

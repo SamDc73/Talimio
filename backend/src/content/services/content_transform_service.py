@@ -105,7 +105,7 @@ class ContentTransformService:
     @staticmethod
     def _create_roadmap_content(row: Any) -> CourseContent:
         """Create RoadmapContent from row data."""
-        # Return CourseContent instead of RoadmapContent for frontend compatibility
+        # Return CourseContent instead of RoadmapContent for web app compatibility
         return CourseContent(
             id=row.id,
             title=row.title,
