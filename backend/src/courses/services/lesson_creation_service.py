@@ -98,7 +98,7 @@ class LessonCreationService:
                 "lesson_requirements": request.node_meta,
             }
 
-            content = await create_lesson_body(context)
+            content, citations = await create_lesson_body(context)
 
             # Get next order index
             order_query = select(Node).where(
@@ -215,8 +215,9 @@ class LessonCreationService:
                 "lesson_description": lesson.description,
             }
 
-            content = await create_lesson_body(context)
+            content, citations = await create_lesson_body(context)
             lesson.content = content
+            # TODO: Store citations if needed
             lesson.updated_at = datetime.now(UTC)
 
             await self.session.commit()

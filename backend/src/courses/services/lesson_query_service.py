@@ -54,8 +54,8 @@ class LessonQueryService:
 
         # Get all lessons for the course
         lessons_query = select(Node).where(
-            Node.roadmap_id == course_id,
-            Node.parent_id.is_not(None)  # Lessons have a parent module
+            Node.roadmap_id == course_id
+            # Removed parent_id check - in simplified backend, modules ARE lessons
         ).order_by(Node.order)
 
         lessons_result = await self.session.execute(lessons_query)
@@ -65,7 +65,7 @@ class LessonQueryService:
             LessonResponse(
                 id=lesson.id,
                 course_id=course_id,
-                module_id=lesson.parent_id,
+                module_id=lesson.parent_id if lesson.parent_id else lesson.id,  # Use lesson.id if no parent
                 title=lesson.title,
                 description=lesson.description,
                 slug=lesson.title.lower().replace(" ", "-"),
@@ -115,8 +115,8 @@ class LessonQueryService:
         # Get the lesson
         lesson_query = select(Node).where(
             Node.id == lesson_id,
-            Node.roadmap_id == course_id,
-            Node.parent_id.is_not(None)  # Lessons have a parent module
+            Node.roadmap_id == course_id
+            # Removed parent_id check - in simplified backend, modules ARE lessons
         )
 
         lesson_result = await self.session.execute(lesson_query)
@@ -131,22 +131,19 @@ class LessonQueryService:
         # Generate content if requested and missing
         if generate and not lesson.content:
             try:
-                # Get module context for better generation
-                module_query = select(Node).where(Node.id == lesson.parent_id)
-                module_result = await self.session.execute(module_query)
-                module = module_result.scalar_one_or_none()
-
+                # In simplified backend, modules ARE lessons, so we use lesson data directly
                 context = {
                     "course_title": course.title,
                     "course_description": course.description,
-                    "module_title": module.title if module else "",
-                    "module_description": module.description if module else "",
+                    "module_title": lesson.title,  # Use lesson title as module title
+                    "module_description": lesson.description,  # Use lesson description
                     "lesson_title": lesson.title,
                     "lesson_description": lesson.description,
                 }
 
-                content = await create_lesson_body(context)
+                content, citations = await create_lesson_body(context)
                 lesson.content = content
+                # TODO: Store citations if needed
                 lesson.updated_at = datetime.now(UTC)
                 await self.session.commit()
 
@@ -157,7 +154,7 @@ class LessonQueryService:
         return LessonResponse(
             id=lesson.id,
             course_id=course_id,
-            module_id=lesson.parent_id,
+            module_id=lesson.parent_id if lesson.parent_id else lesson.id,  # Use lesson.id if no parent
             title=lesson.title,
             description=lesson.description,
             slug=lesson.title.lower().replace(" ", "-"),
@@ -206,8 +203,8 @@ class LessonQueryService:
         # Find lesson across all modules in the course
         lesson_query = select(Node).where(
             Node.id == lesson_id,
-            Node.roadmap_id == course_id,
-            Node.parent_id.is_not(None)
+            Node.roadmap_id == course_id
+            # Removed parent_id check - in simplified backend, modules ARE lessons
         )
 
         lesson_result = await self.session.execute(lesson_query)
