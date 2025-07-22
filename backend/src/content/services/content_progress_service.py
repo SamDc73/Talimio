@@ -190,7 +190,7 @@ async def _calculate_book_progress(session: AsyncSession, items: list[Any], user
             # Update the item's progress with TOC-based calculation
             item.progress = float(progress)
 
-            # Store additional stats for frontend if needed
+            # Store additional stats for web app if needed
             if hasattr(item, "completed_sections"):
                 item.completed_sections = stats["completed_sections"]
             if hasattr(item, "total_sections"):

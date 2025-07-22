@@ -138,7 +138,7 @@ class VideoChapterStatusUpdate(BaseModel):
 
 
 class VideoChapterProgressSync(BaseModel):
-    """Schema for syncing chapter progress from frontend."""
+    """Schema for syncing chapter progress from web app."""
 
     completed_chapter_ids: list[str] = Field(
         ..., description="List of completed chapter IDs", alias="completedChapterIds"

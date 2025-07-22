@@ -22,7 +22,7 @@ export const deleteApi = {
 	},
 
 	async deleteItem(itemType, id) {
-		// Map frontend item types to backend content types
+		// Map web app item types to backend content types
 		const contentTypeMap = {
 			video: "youtube",
 			youtube: "youtube",

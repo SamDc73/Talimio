@@ -103,7 +103,7 @@ export async function extractVideoChapters(videoUuid) {
 }
 
 /**
- * Sync chapter progress from frontend to backend
+ * Sync chapter progress from web app to backend
  * @param {string} videoUuid - The UUID of the video
  * @param {string[]} completedChapterIds - Array of completed chapter IDs
  * @param {number} totalChapters - Total number of chapters

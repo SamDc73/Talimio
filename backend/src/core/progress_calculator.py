@@ -113,7 +113,7 @@ class ProgressCalculator:
         """Calculate flashcard progress.
 
         Currently returns 0 as flashcards use a different progress model
-        based on due/overdue cards calculated on the frontend.
+        based on due/overdue cards calculated on the web app.
         """
         # TODO: Implement server-side flashcard progress if needed
         return 0

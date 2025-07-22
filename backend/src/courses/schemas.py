@@ -47,7 +47,7 @@ class LessonResponse(LessonBase):
     created_at: datetime = Field(..., description="Lesson creation timestamp")
     updated_at: datetime = Field(..., description="Lesson last update timestamp")
 
-    # Additional fields for frontend compatibility
+    # Additional fields for web app compatibility
     title: str | None = Field(None, description="Lesson title extracted from content")
     description: str | None = Field(None, description="Lesson description")
     content: str | None = Field(None, description="Lesson content as HTML")

@@ -199,7 +199,7 @@ async def sync_video_chapter_progress(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     current_user_id: CurrentUserId,
 ) -> VideoResponse:
-    """Sync chapter progress from frontend to update video completion percentage."""
+    """Sync chapter progress from web app to update video completion percentage."""
     # Note: current_user_id is available for future multi-user support
     try:
         return await video_service.sync_chapter_progress(
