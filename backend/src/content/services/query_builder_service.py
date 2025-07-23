@@ -30,7 +30,9 @@ class QueryBuilderService:
             queries.append(QueryBuilderService._get_video_query(search, include_archived))
 
         if not content_type or content_type == ContentType.FLASHCARDS:
-            queries.append(QueryBuilderService._get_flashcard_query(search, include_archived))
+            queries.append(QueryBuilderService._get_flashcard_query(search, include_archived, user_id))
+            if user_id:
+                needs_user_id = True
 
         if not content_type or content_type == ContentType.BOOK:
             queries.append(QueryBuilderService._get_book_query(search, include_archived, user_id))
@@ -38,8 +40,9 @@ class QueryBuilderService:
                 needs_user_id = True
 
         if not content_type or content_type in (ContentType.ROADMAP, ContentType.COURSE):
-            queries.append(QueryBuilderService._get_roadmap_query(search, include_archived))
-            needs_user_id = True
+            queries.append(QueryBuilderService._get_roadmap_query(search, include_archived, user_id))
+            if user_id:
+                needs_user_id = True
 
         return queries, needs_user_id
 
@@ -100,13 +103,13 @@ class QueryBuilderService:
         return query
 
     @staticmethod
-    def _get_flashcard_query(search: str | None, include_archived: bool = False) -> str:
+    def _get_flashcard_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
         """Get SQL query for flashcards."""
-        return QueryBuilderService.get_flashcards_query(search, archived_only=False, include_archived=include_archived)
+        return QueryBuilderService.get_flashcards_query(search, archived_only=False, include_archived=include_archived, user_id=user_id)
 
     @staticmethod
-    def get_flashcards_query(search: str | None, archived_only: bool = False, include_archived: bool = False) -> str:
-        """Get SQL query for flashcards."""
+    def get_flashcards_query(search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: UUID | None = None) -> str:
+        """Get SQL query for flashcards with user filtering."""
         query = """
             SELECT
                 id::text,
@@ -128,6 +131,11 @@ class QueryBuilderService:
 
         # Build WHERE clause
         where_conditions = []
+
+        # CRITICAL: Filter by user_id since flashcards are user-specific
+        if user_id:
+            where_conditions.append("user_id = :user_id")
+
         if archived_only:
             where_conditions.append("archived = true")
         elif not include_archived:
@@ -210,17 +218,17 @@ class QueryBuilderService:
         return query
 
     @staticmethod
-    def _get_roadmap_query(search: str | None, include_archived: bool = False) -> str:
+    def _get_roadmap_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
         """Get SQL query for roadmaps."""
         return QueryBuilderService.get_roadmaps_query(
-            search, archived_only=False, include_archived=include_archived
+            search, archived_only=False, include_archived=include_archived, user_id=user_id
         )
 
     @staticmethod
     def get_roadmaps_query(
-        search: str | None, archived_only: bool = False, include_archived: bool = False
+        search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: UUID | None = None
     ) -> str:
-        """Get SQL query for roadmaps. Progress will be calculated separately using CourseProgressService."""
+        """Get SQL query for roadmaps with user filtering. Progress will be calculated separately using CourseProgressService."""
         # Simplified query - progress is calculated post-query using CourseProgressService for DRY
         query = """
             SELECT
@@ -244,6 +252,11 @@ class QueryBuilderService:
 
         # Build WHERE clause
         where_conditions = []
+
+        # CRITICAL: Filter by user_id since roadmaps are user-specific
+        if user_id:
+            where_conditions.append("r.user_id = :user_id")
+
         if archived_only:
             where_conditions.append("r.archived = true")
         elif not include_archived:

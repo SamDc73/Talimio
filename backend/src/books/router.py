@@ -193,9 +193,9 @@ async def update_book_progress_post_endpoint(
 
 
 @router.get("/{book_id}/file", response_model=None)
-async def serve_book_file(book_id: UUID) -> FileResponse | RedirectResponse:
+async def serve_book_file(book_id: UUID, user_id: EffectiveUserId) -> FileResponse | RedirectResponse:
     """Serve the actual book file for viewing."""
-    book = await get_book(book_id)
+    book = await get_book(book_id, user_id)
 
     if not book.file_path:
         raise HTTPException(

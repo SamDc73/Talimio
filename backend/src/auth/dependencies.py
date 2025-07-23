@@ -1,4 +1,4 @@
-"""FastAPI dependencies for authentication."""
+"""Authentication dependencies for FastAPI."""
 
 from typing import Annotated
 from uuid import UUID
@@ -8,28 +8,47 @@ from fastapi import Depends, Request
 from src.auth.manager import AuthUser, auth_manager
 
 
-async def get_current_user(request: Request) -> AuthUser | None:
-    """Get the current authenticated user (can be None)."""
-    return await auth_manager.get_current_user(request)
+def _get_effective_user_id(request: Request) -> UUID:
+    """
+    FastAPI dependency to get the effective user ID.
 
+    - If auth is enabled and user is logged in, returns their ID.
+    - If auth is disabled or no user is logged in, returns DEFAULT_USER_ID.
 
-async def get_current_user_id(request: Request) -> UUID | None:
-    """Get the current user ID (lightweight, can be None)."""
-    return auth_manager.get_user_id(request)
-
-
-async def get_effective_user_id(request: Request) -> UUID:
-    """Get effective user ID (never None, handles single-user mode)."""
+    This provides a single, reliable source for the user ID for any request.
+    """
     return auth_manager.get_effective_user_id(request)
 
 
-async def get_current_user_required(request: Request) -> AuthUser:
-    """Get current user or raise 401 if not authenticated."""
+async def _get_current_user(request: Request) -> AuthUser | None:
+    """
+    FastAPI dependency to get the current authenticated user.
+
+    Returns None if no user is authenticated.
+    """
+    return await auth_manager.get_current_user(request)
+
+
+async def _get_required_user(request: Request) -> AuthUser:
+    """
+    FastAPI dependency to get the current authenticated user.
+
+    Raises HTTPException if no user is authenticated.
+    """
     return await auth_manager.get_current_user_required(request)
 
 
-# Type aliases for easier usage
-CurrentUser = Annotated[AuthUser | None, Depends(get_current_user)]
-CurrentUserId = Annotated[UUID | None, Depends(get_current_user_id)]
-EffectiveUserId = Annotated[UUID, Depends(get_effective_user_id)]
-RequiredUser = Annotated[AuthUser, Depends(get_current_user_required)]
+def _get_current_user_id(request: Request) -> UUID | None:
+    """
+    FastAPI dependency to get the current user ID.
+
+    Returns None if no user is authenticated.
+    """
+    return auth_manager.get_user_id(request)
+
+
+# This is the dependency that will be used in all router endpoints.
+EffectiveUserId = Annotated[UUID, Depends(_get_effective_user_id)]
+CurrentUser = Annotated[AuthUser | None, Depends(_get_current_user)]
+RequiredUser = Annotated[AuthUser, Depends(_get_required_user)]
+CurrentUserId = Annotated[UUID | None, Depends(_get_current_user_id)]

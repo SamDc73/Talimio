@@ -8,7 +8,7 @@ import logging
 import time
 from typing import Any
 
-import requests
+import httpx
 
 from .registry import register_function
 
@@ -105,7 +105,8 @@ async def search_hackernews_discussions(
         if time_range != "all":
             params["numericFilters"] += f",created_at_i>{time_filters[time_range]}"
 
-        response = requests.get(base_url, params=params, timeout=10)
+        async with httpx.AsyncClient() as client:
+            response = await client.get(base_url, params=params, timeout=10)
         response.raise_for_status()
 
         data = response.json()

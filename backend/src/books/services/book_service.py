@@ -20,7 +20,6 @@ from src.books.schemas import (
     BookWithProgress,
     TableOfContentsItem,
 )
-from src.config.settings import DEFAULT_USER_ID
 from src.database.session import async_session_maker
 
 
@@ -154,7 +153,7 @@ async def get_books(page: int = 1, per_page: int = 20) -> BookListResponse:
         ) from e
 
 
-async def get_book(book_id: UUID, user_id: UUID | None = None) -> BookWithProgress:
+async def get_book(book_id: UUID, user_id: UUID) -> BookWithProgress:
     """
     Get a book by ID with progress information.
 
@@ -184,17 +183,10 @@ async def get_book(book_id: UUID, user_id: UUID | None = None) -> BookWithProgre
 
             # Get progress for current user
             progress = None
-            if user_id:
-                for prog in book.progress_records:
-                    if prog.user_id == user_id:
-                        progress = BookProgressResponse.model_validate(prog)
-                        break
-            else:
-                # Fallback to default user for backward compatibility
-                for prog in book.progress_records:
-                    if prog.user_id == DEFAULT_USER_ID:
-                        progress = BookProgressResponse.model_validate(prog)
-                        break
+            for prog in book.progress_records:
+                if prog.user_id == user_id:
+                    progress = BookProgressResponse.model_validate(prog)
+                    break
 
             book_response = _book_to_response(book)
             return BookWithProgress(
