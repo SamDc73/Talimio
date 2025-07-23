@@ -1,4 +1,10 @@
-import { createContext, useContext, useEffect } from "react";
+import {
+	createContext,
+	useContext,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+} from "react";
 import useAppStore from "@/stores/useAppStore";
 
 /**
@@ -9,15 +15,15 @@ import useAppStore from "@/stores/useAppStore";
 const ThemeContext = createContext(undefined);
 
 export function ThemeProvider({ children }) {
-	// Get theme state and actions from Zustand store
-	const theme = useAppStore((state) => state.preferences.theme);
+	// Get theme state and actions from Zustand store with proper selectors
+	const theme = useAppStore((state) => state.preferences?.theme ?? "light");
 	const updatePreference = useAppStore((state) => state.updatePreference);
 	const toggleTheme = useAppStore((state) => state.toggleTheme);
 
 	/**
 	 * Initialize theme on mount
 	 */
-	useEffect(() => {
+	useLayoutEffect(() => {
 		// If theme is 'system', resolve to actual system preference
 		let resolvedTheme = theme;
 
@@ -31,55 +37,74 @@ export function ThemeProvider({ children }) {
 		const root = window.document.documentElement;
 		root.classList.remove("light", "dark");
 		root.classList.add(resolvedTheme);
+		root.style.colorScheme = resolvedTheme;
 	}, [theme]);
 
 	/**
-	 * Listen for system theme changes when using 'system' theme
+	 * Listen for system theme changes when theme is set to 'system'
 	 */
 	useEffect(() => {
 		if (theme !== "system") return;
 
 		const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-		const handleSystemThemeChange = (e) => {
+		const handleChange = (e) => {
 			const root = window.document.documentElement;
+			const resolvedTheme = e.matches ? "dark" : "light";
 			root.classList.remove("light", "dark");
-			root.classList.add(e.matches ? "dark" : "light");
+			root.classList.add(resolvedTheme);
+			root.style.colorScheme = resolvedTheme;
 		};
 
-		mediaQuery.addEventListener("change", handleSystemThemeChange);
+		// Support for older browsers
+		if (mediaQuery.addEventListener) {
+			mediaQuery.addEventListener("change", handleChange);
+			return () => mediaQuery.removeEventListener("change", handleChange);
+		}
+		mediaQuery.addListener(handleChange);
+		return () => mediaQuery.removeListener(handleChange);
+	}, [theme]);
 
-		return () => {
-			mediaQuery.removeEventListener("change", handleSystemThemeChange);
-		};
+	// Calculate resolved theme once to avoid re-calculation
+	const resolvedTheme = useMemo(() => {
+		if (typeof window === "undefined") return theme;
+		if (theme === "system") {
+			try {
+				return window.matchMedia("(prefers-color-scheme: dark)").matches
+					? "dark"
+					: "light";
+			} catch (e) {
+				console.warn("Failed to detect system theme:", e);
+				return "light";
+			}
+		}
+		return theme;
 	}, [theme]);
 
 	/**
-	 * Enhanced setTheme that supports 'system' option
+	 * Provide a stable context value to avoid unnecessary re-renders
 	 */
-	const setTheme = (newTheme) => {
-		updatePreference("theme", newTheme);
-	};
-
-	/**
-	 * Get the resolved theme (actual light/dark, not 'system')
-	 */
-	const getResolvedTheme = () => {
-		if (theme === "system") {
-			return window.matchMedia("(prefers-color-scheme: dark)").matches
-				? "dark"
-				: "light";
-		}
-		return theme;
-	};
-
-	const contextValue = {
-		theme,
-		setTheme,
-		toggleTheme,
-		resolvedTheme: getResolvedTheme(),
-		isSystemTheme: theme === "system",
-	};
+	const contextValue = useMemo(
+		() => ({
+			theme,
+			setTheme: (newTheme) => {
+				if (!newTheme || !["light", "dark", "system"].includes(newTheme)) {
+					console.warn(
+						`Invalid theme value: ${newTheme}. Using 'system' as fallback.`,
+					);
+					updatePreference("theme", "system");
+					return;
+				}
+				updatePreference("theme", newTheme);
+			},
+			toggleTheme,
+			// Keep the raw theme value for UI display
+			rawTheme: theme,
+			// Provide the resolved theme for components that need it
+			resolvedTheme,
+		}),
+		[theme, updatePreference, toggleTheme, resolvedTheme],
+	);
 
 	return (
 		<ThemeContext.Provider value={contextValue}>
@@ -89,7 +114,8 @@ export function ThemeProvider({ children }) {
 }
 
 /**
- * Hook to use theme context
+ * Hook to access theme context
+ * @throws {Error} If used outside of ThemeProvider
  */
 export function useTheme() {
 	const context = useContext(ThemeContext);
@@ -98,29 +124,3 @@ export function useTheme() {
 	}
 	return context;
 }
-
-// Keep V2 export for backwards compatibility
-export const useThemeV2 = useTheme;
-
-/**
- * Hook that provides both old and new theme interfaces during migration
- */
-export function useThemeMigrationBridge() {
-	const newTheme = useTheme();
-
-	// Provide old interface for backwards compatibility
-	const oldInterface = {
-		theme: newTheme.resolvedTheme, // Old interface expects 'light' or 'dark', not 'system'
-		setTheme: newTheme.setTheme,
-	};
-
-	return {
-		// New enhanced interface
-		...newTheme,
-		// Old interface for compatibility
-		legacy: oldInterface,
-	};
-}
-
-// Also export V2 variant for backwards compatibility
-export const ThemeProviderV2 = ThemeProvider;

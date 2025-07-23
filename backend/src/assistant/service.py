@@ -100,7 +100,7 @@ def detect_course_generation_intent(message: str) -> bool:
     return any(keyword in message_lower for keyword in course_keywords)
 
 
-async def trigger_course_generation(message: str, user_id: str | None = None) -> dict:
+async def trigger_course_generation(message: str, user_id: UUID | None = None) -> dict:
     """Extract course topic from message and trigger course generation."""
     try:
         # Extract topic from message

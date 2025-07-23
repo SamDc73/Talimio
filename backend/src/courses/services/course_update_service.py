@@ -16,7 +16,7 @@ from src.courses.services.course_query_service import CourseQueryService
 class CourseUpdateService:
     """Service for updating course data."""
 
-    def __init__(self, session: AsyncSession, user_id: str | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
         """Initialize the course update service.
 
         Args:
@@ -32,7 +32,7 @@ class CourseUpdateService:
         self,
         course_id: UUID,
         request: CourseUpdate,
-        user_id: str | None = None
+        user_id: UUID | None = None
     ) -> CourseResponse:
         """Update a course.
 

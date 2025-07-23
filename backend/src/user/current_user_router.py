@@ -44,11 +44,11 @@ async def get_current_user_settings(
         UserSettingsResponse: User's personalization settings
     """
     try:
-        return await get_user_settings(str(user_id), db)
+        return await get_user_settings(user_id, db)
     except Exception as e:
         logger.exception(f"Error in get_current_user_settings for user {user_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get user settings: {e}"
         ) from e
 
@@ -69,11 +69,11 @@ async def update_current_user_instructions(
         CustomInstructionsResponse: Updated instructions and success status
     """
     try:
-        return await update_custom_instructions(str(user_id), request.instructions)
+        return await update_custom_instructions(user_id, request.instructions)
     except Exception as e:
         logger.exception(f"Error in update_current_user_instructions for user {user_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update instructions: {e}"
         ) from e
 
@@ -91,12 +91,12 @@ async def get_current_user_instructions(
         Dict containing the user's custom instructions
     """
     try:
-        settings = await get_user_settings(str(user_id), db)
+        settings = await get_user_settings(user_id, db)
         return {"instructions": settings.custom_instructions}
     except Exception as e:
         logger.exception(f"Error in get_current_user_instructions for user {user_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get instructions: {e}"
         ) from e
 
@@ -111,11 +111,11 @@ async def clear_current_user_memory(user_id: EffectiveUserId) -> ClearMemoryResp
         ClearMemoryResponse: Success status and message
     """
     try:
-        return await clear_user_memory(str(user_id))
+        return await clear_user_memory(user_id)
     except Exception as e:
         logger.exception(f"Error in clear_current_user_memory for user {user_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to clear memory: {e}"
         ) from e
 
@@ -130,10 +130,10 @@ async def get_current_user_memories(user_id: EffectiveUserId) -> list[dict]:
         List of user memories with content and metadata
     """
     try:
-        return await get_user_memories(str(user_id))
+        return await get_user_memories(user_id)
     except Exception as e:
         logger.exception(f"Error in get_current_user_memories for user {user_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get memories: {e}"
         ) from e

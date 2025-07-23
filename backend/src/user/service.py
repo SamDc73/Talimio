@@ -22,10 +22,10 @@ from src.user.schemas import (
 logger = logging.getLogger(__name__)
 
 
-async def _load_user_preferences(user_id: str, db_session: AsyncSession) -> UserPreferences:
+async def _load_user_preferences(user_id: UUID, db_session: AsyncSession) -> UserPreferences:
     """Load user preferences from database."""
     try:
-        user_uuid = UUID(user_id)
+        user_uuid = user_id
         stmt = select(UserPreferencesModel).where(UserPreferencesModel.user_id == user_uuid)
         result = await db_session.execute(stmt)
         db_preferences = result.scalar_one_or_none()
@@ -41,10 +41,10 @@ async def _load_user_preferences(user_id: str, db_session: AsyncSession) -> User
     return UserPreferences()
 
 
-async def _save_user_preferences(user_id: str, preferences: UserPreferences, db_session: AsyncSession) -> bool:
+async def _save_user_preferences(user_id: UUID, preferences: UserPreferences, db_session: AsyncSession) -> bool:
     """Save user preferences to database."""
     try:
-        user_uuid = UUID(user_id)
+        user_uuid = user_id
 
         # Check if preferences already exist
         stmt = select(UserPreferencesModel).where(UserPreferencesModel.user_id == user_uuid)
@@ -79,25 +79,25 @@ async def create_user(_user: UserCreate) -> dict:
     return {"id": "a-fake-user-id"}
 
 
-async def get_user(user_id: str) -> dict:
+async def get_user(user_id: UUID) -> dict:
     """Get a user by ID."""
     # For now, we'll just return a dummy user
     return {"id": user_id, "email": "test@example.com", "name": "Test User"}
 
 
-async def update_user(user_id: str, user: UserUpdate) -> dict:
+async def update_user(user_id: UUID, user: UserUpdate) -> dict:
     """Update a user."""
     # For now, we'll just return the updated user
     return {"id": user_id, "email": user.email, "name": user.name}
 
 
-async def delete_user(user_id: str) -> None:
+async def delete_user(user_id: UUID) -> None:
     """Delete a user."""
     # For now, we'll just log the deletion
     logger.info(f"User {user_id} deleted.")
 
 
-async def get_user_settings(user_id: str, db_session: AsyncSession) -> UserSettingsResponse:
+async def get_user_settings(user_id: UUID, db_session: AsyncSession) -> UserSettingsResponse:
     """
     Get user settings including custom instructions, memory count, and preferences.
 
@@ -135,7 +135,7 @@ async def get_user_settings(user_id: str, db_session: AsyncSession) -> UserSetti
         return UserSettingsResponse(custom_instructions="", memory_count=0, preferences=UserPreferences())
 
 
-async def update_custom_instructions(user_id: str, instructions: str) -> CustomInstructionsResponse:
+async def update_custom_instructions(user_id: UUID, instructions: str) -> CustomInstructionsResponse:
     """
     Update custom instructions for a user.
 
@@ -175,7 +175,7 @@ async def update_custom_instructions(user_id: str, instructions: str) -> CustomI
         return CustomInstructionsResponse(instructions=instructions, updated=False)
 
 
-async def get_user_memories(user_id: str) -> list[dict]:
+async def get_user_memories(user_id: UUID) -> list[dict]:
     """
     Get all memories for a user.
 
@@ -217,7 +217,7 @@ async def get_user_memories(user_id: str) -> list[dict]:
 
 
 async def update_user_preferences(
-    user_id: str, preferences: UserPreferences, db_session: AsyncSession
+    user_id: UUID, preferences: UserPreferences, db_session: AsyncSession
 ) -> PreferencesUpdateResponse:
     """
     Update user preferences.
@@ -239,7 +239,7 @@ async def update_user_preferences(
         return PreferencesUpdateResponse(preferences=preferences, updated=False)
 
 
-async def clear_user_memory(user_id: str) -> ClearMemoryResponse:
+async def clear_user_memory(user_id: UUID) -> ClearMemoryResponse:
     """
     Clear all memories for a user.
 

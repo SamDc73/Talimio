@@ -91,12 +91,12 @@ const BaseCard = ({
 						? "flashcard"
 						: item.type;
 			await deleteApi.deleteItem(itemType, item.id || item.uuid);
-			
+
 			toast({
 				title: "Item Deleted",
 				description: `${item.title} has been deleted successfully.`,
 			});
-			
+
 			if (onDelete) {
 				onDelete(item.id || item.uuid, itemType);
 			}
@@ -104,7 +104,8 @@ const BaseCard = ({
 			console.error("Failed to delete item:", error);
 			toast({
 				title: "Delete Failed",
-				description: error.message || "Failed to delete item. Please try again.",
+				description:
+					error.message || "Failed to delete item. Please try again.",
 				variant: "destructive",
 			});
 		} finally {

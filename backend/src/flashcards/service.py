@@ -24,7 +24,7 @@ from src.flashcards.schemas import (
 )
 
 
-DEFAULT_USER_ID = "default_user"  # For now, use default user
+DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")  # Default user UUID
 
 
 async def create_deck(deck_data: FlashcardDeckCreate) -> FlashcardDeckResponse:
@@ -47,7 +47,7 @@ async def create_deck(deck_data: FlashcardDeckCreate) -> FlashcardDeckResponse:
             deck = FlashcardDeck(
                 name=deck_data.name,
                 description=deck_data.description,
-                user_id=DEFAULT_USER_ID,
+                user_id=user_id or DEFAULT_USER_ID,
                 tags=json.dumps(deck_data.tags) if deck_data.tags else None,
                 is_public=deck_data.is_public,
             )
@@ -588,7 +588,7 @@ async def review_card(deck_id: UUID, card_id: UUID, review_data: FlashcardReview
             # Create review record
             review = FlashcardReview(
                 card_id=card_id,
-                user_id=DEFAULT_USER_ID,
+                user_id=user_id or DEFAULT_USER_ID,
                 rating=review_data.rating,
                 response_time_ms=review_data.response_time_ms,
                 reviewed_at=now,

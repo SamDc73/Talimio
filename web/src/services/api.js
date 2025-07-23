@@ -31,8 +31,9 @@ class ApiClient {
 		}
 
 		// Check if response has content (status 204 means no content)
-		const hasContent = response.status !== 204 && response.headers.get("content-length") !== "0";
-		
+		const hasContent =
+			response.status !== 204 && response.headers.get("content-length") !== "0";
+
 		return {
 			data: hasContent ? await response.json() : null,
 			status: response.status,

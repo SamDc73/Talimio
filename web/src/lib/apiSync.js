@@ -193,10 +193,9 @@ function buildEndpoint(resourceType, resourceId, data) {
 			return null;
 
 		case "preferences": {
-			// For now, use the default user ID for single-user mode
-			// TODO: Get actual user ID from auth context when multi-user is implemented
-			const defaultUserId = "00000000-0000-0000-0000-000000000001";
-			return `${baseUrl}/users/${defaultUserId}/preferences`;
+			// User preferences are now handled by auth context automatically
+			// The backend will use the effective user ID from the request
+			return `${baseUrl}/user/preferences`;
 		}
 
 		case "roadmaps":

@@ -4,6 +4,7 @@ import json
 import logging
 import uuid
 from typing import Optional
+from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -186,7 +187,7 @@ class VectorStore:
         session: AsyncSession | None,
         query: str,
         top_k: int = 10,
-        user_id: str | None = None,
+        user_id: UUID | None = None,
     ) -> list[dict]:
         """Search across ALL documents in the system (not limited to a specific context)."""
         try:
@@ -272,7 +273,7 @@ class VectorStore:
         session: AsyncSession | None,
         query: str,
         top_k: int = 10,
-        user_id: str | None = None,
+        user_id: UUID | None = None,
     ) -> list[dict]:
         """Fallback text-based global search when vector search fails."""
         try:

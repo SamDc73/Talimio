@@ -41,7 +41,8 @@ export const deleteApi = {
 			return response;
 		} catch (error) {
 			console.error(`Failed to delete ${itemType}:`, error);
-			const errorMsg = error.response?.data?.detail || `Failed to delete ${itemType}`;
+			const errorMsg =
+				error.response?.data?.detail || `Failed to delete ${itemType}`;
 			throw new Error(errorMsg);
 		}
 	},

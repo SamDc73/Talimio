@@ -16,7 +16,7 @@ class ChatRequest(BaseModel):
 
     message: str
     conversation_history: list[ChatMessage] = []
-    user_id: str | None = None
+    user_id: UUID | None = None
     roadmap_id: str | None = None  # Optional roadmap ID for RAG context
     stream: bool = False  # Enable streaming response
     model: str | None = None  # Optional model ID to use for the request

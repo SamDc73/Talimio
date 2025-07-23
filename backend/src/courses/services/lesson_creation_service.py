@@ -16,7 +16,7 @@ from src.courses.schemas import LessonCreate, LessonResponse
 class LessonCreationService:
     """Service for creating and regenerating lessons."""
 
-    def __init__(self, session: AsyncSession, user_id: str | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
         """Initialize the lesson creation service.
 
         Args:
@@ -31,7 +31,7 @@ class LessonCreationService:
         self,
         course_id: UUID,
         request: LessonCreate,
-        user_id: str | None = None
+        user_id: UUID | None = None
     ) -> LessonResponse:
         """Generate a new lesson for a course.
 
@@ -161,7 +161,7 @@ class LessonCreationService:
         self,
         course_id: UUID,
         lesson_id: UUID,
-        user_id: str | None = None
+        user_id: UUID | None = None
     ) -> LessonResponse:
         """Regenerate an existing lesson.
 

@@ -302,7 +302,7 @@ class ContextAwareRetriever:
     async def global_retrieve(
         self,
         query: str,
-        user_id: str | None = None,
+        user_id: UUID | None = None,
         max_chunks: int = 10,
         relevance_threshold: float = 0.4,
     ) -> list[BaseSearchResult]:

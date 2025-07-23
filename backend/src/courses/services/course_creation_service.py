@@ -20,7 +20,7 @@ from src.tagging.service import TaggingService
 class CourseCreationService:
     """Service for creating new courses."""
 
-    def __init__(self, session: AsyncSession, user_id: str | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
         """Initialize the course creation service.
 
         Args:
@@ -34,7 +34,7 @@ class CourseCreationService:
         self.response_builder = CourseResponseBuilder(session)
         self._logger = logging.getLogger(__name__)
 
-    async def create_course(self, request: CourseCreate, user_id: str | None = None) -> CourseResponse:
+    async def create_course(self, request: CourseCreate, user_id: UUID | None = None) -> CourseResponse:
         """Create a new course using AI generation.
 
         Args:

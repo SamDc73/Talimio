@@ -19,7 +19,7 @@ from src.courses.schemas import (
 class CourseProgressService:
     """Service for course progress tracking operations."""
 
-    def __init__(self, session: AsyncSession, user_id: str | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
         """Initialize the progress service.
 
         Args:
@@ -29,7 +29,7 @@ class CourseProgressService:
         self.session = session
         self.user_id = user_id
 
-    async def get_course_progress(self, course_id: UUID, modules: list, lessons: list, user_id: str | None = None) -> dict:
+    async def get_course_progress(self, course_id: UUID, modules: list, lessons: list, user_id: UUID | None = None) -> dict:
         """Get overall progress for a course."""
         total_modules = len(modules)
 
@@ -94,7 +94,7 @@ class CourseProgressService:
         module_id: UUID,
         lesson_id: UUID,
         request: LessonStatusUpdate,
-        _user_id: str | None = None,
+        _user_id: UUID | None = None,
     ) -> LessonStatusResponse:
         """Update the status of a specific lesson."""
         # Check if progress record exists
@@ -251,7 +251,7 @@ class CourseProgressService:
         }
 
     async def get_lesson_status(
-        self, course_id: UUID, module_id: UUID, lesson_id: UUID, _user_id: str | None = None
+        self, course_id: UUID, module_id: UUID, lesson_id: UUID, _user_id: UUID | None = None
     ) -> LessonStatusResponse:
         """Get the status of a specific lesson."""
         effective_user_id = _user_id or self.user_id

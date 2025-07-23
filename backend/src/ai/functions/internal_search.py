@@ -1,5 +1,6 @@
 """Internal library search functionality.
 
+from uuid import UUID
 This module handles searching the platform's own database for existing
 courses, lessons, books, and videos that match the user's learning needs.
 """
@@ -42,7 +43,7 @@ logger = logging.getLogger(__name__)
 async def search_internal_library(
     topic: str,
     content_type: str = "all",
-    user_id: str | None = None
+    user_id: UUID | None = None
 ) -> dict[str, Any]:
     """Search platform's internal library for existing content.
 

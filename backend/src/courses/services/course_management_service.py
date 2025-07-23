@@ -13,7 +13,7 @@ from src.courses.services.course_update_service import CourseUpdateService
 class CourseManagementService:
     """Service for managing course CRUD operations - refactored version."""
 
-    def __init__(self, session: AsyncSession, user_id: str | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
         """Initialize the course management service.
 
         Args:
@@ -28,7 +28,7 @@ class CourseManagementService:
         self.query_service = CourseQueryService(session, user_id)
         self.update_service = CourseUpdateService(session, user_id)
 
-    async def create_course(self, request: CourseCreate, user_id: str | None = None) -> CourseResponse:
+    async def create_course(self, request: CourseCreate, user_id: UUID | None = None) -> CourseResponse:
         """Create a new course using AI generation.
 
         Args:
@@ -45,7 +45,7 @@ class CourseManagementService:
         """
         return await self.creation_service.create_course(request, user_id)
 
-    async def get_course(self, course_id: UUID, user_id: str | None = None) -> CourseResponse:
+    async def get_course(self, course_id: UUID, user_id: UUID | None = None) -> CourseResponse:
         """Get a specific course by ID.
 
         Args:
@@ -67,7 +67,7 @@ class CourseManagementService:
         page: int = 1,
         per_page: int = 20,
         search: str | None = None,
-        user_id: str | None = None
+        user_id: UUID | None = None
     ) -> tuple[list[CourseResponse], int]:
         """List courses with pagination and optional search.
 
@@ -87,7 +87,7 @@ class CourseManagementService:
         self,
         course_id: UUID,
         request: CourseUpdate,
-        user_id: str | None = None
+        user_id: UUID | None = None
     ) -> CourseResponse:
         """Update a course.
 
@@ -106,7 +106,7 @@ class CourseManagementService:
         """
         return await self.update_service.update_course(course_id, request, user_id)
 
-    async def list_modules(self, course_id: UUID, user_id: str | None = None) -> list[ModuleResponse]:
+    async def list_modules(self, course_id: UUID, user_id: UUID | None = None) -> list[ModuleResponse]:
         """List all modules for a course.
 
         Args:
@@ -123,7 +123,7 @@ class CourseManagementService:
         """
         return await self.query_service.list_modules(course_id, user_id)
 
-    async def delete_course(self, course_id: UUID, user_id: str | None = None) -> None:
+    async def delete_course(self, course_id: UUID, user_id: UUID | None = None) -> None:
         """Delete a course.
 
         Args:

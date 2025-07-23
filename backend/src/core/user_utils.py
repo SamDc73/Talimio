@@ -50,7 +50,7 @@ def resolve_user_id(provided_user_id: str | UUID | None = None) -> UUID:
     return provided_user_id
 
 
-def get_user_filter(provided_user_id: str | None = None) -> UUID:
+def get_user_filter(provided_user_id: UUID | None = None) -> UUID:
     """
     Get the user ID for database filtering.
 

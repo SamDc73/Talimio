@@ -16,7 +16,7 @@ from src.courses.schemas import LessonResponse
 class LessonQueryService:
     """Service for querying lesson data."""
 
-    def __init__(self, session: AsyncSession, user_id: str | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
         """Initialize the lesson query service.
 
         Args:
@@ -27,7 +27,7 @@ class LessonQueryService:
         self.user_id = user_id
         self._logger = logging.getLogger(__name__)
 
-    async def list_lessons(self, course_id: UUID, user_id: str | None = None) -> list[LessonResponse]:
+    async def list_lessons(self, course_id: UUID, user_id: UUID | None = None) -> list[LessonResponse]:
         """List all lessons for a course.
 
         Args:
@@ -83,7 +83,7 @@ class LessonQueryService:
         course_id: UUID,
         lesson_id: UUID,
         generate: bool = False,
-        user_id: str | None = None
+        user_id: UUID | None = None
     ) -> LessonResponse:
         """Get a specific lesson, optionally generating if missing.
 
@@ -170,7 +170,7 @@ class LessonQueryService:
         course_id: UUID,
         lesson_id: UUID,
         generate: bool = False,
-        user_id: str | None = None
+        user_id: UUID | None = None
     ) -> LessonResponse:
         """Get a lesson without requiring module_id (searches through modules).
 

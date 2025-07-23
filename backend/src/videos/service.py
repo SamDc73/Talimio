@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.ai.client import ModelManager
 from src.ai.rag.chunker import ChunkerFactory
 from src.ai.rag.vector_store import VectorStore
+from src.core.user_context import UserContext
 from src.database.pagination import Paginator
 from src.database.session import async_session_maker
 from src.tagging.service import TaggingService
@@ -26,11 +27,13 @@ from src.videos.schemas import (
     VideoChapterResponse,
     VideoCreate,
     VideoListResponse,
+    VideoProgressResponse,
     VideoProgressUpdate,
     VideoResponse,
     VideoTranscriptResponse,
     VideoUpdate,
 )
+from src.videos.services.video_progress_service import VideoProgressService
 
 
 logger = logging.getLogger(__name__)
@@ -189,8 +192,6 @@ class VideoService:
             "published_at": video.published_at,
             "created_at": video.created_at,
             "updated_at": video.updated_at,
-            "last_position": video.last_position,
-            "completion_percentage": video.completion_percentage,
         }
 
     async def create_video(
@@ -391,29 +392,25 @@ class VideoService:
         db: AsyncSession,
         video_uuid: str,
         progress_data: VideoProgressUpdate,
-    ) -> VideoResponse:
-        """Update video watch progress."""
-        result = await db.execute(select(Video).where(Video.uuid == video_uuid))
-        video = result.scalar_one_or_none()
+        user_context: UserContext,
+    ) -> VideoProgressResponse:
+        """Update video watch progress for a specific user."""
+        progress_service = VideoProgressService(db, user_context)
+        video_uuid_obj = UUID(video_uuid)
 
-        if not video:
-            msg = f"Video with UUID {video_uuid} not found"
-            raise ValueError(msg)
+        return await progress_service.update_video_progress(video_uuid_obj, progress_data)
 
-        # Update progress
-        video.last_position = progress_data.last_position
+    async def get_video_progress(
+        self,
+        db: AsyncSession,
+        video_uuid: str,
+        user_context: UserContext,
+    ) -> VideoProgressResponse | None:
+        """Get video progress for a specific user."""
+        progress_service = VideoProgressService(db, user_context)
+        video_uuid_obj = UUID(video_uuid)
 
-        # Calculate completion percentage and round to 1 decimal place
-        if video.duration > 0:
-            percentage = (progress_data.last_position / video.duration) * 100
-            video.completion_percentage = round(min(percentage, 100.0), 1)
-        else:
-            video.completion_percentage = 0.0
-
-        await db.commit()
-        await db.refresh(video)
-
-        return VideoResponse.model_validate(self._video_to_dict(video))
+        return await progress_service.get_video_progress(video_uuid_obj)
 
     async def delete_video(self, db: AsyncSession, video_uuid: str) -> None:
         """Delete a video."""

@@ -1,6 +1,5 @@
 import { useApi } from "../hooks/useApi";
 import useAppStore from "../stores/useAppStore";
-import { getUserHeaders } from "../utils/userUtils";
 
 export const assistantApi = {
 	async chat(
@@ -15,7 +14,7 @@ export const assistantApi = {
 		const requestBody = {
 			message,
 			conversation_history: conversationHistory,
-			user_id: getUserHeaders()["x-user-id"] || null,
+			user_id: null, // User ID is handled by auth headers
 			model: assistantModel, // Include preferred model
 			stream, // Enable streaming if requested
 		};
@@ -43,7 +42,6 @@ export const assistantApi = {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
-					...getUserHeaders(),
 				},
 				body: JSON.stringify(requestBody),
 			},
@@ -117,7 +115,6 @@ export const assistantApi = {
 				method: "GET",
 				headers: {
 					"Content-Type": "application/json",
-					...getUserHeaders(),
 				},
 			},
 		);

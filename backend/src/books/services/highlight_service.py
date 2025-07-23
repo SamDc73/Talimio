@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class HighlightService:
     """Service for managing book highlights and annotations."""
 
-    def __init__(self, session: AsyncSession, user_id: str | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
         """Initialize the highlight service."""
         self.session = session
         # Normalize user_id to string for SQL queries

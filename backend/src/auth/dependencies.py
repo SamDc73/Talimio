@@ -13,7 +13,7 @@ async def get_current_user(request: Request) -> AuthUser | None:
     return await auth_manager.get_current_user(request)
 
 
-async def get_current_user_id(request: Request) -> str | None:
+async def get_current_user_id(request: Request) -> UUID | None:
     """Get the current user ID (lightweight, can be None)."""
     return auth_manager.get_user_id(request)
 
@@ -30,6 +30,6 @@ async def get_current_user_required(request: Request) -> AuthUser:
 
 # Type aliases for easier usage
 CurrentUser = Annotated[AuthUser | None, Depends(get_current_user)]
-CurrentUserId = Annotated[str | None, Depends(get_current_user_id)]
+CurrentUserId = Annotated[UUID | None, Depends(get_current_user_id)]
 EffectiveUserId = Annotated[UUID, Depends(get_effective_user_id)]
 RequiredUser = Annotated[AuthUser, Depends(get_current_user_required)]
