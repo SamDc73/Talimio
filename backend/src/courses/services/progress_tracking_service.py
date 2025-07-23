@@ -20,7 +20,7 @@ from src.courses.services.course_progress_service import CourseProgressService
 class ProgressTrackingService:
     """Service for managing course and lesson progress tracking."""
 
-    def __init__(self, session: AsyncSession, user_id: str | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
         """Initialize the progress tracking service.
 
         Args:
@@ -34,7 +34,7 @@ class ProgressTrackingService:
     async def get_course_progress(
         self,
         course_id: UUID,
-        user_id: str | None = None
+        user_id: UUID | None = None
     ) -> CourseProgressResponse:
         """Get overall progress for a course.
 
@@ -98,7 +98,7 @@ class ProgressTrackingService:
         module_id: UUID,
         lesson_id: UUID,
         request: LessonStatusUpdate,
-        user_id: str | None = None
+        user_id: UUID | None = None
     ) -> LessonStatusResponse:
         """Update the status of a specific lesson.
 
@@ -178,7 +178,7 @@ class ProgressTrackingService:
         course_id: UUID,
         module_id: UUID,
         lesson_id: UUID,
-        user_id: str | None = None
+        user_id: UUID | None = None
     ) -> LessonStatusResponse:
         """Get the status of a specific lesson.
 
@@ -246,7 +246,7 @@ class ProgressTrackingService:
     async def get_all_lesson_statuses(
         self,
         course_id: UUID,
-        user_id: str | None = None
+        user_id: UUID | None = None
     ) -> dict[str, str]:
         """Get all lesson statuses for a course.
 

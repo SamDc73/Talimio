@@ -7,6 +7,7 @@ across all AI endpoints in the learning roadmap platform.
 
 import logging
 from typing import Any
+from uuid import UUID
 
 import asyncpg
 from mem0 import AsyncMemory
@@ -169,7 +170,7 @@ class Mem0Wrapper:
             database=env("DB_NAME", "neondb"),
         )
 
-    async def add_memory(self, user_id: str, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def add_memory(self, user_id: str | UUID, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Add a memory entry for a user.
 
@@ -186,17 +187,20 @@ class Mem0Wrapper:
             if metadata is None:
                 metadata = {}
 
+            # Convert UUID to string for Mem0 compatibility
+            mem0_user_id = str(user_id)
+
             # Add user context to metadata
             metadata.update(
                 {
-                    "user_id": user_id,
+                    "user_id": mem0_user_id,
                     "timestamp": metadata.get("timestamp", "now"),
                     "source": metadata.get("source", "learning_platform"),
                 }
             )
 
             memory_client = await self.get_memory_client()
-            result = await memory_client.add(content, user_id=user_id, metadata=metadata)
+            result = await memory_client.add(content, user_id=mem0_user_id, metadata=metadata)
 
             self._logger.debug(f"Added memory for user {user_id}: {content[:100]}...")
             return result
@@ -213,7 +217,7 @@ class Mem0Wrapper:
             raise AIMemoryError(msg) from e
 
     async def search_memories(
-        self, user_id: str, query: str, limit: int = 5, relevance_threshold: float = 0.7, allow_empty: bool = False
+        self, user_id: str | UUID, query: str, limit: int = 5, relevance_threshold: float = 0.7, allow_empty: bool = False
     ) -> list[dict[str, Any]]:
         """
         Search for relevant memories for a user.
@@ -235,10 +239,13 @@ class Mem0Wrapper:
                 self._logger.debug(f"Empty query provided for user {user_id}, returning empty results")
                 return []
 
+            # Convert UUID to string for Mem0 compatibility
+            mem0_user_id = str(user_id)
+
             memory_client = await self.get_memory_client()
             # If empty query is allowed and query is empty, use a wildcard
             search_query = query.strip() if query.strip() else "*" if allow_empty else ""
-            results = await memory_client.search(query=search_query, user_id=user_id, limit=limit)
+            results = await memory_client.search(query=search_query, user_id=mem0_user_id, limit=limit)
 
             # Debug: Log the actual structure of results
             self._logger.debug(f"Raw search results type: {type(results)}")
@@ -267,7 +274,7 @@ class Mem0Wrapper:
             self._logger.exception(f"Error searching memories for user {user_id}: {e}")
             return []  # Return empty list on error to not break AI responses
 
-    async def delete_all_memories(self, user_id: str) -> dict[str, str]:
+    async def delete_all_memories(self, user_id: str | UUID) -> dict[str, str]:
         """
         Delete all memories for a user.
 
@@ -279,8 +286,11 @@ class Mem0Wrapper:
             Confirmation message
         """
         try:
+            # Convert UUID to string for Mem0 compatibility
+            mem0_user_id = str(user_id)
+
             memory_client = await self.get_memory_client()
-            result = await memory_client.delete_all(user_id=user_id)
+            result = await memory_client.delete_all(user_id=mem0_user_id)
             self._logger.info(f"Deleted all memories for user {user_id}")
             return result
 
@@ -289,7 +299,7 @@ class Mem0Wrapper:
             # Return a default response if deletion fails (common with orphaned records)
             return {"message": "Memory deletion attempted, continuing with operation"}
 
-    async def get_custom_instructions(self, user_id: str) -> str:
+    async def get_custom_instructions(self, user_id: str | UUID) -> str:
         """
         Get custom instructions for a user.
 
@@ -304,7 +314,7 @@ class Mem0Wrapper:
             conn = await self._get_db_connection()
             try:
                 result = await conn.fetchrow(
-                    "SELECT instructions FROM user_custom_instructions WHERE user_id = $1", user_id
+                    "SELECT instructions FROM user_custom_instructions WHERE user_id = $1", str(user_id)
                 )
                 return result["instructions"] if result else ""
             finally:
@@ -314,7 +324,7 @@ class Mem0Wrapper:
             self._logger.exception(f"Error getting custom instructions for user {user_id}: {e}")
             return ""  # Return empty string on error
 
-    async def update_custom_instructions(self, user_id: str, instructions: str) -> bool:
+    async def update_custom_instructions(self, user_id: str | UUID, instructions: str) -> bool:
         """
         Update custom instructions for a user.
 
@@ -336,7 +346,7 @@ class Mem0Wrapper:
                     ON CONFLICT (user_id)
                     DO UPDATE SET instructions = $2, updated_at = NOW()
                 """,
-                    user_id,
+                    str(user_id),
                     instructions,
                 )
 
@@ -349,7 +359,7 @@ class Mem0Wrapper:
             self._logger.exception(f"Error updating custom instructions for user {user_id}: {e}")
             return False
 
-    async def get_memory_count(self, user_id: str) -> int:
+    async def get_memory_count(self, user_id: str | UUID) -> int:
         """
         Get the total count of memories for a user.
 
@@ -374,7 +384,7 @@ class Mem0Wrapper:
             self._logger.warning(f"Error counting memories for user {user_id}: {e}")
             return 0
 
-    async def build_memory_context(self, user_id: str, current_query: str) -> str:
+    async def build_memory_context(self, user_id: str | UUID, current_query: str) -> str:
         """
         Build memory context for AI prompts by combining custom instructions and relevant memories.
 
@@ -423,7 +433,7 @@ class Mem0Wrapper:
             return ""  # Return empty context on error to not break AI responses
 
     async def track_learning_interaction(
-        self, user_id: str, interaction_type: str, content: str, metadata: dict[str, Any] | None = None
+        self, user_id: str | UUID, interaction_type: str, content: str, metadata: dict[str, Any] | None = None
     ) -> None:
         """
         Track learning interactions automatically (behind the scenes).

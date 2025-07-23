@@ -2,8 +2,6 @@
  * API service for personalization and memory management
  */
 
-import { getUserHeaders } from "../utils/userUtils";
-
 const API_BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1";
 
 /**
@@ -16,7 +14,6 @@ export async function getUserSettings() {
 			method: "GET",
 			headers: {
 				"Content-Type": "application/json",
-				...getUserHeaders(),
 			},
 		});
 
@@ -42,7 +39,6 @@ export async function updateCustomInstructions(instructions) {
 			method: "PUT",
 			headers: {
 				"Content-Type": "application/json",
-				...getUserHeaders(),
 			},
 			body: JSON.stringify({ instructions }),
 		});
@@ -68,7 +64,6 @@ export async function getCustomInstructions() {
 			method: "GET",
 			headers: {
 				"Content-Type": "application/json",
-				...getUserHeaders(),
 			},
 		});
 
@@ -93,7 +88,6 @@ export async function getUserMemories() {
 			method: "GET",
 			headers: {
 				"Content-Type": "application/json",
-				...getUserHeaders(),
 			},
 		});
 
@@ -118,7 +112,6 @@ export async function clearUserMemory() {
 			method: "DELETE",
 			headers: {
 				"Content-Type": "application/json",
-				...getUserHeaders(),
 			},
 		});
 

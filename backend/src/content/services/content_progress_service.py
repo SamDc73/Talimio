@@ -27,7 +27,7 @@ class ContentProgressService:
         except ValueError:
             return None
 
-    async def _get_course_progress(self, content_id: UUID, user_id: str | None) -> int:
+    async def _get_course_progress(self, content_id: UUID, user_id: UUID | None) -> int:
         """Get course progress."""
         from src.courses.services.course_progress_service import CourseProgressService
         if user_id is None:
@@ -39,19 +39,19 @@ class ContentProgressService:
         except ValueError:
             return 0
 
-    async def _get_book_progress(self, content_id: UUID, _user_id: str | None) -> int:
+    async def _get_book_progress(self, content_id: UUID, _user_id: UUID | None) -> int:
         """Get book progress."""
         from src.books.services.book_service import BookService
         service = BookService(self.session)
         return await service.get_book_progress(content_id)
 
-    async def _get_video_progress(self, content_id: UUID, _user_id: str | None) -> int:
+    async def _get_video_progress(self, content_id: UUID, _user_id: UUID | None) -> int:
         """Get video progress."""
         from src.videos.service import VideoService
         service = VideoService()
         return await service.get_video_progress(content_id)
 
-    async def _get_flashcard_progress(self, _content_id: UUID, _user_id: str | None) -> int:
+    async def _get_flashcard_progress(self, _content_id: UUID, _user_id: UUID | None) -> int:
         """Get flashcard progress."""
         return 0  # TODO: Implement when flashcard progress is needed
 
@@ -65,7 +65,7 @@ class ContentProgressService:
             grouped[content_type].append(content_id)
         return grouped
 
-    async def _process_courses(self, course_ids: list[str | UUID], user_id: str | None) -> dict[str, int]:
+    async def _process_courses(self, course_ids: list[str | UUID], user_id: UUID | None) -> dict[str, int]:
         """Process course progress for bulk operation."""
         if not course_ids or not user_id:
             return {f"course:{course_id}": 0 for course_id in course_ids}

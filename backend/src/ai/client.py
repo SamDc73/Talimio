@@ -102,7 +102,7 @@ class ModelManager:
     async def _integrate_memory_context(
         self,
         messages: list[dict[str, str]] | Sequence[dict[str, str]],
-        user_id: str | None = None,
+        user_id: UUID | None = None,
         track_interaction: bool = True,
     ) -> list[dict[str, str]]:
         """Integrate memory context into messages.
@@ -167,7 +167,7 @@ Please use this context to personalize your response appropriately."""
     async def get_completion_with_memory(
         self,
         messages: list[dict[str, str]] | Sequence[dict[str, str]],
-        user_id: str | None = None,
+        user_id: UUID | None = None,
         *,
         format_json: bool = True,
         track_interaction: bool = True,
@@ -224,7 +224,7 @@ Please use this context to personalize your response appropriately."""
         messages: list[dict[str, str]] | Sequence[dict[str, str]],
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str = "auto",
-        user_id: str | None = None,
+        user_id: UUID | None = None,
         *,
         format_json: bool = True,
         track_interaction: bool = True,
@@ -396,7 +396,7 @@ Please use this context to personalize your response appropriately."""
     async def get_streaming_completion_with_memory(
         self,
         messages: list[dict[str, str]] | Sequence[dict[str, str]],
-        user_id: str | None = None,
+        user_id: UUID | None = None,
         track_interaction: bool = True,
     ) -> AsyncGenerator[str, None]:
         """Get streaming completion with memory integration."""

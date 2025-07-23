@@ -54,7 +54,23 @@ class VideoProgressUpdate(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True, populate_by_name=True)
 
-    last_position: float = Field(..., ge=0, description="Current position in seconds", alias="lastPosition")
+    last_position: float | None = Field(None, ge=0, description="Current position in seconds", alias="lastPosition")
+    completion_percentage: float | None = Field(None, ge=0, le=100, description="Completion percentage", alias="completionPercentage")
+
+
+class VideoProgressResponse(BaseModel):
+    """Schema for video progress response."""
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: UUID
+    video_uuid: UUID = Field(alias="videoUuid")
+    user_id: UUID = Field(alias="userId")
+    last_position: float = Field(alias="lastPosition")
+    completion_percentage: float = Field(alias="completionPercentage")
+    last_watched_at: datetime | None = Field(None, alias="lastWatchedAt")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
 
 
 class VideoInDB(VideoBase):
@@ -62,8 +78,6 @@ class VideoInDB(VideoBase):
 
     id: int
     uuid: UUID
-    last_position: float = Field(0.0, alias="lastPosition")
-    completion_percentage: float = Field(0.0, alias="completionPercentage")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
 

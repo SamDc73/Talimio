@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class BookQueryService:
     """Service for complex book database queries and operations."""
 
-    def __init__(self, session: AsyncSession, user_id: str | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
         """Initialize the book query service.
 
         Args:

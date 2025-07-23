@@ -13,7 +13,7 @@ from src.courses.models import Node
 class LessonDeletionService:
     """Service for deleting lessons."""
 
-    def __init__(self, session: AsyncSession, user_id: str | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
         """Initialize the lesson deletion service.
 
         Args:
@@ -28,7 +28,7 @@ class LessonDeletionService:
         self,
         course_id: UUID,
         lesson_id: UUID,
-        user_id: str | None = None
+        user_id: UUID | None = None
     ) -> bool:
         """Delete a lesson.
 

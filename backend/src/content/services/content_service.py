@@ -2,6 +2,7 @@
 
 import logging
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +27,7 @@ class ContentService:
         page: int = 1,
         page_size: int = 20,
         include_archived: bool = False,
-        current_user_id: str | None = None,
+        current_user_id: UUID | None = None,
     ) -> ContentListResponse:
         """
         Ultra-fast content listing using raw SQL queries.
@@ -90,7 +91,7 @@ class ContentService:
         search_term: str | None,
         page_size: int,
         offset: int,
-        user_id: str | None = None,
+        user_id: UUID | None = None,
     ) -> list[Any]:
         """Get paginated results."""
         from src.core.user_utils import normalize_user_id
@@ -115,11 +116,9 @@ class ContentService:
     async def delete_content(
         content_type: ContentType,
         content_id: str,
-        current_user_id: str | None = None,
+        current_user_id: UUID | None = None,
     ) -> None:
         """Delete content by type and ID."""
-        from uuid import UUID
-
         from src.books.services import delete_book
         from src.courses.services.course_service import CourseService
         from src.flashcards.service import delete_deck

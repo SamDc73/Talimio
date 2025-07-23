@@ -15,7 +15,7 @@ from src.courses.schemas import LessonResponse, LessonUpdate
 class LessonUpdateService:
     """Service for updating lessons."""
 
-    def __init__(self, session: AsyncSession, user_id: str | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
         """Initialize the lesson update service.
 
         Args:
@@ -31,7 +31,7 @@ class LessonUpdateService:
         course_id: UUID,
         lesson_id: UUID,
         request: LessonUpdate,
-        user_id: str | None = None
+        user_id: UUID | None = None
     ) -> LessonResponse:
         """Update lesson metadata/content.
 

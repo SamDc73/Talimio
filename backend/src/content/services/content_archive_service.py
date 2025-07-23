@@ -2,6 +2,7 @@
 
 import logging
 from datetime import UTC, datetime
+from uuid import UUID
 
 from sqlalchemy import text
 
@@ -117,7 +118,7 @@ class ContentArchiveService:
         content_type: ContentType | None = None,
         page: int = 1,
         page_size: int = 20,
-        current_user_id: str | None = None,
+        current_user_id: UUID | None = None,
     ) -> ContentListResponse:
         """
         List only archived content across different types.

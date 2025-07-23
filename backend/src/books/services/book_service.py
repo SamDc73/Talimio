@@ -14,6 +14,7 @@ from src.books.models import Book, BookChapter, BookProgress
 from src.books.schemas import (
     BookListResponse,
     BookProgressResponse,
+    BookProgressUpdate,
     BookResponse,
     BookUpdate,
     BookWithProgress,
@@ -22,7 +23,7 @@ from src.books.schemas import (
 from src.database.session import async_session_maker
 
 
-DEFAULT_USER_ID = "default_user"  # For now, use default user
+DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")  # Default user UUID
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +155,7 @@ async def get_books(page: int = 1, per_page: int = 20) -> BookListResponse:
         ) from e
 
 
-async def get_book(book_id: UUID, user_id: str | None = None) -> BookWithProgress:
+async def get_book(book_id: UUID, user_id: UUID | None = None) -> BookWithProgress:
     """
     Get a book by ID with progress information.
 
@@ -491,11 +492,10 @@ async def batch_update_chapter_statuses(book_id: UUID, updates: list):
         return await chapter_service.batch_update_chapter_statuses(book_id, updates)
 
 
-async def update_book_progress(book_id: UUID, progress_data):
+async def update_book_progress(book_id: UUID, progress_data: BookProgressUpdate, user_id: UUID) -> BookProgressResponse:
     """Update reading progress for a book."""
     from src.books.services.book_progress_service import BookProgressService
-    from src.database.session import async_session_maker
 
     async with async_session_maker() as session:
-        progress_service = BookProgressService(session)
+        progress_service = BookProgressService(session, user_id)
         return await progress_service.update_book_progress(book_id, progress_data)

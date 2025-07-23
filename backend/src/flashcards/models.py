@@ -16,7 +16,7 @@ class FlashcardDeck(Base):
     id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    user_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)  # For future user support
+    user_id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), nullable=False, index=True)
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     is_public: Mapped[bool] = mapped_column(nullable=False, default=False)
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -93,7 +93,7 @@ class FlashcardReview(Base):
         nullable=False,
         index=True,
     )
-    user_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    user_id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), nullable=False, index=True)
     rating: Mapped[int] = mapped_column(Integer, nullable=False)  # 1=Again, 2=Hard, 3=Good, 4=Easy
     response_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

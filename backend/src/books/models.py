@@ -68,7 +68,7 @@ class BookProgress(Base):
         nullable=False,
         index=True,
     )
-    user_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)  # For future user support
+    user_id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), nullable=False, index=True)
     current_page: Mapped[int] = mapped_column(Integer, default=1)
     total_pages_read: Mapped[int] = mapped_column(Integer, default=0)
     progress_percentage: Mapped[float] = mapped_column(Float, default=0.0)

@@ -43,11 +43,11 @@ from .flashcards.router import router as flashcards_router
 from .middleware.auth_error_handler import AuthErrorMiddleware
 from .tagging.models import Tag, TagAssociation  # noqa: F401
 from .tagging.router import router as tagging_router
+from .user.current_user_router import router as current_user_router
 
 # Auth models moved to user.models - import for SQLAlchemy registration
 from .user.models import User, UserPreferences  # noqa: F401
 from .user.router import router as user_router
-from .user.current_user_router import router as current_user_router
 from .videos.models import Video  # noqa: F401
 from .videos.router import router as videos_router
 
@@ -166,7 +166,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await run_transcript_url_migration(engine)
 
             # Run user custom instructions migration
-            from src.database.migrations.add_user_custom_instructions import run_migration as run_custom_instructions_migration
+            from src.database.migrations.add_user_custom_instructions import (
+                run_migration as run_custom_instructions_migration,
+            )
 
             await run_custom_instructions_migration(engine)
 

@@ -15,7 +15,7 @@ from src.courses.services.course_response_builder import CourseResponseBuilder
 class CourseQueryService:
     """Service for querying course data."""
 
-    def __init__(self, session: AsyncSession, user_id: str | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
         """Initialize the course query service.
 
         Args:
@@ -27,7 +27,7 @@ class CourseQueryService:
         self.response_builder = CourseResponseBuilder(session)
         self._logger = logging.getLogger(__name__)
 
-    async def get_course(self, course_id: UUID, user_id: str | None = None) -> CourseResponse:
+    async def get_course(self, course_id: UUID, user_id: UUID | None = None) -> CourseResponse:
         """Get a specific course by ID.
 
         Args:
@@ -79,7 +79,7 @@ class CourseQueryService:
         page: int = 1,
         per_page: int = 20,
         search: str | None = None,
-        user_id: str | None = None
+        user_id: UUID | None = None
     ) -> tuple[list[CourseResponse], int]:
         """List courses with pagination and optional search.
 
@@ -128,7 +128,7 @@ class CourseQueryService:
 
         return courses, total
 
-    async def list_modules(self, course_id: UUID, user_id: str | None = None) -> list[ModuleResponse]:
+    async def list_modules(self, course_id: UUID, user_id: UUID | None = None) -> list[ModuleResponse]:
         """List all modules for a course.
 
         Args:

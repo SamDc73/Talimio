@@ -17,7 +17,7 @@ from src.books.schemas import BookProgressResponse, BookProgressUpdate
 from src.core.user_utils import normalize_user_id
 
 
-DEFAULT_USER_ID = "default_user"  # For now, use default user (consistent with database)
+DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")  # Default user UUID
 
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class BookProgressService:
     """Service for calculating book progress based on table of contents."""
 
-    def __init__(self, session: AsyncSession, user_id: str | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
         """Initialize the book progress service.
 
         Args:
@@ -43,7 +43,7 @@ class BookProgressService:
         Returns percentage (0-100) of completed sections.
         This matches the CourseProgressService interface pattern.
         """
-        effective_user_id = str(user_id) if user_id else self.user_id
+        effective_user_id = user_id if user_id else self.user_id
 
         # Get book with TOC
         book_query = select(Book).where(Book.id == book_id)
@@ -126,7 +126,7 @@ class BookProgressService:
 
         Similar to CourseProgressService.get_lesson_completion_stats
         """
-        effective_user_id = str(user_id) if user_id else self.user_id
+        effective_user_id = user_id if user_id else self.user_id
 
         # Get book with TOC
         book_query = select(Book).where(Book.id == book_id)

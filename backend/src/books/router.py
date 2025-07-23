@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
-from src.auth.dependencies import CurrentUserId
+from src.auth.dependencies import EffectiveUserId
 from src.storage.factory import get_storage_provider
 
 from .schemas import (
@@ -62,7 +62,7 @@ async def list_books(
 
 
 @router.get("/{book_id}")
-async def get_book_endpoint(book_id: UUID, current_user_id: CurrentUserId) -> BookWithProgress:
+async def get_book_endpoint(book_id: UUID, current_user_id: EffectiveUserId) -> BookWithProgress:
     """Get book details with progress information."""
     return await get_book(book_id, current_user_id)
 
@@ -176,18 +176,20 @@ async def update_book_endpoint(book_id: UUID, book_data: BookUpdate) -> BookResp
 async def update_book_progress_endpoint(
     book_id: UUID,
     progress_data: BookProgressUpdate,
+    current_user_id: EffectiveUserId,
 ) -> BookProgressResponse:
     """Update reading progress for a book."""
-    return await update_book_progress(book_id, progress_data)
+    return await update_book_progress(book_id, progress_data, current_user_id)
 
 
 @router.post("/{book_id}/progress")
 async def update_book_progress_post_endpoint(
     book_id: UUID,
     progress_data: BookProgressUpdate,
+    current_user_id: EffectiveUserId,
 ) -> BookProgressResponse:
     """Update reading progress for a book (POST version for sendBeacon compatibility)."""
-    return await update_book_progress(book_id, progress_data)
+    return await update_book_progress(book_id, progress_data, current_user_id)
 
 
 @router.get("/{book_id}/file", response_model=None)

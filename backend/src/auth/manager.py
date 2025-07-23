@@ -42,7 +42,7 @@ class AuthProvider(ABC):
         """Get the current authenticated user from the request."""
 
     @abstractmethod
-    def get_user_id(self, request: "Request") -> str | None:
+    def get_user_id(self, request: "Request") -> UUID | None:
         """Get just the user ID from the request (lightweight operation)."""
 
 
@@ -55,9 +55,9 @@ class NoAuthProvider(AuthProvider):
         """Get current user for no-auth mode."""
         return AuthUser(id=str(self.DEFAULT_USER_ID), email="demo@talimio.com", name="Demo User")
 
-    def get_user_id(self, request: "Request") -> str | None:  # noqa: ARG002
+    def get_user_id(self, request: "Request") -> UUID | None:  # noqa: ARG002
         """Get user ID for no-auth mode."""
-        return str(self.DEFAULT_USER_ID)
+        return self.DEFAULT_USER_ID
 
 
 class SupabaseAuthProvider(AuthProvider):
@@ -101,7 +101,7 @@ class SupabaseAuthProvider(AuthProvider):
         except Exception:
             return None
 
-    def get_user_id(self, request: "Request") -> str | None:
+    def get_user_id(self, request: "Request") -> UUID | None:
         """Lightweight user ID extraction from Supabase JWT."""
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
@@ -118,9 +118,9 @@ class SupabaseAuthProvider(AuthProvider):
             user_id = payload.get("sub")  # 'sub' contains user ID in Supabase JWTs
             if user_id:
                 logger.debug(f"Extracted user ID from JWT: {user_id}")
-            else:
-                logger.warning("JWT payload does not contain 'sub' field")
-            return user_id
+                return UUID(user_id)
+            logger.warning("JWT payload does not contain 'sub' field")
+            return None
         except Exception as e:
             logger.error(f"Failed to decode JWT token: {e}")
             return None
@@ -149,7 +149,7 @@ class AuthManager:
         """Get the current authenticated user."""
         return await self.provider.get_current_user(request)
 
-    def get_user_id(self, request: "Request") -> str | None:
+    def get_user_id(self, request: "Request") -> UUID | None:
         """Get the current user ID (lightweight)."""
         return self.provider.get_user_id(request)
 
@@ -162,7 +162,7 @@ class AuthManager:
                 logger.info("No user ID found in request, using default user ID")
                 return NoAuthProvider.DEFAULT_USER_ID
             logger.debug(f"Using authenticated user ID: {user_id}")
-            return UUID(user_id)
+            return user_id
         except Exception as e:
             # Always fallback to default user ID on any auth failure
             logger.error(f"Error getting user ID, falling back to default: {e}")

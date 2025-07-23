@@ -1,5 +1,5 @@
 import { FileText } from "lucide-react";
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { extractBookChapters, getBookChapters } from "@/services/booksService";
 import { useTocProgress } from "@/services/tocProgressService";
 import useAppStore from "@/stores/useAppStore";
@@ -39,7 +39,7 @@ function BookSidebar({
 				if (!book?.id) return DEFAULT_STATS;
 				return state.books.progressStats[book.id] || DEFAULT_STATS;
 			},
-			[book?.id]
+			[book?.id],
 		),
 	);
 
@@ -58,16 +58,17 @@ function BookSidebar({
 				if (!book?.id) return EMPTY_TOC_PROGRESS;
 				return state.books.tocProgress[book.id] || EMPTY_TOC_PROGRESS;
 			},
-			[book?.id]
+			[book?.id],
 		),
 	);
 	const completedSections = useMemo(
-		() => new Set(
-			Object.entries(tocProgress)
-				.filter(([_, completed]) => completed)
-				.map(([sectionId, _]) => sectionId),
-		),
-		[tocProgress]
+		() =>
+			new Set(
+				Object.entries(tocProgress)
+					.filter(([_, completed]) => completed)
+					.map(([sectionId, _]) => sectionId),
+			),
+		[tocProgress],
 	);
 
 	/**

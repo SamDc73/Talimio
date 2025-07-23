@@ -44,25 +44,25 @@ async def list_decks(
     """List all flashcard decks."""
     # Note: user_id is available for future multi-user support
     # Currently using DEFAULT_USER_ID in service layer
-    return await get_decks(page=page, per_page=per_page)
+    return await get_decks(page=page, per_page=per_page, user_id=user_id)
 
 
 @router.get("/{deck_id}")
 async def get_deck_endpoint(deck_id: UUID, user_id: EffectiveUserId = None) -> FlashcardDeckResponse:
     """Get deck details."""
-    return await get_deck(deck_id)
+    return await get_deck(deck_id, user_id=user_id)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_deck_endpoint(deck_data: FlashcardDeckCreate, user_id: EffectiveUserId = None) -> FlashcardDeckResponse:
     """Create a new deck."""
-    return await create_deck(deck_data)
+    return await create_deck(deck_data, user_id=user_id)
 
 
 @router.put("/{deck_id}")
 async def update_deck_endpoint(deck_id: UUID, deck_data: FlashcardDeckUpdate, user_id: EffectiveUserId = None) -> FlashcardDeckResponse:
     """Update deck details."""
-    return await update_deck(deck_id, deck_data)
+    return await update_deck(deck_id, deck_data, user_id=user_id)
 
 
 # Card endpoints
@@ -74,14 +74,14 @@ async def get_deck_cards_endpoint(
     user_id: EffectiveUserId = None,
 ) -> CardListResponse:
     """Get all cards in a deck."""
-    return await get_deck_cards(deck_id, page=page, per_page=per_page)
+    return await get_deck_cards(deck_id, page=page, per_page=per_page, user_id=user_id)
 
 
 @router.post("/{deck_id}/cards", status_code=status.HTTP_201_CREATED)
 async def create_card_endpoint(deck_id: UUID, card_data: FlashcardCardCreate, user_id: EffectiveUserId = None) -> FlashcardCardResponse:
     """Add a card to a deck."""
     # Note: user_id is available for future multi-user support
-    return await create_card(deck_id, card_data)
+    return await create_card(deck_id, card_data, user_id=user_id)
 
 
 @router.put("/{deck_id}/cards/{card_id}")
@@ -92,7 +92,7 @@ async def update_card_endpoint(
     user_id: EffectiveUserId = None,
 ) -> FlashcardCardResponse:
     """Update a card."""
-    return await update_card(deck_id, card_id, card_data)
+    return await update_card(deck_id, card_id, card_data, user_id=user_id)
 
 
 # Review endpoints
@@ -104,7 +104,7 @@ async def review_card_endpoint(
     user_id: EffectiveUserId = None,
 ) -> FlashcardReviewResponse:
     """Submit a card review (for spaced repetition)."""
-    return await review_card(deck_id, card_id, review_data)
+    return await review_card(deck_id, card_id, review_data, user_id=user_id)
 
 
 @router.get("/{deck_id}/study")
@@ -114,4 +114,4 @@ async def get_study_session_endpoint(
     user_id: EffectiveUserId = None,
 ) -> StudySessionResponse:
     """Get cards due for review in a deck."""
-    return await get_study_session(deck_id, limit=limit)
+    return await get_study_session(deck_id, limit=limit, user_id=user_id)

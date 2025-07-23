@@ -1,5 +1,7 @@
 """Authentication routes for user login, signup, and session management."""
 
+from uuid import UUID
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from supabase import Client, create_client
@@ -257,11 +259,11 @@ async def debug_auth(
         "auth_provider": settings.AUTH_PROVIDER,
         "has_auth_header": bool(auth_header),
         "auth_header_preview": auth_header[:50] + "..." if auth_header and len(auth_header) > 50 else auth_header,
-        "effective_user_id": str(effective_user_id),
+        "effective_user_id": str(effective_user_id),  # Keep as string for JSON serialization
         "current_user": {
             "id": current_user.id if current_user else None,
             "email": current_user.email if current_user else None,
             "name": current_user.name if current_user else None,
         } if current_user else None,
-        "is_default_user": str(effective_user_id) == "00000000-0000-0000-0000-000000000001",
+        "is_default_user": effective_user_id == UUID("00000000-0000-0000-0000-000000000001"),
     }
