@@ -84,7 +84,8 @@ class CourseCreationService:
             # Check for duplicate title (basic validation)
             title = course_title
             existing_query = select(Roadmap).where(
-                Roadmap.title == title
+                Roadmap.title == title,
+                Roadmap.user_id == effective_user_id
             )
             existing_course = await self.session.execute(existing_query)
             if existing_course.scalar_one_or_none():
@@ -96,6 +97,7 @@ class CourseCreationService:
                 title=title,
                 description=course_description,
                 skill_level=roadmap_response.get("difficulty", "beginner"),
+                user_id=effective_user_id,
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC),
             )

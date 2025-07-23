@@ -51,8 +51,11 @@ class CourseUpdateService:
         """
         effective_user_id = user_id or self.user_id
 
-        # Get the roadmap/course
-        query = select(Roadmap).where(Roadmap.id == course_id)
+        # Get the roadmap/course with user filtering
+        query = select(Roadmap).where(
+            Roadmap.id == course_id,
+            Roadmap.user_id == effective_user_id
+        )
 
         result = await self.session.execute(query)
         roadmap = result.scalar_one_or_none()
