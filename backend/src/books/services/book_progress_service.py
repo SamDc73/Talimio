@@ -14,10 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book, BookProgress
 from src.books.schemas import BookProgressResponse, BookProgressUpdate
-from src.core.user_utils import normalize_user_id
-
-
-DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")  # Default user UUID
+from src.config.settings import DEFAULT_USER_ID
 
 
 logger = logging.getLogger(__name__)
@@ -34,10 +31,9 @@ class BookProgressService:
             user_id: User ID for user-specific operations
         """
         self.session = session
-        # Normalize user_id to string for SQL queries
-        self.user_id = normalize_user_id(user_id or DEFAULT_USER_ID)
+        self.user_id = user_id or DEFAULT_USER_ID
 
-    async def get_book_toc_progress_percentage(self, book_id: UUID, user_id: UUID | str | None = None) -> int:
+    async def get_book_toc_progress_percentage(self, book_id: UUID, user_id: UUID | None = None) -> int:
         """Calculate book progress based on completed TOC sections.
 
         Returns percentage (0-100) of completed sections.
@@ -121,7 +117,7 @@ class BookProgressService:
 
         return total, completed
 
-    async def get_toc_completion_stats(self, book_id: UUID, user_id: UUID | str | None = None) -> dict:
+    async def get_toc_completion_stats(self, book_id: UUID, user_id: UUID | None = None) -> dict:
         """Get detailed TOC completion statistics.
 
         Similar to CourseProgressService.get_lesson_completion_stats

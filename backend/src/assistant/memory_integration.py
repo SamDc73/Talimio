@@ -25,7 +25,7 @@ class ContextAwareMemoryManager:
 
     async def add_context_memory(
         self,
-        user_id: str,
+        user_id: UUID,
         content: str,
         context_type: str | None = None,
         context_id: UUID | None = None,
@@ -101,7 +101,7 @@ class ContextAwareMemoryManager:
 
     async def search_context_memories(
         self,
-        user_id: str,
+        user_id: UUID,
         query: str,
         context_type: str | None = None,
         context_id: UUID | None = None,
@@ -163,7 +163,7 @@ class ContextAwareMemoryManager:
 
     async def get_hybrid_memory_context(
         self,
-        user_id: str,
+        user_id: UUID,
         current_query: str,
         context_type: str | None = None,
         context_id: UUID | None = None,
@@ -239,7 +239,7 @@ class ContextAwareMemoryManager:
 
     async def get_learning_patterns(
         self,
-        user_id: str,
+        user_id: UUID,
         context_type: str | None = None,
         context_id: UUID | None = None,
     ) -> str:
@@ -337,7 +337,7 @@ class ContextAwareMemoryManager:
 
     async def track_context_interaction(
         self,
-        user_id: str,
+        user_id: UUID,
         interaction_type: str,
         content: str,
         context_type: str | None = None,
@@ -378,7 +378,7 @@ class SessionMemoryManager:
         self._session_memories = {}  # user_id -> list of session memories
         self._logger = logging.getLogger(__name__)
 
-    def add_session_memory(self, user_id: str, content: str, metadata: dict[str, Any] | None = None) -> None:
+    def add_session_memory(self, user_id: UUID, content: str, metadata: dict[str, Any] | None = None) -> None:
         """Add a memory to the current session."""
         if user_id not in self._session_memories:
             self._session_memories[user_id] = []
@@ -394,16 +394,16 @@ class SessionMemoryManager:
         # Keep only recent session memories (last 20)
         self._session_memories[user_id] = self._session_memories[user_id][-20:]
 
-    def get_session_memories(self, user_id: str) -> list[dict[str, Any]]:
+    def get_session_memories(self, user_id: UUID) -> list[dict[str, Any]]:
         """Get all session memories for a user."""
         return self._session_memories.get(user_id, [])
 
-    def clear_session_memories(self, user_id: str) -> None:
+    def clear_session_memories(self, user_id: UUID) -> None:
         """Clear session memories for a user."""
         if user_id in self._session_memories:
             del self._session_memories[user_id]
 
-    def get_recent_session_context(self, user_id: str, limit: int = 5) -> str:
+    def get_recent_session_context(self, user_id: UUID, limit: int = 5) -> str:
         """Get recent session context as formatted string."""
         memories = self.get_session_memories(user_id)
         if not memories:

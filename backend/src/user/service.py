@@ -73,10 +73,10 @@ async def _save_user_preferences(user_id: UUID, preferences: UserPreferences, db
         return False
 
 
-async def create_user(_user: UserCreate) -> dict:
+async def create_user(user: UserCreate) -> dict:
     """Create a new user."""
     # For now, we'll just return a dummy user ID
-    return {"id": "a-fake-user-id"}
+    return {"id": UUID(user.id)}
 
 
 async def get_user(user_id: UUID) -> dict:

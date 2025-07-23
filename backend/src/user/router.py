@@ -2,6 +2,7 @@
 
 import logging
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,7 +56,7 @@ async def create_user_endpoint(user: UserCreate) -> dict:
 
 
 @router.get("/{user_id}")
-async def get_user_endpoint(user_id: str) -> dict:
+async def get_user_endpoint(user_id: UUID) -> dict:
     """Get user by ID.
 
     Args:
@@ -69,7 +70,7 @@ async def get_user_endpoint(user_id: str) -> dict:
 
 
 @router.put("/{user_id}")
-async def update_user_endpoint(user_id: str, user: UserUpdate) -> dict:
+async def update_user_endpoint(user_id: UUID, user: UserUpdate) -> dict:
     """Update user information.
 
     Args:
@@ -84,7 +85,7 @@ async def update_user_endpoint(user_id: str, user: UserUpdate) -> dict:
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user_endpoint(user_id: str) -> None:
+async def delete_user_endpoint(user_id: UUID) -> None:
     """Delete a user.
 
     Args:
@@ -99,7 +100,7 @@ async def delete_user_endpoint(user_id: str) -> None:
 
 @router.get("/{user_id}/settings")
 async def get_settings(
-    user_id: str,
+    user_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db_session)]
 ) -> UserSettingsResponse:
     """
@@ -123,7 +124,7 @@ async def get_settings(
 
 @router.put("/{user_id}/settings/instructions")
 async def update_instructions(
-    user_id: str, request: CustomInstructionsRequest
+    user_id: UUID, request: CustomInstructionsRequest
 ) -> CustomInstructionsResponse:
     """
     Update custom instructions for AI personalization.
@@ -146,7 +147,7 @@ async def update_instructions(
 
 
 @router.delete("/{user_id}/memory")
-async def clear_memory(user_id: str) -> ClearMemoryResponse:
+async def clear_memory(user_id: UUID) -> ClearMemoryResponse:
     """
     Clear all stored memories for the user.
 
@@ -168,7 +169,7 @@ async def clear_memory(user_id: str) -> ClearMemoryResponse:
 
 @router.get("/{user_id}/settings/instructions")
 async def get_instructions(
-    user_id: str,
+    user_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db_session)]
 ) -> dict[str, str]:
     """
@@ -192,7 +193,7 @@ async def get_instructions(
 
 
 @router.get("/{user_id}/memories")
-async def get_memories(user_id: str) -> list[dict]:
+async def get_memories(user_id: UUID) -> list[dict]:
     """
     Get all memories for the user.
 
@@ -214,7 +215,7 @@ async def get_memories(user_id: str) -> list[dict]:
 
 @router.put("/{user_id}/preferences")
 async def update_preferences(
-    user_id: str,
+    user_id: UUID,
     request: PreferencesUpdateRequest,
     db: Annotated[AsyncSession, Depends(get_db_session)]
 ) -> PreferencesUpdateResponse:

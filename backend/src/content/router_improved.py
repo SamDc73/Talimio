@@ -1,9 +1,11 @@
+"""Improved content router using EffectiveUserId for guaranteed UUID."""
+
 import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from src.auth.dependencies import CurrentUser
+from src.auth.dependencies import EffectiveUserId
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_service import ContentService
 
@@ -21,7 +23,7 @@ async def get_all_content(
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
     include_archived: Annotated[bool, Query(description="Include archived content")] = False,
-    current_user: CurrentUser = None,
+    current_user_id: EffectiveUserId = None,  # This will never be None!
 ) -> ContentListResponse:
     """
     List all content across different types (videos, flashcards, books, roadmaps).
@@ -35,7 +37,7 @@ async def get_all_content(
         page=page,
         page_size=page_size,
         include_archived=include_archived,
-        current_user_id=current_user.id if current_user else None,
+        current_user_id=current_user_id,  # Always a UUID, never None
     )
 
 
@@ -43,7 +45,7 @@ async def get_all_content(
 async def delete_content(
     content_type: ContentType,
     content_id: str,
-    current_user: CurrentUser = None,
+    current_user_id: EffectiveUserId = None,  # This will never be None!
 ) -> None:
     """
     Delete a content item by type and ID.
@@ -53,5 +55,5 @@ async def delete_content(
     await ContentService.delete_content(
         content_type=content_type,
         content_id=content_id,
-        current_user_id=current_user.id if current_user else None,
+        current_user_id=current_user_id,  # Always a UUID, never None
     )

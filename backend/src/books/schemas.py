@@ -115,7 +115,7 @@ class BookProgressResponse(BookProgressBase):
 
     id: UUID
     book_id: UUID = Field(alias="bookId")
-    user_id: str = Field(alias="userId")
+    user_id: UUID = Field(alias="userId")
     total_pages_read: int = Field(alias="totalPagesRead")
     last_read_at: datetime | None = Field(alias="lastReadAt")
     created_at: datetime = Field(alias="createdAt")

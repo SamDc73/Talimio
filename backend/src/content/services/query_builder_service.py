@@ -17,7 +17,10 @@ class QueryBuilderService:
 
     @staticmethod
     def build_content_queries(
-        content_type: ContentType | None, search: str | None, include_archived: bool = False, user_id: UUID | None = None
+        content_type: ContentType | None,
+        search: str | None,
+        include_archived: bool = False,
+        user_id: UUID | None = None,
     ) -> tuple[list[str], bool]:
         """Build SQL queries for different content types. Returns queries and whether user_id is needed."""
         queries = []
@@ -35,7 +38,7 @@ class QueryBuilderService:
                 needs_user_id = True
 
         if not content_type or content_type in (ContentType.ROADMAP, ContentType.COURSE):
-            queries.append(QueryBuilderService._get_roadmap_query(search, include_archived, user_id))
+            queries.append(QueryBuilderService._get_roadmap_query(search, include_archived))
             needs_user_id = True
 
         return queries, needs_user_id
@@ -142,13 +145,17 @@ class QueryBuilderService:
     @staticmethod
     def _get_book_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
         """Get SQL query for books."""
-        return QueryBuilderService.get_books_query(search, archived_only=False, include_archived=include_archived, user_id=user_id)
+        return QueryBuilderService.get_books_query(
+            search, archived_only=False, include_archived=include_archived, user_id=user_id
+        )
 
     @staticmethod
-    def get_books_query(search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: UUID | None = None) -> str:
+    def get_books_query(
+        search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: UUID | None = None
+    ) -> str:
         """Get SQL query for books."""
         # If user_id is provided, filter book_progress by user_id
-        # user_id is stored as VARCHAR in the database
+        # FIX: user_id is stored as UUID in the database (not VARCHAR)
         user_filter = "AND user_id = :user_id" if user_id else ""
 
         query = f"""
@@ -186,7 +193,6 @@ class QueryBuilderService:
                      LIMIT 1), '{{}}')::text as toc_progress
             FROM books b
         """
-
         # Build WHERE clause
         where_conditions = []
         if archived_only:
@@ -204,15 +210,18 @@ class QueryBuilderService:
         return query
 
     @staticmethod
-    def _get_roadmap_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
+    def _get_roadmap_query(search: str | None, include_archived: bool = False) -> str:
         """Get SQL query for roadmaps."""
-        return QueryBuilderService.get_roadmaps_query(search, archived_only=False, include_archived=include_archived, user_id=user_id)
+        return QueryBuilderService.get_roadmaps_query(
+            search, archived_only=False, include_archived=include_archived
+        )
 
     @staticmethod
-    def get_roadmaps_query(search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: UUID | None = None) -> str:  # noqa: ARG004
+    def get_roadmaps_query(
+        search: str | None, archived_only: bool = False, include_archived: bool = False
+    ) -> str:
         """Get SQL query for roadmaps. Progress will be calculated separately using CourseProgressService."""
         # Simplified query - progress is calculated post-query using CourseProgressService for DRY
-        # Note: user_id parameter is reserved for future user-specific roadmap filtering
         query = """
             SELECT
                 r.id::text,
@@ -250,17 +259,17 @@ class QueryBuilderService:
         return query
 
     @staticmethod
-    async def get_total_count(session: AsyncSession, combined_query: str, search_term: str | None, user_id: UUID | None = None) -> int:
+    async def get_total_count(
+        session: AsyncSession, combined_query: str, search_term: str | None, user_id: UUID | None = None
+    ) -> int:
         """Get total count of results."""
-        from src.core.user_utils import normalize_user_id
-
         count_query = f"SELECT COUNT(*) FROM ({combined_query}) as combined"
         params = {}
         if search_term:
             params["search"] = search_term
         # Only include user_id if it's not None (since we build different queries based on user_id)
         if user_id is not None:
-            params["user_id"] = normalize_user_id(user_id)
+            params["user_id"] = user_id
         count_result = await session.execute(
             text(count_query),
             params,

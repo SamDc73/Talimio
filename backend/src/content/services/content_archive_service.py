@@ -143,7 +143,7 @@ class ContentArchiveService:
             elif content_type == ContentType.BOOK:
                 combined_query = QueryBuilderService.get_books_query(search, archived_only=True)
             elif content_type == ContentType.ROADMAP:
-                combined_query = QueryBuilderService.get_roadmaps_query(search, archived_only=True, user_id=effective_user_id)
+                combined_query = QueryBuilderService.get_roadmaps_query(search, archived_only=True)
             else:
                 msg = f"Unsupported content type: {content_type}"
                 raise ValueError(msg)
@@ -156,7 +156,7 @@ class ContentArchiveService:
                 UNION ALL
                 {QueryBuilderService.get_books_query(search, archived_only=True)}
                 UNION ALL
-                {QueryBuilderService.get_roadmaps_query(search, archived_only=True, user_id=effective_user_id)}
+                {QueryBuilderService.get_roadmaps_query(search, archived_only=True)}
             """
 
         async with async_session_maker() as session:

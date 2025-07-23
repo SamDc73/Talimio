@@ -28,7 +28,7 @@ class AuthProviderType(Enum):
 class AuthUser:
     """User representation across auth providers."""
 
-    id: str
+    id: UUID
     email: str | None = None
     name: str | None = None
     metadata: dict | None = None
@@ -53,7 +53,7 @@ class NoAuthProvider(AuthProvider):
 
     async def get_current_user(self, request: "Request") -> AuthUser | None:  # noqa: ARG002
         """Get current user for no-auth mode."""
-        return AuthUser(id=str(self.DEFAULT_USER_ID), email="demo@talimio.com", name="Demo User")
+        return AuthUser(id=self.DEFAULT_USER_ID, email="demo@talimio.com", name="Demo User")
 
     def get_user_id(self, request: "Request") -> UUID | None:  # noqa: ARG002
         """Get user ID for no-auth mode."""
@@ -93,7 +93,7 @@ class SupabaseAuthProvider(AuthProvider):
                 return None
 
             return AuthUser(
-                id=str(user_response.user.id),
+                id=UUID(str(user_response.user.id)),
                 email=user_response.user.email,
                 name=user_response.user.user_metadata.get("username"),
                 metadata=user_response.user.user_metadata

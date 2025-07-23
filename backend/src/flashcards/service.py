@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 from fsrs import Card, Rating, Scheduler
 from sqlalchemy import func, select
 
+from src.config.settings import DEFAULT_USER_ID
 from src.database.session import async_session_maker
 from src.flashcards.models import FlashcardCard, FlashcardDeck, FlashcardReview
 from src.flashcards.schemas import (
@@ -24,10 +25,7 @@ from src.flashcards.schemas import (
 )
 
 
-DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")  # Default user UUID
-
-
-async def create_deck(deck_data: FlashcardDeckCreate) -> FlashcardDeckResponse:
+async def create_deck(deck_data: FlashcardDeckCreate, user_id: UUID | None = None) -> FlashcardDeckResponse:
     """
     Create a new flashcard deck.
 
@@ -68,7 +66,7 @@ async def create_deck(deck_data: FlashcardDeckCreate) -> FlashcardDeckResponse:
         ) from e
 
 
-async def get_decks(page: int = 1, per_page: int = 20) -> DeckListResponse:
+async def get_decks(page: int = 1, per_page: int = 20, user_id: UUID | None = None) -> DeckListResponse:
     """
     Get list of flashcard decks with pagination.
 
@@ -127,7 +125,7 @@ async def get_decks(page: int = 1, per_page: int = 20) -> DeckListResponse:
         ) from e
 
 
-async def get_deck(deck_id: UUID) -> FlashcardDeckResponse:
+async def get_deck(deck_id: UUID, user_id: UUID | None = None) -> FlashcardDeckResponse:
     """
     Get a flashcard deck by ID.
 
@@ -178,7 +176,7 @@ async def get_deck(deck_id: UUID) -> FlashcardDeckResponse:
         ) from e
 
 
-async def update_deck(deck_id: UUID, deck_data: FlashcardDeckUpdate) -> FlashcardDeckResponse:
+async def update_deck(deck_id: UUID, deck_data: FlashcardDeckUpdate, user_id: UUID | None = None) -> FlashcardDeckResponse:
     """
     Update a flashcard deck.
 
@@ -243,7 +241,7 @@ async def update_deck(deck_id: UUID, deck_data: FlashcardDeckUpdate) -> Flashcar
         ) from e
 
 
-async def delete_deck(deck_id: UUID) -> None:
+async def delete_deck(deck_id: UUID, user_id: UUID | None = None) -> None:
     """
     Delete a flashcard deck and all its cards.
 
@@ -282,7 +280,7 @@ async def delete_deck(deck_id: UUID) -> None:
         ) from e
 
 
-async def get_deck_cards(deck_id: UUID, page: int = 1, per_page: int = 20) -> CardListResponse:
+async def get_deck_cards(deck_id: UUID, page: int = 1, per_page: int = 20, user_id: UUID | None = None) -> CardListResponse:
     """
     Get all cards in a deck with pagination.
 
@@ -354,7 +352,7 @@ async def get_deck_cards(deck_id: UUID, page: int = 1, per_page: int = 20) -> Ca
         ) from e
 
 
-async def create_card(deck_id: UUID, card_data: FlashcardCardCreate) -> FlashcardCardResponse:
+async def create_card(deck_id: UUID, card_data: FlashcardCardCreate, user_id: UUID | None = None) -> FlashcardCardResponse:
     """
     Add a card to a deck.
 
@@ -417,7 +415,7 @@ async def create_card(deck_id: UUID, card_data: FlashcardCardCreate) -> Flashcar
         ) from e
 
 
-async def update_card(deck_id: UUID, card_id: UUID, card_data: FlashcardCardUpdate) -> FlashcardCardResponse:
+async def update_card(deck_id: UUID, card_id: UUID, card_data: FlashcardCardUpdate, user_id: UUID | None = None) -> FlashcardCardResponse:
     """
     Update a card in a deck.
 
@@ -475,7 +473,7 @@ async def update_card(deck_id: UUID, card_id: UUID, card_data: FlashcardCardUpda
         ) from e
 
 
-async def delete_card(deck_id: UUID, card_id: UUID) -> None:
+async def delete_card(deck_id: UUID, card_id: UUID, user_id: UUID | None = None) -> None:
     """
     Delete a card from a deck.
 
@@ -515,7 +513,7 @@ async def delete_card(deck_id: UUID, card_id: UUID) -> None:
         ) from e
 
 
-async def review_card(deck_id: UUID, card_id: UUID, review_data: FlashcardReviewRequest) -> FlashcardReviewResponse:
+async def review_card(deck_id: UUID, card_id: UUID, review_data: FlashcardReviewRequest, user_id: UUID | None = None) -> FlashcardReviewResponse:
     """
     Submit a card review and update spaced repetition scheduling.
 
@@ -621,7 +619,7 @@ async def review_card(deck_id: UUID, card_id: UUID, review_data: FlashcardReview
         ) from e
 
 
-async def get_study_session(deck_id: UUID, limit: int = 20) -> StudySessionResponse:
+async def get_study_session(deck_id: UUID, limit: int = 20, user_id: UUID | None = None) -> StudySessionResponse:
     """
     Get cards due for review in a deck.
 

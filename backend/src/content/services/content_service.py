@@ -94,10 +94,7 @@ class ContentService:
         user_id: UUID | None = None,
     ) -> list[Any]:
         """Get paginated results."""
-        from src.core.user_utils import normalize_user_id
-
-        final_query = f"""
-            SELECT * FROM ({combined_query}) as combined
+        final_query = f"""            SELECT * FROM ({combined_query}) as combined
             ORDER BY last_accessed DESC
             LIMIT :limit OFFSET :offset
         """
@@ -107,7 +104,7 @@ class ContentService:
             params["search"] = search_term
         # Only include user_id if it's not None (since we build different queries based on user_id)
         if user_id is not None:
-            params["user_id"] = normalize_user_id(user_id)
+            params["user_id"] = user_id
 
         result = await session.execute(text(final_query), params)
         return list(result.all())
