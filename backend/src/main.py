@@ -20,7 +20,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from .ai.rag.router import router as rag_router
 from .assistant.router import router as assistant_router
-from .auth.manager import NoAuthProvider, auth_manager
+from .auth.manager import auth_manager
 from .auth.router import router as auth_router
 
 # Import models to register them with SQLAlchemy - MUST be after database.base import
@@ -234,12 +234,8 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def inject_user_context(request: Request, call_next):
         """Inject user context into every request."""
-        try:
-            user_id = auth_manager.get_effective_user_id(request)
-            request.state.user_id = user_id
-        except Exception as e:
-            logger.warning(f"Auth failed, using default user: {e}")
-            request.state.user_id = NoAuthProvider.DEFAULT_USER_ID
+        # Get user ID, with AuthManager handling fallbacks to the default user
+        request.state.user_id = auth_manager.get_effective_user_id(request)
 
         response = await call_next(request)
         return response

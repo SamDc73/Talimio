@@ -2,9 +2,6 @@ import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 
-// Default user ID for single-user mode
-const DEFAULT_USER_ID = "default_user";
-
 /**
  * Tag store for managing user tags and tag-content associations
  */
@@ -34,7 +31,7 @@ const useTagStore = create(
 			// ========== ACTIONS ==========
 
 			// User Tags Management
-			async fetchUserTags(_userId = DEFAULT_USER_ID) {
+			async fetchUserTags() {
 				set((state) => {
 					state.loading.tags = true;
 				});

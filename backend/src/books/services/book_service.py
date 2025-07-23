@@ -20,10 +20,9 @@ from src.books.schemas import (
     BookWithProgress,
     TableOfContentsItem,
 )
+from src.config.settings import DEFAULT_USER_ID
 from src.database.session import async_session_maker
 
-
-DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")  # Default user UUID
 
 logger = logging.getLogger(__name__)
 

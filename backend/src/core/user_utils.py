@@ -9,7 +9,7 @@ from src.config.settings import get_settings
 DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
-def resolve_user_id(provided_user_id: str | UUID | None = None) -> UUID:
+def resolve_user_id(provided_user_id: UUID | None = None) -> UUID:
     """
     Resolve the effective user ID based on deployment mode.
 
@@ -43,10 +43,6 @@ def resolve_user_id(provided_user_id: str | UUID | None = None) -> UUID:
         msg = "Authentication required in cloud mode"
         raise ValueError(msg)
 
-    # Convert to UUID if it's a string
-    if isinstance(provided_user_id, str):
-        return UUID(provided_user_id)
-
     return provided_user_id
 
 
@@ -57,22 +53,3 @@ def get_user_filter(provided_user_id: UUID | None = None) -> UUID:
     This is a convenience function that wraps resolve_user_id.
     """
     return resolve_user_id(provided_user_id)
-
-
-def normalize_user_id(user_id: str | UUID | None) -> str | None:
-    """
-    Normalize user ID to string format for SQL queries.
-    
-    asyncpg requires string format for UUID parameters, not UUID objects.
-    This function ensures consistent conversion.
-    
-    Args:
-        user_id: User ID as string, UUID, or None
-        
-    Returns
-    -------
-        str | None: User ID as string or None
-    """
-    if user_id is None:
-        return None
-    return str(user_id)

@@ -26,7 +26,7 @@ class ConversationManager:
             return f"{context_type}:{context_id}"
         return "global"
 
-    def _get_conversation_data(self, user_id: str, resource_key: str) -> dict[str, Any]:
+    def _get_conversation_data(self, user_id: UUID, resource_key: str) -> dict[str, Any]:
         """Get or create conversation data for a user and resource."""
         conversation_key = f"{user_id}:{resource_key}"
 
@@ -44,7 +44,7 @@ class ConversationManager:
 
     async def add_message(
         self,
-        user_id: str,
+        user_id: UUID,
         message: dict[str, Any],
         context_type: str | None = None,
         context_id: UUID | None = None,
@@ -91,7 +91,7 @@ class ConversationManager:
 
     async def get_conversation_history(
         self,
-        user_id: str,
+        user_id: UUID,
         context_type: str | None = None,
         context_id: UUID | None = None,
         limit: int = 20,
@@ -137,7 +137,7 @@ class ConversationManager:
 
     async def _track_context_switch(
         self,
-        user_id: str,
+        user_id: UUID,
         new_resource_key: str,
         context_type: str | None,
         context_id: UUID | None,
@@ -179,7 +179,7 @@ class ConversationManager:
         except Exception as e:
             self._logger.exception(f"Error tracking context switch: {e}")
 
-    async def _auto_summarize_conversation(self, user_id: str, resource_key: str) -> None:
+    async def _auto_summarize_conversation(self, user_id: UUID, resource_key: str) -> None:
         """Auto-summarize conversation when it gets too long."""
         try:
             conversation_data = self._get_conversation_data(user_id, resource_key)
@@ -228,7 +228,7 @@ class ConversationManager:
         except Exception as e:
             self._logger.exception(f"Error auto-summarizing conversation: {e}")
 
-    async def get_context_switch_history(self, user_id: str) -> list[dict[str, Any]]:
+    async def get_context_switch_history(self, user_id: UUID) -> list[dict[str, Any]]:
         """Get the history of context switches for a user's session."""
         try:
             session_data = self._user_sessions.get(user_id, {})
@@ -240,7 +240,7 @@ class ConversationManager:
 
     async def get_conversation_summary(
         self,
-        user_id: str,
+        user_id: UUID,
         context_type: str | None = None,
         context_id: UUID | None = None,
     ) -> str:
@@ -281,7 +281,7 @@ class ConversationManager:
 
     async def prune_context_for_tokens(
         self,
-        user_id: str,
+        user_id: UUID,
         context_type: str | None = None,
         context_id: UUID | None = None,
         max_tokens: int = 4000,
@@ -373,7 +373,7 @@ class ConversationManager:
                 user_id, context_type, context_id, limit=preserve_recent, include_context=False
             )
 
-    def get_conversation_stats(self, user_id: str) -> dict[str, Any]:
+    def get_conversation_stats(self, user_id: UUID) -> dict[str, Any]:
         """Get statistics about user's conversations across all resources."""
         try:
             stats = {

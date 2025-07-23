@@ -130,7 +130,7 @@ class ContentProgressService:
         return results
 
 
-async def _calculate_course_progress(session: AsyncSession, items: list[Any], user_id: str) -> list[Any]:
+async def _calculate_course_progress(session: AsyncSession, items: list[Any], user_id: UUID) -> list[Any]:
     """Calculate accurate course progress using CourseProgressService (DRY)."""
     from src.courses.services.course_progress_service import CourseProgressService
 
@@ -147,11 +147,10 @@ async def _calculate_course_progress(session: AsyncSession, items: list[Any], us
     for item in course_items:
         try:
             course_id = UUID(item.id)
-            user_uuid = UUID(user_id)
 
             # Use our DRY CourseProgressService
-            progress = await progress_service.get_course_progress_percentage(course_id, user_uuid)
-            stats = await progress_service.get_lesson_completion_stats(course_id, user_uuid)
+            progress = await progress_service.get_course_progress_percentage(course_id, user_id)
+            stats = await progress_service.get_lesson_completion_stats(course_id, user_id)
 
             # Update the item's progress
             item.progress = float(progress)
@@ -165,7 +164,7 @@ async def _calculate_course_progress(session: AsyncSession, items: list[Any], us
     return items
 
 
-async def _calculate_book_progress(session: AsyncSession, items: list[Any], user_id: str) -> list[Any]:
+async def _calculate_book_progress(session: AsyncSession, items: list[Any], user_id: UUID) -> list[Any]:
     """Calculate accurate book progress using BookProgressService (matching course pattern)."""
     from src.books.services.book_progress_service import BookProgressService
 

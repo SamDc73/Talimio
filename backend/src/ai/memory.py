@@ -170,7 +170,7 @@ class Mem0Wrapper:
             database=env("DB_NAME", "neondb"),
         )
 
-    async def add_memory(self, user_id: str | UUID, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def add_memory(self, user_id: UUID, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Add a memory entry for a user.
 
@@ -217,7 +217,7 @@ class Mem0Wrapper:
             raise AIMemoryError(msg) from e
 
     async def search_memories(
-        self, user_id: str | UUID, query: str, limit: int = 5, relevance_threshold: float = 0.7, allow_empty: bool = False
+        self, user_id: UUID, query: str, limit: int = 5, relevance_threshold: float = 0.7, allow_empty: bool = False
     ) -> list[dict[str, Any]]:
         """
         Search for relevant memories for a user.
@@ -274,7 +274,7 @@ class Mem0Wrapper:
             self._logger.exception(f"Error searching memories for user {user_id}: {e}")
             return []  # Return empty list on error to not break AI responses
 
-    async def delete_all_memories(self, user_id: str | UUID) -> dict[str, str]:
+    async def delete_all_memories(self, user_id: UUID) -> dict[str, str]:
         """
         Delete all memories for a user.
 
@@ -299,7 +299,7 @@ class Mem0Wrapper:
             # Return a default response if deletion fails (common with orphaned records)
             return {"message": "Memory deletion attempted, continuing with operation"}
 
-    async def get_custom_instructions(self, user_id: str | UUID) -> str:
+    async def get_custom_instructions(self, user_id: UUID) -> str:
         """
         Get custom instructions for a user.
 
@@ -324,7 +324,7 @@ class Mem0Wrapper:
             self._logger.exception(f"Error getting custom instructions for user {user_id}: {e}")
             return ""  # Return empty string on error
 
-    async def update_custom_instructions(self, user_id: str | UUID, instructions: str) -> bool:
+    async def update_custom_instructions(self, user_id: UUID, instructions: str) -> bool:
         """
         Update custom instructions for a user.
 
@@ -359,7 +359,7 @@ class Mem0Wrapper:
             self._logger.exception(f"Error updating custom instructions for user {user_id}: {e}")
             return False
 
-    async def get_memory_count(self, user_id: str | UUID) -> int:
+    async def get_memory_count(self, user_id: UUID) -> int:
         """
         Get the total count of memories for a user.
 
@@ -384,7 +384,7 @@ class Mem0Wrapper:
             self._logger.warning(f"Error counting memories for user {user_id}: {e}")
             return 0
 
-    async def build_memory_context(self, user_id: str | UUID, current_query: str) -> str:
+    async def build_memory_context(self, user_id: UUID, current_query: str) -> str:
         """
         Build memory context for AI prompts by combining custom instructions and relevant memories.
 
@@ -433,7 +433,7 @@ class Mem0Wrapper:
             return ""  # Return empty context on error to not break AI responses
 
     async def track_learning_interaction(
-        self, user_id: str | UUID, interaction_type: str, content: str, metadata: dict[str, Any] | None = None
+        self, user_id: UUID, interaction_type: str, content: str, metadata: dict[str, Any] | None = None
     ) -> None:
         """
         Track learning interactions automatically (behind the scenes).

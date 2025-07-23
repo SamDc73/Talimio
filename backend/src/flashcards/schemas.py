@@ -32,7 +32,7 @@ class FlashcardDeckResponse(FlashcardDeckBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    user_id: str
+    user_id: UUID
     created_at: datetime
     updated_at: datetime
     card_count: int = 0  # Will be populated by service
@@ -124,7 +124,7 @@ class FlashcardReviewResponse(BaseModel):
 
     id: UUID
     card_id: UUID
-    user_id: str
+    user_id: UUID
     rating: int
     response_time_ms: int | None
     reviewed_at: datetime
