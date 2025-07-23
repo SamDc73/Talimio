@@ -1,12 +1,12 @@
 """Internal library search functionality.
 
-from uuid import UUID
 This module handles searching the platform's own database for existing
 courses, lessons, books, and videos that match the user's learning needs.
 """
 
 import logging
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload

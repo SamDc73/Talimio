@@ -139,11 +139,11 @@ class ContentArchiveService:
             if content_type == ContentType.YOUTUBE:
                 combined_query = QueryBuilderService.get_youtube_query(search, archived_only=True)
             elif content_type == ContentType.FLASHCARDS:
-                combined_query = QueryBuilderService.get_flashcards_query(search, archived_only=True)
+                combined_query = QueryBuilderService.get_flashcards_query(search, archived_only=True, user_id=effective_user_id)
             elif content_type == ContentType.BOOK:
-                combined_query = QueryBuilderService.get_books_query(search, archived_only=True)
+                combined_query = QueryBuilderService.get_books_query(search, archived_only=True, user_id=effective_user_id)
             elif content_type == ContentType.ROADMAP:
-                combined_query = QueryBuilderService.get_roadmaps_query(search, archived_only=True)
+                combined_query = QueryBuilderService.get_roadmaps_query(search, archived_only=True, user_id=effective_user_id)
             else:
                 msg = f"Unsupported content type: {content_type}"
                 raise ValueError(msg)
@@ -152,11 +152,11 @@ class ContentArchiveService:
             combined_query = f"""
                 {QueryBuilderService.get_youtube_query(search, archived_only=True)}
                 UNION ALL
-                {QueryBuilderService.get_flashcards_query(search, archived_only=True)}
+                {QueryBuilderService.get_flashcards_query(search, archived_only=True, user_id=effective_user_id)}
                 UNION ALL
-                {QueryBuilderService.get_books_query(search, archived_only=True)}
+                {QueryBuilderService.get_books_query(search, archived_only=True, user_id=effective_user_id)}
                 UNION ALL
-                {QueryBuilderService.get_roadmaps_query(search, archived_only=True)}
+                {QueryBuilderService.get_roadmaps_query(search, archived_only=True, user_id=effective_user_id)}
             """
 
         async with async_session_maker() as session:

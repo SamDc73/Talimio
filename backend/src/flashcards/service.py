@@ -7,7 +7,6 @@ from fastapi import HTTPException, status
 from fsrs import Card, Rating, Scheduler
 from sqlalchemy import func, select
 
-from src.config.settings import DEFAULT_USER_ID
 from src.database.session import async_session_maker
 from src.flashcards.models import FlashcardCard, FlashcardDeck, FlashcardReview
 from src.flashcards.schemas import (
@@ -25,7 +24,7 @@ from src.flashcards.schemas import (
 )
 
 
-async def create_deck(deck_data: FlashcardDeckCreate, user_id: UUID | None = None) -> FlashcardDeckResponse:
+async def create_deck(deck_data: FlashcardDeckCreate, user_id: UUID) -> FlashcardDeckResponse:
     """
     Create a new flashcard deck.
 
@@ -45,7 +44,7 @@ async def create_deck(deck_data: FlashcardDeckCreate, user_id: UUID | None = Non
             deck = FlashcardDeck(
                 name=deck_data.name,
                 description=deck_data.description,
-                user_id=user_id or DEFAULT_USER_ID,
+                user_id=user_id,
                 tags=json.dumps(deck_data.tags) if deck_data.tags else None,
                 is_public=deck_data.is_public,
             )
@@ -66,7 +65,7 @@ async def create_deck(deck_data: FlashcardDeckCreate, user_id: UUID | None = Non
         ) from e
 
 
-async def get_decks(page: int = 1, per_page: int = 20, user_id: UUID | None = None) -> DeckListResponse:
+async def get_decks(user_id: UUID, page: int = 1, per_page: int = 20) -> DeckListResponse:
     """
     Get list of flashcard decks with pagination.
 
@@ -86,7 +85,7 @@ async def get_decks(page: int = 1, per_page: int = 20, user_id: UUID | None = No
         async with async_session_maker() as session:
             # Get total count
             count_query = select(func.count(FlashcardDeck.id)).where(
-                FlashcardDeck.user_id == DEFAULT_USER_ID,
+                FlashcardDeck.user_id == user_id,
             )
             total_result = await session.execute(count_query)
             total = total_result.scalar() or 0
@@ -96,7 +95,7 @@ async def get_decks(page: int = 1, per_page: int = 20, user_id: UUID | None = No
             query = (
                 select(FlashcardDeck, func.count(FlashcardCard.id).label("card_count"))
                 .outerjoin(FlashcardCard)
-                .where(FlashcardDeck.user_id == DEFAULT_USER_ID)
+                .where(FlashcardDeck.user_id == user_id)
                 .group_by(FlashcardDeck.id)
                 .offset(offset)
                 .limit(per_page)
@@ -125,7 +124,7 @@ async def get_decks(page: int = 1, per_page: int = 20, user_id: UUID | None = No
         ) from e
 
 
-async def get_deck(deck_id: UUID, user_id: UUID | None = None) -> FlashcardDeckResponse:
+async def get_deck(deck_id: UUID, user_id: UUID) -> FlashcardDeckResponse:
     """
     Get a flashcard deck by ID.
 
@@ -144,7 +143,7 @@ async def get_deck(deck_id: UUID, user_id: UUID | None = None) -> FlashcardDeckR
         async with async_session_maker() as session:
             query = select(FlashcardDeck).where(
                 FlashcardDeck.id == deck_id,
-                FlashcardDeck.user_id == DEFAULT_USER_ID,
+                FlashcardDeck.user_id == user_id,
             )
             result = await session.execute(query)
             deck = result.scalar_one_or_none()
@@ -176,7 +175,7 @@ async def get_deck(deck_id: UUID, user_id: UUID | None = None) -> FlashcardDeckR
         ) from e
 
 
-async def update_deck(deck_id: UUID, deck_data: FlashcardDeckUpdate, user_id: UUID | None = None) -> FlashcardDeckResponse:
+async def update_deck(deck_id: UUID, deck_data: FlashcardDeckUpdate, user_id: UUID) -> FlashcardDeckResponse:
     """
     Update a flashcard deck.
 
@@ -196,7 +195,7 @@ async def update_deck(deck_id: UUID, deck_data: FlashcardDeckUpdate, user_id: UU
         async with async_session_maker() as session:
             query = select(FlashcardDeck).where(
                 FlashcardDeck.id == deck_id,
-                FlashcardDeck.user_id == DEFAULT_USER_ID,
+                FlashcardDeck.user_id == user_id,
             )
             result = await session.execute(query)
             deck = result.scalar_one_or_none()
@@ -241,7 +240,7 @@ async def update_deck(deck_id: UUID, deck_data: FlashcardDeckUpdate, user_id: UU
         ) from e
 
 
-async def delete_deck(deck_id: UUID, user_id: UUID | None = None) -> None:
+async def delete_deck(deck_id: UUID, user_id: UUID) -> None:
     """
     Delete a flashcard deck and all its cards.
 
@@ -256,7 +255,7 @@ async def delete_deck(deck_id: UUID, user_id: UUID | None = None) -> None:
         async with async_session_maker() as session:
             query = select(FlashcardDeck).where(
                 FlashcardDeck.id == deck_id,
-                FlashcardDeck.user_id == DEFAULT_USER_ID,
+                FlashcardDeck.user_id == user_id,
             )
             result = await session.execute(query)
             deck = result.scalar_one_or_none()
@@ -280,7 +279,7 @@ async def delete_deck(deck_id: UUID, user_id: UUID | None = None) -> None:
         ) from e
 
 
-async def get_deck_cards(deck_id: UUID, page: int = 1, per_page: int = 20, user_id: UUID | None = None) -> CardListResponse:
+async def get_deck_cards(deck_id: UUID, user_id: UUID, page: int = 1, per_page: int = 20) -> CardListResponse:
     """
     Get all cards in a deck with pagination.
 
@@ -302,7 +301,7 @@ async def get_deck_cards(deck_id: UUID, page: int = 1, per_page: int = 20, user_
             # Verify deck exists and belongs to user
             deck_query = select(FlashcardDeck).where(
                 FlashcardDeck.id == deck_id,
-                FlashcardDeck.user_id == DEFAULT_USER_ID,
+                FlashcardDeck.user_id == user_id,
             )
             deck_result = await session.execute(deck_query)
             deck = deck_result.scalar_one_or_none()
@@ -352,7 +351,7 @@ async def get_deck_cards(deck_id: UUID, page: int = 1, per_page: int = 20, user_
         ) from e
 
 
-async def create_card(deck_id: UUID, card_data: FlashcardCardCreate, user_id: UUID | None = None) -> FlashcardCardResponse:
+async def create_card(deck_id: UUID, card_data: FlashcardCardCreate, user_id: UUID) -> FlashcardCardResponse:
     """
     Add a card to a deck.
 
@@ -373,7 +372,7 @@ async def create_card(deck_id: UUID, card_data: FlashcardCardCreate, user_id: UU
             # Verify deck exists and belongs to user
             deck_query = select(FlashcardDeck).where(
                 FlashcardDeck.id == deck_id,
-                FlashcardDeck.user_id == DEFAULT_USER_ID,
+                FlashcardDeck.user_id == user_id,
             )
             deck_result = await session.execute(deck_query)
             deck = deck_result.scalar_one_or_none()
@@ -415,7 +414,66 @@ async def create_card(deck_id: UUID, card_data: FlashcardCardCreate, user_id: UU
         ) from e
 
 
-async def update_card(deck_id: UUID, card_id: UUID, card_data: FlashcardCardUpdate, user_id: UUID | None = None) -> FlashcardCardResponse:
+async def get_card(deck_id: UUID, card_id: UUID, user_id: UUID) -> FlashcardCardResponse:
+    """
+    Get a single card by ID.
+
+    Args:
+        deck_id: Deck ID
+        card_id: Card ID
+        user_id: User ID
+
+    Returns
+    -------
+        FlashcardCardResponse: Card data
+
+    Raises
+    ------
+        HTTPException: If card not found or retrieval fails
+    """
+    try:
+        async with async_session_maker() as session:
+            # First verify deck belongs to user
+            deck_query = select(FlashcardDeck).where(
+                FlashcardDeck.id == deck_id,
+                FlashcardDeck.user_id == user_id,
+            )
+            deck_result = await session.execute(deck_query)
+            deck = deck_result.scalar_one_or_none()
+
+            if not deck:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Deck {deck_id} not found",
+                )
+
+            # Get the card
+            query = select(FlashcardCard).where(
+                FlashcardCard.id == card_id,
+                FlashcardCard.deck_id == deck_id,
+            )
+            result = await session.execute(query)
+            card = result.scalar_one_or_none()
+
+            if not card:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Card {card_id} not found in deck {deck_id}",
+                )
+
+            return FlashcardCardResponse.model_validate(card)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.exception(f"Error getting card {card_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get card: {e!s}",
+        ) from e
+
+
+async def update_card(deck_id: UUID, card_id: UUID, card_data: FlashcardCardUpdate, user_id: UUID) -> FlashcardCardResponse:
     """
     Update a card in a deck.
 
@@ -434,6 +492,20 @@ async def update_card(deck_id: UUID, card_id: UUID, card_data: FlashcardCardUpda
     """
     try:
         async with async_session_maker() as session:
+            # First verify deck belongs to user
+            deck_query = select(FlashcardDeck).where(
+                FlashcardDeck.id == deck_id,
+                FlashcardDeck.user_id == user_id,
+            )
+            deck_result = await session.execute(deck_query)
+            deck = deck_result.scalar_one_or_none()
+
+            if not deck:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Deck {deck_id} not found",
+                )
+
             # Get card and verify it belongs to the specified deck
             query = select(FlashcardCard).where(
                 FlashcardCard.id == card_id,
@@ -473,7 +545,7 @@ async def update_card(deck_id: UUID, card_id: UUID, card_data: FlashcardCardUpda
         ) from e
 
 
-async def delete_card(deck_id: UUID, card_id: UUID, user_id: UUID | None = None) -> None:
+async def delete_card(deck_id: UUID, card_id: UUID, user_id: UUID) -> None:
     """
     Delete a card from a deck.
 
@@ -487,6 +559,20 @@ async def delete_card(deck_id: UUID, card_id: UUID, user_id: UUID | None = None)
     """
     try:
         async with async_session_maker() as session:
+            # First verify deck belongs to user
+            deck_query = select(FlashcardDeck).where(
+                FlashcardDeck.id == deck_id,
+                FlashcardDeck.user_id == user_id,
+            )
+            deck_result = await session.execute(deck_query)
+            deck = deck_result.scalar_one_or_none()
+
+            if not deck:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Deck {deck_id} not found",
+                )
+
             query = select(FlashcardCard).where(
                 FlashcardCard.id == card_id,
                 FlashcardCard.deck_id == deck_id,
@@ -513,7 +599,7 @@ async def delete_card(deck_id: UUID, card_id: UUID, user_id: UUID | None = None)
         ) from e
 
 
-async def review_card(deck_id: UUID, card_id: UUID, review_data: FlashcardReviewRequest, user_id: UUID | None = None) -> FlashcardReviewResponse:
+async def review_card(deck_id: UUID, card_id: UUID, review_data: FlashcardReviewRequest, user_id: UUID) -> FlashcardReviewResponse:
     """
     Submit a card review and update spaced repetition scheduling.
 
@@ -586,7 +672,7 @@ async def review_card(deck_id: UUID, card_id: UUID, review_data: FlashcardReview
             # Create review record
             review = FlashcardReview(
                 card_id=card_id,
-                user_id=user_id or DEFAULT_USER_ID,
+                user_id=user_id,
                 rating=review_data.rating,
                 response_time_ms=review_data.response_time_ms,
                 reviewed_at=now,
@@ -619,7 +705,7 @@ async def review_card(deck_id: UUID, card_id: UUID, review_data: FlashcardReview
         ) from e
 
 
-async def get_study_session(deck_id: UUID, limit: int = 20, user_id: UUID | None = None) -> StudySessionResponse:
+async def get_study_session(deck_id: UUID, user_id: UUID, limit: int = 20) -> StudySessionResponse:
     """
     Get cards due for review in a deck.
 
@@ -640,7 +726,7 @@ async def get_study_session(deck_id: UUID, limit: int = 20, user_id: UUID | None
             # Verify deck exists and belongs to user
             deck_query = select(FlashcardDeck).where(
                 FlashcardDeck.id == deck_id,
-                FlashcardDeck.user_id == DEFAULT_USER_ID,
+                FlashcardDeck.user_id == user_id,
             )
             deck_result = await session.execute(deck_query)
             deck = deck_result.scalar_one_or_none()
