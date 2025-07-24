@@ -1,16 +1,41 @@
 """Authentication routes for user login, signup, and session management."""
 
+import contextlib
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr
 from supabase import Client, create_client
 
-from src.auth.dependencies import CurrentUser, EffectiveUserId, RequiredUser
+from src.auth.dependencies import CurrentUser, EffectiveUserId, RequireAuthInMultiUser
 from src.config.settings import get_settings
+from src.middleware.security import auth_rate_limit
 
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+
+
+def set_auth_cookie(response: Response, token: str) -> None:
+    """Set httpOnly auth cookie (secure!)."""
+    settings = get_settings()
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {token}",
+        httponly=True,  # Can't be accessed by JS (XSS protection)
+        secure=settings.ENVIRONMENT == "production",  # HTTPS only in prod
+        samesite="lax",  # CSRF protection
+        max_age=24 * 60 * 60,  # 24 hours
+    )
+
+
+def clear_auth_cookie(response: Response) -> None:
+    """Clear auth cookie on logout."""
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        secure=True,  # Always use secure for deletion
+        samesite="lax",
+    )
 
 
 class LoginRequest(BaseModel):
@@ -65,7 +90,8 @@ def get_supabase_client() -> Client | None:
 
 
 @router.post("/signup")
-async def signup(data: SignupRequest) -> SignupResponse:
+@auth_rate_limit
+async def signup(request: Request, data: SignupRequest) -> SignupResponse:  # noqa: ARG001
     """Create a new user account."""
     settings = get_settings()
 
@@ -132,7 +158,8 @@ async def signup(data: SignupRequest) -> SignupResponse:
 
 
 @router.post("/login")
-async def login(data: LoginRequest) -> AuthResponse:
+@auth_rate_limit
+async def login(request: Request, response: Response, data: LoginRequest) -> dict:  # noqa: ARG001
     """Login with email and password."""
     settings = get_settings()
     if settings.AUTH_PROVIDER != "supabase":
@@ -152,25 +179,36 @@ async def login(data: LoginRequest) -> AuthResponse:
             "password": data.password
         })
 
-        if not auth_response.user:
+        if not auth_response.user or not auth_response.session:
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
-        return AuthResponse(
-            user={
+        # Set secure httpOnly cookies for both access and refresh tokens
+        set_auth_cookie(response, auth_response.session.access_token)
+
+        # Also set refresh token cookie
+        response.set_cookie(
+            key="refresh_token",
+            value=auth_response.session.refresh_token,
+            httponly=True,
+            secure=settings.ENVIRONMENT == "production",
+            samesite="lax",
+            max_age=7 * 24 * 60 * 60,  # 7 days
+        )
+
+        return {
+            "user": {
                 "id": str(auth_response.user.id),
                 "email": auth_response.user.email,
                 "username": auth_response.user.user_metadata.get("username"),
-            },
-            access_token=auth_response.session.access_token,
-            expires_in=auth_response.session.expires_in
-        )
+            }
+        }
 
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid credentials") from e
 
 
 @router.post("/logout")
-async def logout(request: Request) -> dict[str, str]:
+async def logout(request: Request, response: Response) -> dict[str, str]:  # noqa: ARG001
     """Logout the current user."""
     settings = get_settings()
     if settings.AUTH_PROVIDER != "supabase":
@@ -180,33 +218,35 @@ async def logout(request: Request) -> dict[str, str]:
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured")
 
-    try:
-        # Extract token from header
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            # Sign out with Supabase
-            supabase.auth.sign_out()
+    # Clear both httpOnly cookies (this is the real logout)
+    clear_auth_cookie(response)
+    response.delete_cookie(
+        key="refresh_token",
+        httponly=True,
+        secure=True,
+        samesite="lax",
+    )
 
-        return {"message": "Successfully logged out"}
+    with contextlib.suppress(Exception):
+        # Try to sign out with Supabase (optional)
+        supabase.auth.sign_out()
 
-    except Exception:
-        # Even if logout fails, we return success
-        return {"message": "Successfully logged out"}
+    return {"message": "Successfully logged out"}
 
 
 @router.get("/me")
-async def get_current_user(user: RequiredUser) -> UserResponse:
-    """Get the current authenticated user."""
+async def get_current_user(context: RequireAuthInMultiUser) -> UserResponse:
+    """Get the current user (authenticated in multi-user mode, default in single-user mode)."""
     return UserResponse(
-        id=str(user.id),
-        email=user.email,
-        username=user.name
+        id=str(context.user_id),
+        email=context.email or "user@talmio.local",
+        username=context.name or "Default User"
     )
 
 
 @router.post("/refresh")
-async def refresh_token(request: Request) -> AuthResponse:
-    """Refresh the access token."""
+async def refresh_token(request: Request, response: Response) -> dict:
+    """Refresh the access token using the refresh_token cookie."""
     settings = get_settings()
     if settings.AUTH_PROVIDER != "supabase":
         raise HTTPException(
@@ -219,26 +259,38 @@ async def refresh_token(request: Request) -> AuthResponse:
         raise HTTPException(status_code=500, detail="Supabase not configured")
 
     try:
-        # Extract refresh token from request
-        auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
+        # Get refresh token from cookie
+        refresh_token = request.cookies.get("refresh_token")
+        if not refresh_token:
             raise HTTPException(status_code=401, detail="No refresh token provided")
 
-        # Refresh the session
-        auth_response = supabase.auth.refresh_session()
+        # Refresh the session using the refresh token
+        auth_response = supabase.auth.refresh_session(refresh_token)
 
-        if not auth_response.user:
+        if not auth_response.user or not auth_response.session:
             raise HTTPException(status_code=401, detail="Invalid refresh token")
 
-        return AuthResponse(
-            user={
+        # Update both access and refresh tokens in cookies
+        set_auth_cookie(response, auth_response.session.access_token)
+
+        # Also set refresh token cookie
+        response.set_cookie(
+            key="refresh_token",
+            value=auth_response.session.refresh_token,
+            httponly=True,
+            secure=settings.ENVIRONMENT == "production",
+            samesite="lax",
+            max_age=7 * 24 * 60 * 60,  # 7 days
+        )
+
+        return {
+            "message": "Token refreshed successfully",
+            "user": {
                 "id": str(auth_response.user.id),
                 "email": auth_response.user.email,
                 "username": auth_response.user.user_metadata.get("username"),
-            },
-            access_token=auth_response.session.access_token,
-            expires_in=auth_response.session.expires_in
-        )
+            }
+        }
 
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid refresh token") from e

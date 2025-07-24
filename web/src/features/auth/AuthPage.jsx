@@ -1,15 +1,38 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import LoginForm from "./LoginForm";
+import PasswordResetForm from "./PasswordResetForm";
 import SignupForm from "./SignupForm";
 
 const AuthPage = () => {
-	const [isLogin, setIsLogin] = useState(true);
+	const [view, setView] = useState("login"); // "login", "signup", "reset"
 	const [error, setError] = useState("");
 	const [successMessage, setSuccessMessage] = useState("");
 	const navigate = useNavigate();
-	const { login, signup } = useAuth();
+	const [searchParams] = useSearchParams();
+	const authContext = useAuth();
+	const { login, signup, isAuthenticated } = authContext;
+
+	// Debug logging
+	useEffect(() => {
+		console.log("🔐 AuthPage - Auth context:", {
+			hasLogin: typeof login === "function",
+			hasSignup: typeof signup === "function",
+			isAuthenticated,
+			fullContext: authContext,
+		});
+	}, [login, signup, isAuthenticated, authContext]);
+
+	// Get redirect URL from query params
+	const redirectUrl = searchParams.get("redirect") || "/";
+
+	// If already authenticated, redirect immediately
+	useEffect(() => {
+		if (isAuthenticated) {
+			navigate(redirectUrl);
+		}
+	}, [isAuthenticated, navigate, redirectUrl]);
 
 	const handleLogin = async (email, password) => {
 		setError("");
@@ -17,7 +40,7 @@ const AuthPage = () => {
 		const result = await login(email, password);
 
 		if (result.success) {
-			navigate("/");
+			navigate(redirectUrl);
 		} else {
 			setError(result.error);
 		}
@@ -33,11 +56,11 @@ const AuthPage = () => {
 				setSuccessMessage(result.message);
 				// Optionally switch to login form after showing message
 				setTimeout(() => {
-					setIsLogin(true);
+					setView("login");
 					setSuccessMessage("");
 				}, 5000);
 			} else {
-				navigate("/");
+				navigate(redirectUrl);
 			}
 		} else {
 			setError(result.error);
@@ -58,10 +81,20 @@ const AuthPage = () => {
 				</div>
 			)}
 
-			{isLogin ? (
-				<LoginForm onSignUp={() => setIsLogin(false)} onSubmit={handleLogin} />
-			) : (
-				<SignupForm onSignIn={() => setIsLogin(true)} onSubmit={handleSignup} />
+			{view === "login" && (
+				<LoginForm
+					onSignUp={() => setView("signup")}
+					onForgotPassword={() => setView("reset")}
+					onSubmit={handleLogin}
+				/>
+			)}
+
+			{view === "signup" && (
+				<SignupForm onSignIn={() => setView("login")} onSubmit={handleSignup} />
+			)}
+
+			{view === "reset" && (
+				<PasswordResetForm onBack={() => setView("login")} />
 			)}
 		</>
 	);

@@ -3,6 +3,7 @@ import React, { useState } from "react";
 
 const LoginForm = ({
 	onSignUp = () => console.log("Switch to signup"),
+	onForgotPassword = () => console.log("Switch to reset"),
 	onSubmit = async (email, password) => {
 		await new Promise((resolve) => setTimeout(resolve, 2000));
 		console.log("Login attempt:", { email, password });
@@ -163,6 +164,7 @@ const LoginForm = ({
 						<div className="flex justify-end">
 							<button
 								type="button"
+								onClick={onForgotPassword}
 								className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
 							>
 								Forgot password?
