@@ -1,9 +1,7 @@
 """Document retrieval and search components."""
 
 import logging
-import uuid
-from typing import Any
-from uuid import UUID
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +9,10 @@ from src.ai.constants import rag_config
 from src.ai.rag.schemas import SearchResult as BaseSearchResult
 from src.ai.rag.vector_store import VectorStore
 from src.database.session import async_session_maker
+
+
+if TYPE_CHECKING:
+    from uuid import UUID
 
 
 # Removed unused CrossEncoder import
@@ -28,15 +30,48 @@ class Reranker:
         self.enabled = rag_config.rerank_enabled
 
     async def rerank_results(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
-        """Rerank candidates using Qwen 3 reranker."""
+        """Rerank candidates using Qwen 3 reranker via LiteLLM."""
         if not self.enabled or len(candidates) <= top_k:
             return candidates[:top_k]
 
-        # TODO: Implement Qwen 3 reranker in future enhancement
-        # For now, return top candidates by similarity score
-        sorted_candidates = sorted(candidates, key=lambda x: x["similarity_score"], reverse=True)
+        try:
+            # Import LiteLLM for reranking
+            import litellm
 
-        return sorted_candidates[:top_k]
+            # Prepare texts for reranking - combine query with each candidate
+            rerank_pairs = []
+            for candidate in candidates:
+                text = candidate.get("content", "")
+                rerank_pairs.append([query, text])
+
+            # Use LiteLLM to call the reranker model
+            response = await litellm.arerank(
+                model=f"huggingface/{self.model}",
+                query=query,
+                documents=[pair[1] for pair in rerank_pairs],
+                top_n=top_k
+            )
+
+            # Extract reranked indices and scores
+            reranked_candidates = []
+            for result in response.results:
+                original_idx = result.index
+                rerank_score = result.relevance_score
+
+                # Get the original candidate and update with rerank score
+                candidate = candidates[original_idx].copy()
+                candidate["rerank_score"] = rerank_score
+                candidate["similarity_score"] = rerank_score  # Use rerank score as main score
+                reranked_candidates.append(candidate)
+
+            logger.info(f"Reranked {len(candidates)} candidates to top {len(reranked_candidates)} using {self.model}")
+            return reranked_candidates
+
+        except Exception as e:
+            logger.warning(f"Reranking failed with {self.model}: {e}. Falling back to similarity scores.")
+            # Fall back to similarity-based ranking
+            sorted_candidates = sorted(candidates, key=lambda x: x["similarity_score"], reverse=True)
+            return sorted_candidates[:top_k]
 
 
 # Removed unused CrossEncoderReranker class
@@ -53,7 +88,7 @@ class DocumentRetriever:
         self.rerank_k = rag_config.rerank_k
 
     async def search_documents(
-        self, session: AsyncSession, roadmap_id: uuid.UUID, query: str, top_k: int | None = None
+        self, session: AsyncSession, roadmap_id: "UUID", query: str, top_k: int | None = None
     ) -> list[BaseSearchResult]:
         """Search documents using vector similarity with optional reranking."""
         if top_k is None:
@@ -89,7 +124,7 @@ class DocumentRetriever:
         return results
 
     async def get_document_context(
-        self, session: AsyncSession, roadmap_id: uuid.UUID, query: str, max_chunks: int = 5
+        self, session: AsyncSession, roadmap_id: "UUID", query: str, max_chunks: int = 5
     ) -> str:
         """Get relevant document context for AI generation tasks."""
         results = await self.search_documents(session=session, roadmap_id=roadmap_id, query=query, top_k=max_chunks)
@@ -114,7 +149,7 @@ class ContextAwareRetriever:
         self,
         query: str,
         context_type: str,
-        context_id: UUID,
+        context_id: "UUID",
         context_meta: dict[str, Any] | None = None,
         max_chunks: int | None = None,
         relevance_threshold: float | None = None,
@@ -232,6 +267,38 @@ class ContextAwareRetriever:
 
         return search_results
 
+    def _calculate_page_proximity_boost(self, current_page: int, result_page: int) -> float:
+        """Calculate boost based on page proximity."""
+        page_distance = abs(current_page - result_page)
+
+        if page_distance == 0:
+            return 1.5  # Same page
+        if page_distance <= 2:
+            return 1.3  # Very close
+        if page_distance <= 5:
+            return 1.1  # Close
+        if page_distance <= 10:
+            return 1.05  # Nearby
+        return 1.0  # No boost
+
+    def _calculate_timestamp_proximity_boost(
+        self, current_time: float, chunk_start: float, chunk_end: float
+    ) -> float:
+        """Calculate boost based on timestamp proximity."""
+        # Check if current time is within chunk
+        if chunk_start <= current_time <= chunk_end:
+            return 1.5  # Currently playing chunk
+
+        # Boost based on temporal proximity
+        time_distance = min(abs(current_time - chunk_start), abs(current_time - chunk_end))
+        if time_distance <= 30:
+            return 1.3  # Very close
+        if time_distance <= 60:
+            return 1.1  # Close
+        if time_distance <= 120:
+            return 1.05  # Nearby
+        return 1.0  # No boost
+
     def _apply_context_aware_scoring(
         self, results: list[BaseSearchResult], context_meta: dict[str, Any]
     ) -> list[BaseSearchResult]:
@@ -241,38 +308,18 @@ class ContextAwareRetriever:
 
             # Page proximity boost for books/documents
             if "page" in context_meta and "page" in result.metadata:
-                current_page = context_meta["page"]
-                result_page = result.metadata["page"]
-                page_distance = abs(current_page - result_page)
-
-                # Boost based on proximity (exponential decay)
-                if page_distance == 0:
-                    boost *= 1.5  # Same page
-                elif page_distance <= 2:
-                    boost *= 1.3  # Very close
-                elif page_distance <= 5:
-                    boost *= 1.1  # Close
-                elif page_distance <= 10:
-                    boost *= 1.05  # Nearby
+                boost *= self._calculate_page_proximity_boost(
+                    context_meta["page"], result.metadata["page"]
+                )
 
             # Timestamp proximity boost for videos
             if "timestamp" in context_meta and "start_time" in result.metadata:
-                current_time = context_meta["timestamp"]
-                chunk_start = result.metadata["start_time"]
-                chunk_end = result.metadata.get("end_time", chunk_start + 60)
-
-                # Check if current time is within chunk
-                if chunk_start <= current_time <= chunk_end:
-                    boost *= 1.5  # Currently playing chunk
-                else:
-                    # Boost based on temporal proximity
-                    time_distance = min(abs(current_time - chunk_start), abs(current_time - chunk_end))
-                    if time_distance <= 30:
-                        boost *= 1.3  # Very close
-                    elif time_distance <= 60:
-                        boost *= 1.1  # Close
-                    elif time_distance <= 120:
-                        boost *= 1.05  # Nearby
+                chunk_end = result.metadata.get("end_time", result.metadata["start_time"] + 60)
+                boost *= self._calculate_timestamp_proximity_boost(
+                    context_meta["timestamp"],
+                    result.metadata["start_time"],
+                    chunk_end
+                )
 
             # Apply boost to final score
             if result.final_score:
@@ -302,7 +349,7 @@ class ContextAwareRetriever:
     async def global_retrieve(
         self,
         query: str,
-        user_id: UUID | None = None,
+        user_id: "UUID | None" = None,
         max_chunks: int = 10,
         relevance_threshold: float = 0.4,
     ) -> list[BaseSearchResult]:

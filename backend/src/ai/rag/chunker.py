@@ -87,6 +87,20 @@ class BookChunker(EnhancedChunker):
     def __init__(self, chunk_size: int | None = None, chunk_overlap: int | None = None) -> None:
         super().__init__(chunk_size, chunk_overlap)
 
+    def chunk_text(self, text: str) -> list[str]:
+        """Chunk plain text using basic word-based chunking."""
+        words = text.split()
+        words_per_chunk = int(self.chunk_size * 0.75)
+        words_overlap = int(self.chunk_overlap * 0.75)
+        chunks = []
+
+        for i in range(0, len(words), words_per_chunk - words_overlap):
+            chunk_words = words[i : i + words_per_chunk]
+            if chunk_words:
+                chunks.append(" ".join(chunk_words))
+
+        return chunks
+
     def chunk_document(self, doc_id: UUID, doc_type: str, content: str | Path) -> list[DocumentChunk]:
         """Chunk book PDF with chapter awareness."""
         if not isinstance(content, Path) or not content.exists():

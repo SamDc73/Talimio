@@ -141,6 +141,7 @@ class RAGService:
             # Store file if provided
             if file_content and filename:
                 from src.config.settings import get_settings
+
                 settings = get_settings()
                 upload_dir = Path(settings.LOCAL_STORAGE_PATH) / "documents" / str(roadmap_id)
                 upload_dir.mkdir(parents=True, exist_ok=True)
@@ -154,6 +155,7 @@ class RAGService:
 
             # Process document asynchronously
             import asyncio
+
             asyncio.create_task(self._process_document_async(doc.id))  # noqa: RUF006
 
             return DocumentResponse.model_validate(doc.__dict__)
@@ -202,13 +204,12 @@ class RAGService:
                 text_content, crawl_date = await self.document_processor.process_url_document(doc_dict["source_url"])
                 await session.execute(
                     text("UPDATE roadmap_documents SET crawl_date = :crawl_date WHERE id = :doc_id"),
-                    {"crawl_date": crawl_date, "doc_id": document_id}
+                    {"crawl_date": crawl_date, "doc_id": document_id},
                 )
             elif doc_dict["file_path"]:
                 # Process file
                 text_content = await self.document_processor.process_document(
-                    doc_dict["file_path"],
-                    doc_dict["document_type"]
+                    doc_dict["file_path"], doc_dict["document_type"]
                 )
             else:
                 msg = "No file path or URL to process"
@@ -239,8 +240,7 @@ class RAGService:
         except Exception:
             logger.exception("Failed to process document %s", document_id)
             await session.execute(
-                text("UPDATE roadmap_documents SET status = 'failed' WHERE id = :doc_id"),
-                {"doc_id": document_id}
+                text("UPDATE roadmap_documents SET status = 'failed' WHERE id = :doc_id"), {"doc_id": document_id}
             )
             await session.commit()
             raise
@@ -255,7 +255,7 @@ class RAGService:
                     FROM roadmap_documents
                     WHERE id = :doc_id
                 """),
-                {"doc_id": document_id}
+                {"doc_id": document_id},
             )
             doc_info = result.fetchone()
 
@@ -272,16 +272,12 @@ class RAGService:
                 "original_document_id": document_id,
                 "roadmap_id": str(doc_info.roadmap_id),
                 "document_title": doc_info.title,
-                "document_type": doc_info.document_type
+                "document_type": doc_info.document_type,
             }
 
             # Use VectorStore to store chunks
             await self.vector_store.store_chunks_with_embeddings(
-                session=session,
-                doc_id=doc_uuid,
-                doc_type="course",
-                chunks=chunks,
-                metadata=metadata
+                session=session, doc_id=doc_uuid, doc_type="course", chunks=chunks, metadata=metadata
             )
 
             logger.info("Stored %s chunks for document %s", len(chunks), document_id)
@@ -297,10 +293,7 @@ class RAGService:
         try:
             # Use the retriever to search for relevant chunks
             return await self.retriever.search_documents(
-                session=session,
-                roadmap_id=roadmap_id,
-                query=query,
-                top_k=top_k or 5
+                session=session, roadmap_id=roadmap_id, query=query, top_k=top_k or 5
             )
         except Exception:
             logger.exception("Failed to search documents")
@@ -378,8 +371,7 @@ class RAGService:
         try:
             # First check if document exists
             result = await session.execute(
-                text("SELECT id, file_path FROM roadmap_documents WHERE id = :doc_id"),
-                {"doc_id": document_id}
+                text("SELECT id, file_path FROM roadmap_documents WHERE id = :doc_id"), {"doc_id": document_id}
             )
             doc = result.fetchone()
 
@@ -400,10 +392,7 @@ class RAGService:
             # and are handled by the new system
 
             # Delete document
-            await session.execute(
-                text("DELETE FROM roadmap_documents WHERE id = :doc_id"),
-                {"doc_id": document_id}
-            )
+            await session.execute(text("DELETE FROM roadmap_documents WHERE id = :doc_id"), {"doc_id": document_id})
 
             await session.commit()
             logger.info("Successfully deleted document %s", document_id)

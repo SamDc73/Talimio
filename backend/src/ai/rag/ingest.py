@@ -5,7 +5,6 @@ import logging
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID
 
 import ebooklib
 import fitz  # PyMuPDF
@@ -13,13 +12,8 @@ from bs4 import BeautifulSoup
 from docx import Document
 from ebooklib import epub
 from goose3 import Goose
-from sqlalchemy import select
 
 from src.ai.constants import rag_config
-from src.ai.rag.chunker import ChunkerFactory
-from src.ai.rag.vector_store import VectorStore
-from src.books.models import Book
-from src.database.session import async_session_maker
 
 
 logger = logging.getLogger(__name__)
@@ -243,61 +237,3 @@ class DocumentProcessor:
         raise ValueError(msg)
 
     # Removed unused save_pdf_file method - use save_file instead
-
-async def process_book_rag_background(book_id: UUID) -> None:
-    """Process book for RAG in background (non-blocking)."""
-    try:
-        # Create a new async session for background task
-        async with async_session_maker() as session:
-            # Update status to processing
-            book_query = select(Book).where(Book.id == book_id)
-            result = await session.execute(book_query)
-            book = result.scalar_one_or_none()
-
-            if not book:
-                logger.error(f"Book {book_id} not found for RAG processing")
-                return
-
-            book.rag_status = "processing"
-            await session.commit()
-
-            # Initialize components
-            DocumentProcessor()
-            # Use BookChunker for position-aware chunking
-            chunker = ChunkerFactory.create_chunker("book")
-            vector_store = VectorStore()
-
-            # Process the book file
-            file_path = Path(book.file_path)
-            if not file_path.exists():
-                msg = f"Book file not found: {book.file_path}"
-                raise FileNotFoundError(msg)
-
-            # Use enhanced chunking with position data for Phase 5
-            enhanced_chunks = chunker.chunk_document(doc_id=book_id, doc_type="book", content=file_path)
-
-            # Store enhanced chunks with embeddings
-            # Extract just the content from DocumentChunk objects
-            chunk_texts = [chunk.content for chunk in enhanced_chunks]
-            await vector_store.store_chunks_with_embeddings(session, book_id, chunk_texts)
-
-            # Update status to completed
-            book.rag_status = "completed"
-            book.rag_processed_at = datetime.now(UTC)
-            await session.commit()
-
-            logger.info(f"Successfully processed book {book_id} for RAG with {len(enhanced_chunks)} chunks")
-
-    except Exception as e:
-        logger.exception(f"Failed to process book {book_id} for RAG: {e}")
-        # Update status to failed
-        try:
-            async with async_session_maker() as session:
-                book_query = select(Book).where(Book.id == book_id)
-                result = await session.execute(book_query)
-                book = result.scalar_one_or_none()
-                if book:
-                    book.rag_status = "failed"
-                    await session.commit()
-        except Exception as update_error:
-            logger.exception(f"Failed to update book {book_id} status to failed: {update_error}")

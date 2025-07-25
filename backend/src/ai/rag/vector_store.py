@@ -51,7 +51,14 @@ class EmbeddingGenerator:
             # Detect capabilities on first real use
             if not hasattr(self, "_capabilities_checked"):
                 self._capabilities_checked = True
+                logger.info(f"Using embedding model: {self.model}")
                 # Don't call _detect_model_capabilities to avoid issues
+
+            # Log batch info
+            logger.info(f"Generating embeddings for {len(texts)} text chunks")
+            if texts:
+                sample_length = len(texts[0])
+                logger.debug(f"First chunk sample ({sample_length} chars): {texts[0][:100]}...")
 
             # Generate embeddings - LiteLLM handles provider-specific config
             response = embedding(
@@ -59,12 +66,17 @@ class EmbeddingGenerator:
                 input=texts
             )
 
-            return [emb["embedding"] for emb in response.data]
+            embeddings = [emb["embedding"] for emb in response.data]
+            logger.info(f"✅ Successfully generated {len(embeddings)} embeddings, dimension: {len(embeddings[0]) if embeddings else 0}")
+            return embeddings
 
         except Exception as e:
-            logger.warning("Failed to generate embeddings: %s", str(e))
+            logger.exception(f"❌ Failed to generate embeddings with model '{self.model}': {type(e).__name__}: {e!s}")
+            logger.exception("Full embedding error traceback:")
+
             # Return fake embeddings as fallback - match existing dimensions
             dimensions = self.dimensions or 768  # Use 768 to match existing embeddings
+            logger.warning(f"Returning fallback embeddings with {dimensions} dimensions")
             return [[0.1] * dimensions for _ in texts]
 
     async def generate_query_embedding(self, query: str) -> list[float]:
@@ -81,14 +93,44 @@ class VectorStore:
         # Create embedding generator but don't call any methods
         self.embedding_generator = EmbeddingGenerator()
 
-    async def store_chunks_with_embeddings(self, session: AsyncSession, doc_id: uuid.UUID, doc_type: str, chunks: list[str], metadata: dict | None = None) -> None:
-        """Store text chunks with their embeddings in rag_document_chunks table."""
+    async def store_chunks_with_embeddings(self, session: AsyncSession, doc_id: uuid.UUID, chunks: list[str] | list[dict], doc_type: str = "video", metadata: dict | None = None) -> None:
+        """Store text chunks with their embeddings in rag_document_chunks table.
+
+        Args:
+            session: Database session
+            doc_id: Document UUID
+            chunks: Either list of strings or list of dicts with 'text' and 'metadata' keys
+            doc_type: Type of document (default: video)
+            metadata: Global metadata for all chunks (if chunks are strings)
+        """
         try:
+            logger.info(f"Storing chunks for document {doc_id} (type: {doc_type})")
+
+            # Handle both string chunks and dict chunks with metadata
+            if chunks and isinstance(chunks[0], dict):
+                # Extract texts and metadata from dict chunks
+                texts = [chunk["text"] for chunk in chunks]
+                chunk_metadata_list = [chunk.get("metadata", {}) for chunk in chunks]
+                logger.info(f"Processing {len(texts)} dict chunks with metadata")
+            else:
+                # Simple string chunks
+                texts = chunks
+                chunk_metadata_list = [metadata or {} for _ in chunks]
+                logger.info(f"Processing {len(texts)} string chunks")
+
             # Generate embeddings for all chunks
-            embeddings = await self.embedding_generator.generate_embeddings(chunks)
+            logger.info(f"Generating embeddings for {len(texts)} chunks")
+            embeddings = await self.embedding_generator.generate_embeddings(texts)
+
+            if len(embeddings) != len(texts):
+                logger.error(f"Embedding count mismatch: {len(embeddings)} embeddings for {len(texts)} texts")
+                return
 
             # Store each chunk with its embedding
-            for i, (chunk, emb) in enumerate(zip(chunks, embeddings, strict=False)):
+            stored_count = 0
+            updated_count = 0
+
+            for i, (text, emb, chunk_meta) in enumerate(zip(texts, embeddings, chunk_metadata_list, strict=False)):
                 # Check if chunk already exists
                 existing = await session.execute(
                     text("""
@@ -98,6 +140,9 @@ class VectorStore:
                     {"doc_id": str(doc_id), "chunk_idx": i},
                 )
                 existing_row = existing.fetchone()
+
+                # Merge chunk metadata with any global metadata
+                final_metadata = {**(metadata or {}), **chunk_meta}
 
                 if existing_row:
                     # Update existing chunk
@@ -111,12 +156,13 @@ class VectorStore:
                         """),
                         {
                             "doc_id": str(doc_id),
-                            "content": chunk,
+                            "content": text,
                             "embedding": str(emb),
-                            "metadata": json.dumps({"chunk_type": "basic"}),
+                            "metadata": json.dumps(final_metadata),
                             "chunk_idx": i,
                         },
                     )
+                    updated_count += 1
                 else:
                     # Insert new chunk
                     await session.execute(
@@ -129,15 +175,20 @@ class VectorStore:
                             "doc_id": str(doc_id),
                             "doc_type": doc_type,
                             "chunk_idx": i,
-                            "content": chunk,
+                            "content": text,
                             "embedding": str(emb),  # pgvector handles list conversion
-                            "metadata": json.dumps(metadata or {"chunk_type": "basic"}),
+                            "metadata": json.dumps(final_metadata),
                         },
                     )
-        except Exception:
-            logger.exception("Failed to store chunks with embeddings")
+                    stored_count += 1
+
+            logger.info(f"✅ Successfully stored embeddings: {stored_count} new, {updated_count} updated for document {doc_id}")
+
+        except Exception as e:
+            logger.exception(f"❌ Failed to store chunks with embeddings for document {doc_id}: {type(e).__name__}: {e!s}")
+            logger.exception("Full storage error traceback:")
             # Don't crash - just log and continue
-            logger.exception("Continuing without embeddings due to error")
+            logger.warning("Continuing without embeddings due to error")
 
     async def similarity_search(
         self, session: AsyncSession, query_embedding: list[float], top_k: int, doc_type: str | None = None, roadmap_id: uuid.UUID | None = None
@@ -187,7 +238,7 @@ class VectorStore:
         session: AsyncSession | None,
         query: str,
         top_k: int = 10,
-        user_id: UUID | None = None,
+        user_id: "UUID | None" = None,
     ) -> list[dict]:
         """Search across ALL documents in the system (not limited to a specific context)."""
         try:
@@ -273,7 +324,7 @@ class VectorStore:
         session: AsyncSession | None,
         query: str,
         top_k: int = 10,
-        user_id: UUID | None = None,
+        user_id: "UUID | None" = None,
     ) -> list[dict]:
         """Fallback text-based global search when vector search fails."""
         try:
