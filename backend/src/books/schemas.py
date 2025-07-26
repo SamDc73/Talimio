@@ -41,6 +41,7 @@ class BookUpdate(BaseModel):
     publication_year: int | None = Field(None, ge=1000, le=2030, alias="publicationYear")
     publisher: str | None = Field(None, max_length=200)
     tags: list[str] | None = None
+    table_of_contents: list[dict] | None = Field(None, alias="tableOfContents")
 
 
 class TableOfContentsItem(BaseModel):
@@ -76,8 +77,9 @@ class BookResponse(BaseModel):
     file_path: str = Field(alias="filePath")
     file_size: int = Field(alias="fileSize")
     total_pages: int | None = Field(None, alias="totalPages")
-    cover_image_path: str | None = Field(None, alias="coverImagePath")
     table_of_contents: list[TableOfContentsItem] | None = Field(None, alias="tableOfContents")
+    rag_status: str = Field(alias="ragStatus")  # pending, processing, completed, failed
+    rag_processed_at: datetime | None = Field(None, alias="ragProcessedAt")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
 
@@ -184,7 +186,6 @@ class BookListResponse(BaseModel):
     pages: int
 
 
-# Chapter schemas for Phase 2.2
 class BookChapterBase(BaseModel):
     """Base schema for book chapter."""
 
@@ -192,7 +193,7 @@ class BookChapterBase(BaseModel):
     title: str = Field(..., max_length=500)
     start_page: int | None = Field(None, ge=1, alias="startPage")
     end_page: int | None = Field(None, ge=1, alias="endPage")
-    status: str = Field(default="not_started", pattern="^(not_started|in_progress|done)$")
+    status: str = Field(default="not_started", pattern="^(not_started|in_progress|completed)$")
 
 
 class BookChapterResponse(BookChapterBase):
@@ -209,14 +210,14 @@ class BookChapterResponse(BookChapterBase):
 class BookChapterStatusUpdate(BaseModel):
     """Schema for updating book chapter status."""
 
-    status: str = Field(..., pattern="^(not_started|in_progress|done)$")
+    status: str = Field(..., pattern="^(not_started|in_progress|completed)$")
 
 
 class BookChapterBatchStatusUpdate(BaseModel):
     """Schema for batch updating book chapter statuses."""
 
     chapter_id: UUID = Field(..., alias="chapterId")
-    status: str = Field(..., pattern="^(not_started|in_progress|done)$")
+    status: str = Field(..., pattern="^(not_started|in_progress|completed)$")
 
 
 class BookChapterBatchUpdateRequest(BaseModel):

@@ -14,6 +14,7 @@ class Book(Base):
     __tablename__ = "books"
 
     id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     subtitle: Mapped[str | None] = mapped_column(String(500), nullable=True)
     author: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -23,7 +24,6 @@ class Book(Base):
     file_type: Mapped[str] = mapped_column(String(10), nullable=False)  # pdf, epub
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)  # in bytes
     total_pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    cover_image_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     language: Mapped[str | None] = mapped_column(String(10), nullable=True)
     publication_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     publisher: Mapped[str | None] = mapped_column(String(200), nullable=True)

@@ -27,7 +27,6 @@ class BookMetadata:
         page_count: int | None = None,
         table_of_contents: list[dict] | None = None,
         file_type: str | None = None,
-        cover_image_path: str | None = None,
     ) -> None:
         self.title = title
         self.subtitle = subtitle
@@ -41,7 +40,6 @@ class BookMetadata:
         self.total_pages = page_count  # Alias for compatibility
         self.table_of_contents = table_of_contents
         self.file_type = file_type
-        self.cover_image_path = cover_image_path
 
 
 class BookMetadataService:

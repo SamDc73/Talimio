@@ -23,11 +23,13 @@ class QueryBuilderService:
         user_id: UUID | None = None,
     ) -> tuple[list[str], bool]:
         """Build SQL queries for different content types. Returns queries and whether user_id is needed."""
-        queries = []
+        queries: list[str] = []
         needs_user_id = False
 
         if not content_type or content_type == ContentType.YOUTUBE:
-            queries.append(QueryBuilderService._get_video_query(search, include_archived))
+            queries.append(QueryBuilderService._get_video_query(search, include_archived, user_id))
+            if user_id:
+                needs_user_id = True
 
         if not content_type or content_type == ContentType.FLASHCARDS:
             queries.append(QueryBuilderService._get_flashcard_query(search, include_archived, user_id))
@@ -39,7 +41,7 @@ class QueryBuilderService:
             if user_id:
                 needs_user_id = True
 
-        if not content_type or content_type in (ContentType.ROADMAP, ContentType.COURSE):
+        if not content_type or content_type == ContentType.COURSE:
             queries.append(QueryBuilderService._get_roadmap_query(search, include_archived, user_id))
             if user_id:
                 needs_user_id = True
@@ -47,16 +49,24 @@ class QueryBuilderService:
         return queries, needs_user_id
 
     @staticmethod
-    def _get_video_query(search: str | None, include_archived: bool = False) -> str:
+    def _get_video_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
         """Get SQL query for videos."""
-        return QueryBuilderService.get_youtube_query(search, archived_only=False, include_archived=include_archived)
+        # If DEFAULT_USER_ID, show all videos (for demo/development)
+        effective_user_id = user_id if str(user_id) != "00000000-0000-0000-0000-000000000001" else None
+        return QueryBuilderService.get_youtube_query(search, archived_only=False, include_archived=include_archived, user_id=effective_user_id)
 
     @staticmethod
-    def get_youtube_query(search: str | None, archived_only: bool = False, include_archived: bool = False) -> str:
-        """Get SQL query for videos."""
+    def get_youtube_query(
+        search: str | None,
+        archived_only: bool = False,
+        include_archived: bool = False,
+        user_id: UUID | None = None,
+    ) -> str:
+        """Get SQL query for videos WITHOUT progress (optimized for performance)."""
+        # No more progress JOINs - progress is fetched separately
         query = """
             SELECT
-                v.uuid::text as id,
+                v.id::text as id,
                 v.title,
                 COALESCE(v.description, '') as description,
                 'youtube' as type,
@@ -65,25 +75,13 @@ class QueryBuilderService:
                 v.tags,
                 v.channel as extra1,
                 v.thumbnail_url as extra2,
-                CASE
-                    WHEN chapter_stats.total_chapters > 0 THEN
-                        (chapter_stats.completed_chapters * 100.0 / chapter_stats.total_chapters)
-                    ELSE
-                        COALESCE(v.completion_percentage, 0)
-                END as progress,
+                0 as progress,
                 COALESCE(v.duration, 0) as count1,
                 0 as count2,
                 COALESCE(v.archived, false) as archived,
-                NULL::text as toc_progress
+                NULL::text as toc_progress,
+                NULL::text as table_of_contents
             FROM videos v
-            LEFT JOIN (
-                SELECT
-                    video_uuid,
-                    COUNT(*) as total_chapters,
-                    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_chapters
-                FROM video_chapters
-                GROUP BY video_uuid
-            ) chapter_stats ON v.uuid = chapter_stats.video_uuid
         """
 
         # Build WHERE clause
@@ -92,10 +90,13 @@ class QueryBuilderService:
             where_conditions.append("v.archived = true")
         elif not include_archived:
             where_conditions.append("(v.archived = false OR v.archived IS NULL)")
-        # If include_archived is True, don't add any archive filter (show all)
 
         if search:
             where_conditions.append("(v.title ILIKE :search OR v.channel ILIKE :search)")
+
+        # Add user_id filter if provided
+        if user_id:
+            where_conditions.append("v.user_id = :user_id")
 
         if where_conditions:
             query += " WHERE " + " AND ".join(where_conditions)
@@ -105,7 +106,9 @@ class QueryBuilderService:
     @staticmethod
     def _get_flashcard_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
         """Get SQL query for flashcards."""
-        return QueryBuilderService.get_flashcards_query(search, archived_only=False, include_archived=include_archived, user_id=user_id)
+        # If DEFAULT_USER_ID, show all flashcards (for demo/development)
+        effective_user_id = user_id if str(user_id) != "00000000-0000-0000-0000-000000000001" else None
+        return QueryBuilderService.get_flashcards_query(search, archived_only=False, include_archived=include_archived, user_id=effective_user_id)
 
     @staticmethod
     def get_flashcards_query(search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: UUID | None = None) -> str:
@@ -125,7 +128,8 @@ class QueryBuilderService:
                 (SELECT COUNT(*) FROM flashcard_cards WHERE deck_id = flashcard_decks.id) as count1,
                 0 as count2,
                 COALESCE(archived, false) as archived,
-                NULL::text as toc_progress
+                NULL::text as toc_progress,
+                NULL::text as table_of_contents
             FROM flashcard_decks
         """
 
@@ -133,6 +137,7 @@ class QueryBuilderService:
         where_conditions = []
 
         # CRITICAL: Filter by user_id since flashcards are user-specific
+        # Skip filtering if no user_id (for demo/development with DEFAULT_USER_ID)
         if user_id:
             where_conditions.append("user_id = :user_id")
 
@@ -153,20 +158,19 @@ class QueryBuilderService:
     @staticmethod
     def _get_book_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
         """Get SQL query for books."""
+        # If DEFAULT_USER_ID, show all books (for demo/development)
+        effective_user_id = user_id if str(user_id) != "00000000-0000-0000-0000-000000000001" else None
         return QueryBuilderService.get_books_query(
-            search, archived_only=False, include_archived=include_archived, user_id=user_id
+            search, archived_only=False, include_archived=include_archived, user_id=effective_user_id
         )
 
     @staticmethod
     def get_books_query(
         search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: UUID | None = None
     ) -> str:
-        """Get SQL query for books."""
-        # If user_id is provided, filter book_progress by user_id
-        # FIX: user_id is stored as UUID in the database (not VARCHAR)
-        user_filter = "AND user_id = :user_id" if user_id else ""
-
-        query = f"""
+        """Get SQL query for books WITHOUT progress (optimized for performance)."""
+        # No more progress JOINs - progress is fetched separately
+        query = """
             SELECT
                 b.id::text,
                 b.title,
@@ -177,32 +181,22 @@ class QueryBuilderService:
                 b.tags,
                 b.author as extra1,
                 '' as extra2,
-                COALESCE(
-                    (SELECT progress_percentage
-                     FROM book_progress
-                     WHERE book_id = b.id {user_filter}
-                     ORDER BY updated_at DESC
-                     LIMIT 1), 0
-                )::int as progress,
+                0 as progress,
                 COALESCE(b.total_pages, 0) as count1,
-                COALESCE(
-                    (SELECT current_page
-                     FROM book_progress
-                     WHERE book_id = b.id {user_filter}
-                     ORDER BY updated_at DESC
-                     LIMIT 1), 1
-                ) as count2,
+                0 as count2,
                 COALESCE(b.archived, false) as archived,
-                COALESCE(
-                    (SELECT toc_progress::text
-                     FROM book_progress
-                     WHERE book_id = b.id {user_filter}
-                     ORDER BY updated_at DESC
-                     LIMIT 1), '{{}}')::text as toc_progress
+                '{}'::text as toc_progress,
+                NULL::text as table_of_contents
             FROM books b
         """
         # Build WHERE clause
         where_conditions = []
+
+        # CRITICAL: Filter by user_id since books are user-specific
+        # Skip filtering if no user_id (for demo/development with DEFAULT_USER_ID)
+        if user_id:
+            where_conditions.append("b.user_id = :user_id")
+
         if archived_only:
             where_conditions.append("b.archived = true")
         elif not include_archived:
@@ -220,16 +214,18 @@ class QueryBuilderService:
     @staticmethod
     def _get_roadmap_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
         """Get SQL query for roadmaps."""
+        # If DEFAULT_USER_ID, show all roadmaps (for demo/development)
+        effective_user_id = user_id if str(user_id) != "00000000-0000-0000-0000-000000000001" else None
         return QueryBuilderService.get_roadmaps_query(
-            search, archived_only=False, include_archived=include_archived, user_id=user_id
+            search, archived_only=False, include_archived=include_archived, user_id=effective_user_id
         )
 
     @staticmethod
     def get_roadmaps_query(
         search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: UUID | None = None
     ) -> str:
-        """Get SQL query for roadmaps with user filtering. Progress will be calculated separately using CourseProgressService."""
-        # Simplified query - progress is calculated post-query using CourseProgressService for DRY
+        """Get SQL query for roadmaps WITHOUT progress (optimized for performance)."""
+        # No more progress JOINs or subqueries - progress is fetched separately
         query = """
             SELECT
                 r.id::text,
@@ -238,7 +234,7 @@ class QueryBuilderService:
                 'roadmap' as type,
                 COALESCE(r.updated_at, r.created_at) as last_accessed,
                 r.created_at,
-                '[]' as tags,
+                COALESCE(r.tags, '[]') as tags,
                 '' as extra1,
                 '' as extra2,
                 0 as progress,
@@ -246,7 +242,8 @@ class QueryBuilderService:
                 (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL) as count1,
                 0 as count2,
                 COALESCE(r.archived, false) as archived,
-                NULL::text as toc_progress
+                NULL::text as toc_progress,
+                NULL::text as table_of_contents
             FROM roadmaps r
         """
 
@@ -254,6 +251,7 @@ class QueryBuilderService:
         where_conditions = []
 
         # CRITICAL: Filter by user_id since roadmaps are user-specific
+        # Skip filtering if no user_id (for demo/development with DEFAULT_USER_ID)
         if user_id:
             where_conditions.append("r.user_id = :user_id")
 

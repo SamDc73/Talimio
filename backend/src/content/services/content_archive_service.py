@@ -25,8 +25,7 @@ class ContentArchiveService:
             ContentType.BOOK: "books",
             ContentType.YOUTUBE: "videos",
             ContentType.FLASHCARDS: "flashcard_decks",
-            ContentType.ROADMAP: "roadmaps",
-            ContentType.COURSE: "roadmaps",  # Alias for roadmap
+            ContentType.COURSE: "roadmaps",
         }
 
         table_name = table_map.get(content_type)
@@ -68,8 +67,7 @@ class ContentArchiveService:
             ContentType.BOOK: "books",
             ContentType.YOUTUBE: "videos",
             ContentType.FLASHCARDS: "flashcard_decks",
-            ContentType.ROADMAP: "roadmaps",
-            ContentType.COURSE: "roadmaps",  # Alias for roadmap
+            ContentType.COURSE: "roadmaps",
         }
 
         table_name = table_map.get(content_type)
@@ -142,7 +140,7 @@ class ContentArchiveService:
                 combined_query = QueryBuilderService.get_flashcards_query(search, archived_only=True, user_id=effective_user_id)
             elif content_type == ContentType.BOOK:
                 combined_query = QueryBuilderService.get_books_query(search, archived_only=True, user_id=effective_user_id)
-            elif content_type == ContentType.ROADMAP:
+            elif content_type == ContentType.COURSE:
                 combined_query = QueryBuilderService.get_roadmaps_query(search, archived_only=True, user_id=effective_user_id)
             else:
                 msg = f"Unsupported content type: {content_type}"

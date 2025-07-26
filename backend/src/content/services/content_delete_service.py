@@ -25,7 +25,7 @@ class ContentDeleteService:
             from src.videos.models import Video as ModelClass
         elif content_type == ContentType.FLASHCARDS:
             from src.flashcards.models import FlashcardDeck as ModelClass
-        elif content_type in (ContentType.ROADMAP, ContentType.COURSE):
+        elif content_type == ContentType.COURSE:
             from src.courses.models import Roadmap as ModelClass
         else:
             msg = f"Unsupported content type: {content_type}"
@@ -52,7 +52,7 @@ class ContentDeleteService:
                 raise ValueError(msg)
 
             # Special handling for roadmaps to fix foreign key constraint issues
-            if content_type in (ContentType.ROADMAP, ContentType.COURSE):
+            if content_type == ContentType.COURSE:
                 # First, delete all nodes that reference this roadmap in correct order
                 # Delete child nodes first, then parent nodes to avoid foreign key violations
                 await session.execute(

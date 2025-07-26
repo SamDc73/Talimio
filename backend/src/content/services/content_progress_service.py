@@ -6,6 +6,8 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.content.schemas import ContentType
+
 
 logger = logging.getLogger(__name__)
 
@@ -33,109 +35,66 @@ class ContentProgressService:
         if user_id is None:
             return 0
         try:
-            user_uuid = UUID(user_id)
             service = CourseProgressService(self.session, user_id)
-            return await service.get_course_progress_percentage(content_id, user_uuid)
+            return await service.get_course_progress_percentage(content_id, user_id)
         except ValueError:
             return 0
 
-    async def _get_book_progress(self, content_id: UUID, _user_id: UUID | None) -> int:
-        """Get book progress."""
-        from src.books.services.book_service import BookService
-        service = BookService(self.session)
-        return await service.get_book_progress(content_id)
+    async def _get_book_progress(self, content_id: UUID, user_id: UUID | None) -> int:
+        """Get book progress based on chapter completion (aligns with course progress mechanism)."""
+        if not user_id:
+            return 0
 
-    async def _get_video_progress(self, content_id: UUID, _user_id: UUID | None) -> int:
+        # Use book facade for progress calculation
+        from src.books.facade import BooksFacade
+        try:
+            facade = BooksFacade(self.session)
+            book_data = await facade.get_book_with_progress(content_id, user_id)
+            return book_data.get("progress", {}).get("progress_percentage", 0)
+        except (ValueError, KeyError):
+            return 0
+
+    async def _get_video_progress(self, content_id: UUID, user_id: UUID | None) -> int:
         """Get video progress."""
-        from src.videos.service import VideoService
-        service = VideoService()
-        return await service.get_video_progress(content_id)
+        if not user_id:
+            return 0
+
+        # Use video facade for progress calculation
+        from src.videos.facade import VideosFacade
+        try:
+            facade = VideosFacade()
+            # Use get_video_with_progress which exists in the facade
+            video_data = await facade.get_video_with_progress(content_id, user_id)
+            if video_data and video_data.get("success"):
+                return video_data.get("completion_percentage", 0)
+            return 0
+        except (ValueError, KeyError):
+            return 0
 
     async def _get_flashcard_progress(self, _content_id: UUID, _user_id: UUID | None) -> int:
         """Get flashcard progress."""
         return 0  # TODO: Implement when flashcard progress is needed
 
 
-    def _group_items_by_type(self, items: list[tuple[str, str | UUID]]) -> dict[str, list[str | UUID]]:
+    def _group_items_by_type(self, items: list[tuple[str, str | UUID, UUID | None]]) -> dict[str, list[tuple[str | UUID, UUID | None]]]:
         """Group items by content type."""
         grouped = {}
-        for content_type, content_id in items:
+        for content_type, content_id, user_id in items:
             if content_type not in grouped:
                 grouped[content_type] = []
-            grouped[content_type].append(content_id)
+            grouped[content_type].append((content_id, user_id))
         return grouped
 
-    async def _process_courses(self, course_ids: list[str | UUID], user_id: UUID | None) -> dict[str, int]:
-        """Process course progress for bulk operation."""
-        if not course_ids or not user_id:
-            return {f"course:{course_id}": 0 for course_id in course_ids}
 
-        from src.courses.services.course_progress_service import CourseProgressService
-        try:
-            user_uuid = UUID(user_id)
-            service = CourseProgressService(self.session, user_id)
-            results = {}
-            for course_id in course_ids:
-                try:
-                    course_uuid = self._convert_to_uuid(course_id)
-                    if course_uuid:
-                        progress = await service.get_course_progress_percentage(course_uuid, user_uuid)
-                        results[f"course:{course_id}"] = progress
-                    else:
-                        results[f"course:{course_id}"] = 0
-                except Exception:
-                    results[f"course:{course_id}"] = 0
-            return results
-        except ValueError:
-            return {f"course:{course_id}": 0 for course_id in course_ids}
-
-    async def _process_videos(self, video_ids: list[str | UUID]) -> dict[str, int]:
-        """Process video progress for bulk operation."""
-        if not video_ids:
-            return {}
-
-        from src.videos.service import VideoService
-        service = VideoService()
-        results = {}
-        for video_id in video_ids:
-            try:
-                video_uuid = self._convert_to_uuid(video_id)
-                if video_uuid:
-                    progress = await service.get_video_progress(video_uuid)
-                    results[f"youtube:{video_id}"] = progress
-                else:
-                    results[f"youtube:{video_id}"] = 0
-            except Exception:
-                results[f"youtube:{video_id}"] = 0
-        return results
-
-    async def _process_books(self, book_ids: list[str | UUID]) -> dict[str, int]:
-        """Process book progress for bulk operation."""
-        if not book_ids:
-            return {}
-
-        from src.books.services.book_service import BookService
-        service = BookService(self.session)
-        results = {}
-        for book_id in book_ids:
-            try:
-                book_uuid = self._convert_to_uuid(book_id)
-                if book_uuid:
-                    progress = await service.get_book_progress(book_uuid)
-                    results[f"book:{book_id}"] = progress
-                else:
-                    results[f"book:{book_id}"] = 0
-            except Exception:
-                results[f"book:{book_id}"] = 0
-        return results
 
 
 async def _calculate_course_progress(session: AsyncSession, items: list[Any], user_id: UUID) -> list[Any]:
     """Calculate accurate course progress using CourseProgressService (DRY)."""
+    # Filter for course items only (roadmap type in DB, but shows as course in enum)
+    # Check for ContentType.COURSE enum value
     from src.courses.services.course_progress_service import CourseProgressService
 
-    # Filter for course items only (roadmap type in DB, but shows as course in enum)
-    course_items = [item for item in items if hasattr(item, "type") and str(item.type) in ("roadmap", "course", "ContentType.COURSE")]
+    course_items = [item for item in items if hasattr(item, "type") and (item.type == ContentType.COURSE or str(item.type) == "course")]
 
     if not course_items:
         return items
@@ -152,10 +111,19 @@ async def _calculate_course_progress(session: AsyncSession, items: list[Any], us
             progress = await progress_service.get_course_progress_percentage(course_id, user_id)
             stats = await progress_service.get_lesson_completion_stats(course_id, user_id)
 
-            # Update the item's progress
-            item.progress = float(progress)
+            # Update the item's progress with standardized ProgressData
+            from src.content.schemas import ProgressData
+            item.progress = ProgressData(
+                percentage=float(progress),
+                completed_items=stats["completed_lessons"],
+                total_items=stats["total_lessons"]
+            )
+
+            # Update completed_lessons count for backward compatibility
             if hasattr(item, "completed_lessons"):
                 item.completed_lessons = stats["completed_lessons"]
+            elif hasattr(item, "completedLessons"):
+                item.completedLessons = stats["completed_lessons"]
 
         except (ValueError, Exception) as e:
             # Keep original progress (0) if there's an error
@@ -164,39 +132,244 @@ async def _calculate_course_progress(session: AsyncSession, items: list[Any], us
     return items
 
 
-async def _calculate_book_progress(session: AsyncSession, items: list[Any], user_id: UUID) -> list[Any]:
-    """Calculate accurate book progress using BookProgressService (matching course pattern)."""
-    from src.books.services.book_progress_service import BookProgressService
+async def _calculate_book_progress(_session: AsyncSession, items: list[Any], user_id: UUID) -> list[Any]:
+    """Calculate accurate book progress from ToC progress and actual table of contents.
 
+    This function properly calculates progress by:
+    1. Getting the actual table of contents from the book
+    2. Counting all sections in the ToC (recursively)
+    3. Calculating progress based on completed sections vs total sections
+    """
     # Filter for book items only
-    book_items = [item for item in items if hasattr(item, "type") and str(item.type) == "book"]
+    import json
+
+    from src.content.schemas import ContentType
+    book_items = [item for item in items if hasattr(item, "type") and item.type == ContentType.BOOK]
+
+    logger.info(f"📚 _calculate_book_progress called with {len(book_items)} book items for user {user_id}")
+
+    # Debug: Log each book's current state
+    for item in book_items:
+        toc_progress = getattr(item, "tocProgress", None) or getattr(item, "toc_progress", {})
+        logger.info(f"📚 Book {item.id}: Current tocProgress from query = {toc_progress}")
+        logger.info(f"📚 Book {item.id}: Item attributes = {[attr for attr in dir(item) if not attr.startswith('_')]}")
 
     if not book_items:
         return items
 
-    # Initialize progress service
-    progress_service = BookProgressService(session, user_id)
-
-    # Calculate progress for each book using TOC-based progress
+    # Calculate progress for each book
     for item in book_items:
         try:
             book_id = UUID(item.id)
 
-            # Use our BookProgressService for TOC-based progress
-            progress = await progress_service.get_book_toc_progress_percentage(book_id, user_id)
-            stats = await progress_service.get_toc_completion_stats(book_id, user_id)
+            # Get the toc_progress from the item (already parsed by transform service)
+            toc_progress = getattr(item, "tocProgress", None) or getattr(item, "toc_progress", {})
+            if isinstance(toc_progress, str):
+                try:
+                    toc_progress = json.loads(toc_progress)
+                except (json.JSONDecodeError, TypeError):
+                    toc_progress = {}
 
-            # Update the item's progress with TOC-based calculation
-            item.progress = float(progress)
+            logger.info(f"📚 Book {book_id}: Parsed toc_progress = {toc_progress}, type = {type(toc_progress)}")
 
-            # Store additional stats for web app if needed
-            if hasattr(item, "completed_sections"):
-                item.completed_sections = stats["completed_sections"]
-            if hasattr(item, "total_sections"):
-                item.total_sections = stats["total_sections"]
+            logger.info(f"📚 Book {book_id}: Progress has {len(toc_progress)} entries")
+
+            # Check if we already have a stored progress percentage from the query
+            stored_progress = getattr(item, "progress", None)
+            logger.info(f"📚 Book {book_id}: Raw stored_progress value = {stored_progress}, type = {type(stored_progress)}")
+
+            # Always use stored progress from database - it's already calculated by BookProgressService
+            from src.content.schemas import ProgressData
+            if isinstance(stored_progress, ProgressData):
+                # If it's already a ProgressData object, just use it
+                item.progress = stored_progress
+                continue
+            # Otherwise, extract the percentage value
+            progress = float(stored_progress) if stored_progress is not None else 0.0
+
+            # For completed/total items, we can estimate from toc_progress if available
+            completed_sections = sum(1 for status in toc_progress.values() if status is True) if toc_progress else 0
+            # Estimate total sections based on progress percentage if we have it
+            if progress > 0 and completed_sections > 0:
+                total_sections = int(completed_sections * 100 / progress)
+            else:
+                total_sections = len(toc_progress) if toc_progress else 0
+
+            logger.info(f"📚 Book {book_id}: Using stored progress from DB = {progress}% ({completed_sections} completed)")
+
+            # Update the item's progress with standardized ProgressData
+            from src.content.schemas import ProgressData
+            item.progress = ProgressData(
+                percentage=float(progress),
+                completed_items=completed_sections,
+                total_items=total_sections
+            )
 
         except (ValueError, Exception) as e:
-            # Keep original progress (page-based) if there's an error
-            logger.debug(f"Error calculating TOC progress for book {item.id}: {e}")
+            # Keep original progress if there's an error
+            logger.exception(f"Error calculating book progress for book {item.id}: {e}")
+            from src.content.schemas import ProgressData
+            item.progress = ProgressData(
+                percentage=0.0,
+                completed_items=0,
+                total_items=0
+            )
+
+    return items
+
+
+async def _calculate_video_progress(session: AsyncSession, items: list[Any], user_id: UUID) -> list[Any]:
+    """Calculate accurate video progress using time-based calculation (matching book/course pattern)."""
+    # Filter for video items only (youtube type)
+    from src.content.schemas import ContentType
+    from src.videos.models import Video, VideoProgress
+    video_items = [item for item in items if hasattr(item, "type") and item.type == ContentType.YOUTUBE]
+
+    if not video_items:
+        return items
+
+    # Calculate progress for each video using time-based calculation
+    for item in video_items:
+        try:
+            video_id = UUID(item.id)
+
+            # Get video duration first
+            from sqlalchemy import select
+            video_query = select(Video).where(Video.uuid == video_id)
+            video_result = await session.execute(video_query)
+            video = video_result.scalar_one_or_none()
+
+            if not video or not video.duration:
+                from src.content.schemas import ProgressData
+                item.progress = ProgressData(
+                    percentage=0.0,
+                    completed_items=0,
+                    total_items=0
+                )
+                continue
+
+            # Get progress record for this user and video
+            progress_query = select(VideoProgress).where(
+                VideoProgress.video_uuid == video_id,
+                VideoProgress.user_id == user_id
+            )
+            progress_result = await session.execute(progress_query)
+            progress = progress_result.scalar_one_or_none()
+
+            if not progress:
+                from src.content.schemas import ProgressData
+                item.progress = ProgressData(
+                    percentage=0.0,
+                    completed_items=0,
+                    total_items=0
+                )
+                continue
+
+            # Use stored completion_percentage if available (from chapter-based progress)
+            # Otherwise calculate time-based progress percentage
+            from src.content.schemas import ProgressData
+
+            # For videos, completed_items and total_items refer to chapters if available
+            # Get chapter count and completed chapters
+            from src.videos.models import VideoChapter
+            chapters_query = select(VideoChapter).where(VideoChapter.video_uuid == video_id)
+            chapters_result = await session.execute(chapters_query)
+            chapters = chapters_result.scalars().all()
+
+            total_chapters = len(chapters)
+            completed_chapters = sum(1 for ch in chapters if ch.status == "completed")
+
+            if progress.completion_percentage is not None and progress.completion_percentage > 0:
+                percentage = float(progress.completion_percentage)
+            elif progress.last_position is not None and video.duration > 0:
+                percentage = min(100, (progress.last_position / video.duration) * 100)
+            else:
+                percentage = 0.0
+
+            item.progress = ProgressData(
+                percentage=percentage,
+                completed_items=completed_chapters,
+                total_items=total_chapters
+            )
+
+        except (ValueError, Exception) as e:
+            # Keep original progress if there's an error
+            logger.debug(f"Error calculating video progress for video {item.id}: {e}")
+            from src.content.schemas import ProgressData
+            item.progress = ProgressData(
+                percentage=0.0,
+                completed_items=0,
+                total_items=0
+            )
+
+    return items
+
+
+async def _calculate_flashcard_progress(session: AsyncSession, items: list[Any], user_id: UUID) -> list[Any]:
+    """Calculate accurate flashcard progress using FSRS algorithm (matching course pattern)."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import func, select
+
+    # Filter for flashcard items only
+    from src.content.schemas import ContentType
+    from src.flashcards.models import FlashcardCard, FlashcardDeck
+    flashcard_items = [item for item in items if hasattr(item, "type") and item.type == ContentType.FLASHCARDS]
+
+    if not flashcard_items:
+        return items
+
+    # Calculate progress for each flashcard deck
+    for item in flashcard_items:
+        try:
+            deck_id = UUID(item.id)
+            now = datetime.now(UTC)
+
+            # Get total cards, due cards, and overdue cards
+            stats_query = select(
+                func.count(FlashcardCard.id).label("total"),
+                func.count(FlashcardCard.id).filter(FlashcardCard.due <= now).label("due"),
+                func.count(FlashcardCard.id).filter(FlashcardCard.due < now).label("overdue")
+            ).where(
+                FlashcardCard.deck_id == deck_id,
+                FlashcardDeck.user_id == user_id
+            ).join(FlashcardDeck)
+
+            result = await session.execute(stats_query)
+            stats = result.first()
+
+            from src.content.schemas import ProgressData
+
+            if not stats or stats.total == 0:
+                # No cards in deck
+                item.progress = ProgressData(
+                    percentage=0.0,
+                    completed_items=0,
+                    total_items=0
+                )
+            else:
+                reviewed_cards = stats.total - stats.due
+                progress = (reviewed_cards / stats.total) * 100
+                item.progress = ProgressData(
+                    percentage=float(max(0, progress)),
+                    completed_items=reviewed_cards,
+                    total_items=stats.total
+                )
+
+            # Store additional stats for web app if needed
+            if hasattr(item, "due_count"):
+                item.due_count = stats.due if stats else 0
+            if hasattr(item, "card_count"):
+                item.card_count = stats.total if stats else 0
+
+        except (ValueError, Exception) as e:
+            # Keep original progress (0) if there's an error
+            logger.debug(f"Error calculating flashcard progress for deck {item.id}: {e}")
+            from src.content.schemas import ProgressData
+            item.progress = ProgressData(
+                percentage=0.0,
+                completed_items=0,
+                total_items=0
+            )
 
     return items

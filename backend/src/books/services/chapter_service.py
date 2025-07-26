@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book, BookChapter
-from src.books.schemas import BookChapterResponse
+from src.books.schemas import BookChapterResponse, BookProgressUpdate
 from src.books.services.book_response_builder import BookResponseBuilder
 
 
@@ -75,7 +75,7 @@ class ChapterService:
 
         return BookResponseBuilder.build_chapter_response(chapter)
 
-    async def update_chapter_status(self, book_id: UUID, chapter_id: UUID, chapter_status: str) -> BookChapterResponse:
+    async def update_chapter_status(self, book_id: UUID, chapter_id: UUID, chapter_status: str, user_id: UUID) -> BookChapterResponse:
         """Update the status of a book chapter."""
         # Verify book exists
         book_query = select(Book).where(Book.id == book_id)
@@ -110,12 +110,37 @@ class ChapterService:
                 detail=f"Invalid status '{chapter_status}'. Valid statuses are: {', '.join(valid_statuses)}",
             )
 
-        # Update status
+        # Update chapter status
         chapter.status = chapter_status
         chapter.updated_at = datetime.now(UTC)
 
+        # Update toc_progress in book_progress table
+        from src.books.models import BookProgress
+        progress_query = select(BookProgress).where(
+            BookProgress.book_id == book_id,
+            BookProgress.user_id == user_id
+        )
+        progress_result = await self.session.execute(progress_query)
+        progress = progress_result.scalar_one_or_none()
+
+        if not progress:
+            progress = BookProgress(book_id=book_id, user_id=user_id, toc_progress={})
+            self.session.add(progress)
+
+        if progress.toc_progress is None:
+            progress.toc_progress = {}
+
+        progress.toc_progress[str(chapter_id)] = chapter_status == "completed"
+        progress.updated_at = datetime.now(UTC)
+
+        # Update the overall book progress
+        from src.books.services.book_progress_service import BookProgressService
+        progress_service = BookProgressService(self.session, user_id)
+        await progress_service.update_book_progress(book_id, BookProgressUpdate())
+
         await self.session.commit()
         await self.session.refresh(chapter)
+        await self.session.refresh(progress)
 
         return BookResponseBuilder.build_chapter_response(chapter)
 
