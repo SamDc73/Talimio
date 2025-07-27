@@ -1,4 +1,4 @@
-import { useProgress } from "../../../../hooks/useProgress";
+import { useCourseProgress } from "../../../../hooks/useCourseProgress";
 import { useCourseNavigation } from "../../../../utils/navigationUtils";
 import OutlineNode from "../../components/navigation/OutlineNode";
 
@@ -10,8 +10,11 @@ import OutlineNode from "../../components/navigation/OutlineNode";
  * @returns {JSX.Element}
  */
 function OutlineView({ roadmapId, modules = [] }) {
-	const { courseProgress, toggleLessonCompletion, isLessonCompleted } =
-		useProgress();
+	const {
+		progress: courseProgress,
+		toggleCompletion: toggleLessonCompletion,
+		isCompleted,
+	} = useCourseProgress(roadmapId);
 	const { goToLesson } = useCourseNavigation();
 
 	const handleLessonClick = async (_moduleIdx, _lessonIdx, lessonId) => {
@@ -51,7 +54,7 @@ function OutlineView({ roadmapId, modules = [] }) {
 						onLessonClick={(lessonIdx, lessonId) =>
 							handleLessonClick(idx, lessonIdx, lessonId)
 						}
-						isLessonCompleted={isLessonCompleted}
+						isLessonCompleted={isCompleted}
 						toggleLessonCompletion={toggleLessonCompletion}
 						courseProgress={courseProgress}
 					/>

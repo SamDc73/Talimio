@@ -4,202 +4,170 @@ import { useNavigate, useParams } from "react-router-dom";
 import { VideoHeader } from "@/components/header/VideoHeader";
 import { VideoSidebar } from "@/components/sidebar";
 import { useToast } from "@/hooks/use-toast";
+import { useVideoProgressWithPosition } from "@/hooks/useVideoProgress";
 import { videoApi } from "@/services/videoApi";
 import useAppStore from "@/stores/useAppStore";
 import "@justinribeiro/lite-youtube";
 import { CollapsibleDescription } from "./CollapsibleDescription";
+import VideoTranscript from "./VideoTranscript";
 import "./VideoViewer.css";
 import { getVideoProgress } from "@/utils/progressUtils";
-import VideoTranscript from "./VideoTranscript";
 
 /**
- * Enhanced VideoViewer using Zustand for state management
- * Replaces direct localStorage usage with unified store
+ * VideoViewer component following patterns from PDFViewer and LessonViewer
  */
-function VideoViewerContentV2() {
+function VideoViewerContent() {
 	const { videoId } = useParams();
 	const navigate = useNavigate();
 	const { toast } = useToast();
-	const isOpen = useAppStore((state) => state.preferences.sidebarOpen);
+
+	// Zustand store - using stable selectors
+	const isOpen = useAppStore((state) => state.preferences?.sidebarOpen ?? true);
 	const toggleSidebar = useAppStore((state) => state.toggleSidebar);
+
+	// Use unified progress hook
+	const { updateVideoProgress: updateProgress } =
+		useVideoProgressWithPosition(videoId);
+
+	// Local state
 	const [video, setVideo] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState(null);
+	const [currentTime, setCurrentTime] = useState(0);
+	const [duration, setDuration] = useState(0);
+
+	// Refs
 	const playerRef = useRef(null);
+	const ytPlayerRef = useRef(null);
+	const progressIntervalRef = useRef(null);
+	const liteYoutubeEventListenerRef = useRef(null);
 
-	// Zustand store selectors
-	const videoProgress = useAppStore((state) => state.getVideoProgress(videoId));
-	const updateVideoProgress = useAppStore((state) => state.updateVideoProgress);
-	const setAppLoading = useAppStore((state) => state.setLoading);
-	const addError = useAppStore((state) => state.addError);
-
-	// Local state derived from store
-	const [currentTime, setCurrentTime] = useState(
-		videoProgress.currentTime || 0,
-	);
-
-	/**
-	 * Load video data and initialize progress
-	 */
-	useEffect(() => {
-		const loadVideo = async () => {
-			if (!videoId) {
-				setError("No video ID provided");
-				setLoading(false);
-				return;
-			}
-
-			try {
-				setLoading(true);
-				setAppLoading("video-fetch", true);
-				setError(null);
-
-				const data = await videoApi.getVideo(videoId);
-				setVideo(data);
-
-				// Initialize video duration in store if not already set
-				if (!videoProgress.duration && data.duration) {
-					updateVideoProgress(videoId, {
-						duration: data.duration,
-						totalDuration: data.duration,
-					});
-				}
-
-				// Use stored progress or server progress
-				const serverProgress =
-					data.progress?.lastPosition || data.lastPosition || 0;
-				const localProgress = videoProgress.currentTime || 0;
-
-				// Use more recent progress
-				const initialTime =
-					localProgress > serverProgress ? localProgress : serverProgress;
-				setCurrentTime(initialTime);
-			} catch (err) {
-				console.error("Failed to load video:", err);
-				setError(err.message || "Failed to load video");
-				addError(`Failed to load video: ${err.message}`);
-				toast({
-					title: "Error",
-					description: err.message || "Failed to load video. Please try again.",
-					variant: "destructive",
-				});
-			} finally {
-				setLoading(false);
-				setAppLoading("video-fetch", false);
-			}
-		};
-
-		loadVideo();
-	}, [
-		videoId,
-		toast,
-		updateVideoProgress,
-		addError,
-		setAppLoading,
-		videoProgress.currentTime,
-		videoProgress.duration,
-	]);
-
-	/**
-	 * Handle progress updates with store synchronization
-	 */
-	const handleProgressUpdate = useCallback(
-		async (newCurrentTime) => {
-			if (!video) return;
-
-			const progressData = {
-				currentTime: Math.floor(newCurrentTime),
-				lastPosition: Math.floor(newCurrentTime),
-				duration: video.duration,
-				percentage:
-					video.duration > 0
-						? Math.round((newCurrentTime / video.duration) * 100)
-						: 0,
-				lastAccessed: Date.now(),
-			};
-
-			// Update store immediately
-			updateVideoProgress(videoId, progressData);
-
-			// Also update local state for immediate UI feedback
-			setCurrentTime(newCurrentTime);
-		},
-		[video, videoId, updateVideoProgress],
-	);
-
-	/**
-	 * Initialize YouTube IFrame API for real-time updates
-	 */
-	useEffect(() => {
-		if (!video) return;
-
-		// Load YouTube IFrame API script
-		if (!window.YT) {
-			const tag = document.createElement("script");
-			tag.src = "https://www.youtube.com/iframe_api";
-			const firstScriptTag = document.getElementsByTagName("script")[0];
-			firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+	// Load video data
+	const loadVideo = useCallback(async () => {
+		if (!videoId) {
+			setError("No video ID provided");
+			setLoading(false);
+			return;
 		}
 
-		let ytPlayer = null;
+		try {
+			setLoading(true);
+			setError(null);
+
+			const data = await videoApi.getVideo(videoId);
+			setVideo(data);
+
+			// Set initial duration if available
+			if (data.duration) {
+				setDuration(data.duration);
+			}
+
+			// Set initial progress from server
+			const savedProgress =
+				data.progress?.lastPosition || data.lastPosition || 0;
+			setCurrentTime(savedProgress);
+		} catch (err) {
+			console.error("Failed to load video:", err);
+			setError(err.message || "Failed to load video");
+			toast({
+				title: "Error",
+				description: err.message || "Failed to load video. Please try again.",
+				variant: "destructive",
+			});
+		} finally {
+			setLoading(false);
+		}
+	}, [videoId, toast]);
+
+	// Load video on mount
+	useEffect(() => {
+		loadVideo();
+	}, [loadVideo]);
+
+	// Initialize YouTube player when lite-youtube is ready
+	useEffect(() => {
+		if (!video || !playerRef.current) return;
+
+		let _ytPlayer = null;
 		let intervalId = null;
 
-		// Wait for lite-youtube to load the iframe
-		const handleIframeLoaded = async (_event) => {
-			console.log("lite-youtube iframe loaded");
-
-			// Wait a bit for YouTube API to be ready
-			setTimeout(() => {
-				try {
-					// Get the iframe from the shadow DOM
-					const iframe = playerRef.current?.shadowRoot?.querySelector("iframe");
-					if (!iframe || !window.YT || !window.YT.Player) {
-						console.warn("YouTube API or iframe not ready");
-						return;
-					}
+		const initializeYouTubePlayer = () => {
+			// Wait for lite-youtube to load the iframe
+			const checkIframe = setInterval(() => {
+				const iframe = playerRef.current?.shadowRoot?.querySelector("iframe");
+				if (iframe && window.YT && window.YT.Player) {
+					clearInterval(checkIframe);
 
 					// Create YouTube player instance
-					ytPlayer = new window.YT.Player(iframe, {
+					_ytPlayer = new window.YT.Player(iframe, {
 						events: {
-							onReady: () => {
+							onReady: (event) => {
 								console.log("YouTube player ready");
+								ytPlayerRef.current = event.target;
 
-								// Start polling for time updates
+								// Seek to saved position
+								if (currentTime > 0) {
+									event.target.seekTo(currentTime, true);
+								}
+
+								// Start progress tracking
 								intervalId = setInterval(() => {
 									if (
-										ytPlayer &&
-										typeof ytPlayer.getCurrentTime === "function"
+										ytPlayerRef.current &&
+										typeof ytPlayerRef.current.getCurrentTime === "function"
 									) {
 										try {
-											const time = ytPlayer.getCurrentTime();
+											const time = ytPlayerRef.current.getCurrentTime();
+											const totalDuration = ytPlayerRef.current.getDuration();
+
 											if (typeof time === "number" && !Number.isNaN(time)) {
 												setCurrentTime(time);
-												// Also update Zustand store for real-time sync
-												handleProgressUpdate(time);
+												if (totalDuration > 0) {
+													setDuration(totalDuration);
+												}
 											}
 										} catch (err) {
-											console.error("Error getting current time:", err);
+											console.error("Error getting video time:", err);
 										}
 									}
-								}, 1000); // Poll every 1 second (reduced frequency for store updates)
+								}, 1000);
 							},
 							onStateChange: (event) => {
 								console.log("Player state changed:", event.data);
 							},
 						},
 					});
-				} catch (err) {
-					console.error("Failed to create YouTube player:", err);
 				}
-			}, 1000);
+			}, 100);
 		};
 
-		// Listen for lite-youtube iframe loaded event
-		if (playerRef.current) {
-			playerRef.current.addEventListener(
-				"liteYoutubeIframeLoaded",
-				handleIframeLoaded,
-			);
+		// Setup lite-youtube iframe loaded event listener
+		const handleIframeLoaded = () => {
+			console.log("lite-youtube iframe loaded");
+			setTimeout(initializeYouTubePlayer, 500);
+		};
+
+		// Load YouTube IFrame API if not already loaded
+		if (!window.YT) {
+			const tag = document.createElement("script");
+			tag.src = "https://www.youtube.com/iframe_api";
+			const firstScriptTag = document.getElementsByTagName("script")[0];
+			firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+			window.onYouTubeIframeAPIReady = initializeYouTubePlayer;
+		} else {
+			// If API is already loaded, check if iframe exists
+			const iframe = playerRef.current?.shadowRoot?.querySelector("iframe");
+			if (iframe) {
+				initializeYouTubePlayer();
+			} else {
+				// Listen for iframe loaded event
+				liteYoutubeEventListenerRef.current = handleIframeLoaded;
+				playerRef.current.addEventListener(
+					"liteYoutubeIframeLoaded",
+					handleIframeLoaded,
+				);
+			}
 		}
 
 		// Cleanup
@@ -207,98 +175,131 @@ function VideoViewerContentV2() {
 			if (intervalId) {
 				clearInterval(intervalId);
 			}
-			if (playerRef.current) {
+			if (progressIntervalRef.current) {
+				clearInterval(progressIntervalRef.current);
+			}
+			if (playerRef.current && liteYoutubeEventListenerRef.current) {
 				playerRef.current.removeEventListener(
 					"liteYoutubeIframeLoaded",
-					handleIframeLoaded,
+					liteYoutubeEventListenerRef.current,
 				);
 			}
+			ytPlayerRef.current = null;
 		};
-	}, [video, handleProgressUpdate]);
+	}, [video, currentTime]); // Remove currentTime from deps to avoid re-initialization
 
-	/**
-	 * Save progress on page unload using beacon API
-	 */
+	// Save progress periodically using useRef to avoid stale closures
+	const progressDataRef = useRef({ currentTime: 0, duration: 0 });
+	const lastSavedTimeRef = useRef(0);
+
+	// Update ref whenever values change
 	useEffect(() => {
-		const saveProgressOnUnload = () => {
-			if (currentTime > 0 && video) {
-				// Use sendBeacon for reliable delivery during page unload
+		progressDataRef.current = { currentTime, duration };
+	}, [currentTime, duration]);
+
+	useEffect(() => {
+		if (!video || !videoId) return;
+
+		const saveProgress = () => {
+			const { currentTime: time, duration: dur } = progressDataRef.current;
+			// Only save if position changed by at least 5 seconds
+			if (time > 0 && Math.abs(time - lastSavedTimeRef.current) >= 5) {
+				updateProgress(Math.floor(time), dur);
+				lastSavedTimeRef.current = time;
+			}
+		};
+
+		// Save every 10 seconds (reduced frequency)
+		const saveInterval = setInterval(saveProgress, 10000);
+
+		return () => {
+			clearInterval(saveInterval);
+			// Save on unmount
+			saveProgress();
+		};
+	}, [videoId, video, updateProgress]);
+
+	// Save progress on page unload
+	useEffect(() => {
+		const handleBeforeUnload = () => {
+			if (currentTime > 0 && video && videoId) {
 				const data = JSON.stringify({
-					lastPosition: Math.floor(currentTime),
-					percentage:
-						video.duration > 0
-							? Math.round((currentTime / video.duration) * 100)
-							: 0,
+					progress_percentage:
+						duration > 0 ? Math.round((currentTime / duration) * 100) : 0,
+					metadata: {
+						content_type: "video",
+						lastPosition: Math.floor(currentTime),
+						duration: duration,
+					},
 				});
 				navigator.sendBeacon(
-					`/api/v1/videos/${videoId}/progress`,
+					`/api/v1/progress/${videoId}`,
 					new Blob([data], { type: "application/json" }),
 				);
 			}
 		};
 
-		const handleBeforeUnload = () => {
-			saveProgressOnUnload();
-		};
-
 		window.addEventListener("beforeunload", handleBeforeUnload);
-
 		return () => {
 			window.removeEventListener("beforeunload", handleBeforeUnload);
-			// Also save progress when component unmounts
-			saveProgressOnUnload();
 		};
-	}, [currentTime, video, videoId]);
+	}, [currentTime, duration, video, videoId]);
 
-	/**
-	 * Handle seeking to specific chapter/timestamp
-	 */
+	// Handle chapter/timestamp seeking
 	const handleSeekToChapter = useCallback(
 		(timestamp) => {
-			const iframe = playerRef.current?.querySelector("iframe");
-
-			// Check if iframe exists (player is activated)
-			if (iframe?.contentWindow) {
-				console.log("Seeking to timestamp:", timestamp);
-				// Use postMessage to control YouTube player
-				iframe.contentWindow.postMessage(
-					JSON.stringify({
-						event: "command",
-						func: "seekTo",
-						args: [timestamp, true],
-					}),
-					"https://www.youtube.com",
-				);
-
-				// Update both local state and store
+			if (
+				ytPlayerRef.current &&
+				typeof ytPlayerRef.current.seekTo === "function"
+			) {
+				ytPlayerRef.current.seekTo(timestamp, true);
 				setCurrentTime(timestamp);
-				handleProgressUpdate(timestamp);
 			} else {
-				console.warn(
-					"YouTube player not ready yet. Please start playing the video first.",
-				);
-				toast({
-					title: "Start video first",
-					description: "Please click play on the video before seeking",
-					variant: "default",
-				});
+				// If player not ready, try iframe postMessage
+				const iframe = playerRef.current?.shadowRoot?.querySelector("iframe");
+				if (iframe?.contentWindow) {
+					iframe.contentWindow.postMessage(
+						JSON.stringify({
+							event: "command",
+							func: "seekTo",
+							args: [timestamp, true],
+						}),
+						"https://www.youtube.com",
+					);
+					setCurrentTime(timestamp);
+				} else {
+					toast({
+						title: "Start video first",
+						description: "Please click play on the video before seeking",
+						variant: "default",
+					});
+				}
 			}
 		},
-		[handleProgressUpdate, toast],
+		[toast],
 	);
 
-	/**
-	 * Calculate progress percentage
-	 */
-	// Import the utility at the top of the file
+	// Calculate progress percentage
 	const progressPercentage =
-		video?.duration > 0
-			? Math.round((currentTime / video.duration) * 100)
+		duration > 0
+			? Math.round((currentTime / duration) * 100)
 			: getVideoProgress(video);
 
-	/**
-	 * Render loading state
-	 */
+	// Format duration helper
+	const formatDuration = (seconds) => {
+		if (!seconds || seconds === 0) return "0:00";
+
+		const hours = Math.floor(seconds / 3600);
+		const minutes = Math.floor((seconds % 3600) / 60);
+		const secs = Math.floor(seconds % 60);
+
+		if (hours > 0) {
+			return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+		}
+		return `${minutes}:${secs.toString().padStart(2, "0")}`;
+	};
+
+	// Loading state
 	if (loading) {
 		return (
 			<div className={`h-screen ${isOpen ? "sidebar-open" : ""}`}>
@@ -313,9 +314,7 @@ function VideoViewerContentV2() {
 		);
 	}
 
-	/**
-	 * Render error state
-	 */
+	// Error state
 	if (error || !video) {
 		return (
 			<div className={`h-screen ${isOpen ? "sidebar-open" : ""}`}>
@@ -336,12 +335,11 @@ function VideoViewerContentV2() {
 		);
 	}
 
+	// Main render
 	return (
 		<div className="flex h-screen bg-background">
 			<VideoHeader
 				video={video}
-				currentTime={currentTime}
-				progressPercentage={progressPercentage}
 				onToggleSidebar={toggleSidebar}
 				isSidebarOpen={isOpen}
 			/>
@@ -378,12 +376,13 @@ function VideoViewerContentV2() {
 							<span className="video-channel">{video.channel}</span>
 							<span className="video-separator">•</span>
 							<span className="video-duration">
-								{formatDuration(video.duration)}
+								{formatDuration(duration || video.duration)}
 							</span>
 							<span className="video-separator">•</span>
 							<span className="video-progress">
-								{formatDuration(currentTime)} / {formatDuration(video.duration)}{" "}
-								({progressPercentage}%)
+								{formatDuration(currentTime)} /{" "}
+								{formatDuration(duration || video.duration)} (
+								{progressPercentage}%)
 							</span>
 							{video.publishedAt && (
 								<>
@@ -398,8 +397,8 @@ function VideoViewerContentV2() {
 				</div>
 				{/* Video Transcript */}
 				<VideoTranscript
-					key={video.uuid} // Force re-mount on video change
-					videoUuid={video.uuid}
+					key={video.id} // Force re-mount on video change
+					videoId={video.id}
 					currentTime={currentTime}
 					onSeek={handleSeekToChapter}
 				/>
@@ -412,24 +411,8 @@ function VideoViewerContentV2() {
 }
 
 /**
- * Format duration in HH:MM:SS or MM:SS format
- */
-function formatDuration(seconds) {
-	if (!seconds) return "Unknown duration";
-
-	const hours = Math.floor(seconds / 3600);
-	const minutes = Math.floor((seconds % 3600) / 60);
-	const secs = seconds % 60;
-
-	if (hours > 0) {
-		return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-	}
-	return `${minutes}:${secs.toString().padStart(2, "0")}`;
-}
-
-/**
  * Main VideoViewer component
  */
-export default function VideoViewerV2() {
-	return <VideoViewerContentV2 />;
+export default function VideoViewer() {
+	return <VideoViewerContent />;
 }

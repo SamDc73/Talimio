@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { videoApi } from "@/services/videoApi";
 import "./VideoTranscript.css";
 
-const VideoTranscript = ({ videoUuid, currentTime, onSeek }) => {
+const VideoTranscript = ({ videoId, currentTime, onSeek }) => {
 	const [transcript, setTranscript] = useState({ segments: [] });
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState(null);
@@ -16,13 +16,13 @@ const VideoTranscript = ({ videoUuid, currentTime, onSeek }) => {
 	// Fetch transcript when component mounts
 	useEffect(() => {
 		const loadTranscript = async () => {
-			if (!videoUuid) return;
+			if (!videoId) return;
 
 			setLoading(true);
 			setError(null);
 
 			try {
-				const data = await videoApi.fetchTranscript(videoUuid);
+				const data = await videoApi.fetchTranscript(videoId);
 				setTranscript(data);
 			} catch (err) {
 				console.error("Failed to load transcript:", err);
@@ -33,7 +33,7 @@ const VideoTranscript = ({ videoUuid, currentTime, onSeek }) => {
 		};
 
 		loadTranscript();
-	}, [videoUuid]);
+	}, [videoId]);
 
 	// Find active segment using a strict time check for better accuracy
 	const findActiveSegment = useCallback((time, segments) => {
@@ -203,7 +203,7 @@ const VideoTranscript = ({ videoUuid, currentTime, onSeek }) => {
 };
 
 VideoTranscript.propTypes = {
-	videoUuid: PropTypes.string.isRequired,
+	videoId: PropTypes.string.isRequired,
 	currentTime: PropTypes.number.isRequired,
 	onSeek: PropTypes.func.isRequired,
 };

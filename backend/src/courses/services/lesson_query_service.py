@@ -27,7 +27,7 @@ class LessonQueryService:
         self.user_id = user_id
         self._logger = logging.getLogger(__name__)
 
-    async def list_lessons(self, course_id: UUID, user_id: UUID | None = None) -> list[LessonResponse]:
+    async def list_lessons(self, course_id: UUID, _user_id: UUID | None = None) -> list[LessonResponse]:
         """List all lessons for a course.
 
         Args:
@@ -83,7 +83,7 @@ class LessonQueryService:
         course_id: UUID,
         lesson_id: UUID,
         generate: bool = False,
-        user_id: UUID | None = None
+        _user_id: UUID | None = None
     ) -> LessonResponse:
         """Get a specific lesson, optionally generating if missing.
 

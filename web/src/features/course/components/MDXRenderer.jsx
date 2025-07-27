@@ -128,8 +128,20 @@ export function MDXRenderer({ content }) {
 
 		const compileMdx = async () => {
 			try {
+				// Preprocess content to fix common MDX issues
+				let processedContent = content;
+
+				// Fix unclosed JSX expressions that might cause parsing errors
+				// Replace problematic patterns that could break MDX parsing
+				processedContent = processedContent
+					.replace(/\{\s*$/gm, "{ ") // Fix trailing open braces
+					.replace(/^\s*\}/gm, " }") // Fix leading close braces
+					.replace(/\{\s*\}/g, "{ }") // Fix empty expressions
+					.replace(/\{([^}]*)\{/g, "{$1\\{") // Escape nested braces
+					.replace(/\}([^{]*)\}/g, "\\}$1}"); // Escape nested braces
+
 				// Evaluate the MDX content with the runtime and rehype plugins
-				const result = await evaluate(content, {
+				const result = await evaluate(processedContent, {
 					...runtime,
 					development: false,
 					useMDXComponents: () => currentComponents,

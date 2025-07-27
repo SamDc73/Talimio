@@ -3,7 +3,7 @@
 import { CheckCircle } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { useProgress } from "../../../../hooks/useProgress";
+import { useCourseProgress } from "../../../../hooks/useCourseProgress";
 import { useCourseNavigation } from "../../../../utils/navigationUtils";
 
 // Helper function to find x position at given y coordinate on an SVG path
@@ -37,7 +37,7 @@ const xAtY = (path, targetY) => {
  * @returns {JSX.Element}
  */
 export default function TrackView({ roadmapId, modules = [] }) {
-	const { courseProgress, isLessonCompleted } = useProgress();
+	const { isCompleted } = useCourseProgress(roadmapId);
 	const { goToLesson } = useCourseNavigation();
 
 	// Handle lesson click - navigate to lesson page
@@ -370,7 +370,7 @@ export default function TrackView({ roadmapId, modules = [] }) {
 															}}
 															className={cn(
 																"relative bg-white border rounded-xl p-4 shadow-sm w-[calc(50%-20px)] hover:shadow-md hover:border-emerald-300 z-10 text-left",
-																isLessonCompleted(lesson.id)
+																isCompleted(lesson.id)
 																	? "border-emerald-300 bg-emerald-50/30"
 																	: "border-slate-200",
 															)}
@@ -388,12 +388,12 @@ export default function TrackView({ roadmapId, modules = [] }) {
 																<div
 																	className={cn(
 																		"w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-																		isLessonCompleted(lesson.id)
+																		isCompleted(lesson.id)
 																			? "bg-emerald-100 text-emerald-600"
 																			: "bg-slate-100 text-slate-600",
 																	)}
 																>
-																	{isLessonCompleted(lesson.id) ? (
+																	{isCompleted(lesson.id) ? (
 																		<CheckCircle className="w-4 h-4" />
 																	) : (
 																		<span className="text-sm font-medium">

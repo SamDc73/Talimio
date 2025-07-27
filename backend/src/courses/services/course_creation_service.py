@@ -1,7 +1,7 @@
 """Course creation service for creating new courses."""
 
-import json
 import logging
+import os
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -9,12 +9,11 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.client import AIError, ModelManager
+from src.ai.ai_service import AIServiceError, get_ai_service
 from src.ai.memory import Mem0Wrapper
 from src.courses.models import Node, Roadmap
 from src.courses.schemas import CourseCreate, CourseResponse, ModuleResponse
 from src.courses.services.course_response_builder import CourseResponseBuilder
-from src.tagging.service import TaggingService
 
 
 class CourseCreationService:
@@ -29,17 +28,31 @@ class CourseCreationService:
         """
         self.session = session
         self.user_id = user_id
-        self.ai_client = ModelManager()
-        self.memory_service = Mem0Wrapper() if user_id else None
-        self.response_builder = CourseResponseBuilder(session)
         self._logger = logging.getLogger(__name__)
+        self.response_builder = CourseResponseBuilder(session)
 
-    async def create_course(self, request: CourseCreate, user_id: UUID | None = None) -> CourseResponse:
+        # Initialize AI service
+        self._ai_service = get_ai_service()
+
+        # Initialize memory service
+        try:
+            # Skip memory service in mock mode
+            if os.getenv("MOCK_AI_SERVICES") == "true":
+                self.memory_service = None
+            else:
+                self.memory_service = Mem0Wrapper() if user_id else None
+            self._logger.info(f"Memory service initialized: {self.memory_service is not None}, user_id: {user_id}")
+        except Exception as e:
+            self._logger.exception(f"Failed to initialize memory service: {e}")
+            self.memory_service = None
+
+
+    async def create_course(self, request: CourseCreate, user_id: UUID) -> CourseResponse:
         """Create a new course using AI generation.
 
         Args:
             request: Course creation request
-            user_id: User ID (optional override)
+            user_id: User ID
 
         Returns
         -------
@@ -49,10 +62,7 @@ class CourseCreationService:
         ------
             HTTPException: If course creation fails
         """
-        effective_user_id = user_id or self.user_id
-
-        self._logger.info("Creating course for user %s with prompt: %s...", effective_user_id, request.prompt[:100])
-        self._logger.info("Current AI model: %s", self.ai_client.model)
+        self._logger.info("Creating course for user %s with prompt: %s...", user_id, request.prompt[:100])
 
         # Enhanced AI prompt for better course generation
         enhanced_prompt = f"""
@@ -69,9 +79,12 @@ class CourseCreationService:
         """
 
         try:
-            # Generate course structure using AI with function calling enabled
-            roadmap_response = await self.ai_client.generate_roadmap_content(
-                user_prompt=request.prompt,
+            # Generate course structure using AI service
+            roadmap_response = await self._ai_service.process_content(
+                content_type="course",
+                action="generate",
+                user_id=user_id,
+                topic=request.prompt,
                 skill_level="beginner",
                 description=enhanced_prompt,
                 use_tools=True,  # Enable content discovery
@@ -85,7 +98,7 @@ class CourseCreationService:
             title = course_title
             existing_query = select(Roadmap).where(
                 Roadmap.title == title,
-                Roadmap.user_id == effective_user_id
+                Roadmap.user_id == user_id
             )
             existing_course = await self.session.execute(existing_query)
             if existing_course.scalar_one_or_none():
@@ -97,7 +110,7 @@ class CourseCreationService:
                 title=title,
                 description=course_description,
                 skill_level=roadmap_response.get("difficulty", "beginner"),
-                user_id=effective_user_id,
+                user_id=user_id,
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC),
             )
@@ -109,15 +122,23 @@ class CourseCreationService:
             modules_data = await self._create_modules_and_lessons(roadmap.id, nodes_data)
 
             await self.session.commit()
+            await self.session.refresh(roadmap)
 
-            # Apply automatic tagging
-            await self._apply_automatic_tagging(roadmap, modules_data)
+            # Apply automatic tagging (non-blocking - don't fail course creation if tagging fails)
+            try:
+                from src.tagging.service import apply_automatic_tagging_to_course
+                await apply_automatic_tagging_to_course(self.session, roadmap, modules_data)
+                await self.session.commit()
+                await self.session.refresh(roadmap)
+            except Exception as tagging_error:
+                self._logger.warning("Failed to apply automatic tagging to course %s: %s", roadmap.id, tagging_error)
+                # Continue with course creation even if tagging fails
 
             # Store in memory service if available
             if self.memory_service:
                 try:
                     await self.memory_service.store_course_context(
-                        effective_user_id,
+                        user_id,
                         {
                             "course_id": str(roadmap.id),
                             "title": roadmap.title,
@@ -128,13 +149,13 @@ class CourseCreationService:
                 except Exception as e:
                     self._logger.warning("Failed to store course in memory service: %s", e)
 
-            self._logger.info("Successfully created course %s for user %s", roadmap.id, effective_user_id)
+            self._logger.info("Successfully created course %s for user %s", roadmap.id, user_id)
 
             return self.response_builder.build_course_response_from_roadmap(
                 roadmap, modules_data
             )
 
-        except AIError as e:
+        except AIServiceError as e:
             self._logger.exception("AI service error during course creation")
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -217,73 +238,3 @@ class CourseCreationService:
 
         return modules_data
 
-    async def _apply_automatic_tagging(self, roadmap: Roadmap, modules_data: list[ModuleResponse]) -> None:
-        """Apply automatic tagging to the course/roadmap.
-
-        Args:
-            roadmap: The created roadmap
-            modules_data: List of module data for context
-        """
-        try:
-            # Initialize tagging service
-            tagging_service = TaggingService(self.session, self.ai_client)
-
-            # Build content preview from roadmap and modules
-            content_preview = self._build_content_preview(roadmap, modules_data)
-
-            # Generate and store tags
-            tags = await tagging_service.tag_content(
-                content_id=roadmap.id,
-                content_type="roadmap",
-                title=roadmap.title,
-                content_preview=content_preview,
-            )
-
-            if tags:
-                # Update the roadmap's tags_json field
-                roadmap.tags_json = json.dumps(tags)
-                await self.session.commit()
-                self._logger.info("Successfully tagged course %s with tags: %s", roadmap.id, tags)
-
-        except Exception as e:
-            self._logger.exception("Failed to tag course %s: %s", roadmap.id, e)
-            # Don't fail the entire course creation if tagging fails
-
-    def _build_content_preview(self, roadmap: Roadmap, modules_data: list[ModuleResponse]) -> str:
-        """Build content preview for tagging.
-
-        Args:
-            roadmap: The created roadmap
-            modules_data: List of module data
-
-        Returns
-        -------
-            Content preview string
-        """
-        parts = []
-
-        # Add roadmap description
-        parts.append(f"Title: {roadmap.title}")
-        if roadmap.description:
-            parts.append(f"Description: {roadmap.description}")
-
-        # Add skill level
-        parts.append(f"Skill Level: {roadmap.skill_level}")
-
-        # Add module information
-        if modules_data:
-            parts.append("\nCourse Structure:")
-            for i, module in enumerate(modules_data[:10], 1):  # Limit to first 10 modules
-                module_info = f"{i}. {module.title}"
-                if module.description:
-                    module_info += f": {module.description[:100]}"
-                    if len(module.description) > 100:
-                        module_info += "..."
-                parts.append(module_info)
-
-                # Include some lesson titles for better context
-                if module.lessons and i <= 3:  # Only first 3 modules' lessons
-                    for _j, lesson in enumerate(module.lessons[:3], 1):
-                        parts.append(f"   - {lesson.title}")
-
-        return "\n".join(parts)

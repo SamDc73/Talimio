@@ -10,6 +10,7 @@
  * - Download and external link options
  */
 
+import DOMPurify from "dompurify";
 import {
 	ChevronLeft,
 	ChevronRight,
@@ -24,7 +25,7 @@ import {
 	ZoomIn,
 	ZoomOut,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../../../components/button";
 import { Card } from "../../../components/card";
 import DocumentStatusBadge from "./DocumentStatusBadge";
@@ -49,19 +50,8 @@ const DocumentPreviewModal = ({
 	const modalRef = useRef(null);
 	const contentRef = useRef(null);
 
-	// Reset state when document changes
-	useEffect(() => {
-		if (document) {
-			setCurrentPage(1);
-			setZoom(100);
-			setRotation(0);
-			setIsFullscreen(false);
-			loadContentPreview();
-		}
-	}, [document, loadContentPreview]);
-
 	// Load content preview (placeholder for actual implementation)
-	const loadContentPreview = async () => {
+	const loadContentPreview = useCallback(async () => {
 		if (!document) return;
 
 		setIsLoadingPreview(true);
@@ -100,7 +90,18 @@ const DocumentPreviewModal = ({
 			console.error("Failed to load content preview:", error);
 			setIsLoadingPreview(false);
 		}
-	};
+	}, [document]);
+
+	// Reset state when document changes
+	useEffect(() => {
+		if (document) {
+			setCurrentPage(1);
+			setZoom(100);
+			setRotation(0);
+			setIsFullscreen(false);
+			loadContentPreview();
+		}
+	}, [document, loadContentPreview]);
 
 	// Handle keyboard shortcuts
 	useEffect(() => {
@@ -355,7 +356,7 @@ const DocumentPreviewModal = ({
 										<div
 											className="prose prose-sm max-w-none"
 											dangerouslySetInnerHTML={{
-												__html: contentPreview.content,
+												__html: DOMPurify.sanitize(contentPreview.content),
 											}}
 										/>
 									</div>
@@ -455,7 +456,8 @@ const DocumentPreviewModal = ({
 										<div className="grid grid-cols-2 gap-2">
 											{contentPreview.thumbnails.map((thumbnail, index) => (
 												<button
-													key={index}
+													type="button"
+													key={thumbnail}
 													onClick={() => setCurrentPage(index + 1)}
 													className={`
                             relative aspect-[3/4] bg-gray-200 rounded border-2 transition-colors

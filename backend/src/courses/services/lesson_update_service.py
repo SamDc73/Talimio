@@ -31,7 +31,7 @@ class LessonUpdateService:
         course_id: UUID,
         lesson_id: UUID,
         request: LessonUpdate,
-        user_id: UUID | None = None
+        _user_id: UUID | None = None
     ) -> LessonResponse:
         """Update lesson metadata/content.
 

@@ -110,10 +110,10 @@ async def get_decks(user_id: UUID, page: int = 1, per_page: int = 20) -> DeckLis
                 deck_responses.append(deck_response)
 
             return DeckListResponse(
-                decks=deck_responses,
+                items=deck_responses,
                 total=total,
                 page=page,
-                per_page=per_page,
+                pages=(total + per_page - 1) // per_page,
             )
 
     except Exception as e:

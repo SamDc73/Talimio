@@ -11,6 +11,7 @@ export function CollapsibleDescription({ description }) {
 	return (
 		<div className="video-description-container">
 			<button
+				type="button"
 				onClick={() => setIsCollapsed(!isCollapsed)}
 				className="collapse-button"
 			>

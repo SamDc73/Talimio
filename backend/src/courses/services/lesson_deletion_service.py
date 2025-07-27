@@ -28,7 +28,7 @@ class LessonDeletionService:
         self,
         course_id: UUID,
         lesson_id: UUID,
-        user_id: UUID | None = None
+        _user_id: UUID | None = None
     ) -> bool:
         """Delete a lesson.
 

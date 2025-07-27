@@ -16,14 +16,12 @@ class Video(Base):
 
     __tablename__ = "videos"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    uuid: Mapped[UUID_TYPE] = mapped_column(
+    id: Mapped[UUID_TYPE] = mapped_column(
         UUID(as_uuid=True),
-        unique=True,
-        nullable=False,
+        primary_key=True,
         default=uuid.uuid4,
-        index=True,
     )
+    user_id: Mapped[UUID_TYPE] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     youtube_id: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
     url: Mapped[str] = mapped_column(String(255), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -82,9 +80,9 @@ class VideoChapter(Base):
     __tablename__ = "video_chapters"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    video_uuid: Mapped[uuid.UUID] = mapped_column(
+    video_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("videos.uuid", ondelete="CASCADE"),
+        ForeignKey("videos.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -110,9 +108,9 @@ class VideoProgress(Base):
     __tablename__ = "video_progress"
 
     id: Mapped[UUID_TYPE] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    video_uuid: Mapped[UUID_TYPE] = mapped_column(
+    video_id: Mapped[UUID_TYPE] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("videos.uuid", ondelete="CASCADE"),
+        ForeignKey("videos.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

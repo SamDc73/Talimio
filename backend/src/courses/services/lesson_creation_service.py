@@ -31,7 +31,7 @@ class LessonCreationService:
         self,
         course_id: UUID,
         request: LessonCreate,
-        user_id: UUID | None = None
+        _user_id: UUID | None = None
     ) -> LessonResponse:
         """Generate a new lesson for a course.
 
@@ -161,7 +161,7 @@ class LessonCreationService:
         self,
         course_id: UUID,
         lesson_id: UUID,
-        user_id: UUID | None = None
+        _user_id: UUID | None = None
     ) -> LessonResponse:
         """Regenerate an existing lesson.
 

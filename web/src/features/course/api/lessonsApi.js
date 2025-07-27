@@ -23,6 +23,23 @@ export async function fetchLesson(courseId, lessonId) {
 }
 
 /**
+ * Fetch a lesson by ID only (no courseId needed)
+ * For simplified /lesson/:lessonId routing
+ */
+export async function fetchLessonById(lessonId) {
+	if (!lessonId) {
+		throw new Error("Lesson ID is required");
+	}
+
+	// Use the dedicated endpoint that finds lessons by ID alone
+	const res = await fetch(`${BASE}/content/lessons/${lessonId}`);
+	if (!res.ok) {
+		throw new Error(`Failed to fetch lesson: ${res.status}`);
+	}
+	return res.json();
+}
+
+/**
  * Fetch a specific lesson by IDs (full endpoint, fallback)
  */
 export async function fetchLessonFull(courseId, moduleId, lessonId) {

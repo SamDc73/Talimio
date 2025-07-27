@@ -1,9 +1,18 @@
 """Pydantic schemas for the unified courses API."""
 
 from datetime import datetime
+from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class LessonStatus(str, Enum):
+    """Enum for lesson status values."""
+
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
 
 
 class LessonBase(BaseModel):
@@ -61,7 +70,7 @@ class CourseBase(BaseModel):
     title: str = Field(..., description="Course title")
     description: str = Field("", description="Course description")
     skill_level: str = Field("beginner", description="Course skill level")
-    tags_json: str = Field("[]", description="Course tags as JSON string")
+    tags: str = Field("[]", description="Course tags as JSON string")
     archived: bool = Field(default=False, description="Whether the course is archived")
     rag_enabled: bool = Field(default=False, description="Whether RAG is enabled for this course")
 
@@ -78,7 +87,7 @@ class CourseUpdate(BaseModel):
     title: str | None = Field(None, description="Course title")
     description: str | None = Field(None, description="Course description")
     skill_level: str | None = Field(None, description="Course skill level")
-    tags_json: str | None = Field(None, description="Course tags as JSON string")
+    tags: str | None = Field(None, description="Course tags as JSON string")
     archived: bool | None = Field(None, description="Whether the course is archived")
     rag_enabled: bool | None = Field(None, description="Whether RAG is enabled for this course")
 
@@ -119,7 +128,7 @@ class CourseProgressResponse(BaseModel):
 class LessonStatusUpdate(BaseModel):
     """Schema for updating lesson status."""
 
-    status: str = Field(..., description="Lesson status: not_started, in_progress, completed")
+    status: LessonStatus = Field(..., description="Lesson status: not_started, in_progress, completed")
 
 
 class LessonStatusResponse(BaseModel):
@@ -128,7 +137,7 @@ class LessonStatusResponse(BaseModel):
     lesson_id: UUID = Field(..., description="Lesson ID")
     module_id: UUID = Field(..., description="Module ID")
     course_id: UUID = Field(..., description="Course ID")
-    status: str = Field(..., description="Lesson status")
+    status: LessonStatus = Field(..., description="Lesson status")
     created_at: datetime = Field(..., description="Status creation timestamp")
     updated_at: datetime = Field(..., description="Status last update timestamp")
 

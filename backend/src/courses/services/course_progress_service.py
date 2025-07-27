@@ -3,6 +3,7 @@
 Handles progress tracking and status updates for courses, modules, and lessons.
 """
 
+import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -14,6 +15,9 @@ from src.courses.schemas import (
     LessonStatusResponse,
     LessonStatusUpdate,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class CourseProgressService:
@@ -120,6 +124,7 @@ class CourseProgressService:
                 course_id=str(course_id),
                 module_id=str(module_id),
                 status=request.status,
+                user_id=_user_id or self.user_id,  # Fix: Add user_id
                 created_at=now,
                 updated_at=now,
             )
@@ -147,10 +152,17 @@ class CourseProgressService:
 
         from src.courses.models import Node
 
-        # Count total lessons (all nodes in course - simplified backend)
-        total_query = select(func.count(Node.id)).where(Node.roadmap_id == course_id)
+        # Count total lessons (only leaf nodes, excluding modules)
+        # This matches the content endpoint counting method for consistency
+        total_query = select(func.count(Node.id)).where(
+            Node.roadmap_id == course_id,
+            Node.parent_id.is_not(None)  # Only lessons, not modules
+        )
         total_result = await self.session.execute(total_query)
         total_lessons = total_result.scalar() or 0
+
+        # Debug logging
+        logger.info(f"📊 Progress calculation for course {course_id}, user {user_id}: found {total_lessons} total lessons")
 
         if total_lessons == 0:
             return 0
@@ -182,6 +194,9 @@ class CourseProgressService:
         completed_result = await self.session.execute(completed_query)
         completed_lessons = completed_result.scalar() or 0
 
+        # Debug logging
+        logger.info(f"📊 Progress calculation result: {completed_lessons}/{total_lessons} = {int((completed_lessons / total_lessons) * 100)}%")
+
         return int((completed_lessons / total_lessons) * 100)
 
     async def get_lesson_completion_stats(self, course_id: UUID, user_id: UUID) -> dict:
@@ -193,8 +208,12 @@ class CourseProgressService:
 
         from src.courses.models import Node
 
-        # Count total lessons (all nodes in course - simplified backend)
-        total_query = select(func.count(Node.id)).where(Node.roadmap_id == course_id)
+        # Count total lessons (only leaf nodes, excluding modules)
+        # This matches the content endpoint counting method for consistency
+        total_query = select(func.count(Node.id)).where(
+            Node.roadmap_id == course_id,
+            Node.parent_id.is_not(None)  # Only lessons, not modules
+        )
         total_result = await self.session.execute(total_query)
         total_lessons = total_result.scalar() or 0
 
@@ -255,6 +274,7 @@ class CourseProgressService:
     ) -> LessonStatusResponse:
         """Get the status of a specific lesson."""
         effective_user_id = _user_id or self.user_id
+
         # Note: Progress.course_id actually stores module_id (legacy naming)
         stmt = select(Progress).where(
             Progress.lesson_id == str(lesson_id),

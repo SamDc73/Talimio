@@ -64,7 +64,7 @@ class VideoProgressResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: UUID
-    video_uuid: UUID = Field(alias="videoUuid")
+    video_id: UUID = Field(alias="videoId")
     user_id: UUID = Field(alias="userId")
     last_position: float = Field(alias="lastPosition")
     completion_percentage: float = Field(alias="completionPercentage")
@@ -76,8 +76,7 @@ class VideoProgressResponse(BaseModel):
 class VideoInDB(VideoBase):
     """Schema for video stored in database."""
 
-    id: int
-    uuid: UUID
+    id: UUID
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
 
@@ -121,7 +120,6 @@ class VideoListResponse(BaseModel):
     pages: int
 
 
-# Chapter schemas for Phase 2.3
 class VideoChapterBase(BaseModel):
     """Base schema for video chapter."""
 
@@ -131,7 +129,7 @@ class VideoChapterBase(BaseModel):
     title: str = Field(..., max_length=500)
     start_time: int | None = Field(None, ge=0, description="Start time in seconds", alias="startTime")
     end_time: int | None = Field(None, ge=0, description="End time in seconds", alias="endTime")
-    status: str = Field(default="not_started", pattern="^(not_started|in_progress|done)$")
+    status: str = Field(default="not_started", pattern="^(not_started|in_progress|completed)$")
 
 
 class VideoChapterResponse(VideoChapterBase):
@@ -140,7 +138,7 @@ class VideoChapterResponse(VideoChapterBase):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: UUID
-    video_uuid: UUID = Field(alias="videoUuid")
+    video_id: UUID = Field(alias="videoId")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
 
@@ -148,7 +146,7 @@ class VideoChapterResponse(VideoChapterBase):
 class VideoChapterStatusUpdate(BaseModel):
     """Schema for updating video chapter status."""
 
-    status: str = Field(..., pattern="^(not_started|in_progress|done)$")
+    status: str = Field(..., pattern="^(not_started|in_progress|completed)$")
 
 
 class VideoChapterProgressSync(BaseModel):
@@ -175,6 +173,17 @@ class VideoTranscriptResponse(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    video_uuid: str = Field(..., alias="videoUuid")
+    video_id: UUID = Field(..., alias="videoId")
     segments: list[TranscriptSegment] = Field(..., description="List of transcript segments")
     total_segments: int = Field(..., alias="totalSegments")
+
+
+class RAGStatusResponse(BaseModel):
+    """Response model for RAG embedding status."""
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    video_id: UUID
+    rag_status: str  # pending, processing, completed, failed
+    rag_processed_at: str | None = None
+    message: str

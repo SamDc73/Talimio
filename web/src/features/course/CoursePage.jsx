@@ -1,68 +1,102 @@
-import { useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { LessonViewer } from "./components";
-import { useLessonViewer } from "./hooks/useLessonViewer";
+import { forwardRef, useState } from "react";
+import { useParams } from "react-router-dom";
 
-const CoursePage = () => {
+import RoadmapHeader from "@/components/header/RoadmapHeader";
+import { CourseSidebar } from "@/components/sidebar";
+import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore";
+import { useCourseNavigation } from "../../utils/navigationUtils";
+import { useOutlineData } from "./hooks/useOutlineData";
+import { useRoadmapState } from "./hooks/useRoadmapState";
+import DocumentsView from "./views/DocumentsView";
+import LessonView from "./views/LessonView";
+import OutlineView from "./views/outline";
+import TrackView from "./views/track";
+
+/**
+ * Main container component for the Course feature
+ * Handles switching between different views and lesson display
+ */
+const CoursePage = forwardRef(({ roadmapId: propRoadmapId }, _ref) => {
 	const { courseId, lessonId } = useParams();
-	const navigate = useNavigate();
+	const roadmapId = propRoadmapId || courseId; // Support both props and URL params
 
-	// Use the simplified lesson viewer hook
-	const { lesson, isLoading, error, loadLesson, createLesson } =
-		useLessonViewer(courseId);
+	const { isLoading: roadmapLoading, roadmap } = useRoadmapState(
+		roadmapId,
+		() => {}, // No error handler needed for now
+	);
+	const { modules, isLoading: modulesLoading } = useOutlineData(roadmapId);
+	const isOpen = useAppStore(selectSidebarOpen);
+	const [mode, setMode] = useState("outline"); // Default to outline view
+	const { goToLesson } = useCourseNavigation();
 
-	// Load lesson when component mounts or lessonId changes
-	useEffect(() => {
-		if (courseId && lessonId) {
-			loadLesson(lessonId);
-		}
-	}, [courseId, lessonId, loadLesson]);
+	const isLoading = roadmapLoading || modulesLoading;
+	const courseName = roadmap?.title || "Course";
 
-	const handleBack = () => {
-		navigate(`/roadmap/${courseId}`);
+	// Handle lesson click navigation
+	const handleLessonClick = (clickedLessonId) => {
+		goToLesson(roadmapId, clickedLessonId);
 	};
 
-	const handleRegenerate = async (lessonId) => {
-		if (lessonId) {
-			await createLesson();
-		}
-	};
+	if (isLoading) {
+		return (
+			<div className="w-screen h-screen flex items-center justify-center">
+				<div className="text-lg">Loading your course...</div>
+			</div>
+		);
+	}
 
-	const handleMarkComplete = (lessonId) => {
-		// TODO: Implement mark complete functionality
-		console.log("Mark complete:", lessonId);
-	};
-
-	if (!courseId || !lessonId) {
+	if (!roadmapId) {
 		return (
 			<div className="flex items-center justify-center h-screen">
 				<div className="text-center">
-					<h2 className="text-xl font-semibold mb-2">Invalid URL</h2>
-					<p className="text-gray-600 mb-4">
-						Course and lesson IDs are required.
-					</p>
-					<button
-						type="button"
-						onClick={() => navigate("/")}
-						className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-					>
-						Go Home
-					</button>
+					<h2 className="text-xl font-semibold mb-2">Course Not Found</h2>
+					<p className="text-gray-600 mb-4">No course ID provided.</p>
 				</div>
 			</div>
 		);
 	}
 
 	return (
-		<LessonViewer
-			lesson={lesson}
-			isLoading={isLoading}
-			error={error}
-			onBack={handleBack}
-			onRegenerate={handleRegenerate}
-			onMarkComplete={handleMarkComplete}
-		/>
+		<div
+			className={`roadmap-container ${isOpen ? "sidebar-open" : "sidebar-closed"}`}
+			style={{ margin: 0, padding: 0 }}
+		>
+			<RoadmapHeader
+				mode={mode}
+				onModeChange={setMode}
+				courseId={roadmapId}
+				courseName={courseName}
+			/>
+
+			<div className="flex h-screen">
+				<CourseSidebar
+					modules={modules || []}
+					onLessonClick={handleLessonClick}
+					courseId={roadmapId}
+				/>
+
+				{/* If viewing a lesson, show lesson view with same layout */}
+				{lessonId ? (
+					<div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
+						<LessonView courseId={roadmapId} lessonId={lessonId} />
+					</div>
+				) : /* Course overview views */
+				mode === "outline" ? (
+					<div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
+						<OutlineView roadmapId={roadmapId} modules={modules} />
+					</div>
+				) : mode === "track" ? (
+					<div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
+						<TrackView roadmapId={roadmapId} modules={modules} />
+					</div>
+				) : mode === "documents" ? (
+					<div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
+						<DocumentsView courseId={roadmapId} />
+					</div>
+				) : null}
+			</div>
+		</div>
 	);
-};
+});
 
 export default CoursePage;

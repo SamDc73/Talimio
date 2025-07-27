@@ -16,7 +16,6 @@ import { Card } from "../../../components/card";
 import {
 	Tooltip,
 	TooltipContent,
-	TooltipProvider,
 	TooltipTrigger,
 } from "../../../components/tooltip";
 
@@ -31,12 +30,11 @@ export const InlineCitation = ({
 	className = "",
 }) => {
 	return (
-		<TooltipProvider>
-			<Tooltip delayDuration={300}>
-				<TooltipTrigger asChild>
-					<button
-						onClick={() => onClick?.(document, excerpt)}
-						className={`
+		<Tooltip delayDuration={300}>
+			<TooltipTrigger asChild>
+				<button
+					onClick={() => onClick?.(document, excerpt)}
+					className={`
               inline-flex items-center justify-center
               w-5 h-5 text-xs font-medium
               bg-blue-100 hover:bg-blue-200 
@@ -46,31 +44,30 @@ export const InlineCitation = ({
               mx-0.5 align-super
               ${className}
             `}
-						type="button"
-					>
-						{citationNumber}
-					</button>
-				</TooltipTrigger>
-				<TooltipContent side="top" className="max-w-xs">
-					<div className="space-y-2">
-						<div className="flex items-center space-x-2">
-							{document.document_type === "url" ? (
-								<Link2 className="w-4 h-4 text-green-500" />
-							) : (
-								<FileText className="w-4 h-4 text-blue-500" />
-							)}
-							<span className="text-sm font-medium truncate">
-								{document.title}
-							</span>
-						</div>
-						{excerpt && (
-							<p className="text-xs text-gray-600 line-clamp-3">"{excerpt}"</p>
+					type="button"
+				>
+					{citationNumber}
+				</button>
+			</TooltipTrigger>
+			<TooltipContent side="top" className="max-w-xs">
+				<div className="space-y-2">
+					<div className="flex items-center space-x-2">
+						{document.document_type === "url" ? (
+							<Link2 className="w-4 h-4 text-green-500" />
+						) : (
+							<FileText className="w-4 h-4 text-blue-500" />
 						)}
-						<p className="text-xs text-gray-500">Click to view full context</p>
+						<span className="text-sm font-medium truncate">
+							{document.title}
+						</span>
 					</div>
-				</TooltipContent>
-			</Tooltip>
-		</TooltipProvider>
+					{excerpt && (
+						<p className="text-xs text-gray-600 line-clamp-3">"{excerpt}"</p>
+					)}
+					<p className="text-xs text-gray-500">Click to view full context</p>
+				</div>
+			</TooltipContent>
+		</Tooltip>
 	);
 };
 
@@ -254,16 +251,11 @@ export const CitationModal = ({
 			document.addEventListener("keydown", handleEscape);
 			return () => document.removeEventListener("keydown", handleEscape);
 		}
-	}, [
-		isOpen,
-		onClose,
-		document.addEventListener,
-		document.removeEventListener,
-	]);
+	}, [isOpen, onClose]);
 
 	if (!isOpen || !citation) return null;
 
-	const { document, excerpt } = citation;
+	const { document: citationDocument, excerpt } = citation;
 
 	return (
 		<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -274,18 +266,18 @@ export const CitationModal = ({
 				{/* Header */}
 				<div className="flex items-center justify-between p-6 border-b border-gray-200">
 					<div className="flex items-center space-x-3">
-						{document.document_type === "url" ? (
+						{citationDocument.document_type === "url" ? (
 							<Link2 className="w-6 h-6 text-green-500" />
 						) : (
 							<FileText className="w-6 h-6 text-blue-500" />
 						)}
 						<div>
 							<h2 className="text-lg font-semibold text-gray-900">
-								{document.title}
+								{citationDocument.title}
 							</h2>
-							{document.source_url && (
+							{citationDocument.source_url && (
 								<p className="text-sm text-gray-600 truncate">
-									{document.source_url}
+									{citationDocument.source_url}
 								</p>
 							)}
 						</div>
@@ -295,7 +287,7 @@ export const CitationModal = ({
 						{onViewDocument && (
 							<Button
 								variant="outline"
-								onClick={() => onViewDocument(document)}
+								onClick={() => onViewDocument(citationDocument)}
 							>
 								<ExternalLink className="w-4 h-4 mr-2" />
 								Open Document
@@ -333,17 +325,21 @@ export const CitationModal = ({
 							<dl className="grid grid-cols-2 gap-2 text-sm">
 								<dt className="font-medium text-gray-600">Type:</dt>
 								<dd className="text-gray-900 capitalize">
-									{document.document_type}
+									{citationDocument.document_type}
 								</dd>
 
 								<dt className="font-medium text-gray-600">Status:</dt>
-								<dd className="text-gray-900 capitalize">{document.status}</dd>
+								<dd className="text-gray-900 capitalize">
+									{citationDocument.status}
+								</dd>
 
-								{document.crawl_date && (
+								{citationDocument.crawl_date && (
 									<>
 										<dt className="font-medium text-gray-600">Processed:</dt>
 										<dd className="text-gray-900">
-											{new Date(document.crawl_date).toLocaleDateString()}
+											{new Date(
+												citationDocument.crawl_date,
+											).toLocaleDateString()}
 										</dd>
 									</>
 								)}
@@ -367,9 +363,9 @@ export const parseCitationsInText = (text, citations = [], onCitationClick) => {
 	const citationRegex = /\[(\d+)\]/g;
 	const parts = [];
 	let lastIndex = 0;
-	let match;
+	let match = citationRegex.exec(text);
 
-	while ((match = citationRegex.exec(text)) !== null) {
+	while (match !== null) {
 		const citationNumber = parseInt(match[1], 10);
 		const citation = citations[citationNumber - 1]; // Arrays are 0-indexed
 
@@ -395,6 +391,7 @@ export const parseCitationsInText = (text, citations = [], onCitationClick) => {
 		}
 
 		lastIndex = match.index + match[0].length;
+		match = citationRegex.exec(text);
 	}
 
 	// Add remaining text

@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class FlashcardDeckBase(BaseModel):
@@ -36,6 +36,18 @@ class FlashcardDeckResponse(FlashcardDeckBase):
     created_at: datetime
     updated_at: datetime
     card_count: int = 0  # Will be populated by service
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def parse_tags(cls, v: str | list[str] | None) -> list[str]:
+        """Convert tags JSON string to list during validation."""
+        if isinstance(v, str):
+            import json
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return []
+        return v or []
 
     @property
     def tags_list(self) -> list[str]:
@@ -90,6 +102,18 @@ class FlashcardCardResponse(FlashcardCardBase):
     last_review: datetime | None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def parse_tags(cls, v: str | list[str] | None) -> list[str]:
+        """Convert tags JSON string to list during validation."""
+        if isinstance(v, str):
+            import json
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return []
+        return v or []
 
     @property
     def tags_list(self) -> list[str]:

@@ -38,7 +38,7 @@ class Course(Base):
         Enum("beginner", "intermediate", "advanced", name="skill_level_enum"),
         nullable=False,
     )
-    tags_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of tags
+    tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of tags
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rag_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # RAG integration flag

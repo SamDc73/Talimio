@@ -2,6 +2,7 @@
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -15,6 +16,7 @@ from src.courses.schemas import (
     LessonStatusUpdate,
 )
 from src.courses.services.course_progress_service import CourseProgressService
+from src.courses.services.course_progress_tracker import CourseProgressTracker
 
 
 class ProgressTrackingService:
@@ -226,12 +228,14 @@ class ProgressTrackingService:
 
         if not progress:
             # Return default status if no progress record exists
+            now = datetime.now(UTC)
             return LessonStatusResponse(
                 lesson_id=str(lesson_id),
                 module_id=str(module_id),
                 course_id=str(course_id),
                 status="not_started",
-                updated_at=datetime.now(UTC),
+                created_at=now,
+                updated_at=now,
             )
 
         return LessonStatusResponse(
@@ -279,10 +283,17 @@ class ProgressTrackingService:
                 detail="Course not found"
             )
 
-        # Get all lesson progress for the course
+        # Get all lessons for the course through the lesson service
+        from src.courses.services.lesson_query_service import LessonQueryService
+        lesson_service = LessonQueryService(self.session, effective_user_id)
+        lessons = await lesson_service.list_lessons(course_id, effective_user_id)
+
+        # Get progress for each lesson
+        # Note: Progress.course_id field actually stores module_id
+        lesson_ids = [str(lesson.id) for lesson in lessons]
         progress_query = select(Progress).where(
             Progress.user_id == effective_user_id,
-            Progress.course_id == course_id
+            Progress.lesson_id.in_(lesson_ids)
         )
 
         progress_result = await self.session.execute(progress_query)
@@ -293,4 +304,92 @@ class ProgressTrackingService:
         for progress in progress_records:
             status_map[str(progress.lesson_id)] = progress.status
 
+        # For lessons without progress records, set default status
+        for lesson in lessons:
+            lesson_id_str = str(lesson.id)
+            if lesson_id_str not in status_map:
+                status_map[lesson_id_str] = "not_started"
+
         return status_map
+
+    async def update_course_progress(
+        self,
+        course_id: UUID,
+        user_id: UUID | None,
+        progress_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Update course progress using the unified progress system.
+
+        Args:
+            course_id: Course ID
+            user_id: User ID
+            progress_data: Progress update data
+
+        Returns
+        -------
+            Updated progress data
+        """
+        effective_user_id = user_id or self.user_id
+
+        if not effective_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User ID required for progress tracking"
+            )
+
+        # Use the unified course progress tracker
+        tracker = CourseProgressTracker()
+        return await tracker.update_progress(course_id, effective_user_id, progress_data)
+
+    async def calculate_course_progress(
+        self,
+        course_id: UUID,
+        user_id: UUID | None
+    ) -> float:
+        """Calculate course completion percentage using unified progress system.
+
+        Args:
+            course_id: Course ID
+            user_id: User ID
+
+        Returns
+        -------
+            Completion percentage (0-100)
+        """
+        effective_user_id = user_id or self.user_id
+
+        if not effective_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User ID required for progress tracking"
+            )
+
+        # Use the unified course progress tracker
+        tracker = CourseProgressTracker()
+        return await tracker.calculate_completion_percentage(course_id, effective_user_id)
+
+    async def get_lesson_progress(
+        self,
+        lesson_id: UUID,
+        _user_id: UUID | None
+    ) -> dict[str, Any]:
+        """Get lesson progress (stub for compatibility)."""
+        # This is a placeholder - individual lesson progress is tracked as part of course progress
+        return {
+            "lesson_id": str(lesson_id),
+            "status": "not_started",
+            "completed": False
+        }
+
+    async def mark_lesson_complete(
+        self,
+        lesson_id: UUID,
+        _user_id: UUID | None
+    ) -> dict[str, Any]:
+        """Mark lesson as complete (stub for compatibility)."""
+        # This is a placeholder - will be replaced with proper implementation
+        return {
+            "lesson_id": str(lesson_id),
+            "status": "completed",
+            "success": True
+        }

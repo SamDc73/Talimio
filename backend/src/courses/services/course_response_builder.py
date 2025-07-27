@@ -90,7 +90,7 @@ class CourseResponseBuilder:
             title=roadmap.title,
             description=roadmap.description,
             skill_level=roadmap.skill_level,
-            tags_json=roadmap.tags_json or "[]",
+            tags=roadmap.tags or "[]",
             archived=roadmap.archived,
             rag_enabled=roadmap.rag_enabled,
             modules=modules_data,

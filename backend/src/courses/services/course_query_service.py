@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config.settings import DEFAULT_USER_ID
 from src.courses.models import Node, Roadmap
 from src.courses.schemas import CourseResponse, ModuleResponse
 from src.courses.services.course_response_builder import CourseResponseBuilder
@@ -46,9 +47,13 @@ class CourseQueryService:
         effective_user_id = user_id or self.user_id
 
         # Get the roadmap/course with user filtering
+        # Include DEFAULT_USER_ID fallback for legacy courses from single-user mode
         query = select(Roadmap).where(
             Roadmap.id == course_id,
-            Roadmap.user_id == effective_user_id
+            or_(
+                Roadmap.user_id == effective_user_id,
+                Roadmap.user_id == DEFAULT_USER_ID
+            )
         )
 
         result = await self.session.execute(query)
@@ -105,8 +110,13 @@ class CourseQueryService:
         effective_user_id = user_id or self.user_id
 
         # Build query with user filtering
-        query = select(Roadmap).where(Roadmap.user_id == effective_user_id)
-        count_query = select(func.count(Roadmap.id)).where(Roadmap.user_id == effective_user_id)
+        # Include DEFAULT_USER_ID fallback for legacy courses from single-user mode
+        user_filter = or_(
+            Roadmap.user_id == effective_user_id,
+            Roadmap.user_id == DEFAULT_USER_ID
+        )
+        query = select(Roadmap).where(user_filter)
+        count_query = select(func.count(Roadmap.id)).where(user_filter)
 
         if search:
             search_filter = or_(
@@ -154,9 +164,13 @@ class CourseQueryService:
         effective_user_id = user_id or self.user_id
 
         # Verify course exists and user has access
+        # Include DEFAULT_USER_ID fallback for legacy courses from single-user mode
         course_query = select(Roadmap).where(
             Roadmap.id == course_id,
-            Roadmap.user_id == effective_user_id
+            or_(
+                Roadmap.user_id == effective_user_id,
+                Roadmap.user_id == DEFAULT_USER_ID
+            )
         )
 
         course_result = await self.session.execute(course_query)

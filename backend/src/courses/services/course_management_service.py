@@ -140,10 +140,10 @@ class CourseManagementService:
 
         # Check if course exists using query service
         try:
-            course = await self.query_service.get_course(course_id, user_id)
+            await self.query_service.get_course(course_id, user_id)
         except Exception:
             error_msg = f"Course with ID {course_id} not found"
-            raise ValueError(error_msg)
+            raise ValueError(error_msg) from None
 
         # Delete related records first to avoid foreign key constraints
         # 1. Delete progress records (uses string course_id/module_id)

@@ -255,7 +255,7 @@ const DocumentUploadModal = ({
 									<div className="space-y-1">
 										{uploadResults.errors.map((error, index) => (
 											<p
-												key={index}
+												key={`${error.document.title}-${index}`}
 												className="text-xs text-red-700 dark:text-red-400"
 											>
 												• {error.document.title}: {error.error}
