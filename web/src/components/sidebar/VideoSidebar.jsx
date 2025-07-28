@@ -1,118 +1,28 @@
 import { Clock, Download } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useShallow } from "zustand/react/shallow";
+import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useVideoProgress } from "@/hooks/useVideoProgress";
 import {
 	extractVideoChapters,
 	getVideoChapters,
-	syncVideoChapterProgress,
-	updateVideoChapterStatus,
 } from "@/services/videosService";
-import useAppStore from "@/stores/useAppStore";
 import CompletionCheckbox from "./CompletionCheckbox";
 import ProgressIndicator from "./ProgressIndicator";
 import SidebarContainer from "./SidebarContainer";
 import SidebarNav from "./SidebarNav";
 
-// Stable empty object to prevent infinite re-renders
-const EMPTY_CHAPTER_COMPLETION = {};
-
-// Migrate completed chapters from localStorage to Zustand (for backwards compatibility)
-const migrateVideoChaptersFromStorage = (videoUuid, setChapterCompletion) => {
-	try {
-		const saved = localStorage.getItem(`video_chapters_${videoUuid}`);
-		if (saved) {
-			const completedArray = JSON.parse(saved);
-			const completedObj = {};
-			completedArray.forEach((chapterId) => {
-				completedObj[chapterId] = true;
-			});
-			setChapterCompletion(videoUuid, completedObj);
-			// Clean up localStorage after migration
-			localStorage.removeItem(`video_chapters_${videoUuid}`);
-		}
-	} catch (error) {
-		console.error("Failed to migrate completed chapters from storage:", error);
-	}
-};
-
 export function VideoSidebar({ video, currentTime, onSeek }) {
 	const [chapters, setChapters] = useState([]);
-	const [apiChapters, setApiChapters] = useState([]);
 	const [activeChapter, setActiveChapter] = useState(null);
-	const [_isLoadingChapters, setIsLoadingChapters] = useState(false);
+	const [isLoadingChapters, setIsLoadingChapters] = useState(false);
 	const [isExtracting, setIsExtracting] = useState(false);
+	const [optimisticCompletions, setOptimisticCompletions] = useState({});
 	const { toast } = useToast();
-	const hasSyncedProgress = useRef(false);
 
-	// Zustand store selectors - use shallow comparison to prevent infinite loops
-	const { updateVideoChapterCompletion, setVideoChapterStatus } = useAppStore(
-		useShallow((state) => ({
-			updateVideoChapterCompletion: state.updateVideoChapterCompletion,
-			setVideoChapterStatus: state.setVideoChapterStatus,
-		})),
+	// Use the standardized hook
+	const { progress, toggleCompletion, isCompleted, refetch } = useVideoProgress(
+		video?.id,
 	);
-
-	// Get video chapter completion with reactive selector (like BookViewer)
-	const videoChapterCompletion = useAppStore((state) =>
-		video?.uuid
-			? state.videos.chapterCompletion[video.uuid] || EMPTY_CHAPTER_COMPLETION
-			: EMPTY_CHAPTER_COMPLETION,
-	);
-
-	// Convert store object to Set for backwards compatibility - memoized to prevent infinite loops
-	const completedChapters = useMemo(() => {
-		const entries = Object.entries(videoChapterCompletion);
-		return new Set(
-			entries
-				.filter(([_, completed]) => completed)
-				.map(([chapterId, _]) => chapterId),
-		);
-	}, [videoChapterCompletion]);
-
-	// Helper functions defined before their usage in effects
-	const extractChapters = useCallback((description) => {
-		if (!description) return [];
-
-		const timestampRegex =
-			/(?:^|\n)(?:[^\d]*)?(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–—]?\s*(.+?)(?=\n|$)/gm;
-
-		const chapters = [];
-		let match;
-
-		match = timestampRegex.exec(description);
-		while (match !== null) {
-			const timeStr = match[1];
-			const title = match[2].trim();
-
-			const parts = timeStr.split(":").map(Number);
-			let timestamp = 0;
-
-			if (parts.length === 3) {
-				timestamp = parts[0] * 3600 + parts[1] * 60 + parts[2];
-			} else if (parts.length === 2) {
-				timestamp = parts[0] * 60 + parts[1];
-			}
-
-			const cleanTitle = title
-				.replace(/^[^\w\s]+\s*/, "")
-				.replace(/^\([^)]+\)\s*/, "")
-				.trim();
-
-			if (cleanTitle && timestamp >= 0) {
-				chapters.push({
-					id: `chapter-${timestamp}`,
-					timestamp,
-					timeStr,
-					title: cleanTitle,
-				});
-			}
-
-			match = timestampRegex.exec(description);
-		}
-
-		return chapters.sort((a, b) => a.timestamp - b.timestamp);
-	}, []);
 
 	// Helper function to format seconds to time string
 	const formatTime = useCallback((seconds) => {
@@ -126,87 +36,40 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 		return `${minutes}:${secs.toString().padStart(2, "0")}`;
 	}, []);
 
-	// Reset sync flag when video changes
+	// Fetch chapters from API only
 	useEffect(() => {
-		hasSyncedProgress.current = false;
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		// video?.uuid is intentionally the only dependency - we want to reset when video changes
-	}, []);
+		if (!video?.id) return;
 
-	// Fetch API chapters
-	useEffect(() => {
-		if (!video?.uuid) return;
-
-		async function fetchApiChapters() {
+		async function fetchChapters() {
 			setIsLoadingChapters(true);
 			try {
-				const chapters = await getVideoChapters(video.uuid);
-				setApiChapters(chapters || []);
-
-				if (chapters && chapters.length > 0) {
-					// Update completed chapters based on chapter status from API
-					const completed = {};
-					for (const chapter of chapters) {
-						if (chapter.status === "completed") {
-							completed[chapter.id] = true;
-						}
-					}
-					updateVideoChapterCompletion(video.uuid, completed);
+				const apiChapters = await getVideoChapters(video.id);
+				// Convert API chapters to the expected format
+				if (apiChapters && apiChapters.length > 0) {
+					const formattedChapters = apiChapters.map((chapter) => ({
+						id: chapter.id,
+						timestamp: chapter.startTime,
+						timeStr: formatTime(chapter.startTime),
+						title: chapter.title,
+						chapter_id: chapter.id,
+					}));
+					setChapters(formattedChapters);
 				} else {
-					// No API chapters, try to migrate from localStorage for description-based chapters
-					migrateVideoChaptersFromStorage(
-						video.uuid,
-						updateVideoChapterCompletion,
-					);
+					setChapters([]);
 				}
 			} catch (error) {
-				console.error("Failed to fetch video chapters:", error);
-				// Fall back to description extraction and try to migrate from localStorage
-				setApiChapters([]);
-				migrateVideoChaptersFromStorage(
-					video.uuid,
-					updateVideoChapterCompletion,
-				);
+				// Don't log error if it's expected (404 when no chapters exist)
+				if (!error.message?.includes("404")) {
+					console.error("Failed to fetch video chapters:", error);
+				}
+				setChapters([]);
 			} finally {
 				setIsLoadingChapters(false);
 			}
 		}
 
-		fetchApiChapters();
-	}, [video?.uuid, updateVideoChapterCompletion]);
-
-	// Extract chapters from description as fallback
-	useEffect(() => {
-		if (video?.description && apiChapters.length === 0) {
-			const extractedChapters = extractChapters(video.description);
-			setChapters(extractedChapters);
-
-			// Migrate from localStorage
-			if (extractedChapters.length > 0) {
-				migrateVideoChaptersFromStorage(
-					video.uuid,
-					updateVideoChapterCompletion,
-				);
-			}
-		} else if (apiChapters.length > 0) {
-			// Convert API chapters to the expected format
-			const formattedChapters = apiChapters.map((chapter) => ({
-				id: chapter.id,
-				timestamp: chapter.startTime,
-				timeStr: formatTime(chapter.startTime),
-				title: chapter.title,
-				chapter_id: chapter.id,
-			}));
-			setChapters(formattedChapters);
-		}
-	}, [
-		video?.description,
-		apiChapters,
-		video?.uuid,
-		updateVideoChapterCompletion,
-		extractChapters,
-		formatTime,
-	]);
+		fetchChapters();
+	}, [video?.id, formatTime]);
 
 	useEffect(() => {
 		if (chapters.length > 0 && currentTime !== undefined) {
@@ -229,88 +92,62 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 
 	const toggleChapterCompletion = async (chapter) => {
 		const chapterId = chapter.id || chapter.chapter_id;
-		const isCompleted = completedChapters.has(chapterId);
-		const newStatus = isCompleted ? "not_started" : "completed";
 
-		// Optimistic update to store
-		setVideoChapterStatus(video.uuid, chapterId, !isCompleted);
+		// Optimistic update - immediately update UI
+		setOptimisticCompletions((prev) => ({
+			...prev,
+			[chapterId]: !isChapterCompleted(chapterId),
+		}));
 
-		// Update via API if this is an API chapter
-		if (apiChapters.length > 0 && chapter.chapter_id) {
-			try {
-				await updateVideoChapterStatus(
-					video.uuid,
-					chapter.chapter_id,
-					newStatus,
-				);
-				toast({
-					title: "Chapter updated",
-					description: `Chapter marked as ${newStatus.replace("_", " ")}`,
-				});
-			} catch (_error) {
-				// Revert optimistic update
-				setVideoChapterStatus(video.uuid, chapterId, isCompleted);
-
-				toast({
-					title: "Error",
-					description: "Failed to update chapter status",
-					variant: "destructive",
-				});
-			}
-		} else {
-			// This is a description-based chapter, sync to backend
-			try {
-				// Create a new Set with the latest completed chapters
-				const updatedCompletedSet = new Set(completedChapters);
-				if (isCompleted) {
-					updatedCompletedSet.delete(chapterId);
-				} else {
-					updatedCompletedSet.add(chapterId);
-				}
-				const updatedCompletedIds = Array.from(updatedCompletedSet);
-				const totalChapters = chapters.length;
-
-				if (totalChapters > 0) {
-					// Don't await - let it sync in background
-					syncVideoChapterProgress(
-						video.uuid,
-						updatedCompletedIds,
-						totalChapters,
-					).catch((error) => {
-						console.error("Failed to sync chapter progress to backend:", error);
-						// Don't show error to user, this is just for homepage sync
-					});
-				}
-
-				toast({
-					title: "Chapter updated",
-					description: `Chapter marked as ${newStatus.replace("_", " ")}`,
-				});
-			} catch (_error) {
-				// Revert optimistic update
-				setVideoChapterStatus(video.uuid, chapterId, isCompleted);
-
-				toast({
-					title: "Error",
-					description: "Failed to save chapter progress",
-					variant: "destructive",
-				});
-			}
+		try {
+			// Pass the total chapters count so progress can be calculated correctly
+			await toggleCompletion(chapterId, chapters.length);
+			// On success, clear the optimistic state (real state will take over)
+			setOptimisticCompletions((prev) => {
+				const newState = { ...prev };
+				delete newState[chapterId];
+				return newState;
+			});
+		} catch (_error) {
+			// On error, revert optimistic update
+			setOptimisticCompletions((prev) => {
+				const newState = { ...prev };
+				delete newState[chapterId];
+				return newState;
+			});
+			toast({
+				title: "Error",
+				description: "Failed to update chapter progress",
+				variant: "destructive",
+			});
 		}
+	};
+
+	// Helper to check if chapter is completed (with optimistic state)
+	const isChapterCompleted = (chapterId) => {
+		// Check optimistic state first
+		if (chapterId in optimisticCompletions) {
+			return optimisticCompletions[chapterId];
+		}
+		// Fall back to actual state
+		return isCompleted(chapterId);
 	};
 
 	const handleExtractChapters = async () => {
 		setIsExtracting(true);
 		try {
-			const result = await extractVideoChapters(video.uuid);
+			const result = await extractVideoChapters(video.id);
 			toast({
 				title: "Chapters extracted",
 				description: `Successfully extracted ${result.count || 0} chapters`,
 			});
 
 			// Refresh chapters
-			const chapters = await getVideoChapters(video.uuid);
+			const chapters = await getVideoChapters(video.id);
 			setApiChapters(chapters || []);
+
+			// Refresh progress data
+			await refetch();
 		} catch (_error) {
 			toast({
 				title: "Error",
@@ -322,19 +159,15 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 		}
 	};
 
-	const getProgress = () => {
-		if (chapters.length === 0) return 0;
-		return Math.round((completedChapters.size / chapters.length) * 100);
-	};
-
 	if (!video) return null;
 
 	return (
-		<SidebarContainer>
+		<SidebarContainer data-testid="video-sidebar">
 			<ProgressIndicator
-				progress={getProgress()}
+				progress={progress.percentage}
 				variant="video"
 				suffix="Watched"
+				data-testid="progress-percentage"
 			/>
 
 			{/* Video info */}
@@ -349,21 +182,25 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 				{chapters.length === 0 ? (
 					<div className="text-center text-zinc-500 mt-8">
 						<Clock className="w-12 h-12 mx-auto mb-4 text-zinc-300" />
-						<p className="text-sm">No chapters found</p>
-						<p className="text-xs mt-2">
-							Chapters are extracted from the video description
-						</p>
+						<p className="text-sm">No chapters available</p>
+						{!isLoadingChapters && (
+							<>
+								<p className="text-xs mt-2">
+									This video doesn't have chapter markers
+								</p>
 
-						{/* Extract chapters button */}
-						<button
-							type="button"
-							onClick={handleExtractChapters}
-							disabled={isExtracting}
-							className="mt-4 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
-						>
-							<Download className="w-4 h-4" />
-							{isExtracting ? "Extracting..." : "Extract Chapters"}
-						</button>
+								{/* Extract chapters button */}
+								<button
+									type="button"
+									onClick={handleExtractChapters}
+									disabled={isExtracting}
+									className="mt-4 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
+								>
+									<Download className="w-4 h-4" />
+									{isExtracting ? "Extracting..." : "Extract Chapters"}
+								</button>
+							</>
+						)}
 					</div>
 				) : (
 					<div className="space-y-2">
@@ -372,7 +209,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 						</h4>
 						{chapters.map((chapter, index) => {
 							const chapterId = chapter.id || chapter.chapter_id;
-							const isCompleted = completedChapters.has(chapterId);
+							const chapterCompleted = isChapterCompleted(chapterId);
 							const isActive = activeChapter === index;
 
 							return (
@@ -386,9 +223,10 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 								>
 									<div className="flex items-center gap-3 px-4 py-3">
 										<CompletionCheckbox
-											isCompleted={isCompleted}
+											isCompleted={chapterCompleted}
 											onClick={() => toggleChapterCompletion(chapter)}
 											variant="video"
+											data-testid={`chapter-checkbox-${index}`}
 										/>
 
 										<button
@@ -407,7 +245,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 											</div>
 											<h5
 												className={`text-sm font-medium line-clamp-2 ${
-													isCompleted
+													chapterCompleted
 														? "text-violet-700"
 														: isActive
 															? "text-violet-600"

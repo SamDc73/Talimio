@@ -2,29 +2,22 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
 	BookOpen,
 	Bot,
-	Brain,
 	FileText,
 	GripVertical,
-	HelpCircle,
 	Layers,
-	LogOut,
 	Menu,
 	MessageSquare,
 	Mic,
-	Moon,
 	Paperclip,
 	Pin,
 	PinOff,
 	Search,
 	Send,
-	Settings,
 	Sparkles,
-	Sun,
-	User,
 	X,
 	Youtube,
 } from "lucide-react";
-import {
+import React, {
 	createContext,
 	useCallback,
 	useContext,
@@ -40,25 +33,9 @@ import { cn } from "../../lib/utils";
 import { useAssistantChat } from "../../services/assistantApi";
 import useAppStore from "../../stores/useAppStore";
 import { Button } from "../button";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuGroup,
-	DropdownMenuItem,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "../drop-menu";
 import { Input } from "../input";
-import { PersonalizationDialog } from "../PersonalizationDialog";
 import { Sheet, SheetContent, SheetTrigger } from "../sheet";
-import { Switch } from "../switch";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipProvider,
-	TooltipTrigger,
-} from "../tooltip";
+import { TooltipButton } from "../TooltipButton";
 
 // Chat sidebar context
 const ChatSidebarContext = createContext(undefined);
@@ -85,27 +62,37 @@ export function ChatSidebarProvider({ children }) {
 
 export function useChatSidebar() {
 	const context = useContext(ChatSidebarContext);
+	// Return a default context if used outside provider to prevent errors
 	if (context === undefined) {
-		throw new Error("useChatSidebar must be used within a ChatSidebarProvider");
+		return {
+			isChatOpen: false,
+			toggleChat: () => {
+				console.warn(
+					"ChatSidebar: toggleChat called outside of ChatSidebarProvider",
+				);
+			},
+			closeChatSidebar: () => {
+				console.warn(
+					"ChatSidebar: closeChatSidebar called outside of ChatSidebarProvider",
+				);
+			},
+		};
 	}
 	return context;
 }
 
 // User Avatar Menu Component
-export function UserAvatarMenu() {
+export const UserAvatarMenu = React.memo(function UserAvatarMenu() {
 	const { user, logout } = useAuth();
 	const navigate = useNavigate();
-	const { theme, setTheme } = useTheme();
-	const [open, setOpen] = useState(false);
-	const [personalizationOpen, setPersonalizationOpen] = useState(false);
 
-	const handleLogout = async () => {
+	const handleLogout = useCallback(async () => {
 		await logout();
 		navigate("/auth");
-	};
+	}, [logout, navigate]);
 
 	// Get user initials
-	const getUserInitials = () => {
+	const getUserInitials = useCallback(() => {
 		if (!user) return "U";
 		if (user.username) {
 			return user.username.substring(0, 2).toUpperCase();
@@ -115,31 +102,53 @@ export function UserAvatarMenu() {
 			return name.substring(0, 2).toUpperCase();
 		}
 		return "U";
-	};
+	}, [user]);
+
+	// TEMPORARY: Simple button with click handler for logout
+	return (
+		<button
+			type="button"
+			className="flex items-center rounded-full transition-all hover:bg-muted focus:outline-none h-10 w-10 justify-center"
+			title="Profile - Click to logout"
+			onClick={handleLogout}
+		>
+			<div className="h-8 w-8 rounded-full bg-white flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
+				<div className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500 font-semibold text-sm">
+					{getUserInitials()}
+				</div>
+			</div>
+		</button>
+	);
+});
+
+/* ORIGINAL CODE COMMENTED OUT FOR DEBUGGING
+	const { theme, setTheme } = useTheme();
+	const [open, setOpen] = useState(false);
+	const [personalizationOpen, setPersonalizationOpen] = useState(false);
+	
+	// Log when state changes
+	useEffect(() => {
+		console.log(`UserAvatarMenu state changed - open: ${open}, personalizationOpen: ${personalizationOpen}`);
+	}, [open, personalizationOpen]);
+	
+	// Log when setOpen is called
+	const handleOpenChange = useCallback((newOpen) => {
+		console.log(`UserAvatarMenu handleOpenChange called with: ${newOpen}`);
+		setOpen(newOpen);
+	}, []);
 
 	return (
-		<DropdownMenu open={open} onOpenChange={setOpen}>
-			<TooltipProvider>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<DropdownMenuTrigger asChild>
-							<button
-								type="button"
-								className="flex items-center rounded-full transition-all hover:bg-muted focus:outline-none h-10 w-10 justify-center"
-							>
-								<div className="h-8 w-8 rounded-full bg-white flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
-									<div className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500 font-semibold text-sm">
-										{getUserInitials()}
-									</div>
-								</div>
-							</button>
-						</DropdownMenuTrigger>
-					</TooltipTrigger>
-					<TooltipContent sideOffset={6}>
-						<p>Profile</p>
-					</TooltipContent>
-				</Tooltip>
-			</TooltipProvider>
+		<DropdownMenu open={open} onOpenChange={handleOpenChange}>
+			<DropdownMenuTrigger 
+				className="flex items-center rounded-full transition-all hover:bg-muted focus:outline-none h-10 w-10 justify-center"
+				title="Profile"
+			>
+				<div className="h-8 w-8 rounded-full bg-white flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
+					<div className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500 font-semibold text-sm">
+						{getUserInitials()}
+					</div>
+				</div>
+			</DropdownMenuTrigger>
 			<DropdownMenuContent className="w-56" align="end" forceMount>
 				<DropdownMenuLabel className="font-normal">
 					<div className="flex flex-col space-y-1">
@@ -175,7 +184,13 @@ export function UserAvatarMenu() {
 					</DropdownMenuItem>
 				</DropdownMenuGroup>
 				<DropdownMenuSeparator />
-				<DropdownMenuItem className="flex items-center justify-between">
+				<DropdownMenuItem 
+					className="flex items-center justify-between"
+					onSelect={(e) => {
+						e.preventDefault();
+						setTheme(theme === "dark" ? "light" : "dark");
+					}}
+				>
 					<div className="flex items-center">
 						{theme === "dark" ? (
 							<Moon className="mr-2 h-4 w-4" />
@@ -184,10 +199,9 @@ export function UserAvatarMenu() {
 						)}
 						<span>Dark Mode</span>
 					</div>
-					<Switch
-						checked={theme === "dark"}
-						onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
-					/>
+					<div className="ml-auto">
+						{theme === "dark" ? "On" : "Off"}
+					</div>
 				</DropdownMenuItem>
 				<DropdownMenuItem>
 					<HelpCircle className="mr-2 h-4 w-4" />
@@ -208,7 +222,7 @@ export function UserAvatarMenu() {
 			/>
 		</DropdownMenu>
 	);
-}
+	*/
 
 // Logo Component
 export function Logo({ className, size = "md", href = "/" }) {
@@ -272,11 +286,6 @@ export function ChatSidebar() {
 
 	// Get current page context for context-aware assistance
 	const currentContext = useCurrentContext();
-
-	// Debug logging
-	useEffect(() => {
-		console.log("[ChatSidebar] Current context:", currentContext);
-	}, [currentContext]);
 
 	// Create a unique conversation key based on context
 	const conversationKey = currentContext
@@ -423,10 +432,7 @@ export function ChatSidebar() {
 				content: msg.content,
 			}));
 
-			// Debug: Log context being sent
-			if (currentContext) {
-				console.log("Sending context to assistant:", currentContext);
-			}
+			// Context is passed to assistant for relevant responses
 
 			if (useStreaming) {
 				// Add placeholder for assistant message
@@ -801,42 +807,27 @@ export function MainHeader({ transparent = false, className }) {
 						{/* Action buttons with consistent styling */}
 						<div className="flex items-center gap-1 mr-1">
 							{!searchOpen && (
-								<TooltipProvider delayDuration={300}>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												variant="ghost"
-												size="icon"
-												onClick={() => setSearchOpen(true)}
-												className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted transition-all"
-											>
-												<Search className="h-5 w-5" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent sideOffset={6}>
-											<p>Search</p>
-										</TooltipContent>
-									</Tooltip>
-								</TooltipProvider>
+								<TooltipButton
+									variant="ghost"
+									size="icon"
+									onClick={() => setSearchOpen(true)}
+									className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted transition-all"
+									tooltipContent="Search"
+								>
+									<Search className="h-5 w-5" />
+								</TooltipButton>
 							)}
 
-							<TooltipProvider delayDuration={300}>
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											variant="ghost"
-											size="icon"
-											onClick={toggleChat}
-											className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted transition-all"
-										>
-											<MessageSquare className="h-5 w-5" />
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent sideOffset={6}>
-										<p>Chat with AI</p>
-									</TooltipContent>
-								</Tooltip>
-							</TooltipProvider>
+							<TooltipButton
+								variant="ghost"
+								size="icon"
+								onClick={toggleChat}
+								className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted transition-all"
+								tooltipContent="Chat with AI"
+								tooltipSide="bottom"
+							>
+								<MessageSquare className="h-5 w-5" />
+							</TooltipButton>
 						</div>
 
 						{/* User Avatar Menu */}

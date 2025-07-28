@@ -1,21 +1,21 @@
 import { MessageSquare, PanelRight } from "lucide-react";
+import { memo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Button } from "@/components/button";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipProvider,
-	TooltipTrigger,
-} from "@/components/tooltip";
-import { formatProgressText, getVideoProgress } from "@/utils/progressUtils";
+import { TooltipButton } from "@/components/TooltipButton";
+import { useVideoProgress } from "@/hooks/useVideoProgress";
+import { formatProgressText } from "@/utils/progressUtils";
 import { UserAvatarMenu, useChatSidebar } from "./MainHeader";
 
-export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
+export const VideoHeader = memo(function VideoHeader({
+	video,
+	onToggleSidebar,
+	isSidebarOpen,
+}) {
 	const _navigate = useNavigate();
 	const { toggleChat } = useChatSidebar();
 
-	// Calculate progress percentage for display
-	const progress = getVideoProgress(video);
+	// Use chapter-based progress from the hook
+	const { progress } = useVideoProgress(video?.uuid);
 
 	return (
 		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-border shadow-sm">
@@ -47,11 +47,11 @@ export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
 								<div className="w-32 md:w-48 bg-slate-200 rounded-full h-1.5 overflow-hidden">
 									<div
 										className="h-full bg-gradient-to-r from-red-500 to-pink-500 rounded-full transition-all duration-300"
-										style={{ width: `${progress}%` }}
+										style={{ width: `${progress.percentage}%` }}
 									/>
 								</div>
 								<span className="ml-2 text-xs font-medium text-slate-600">
-									{formatProgressText(progress)}
+									{formatProgressText(progress.percentage)}
 								</span>
 								<span className="ml-3 text-xs text-slate-500">
 									{video.channelName || video.channel}
@@ -65,46 +65,30 @@ export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
 						{/* Sidebar Toggle (Desktop only) */}
 						{onToggleSidebar && (
 							<div className="hidden md:block">
-								<TooltipProvider>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												variant="outline"
-												size="icon"
-												className="h-8 w-8 rounded-full"
-												onClick={onToggleSidebar}
-											>
-												<PanelRight
-													className={`h-4 w-4 transition-transform duration-300 ${!isSidebarOpen ? "rotate-180" : ""}`}
-												/>
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent>
-											<p>{isSidebarOpen ? "Hide" : "Show"} chapters</p>
-										</TooltipContent>
-									</Tooltip>
-								</TooltipProvider>
+								<TooltipButton
+									variant="outline"
+									size="icon"
+									className="h-8 w-8 rounded-full"
+									onClick={onToggleSidebar}
+									tooltipContent={`${isSidebarOpen ? "Hide" : "Show"} chapters`}
+								>
+									<PanelRight
+										className={`h-4 w-4 transition-transform duration-300 ${!isSidebarOpen ? "rotate-180" : ""}`}
+									/>
+								</TooltipButton>
 							</div>
 						)}
 
 						{/* Chat Button */}
-						<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										onClick={toggleChat}
-										variant="outline"
-										size="icon"
-										className="h-8 w-8 rounded-full"
-									>
-										<MessageSquare className="h-4 w-4" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>
-									<p>Chat with AI assistant</p>
-								</TooltipContent>
-							</Tooltip>
-						</TooltipProvider>
+						<TooltipButton
+							onClick={toggleChat}
+							variant="outline"
+							size="icon"
+							className="h-8 w-8 rounded-full"
+							tooltipContent="Chat with AI assistant"
+						>
+							<MessageSquare className="h-4 w-4" />
+						</TooltipButton>
 
 						{/* User Avatar */}
 						<div className="ml-1">
@@ -115,4 +99,4 @@ export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
 			</div>
 		</header>
 	);
-}
+});

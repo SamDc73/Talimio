@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { Archive, MoreHorizontal, Pause, Pin, Tag, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/button";
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover";
@@ -12,7 +12,6 @@ import { VARIANTS } from "@/features/home/utils/contentConstants";
 import { useToast } from "@/hooks/use-toast";
 import { archiveContent, unarchiveContent } from "@/services/contentService";
 import { deleteApi } from "@/services/deleteApi";
-import useAppStore from "@/stores/useAppStore";
 
 function formatDuration(seconds) {
 	if (!seconds) return "Unknown duration";
@@ -40,76 +39,57 @@ const BaseCard = ({
 	const [showTagEditModal, setShowTagEditModal] = useState(false);
 	const [isArchiving, setIsArchiving] = useState(false);
 	const { toast } = useToast();
-	const bookProgressStats = useAppStore((state) =>
-		item.type === "book" ? state.books.progressStats[item.id] : null,
-	);
-	const videoProgress = useAppStore((state) =>
-		item.type === "youtube" ? state.videos.progress[item.uuid] : null,
-	);
 
 	const V = VARIANTS[item.type];
 	const isFlashcard = item.type === "flashcards";
-	const isBook = item.type === "book";
 
-	const progressValue = useMemo(() => {
-		if (isFlashcard) {
-			return item.totalCards > 0
-				? ((item.totalCards - (item.due || 0) - (item.overdue || 0)) /
-						item.totalCards) *
-						100
-				: 0;
-		}
-		if (isBook) {
-			// Use live progress stats from the store
-			if (bookProgressStats) {
-				return bookProgressStats.percentage;
-			}
-			// Fallback to initial item progress if stats are not yet available
-			return item.progress || 0;
-		}
-		if (item.type === "youtube") {
-			if (videoProgress && videoProgress.duration > 0) {
-				return (videoProgress.currentTime / videoProgress.duration) * 100;
-			}
-			// Fallback to initial item progress
-			return item.progress || 0;
-		}
-		// For courses and other types, use the progress from the item prop
-		return item.progress || item.completionPercentage || 0;
-	}, [item, isFlashcard, isBook, bookProgressStats, videoProgress]);
+	// Use unified API progress data - extract percentage from progress object
+	const progressValue =
+		typeof item.progress === "object" && item.progress !== null
+			? (item.progress.percentage ?? 0)
+			: item.progress || 0;
+
+	// Debug log for progress
+	if (item.type === "video" || item.type === "book") {
+		console.log(`📊 Progress for ${item.type} "${item.title}":`, {
+			raw: item.progress,
+			extracted: progressValue,
+			isFlashcard,
+			shouldShow: !isFlashcard,
+			variantGrad: V.grad,
+			fullItem: item,
+		});
+	}
 
 	const handleDeleteClick = () => {
 		setShowDeleteConfirm(true);
 	};
 
 	const handleConfirmDelete = async () => {
+		// Close dialog immediately for instant feedback
+		setShowDeleteConfirm(false);
+
+		// Optimistically update UI by calling parent handler
+		if (onDelete) {
+			onDelete(item.id || item.uuid, item.type);
+		}
+
 		try {
-			const itemType =
-				item.type === "youtube"
-					? "video"
-					: item.type === "flashcards"
-						? "flashcard"
-						: item.type;
-			await deleteApi.deleteItem(itemType, item.id || item.uuid);
-
-			toast({
-				title: "Item Deleted",
-				description: `${item.title} has been deleted successfully.`,
-			});
-
-			if (onDelete) {
-				onDelete(item.id || item.uuid, itemType);
-			}
+			// Delete from backend in the background
+			await deleteApi.deleteItem(item.type, item.id || item.uuid);
 		} catch (error) {
 			console.error("Failed to delete item:", error);
+
+			// Show error toast
 			toast({
 				title: "Delete Failed",
 				description:
 					error.message || "Failed to delete item. Please try again.",
 				variant: "destructive",
 			});
-		} finally {
-			setShowDeleteConfirm(false);
+
+			// TODO: Rollback the optimistic update by reloading content
+			// This would be handled by the parent component
 		}
 	};
 
@@ -174,6 +154,7 @@ const BaseCard = ({
 				layout
 				initial={{ opacity: 0, y: 20 }}
 				animate={{ opacity: 1, y: 0 }}
+				exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
 				transition={{ duration: 0.4, delay: 0.1 * index }}
 				whileHover={{ y: -5, transition: { duration: 0.2 } }}
 				className={`bg-white rounded-2xl overflow-hidden relative flex flex-col h-full cursor-pointer ${
@@ -202,9 +183,9 @@ const BaseCard = ({
 					</h3>
 
 					{/* Video metadata */}
-					{item.type === "youtube" && (
+					{item.type === "video" && (
 						<p className="text-muted-foreground text-sm mb-4">
-							by {item.channelName || item.channel || "Unknown Channel"} •{" "}
+							by {item.channel || "Unknown Channel"} •{" "}
 							{formatDuration(item.duration)}
 						</p>
 					)}
@@ -213,12 +194,12 @@ const BaseCard = ({
 					{item.type === "book" && (
 						<p className="text-muted-foreground text-sm mb-4">
 							by {item.author || "Unknown Author"} •{" "}
-							{item.pageCount || item.pages || "Unknown"} pages
+							{item.pageCount || "Unknown"} pages
 						</p>
 					)}
 
 					{/* Description for other types */}
-					{item.type !== "youtube" &&
+					{item.type !== "video" &&
 						item.type !== "book" &&
 						item.description && (
 							<p className="text-muted-foreground text-sm line-clamp-2 mb-4">
@@ -264,19 +245,19 @@ const BaseCard = ({
 								</span>
 							</div>
 						)}
-						{!isFlashcard && progressValue != null && progressValue !== "" && (
-							<div className="flex justify-between text-xs text-muted-foreground mb-2">
-								<span>{Math.round(progressValue)}%</span>
-							</div>
+						{!isFlashcard && (
+							<>
+								<div className="flex justify-between text-xs text-muted-foreground mb-2">
+									<span>{Math.round(progressValue)}%</span>
+								</div>
+								<div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+									<div
+										style={{ width: `${progressValue}%` }}
+										className={`h-full bg-gradient-to-r ${V.grad} rounded-full transition-all duration-500`}
+									/>
+								</div>
+							</>
 						)}
-						<div className="w-full bg-muted rounded-full h-2">
-							<motion.div
-								initial={{ width: 0 }}
-								animate={{ width: `${progressValue}%` }}
-								transition={{ duration: 0.6 }}
-								className={`h-2 rounded-full bg-gradient-to-r ${V.grad}`}
-							/>
-						</div>
 					</div>
 				</div>
 				{hover && (
@@ -364,13 +345,7 @@ const BaseCard = ({
 			<TagEditModal
 				open={showTagEditModal}
 				onOpenChange={setShowTagEditModal}
-				contentType={
-					item.type === "youtube"
-						? "video"
-						: item.type === "flashcards"
-							? "flashcard"
-							: item.type
-				}
+				contentType={item.type}
 				contentId={item.id || item.uuid}
 				contentTitle={item.title}
 				onTagsUpdated={onTagsUpdated}

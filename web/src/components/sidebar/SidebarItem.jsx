@@ -14,6 +14,19 @@ function SidebarItem({
 	className = "",
 	variant = "default",
 }) {
+	// Validate that leftContent and rightContent are not buttons if onClick is provided
+	if (process.env.NODE_ENV === "development") {
+		if (onClick && leftContent?.type === "button") {
+			console.warn(
+				"SidebarItem: leftContent should not be a button when onClick is provided. Use asDiv prop.",
+			);
+		}
+		if (onClick && rightContent?.type === "button") {
+			console.warn(
+				"SidebarItem: rightContent should not be a button when onClick is provided. Use asDiv prop.",
+			);
+		}
+	}
 	// Map variants to colors following the styling guide
 	const variantColors = {
 		default: "text-emerald-700",
@@ -28,7 +41,9 @@ function SidebarItem({
 	return (
 		<li className={`flex items-start gap-3 ${className}`}>
 			{leftContent}
-			<div
+			<button
+				type="button"
+				disabled={isLocked}
 				className={`text-left flex-1 min-w-0 ${
 					isCompleted
 						? `font-semibold ${activeColor}`
@@ -43,18 +58,10 @@ function SidebarItem({
 					cursor: isLocked ? "not-allowed" : "pointer",
 				}}
 				onClick={() => !isLocked && onClick?.()}
-				role="button"
-				tabIndex={isLocked ? -1 : 0}
-				onKeyDown={(e) => {
-					if ((e.key === "Enter" || e.key === " ") && !isLocked) {
-						e.preventDefault();
-						onClick?.();
-					}
-				}}
 				aria-label={`Navigate to ${title}`}
 			>
 				{title}
-			</div>
+			</button>
 			{rightContent}
 		</li>
 	);

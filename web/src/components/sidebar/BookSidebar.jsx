@@ -1,27 +1,33 @@
-import { FileText } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronRight, FileText } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { useToast } from "@/hooks/use-toast";
+import { useBookProgress } from "@/hooks/useBookProgress";
 import { extractBookChapters, getBookChapters } from "@/services/booksService";
-import { useTocProgress } from "@/services/tocProgressService";
-import useAppStore from "@/stores/useAppStore";
 import CompletionCheckbox from "./CompletionCheckbox";
-import ExpandableSection from "./ExpandableSection";
 import ProgressCircle from "./ProgressCircle";
 import ProgressIndicator from "./ProgressIndicator";
 import SidebarContainer from "./SidebarContainer";
 import SidebarItem from "./SidebarItem";
 import SidebarNav from "./SidebarNav";
 
-// Stable default objects to prevent re-renders
-const DEFAULT_STATS = {
-	totalSections: 0,
-	completedSections: 0,
-	percentage: 0,
-};
-
-const EMPTY_TOC_PROGRESS = {};
-
 /**
- * Clean BookSidebar matching the course sidebar design
+ * BookSidebar - Displays book table of contents with progress tracking
+ *
+ * IMPORTANT: Interactive Element Rules
+ * 1. Never nest buttons/links inside other buttons/links
+ * 2. Use CompletionCheckbox with asDiv={true} when inside interactive containers
+ * 3. Keep clickable elements as siblings, not parent-child
+ *
+ * Pattern:
+ * <Container>
+ *   <InteractiveElement1 />
+ *   <InteractiveElement2 />
+ * </Container>
+ *
+ * @param {Object} book - The book object
+ * @param {number} currentPage - Current page number
+ * @param {Function} onChapterClick - Handler for chapter navigation
+ * @param {number} progressPercentage - Overall progress percentage
  */
 function BookSidebar({
 	book,
@@ -32,44 +38,13 @@ function BookSidebar({
 	const [expandedChapters, setExpandedChapters] = useState([0]);
 	const [apiChapters, setApiChapters] = useState([]);
 	const [isExtracting, setIsExtracting] = useState(false);
+	const [isLoadingChapters, setIsLoadingChapters] = useState(false);
+	const [optimisticCompletions, setOptimisticCompletions] = useState({});
+	const { toast } = useToast();
 
-	const stats = useAppStore(
-		useCallback(
-			(state) => {
-				if (!book?.id) return DEFAULT_STATS;
-				return state.books.progressStats[book.id] || DEFAULT_STATS;
-			},
-			[book?.id],
-		),
-	);
-
-	// Zustand store actions
-	const setLoading = useAppStore((state) => state.setLoading);
-	const batchUpdateTocProgress = useAppStore(
-		(state) => state.batchUpdateTocProgress,
-	);
-
-	// Use enhanced ToC progress hook
-	const tocProgressUtils = useTocProgress(book?.id);
-	// Get completedSections directly from store to ensure reactivity
-	const tocProgress = useAppStore(
-		useCallback(
-			(state) => {
-				if (!book?.id) return EMPTY_TOC_PROGRESS;
-				return state.books.tocProgress[book.id] || EMPTY_TOC_PROGRESS;
-			},
-			[book?.id],
-		),
-	);
-	const completedSections = useMemo(
-		() =>
-			new Set(
-				Object.entries(tocProgress)
-					.filter(([_, completed]) => completed)
-					.map(([sectionId, _]) => sectionId),
-			),
-		[tocProgress],
-	);
+	// Use the standardized hook (similar to VideoSidebar)
+	const { progress, toggleCompletion, isCompleted, batchUpdate, refetch } =
+		useBookProgress(book?.id);
 
 	/**
 	 * Get all children IDs recursively
@@ -86,10 +61,49 @@ function BookSidebar({
 	}, []);
 
 	/**
+	 * Count total leaf chapters (chapters without children)
+	 * This matches the backend's calculation
+	 */
+	const countTotalLeafChapters = useCallback((chapters) => {
+		let count = 0;
+
+		const countLeaves = (items) => {
+			for (const item of items) {
+				if (!item.children || item.children.length === 0) {
+					// This is a leaf node
+					count++;
+				} else {
+					// Has children, recurse
+					countLeaves(item.children);
+				}
+			}
+		};
+
+		if (Array.isArray(chapters)) {
+			countLeaves(chapters);
+		}
+
+		return count;
+	}, []);
+
+	// Helper to check if chapter is completed (with optimistic state)
+	const isChapterCompleted = useCallback(
+		(chapterId) => {
+			// Check optimistic state first
+			if (chapterId in optimisticCompletions) {
+				return optimisticCompletions[chapterId];
+			}
+			// Fall back to actual state
+			return isCompleted(chapterId);
+		},
+		[optimisticCompletions, isCompleted],
+	);
+
+	/**
 	 * Toggle completion for a section/chapter
 	 */
 	const toggleSectionCompletion = useCallback(
-		(section) => {
+		async (section, totalChapters) => {
 			const hasChildren = section.children?.length > 0;
 
 			if (hasChildren) {
@@ -97,27 +111,81 @@ function BookSidebar({
 				const allChildren = getAllChildrenIds(section);
 				const allIds = [section.id, ...allChildren];
 				const completedCount = allIds.filter((id) =>
-					completedSections.has(id),
+					isChapterCompleted(id),
 				).length;
 				const newStatus = completedCount < allIds.length;
 
-				const updates = allIds.map((id) => ({
-					sectionId: id,
-					isCompleted: newStatus,
-				}));
-				batchUpdateTocProgress(book.id, updates);
+				// Optimistic update
+				const newOptimistic = {};
+				allIds.forEach((id) => {
+					newOptimistic[id] = newStatus;
+				});
+				setOptimisticCompletions((prev) => ({ ...prev, ...newOptimistic }));
+
+				try {
+					const updates = allIds.map((id) => ({
+						itemId: id,
+						completed: newStatus,
+					}));
+					await batchUpdate(updates, totalChapters);
+					// Clear optimistic state on success
+					setOptimisticCompletions((prev) => {
+						const newState = { ...prev };
+						allIds.forEach((id) => delete newState[id]);
+						return newState;
+					});
+				} catch (_error) {
+					// Revert optimistic update on error
+					setOptimisticCompletions((prev) => {
+						const newState = { ...prev };
+						allIds.forEach((id) => delete newState[id]);
+						return newState;
+					});
+					toast({
+						title: "Error",
+						description: "Failed to update chapter progress",
+						variant: "destructive",
+					});
+				}
 			} else {
 				// For single sections, just toggle
-				const isCompleted = tocProgressUtils.isCompleted(section.id);
-				tocProgressUtils.updateSection(section.id, !isCompleted);
+				const chapterId = section.id;
+
+				// Optimistic update
+				setOptimisticCompletions((prev) => ({
+					...prev,
+					[chapterId]: !isChapterCompleted(chapterId),
+				}));
+
+				try {
+					await toggleCompletion(chapterId, totalChapters);
+					// Clear optimistic state on success
+					setOptimisticCompletions((prev) => {
+						const newState = { ...prev };
+						delete newState[chapterId];
+						return newState;
+					});
+				} catch (_error) {
+					// Revert optimistic update on error
+					setOptimisticCompletions((prev) => {
+						const newState = { ...prev };
+						delete newState[chapterId];
+						return newState;
+					});
+					toast({
+						title: "Error",
+						description: "Failed to update chapter progress",
+						variant: "destructive",
+					});
+				}
 			}
 		},
 		[
 			getAllChildrenIds,
-			completedSections,
-			tocProgressUtils,
-			batchUpdateTocProgress,
-			book?.id,
+			isChapterCompleted,
+			toggleCompletion,
+			batchUpdate,
+			toast,
 		],
 	);
 
@@ -127,11 +195,17 @@ function BookSidebar({
 	const getChapterProgress = useCallback(
 		(chapter) => {
 			if (!chapter.children?.length) {
-				return tocProgressUtils.isCompleted(chapter.id) ? 100 : 0;
+				return isChapterCompleted(chapter.id) ? 100 : 0;
 			}
-			return tocProgressUtils.getChapterProgress(chapter);
+			// Calculate progress for chapters with children
+			const allChildren = getAllChildrenIds(chapter);
+			const allIds = [chapter.id, ...allChildren];
+			const completedCount = allIds.filter((id) =>
+				isChapterCompleted(id),
+			).length;
+			return Math.round((completedCount / allIds.length) * 100);
 		},
-		[tocProgressUtils],
+		[isChapterCompleted, getAllChildrenIds],
 	);
 
 	/**
@@ -141,38 +215,50 @@ function BookSidebar({
 		if (!book?.id) return;
 
 		async function fetchChapters() {
-			setLoading("book-chapters", true);
+			setIsLoadingChapters(true);
 			try {
 				const chapters = await getBookChapters(book.id);
 				setApiChapters(chapters || []);
 			} catch (error) {
-				console.error("Failed to fetch chapters:", error);
+				// Don't log error if it's expected (404 when no chapters exist)
+				if (!error.message?.includes("404")) {
+					console.error("Failed to fetch chapters:", error);
+				}
 				setApiChapters([]);
 			} finally {
-				setLoading("book-chapters", false);
+				setIsLoadingChapters(false);
 			}
 		}
 
 		fetchChapters();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [book?.id, setLoading]); // setLoading is stable, intentionally excluded to prevent infinite re-renders
+	}, [book?.id]);
 
 	/**
 	 * Extract chapters using AI
 	 */
 	const handleExtractChapters = async () => {
 		setIsExtracting(true);
-		setLoading("extract-chapters", true);
-
 		try {
-			const _result = await extractBookChapters(book.id);
+			const result = await extractBookChapters(book.id);
+			toast({
+				title: "Chapters extracted",
+				description: `Successfully extracted ${result.count || 0} chapters`,
+			});
+
+			// Refresh chapters
 			const chapters = await getBookChapters(book.id);
 			setApiChapters(chapters || []);
+
+			// Refresh progress data
+			await refetch();
 		} catch (_error) {
-			console.error("Failed to extract chapters:", _error);
+			toast({
+				title: "Error",
+				description: "Failed to extract chapters",
+				variant: "destructive",
+			});
 		} finally {
 			setIsExtracting(false);
-			setLoading("extract-chapters", false);
 		}
 	};
 
@@ -258,8 +344,10 @@ function BookSidebar({
 	const chapters =
 		book.tableOfContents?.length > 0 ? book.tableOfContents : apiChapters;
 
-	const overallProgress =
-		stats.percentage > 0 ? stats.percentage : progressPercentage;
+	const overallProgress = progress.percentage || progressPercentage || 0;
+
+	// Calculate total leaf chapters for progress calculation
+	const totalLeafChapters = countTotalLeafChapters(chapters);
 
 	// Empty state
 	if (!chapters.length) {
@@ -269,18 +357,22 @@ function BookSidebar({
 					<div className="text-center text-zinc-500 text-sm mt-8">
 						<FileText className="w-12 h-12 mx-auto mb-4 text-zinc-300" />
 						<p>No table of contents available</p>
-						<p className="text-xs mt-2">
-							This book doesn't have chapter information.
-						</p>
-						<button
-							type="button"
-							onClick={handleExtractChapters}
-							disabled={isExtracting}
-							className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
-						>
-							<FileText className="w-4 h-4" />
-							{isExtracting ? "Extracting..." : "Extract Chapters"}
-						</button>
+						{!isLoadingChapters && (
+							<>
+								<p className="text-xs mt-2">
+									This book doesn't have chapter information.
+								</p>
+								<button
+									type="button"
+									onClick={handleExtractChapters}
+									disabled={isExtracting}
+									className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+								>
+									<FileText className="w-4 h-4" />
+									{isExtracting ? "Extracting..." : "Extract Chapters"}
+								</button>
+							</>
+						)}
 					</div>
 				</div>
 			</SidebarContainer>
@@ -320,36 +412,36 @@ function BookSidebar({
 										: "border-border bg-white"
 								} shadow-sm overflow-hidden`}
 							>
-								<div
-									className="flex items-center gap-3 justify-between w-full px-4 py-3 text-left cursor-pointer hover:bg-zinc-50/50 transition-colors"
-									onClick={(e) => {
-										// Only navigate if we didn't click on the checkbox
-										if (!e.target.closest("button")) {
+								<div className="flex items-center gap-3 px-4 py-3">
+									<ProgressCircle
+										number={chapterIndex + 1}
+										progress={chapterProgress}
+										variant="book"
+									/>
+									<CompletionCheckbox
+										asDiv={true}
+										className="completion-checkbox"
+										isCompleted={isCompleted}
+										onClick={(e) => {
+											e.stopPropagation();
+											toggleSectionCompletion(chapter, totalLeafChapters);
+										}}
+										variant="book"
+									/>
+									<button
+										type="button"
+										onClick={() => {
 											onChapterClick?.(
 												chapter.page || chapter.startPage,
 												chapter.id,
 											);
-										}
-									}}
-								>
-									<div className="flex items-center gap-3 flex-1 min-w-0">
-										<ProgressCircle
-											number={chapterIndex + 1}
-											progress={chapterProgress}
-											variant="book"
-										/>
-										<CompletionCheckbox
-											isCompleted={isCompleted}
-											onClick={(e) => {
-												e.stopPropagation();
-												toggleSectionCompletion(chapter);
-											}}
-											variant="book"
-										/>
+										}}
+										className="flex-1 text-left hover:underline"
+									>
 										<span className="line-clamp-2 text-sm font-semibold">
 											{chapter.title}
 										</span>
-									</div>
+									</button>
 								</div>
 							</div>
 						);
@@ -357,75 +449,89 @@ function BookSidebar({
 
 					// For chapters with children
 					return (
-						<ExpandableSection
+						<div
 							key={`chapter_${chapterIndex}_${chapter.id}`}
-							title={chapter.title}
-							isExpanded={isExpanded}
-							onToggle={() => handleToggleChapter(chapterIndex)}
-							isActive={isActive}
-							showExpandButton={true}
-							variant="book"
-							headerContent={
-								<div
+							className={`rounded-2xl border ${
+								isActive
+									? "border-blue-200 bg-blue-50/50"
+									: "border-border bg-white"
+							} shadow-sm overflow-hidden`}
+						>
+							<div className="flex items-center gap-3 px-4 py-3">
+								<ProgressCircle
+									number={chapterIndex + 1}
+									progress={chapterProgress}
+									variant="book"
+								/>
+								<CompletionCheckbox
+									asDiv={true}
+									className="completion-checkbox"
+									isCompleted={isCompleted}
 									onClick={(e) => {
 										e.stopPropagation();
-										toggleSectionCompletion(chapter);
+										toggleSectionCompletion(chapter, totalLeafChapters);
 									}}
-									className="hover:scale-110 transition-transform cursor-pointer"
-									role="button"
-									tabIndex={0}
-									onKeyDown={(e) => {
-										if (e.key === "Enter" || e.key === " ") {
-											e.preventDefault();
-											e.stopPropagation();
-											toggleSectionCompletion(chapter);
-										}
-									}}
-									aria-label={`Toggle completion for ${chapter.title}`}
+									variant="book"
+								/>
+								<button
+									type="button"
+									onClick={() => handleToggleChapter(chapterIndex)}
+									className="flex-1 flex items-center justify-between text-left"
 								>
-									<ProgressCircle
-										number={chapterIndex + 1}
-										progress={chapterProgress}
-										variant="book"
+									<span className="line-clamp-2 text-sm font-semibold">
+										{chapter.title}
+									</span>
+									<ChevronRight
+										className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${
+											isExpanded ? "rotate-90 text-blue-600" : "rotate-0"
+										}`}
 									/>
-								</div>
-							}
-						>
-							<ol>
-								{chapter.children.map((section, sectionIndex) => {
-									const isSectionCompleted = tocProgressUtils.isCompleted(
-										section.id,
-									);
-									const isSectionActive =
-										currentPage === section.page ||
-										(section.startPage &&
-											section.endPage &&
-											currentPage >= section.startPage &&
-											currentPage <= section.endPage);
+								</button>
+							</div>
+							{isExpanded && (
+								<div className="px-4 py-2 space-y-2 border-t border-border">
+									<ol>
+										{chapter.children.map((section, sectionIndex) => {
+											const isSectionCompleted = isChapterCompleted(section.id);
+											const isSectionActive =
+												currentPage === section.page ||
+												(section.startPage &&
+													section.endPage &&
+													currentPage >= section.startPage &&
+													currentPage <= section.endPage);
 
-									return (
-										<SidebarItem
-											key={`${chapter.id}_${sectionIndex}_${section.id}`}
-											title={section.title}
-											isActive={isSectionActive}
-											isCompleted={isSectionCompleted}
-											onClick={() => onChapterClick?.(section.page, section.id)}
-											variant="book"
-											leftContent={
-												<CompletionCheckbox
+											return (
+												<SidebarItem
+													key={`${chapter.id}_${sectionIndex}_${section.id}`}
+													title={section.title}
+													isActive={isSectionActive}
 													isCompleted={isSectionCompleted}
-													onClick={(e) => {
-														e.stopPropagation();
-														toggleSectionCompletion(section);
-													}}
+													onClick={() =>
+														onChapterClick?.(section.page, section.id)
+													}
 													variant="book"
+													leftContent={
+														<CompletionCheckbox
+															asDiv={true}
+															className="completion-checkbox"
+															isCompleted={isSectionCompleted}
+															onClick={(e) => {
+																e.stopPropagation();
+																toggleSectionCompletion(
+																	section,
+																	totalLeafChapters,
+																);
+															}}
+															variant="book"
+														/>
+													}
 												/>
-											}
-										/>
-									);
-								})}
-							</ol>
-						</ExpandableSection>
+											);
+										})}
+									</ol>
+								</div>
+							)}
+						</div>
 					);
 				})}
 			</SidebarNav>

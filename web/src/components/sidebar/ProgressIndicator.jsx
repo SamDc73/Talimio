@@ -10,6 +10,7 @@ function ProgressIndicator({
 	suffix = "Completed",
 	children,
 	variant = "default",
+	"data-testid": dataTestId,
 }) {
 	const isOpen = useAppStore(selectSidebarOpen);
 
@@ -32,6 +33,7 @@ function ProgressIndicator({
 		>
 			<span
 				className={`${styleClass} text-xs font-semibold rounded-full px-3 py-1`}
+				data-testid={dataTestId}
 			>
 				{progress}% {suffix}
 			</span>

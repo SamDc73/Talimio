@@ -2,7 +2,7 @@ import useAppStore, {
 	selectSidebarOpen,
 	selectToggleSidebar,
 } from "@/stores/useAppStore";
-import { useProgress } from "../../hooks/useProgress";
+import { useCourseProgress } from "../../hooks/useCourseProgress";
 import { CourseHeader } from "./CourseHeader";
 
 /**
@@ -26,10 +26,10 @@ function RoadmapHeader({ courseName, mode, onModeChange, courseId }) {
 	const isOpen = useAppStore(selectSidebarOpen);
 	const toggleSidebar = useAppStore(selectToggleSidebar);
 	// Use the progress hook to get real-time course progress updates
-	const { courseProgress } = useProgress();
+	const { progress: courseProgress } = useCourseProgress(courseId);
 
 	// Calculate progress percentage, defaulting to 0 if not available
-	const progress = courseProgress?.progressPercentage || 0;
+	const progress = courseProgress?.percentage || 0;
 
 	return (
 		<CourseHeader

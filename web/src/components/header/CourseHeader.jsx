@@ -8,13 +8,7 @@ import {
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "../../lib/utils";
-import { Button } from "../button";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipProvider,
-	TooltipTrigger,
-} from "../tooltip";
+import { TooltipButton } from "../TooltipButton";
 import { UserAvatarMenu, useChatSidebar } from "./MainHeader";
 
 export function CourseHeader({
@@ -25,8 +19,7 @@ export function CourseHeader({
 	isOpen = true,
 	toggleSidebar = () => {},
 }) {
-	const chatContext = useChatSidebar();
-	const toggleChat = chatContext?.toggleChat || (() => {});
+	const { toggleChat } = useChatSidebar();
 
 	const [_showFullTitle, _setShowFullTitle] = useState(false);
 
@@ -118,83 +111,57 @@ export function CourseHeader({
 					<div className="flex items-center gap-2">
 						{/* Mobile View Toggle */}
 						<div className="md:hidden">
-							<TooltipProvider>
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											variant="outline"
-											size="icon"
-											className="h-8 w-8 rounded-full"
-											onClick={() => {
-												const modes = ["outline", "track", "documents"];
-												const currentIndex = modes.indexOf(mode);
-												const nextIndex = (currentIndex + 1) % modes.length;
-												onModeChange(modes[nextIndex]);
-											}}
-										>
-											{mode === "outline" ? (
-												<FileText className="h-4 w-4" />
-											) : mode === "track" ? (
-												<GitBranch className="h-4 w-4" />
-											) : (
-												<Files className="h-4 w-4" />
-											)}
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent>
-										<p>
-											Switch View (
-											{mode === "outline"
-												? "Track"
-												: mode === "track"
-													? "Documents"
-													: "Outline"}{" "}
-											next)
-										</p>
-									</TooltipContent>
-								</Tooltip>
-							</TooltipProvider>
+							<TooltipButton
+								variant="outline"
+								size="icon"
+								className="h-8 w-8 rounded-full"
+								onClick={() => {
+									const modes = ["outline", "track", "documents"];
+									const currentIndex = modes.indexOf(mode);
+									const nextIndex = (currentIndex + 1) % modes.length;
+									onModeChange(modes[nextIndex]);
+								}}
+								tooltipContent={`Switch View (${
+									mode === "outline"
+										? "Track"
+										: mode === "track"
+											? "Documents"
+											: "Outline"
+								} next)`}
+							>
+								{mode === "outline" ? (
+									<FileText className="h-4 w-4" />
+								) : mode === "track" ? (
+									<GitBranch className="h-4 w-4" />
+								) : (
+									<Files className="h-4 w-4" />
+								)}
+							</TooltipButton>
 						</div>
 
 						{/* Sidebar Toggle */}
-						<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										variant="outline"
-										size="icon"
-										className="h-8 w-8 rounded-full"
-										onClick={toggleSidebar}
-									>
-										<PanelLeft
-											className={`h-4 w-4 transition-transform duration-300 ${isOpen ? "" : "rotate-180"}`}
-										/>
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>
-									<p>{isOpen ? "Hide" : "Show"} sidebar</p>
-								</TooltipContent>
-							</Tooltip>
-						</TooltipProvider>
+						<TooltipButton
+							variant="outline"
+							size="icon"
+							className="h-8 w-8 rounded-full"
+							onClick={toggleSidebar}
+							tooltipContent={`${isOpen ? "Hide" : "Show"} sidebar`}
+						>
+							<PanelLeft
+								className={`h-4 w-4 transition-transform duration-300 ${isOpen ? "" : "rotate-180"}`}
+							/>
+						</TooltipButton>
 
 						{/* Chat Button */}
-						<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										onClick={toggleChat}
-										variant="outline"
-										size="icon"
-										className="h-8 w-8 rounded-full"
-									>
-										<MessageSquare className="h-4 w-4" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>
-									<p>Chat with AI assistant</p>
-								</TooltipContent>
-							</Tooltip>
-						</TooltipProvider>
+						<TooltipButton
+							onClick={toggleChat}
+							variant="outline"
+							size="icon"
+							className="h-8 w-8 rounded-full"
+							tooltipContent="Chat with AI assistant"
+						>
+							<MessageSquare className="h-4 w-4" />
+						</TooltipButton>
 
 						{/* User Avatar */}
 						<div className="ml-1">

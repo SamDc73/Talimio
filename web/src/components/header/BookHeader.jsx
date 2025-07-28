@@ -1,22 +1,14 @@
-import { BookOpen, Maximize, MessageSquare, PanelLeft } from "lucide-react";
+import { Maximize, MessageSquare, PanelLeft } from "lucide-react";
+import { memo } from "react";
 import { Link } from "react-router-dom";
-import { Button } from "../button";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipProvider,
-	TooltipTrigger,
-} from "../tooltip";
+import { TooltipButton } from "@/components/TooltipButton";
+import { formatProgressText } from "@/utils/progressUtils";
 import { UserAvatarMenu, useChatSidebar } from "./MainHeader";
 
-export function BookHeader({
-	bookTitle,
-	bookAuthor,
-	currentPage = 1,
-	totalPages = 0,
-	progressPercentage = 0, // Use the reliable progress percentage
-	isOpen = true,
-	toggleSidebar = () => {},
+export const BookHeader = memo(function BookHeader({
+	book,
+	onToggleSidebar,
+	isSidebarOpen,
 	onZoomIn = () => {},
 	onZoomOut = () => {},
 	onFitToScreen = () => {},
@@ -24,6 +16,17 @@ export function BookHeader({
 	showZoomControls = false,
 }) {
 	const { toggleChat } = useChatSidebar();
+
+	// TEMPORARY: Disable useBookProgress to debug infinite loop
+	// const bookId = book?.id;
+	// const { progress, metadata } = useBookProgress(bookId);
+	// const currentPage = metadata?.currentPage || 1;
+	// const totalPages = metadata?.totalPages || book?.totalPages || 0;
+
+	// Use fallback values for now
+	const progress = { percentage: 0 };
+	const currentPage = 1;
+	const totalPages = book?.totalPages || 0;
 
 	return (
 		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-border shadow-sm">
@@ -48,28 +51,26 @@ export function BookHeader({
 					{/* Book Info Section */}
 					<div className="flex-1 min-w-0">
 						<h1 className="text-base font-semibold text-slate-800 truncate">
-							{bookTitle}
+							{book?.title || "Loading..."}
 						</h1>
-						<div className="flex items-center mt-1">
-							{bookAuthor && (
-								<span className="text-xs text-slate-600 mr-3">
-									by {bookAuthor}
+						{book && (
+							<div className="flex items-center mt-1">
+								<div className="w-32 md:w-48 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+									<div
+										className="h-full bg-gradient-to-r from-blue-400 to-blue-500 rounded-full transition-all duration-300"
+										style={{ width: `${progress.percentage}%` }}
+									/>
+								</div>
+								<span className="ml-2 text-xs font-medium text-slate-600">
+									{formatProgressText(progress.percentage)}
 								</span>
-							)}
-							<div className="flex items-center">
-								<BookOpen className="w-3 h-3 text-slate-500 mr-1" />
-								<span className="text-xs text-slate-600">
+								<span className="ml-3 text-xs text-slate-500">
 									{totalPages > 0 && currentPage > 0
 										? `Page ${currentPage} of ${totalPages}`
-										: "Loading..."}
+										: book.author || ""}
 								</span>
-								{progressPercentage > 0 && (
-									<span className="ml-2 text-xs font-medium text-slate-600">
-										({progressPercentage}%)
-									</span>
-								)}
 							</div>
-						</div>
+						)}
 					</div>
 
 					{/* Actions Section */}
@@ -77,102 +78,64 @@ export function BookHeader({
 						{/* Zoom Controls for PDF */}
 						{showZoomControls && (
 							<div className="flex items-center border border-border rounded-full h-8 px-1 bg-muted/50">
-								<TooltipProvider>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												variant="ghost"
-												size="icon"
-												className="h-6 w-6 rounded-full"
-												onClick={onZoomOut}
-											>
-												<span className="text-sm font-medium">-</span>
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent>
-											<p>Zoom out</p>
-										</TooltipContent>
-									</Tooltip>
-								</TooltipProvider>
+								<TooltipButton
+									variant="ghost"
+									size="icon"
+									className="h-6 w-6 rounded-full"
+									onClick={onZoomOut}
+									tooltipContent="Zoom out"
+								>
+									<span className="text-sm font-medium">-</span>
+								</TooltipButton>
 								<span className="px-2 text-xs font-medium text-slate-600 min-w-[3rem] text-center">
 									{zoomLevel}%
 								</span>
-								<TooltipProvider>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												variant="ghost"
-												size="icon"
-												className="h-6 w-6 rounded-full"
-												onClick={onZoomIn}
-											>
-												<span className="text-sm font-medium">+</span>
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent>
-											<p>Zoom in</p>
-										</TooltipContent>
-									</Tooltip>
-								</TooltipProvider>
-								<TooltipProvider>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												variant="ghost"
-												size="icon"
-												className="h-6 w-6 rounded-full ml-1"
-												onClick={onFitToScreen}
-											>
-												<Maximize className="h-3 w-3" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent>
-											<p>Fit to screen</p>
-										</TooltipContent>
-									</Tooltip>
-								</TooltipProvider>
+								<TooltipButton
+									variant="ghost"
+									size="icon"
+									className="h-6 w-6 rounded-full"
+									onClick={onZoomIn}
+									tooltipContent="Zoom in"
+								>
+									<span className="text-sm font-medium">+</span>
+								</TooltipButton>
+								<TooltipButton
+									variant="ghost"
+									size="icon"
+									className="h-6 w-6 rounded-full ml-1"
+									onClick={onFitToScreen}
+									tooltipContent="Fit to screen"
+								>
+									<Maximize className="h-3 w-3" />
+								</TooltipButton>
 							</div>
 						)}
 
 						{/* Sidebar Toggle */}
-						<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										variant="outline"
-										size="icon"
-										className="h-8 w-8 rounded-full"
-										onClick={toggleSidebar}
-									>
-										<PanelLeft
-											className={`h-4 w-4 transition-transform duration-300 ${isOpen ? "" : "rotate-180"}`}
-										/>
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>
-									<p>{isOpen ? "Hide" : "Show"} sidebar</p>
-								</TooltipContent>
-							</Tooltip>
-						</TooltipProvider>
+						{onToggleSidebar && (
+							<TooltipButton
+								variant="outline"
+								size="icon"
+								className="h-8 w-8 rounded-full"
+								onClick={onToggleSidebar}
+								tooltipContent={`${isSidebarOpen ? "Hide" : "Show"} chapters`}
+							>
+								<PanelLeft
+									className={`h-4 w-4 transition-transform duration-300 ${isSidebarOpen ? "" : "rotate-180"}`}
+								/>
+							</TooltipButton>
+						)}
 
 						{/* Chat Button */}
-						<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										onClick={toggleChat}
-										variant="outline"
-										size="icon"
-										className="h-8 w-8 rounded-full"
-									>
-										<MessageSquare className="h-4 w-4" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>
-									<p>Chat with AI assistant</p>
-								</TooltipContent>
-							</Tooltip>
-						</TooltipProvider>
+						<TooltipButton
+							onClick={toggleChat}
+							variant="outline"
+							size="icon"
+							className="h-8 w-8 rounded-full"
+							tooltipContent="Chat with AI assistant"
+						>
+							<MessageSquare className="h-4 w-4" />
+						</TooltipButton>
 
 						{/* User Avatar */}
 						<div className="ml-1">
@@ -183,4 +146,4 @@ export function BookHeader({
 			</div>
 		</header>
 	);
-}
+});

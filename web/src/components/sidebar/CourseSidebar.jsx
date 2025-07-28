@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useProgressSafe } from "@/hooks/useProgress";
+import { useMemo, useState } from "react";
+import { useCourseProgress } from "@/hooks/useCourseProgress";
 import CompletionCheckbox from "./CompletionCheckbox";
 import ExpandableSection from "./ExpandableSection";
 import ProgressCircle from "./ProgressCircle";
@@ -11,13 +11,28 @@ import SidebarNav from "./SidebarNav";
 /**
  * Course navigation sidebar that displays a hierarchical view of modules and lessons
  */
-function CourseSidebar({ modules = [], onLessonClick, activeLessonId = null }) {
-	const { courseProgress, toggleLessonCompletion, isLessonCompleted } =
-		useProgressSafe();
+function CourseSidebar({
+	modules = [],
+	onLessonClick,
+	activeLessonId = null,
+	courseId,
+}) {
+	const {
+		progress: courseProgress,
+		toggleCompletion,
+		isCompleted,
+	} = useCourseProgress(courseId);
 
 	const [expandedModules, setExpandedModules] = useState(() => {
 		return modules.length > 0 ? [modules[0].id] : [];
 	});
+
+	// Calculate total lessons count
+	const totalLessons = useMemo(() => {
+		return modules.reduce((total, module) => {
+			return total + (module.lessons?.length || 0);
+		}, 0);
+	}, [modules]);
 
 	const handleToggleModule = (moduleId) => {
 		setExpandedModules((prev) =>
@@ -30,12 +45,12 @@ function CourseSidebar({ modules = [], onLessonClick, activeLessonId = null }) {
 	const getModuleProgress = (module) => {
 		if (!module.lessons || module.lessons.length === 0) return 0;
 		const completedCount = module.lessons.filter((l) =>
-			isLessonCompleted(l.id),
+			isCompleted(l.id),
 		).length;
 		return (completedCount / module.lessons.length) * 100;
 	};
 
-	const progress = courseProgress?.progressPercentage || 0;
+	const progress = courseProgress?.percentage || 0;
 
 	return (
 		<SidebarContainer>
@@ -67,16 +82,16 @@ function CourseSidebar({ modules = [], onLessonClick, activeLessonId = null }) {
 										key={lesson.id}
 										title={lesson.title}
 										isActive={lesson.id === activeLessonId}
-										isCompleted={isLessonCompleted(lesson.id)}
+										isCompleted={isCompleted(lesson.id)}
 										isLocked={lesson.status === "locked"}
 										onClick={() => onLessonClick?.(module.id, lesson.id)}
 										variant="course"
 										leftContent={
 											<CompletionCheckbox
-												isCompleted={isLessonCompleted(lesson.id)}
+												isCompleted={isCompleted(lesson.id)}
 												isLocked={lesson.status === "locked"}
 												onClick={() =>
-													toggleLessonCompletion(lesson.id, module.id)
+													toggleCompletion(lesson.id, totalLessons)
 												}
 												variant="course"
 											/>
