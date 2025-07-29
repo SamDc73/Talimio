@@ -16,7 +16,7 @@ const buildUrl = (endpoint, pathParams) => {
 
 // Helper function to prepare request options
 const prepareRequestOptions = (method, body, customOptions) => {
-	const { pathParams, headers, ...restOfCustomOptions } = customOptions;
+	const { headers, ...restOfCustomOptions } = customOptions;
 
 	const options = {
 		method,

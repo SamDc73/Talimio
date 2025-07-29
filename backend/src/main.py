@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -13,13 +13,24 @@ ENV_PATH = BACKEND_DIR / ".env"
 load_dotenv(ENV_PATH)
 
 from asyncpg.exceptions import ConnectionDoesNotExistError
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from sqlalchemy.exc import DatabaseError, IntegrityError, OperationalError
 from starlette.middleware.sessions import SessionMiddleware
 
 from .ai.rag.router import router as rag_router
 from .assistant.router import router as assistant_router
+from .auth.exceptions import (
+    AuthenticationError,
+    InvalidCredentialsError,
+    InvalidTokenError,
+    TokenExpiredError,
+)
 from .auth.manager import auth_manager
 from .auth.router import router as auth_router
 
@@ -28,7 +39,22 @@ from .books.models import Book, BookProgress  # noqa: F401
 from .books.router import router as books_router
 from .config.settings import get_settings
 from .content.router import router as content_router
-from .core.exceptions import ResourceNotFoundError
+from .core.error_handlers import (
+    AuthorizationError,
+    ErrorCategory,
+    ErrorCode,
+    ExternalServiceError,
+    RateLimitError,
+    format_error_response,
+    handle_authentication_errors,
+    handle_authorization_errors,
+    handle_database_errors,
+    handle_external_service_errors,
+    handle_rate_limit_errors,
+    handle_validation_errors,
+    log_error_context,
+)
+from .core.exceptions import ResourceNotFoundError, ValidationError as CustomValidationError
 from .courses.models import (  # noqa: F401
     Lesson,
     LessonProgress as Progress,
@@ -41,6 +67,8 @@ from .database.session import engine
 from .flashcards.models import FlashcardCard, FlashcardDeck, FlashcardReview  # noqa: F401
 from .flashcards.router import router as flashcards_router
 from .middleware.auth_error_handler import AuthErrorMiddleware
+from .middleware.security import SimpleSecurityMiddleware, limiter
+from .progress.router import router as progress_router
 from .tagging.models import Tag, TagAssociation  # noqa: F401
 from .tagging.router import router as tagging_router
 from .user.current_user_router import router as current_user_router
@@ -64,7 +92,10 @@ litellm_logger.setLevel(logging.ERROR)  # Only show errors, not warnings
 
 # Alternatively, create a custom filter for specific Cohere embedding errors
 class CohereEmbeddingWarningFilter(logging.Filter):
+    """Filter out Cohere embedding capability detection warnings."""
+
     def filter(self, record: logging.LogRecord) -> bool:
+        """Filter out specific Cohere embedding warnings."""
         # Filter out specific Cohere embedding capability detection warnings
         message = str(record.getMessage())
         return not (
@@ -88,7 +119,7 @@ async def create_tables() -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events."""
     # Startup
     # Validate RAG configuration
@@ -98,79 +129,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         rag_config.validate_config()
         logger.info("RAG configuration validated successfully")
     except ValueError as e:
-        logger.error(f"Invalid RAG configuration: {e}")
+        logger.exception(f"Invalid RAG configuration: {e}")
         raise
 
-    # Run automatic migrations
+    # Validate authentication configuration
     try:
-        from src.database.auto_migrate import run_auto_migrations
+        from src.core.auth_config_validator import validate_auth_on_startup
 
-        await run_auto_migrations()
-        logger.info("Database migrations completed")
+        validate_auth_on_startup()
     except Exception as e:
-        logger.error(f"Failed to run migrations: {e}")
-        # Continue startup even if migrations fail
+        logger.exception(f"Auth configuration validation failed: {e}")
+        raise
 
+    # Initialize database with simple setup
     max_retries = 5
     retry_delay = 1  # seconds
 
     for attempt in range(max_retries):
         try:
-            # Initialize database with required extensions FIRST
-            from src.database.migrations.init_database import init_database
+            # Initialize database with extensions and create all tables
+            from src.database.init import init_database
 
             await init_database(engine)
-
-            # Create all tables
-            async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-
-            # Run migrations to add any missing columns
-            from src.database.migrations.missing_columns import run_all_missing_columns_migrations
-
-            await run_all_missing_columns_migrations(engine)
-
-            # Run auth migration
-            from src.database.migrations.user_table import add_user_table
-
-            await add_user_table()
-
-            # Run archive migration
-            from src.database.migrations.add_archive_columns import run_archive_migrations
-
-            await run_archive_migrations(engine)
-
-            # Run RAG system migration (pgvector is already enabled by init_database)
-            from src.database.migrations.add_rag_system import add_rag_system
-
-            await add_rag_system()
-
-            # Run course references migration
-            from src.database.migrations.fix_course_refs import fix_course_references
-
-            await fix_course_references()
-
-            # Run timezone migration for datetime columns
-            from src.database.migrations.add_timezone_to_datetime_columns import add_timezone_to_datetime_columns
-
-            await add_timezone_to_datetime_columns(engine)
-
-            # Run RAG status columns migration
-            from src.database.migrations.add_rag_status_columns import run_rag_status_migrations
-
-            await run_rag_status_migrations(engine)
-
-            # Run transcript URL migration
-            from src.database.migrations.add_transcript_url import run_transcript_url_migration
-
-            await run_transcript_url_migration(engine)
-
-            # Run user custom instructions migration
-            from src.database.migrations.add_user_custom_instructions import (
-                run_migration as run_custom_instructions_migration,
-            )
-
-            await run_custom_instructions_migration(engine)
+            logger.info("Database initialization completed successfully")
 
             break  # Success - exit the retry loop
 
@@ -208,7 +189,7 @@ def create_app() -> FastAPI:
         description="API for managing learning roadmaps",
         version="0.1.0",
         debug=settings.DEBUG,
-        lifespan=lifespan,
+        lifespan=lifespan if settings.ENVIRONMENT != "test" else None,
     )
 
     # Add CORS middleware
@@ -220,6 +201,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Add gzip compression middleware
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
+
     # Add session middleware for cookie handling
     app.add_middleware(
         SessionMiddleware,
@@ -227,18 +211,24 @@ def create_app() -> FastAPI:
         https_only=settings.ENVIRONMENT == "production",
     )
 
+    # Add security middleware (headers + basic protection)
+    app.add_middleware(SimpleSecurityMiddleware)
+
     # Add auth error handling middleware
     app.add_middleware(AuthErrorMiddleware)
 
+    # Add rate limiting
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
     # Global auth middleware - Always set user_id, fallback to DEFAULT_USER_ID
     @app.middleware("http")
-    async def inject_user_context(request: Request, call_next):
+    async def inject_user_context(request: Request, call_next: Callable) -> Response:
         """Inject user context into every request."""
         # Get user ID, with AuthManager handling fallbacks to the default user
         request.state.user_id = auth_manager.get_effective_user_id(request)
 
-        response = await call_next(request)
-        return response
+        return await call_next(request)
 
     # Add exception handlers
     @app.exception_handler(ResourceNotFoundError)
@@ -246,16 +236,129 @@ def create_app() -> FastAPI:
         _request: Request,
         exc: ResourceNotFoundError,
     ) -> JSONResponse:
-        return JSONResponse(
+        return format_error_response(
+            category=ErrorCategory.RESOURCE_NOT_FOUND,
+            code=ErrorCode.NOT_FOUND,
+            detail=str(exc),
             status_code=404,
-            content={"detail": str(exc)},
+            suggestions=["The requested resource does not exist"]
         )
 
-    # Register health check endpoint
+    # Authentication errors (401)
+    @app.exception_handler(AuthenticationError)
+    async def auth_error_handler(request: Request, exc: AuthenticationError) -> JSONResponse:
+        return await handle_authentication_errors(request, exc)
+
+    @app.exception_handler(InvalidTokenError)
+    async def invalid_token_handler(request: Request, exc: InvalidTokenError) -> JSONResponse:
+        return await handle_authentication_errors(request, exc)
+
+    @app.exception_handler(TokenExpiredError)
+    async def token_expired_handler(request: Request, exc: TokenExpiredError) -> JSONResponse:
+        return await handle_authentication_errors(request, exc)
+
+    @app.exception_handler(InvalidCredentialsError)
+    async def invalid_credentials_handler(request: Request, exc: InvalidCredentialsError) -> JSONResponse:
+        return await handle_authentication_errors(request, exc)
+
+    # Authorization errors (403)
+    @app.exception_handler(AuthorizationError)
+    async def authorization_error_handler(request: Request, exc: AuthorizationError) -> JSONResponse:
+        return await handle_authorization_errors(request, exc)
+
+    # Validation errors (400/422)
+    @app.exception_handler(ValidationError)
+    async def pydantic_validation_handler(request: Request, exc: ValidationError) -> JSONResponse:
+        return await handle_validation_errors(request, exc)
+
+    @app.exception_handler(CustomValidationError)
+    async def custom_validation_handler(request: Request, exc: CustomValidationError) -> JSONResponse:
+        return await handle_validation_errors(request, exc)
+
+    # Database errors
+    @app.exception_handler(IntegrityError)
+    async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
+        return await handle_database_errors(request, exc)
+
+    @app.exception_handler(DatabaseError)
+    async def database_error_handler(request: Request, exc: DatabaseError) -> JSONResponse:
+        return await handle_database_errors(request, exc)
+
+    @app.exception_handler(OperationalError)
+    async def operational_error_handler(request: Request, exc: OperationalError) -> JSONResponse:
+        return await handle_database_errors(request, exc)
+
+    # External service errors (503)
+    @app.exception_handler(ExternalServiceError)
+    async def external_service_handler(request: Request, exc: ExternalServiceError) -> JSONResponse:
+        return await handle_external_service_errors(request, exc)
+
+    # Rate limit errors (429)
+    @app.exception_handler(RateLimitError)
+    async def rate_limit_handler(request: Request, exc: RateLimitError) -> JSONResponse:
+        return await handle_rate_limit_errors(request, exc)
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        """Global exception handler for unhandled errors."""
+        from uuid import uuid4
+
+        # Generate error ID for tracking
+        error_id = uuid4()
+
+        # Log comprehensive error context
+        log_error_context(request, exc, error_id)
+
+        # Return generic error response without exposing internal details
+        return format_error_response(
+            category=ErrorCategory.INTERNAL,
+            code=ErrorCode.INTERNAL,
+            detail="An unexpected error occurred",
+            status_code=500,
+            metadata={"error_id": str(error_id)},
+            suggestions=["Please try again later", "If the problem persists, contact support with the error ID"]
+        )
+
+    # Register health check endpoints
     @app.get("/health")
     async def health_check() -> dict[str, str]:
-        """Health check endpoint."""
+        """Check application health status."""
         return {"status": "healthy"}
+
+    @app.get("/health/db")
+    async def health_check_db() -> dict[str, str]:
+        """Database health check endpoint."""
+        try:
+            from sqlalchemy import text
+
+            from src.database.session import async_session_maker
+            async with async_session_maker() as session:
+                # Simple query to check database connectivity
+                await session.execute(text("SELECT 1"))
+            return {"db_status": "healthy"}
+        except Exception as e:
+            logger.exception("Database health check failed")
+            return JSONResponse(
+                status_code=503,
+                content={"db_status": "unhealthy", "error": str(e)}
+            )
+
+    @app.get("/health/auth")
+    async def health_check_auth() -> dict[str, str]:
+        """Auth service health check endpoint."""
+        try:
+            settings = get_settings()
+            if settings.AUTH_PROVIDER == "supabase":
+                # Test Supabase connectivity (basic check)
+                # This is a simple check - could be expanded to test actual Supabase connection
+                return {"auth_status": "healthy", "provider": "supabase"}
+            return {"auth_status": "healthy", "provider": "none"}
+        except Exception as e:
+            logger.exception("Auth health check failed")
+            return JSONResponse(
+                status_code=503,
+                content={"auth_status": "unhealthy", "error": str(e)}
+            )
 
     # Register routers
     # Note: Auth router removed - using new auth manager system
@@ -263,6 +366,7 @@ def create_app() -> FastAPI:
     app.include_router(books_router)
     app.include_router(content_router)
     app.include_router(flashcards_router)
+    app.include_router(progress_router)  # Unified progress tracking
     app.include_router(rag_router)  # RAG system
 
     # Course management - new unified API

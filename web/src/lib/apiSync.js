@@ -89,12 +89,40 @@ async function performSync(resourceType, resourceId, data, retryCount = 0) {
 
 		// Transform data for specific endpoint requirements
 		let requestData = data;
-		if (resourceType === "videos" && data.progress) {
+		if (resourceType === "books" && data.tocProgress) {
+			// For book ToC progress updates, wrap in progress format expected by backend
+			requestData = {
+				tocProgress: data.tocProgress,
+			};
+		} else if (resourceType === "videos" && data.progress) {
 			// For video progress updates, extract only the fields the backend expects
 			requestData = {
 				lastPosition:
 					data.progress.lastPosition || data.progress.currentTime || 0,
 			};
+		} else if (
+			resourceType === "videos" &&
+			(data.progress ||
+				data.lastPosition !== undefined ||
+				data.currentTime !== undefined ||
+				data.duration !== undefined)
+		) {
+			// Handle direct video progress data - filter to only valid backend fields
+			requestData = {};
+			if (data.progress?.lastPosition !== undefined) {
+				requestData.lastPosition = data.progress.lastPosition;
+			} else if (data.progress?.currentTime !== undefined) {
+				requestData.lastPosition = data.progress.currentTime;
+			} else if (data.lastPosition !== undefined) {
+				requestData.lastPosition = data.lastPosition;
+			} else if (data.currentTime !== undefined) {
+				requestData.lastPosition = data.currentTime;
+			}
+			if (data.progress?.completionPercentage !== undefined) {
+				requestData.completionPercentage = data.progress.completionPercentage;
+			} else if (data.completionPercentage !== undefined) {
+				requestData.completionPercentage = data.completionPercentage;
+			}
 		} else if (resourceType === "videos" && data.chapterStatus) {
 			// For chapter status updates, extract the status
 			requestData = {
@@ -152,6 +180,10 @@ function buildEndpoint(resourceType, resourceId, data) {
 			}
 			if (data.tocProgress || data.tocProgressBatch) {
 				// ToC progress updates go to the progress endpoint
+				console.log(
+					`📚 Syncing ToC progress for book ${resourceId}:`,
+					data.tocProgress,
+				);
 				return `${baseUrl}/books/${resourceId}/progress`;
 			}
 			if (data.chapterStatus) {
@@ -225,8 +257,13 @@ function buildEndpoint(resourceType, resourceId, data) {
  * Determine HTTP method based on resource type and data
  */
 function determineMethod(resourceType, data) {
-	// Progress updates use POST
-	if (data.progress || data.nodeStatus) {
+	// Video progress updates use PATCH
+	if (resourceType === "videos" && data.progress) {
+		return "PATCH";
+	}
+
+	// Other progress updates use POST
+	if (data.progress || data.nodeStatus || data.tocProgress) {
 		return "POST";
 	}
 

@@ -8,17 +8,7 @@
 import useAppStore from "./useAppStore.js";
 import useCourseStore from "./useCourseStore.js";
 
-/**
- * Initialize store integration
- * Call this once during app initialization
- */
-export function initializeStoreIntegration() {
-	// Make course store globally available for compatibility
-	if (typeof window !== "undefined") {
-		window.__courseStore = useCourseStore;
-		console.log("Store integration initialized");
-	}
-}
+// Note: window.__courseStore dependency removed as part of progress unification
 
 /**
  * Create a unified hook that provides integrated store access

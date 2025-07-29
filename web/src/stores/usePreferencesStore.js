@@ -45,7 +45,7 @@ const usePreferencesStore = create(
 				epubLocations: {}, // epub-location-{bookId}
 
 				// Video preferences
-				videoChapters: {}, // video_chapters_{videoUuid}
+				videoChapters: {}, // video_chapters_{videoId}
 
 				// Global preferences
 				theme: "light",
@@ -119,15 +119,15 @@ const usePreferencesStore = create(
 				getEpubLocation: (bookId) => get().epubLocations[bookId] || null,
 
 				// Video chapter methods
-				setVideoChapters: (videoUuid, chapters) =>
+				setVideoChapters: (videoId, chapters) =>
 					set((state) => ({
 						videoChapters: {
 							...state.videoChapters,
-							[videoUuid]: chapters,
+							[videoId]: chapters,
 						},
 					})),
 
-				getVideoChapters: (videoUuid) => get().videoChapters[videoUuid] || [],
+				getVideoChapters: (videoId) => get().videoChapters[videoId] || [],
 
 				// Theme methods
 				setTheme: (theme) => set({ theme }),

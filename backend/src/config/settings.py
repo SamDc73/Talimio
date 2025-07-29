@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     API_PORT: int = 8080
     ENVIRONMENT: str = "development"  # "development", "production"
-    SECRET_KEY: str = "your-secret-key-change-in-production"  # For session middleware
+    SECRET_KEY: str = "your-secret-key-change-in-production"  # For session middleware  # noqa: S105
 
     # Auth settings
     AUTH_DISABLED: bool = False
@@ -37,6 +37,17 @@ class Settings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET_NAME: str = "talimio-books"
     R2_REGION: str = "auto"
+
+    # RAG Video Processing Configuration
+    RAG_VIDEO_MAX_TOKENS: int = 512
+    RAG_VIDEO_OVERLAP_TOKENS: int = 50
+    RAG_VIDEO_TARGET_DURATION: int = 180  # 3 minutes in seconds
+    RAG_VIDEO_SHORT_DURATION_THRESHOLD: int = 600  # 10 minutes
+    RAG_VIDEO_MEDIUM_DURATION_THRESHOLD: int = 1800  # 30 minutes
+    RAG_VIDEO_LONG_DURATION_CHUNK: int = 300  # 5 minutes in seconds for long videos
+
+    # Feature flags for gradual rollout
+    USE_MODULE_FACADES: bool = True  # Enable new facade pattern
 
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.local"),

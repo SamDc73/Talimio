@@ -49,14 +49,14 @@ class UserContextService:
     @staticmethod
     async def get_user_context(request: "Request") -> UserContext:
         """Get unified user context from request.
-        
+
         This method provides a consistent interface regardless of auth mode:
         - In single-user mode: Returns default user context
         - In multi-user mode: Returns authenticated user or default
-        
+
         Args:
             request: FastAPI request object
-            
+
         Returns
         -------
             UserContext with user information
@@ -69,7 +69,7 @@ class UserContextService:
         if auth_user:
             # We have an authenticated user
             return UserContext(
-                user_id=UUID(auth_user.id),
+                user_id=auth_user.id,  # auth_user.id is already a UUID
                 email=auth_user.email,
                 name=auth_user.name,
                 is_authenticated=True,
@@ -90,12 +90,12 @@ class UserContextService:
     @staticmethod
     def get_effective_user_id(request: "Request") -> UUID:
         """Get effective user ID from request (sync version for dependencies).
-        
+
         This is a lightweight sync version that just extracts the ID.
-        
+
         Args:
             request: FastAPI request object
-            
+
         Returns
         -------
             User ID (never None)
@@ -105,14 +105,14 @@ class UserContextService:
     @staticmethod
     async def require_authenticated_user(request: "Request") -> UserContext:
         """Get user context, requiring authentication.
-        
+
         Args:
             request: FastAPI request object
-            
+
         Returns
         -------
             UserContext if authenticated
-            
+
         Raises
         ------
             HTTPException: 401 if not authenticated
@@ -131,7 +131,7 @@ class UserContextService:
     @staticmethod
     def log_context(context: UserContext, action: str) -> None:
         """Log user context for debugging.
-        
+
         Args:
             context: User context
             action: Action being performed
@@ -156,7 +156,7 @@ async def get_user_context(request: "Request") -> UserContext:
 # Backward compatibility function
 def get_effective_user_id(request: "Request") -> UUID:
     """Get effective user ID from request.
-    
+
     This is a backward compatibility wrapper for existing code.
     New code should use UserContextService.get_effective_user_id() or
     the EffectiveUserId dependency from auth.dependencies.

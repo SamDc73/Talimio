@@ -124,49 +124,49 @@ export function useBookChaptersApi(bookId = null) {
 
 /**
  * Hook for video chapter operations
- * @param {string} videoUuid - The video UUID
+ * @param {string} videoId - The video ID
  */
-export function useVideoChaptersApi(videoUuid = null) {
-	const getChapters = useApi("/videos/{videoUuid}/chapters");
-	const getChapter = useApi("/videos/{videoUuid}/chapters/{chapterId}");
+export function useVideoChaptersApi(videoId = null) {
+	const getChapters = useApi("/videos/{videoId}/chapters");
+	const getChapter = useApi("/videos/{videoId}/chapters/{chapterId}");
 	const updateChapterStatus = useApi(
-		"/videos/{videoUuid}/chapters/{chapterId}/status",
+		"/videos/{videoId}/chapters/{chapterId}/status",
 		{ method: "PUT" },
 	);
-	const extractChapters = useApi("/videos/{videoUuid}/extract-chapters", {
+	const extractChapters = useApi("/videos/{videoId}/extract-chapters", {
 		method: "POST",
 	});
 
 	return {
 		// Get all chapters for a video
 		async fetchChapters() {
-			if (!videoUuid) throw new Error("Video UUID required");
-			return await getChapters.execute(null, { pathParams: { videoUuid } });
+			if (!videoId) throw new Error("Video ID required");
+			return await getChapters.execute(null, { pathParams: { videoId } });
 		},
 
 		// Get a specific chapter
 		async fetchChapter(chapterId) {
-			if (!videoUuid || !chapterId)
-				throw new Error("Video UUID and Chapter ID required");
+			if (!videoId || !chapterId)
+				throw new Error("Video ID and Chapter ID required");
 			return await getChapter.execute(null, {
-				pathParams: { videoUuid, chapterId },
+				pathParams: { videoId, chapterId },
 			});
 		},
 
 		// Update chapter status
 		async updateChapterStatus(chapterId, status) {
-			if (!videoUuid || !chapterId)
-				throw new Error("Video UUID and Chapter ID required");
+			if (!videoId || !chapterId)
+				throw new Error("Video ID and Chapter ID required");
 			return await updateChapterStatus.execute(
 				{ status },
-				{ pathParams: { videoUuid, chapterId } },
+				{ pathParams: { videoId, chapterId } },
 			);
 		},
 
 		// Extract chapters from video
 		async extractChapters() {
-			if (!videoUuid) throw new Error("Video UUID required");
-			return await extractChapters.execute(null, { pathParams: { videoUuid } });
+			if (!videoId) throw new Error("Video ID required");
+			return await extractChapters.execute(null, { pathParams: { videoId } });
 		},
 
 		// Loading states

@@ -1,5 +1,3 @@
-import useAppStore from "../stores/useAppStore";
-
 const API_BASE = "/api/v1";
 const REQUEST_TIMEOUT = 10000; // 10 seconds
 
@@ -43,15 +41,12 @@ const REQUEST_TIMEOUT = 10000; // 10 seconds
  */
 
 async function request(url, options = {}) {
-	const { token } = useAppStore.getState();
 	const headers = {
 		"Content-Type": "application/json",
 		...options.headers,
 	};
 
-	if (token) {
-		headers.Authorization = `Bearer ${token}`;
-	}
+	// Authentication is handled via httpOnly cookies, no Bearer token needed
 
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
@@ -120,26 +115,26 @@ export async function fetchContentData(includeArchived = false) {
 		}
 
 		return data.items.map((item) => {
-			console.log(`🔄 Processing item "${item.title}":`, {
-				type: item.type,
-				archived: item.archived,
-				willMapTo: item.archived || false,
-			});
+			if (import.meta.env.VITE_DEBUG_MODE === "true") {
+				console.log(`🔄 Processing item "${item.title}":`, {
+					type: item.type,
+					archived: item.archived,
+				});
+			}
 
 			const mappedItem = {
 				id: item.id,
-				type: item.type,
+				type: item.type === "youtube" ? "video" : item.type, // Map youtube to video
 				title: item.title,
 				description: item.description,
 				lastAccessedDate: item.lastAccessedDate,
 				createdDate: item.createdDate,
-				progress: item.progress || 0,
+				progress: item.progress?.percentage || item.progress || 0, // Extract percentage from ProgressData object
 				tags: item.tags || [],
 				archived: item.archived || false,
 				...(item.type === "youtube" && {
-					channelName: item.channelName || item.channel_name,
-					channel_name: item.channelName || item.channel_name,
-					duration: item.duration,
+					channel: item.channel, // Use the correct field name from backend
+					duration: item.length, // Backend sends 'length' for duration
 				}),
 				...(item.type === "flashcards" && {
 					cardCount: item.cardCount,
@@ -147,25 +142,23 @@ export async function fetchContentData(includeArchived = false) {
 				}),
 				...(item.type === "book" && {
 					author: item.author,
-					pageCount: item.pageCount || item.page_count,
-					pages: item.pageCount || item.page_count,
-					currentPage: item.currentPage || item.current_page,
+					pageCount: item.pageCount,
+					currentPage: item.currentPage,
 					tocProgress: item.tocProgress || {},
 				}),
-				...(item.type === "roadmap" && {
-					nodeCount: item.nodeCount,
-					completedNodes: item.completedNodes,
-				}),
 				...(item.type === "course" && {
-					modules: item.modules,
+					lessonCount: item.lessonCount,
+					completedLessons: item.completedLessons,
 				}),
 			};
 
-			console.log(`✅ Mapped item "${mappedItem.title}":`, {
-				type: mappedItem.type,
-				archived: mappedItem.archived,
-				id: mappedItem.id,
-			});
+			if (import.meta.env.VITE_DEBUG_MODE === "true") {
+				console.log(`✅ Mapped item "${mappedItem.title}":`, {
+					type: mappedItem.type,
+					archived: mappedItem.archived,
+					id: mappedItem.id,
+				});
+			}
 			return mappedItem;
 		});
 	} catch (error) {
@@ -183,7 +176,7 @@ export function processContentData(data) {
 	const filterOptions = [
 		{ id: "all", label: "All Content", icon: "Search" },
 		{ id: "course", label: "Courses", icon: "BookOpen" },
-		{ id: "youtube", label: "Videos", icon: "Youtube" },
+		{ id: "video", label: "Videos", icon: "Youtube" },
 		{ id: "flashcards", label: "Flashcards", icon: "Layers" },
 		{ id: "book", label: "Books", icon: "FileText" },
 	];

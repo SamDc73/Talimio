@@ -116,6 +116,28 @@ class R2Storage(AbstractStorage):
             msg = f"Failed to delete from R2: {key}"
             raise FileDeleteError(msg) from e
 
+    async def download(self, key: str) -> bytes:
+        """Download file content from R2 storage.
+
+        Args:
+            key: The storage key/filename.
+
+        Returns
+        -------
+            The file content as bytes.
+
+        Raises
+        ------
+            FileDownloadError: If the download fails.
+        """
+        try:
+            async with await self._get_client() as client:
+                response = await client.get_object(Bucket=self.bucket_name, Key=key)
+                return await response["Body"].read()
+        except ClientError as e:
+            msg = f"Failed to download from R2: {key}"
+            raise FileDownloadError(msg) from e
+
     async def set_cors_policy(self) -> None:
         """Set CORS policy on the R2 bucket."""
         cors_configuration = {

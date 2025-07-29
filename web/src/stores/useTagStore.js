@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
+import { api } from "@/lib/api";
 
 /**
  * Tag store for managing user tags and tag-content associations
@@ -37,10 +38,7 @@ const useTagStore = create(
 				});
 
 				try {
-					const response = await fetch("/api/tags/tags");
-					if (!response.ok) throw new Error("Failed to fetch tags");
-
-					const tags = await response.json();
+					const tags = await api.get("/api/tags/tags");
 
 					set((state) => {
 						state.tags = {};
@@ -119,12 +117,15 @@ const useTagStore = create(
 			// Content Tagging
 			async fetchContentTags(contentType, contentId) {
 				try {
-					const response = await fetch(
-						`/api/tags/${contentType}/${contentId}/tags`,
-					);
-					if (!response.ok) throw new Error("Failed to fetch content tags");
+					// Normalize content type to match backend expectations
+					const normalizedType = get()._normalizeContentType(contentType);
+					if (!normalizedType) {
+						throw new Error(`Unsupported content type: ${contentType}`);
+					}
 
-					const tags = await response.json();
+					const tags = await api.get(
+						`/api/tags/${normalizedType}/${contentId}/tags`,
+					);
 
 					set((state) => {
 						if (!state.contentTags[contentType]) {
@@ -149,27 +150,18 @@ const useTagStore = create(
 
 			async updateContentTags(contentType, contentId, tagNames) {
 				try {
-					const response = await fetch(
-						`/api/tags/${contentType}/${contentId}/tags`,
-						{
-							method: "PUT",
-							headers: {
-								"Content-Type": "application/json",
-							},
-							body: JSON.stringify({
-								tags: tagNames,
-							}),
-						},
-					);
-
-					if (!response.ok) {
-						const errorData = await response.json();
-						throw new Error(
-							errorData.detail || "Failed to update content tags",
-						);
+					// Normalize content type to match backend expectations
+					const normalizedType = get()._normalizeContentType(contentType);
+					if (!normalizedType) {
+						throw new Error(`Unsupported content type: ${contentType}`);
 					}
 
-					const result = await response.json();
+					const result = await api.put(
+						`/api/tags/${normalizedType}/${contentId}/tags`,
+						{
+							tags: tagNames,
+						},
+					);
 
 					// Refresh content tags
 					await get().fetchContentTags(contentType, contentId);
@@ -230,6 +222,18 @@ const useTagStore = create(
 						searchQuery: "",
 					};
 				});
+			},
+
+			// Helper method to normalize content types for API calls
+			_normalizeContentType(contentType) {
+				const supportedTypes = {
+					youtube: "video",
+					flashcards: "flashcard",
+					course: "course",
+					book: "book",
+					video: "video",
+				};
+				return supportedTypes[contentType] || null;
 			},
 
 			// Quick tag operations
