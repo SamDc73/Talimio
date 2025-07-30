@@ -467,7 +467,7 @@ _memory_wrapper: Mem0Wrapper | None = None
 
 def get_memory_wrapper() -> Mem0Wrapper:
     """Dependency injection for memory wrapper with lazy initialization."""
-    global _memory_wrapper
+    global _memory_wrapper  # noqa: PLW0603
     if _memory_wrapper is None:
         _memory_wrapper = Mem0Wrapper()
     return _memory_wrapper

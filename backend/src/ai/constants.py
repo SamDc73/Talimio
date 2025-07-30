@@ -53,54 +53,73 @@ class RAGConfig:
         """Estimate overlap in words."""
         return int(self.chunk_overlap * 0.75)
 
-    def validate_config(self) -> None:
-        """Validate RAG configuration on startup.
-        
-        Raises
-        ------
-            ValueError: If configuration is invalid
-        """
-        # Validate model format
+    def _validate_models(self) -> None:
+        """Validate model configuration."""
         if not self.llm_model:
-            raise ValueError("RAG_LLM_MODEL environment variable is required")
+            msg = "RAG_LLM_MODEL environment variable is required"
+            raise ValueError(msg)
 
         if not self.embedding_model:
-            raise ValueError("RAG_EMBEDDING_MODEL environment variable is required")
+            msg = "RAG_EMBEDDING_MODEL environment variable is required"
+            raise ValueError(msg)
 
         # Check if models follow provider/model format
         if "/" in self.llm_model:
             provider, model = self.llm_model.split("/", 1)
             if not provider or not model:
-                raise ValueError(f"Invalid LLM model format: {self.llm_model}. Expected format: provider/model-name")
+                msg = f"Invalid LLM model format: {self.llm_model}. Expected format: provider/model-name"
+                raise ValueError(msg)
 
         if "/" in self.embedding_model:
             provider, model = self.embedding_model.split("/", 1)
             if not provider or not model:
-                raise ValueError(f"Invalid embedding model format: {self.embedding_model}. Expected format: provider/model-name")
+                msg = f"Invalid embedding model format: {self.embedding_model}. Expected format: provider/model-name"
+                raise ValueError(msg)
+
+    def _validate_chunk_settings(self) -> None:
+        """Validate chunk configuration."""
+        if self.chunk_size <= 0:
+            msg = f"Invalid chunk size: {self.chunk_size}. Must be positive."
+            raise ValueError(msg)
+
+        if self.chunk_overlap < 0:
+            msg = f"Invalid chunk overlap: {self.chunk_overlap}. Must be non-negative."
+            raise ValueError(msg)
+
+        if self.chunk_overlap >= self.chunk_size:
+            msg = f"Chunk overlap ({self.chunk_overlap}) must be less than chunk size ({self.chunk_size})."
+            raise ValueError(msg)
+
+    def _validate_search_settings(self) -> None:
+        """Validate search configuration."""
+        if self.top_k <= 0:
+            msg = f"Invalid top_k: {self.top_k}. Must be positive."
+            raise ValueError(msg)
+
+        if self.rerank_k <= 0:
+            msg = f"Invalid rerank_k: {self.rerank_k}. Must be positive."
+            raise ValueError(msg)
+
+        if self.rerank_k > self.top_k:
+            msg = f"rerank_k ({self.rerank_k}) cannot be greater than top_k ({self.top_k})."
+            raise ValueError(msg)
+
+    def validate_config(self) -> None:
+        """Validate RAG configuration on startup.
+
+        Raises
+        ------
+            ValueError: If configuration is invalid
+        """
+        self._validate_models()
 
         # Validate embedding dimensions if set
         if self.embedding_dim is not None and self.embedding_dim <= 0:
-            raise ValueError(f"Invalid embedding dimensions: {self.embedding_dim}. Must be positive.")
+            msg = f"Invalid embedding dimensions: {self.embedding_dim}. Must be positive."
+            raise ValueError(msg)
 
-        # Validate chunk settings
-        if self.chunk_size <= 0:
-            raise ValueError(f"Invalid chunk size: {self.chunk_size}. Must be positive.")
-
-        if self.chunk_overlap < 0:
-            raise ValueError(f"Invalid chunk overlap: {self.chunk_overlap}. Must be non-negative.")
-
-        if self.chunk_overlap >= self.chunk_size:
-            raise ValueError(f"Chunk overlap ({self.chunk_overlap}) must be less than chunk size ({self.chunk_size}).")
-
-        # Validate search settings
-        if self.top_k <= 0:
-            raise ValueError(f"Invalid top_k: {self.top_k}. Must be positive.")
-
-        if self.rerank_k <= 0:
-            raise ValueError(f"Invalid rerank_k: {self.rerank_k}. Must be positive.")
-
-        if self.rerank_k > self.top_k:
-            raise ValueError(f"rerank_k ({self.rerank_k}) cannot be greater than top_k ({self.top_k}).")
+        self._validate_chunk_settings()
+        self._validate_search_settings()
 
 
 # Global RAG configuration instance

@@ -56,16 +56,62 @@ async def search_youtube_videos(
     """
     # Smart search count calculation
     if search_count is None:
-        if desired_count:
-            # Use multiplier that decreases as desired count increases
-            multiplier = 2.5 - (min(desired_count, 30) * 0.05)
-            search_count = max(10, int(desired_count * multiplier))
-        else:
-            search_count = 10  # Default
+        search_count = _calculate_smart_search_count(desired_count)
 
     logger.info("Searching YouTube for: %s (fetching %d results)", query, search_count)
 
     # Build yt-dlp command
+    cmd = _build_ytdlp_command(query, search_count, min_duration, max_duration)
+
+    try:
+        # Run yt-dlp subprocess
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            error_msg = stderr.decode() if stderr else "Unknown error"
+            logger.error("yt-dlp failed: %s", error_msg)
+            return _create_youtube_error_response(query, f"yt-dlp failed: {error_msg}")
+
+        # Parse JSON output (one JSON object per line)
+        videos = _parse_ytdlp_output(stdout.decode())
+
+        logger.info("Found %d videos for query: %s", len(videos), query)
+
+        return {
+            "success": True,
+            "videos": videos,
+            "total_found": len(videos),
+            "search_query": query,
+            "search_count": search_count,
+            "filters": {
+                "min_duration": min_duration,
+                "max_duration": max_duration,
+            }
+        }
+
+    except Exception as e:
+        logger.exception("Error running yt-dlp")
+        return _create_youtube_error_response(query, f"Failed to run yt-dlp: {e!s}")
+
+
+def _calculate_smart_search_count(desired_count: int | None) -> int:
+    """Calculate smart search count based on desired results."""
+    if desired_count:
+        # Use multiplier that decreases as desired count increases
+        multiplier = 2.5 - (min(desired_count, 30) * 0.05)
+        return max(10, int(desired_count * multiplier))
+    return 10  # Default
+
+
+def _build_ytdlp_command(
+    query: str, search_count: int, min_duration: int | None, max_duration: int | None
+) -> list[str]:
+    """Build yt-dlp command with appropriate filters."""
     cmd = [
         "yt-dlp",
         f"ytsearch{search_count}:{query}",
@@ -86,57 +132,29 @@ async def search_youtube_videos(
             filter_parts.append(f"duration <= {max_duration}")
         cmd.extend(["--match-filter", " & ".join(filter_parts)])
 
-    try:
-        # Run yt-dlp subprocess
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
+    return cmd
 
-        if process.returncode != 0:
-            error_msg = stderr.decode() if stderr else "Unknown error"
-            logger.error("yt-dlp failed: %s", error_msg)
-            return {
-                "success": False,
-                "videos": [],
-                "total_found": 0,
-                "search_query": query,
-                "error": f"yt-dlp failed: {error_msg}"
-            }
 
-        # Parse JSON output (one JSON object per line)
-        videos = []
-        for line in stdout.decode().strip().split("\n"):
-            if line:
-                try:
-                    video = json.loads(line)
-                    videos.append(video)
-                except json.JSONDecodeError:
-                    logger.warning("Failed to parse video JSON: %s", line)
-                    continue
+def _parse_ytdlp_output(output: str) -> list[dict[str, Any]]:
+    """Parse yt-dlp JSON output into video list."""
+    videos = []
+    for line in output.strip().split("\n"):
+        if line:
+            try:
+                video = json.loads(line)
+                videos.append(video)
+            except json.JSONDecodeError:
+                logger.warning("Failed to parse video JSON: %s", line)
+                continue
+    return videos
 
-        logger.info("Found %d videos for query: %s", len(videos), query)
 
-        return {
-            "success": True,
-            "videos": videos,
-            "total_found": len(videos),
-            "search_query": query,
-            "search_count": search_count,
-            "filters": {
-                "min_duration": min_duration,
-                "max_duration": max_duration,
-            }
-        }
-
-    except Exception as e:
-        logger.exception("Error running yt-dlp")
-        return {
-            "success": False,
-            "videos": [],
-            "total_found": 0,
-            "search_query": query,
-            "error": f"Failed to run yt-dlp: {e!s}"
-        }
+def _create_youtube_error_response(query: str, error_message: str) -> dict[str, Any]:
+    """Create standardized error response for YouTube search."""
+    return {
+        "success": False,
+        "videos": [],
+        "total_found": 0,
+        "search_query": query,
+        "error": error_message
+    }

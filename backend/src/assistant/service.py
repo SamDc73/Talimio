@@ -216,70 +216,64 @@ class EnhancedAssistantService:
         """Get semantic context from the RAG system."""
         logger.info("Getting semantic context for request: %s", request)
 
-        # If no specific context, do global search
-        if not (request.context_type and request.context_id):
-            logger.info("No context_type or context_id in request, performing global search.")
+        # Try different search strategies and return the first successful result
+        search_strategies = [
+            self._try_contextual_search,
+            self._try_global_search,
+            self._try_text_fallback_search,
+        ]
+
+        for strategy in search_strategies:
             try:
-                results = await self.context_retriever.global_retrieve(
-                    query=request.message,
-                    user_id=request.user_id,
-                    max_chunks=5,
-                    relevance_threshold=0.4,
-                )
-                logger.info("Global search returned %d results", len(results))
-                return results
-            except Exception:
-                logger.exception("Global search failed:")
-                return []
-
-        try:
-            logger.info("Retrieving context with context_retriever: %s", self.context_retriever)
-            results = await self.context_retriever.retrieve_context(
-                query=request.message,
-                context_type=request.context_type,
-                context_id=request.context_id,
-                context_meta=request.context_meta,
-                max_chunks=5,
-                relevance_threshold=0.4,  # Lower threshold for better recall
-            )
-            logger.info("Retrieved %d semantic chunks for context", len(results))
-
-            # If vector search failed, try text-based fallback
-            if not results:
-                logger.error("Vector search returned no results, trying text-based fallback")
-                results = await self._text_based_fallback_search(request)
-                logger.error("Text-based fallback returned %d results", len(results))
-
-            logger.info("Final semantic context results: %s", results)
-            return results
-
-        except Exception as e:
-            error_str = str(e).lower()
-            # Check for dimension mismatch or embedding errors
-            if any(
-                keyword in error_str
-                for keyword in ["dimension", "vector", "embedding", "quota", "rate", "insufficient"]
-            ):
-                logger.exception("Vector search failed with embedding/dimension error:")
-                logger.info("Forcing text-based fallback due to embedding issues")
-                # Force text-based fallback for embedding-related errors
-                try:
-                    results = await self._text_based_fallback_search(request)
-                    logger.info("Text-based fallback returned %d results", len(results))
+                results = await strategy(request)
+                if results:
+                    logger.info("Search strategy succeeded with %d results", len(results))
                     return results
-                except Exception:
-                    logger.exception("Text-based fallback also failed:")
-                    return []
-            else:
-                logger.warning("Failed to get semantic context: %s", e)
-                # Try text-based fallback on any other error
-                try:
-                    results = await self._text_based_fallback_search(request)
-                    logger.info("Text-based fallback returned %d results", len(results))
-                    return results
-                except Exception as fallback_error:
-                    logger.warning("Text-based fallback also failed: %s", fallback_error)
-                    return []
+            except Exception as e:
+                logger.debug("Search strategy failed: %s", e)
+                continue
+
+        logger.warning("All search strategies failed, returning empty results")
+        return []
+
+    async def _try_contextual_search(self, request: ChatRequest) -> list[SearchResult]:
+        """Try contextual search if context is available."""
+        if not (request.context_type and request.context_id):
+            return []  # Skip if no context available
+
+        logger.info("Retrieving context with context_retriever: %s", self.context_retriever)
+        results = await self.context_retriever.retrieve_context(
+            query=request.message,
+            context_type=request.context_type,
+            context_id=request.context_id,
+            context_meta=request.context_meta,
+            max_chunks=5,
+            relevance_threshold=0.4,  # Lower threshold for better recall
+        )
+        logger.info("Retrieved %d semantic chunks for context", len(results))
+        return results
+
+    async def _try_global_search(self, request: ChatRequest) -> list[SearchResult]:
+        """Try global search when no specific context is available."""
+        if request.context_type and request.context_id:
+            return []  # Skip if context is available (should use contextual search)
+
+        logger.info("No context_type or context_id in request, performing global search.")
+        results = await self.context_retriever.global_retrieve(
+            query=request.message,
+            user_id=request.user_id,
+            max_chunks=5,
+            relevance_threshold=0.4,
+        )
+        logger.info("Global search returned %d results", len(results))
+        return results
+
+    async def _try_text_fallback_search(self, request: ChatRequest) -> list[SearchResult]:
+        """Try text-based fallback search as last resort."""
+        logger.info("Trying text-based fallback search")
+        results = await self._text_based_fallback_search(request)
+        logger.info("Text-based fallback returned %d results", len(results))
+        return results
 
     async def _text_based_fallback_search(self, request: ChatRequest) -> list[SearchResult]:
         """Text-based fallback search when vector search fails."""

@@ -18,7 +18,7 @@ _FUNCTION_REGISTRY: dict[str, dict[str, Any]] = {}
 
 
 def register_function(schema: dict[str, Any]) -> Callable:
-    """Decorator to register a function with its OpenAI function schema.
+    """Register a function with its OpenAI function schema.
 
     Args:
         schema: OpenAI function schema definition
@@ -50,7 +50,8 @@ def register_function(schema: dict[str, Any]) -> Callable:
     def decorator(func: Callable) -> Callable:
         function_name = schema.get("name")
         if not function_name:
-            raise ValueError("Function schema must include 'name' field")
+            msg = "Function schema must include 'name' field"
+            raise ValueError(msg)
 
         # Store function and schema in registry
         _FUNCTION_REGISTRY[function_name] = {"schema": schema, "function": func, "name": function_name}
@@ -58,7 +59,7 @@ def register_function(schema: dict[str, Any]) -> Callable:
         logger.info(f"Registered function: {function_name}")
 
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             return await func(*args, **kwargs)
 
         return wrapper
@@ -118,7 +119,7 @@ async def execute_function(name: str, args: dict[str, Any]) -> dict[str, Any]:
         return {"success": True, "result": result, "function_name": name}
 
     except Exception as e:
-        logger.error(f"Error executing function {name}: {e!s}", exc_info=True)
+        logger.exception(f"Error executing function {name}: {e!s}")
         return {"success": False, "error": str(e), "function_name": name}
 
 
@@ -137,7 +138,7 @@ def get_function_info(name: str) -> dict[str, Any] | None:
 
 def clear_registry() -> None:
     """Clear all registered functions (mainly for testing)."""
-    global _FUNCTION_REGISTRY
+    global _FUNCTION_REGISTRY  # noqa: PLW0603
     _FUNCTION_REGISTRY = {}
     logger.info("Function registry cleared")
 

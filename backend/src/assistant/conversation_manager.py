@@ -6,7 +6,7 @@ conversation summarization, and smart context pruning.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -34,8 +34,8 @@ class ConversationManager:
             self._conversations[conversation_key] = {
                 "messages": [],
                 "context_switches": [],
-                "created_at": datetime.now(),
-                "last_activity": datetime.now(),
+                "created_at": datetime.now(UTC),
+                "last_activity": datetime.now(UTC),
                 "total_tokens": 0,
                 "summary": "",
             }
@@ -67,14 +67,14 @@ class ConversationManager:
             # Add timestamp and context info to message
             enhanced_message = {
                 **message,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "context_type": context_type,
                 "context_id": str(context_id) if context_id else None,
                 "token_count": token_count,
             }
 
             conversation_data["messages"].append(enhanced_message)
-            conversation_data["last_activity"] = datetime.now()
+            conversation_data["last_activity"] = datetime.now(UTC)
             conversation_data["total_tokens"] += token_count
 
             # Track context switch if switching resources
@@ -148,7 +148,7 @@ class ConversationManager:
             if user_id not in self._user_sessions:
                 self._user_sessions[user_id] = {
                     "current_resource": new_resource_key,
-                    "session_start": datetime.now(),
+                    "session_start": datetime.now(UTC),
                     "context_switches": [],
                 }
                 return
@@ -161,7 +161,7 @@ class ConversationManager:
                 switch_data = {
                     "from_resource": current_resource,
                     "to_resource": new_resource_key,
-                    "timestamp": datetime.now(),
+                    "timestamp": datetime.now(UTC),
                     "context_type": context_type,
                     "context_id": str(context_id) if context_id else None,
                 }
@@ -208,7 +208,7 @@ class ConversationManager:
                     assistant_responses.append(
                         msg.get("content", "")[:100] + "..."
                         if len(msg.get("content", "")) > 100
-                        else msg.get("content", "")
+                        else msg.get("content", ""),
                     )
 
             if user_questions:
@@ -216,7 +216,7 @@ class ConversationManager:
 
             if assistant_responses:
                 summary_parts.append(
-                    f"Assistant helped with: {'; '.join(assistant_responses[-3:])}"
+                    f"Assistant helped with: {'; '.join(assistant_responses[-3:])}",
                 )  # Last 3 responses
 
             # Update conversation data
@@ -303,7 +303,7 @@ class ConversationManager:
         """
         try:
             messages = await self.get_conversation_history(
-                user_id, context_type, context_id, limit=0, include_context=True
+                user_id, context_type, context_id, limit=0, include_context=True,
             )
 
             if not messages:
@@ -350,7 +350,7 @@ class ConversationManager:
             # Sort by importance score (descending) and add messages until token limit
             prioritized_older.sort(key=lambda x: x[1], reverse=True)
 
-            for msg, score in prioritized_older:
+            for msg, _score in prioritized_older:
                 msg_tokens = msg.get("token_count", len(msg.get("content", "")) // 4)
                 if remaining_tokens >= msg_tokens:
                     selected_older.insert(0, msg)  # Insert at beginning to maintain order
@@ -362,7 +362,7 @@ class ConversationManager:
             pruned_messages = selected_older + recent_messages
 
             self._logger.debug(
-                f"Pruned conversation from {len(messages)} to {len(pruned_messages)} messages for token limit"
+                f"Pruned conversation from {len(messages)} to {len(pruned_messages)} messages for token limit",
             )
             return pruned_messages
 
@@ -370,7 +370,7 @@ class ConversationManager:
             self._logger.exception(f"Error pruning context for tokens: {e}")
             # Fallback to simple recent message limiting
             return await self.get_conversation_history(
-                user_id, context_type, context_id, limit=preserve_recent, include_context=False
+                user_id, context_type, context_id, limit=preserve_recent, include_context=False,
             )
 
     def get_conversation_stats(self, user_id: UUID) -> dict[str, Any]:
@@ -408,7 +408,7 @@ class ConversationManager:
     async def cleanup_old_conversations(self, days_old: int = 30) -> int:
         """Clean up conversations older than specified days."""
         try:
-            cutoff_date = datetime.now() - timedelta(days=days_old)
+            cutoff_date = datetime.now(UTC) - timedelta(days=days_old)
             cleaned_count = 0
 
             conversations_to_remove = []

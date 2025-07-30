@@ -16,7 +16,7 @@ from .registry import (
 )
 
 
-def select_functions_for_task(task_type: str, topic: str | None = None) -> list:
+def select_functions_for_task(task_type: str, _topic: str | None = None) -> list:
     """Select appropriate functions based on task type."""
     import os
 

@@ -235,7 +235,7 @@ User: What is Husam's last job?
 
 Semantically related content:
 [Relevant content 1 - Score: 0.41]
-HUSAM ALSHEHADAT... WORK EXPERIENCE Natera Apr. 2023 – Present Data Analyst San Carlos, CA...
+HUSAM ALSHEHADAT... WORK EXPERIENCE Natera Apr. 2023 - Present Data Analyst San Carlos, CA...
 
 Your Answer:
 Based on the resume, Husam's last/current job is Data Analyst at Natera (April 2023 - Present) in San Carlos, CA.

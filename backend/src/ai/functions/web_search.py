@@ -6,6 +6,7 @@ high-quality educational resources from across the web.
 
 import logging
 import os
+from datetime import UTC
 from typing import Any
 
 from .registry import register_function
@@ -56,13 +57,7 @@ async def search_web_content(
 
         exa_api_key = os.getenv("EXA_API_KEY")
         if not exa_api_key:
-            logger.info("Exa API key not found, cannot perform web search")
-            return {
-                "results": [],
-                "total_found": 0,
-                "search_query": topic,
-                "error": "Exa API key not configured",
-            }
+            return _create_error_response(topic, "Exa API key not configured")
 
         from datetime import datetime, timedelta
 
@@ -71,32 +66,10 @@ async def search_web_content(
         client = exa_py.Exa(api_key=exa_api_key)
 
         # Build educational search query
-        query_parts = [topic]
-
-        # Add content type qualifiers
-        if content_type != "any":
-            if content_type == "tutorial":
-                query_parts.extend(["tutorial", "guide", "how to"])
-            elif content_type == "guide":
-                query_parts.extend(["complete guide", "comprehensive", "step by step"])
-            elif content_type == "documentation":
-                query_parts.extend(["documentation", "docs", "reference"])
-            elif content_type == "blog":
-                query_parts.extend(["blog", "article", "post"])
-
-        # Add difficulty qualifiers
-        if difficulty_level != "any":
-            if difficulty_level == "beginner":
-                query_parts.extend(["beginner", "introduction", "getting started"])
-            elif difficulty_level == "intermediate":
-                query_parts.extend(["intermediate", "advanced concepts"])
-            elif difficulty_level == "advanced":
-                query_parts.extend(["advanced", "expert", "deep dive"])
-
-        query = " ".join(query_parts)
+        query = _build_search_query(topic, content_type, difficulty_level)
 
         # Set date filters for recent content
-        end_date = datetime.now()
+        end_date = datetime.now(UTC)
         start_date = end_date - timedelta(days=365)  # Last year
 
         # Perform search with content retrieval
@@ -109,49 +82,10 @@ async def search_web_content(
             highlights=True,  # Get relevant highlights
             start_published_date=start_date.strftime("%Y-%m-%d"),
             end_published_date=end_date.strftime("%Y-%m-%d"),
-            include_domains=[  # Focus on educational domains
-                "medium.com",
-                "dev.to",
-                "towardsdatascience.com",
-                "realpython.com",
-                "freecodecamp.org",
-                "hackernoon.com",
-                "css-tricks.com",
-                "smashingmagazine.com",
-                "docs.python.org",
-                "developer.mozilla.org",
-                "w3schools.com",
-                "geeksforgeeks.org",
-                "stackoverflow.com",
-                "github.com",
-                "arxiv.org",
-            ],
+            include_domains=_get_educational_domains(),
         )
 
-        results = []
-        for result in response.results:
-            # Calculate relevance score
-            relevance_score = calculate_relevance(result, topic, content_type, difficulty_level)
-
-            content_result = {
-                "title": result.title,
-                "url": result.url,
-                "text_preview": result.text[:500] + "..." if result.text else "",
-                "highlights": result.highlights if hasattr(result, "highlights") else [],
-                "score": result.score,
-                "published_date": result.published_date,
-                "author": result.author if hasattr(result, "author") else None,
-                "relevance_score": relevance_score,
-                "source": "exa",
-                "type": "web_content",
-                "content_type": content_type if content_type != "any" else "unknown",
-                "difficulty_level": difficulty_level if difficulty_level != "any" else "unknown",
-            }
-
-            results.append(content_result)
-
-        # Sort by relevance score
-        results.sort(key=lambda x: x["relevance_score"], reverse=True)
+        results = _process_search_results(response.results, topic, content_type, difficulty_level)
 
         logger.info("Found %d web content items for topic: %s", len(results), topic)
 
@@ -167,20 +101,103 @@ async def search_web_content(
 
     except ImportError:
         logger.warning("exa-py library not installed. Install with: pip install exa-py")
-        return {
-            "results": [],
-            "total_found": 0,
-            "search_query": topic,
-            "error": "exa-py library not installed",
-        }
+        return _create_error_response(topic, "exa-py library not installed")
     except Exception as e:
         logger.exception("Error searching web content")
-        return {
-            "results": [],
-            "total_found": 0,
-            "search_query": topic,
-            "error": f"Web content search failed: {e!s}",
+        return _create_error_response(topic, f"Web content search failed: {e!s}")
+
+
+def _create_error_response(topic: str, error_message: str) -> dict[str, Any]:
+    """Create a standardized error response."""
+    logger.info("Error in web search: %s", error_message)
+    return {
+        "results": [],
+        "total_found": 0,
+        "search_query": topic,
+        "error": error_message,
+    }
+
+
+def _build_search_query(topic: str, content_type: str, difficulty_level: str) -> str:
+    """Build an educational search query with content type and difficulty qualifiers."""
+    query_parts = [topic]
+
+    # Add content type qualifiers
+    if content_type != "any":
+        content_type_keywords = {
+            "tutorial": ["tutorial", "guide", "how to"],
+            "guide": ["complete guide", "comprehensive", "step by step"],
+            "documentation": ["documentation", "docs", "reference"],
+            "blog": ["blog", "article", "post"],
         }
+        if content_type in content_type_keywords:
+            query_parts.extend(content_type_keywords[content_type])
+
+    # Add difficulty qualifiers
+    if difficulty_level != "any":
+        difficulty_keywords = {
+            "beginner": ["beginner", "introduction", "getting started"],
+            "intermediate": ["intermediate", "advanced concepts"],
+            "advanced": ["advanced", "expert", "deep dive"],
+        }
+        if difficulty_level in difficulty_keywords:
+            query_parts.extend(difficulty_keywords[difficulty_level])
+
+    return " ".join(query_parts)
+
+
+def _get_educational_domains() -> list[str]:
+    """Get list of educational domains to focus search on."""
+    return [
+        "medium.com",
+        "dev.to",
+        "towardsdatascience.com",
+        "realpython.com",
+        "freecodecamp.org",
+        "hackernoon.com",
+        "css-tricks.com",
+        "smashingmagazine.com",
+        "docs.python.org",
+        "developer.mozilla.org",
+        "w3schools.com",
+        "geeksforgeeks.org",
+        "stackoverflow.com",
+        "github.com",
+        "arxiv.org",
+    ]
+
+
+def _process_search_results(
+    results: list[Any], topic: str, content_type: str, difficulty_level: str
+) -> list[dict[str, Any]]:
+    """Process and format search results from Exa API."""
+    processed_results = []
+
+    for result in results:
+        # Calculate relevance score
+        relevance_score = calculate_relevance(result, topic, content_type, difficulty_level)
+
+        content_result = {
+            "title": result.title,
+            "url": result.url,
+            "text_preview": result.text[:500] + "..." if result.text else "",
+            "highlights": result.highlights if hasattr(result, "highlights") else [],
+            "score": result.score,
+            "published_date": result.published_date,
+            "author": result.author if hasattr(result, "author") else None,
+            "relevance_score": relevance_score,
+            "source": "exa",
+            "type": "web_content",
+            "content_type": content_type if content_type != "any" else "unknown",
+            "difficulty_level": difficulty_level if difficulty_level != "any" else "unknown",
+        }
+
+        processed_results.append(content_result)
+
+    # Sort by relevance score
+    processed_results.sort(key=lambda x: x["relevance_score"], reverse=True)
+
+    return processed_results
 
 
 def calculate_relevance(result: Any, topic: str, content_type: str, difficulty: str) -> float:

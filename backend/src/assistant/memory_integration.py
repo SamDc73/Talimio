@@ -6,7 +6,7 @@ and learning pattern recognition for the AI assistant.
 """
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -51,7 +51,7 @@ class ContextAwareMemoryManager:
             # Build enhanced metadata with context
             enhanced_metadata = {
                 "interaction_type": interaction_type,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "has_context": bool(context_type and context_id),
             }
 
@@ -61,7 +61,7 @@ class ContextAwareMemoryManager:
                     {
                         "context_type": context_type,
                         "context_id": str(context_id),
-                    }
+                    },
                 )
 
                 # Add specific context metadata
@@ -78,7 +78,7 @@ class ContextAwareMemoryManager:
 
                 # Get current context data for richer memory storage
                 context_data = await self.context_manager.get_context(
-                    context_type, context_id, context_meta, max_tokens=1000
+                    context_type, context_id, context_meta, max_tokens=1000,
                 )
                 if context_data:
                     enhanced_metadata["context_source"] = context_data.source
@@ -133,7 +133,7 @@ class ContextAwareMemoryManager:
 
             # Search memories
             memories = await self.memory_wrapper.search_memories(
-                user_id, enhanced_query, limit=limit * 2, relevance_threshold=relevance_threshold
+                user_id, enhanced_query, limit=limit * 2, relevance_threshold=relevance_threshold,
             )
 
             # Filter by context if specified
@@ -268,72 +268,119 @@ class ContextAwareMemoryManager:
             if not recent_memories:
                 return ""
 
-            patterns = []
+            # Analyze different pattern types
+            usage_patterns = self._analyze_usage_patterns(recent_memories)
+            context_patterns = self._analyze_context_specific_patterns(recent_memories, context_type, context_id)
 
-            # Analyze context distribution
-            context_types = {}
-            interaction_types = {}
-            time_patterns = {"morning": 0, "afternoon": 0, "evening": 0}
+            # Combine all patterns
+            all_patterns = usage_patterns + context_patterns
 
-            for memory in recent_memories:
-                metadata = memory.get("metadata", {})
-
-                # Count context types
-                mem_context_type = metadata.get("context_type", "unknown")
-                context_types[mem_context_type] = context_types.get(mem_context_type, 0) + 1
-
-                # Count interaction types
-                interaction_type = metadata.get("interaction_type", "unknown")
-                interaction_types[interaction_type] = interaction_types.get(interaction_type, 0) + 1
-
-                # Analyze time patterns
-                timestamp_str = metadata.get("timestamp", "")
-                if timestamp_str:
-                    try:
-                        timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-                        hour = timestamp.hour
-                        if 5 <= hour < 12:
-                            time_patterns["morning"] += 1
-                        elif 12 <= hour < 18:
-                            time_patterns["afternoon"] += 1
-                        else:
-                            time_patterns["evening"] += 1
-                    except Exception:
-                        pass
-
-            # Generate pattern insights
-            if context_types:
-                most_used_context = max(context_types, key=context_types.get)
-                if most_used_context != "unknown":
-                    patterns.append(f"Primarily learns from {most_used_context} content")
-
-            if interaction_types:
-                most_common_interaction = max(interaction_types, key=interaction_types.get)
-                if most_common_interaction != "unknown":
-                    patterns.append(f"Most common interaction: {most_common_interaction}")
-
-            if time_patterns:
-                preferred_time = max(time_patterns, key=time_patterns.get)
-                if time_patterns[preferred_time] > 0:
-                    patterns.append(f"Most active during {preferred_time}")
-
-            # Analyze content-specific patterns if in specific context
-            if context_type and context_id:
-                context_memories = [
-                    m
-                    for m in recent_memories
-                    if m.get("metadata", {}).get("context_type") == context_type
-                    and m.get("metadata", {}).get("context_id") == str(context_id)
-                ]
-
-                if context_memories:
-                    patterns.append(f"Has {len(context_memories)} previous interactions with this {context_type}")
-
-            return "- " + "\n- ".join(patterns) if patterns else ""
+            return "- " + "\n- ".join(all_patterns) if all_patterns else ""
 
         except Exception as e:
             self._logger.exception(f"Error analyzing learning patterns: {e}")
             return ""
+
+    def _analyze_usage_patterns(self, recent_memories: list[dict]) -> list[str]:
+        """Analyze general usage patterns from memory data."""
+        patterns = []
+
+        # Initialize pattern counters
+        context_types = {}
+        interaction_types = {}
+        time_patterns = {"morning": 0, "afternoon": 0, "evening": 0}
+
+        # Collect pattern data
+        for memory in recent_memories:
+            metadata = memory.get("metadata", {})
+            self._update_pattern_counters(metadata, context_types, interaction_types, time_patterns)
+
+        # Generate pattern insights
+        patterns.extend(self._generate_context_insights(context_types))
+        patterns.extend(self._generate_interaction_insights(interaction_types))
+        patterns.extend(self._generate_time_insights(time_patterns))
+
+        return patterns
+
+    def _update_pattern_counters(
+        self, metadata: dict, context_types: dict, interaction_types: dict, time_patterns: dict
+    ) -> None:
+        """Update pattern counters from memory metadata."""
+        # Count context types
+        mem_context_type = metadata.get("context_type", "unknown")
+        context_types[mem_context_type] = context_types.get(mem_context_type, 0) + 1
+
+        # Count interaction types
+        interaction_type = metadata.get("interaction_type", "unknown")
+        interaction_types[interaction_type] = interaction_types.get(interaction_type, 0) + 1
+
+        # Analyze time patterns
+        self._analyze_timestamp_pattern(metadata.get("timestamp", ""), time_patterns)
+
+    def _analyze_timestamp_pattern(self, timestamp_str: str, time_patterns: dict) -> None:
+        """Analyze timestamp to categorize by time of day."""
+        if not timestamp_str:
+            return
+
+        try:
+            timestamp = datetime.fromisoformat(timestamp_str)
+            hour = timestamp.hour
+            if 5 <= hour < 12:
+                time_patterns["morning"] += 1
+            elif 12 <= hour < 18:
+                time_patterns["afternoon"] += 1
+            else:
+                time_patterns["evening"] += 1
+        except Exception:
+            self._logger.debug("Failed to parse timestamp: %s", timestamp_str)
+
+    def _generate_context_insights(self, context_types: dict) -> list[str]:
+        """Generate insights from context type patterns."""
+        if not context_types:
+            return []
+
+        most_used_context = max(context_types, key=context_types.get)
+        if most_used_context != "unknown":
+            return [f"Primarily learns from {most_used_context} content"]
+        return []
+
+    def _generate_interaction_insights(self, interaction_types: dict) -> list[str]:
+        """Generate insights from interaction type patterns."""
+        if not interaction_types:
+            return []
+
+        most_common_interaction = max(interaction_types, key=interaction_types.get)
+        if most_common_interaction != "unknown":
+            return [f"Most common interaction: {most_common_interaction}"]
+        return []
+
+    def _generate_time_insights(self, time_patterns: dict) -> list[str]:
+        """Generate insights from time-based patterns."""
+        if not time_patterns:
+            return []
+
+        preferred_time = max(time_patterns, key=time_patterns.get)
+        if time_patterns[preferred_time] > 0:
+            return [f"Most active during {preferred_time}"]
+        return []
+
+    def _analyze_context_specific_patterns(
+        self, recent_memories: list[dict], context_type: str | None, context_id: UUID | None
+    ) -> list[str]:
+        """Analyze patterns specific to the current context."""
+        if not context_type or not context_id:
+            return []
+
+        context_memories = [
+            m
+            for m in recent_memories
+            if m.get("metadata", {}).get("context_type") == context_type
+            and m.get("metadata", {}).get("context_id") == str(context_id)
+        ]
+
+        if context_memories:
+            return [f"Has {len(context_memories)} previous interactions with this {context_type}"]
+        return []
 
     async def track_context_interaction(
         self,
@@ -385,7 +432,7 @@ class SessionMemoryManager:
 
         memory_entry = {
             "content": content,
-            "timestamp": datetime.now(),
+            "timestamp": datetime.now(UTC),
             "metadata": metadata or {},
         }
 
