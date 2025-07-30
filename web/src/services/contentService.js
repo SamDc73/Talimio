@@ -6,7 +6,7 @@ import { api } from "@/lib/apiClient";
 
 /**
  * Archive a content item
- * @param {string} contentType - Type of content (book, youtube, flashcards, roadmap)
+ * @param {string} contentType - Type of content (book, youtube, flashcards, course)
  * @param {string} contentId - ID of the content item
  * @returns {Promise<{message: string}>}
  */
@@ -19,7 +19,7 @@ export const archiveContent = async (contentType, contentId) => {
 
 /**
  * Unarchive a content item
- * @param {string} contentType - Type of content (book, youtube, flashcards, roadmap)
+ * @param {string} contentType - Type of content (book, youtube, flashcards, course)
  * @param {string} contentId - ID of the content item
  * @returns {Promise<{message: string}>}
  */

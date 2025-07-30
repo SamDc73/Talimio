@@ -1,17 +1,13 @@
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import RoadmapPromptModal from "@/features/roadmap/RoadmapPromptModal";
-import logger from "@/utils/logger";
+import { useProgress } from "@/hooks/useProgress";
 
-// Debug logging for Radix UI component initialization
-if (import.meta.env.VITE_DEBUG_MODE === "true") {
-	logger.debug("Initializing Radix UI components in HomePage");
-}
+// Radix UI component initialization
 
 import BaseCard from "@/components/cards/BaseCard";
 import { MainHeader } from "@/components/header/MainHeader";
-import { TooltipProvider } from "@/components/tooltip";
 import CelebrationOverlay from "@/features/home/components/CelebrationOverlay";
 import ContentGrid from "@/features/home/components/ContentGrid";
 import { DialogsContainer } from "@/features/home/components/dialogs/DialogsContainer";
@@ -19,21 +15,21 @@ import FABMenu from "@/features/home/components/FABMenu";
 import FilterBadges from "@/features/home/components/FilterBadges";
 import PinnedSection from "@/features/home/components/PinnedSection";
 import SearchBar from "@/features/home/components/SearchBar";
+import SkeletonGrid from "@/features/home/components/SkeletonGrid";
 import WelcomeHeader from "@/features/home/components/WelcomeHeader";
 import { useCelebration } from "@/features/home/hooks/useCelebration";
 import { useContentData } from "@/features/home/hooks/useContentData.jsx";
 import { useContentFilters } from "@/features/home/hooks/useContentFilters";
 import { useContentHandlers } from "@/features/home/hooks/useContentHandlers";
-import { useCourseProgressSync } from "@/features/home/hooks/useCourseProgressSync";
+import { useContentProgressSync } from "@/features/home/hooks/useContentProgressSync";
 import { useDialogStates } from "@/features/home/hooks/useDialogStates";
 import { usePinning } from "@/features/home/hooks/usePinning";
 
 export default function HomePage() {
-	if (import.meta.env.VITE_DEBUG_MODE === "true") {
-		console.log("[Debug] Rendering HomePage component");
-	}
 	const [isGenerating, setIsGenerating] = useState(false);
 	const [isFabExpanded, setIsFabExpanded] = useState(false);
+	const [page, setPage] = useState(0);
+	const itemsPerPage = 20;
 
 	// Use extracted hooks
 	const dialogs = useDialogStates();
@@ -49,9 +45,32 @@ export default function HomePage() {
 		setFilterOptions,
 		sortOptions,
 		setSortOptions,
-		isLoading,
+		isLoading: contentLoading,
 		loadContentData,
 	} = useContentData(filters, pinning);
+
+	// Extract visible content IDs (pagination-aware)
+	const visibleIds = useMemo(() => {
+		const filteredContent = filters.getFilteredAndSortedContent(contentItems);
+		const start = page * itemsPerPage;
+		const end = start + itemsPerPage;
+		return filteredContent.slice(start, end).map((item) => item.id);
+	}, [contentItems, filters, page]);
+
+	// Load progress for visible items only
+	const { data: progressData, isLoading: progressLoading } =
+		useProgress(visibleIds);
+
+	// Merge content with progress
+	const contentWithProgress = useMemo(() => {
+		const filteredContent = filters.getFilteredAndSortedContent(contentItems);
+		const start = page * itemsPerPage;
+		const end = start + itemsPerPage;
+		return filteredContent.slice(start, end).map((item) => ({
+			...item,
+			progress: progressData?.[item.id] || item.progress || 0,
+		}));
+	}, [contentItems, progressData, filters, page]);
 
 	// Use content handlers hook
 	const {
@@ -74,8 +93,9 @@ export default function HomePage() {
 		setIsGenerating,
 	});
 
-	// Use course progress sync hook
-	useCourseProgressSync(setContentItems);
+	// Use content progress sync hook for all content types
+	// Pass loadContentData to trigger backend refresh when progress updates
+	useContentProgressSync(setContentItems, loadContentData);
 
 	// Apply filters and sorting using extracted hook
 	const filteredAndSortedContent =
@@ -97,7 +117,7 @@ export default function HomePage() {
 		);
 	};
 
-	const unpinned = pinning.getUnpinnedItems(filteredAndSortedContent);
+	const unpinned = pinning.getUnpinnedItems(contentWithProgress);
 	const visible = filters.showAll ? unpinned : unpinned.slice(0, 3);
 
 	const renderCard = (item, i) => (
@@ -114,146 +134,191 @@ export default function HomePage() {
 		/>
 	);
 
-	const pinnedItems = pinning.getPinnedItems(filteredAndSortedContent);
+	const pinnedItems = pinning.getPinnedItems(contentWithProgress);
+
+	// Total pages for pagination
+	const totalPages = Math.ceil(
+		(filteredAndSortedContent.length || 0) / itemsPerPage,
+	);
+
+	// Show loading skeleton while content is loading
+	if (contentLoading) {
+		return (
+			<div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
+				<MainHeader transparent />
+				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-28">
+					<WelcomeHeader />
+					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+						<SkeletonGrid count={6} />
+					</div>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<ErrorBoundary>
-			<TooltipProvider>
-				<CelebrationOverlay
-					active={celebration.shouldShowCelebration(unpinned)}
-				/>
-				<ErrorBoundary>
-					<div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
-						<MainHeader transparent />
-						<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-28">
-							<WelcomeHeader />
+			<CelebrationOverlay
+				active={celebration.shouldShowCelebration(unpinned)}
+			/>
+			<ErrorBoundary>
+				<div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
+					<MainHeader transparent />
+					<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-28">
+						<WelcomeHeader />
 
-							<SearchBar
-								searchQuery={filters.searchQuery}
-								setSearchQuery={filters.setSearchQuery}
-								isGenerateMode={filters.isGenerateMode}
-								isYoutubeMode={filters.isYoutubeMode}
-								isGenerating={isGenerating}
-								onGenerateCourse={handleGenerateCourse}
-								onYoutubeAdd={(query) => {
-									dialogs.setYoutubeUrl(query);
-									dialogs.setShowYoutubeDialog(true);
-								}}
-								onSetMode={(mode) => {
-									if (mode === "generate") {
-										filters.setIsGenerateMode(true);
-										filters.setIsYoutubeMode(false);
-									} else if (mode === "youtube") {
-										filters.setIsYoutubeMode(true);
-										filters.setIsGenerateMode(false);
-									} else {
-										filters.setIsGenerateMode(false);
-										filters.setIsYoutubeMode(false);
-									}
-								}}
-								onGenerateRoadmap={() => dialogs.setShowRoadmapModal(true)}
-								// Filter props
-								filterOptions={filterOptions}
-								sortOptions={sortOptions}
-								activeFilter={filters.activeFilter}
-								setActiveFilter={filters.setActiveFilter}
-								archiveFilter={filters.archiveFilter}
-								setArchiveFilter={filters.setArchiveFilter}
-								tagFilter={filters.tagFilter}
-								setTagFilter={filters.setTagFilter}
-								activeSort={filters.activeSort}
-								setActiveSort={filters.setActiveSort}
-								sortDirection={filters.sortDirection}
-								toggleSortDirection={filters.toggleSortDirection}
-							/>
-
-							{filters && (
-								<FilterBadges
-									activeFilter={filters.activeFilter}
-									archiveFilter={filters.archiveFilter}
-									activeSort={filters.activeSort}
-									sortDirection={filters.sortDirection}
-									tagFilter={filters.tagFilter}
-									getActiveFilterLabel={getActiveFilterLabel}
-									getActiveSortLabel={getActiveSortLabel}
-									onFilterChange={filters.setActiveFilter}
-									onArchiveFilterChange={filters.setArchiveFilter}
-									onSortChange={filters.setActiveSort}
-									onSortDirectionChange={filters.setSortDirection}
-									onTagFilterChange={filters.setTagFilter}
-									onResetAll={() => {
-										filters.setActiveFilter("all");
-										filters.setActiveSort("last-accessed");
-										filters.setSortDirection("desc");
-										filters.setTagFilter("");
-									}}
-								/>
-							)}
-
-							<motion.div
-								initial={{ opacity: 0, y: 20 }}
-								animate={{ opacity: 1, y: 0 }}
-								transition={{ duration: 0.5, delay: 0.3 }}
-							>
-								<PinnedSection
-									pinnedItems={pinnedItems}
-									renderCard={renderCard}
-								/>
-								<ContentGrid
-									isLoading={isLoading}
-									filteredAndSortedContent={filteredAndSortedContent}
-									visible={visible}
-									unpinned={unpinned}
-									showAll={filters.showAll}
-									renderCard={renderCard}
-									onShowMoreToggle={() => filters.setShowAll(!filters.showAll)}
-									onGenerateCourse={() => filters.setIsGenerateMode(true)}
-									onUploadBook={() => {
-										dialogs.setShowUploadDialog(true);
-									}}
-									onAddYoutube={() => dialogs.setShowYoutubeDialog(true)}
-									onCreateFlashcards={() =>
-										dialogs.setShowFlashcardDialog(true)
-									}
-								/>
-							</motion.div>
-						</div>
-
-						<FABMenu
-							isFabExpanded={isFabExpanded}
-							onToggleExpanded={() => setIsFabExpanded(!isFabExpanded)}
-							onGenerateCourse={() => {
-								filters.setIsGenerateMode(true);
-								// Focus on search input after a short delay
-								setTimeout(() => {
-									const searchInput =
-										document.querySelector('input[type="text"]');
-									if (searchInput) searchInput.focus();
-								}, 100);
+						<SearchBar
+							searchQuery={filters.searchQuery}
+							setSearchQuery={filters.setSearchQuery}
+							isGenerateMode={filters.isGenerateMode}
+							isYoutubeMode={filters.isYoutubeMode}
+							isGenerating={isGenerating}
+							onGenerateCourse={handleGenerateCourse}
+							onYoutubeAdd={(query) => {
+								dialogs.setYoutubeUrl(query);
+								dialogs.setShowYoutubeDialog(true);
+							}}
+							onSetMode={(mode) => {
+								if (mode === "generate") {
+									filters.setIsGenerateMode(true);
+									filters.setIsYoutubeMode(false);
+								} else if (mode === "youtube") {
+									filters.setIsYoutubeMode(true);
+									filters.setIsGenerateMode(false);
+								} else {
+									filters.setIsGenerateMode(false);
+									filters.setIsYoutubeMode(false);
+								}
 							}}
 							onGenerateRoadmap={() => dialogs.setShowRoadmapModal(true)}
-							onUploadBook={() => {
-								dialogs.setShowUploadDialog(true);
-							}}
-							onAddYoutube={() => dialogs.setShowYoutubeDialog(true)}
-							onCreateFlashcards={() => dialogs.setShowFlashcardDialog(true)}
+							// Filter props
+							filterOptions={filterOptions}
+							sortOptions={sortOptions}
+							activeFilter={filters.activeFilter}
+							setActiveFilter={filters.setActiveFilter}
+							archiveFilter={filters.archiveFilter}
+							setArchiveFilter={filters.setArchiveFilter}
+							tagFilter={filters.tagFilter}
+							setTagFilter={filters.setTagFilter}
+							activeSort={filters.activeSort}
+							setActiveSort={filters.setActiveSort}
+							sortDirection={filters.sortDirection}
+							toggleSortDirection={filters.toggleSortDirection}
 						/>
 
-						<DialogsContainer
-							dialogs={dialogs}
-							onBookUploaded={handleBookUploaded}
-							onVideoAdded={handleVideoAdded}
-							onDeckCreated={handleDeckCreated}
-						/>
+						{filters && (
+							<FilterBadges
+								activeFilter={filters.activeFilter}
+								archiveFilter={filters.archiveFilter}
+								activeSort={filters.activeSort}
+								sortDirection={filters.sortDirection}
+								tagFilter={filters.tagFilter}
+								getActiveFilterLabel={getActiveFilterLabel}
+								getActiveSortLabel={getActiveSortLabel}
+								onFilterChange={filters.setActiveFilter}
+								onArchiveFilterChange={filters.setArchiveFilter}
+								onSortChange={filters.setActiveSort}
+								onSortDirectionChange={filters.setSortDirection}
+								onTagFilterChange={filters.setTagFilter}
+								onResetAll={() => {
+									filters.setActiveFilter("all");
+									filters.setActiveSort("last-accessed");
+									filters.setSortDirection("desc");
+									filters.setTagFilter("");
+								}}
+							/>
+						)}
 
-						<RoadmapPromptModal
-							open={dialogs.showRoadmapModal}
-							onOpenChange={dialogs.setShowRoadmapModal}
-							onRoadmapCreated={handleRoadmapCreated}
-						/>
+						<motion.div
+							initial={{ opacity: 0, y: 20 }}
+							animate={{ opacity: 1, y: 0 }}
+							transition={{ duration: 0.5, delay: 0.3 }}
+						>
+							<PinnedSection
+								pinnedItems={pinnedItems}
+								renderCard={renderCard}
+							/>
+							<ContentGrid
+								isLoading={contentLoading}
+								filteredAndSortedContent={contentWithProgress}
+								visible={visible}
+								unpinned={unpinned}
+								showAll={filters.showAll}
+								renderCard={renderCard}
+								onShowMoreToggle={() => filters.setShowAll(!filters.showAll)}
+								onGenerateCourse={() => filters.setIsGenerateMode(true)}
+								onUploadBook={() => {
+									dialogs.setShowUploadDialog(true);
+								}}
+								onAddYoutube={() => dialogs.setShowYoutubeDialog(true)}
+								onCreateFlashcards={() => dialogs.setShowFlashcardDialog(true)}
+								progressLoading={progressLoading}
+							/>
+							{/* Add pagination if we have more than one page */}
+							{totalPages > 1 && (
+								<div className="mt-8 flex justify-center">
+									<div className="flex gap-2">
+										<button
+											type="button"
+											onClick={() => setPage(Math.max(0, page - 1))}
+											disabled={page === 0}
+											className="px-4 py-2 rounded-md bg-muted hover:bg-muted/80 disabled:opacity-50"
+										>
+											Previous
+										</button>
+										<span className="px-4 py-2">
+											Page {page + 1} of {totalPages}
+										</span>
+										<button
+											type="button"
+											onClick={() =>
+												setPage(Math.min(totalPages - 1, page + 1))
+											}
+											disabled={page >= totalPages - 1}
+											className="px-4 py-2 rounded-md bg-muted hover:bg-muted/80 disabled:opacity-50"
+										>
+											Next
+										</button>
+									</div>
+								</div>
+							)}
+						</motion.div>
 					</div>
-				</ErrorBoundary>
-			</TooltipProvider>
+
+					<FABMenu
+						isFabExpanded={isFabExpanded}
+						onToggleExpanded={() => setIsFabExpanded(!isFabExpanded)}
+						onGenerateCourse={() => {
+							filters.setIsGenerateMode(true);
+							// Focus on search input after a short delay
+							setTimeout(() => {
+								const searchInput =
+									document.querySelector('input[type="text"]');
+								if (searchInput) searchInput.focus();
+							}, 100);
+						}}
+						onGenerateRoadmap={() => dialogs.setShowRoadmapModal(true)}
+						onUploadBook={() => {
+							dialogs.setShowUploadDialog(true);
+						}}
+						onAddYoutube={() => dialogs.setShowYoutubeDialog(true)}
+						onCreateFlashcards={() => dialogs.setShowFlashcardDialog(true)}
+					/>
+
+					<DialogsContainer
+						dialogs={dialogs}
+						onBookUploaded={handleBookUploaded}
+						onVideoAdded={handleVideoAdded}
+						onDeckCreated={handleDeckCreated}
+					/>
+
+					<RoadmapPromptModal
+						open={dialogs.showRoadmapModal}
+						onOpenChange={dialogs.setShowRoadmapModal}
+						onRoadmapCreated={handleRoadmapCreated}
+					/>
+				</div>
+			</ErrorBoundary>
 		</ErrorBoundary>
 	);
 }

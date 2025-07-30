@@ -9,6 +9,7 @@ async function fetchWithTimeout(url, options = {}) {
 		const response = await fetch(url, {
 			...options,
 			signal: controller.signal,
+			credentials: "include", // Include cookies for authentication
 		});
 		clearTimeout(timeout);
 		return response;
@@ -23,22 +24,61 @@ async function fetchWithTimeout(url, options = {}) {
 
 export async function updateBookChapterStatus(bookId, chapterId, status) {
 	try {
-		const response = await fetchWithTimeout(
-			`${API_BASE}/books/${bookId}/chapters/${chapterId}/status`,
-			{
-				method: "PUT",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ status }),
-			},
-		);
+		// Check if this is a ToC ID (like "toc_1_1_6") or a UUID
+		const isTocId = chapterId.startsWith("toc_");
 
-		if (!response.ok) {
-			throw new Error(
-				`Failed to update chapter status: ${response.statusText}`,
+		console.log(`📚 Updating chapter status:`, {
+			bookId,
+			chapterId,
+			status,
+			isTocId,
+			endpoint: isTocId ? "progress" : "chapters",
+		});
+
+		if (isTocId) {
+			// For ToC IDs, use the progress endpoint
+			const requestBody = {
+				tocProgress: {
+					[chapterId]: status === "completed",
+				},
+			};
+			console.log(`📚 Request body:`, requestBody);
+
+			const response = await fetchWithTimeout(
+				`${API_BASE}/books/${bookId}/progress`,
+				{
+					method: "PUT",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(requestBody),
+				},
 			);
+
+			if (!response.ok) {
+				throw new Error(
+					`Failed to update ToC progress: ${response.statusText}`,
+				);
+			}
+			const data = await response.json();
+			return data;
+		} else {
+			// For UUID chapters, use the chapters endpoint
+			const response = await fetchWithTimeout(
+				`${API_BASE}/books/${bookId}/chapters/${chapterId}/status`,
+				{
+					method: "PUT",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ status }),
+				},
+			);
+
+			if (!response.ok) {
+				throw new Error(
+					`Failed to update chapter status: ${response.statusText}`,
+				);
+			}
+			const data = await response.json();
+			return data;
 		}
-		const data = await response.json();
-		return data;
 	} catch (error) {
 		console.error("Error updating chapter status:", error);
 		throw error;

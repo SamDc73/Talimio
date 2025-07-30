@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { BookOpen, Layers, Plus, Sparkles, Youtube } from "lucide-react";
 import { Button } from "@/components/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/tooltip";
+import { TooltipButton } from "@/components/TooltipButton";
 
 export default function FABMenu({
 	isFabExpanded,
@@ -22,74 +22,54 @@ export default function FABMenu({
 						transition={{ duration: 0.2 }}
 						className="flex flex-col items-center gap-3 mb-4"
 					>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									variant="secondary"
-									className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
-									onClick={() => {
-										onGenerateRoadmap();
-										onToggleExpanded();
-									}}
-								>
-									<Sparkles className="h-6 w-6" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="left">
-								<p>Generate Course</p>
-							</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									variant="secondary"
-									className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
-									onClick={() => {
-										onUploadBook();
-										onToggleExpanded();
-									}}
-								>
-									<BookOpen className="h-6 w-6" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="left">
-								<p>Upload Book</p>
-							</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									variant="secondary"
-									className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
-									onClick={() => {
-										onAddYoutube();
-										onToggleExpanded();
-									}}
-								>
-									<Youtube className="h-6 w-6" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="left">
-								<p>Add YouTube Video</p>
-							</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									variant="secondary"
-									className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
-									onClick={() => {
-										onCreateFlashcards();
-										onToggleExpanded();
-									}}
-								>
-									<Layers className="h-6 w-6" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="left">
-								<p>Create Flashcards</p>
-							</TooltipContent>
-						</Tooltip>
+						<TooltipButton
+							variant="secondary"
+							className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
+							onClick={() => {
+								onGenerateRoadmap();
+								onToggleExpanded();
+							}}
+							tooltipContent="Generate Course"
+							tooltipSide="left"
+						>
+							<Sparkles className="h-6 w-6" />
+						</TooltipButton>
+						<TooltipButton
+							variant="secondary"
+							className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
+							onClick={() => {
+								onUploadBook();
+								onToggleExpanded();
+							}}
+							tooltipContent="Upload Book"
+							tooltipSide="left"
+						>
+							<BookOpen className="h-6 w-6" />
+						</TooltipButton>
+						<TooltipButton
+							variant="secondary"
+							className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
+							onClick={() => {
+								onAddYoutube();
+								onToggleExpanded();
+							}}
+							tooltipContent="Add YouTube Video"
+							tooltipSide="left"
+						>
+							<Youtube className="h-6 w-6" />
+						</TooltipButton>
+						<TooltipButton
+							variant="secondary"
+							className="rounded-full h-14 w-14 shadow-lg flex items-center justify-center gap-2"
+							onClick={() => {
+								onCreateFlashcards();
+								onToggleExpanded();
+							}}
+							tooltipContent="Create Flashcards"
+							tooltipSide="left"
+						>
+							<Layers className="h-6 w-6" />
+						</TooltipButton>
 					</motion.div>
 				)}
 			</AnimatePresence>

@@ -69,8 +69,8 @@ export function useContentHandlers({
 		if (item.type === "course" || item.type === "roadmap") {
 			// Use the new course routes for both course and roadmap types
 			navigate(`/course/${item.id}`);
-		} else if (item.type === "youtube") {
-			navigate(`/videos/${item.uuid || item.id}`);
+		} else if (item.type === "video") {
+			navigate(`/videos/${item.id}`);
 		} else if (item.type === "book") {
 			navigate(`/books/${item.id}`);
 		} else if (item.type === "flashcards") {
@@ -78,8 +78,8 @@ export function useContentHandlers({
 		}
 	};
 
-	const handleDeleteItem = (itemId, _itemType) => {
-		// Remove the item from content state
+	const handleDeleteItem = (itemId, itemType) => {
+		// Immediately remove the item from content state (optimistic update)
 		setContentItems((prevContent) =>
 			prevContent.filter((item) => item.id !== itemId && item.uuid !== itemId),
 		);
@@ -87,10 +87,21 @@ export function useContentHandlers({
 		// Remove from pins if it was pinned
 		pinning.removePinById(itemId);
 
-		// Show success toast
+		// Show success toast with item type
+		const typeLabel =
+			itemType === "video"
+				? "Video"
+				: itemType === "book"
+					? "Book"
+					: itemType === "course" || itemType === "roadmap"
+						? "Course"
+						: itemType === "flashcards"
+							? "Flashcard Deck"
+							: "Item";
+
 		toast({
-			title: "Item Deleted",
-			description: "The item has been removed from your library.",
+			title: `${typeLabel} Deleted`,
+			description: "Successfully removed from your library.",
 		});
 	};
 
@@ -193,7 +204,7 @@ export function useContentHandlers({
 		filters.setIsYoutubeMode(false);
 
 		// Navigate to the video page
-		navigate(`/videos/${response.uuid}`);
+		navigate(`/videos/${response.id}`);
 
 		// Refresh content list
 		const data = await fetchContentData();

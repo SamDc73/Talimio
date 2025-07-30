@@ -1,19 +1,29 @@
-const TagChip = ({ tag, contentType }) => (
-	<div
-		className={`text-xs font-medium px-2 py-1 rounded-full ${
-			contentType === "course"
-				? "bg-course/10 text-course-text"
-				: contentType === "book"
-					? "bg-book/10 text-book-text"
-					: contentType === "video"
-						? "bg-video/10 text-video-text"
-						: contentType === "flashcard"
-							? "bg-flashcard/10 text-flashcard-text"
-							: "bg-muted text-muted-foreground"
-		}`}
-	>
-		{tag}
-	</div>
-);
+const TagChip = ({ tag, contentType }) => {
+	// Map content types to consistent classes
+	const getTagClasses = (type) => {
+		switch (type) {
+			case "course":
+				return "bg-teal-50 text-teal-600";
+			case "book":
+				return "bg-blue-50 text-blue-600";
+			case "video":
+			case "youtube":
+				return "bg-violet-50 text-violet-600";
+			case "flashcard":
+			case "flashcards":
+				return "bg-amber-50 text-amber-600";
+			default:
+				return "bg-muted text-muted-foreground";
+		}
+	};
+
+	return (
+		<div
+			className={`text-xs font-medium px-2 py-1 rounded-full ${getTagClasses(contentType)}`}
+		>
+			{tag}
+		</div>
+	);
+};
 
 export default TagChip;

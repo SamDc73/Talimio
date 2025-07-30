@@ -2,27 +2,32 @@
 
 from typing import Any
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class UserBase(BaseModel):
+    """Base user model with common attributes."""
+
     email: EmailStr
     name: str | None = None
 
 
 class UserCreate(UserBase):
-    pass
+    """Schema for creating a new user."""
+
 
 
 class UserUpdate(UserBase):
-    pass
+    """Schema for updating user information."""
+
 
 
 class User(UserBase):
+    """Complete user model with ID."""
+
     id: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserPreferences(BaseModel):

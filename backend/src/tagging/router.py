@@ -7,7 +7,8 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.client import ModelManager
+# AI imports removed - using facades instead
+from src.auth.dependencies import UserContextDep
 from src.database.session import get_db_session
 
 from .schemas import (
@@ -30,8 +31,8 @@ async def get_tagging_service(
     session: AsyncSession = Depends(get_db_session),
 ) -> TaggingService:
     """Get tagging service instance."""
-    model_manager = ModelManager()
-    return TaggingService(session, model_manager)
+    # TaggingService no longer needs model_manager
+    return TaggingService(session)
 
 
 @router.post("/process/{content_type}/{content_id}")
@@ -39,6 +40,7 @@ async def tag_content(
     content_type: str,
     content_id: UUID,
     background_tasks: BackgroundTasks,
+    _user_context: UserContextDep,
     service: Annotated[TaggingService, Depends(get_tagging_service)],
 ) -> TaggingResponse:
     """Generate and store tags for a specific content item.
@@ -47,6 +49,7 @@ async def tag_content(
         content_type: Type of content (book, video, course)
         content_id: UUID of the content
         background_tasks: FastAPI background tasks
+        current_user: Current authenticated user
         service: Tagging service instance
 
     Returns
@@ -61,6 +64,9 @@ async def tag_content(
         )
 
     try:
+        # Initialize tags variable
+        tags: list[str] = []
+
         # Process content based on type
         if content_type == "book":
             from .processors.book_processor import process_book_for_tagging
@@ -195,6 +201,7 @@ async def batch_tag_content(
 
 @router.get("/tags")
 async def list_tags(
+    _user_context: UserContextDep,
     service: Annotated[TaggingService, Depends(get_tagging_service)],
     category: str | None = None,
     limit: int = 100,
@@ -218,13 +225,15 @@ async def list_tags(
 async def get_content_tags(
     content_type: str,
     content_id: UUID,
+    _user_context: UserContextDep,
     service: Annotated[TaggingService, Depends(get_tagging_service)],
 ) -> list[TagSchema]:
     """Get all tags for a specific content item.
 
     Args:
-        content_type: Type of content (book, video, roadmap)
+        content_type: Type of content (book, video, course)
         content_id: UUID of the content
+        current_user: Current authenticated user
         service: Tagging service instance
 
     Returns
@@ -232,7 +241,7 @@ async def get_content_tags(
         List of tags for the content
     """
     # Validate content type
-    if content_type not in ["book", "video", "roadmap"]:
+    if content_type not in ["book", "video", "course"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid content type: {content_type}",
@@ -247,14 +256,16 @@ async def update_content_tags(
     content_type: str,
     content_id: UUID,
     request: ContentTagsUpdate,
+    _user_context: UserContextDep,
     service: Annotated[TaggingService, Depends(get_tagging_service)],
 ) -> TaggingResponse:
     """Update tags for a content item (manual tagging).
 
     Args:
-        content_type: Type of content (book, video, roadmap)
+        content_type: Type of content (book, video, course)
         content_id: UUID of the content
         request: Update request with new tags
+        current_user: Current authenticated user
         service: Tagging service instance
 
     Returns
@@ -262,7 +273,7 @@ async def update_content_tags(
         TaggingResponse with updated tags
     """
     # Validate content type
-    if content_type not in ["book", "video", "roadmap"]:
+    if content_type not in ["book", "video", "course"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid content type: {content_type}",

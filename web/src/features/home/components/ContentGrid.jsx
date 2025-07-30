@@ -1,3 +1,4 @@
+import { AnimatePresence } from "framer-motion";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/button";
 import EmptyState from "./EmptyState";
@@ -15,6 +16,7 @@ export default function ContentGrid({
 	onUploadBook,
 	onAddYoutube,
 	onCreateFlashcards,
+	_progressLoading,
 }) {
 	return (
 		<>
@@ -22,7 +24,9 @@ export default function ContentGrid({
 				{isLoading ? (
 					<SkeletonGrid count={6} />
 				) : filteredAndSortedContent.length > 0 ? (
-					visible.map(renderCard)
+					<AnimatePresence mode="popLayout">
+						{visible.map(renderCard)}
+					</AnimatePresence>
 				) : (
 					<EmptyState
 						onGenerateCourse={onGenerateCourse}

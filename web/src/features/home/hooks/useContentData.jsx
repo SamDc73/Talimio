@@ -10,9 +10,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { fetchContentData, processContentData } from "@/lib/api";
+import { processContentData } from "@/lib/api";
 import { api } from "@/lib/apiClient";
-
 export function useContentData(filters, pinning) {
 	const [contentItems, setContentItems] = useState([]);
 	const [filterOptions, setFilterOptions] = useState([]);
@@ -27,12 +26,48 @@ export function useContentData(filters, pinning) {
 			// Include archived content if we're showing archived or all content
 			const includeArchived =
 				filters.archiveFilter === "archived" || filters.archiveFilter === "all";
-			console.log(
-				`🔄 Loading content data with archiveFilter: ${filters.archiveFilter}, includeArchived: ${includeArchived}`,
+			// Loading content data based on archive filter
+
+			// Fetch data using the correct cookie-based API client
+			const response = await api.get(
+				includeArchived ? "/content?include_archived=true" : "/content",
 			);
 
-			const data = await fetchContentData(includeArchived);
-			console.log("📦 Raw API data received:", data);
+			// Transform the raw API response to match the expected format
+			const data = (response.items || []).map((item) => {
+				const mappedItem = {
+					id: item.id,
+					type: item.type === "youtube" ? "video" : item.type, // Map youtube to video
+					title: item.title,
+					description: item.description,
+					lastAccessedDate: item.lastAccessedDate,
+					createdDate: item.createdDate,
+					progress: item.progress?.percentage || item.progress || 0, // Extract percentage from progress object
+					tags: item.tags || [],
+					archived: item.archived || false,
+					...(item.type === "youtube" && {
+						channel: item.channel, // Use the correct field name from backend
+						duration: item.length, // Backend sends 'length' for duration
+					}),
+					...(item.type === "flashcards" && {
+						cardCount: item.cardCount,
+						dueCount: item.dueCount,
+					}),
+					...(item.type === "book" && {
+						author: item.author,
+						pageCount: item.pageCount,
+						currentPage: item.currentPage,
+						tocProgress: item.tocProgress || {},
+					}),
+					...(item.type === "course" && {
+						lessonCount: item.lessonCount,
+						completedLessons: item.completedLessons,
+					}),
+				};
+				return mappedItem;
+			});
+
+			// Process the API data
 
 			const {
 				content,
@@ -40,111 +75,28 @@ export function useContentData(filters, pinning) {
 				sortOptions: sortOpts,
 			} = processContentData(data);
 
-			console.log("⚙️ Processed content:", content);
-			console.log("📊 Archive status breakdown:", {
-				total: content.length,
-				archived: content.filter((item) => item.archived).length,
-				active: content.filter((item) => !item.archived).length,
-			});
+			// Content processed successfully
 
-			// Batch process tags to avoid too many concurrent requests
-			// Process in chunks of 5 to prevent overwhelming the browser
-			const BATCH_SIZE = 5;
-			const transformedContent = [];
+			// Transform content with additional fields - tags come from backend
+			const transformedContent = content.map((item) => ({
+				...item,
+				// Tags are already included from backend response
+				// Add mock due dates and states for demonstration
+				dueDate:
+					Math.random() > 0.7
+						? new Date(
+								Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000,
+							).toISOString()
+						: null,
+				isPaused: Math.random() > 0.9,
+				// For flashcards, map the existing fields
+				totalCards: item.cardCount,
+				due: item.dueCount || Math.floor(Math.random() * 10),
+				overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
+			}));
 
-			for (let i = 0; i < content.length; i += BATCH_SIZE) {
-				const batch = content.slice(i, i + BATCH_SIZE);
-				const batchResults = await Promise.all(
-					batch.map(async (item) => {
-						// Load tags from tag associations for each item
-						let tags = [];
-						try {
-							const contentType =
-								item.type === "youtube"
-									? "video"
-									: item.type === "flashcards"
-										? "flashcard"
-										: item.type === "course"
-											? "roadmap" // Map course to roadmap for tags API
-											: item.type;
-							const contentId = item.id || item.uuid;
-							if (contentId && contentType) {
-								const response = await fetch(
-									`/api/tags/${contentType}/${contentId}/tags`,
-								);
-								if (response.ok) {
-									const tagData = await response.json();
-									tags = tagData.map((tag) => tag.name);
-								}
-							}
-						} catch (error) {
-							console.log(`Could not load tags for ${item.title}:`, error);
-						}
-
-						return {
-							...item,
-							tags, // Use tags from tag associations instead of book endpoint
-							// Add mock due dates and states for demonstration
-							dueDate:
-								Math.random() > 0.7
-									? new Date(
-											Date.now() +
-												(Math.random() * 7 - 2) * 24 * 60 * 60 * 1000,
-										).toISOString()
-									: null,
-							isPaused: Math.random() > 0.9,
-							// For flashcards, map the existing fields
-							totalCards: item.cardCount,
-							due: item.dueCount || Math.floor(Math.random() * 10),
-							overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
-						};
-					}),
-				);
-				transformedContent.push(...batchResults);
-			}
-
-			const courseItems = transformedContent.filter(
-				(item) => item.type === "course",
-			);
-			if (courseItems.length > 0) {
-				// Use Promise.allSettled to handle individual API failures gracefully
-				const courseProgressPromises = courseItems.map((course) =>
-					api.get(`/courses/${course.id}/progress`).catch((error) => {
-						console.error(
-							`Failed to fetch progress for course ${course.id}:`,
-							error,
-						);
-						// Return a default progress object for failed requests
-						return {
-							completion_percentage: 0,
-							total_lessons: 0,
-							completed_lessons: 0,
-							error: true,
-						};
-					}),
-				);
-				const courseProgresses = await Promise.all(courseProgressPromises);
-
-				console.log("🎯 Course progress API responses:", courseProgresses);
-
-				const coursesWithProgress = courseItems.map((course, index) => ({
-					...course,
-					progress: courseProgresses[index].completion_percentage || 0, // Fixed: Remove .data since apiClient returns direct JSON
-				}));
-
-				const contentWithProgress = transformedContent.map((item) => {
-					if (item.type === "course") {
-						const courseWithProgress = coursesWithProgress.find(
-							(c) => c.id === item.id,
-						);
-						return courseWithProgress || item;
-					}
-					return item;
-				});
-				setContentItems(contentWithProgress);
-			} else {
-				setContentItems(transformedContent);
-			}
+			// Set content items without fetching progress (React Query will handle it)
+			setContentItems(transformedContent);
 
 			// Map the filter options with their icons
 			setFilterOptions(
@@ -216,6 +168,9 @@ export function useContentData(filters, pinning) {
 	useEffect(() => {
 		loadContentData();
 	}, [loadContentData]);
+
+	// Removed event listeners that caused race condition
+	// These events are now handled by useContentProgressSync hook
 
 	return {
 		contentItems,

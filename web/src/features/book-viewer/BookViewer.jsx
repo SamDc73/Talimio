@@ -1,29 +1,76 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { BookHeader } from "@/components/header/BookHeader";
 import BookSidebar from "@/components/sidebar/BookSidebar";
-import { BookProgressProvider, useBookProgress } from "@/hooks/useBookProgress";
 import { booksApi } from "@/services/booksApi";
 import useAppStore from "@/stores/useAppStore";
 import EPUBViewer from "./components/EPUBViewer";
+import PDFErrorBoundary from "./components/PDFErrorBoundary";
 import PDFViewer from "./components/PDFViewer";
 import "./BookViewer.css";
 
+// Remove render tracking in production
+const trackRender = () => {};
+
 const BookViewerContent = () => {
+	trackRender("BookViewerContent");
 	const { bookId } = useParams();
 	const [book, setBook] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState(null);
 	const pdfViewerRef = useRef(null);
-	const { bookProgress, isChapterCompleted } = useBookProgress();
-	const [currentPage, setCurrentPage] = useState(1);
 
-	const updateBookProgress = useAppStore((state) => state.updateBookProgress);
-	const setBookZoom = useAppStore((state) => state.setBookZoom);
-	const storedZoom = useAppStore(
-		(state) => state.books.progress[bookId]?.zoomLevel || 100,
-	);
-	const [zoom, setZoom] = useState(storedZoom);
+	// Temporarily disabled page tracking to test basic PDF rendering
+	// const [currentPage, setCurrentPage] = useState(null);
+	// const currentPageRef = useRef(null);
+
+	// Create a mock bookProgress object to keep the component working
+	const _bookProgress = {
+		progress: { percentage: 0 },
+		updateProgress: () => {},
+	};
+
+	// Temporarily disabled store sync to test basic PDF rendering
+	// const updateBookReadingStateRef = useRef();
+	// const setBookZoomRef = useRef();
+
+	// useEffect(() => {
+	// 	const state = useAppStore.getState();
+	// 	updateBookReadingStateRef.current = state.updateBookReadingState;
+	// 	setBookZoomRef.current = state.setBookZoom;
+	// }, []);
+
+	// Simple local zoom state - no store sync for now
+	const [zoom, setZoom] = useState(100);
+
+	// Sidebar state management - use refs to avoid re-renders
+	const toggleSidebarRef = useRef();
+	const [sidebarOpen, setSidebarOpen] = useState(() => {
+		// Initialize from store once
+		return useAppStore.getState().preferences?.sidebarOpen ?? true;
+	});
+
+	// Subscribe to sidebar changes only
+	useEffect(() => {
+		const state = useAppStore.getState();
+		toggleSidebarRef.current = state.toggleSidebar;
+
+		// Subscribe to sidebar state changes only
+		const unsubscribe = useAppStore.subscribe((newState, prevState) => {
+			const newSidebarOpen = newState.preferences?.sidebarOpen ?? true;
+			const prevSidebarOpen = prevState?.preferences?.sidebarOpen ?? true;
+
+			if (newSidebarOpen !== prevSidebarOpen) {
+				setSidebarOpen(newSidebarOpen);
+			}
+		});
+
+		return unsubscribe;
+	}, []);
+
+	// Memoize the book URL to prevent react-pdf from re-fetching on every render
+	// Must be before any conditional returns to follow React hooks rules
+	const bookUrl = useMemo(() => `/api/v1/books/${bookId}/file`, [bookId]);
 
 	useEffect(() => {
 		const fetchBook = async () => {
@@ -32,20 +79,10 @@ const BookViewerContent = () => {
 				const data = await booksApi.getBook(bookId);
 				setBook(data);
 
-				// Only set initial page on first load, get current stored progress at this moment
-				const currentStoredProgress =
-					useAppStore.getState().books.progress[bookId];
-				const currentPageToUse =
-					currentStoredProgress?.currentPage &&
-					currentStoredProgress.currentPage > 1
-						? currentStoredProgress.currentPage
-						: data.progress?.currentPage || 1;
-
-				setCurrentPage(currentPageToUse);
-
-				console.log(
-					`📖 Book ${bookId} loaded: Using page ${currentPageToUse} (stored: ${currentStoredProgress?.currentPage}, server: ${data.progress?.currentPage})`,
-				);
+				// Page tracking disabled for testing
+				// if (currentPage === null) {
+				// 	// Page setting logic disabled
+				// }
 			} catch (err) {
 				setError(err.message);
 			} finally {
@@ -55,74 +92,35 @@ const BookViewerContent = () => {
 		if (bookId) {
 			fetchBook();
 		}
-	}, [bookId]); // Only depend on bookId, not on storedBookProgress
+	}, [bookId]); // Only depend on bookId
 
-	// Sync local zoom state with stored zoom
-	useEffect(() => {
-		setZoom(storedZoom);
-	}, [storedZoom]);
+	// Temporarily disabled page change handling
+	// const pageChangeTimeoutRef = useRef(null);
+	// const handlePageChange = useCallback((page) => {
+	// 	// Page change logic disabled for testing
+	// }, [bookId]);
 
-	const handlePageChange = useCallback(
-		(page) => {
-			setCurrentPage(page);
-			// Persist the current page to the store
-			if (bookId) {
-				updateBookProgress(bookId, { currentPage: page });
-				console.log(`📄 Page changed to ${page} for book ${bookId}`);
-			}
-		},
-		[bookId, updateBookProgress],
-	);
+	// Extract stable values from book object
+	const _totalPages = book?.totalPages || book?.total_pages || 0;
 
-	const handleZoomChange = useCallback(
-		(newZoom) => {
-			setZoom(newZoom);
-			if (bookId) {
-				setBookZoom(bookId, newZoom);
-			}
-		},
-		[bookId, setBookZoom],
-	);
-
+	// Simple zoom handlers - no store sync for now
 	const handleZoomIn = useCallback(() => {
-		const newZoom = Math.min(300, zoom + 25);
-		setZoom(newZoom);
-		if (bookId) {
-			setBookZoom(bookId, newZoom);
-		}
-	}, [zoom, bookId, setBookZoom]);
-
-	const handleZoomOut = useCallback(() => {
-		const newZoom = Math.max(50, zoom - 25);
-		setZoom(newZoom);
-		if (bookId) {
-			setBookZoom(bookId, newZoom);
-		}
-	}, [zoom, bookId, setBookZoom]);
-
-	const handleFitToScreen = useCallback(() => {
-		if (pdfViewerRef.current) {
-			pdfViewerRef.current.calculateFitToWidth?.();
-		}
+		setZoom((currentZoom) => Math.min(300, currentZoom + 25));
 	}, []);
 
-	const handleChapterClick = useCallback(
-		(pageNumber) => {
-			const fileType = book?.fileType?.toLowerCase();
+	const handleZoomOut = useCallback(() => {
+		setZoom((currentZoom) => Math.max(50, currentZoom - 25));
+	}, []);
 
-			if (fileType === "pdf" && pdfViewerRef.current) {
-				pdfViewerRef.current.scrollToPage?.(pageNumber);
-			}
+	// Disabled fit to screen for now
+	const handleFitToScreen = useCallback(() => {
+		// Fit to screen functionality disabled
+	}, []);
 
-			// Update current page when navigating via chapter
-			if (pageNumber && pageNumber !== currentPage) {
-				handlePageChange(pageNumber);
-			}
-
-			// Chapter completion is now handled internally by the sidebar
-		},
-		[book?.fileType, currentPage, handlePageChange],
-	);
+	// Disabled chapter click for now
+	const handleChapterClick = useCallback((_pageNumber) => {
+		// Chapter click functionality disabled for testing
+	}, []);
 
 	if (loading) {
 		return (
@@ -150,16 +148,13 @@ const BookViewerContent = () => {
 	}
 
 	const fileType = book.fileType?.toLowerCase();
-	const bookUrl = `/api/v1/books/${bookId}/file`;
 
 	return (
 		<div className="flex h-screen bg-background">
 			<BookHeader
-				bookTitle={book.title}
-				bookAuthor={book.author}
-				progressPercentage={bookProgress.progressPercentage}
-				currentPage={currentPage}
-				totalPages={book.totalPages}
+				book={book}
+				onToggleSidebar={() => toggleSidebarRef.current?.()}
+				isSidebarOpen={sidebarOpen}
 				showZoomControls={fileType === "pdf"}
 				zoomLevel={zoom}
 				onZoomIn={handleZoomIn}
@@ -167,25 +162,23 @@ const BookViewerContent = () => {
 				onFitToScreen={handleFitToScreen}
 			/>
 
-			<BookSidebar
-				book={book}
-				onChapterClick={handleChapterClick}
-				isChapterCompleted={isChapterCompleted}
-				currentPage={currentPage}
-			/>
+			{sidebarOpen && (
+				<BookSidebar
+					book={book}
+					onChapterClick={handleChapterClick}
+					currentPage={1}
+					progressPercentage={0}
+				/>
+			)}
 
-			<main className={`flex-1 transition-all duration-300 ml-64 pt-16`}>
+			<main
+				className={`flex-1 transition-all duration-300 ${sidebarOpen ? "ml-64" : "ml-0"} pt-16`}
+			>
 				<div className="book-viewer-container h-full">
 					{fileType === "pdf" ? (
-						<PDFViewer
-							ref={pdfViewerRef}
-							url={bookUrl}
-							bookInfo={book}
-							onPageChange={handlePageChange}
-							initialPage={currentPage}
-							zoom={zoom}
-							onZoomChange={handleZoomChange}
-						/>
+						<PDFErrorBoundary>
+							<PDFViewer ref={pdfViewerRef} url={bookUrl} zoom={zoom} />
+						</PDFErrorBoundary>
 					) : fileType === "epub" ? (
 						<EPUBViewer url={bookUrl} bookInfo={book} />
 					) : (
@@ -200,14 +193,4 @@ const BookViewerContent = () => {
 	);
 };
 
-const BookViewer = () => {
-	const { bookId } = useParams();
-
-	return (
-		<BookProgressProvider bookId={bookId}>
-			<BookViewerContent />
-		</BookProgressProvider>
-	);
-};
-
-export default BookViewer;
+export default BookViewerContent;

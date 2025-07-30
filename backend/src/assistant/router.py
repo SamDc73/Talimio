@@ -4,17 +4,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.ai.constants import rag_config
+from src.auth.dependencies import CurrentUserId
 from src.config import env
-
-
-# from src.ai.rag.reprocess_books import reprocess_book  # TODO: Fix import
-
-
-# Temporary implementation until reprocess_books module is available
-async def reprocess_book(book_id: UUID) -> dict:
-    """Temporary implementation for reprocess_book."""
-    return {"status": "error", "message": "Reprocess functionality not yet implemented"}
-
 
 from .schemas import (
     BatchCitationRequest,
@@ -24,6 +15,12 @@ from .schemas import (
     CitationResponse,
 )
 from .service import enhanced_assistant_service, get_available_models, streaming_enhanced_assistant_service
+
+
+# Temporary implementation until reprocess_books module is available
+async def reprocess_book(_book_id: UUID) -> dict:
+    """Temporary implementation for reprocess_book."""
+    return {"status": "error", "message": "Reprocess functionality not yet implemented"}
 
 
 router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
@@ -49,8 +46,15 @@ async def debug_config() -> dict:
 
 
 @router.post("/chat", response_model=None)
-async def chat_endpoint(request: ChatRequest) -> StreamingResponse | JSONResponse:
+async def chat_endpoint(
+    request: ChatRequest,
+    current_user_id: CurrentUserId = None,
+) -> StreamingResponse | JSONResponse:
     """Send a message to the AI assistant with enhanced RAG capabilities."""
+    # Override the user_id from the request with the authenticated user_id
+    if current_user_id:
+        request.user_id = current_user_id
+
     if request.stream:
         return StreamingResponse(
             streaming_enhanced_assistant_service.chat_with_assistant_streaming_enhanced(request),
@@ -79,7 +83,7 @@ async def reprocess_book_endpoint(book_id: UUID) -> dict:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.post("/citations", response_model=CitationResponse)
+@router.post("/citations")
 async def find_citations(request: CitationRequest) -> CitationResponse:
     """Find text locations in a book for citation highlighting."""
     try:
@@ -101,7 +105,7 @@ async def find_citations(request: CitationRequest) -> CitationResponse:
         raise HTTPException(status_code=500, detail=f"Failed to find citations: {e!s}") from e
 
 
-@router.post("/citations/batch", response_model=BatchCitationResponse)
+@router.post("/citations/batch")
 async def find_batch_citations(request: BatchCitationRequest) -> BatchCitationResponse:
     """Find text locations for multiple response texts in batch."""
     try:

@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.client import ModelManager, TagGenerationError
+from src.ai.ai_service import AIServiceError, get_ai_service
 from src.ai.constants import TAG_CATEGORIES, TAG_CATEGORY_COLORS
 
 from .models import Tag, TagAssociation
@@ -17,6 +17,7 @@ from .models import Tag, TagAssociation
 if TYPE_CHECKING:
     from src.books.models import Book
     from src.books.services.book_metadata_service import BookMetadata
+    from src.courses.models import Course
 
 logger = logging.getLogger(__name__)
 
@@ -24,20 +25,20 @@ logger = logging.getLogger(__name__)
 class TaggingService:
     """Service for managing content tags."""
 
-    def __init__(self, session: AsyncSession, model_manager: ModelManager) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         """Initialize tagging service.
 
         Args:
             session: Database session
-            model_manager: AI model manager for tag generation
         """
         self.session = session
-        self.model_manager = model_manager
+        self._ai_service = get_ai_service()
 
     async def tag_content(
         self,
         content_id: UUID,
         content_type: str,
+        user_id: UUID,
         title: str = "",
         content_preview: str = "",
     ) -> list[str]:
@@ -46,6 +47,7 @@ class TaggingService:
         Args:
             content_id: ID of the content to tag
             content_type: Type of content (book, video, roadmap)
+            user_id: User ID for personalized tagging
             title: Title of the content
             content_preview: Preview text for tag generation
 
@@ -55,10 +57,13 @@ class TaggingService:
         """
         try:
             # Generate tags with confidence using AI
-            tags_with_confidence = await self.model_manager.generate_content_tags(
-                content_type=content_type,
+            # For tagging, we use the actual content type as the routing key
+            tags_with_confidence = await self._ai_service.process_content(
+                content_type,  # The actual content type (book, video, etc.)
+                "tag",         # This is the action
+                user_id,       # Use the actual user_id for personalized tags
                 title=title,
-                content_preview=content_preview,
+                preview=content_preview,
             )
 
             # Extract tag names
@@ -78,6 +83,7 @@ class TaggingService:
                         tag_id=tag_map[tag_name].id,
                         content_id=content_id,
                         content_type=content_type,
+                        user_id=user_id,
                         confidence_score=confidence,
                         auto_generated=True,
                     )
@@ -86,7 +92,7 @@ class TaggingService:
 
             return tag_names
 
-        except TagGenerationError:
+        except AIServiceError:
             logger.exception(f"Failed to generate tags for {content_type} {content_id}")
             return []
         except Exception as e:
@@ -118,9 +124,16 @@ class TaggingService:
                 title = item.get("title", "")
                 preview = item.get("preview", "")
 
+                # Use user_id from item or raise error if not provided
+                if "user_id" not in item:
+                    msg = "user_id is required for batch tagging"
+                    raise ValueError(msg)
+                user_id_for_tag = UUID(item["user_id"])
+
                 tags = await self.tag_content(
                     content_id=content_id,
                     content_type=content_type,
+                    user_id=user_id_for_tag,
                     title=title,
                     content_preview=preview,
                 )
@@ -159,26 +172,34 @@ class TaggingService:
         self,
         content_id: UUID,
         content_type: str,
+        user_id: UUID | None = None,
     ) -> list[Tag]:
-        """Get all tags for a content item.
+        """Get tags for a content item for a specific user.
 
         Args:
             content_id: ID of the content
             content_type: Type of content
+            user_id: User ID to get tags for
 
         Returns
         -------
             List of Tag objects
         """
+        if not user_id:
+            # No user_id means no tags in a user-specific system
+            return []
+
+        # Get user-specific tags only
+        query_conditions = and_(
+            TagAssociation.content_id == content_id,
+            TagAssociation.content_type == content_type,
+            TagAssociation.user_id == user_id
+        )
+
         query = (
             select(Tag)
             .join(TagAssociation)
-            .where(
-                and_(
-                    TagAssociation.content_id == content_id,
-                    TagAssociation.content_type == content_type,
-                ),
-            )
+            .where(query_conditions)
         )
 
         result = await self.session.execute(query)
@@ -188,6 +209,7 @@ class TaggingService:
         self,
         content_id: UUID,
         content_type: str,
+        user_id: UUID,
         tag_names: list[str],
     ) -> None:
         """Update manual tags for content, replacing auto-generated ones.
@@ -195,6 +217,7 @@ class TaggingService:
         Args:
             content_id: ID of the content
             content_type: Type of content
+            user_id: User ID for the tags
             tag_names: List of tag names to set
         """
         # Delete existing associations
@@ -205,6 +228,7 @@ class TaggingService:
                 and_(
                     TagAssociation.content_id == content_id,
                     TagAssociation.content_type == content_type,
+                    TagAssociation.user_id == user_id,
                 ),
             ),
         )
@@ -217,6 +241,7 @@ class TaggingService:
                 tag_id=tag_obj.id,
                 content_id=content_id,
                 content_type=content_type,
+                user_id=user_id,
                 confidence_score=1.0,
                 auto_generated=False,
             )
@@ -226,6 +251,7 @@ class TaggingService:
     async def suggest_tags(
         self,
         content_preview: str,
+        user_id: UUID,
         content_type: str = "general",
         title: str = "",
     ) -> list[str]:
@@ -233,6 +259,7 @@ class TaggingService:
 
         Args:
             content_preview: Preview text for tag generation
+            user_id: User ID for personalized tag suggestions
             content_type: Type of content
             title: Optional title
 
@@ -241,14 +268,16 @@ class TaggingService:
             List of suggested tag names
         """
         try:
-            tags_with_confidence = await self.model_manager.generate_content_tags(
-                content_type=content_type,
+            tags_with_confidence = await self._ai_service.process_content(
+                content_type,  # The actual content type (book, video, etc.)
+                "tag",         # This is the action
+                user_id,       # Use the actual user_id for personalized tags
                 title=title,
-                content_preview=content_preview,
+                preview=content_preview,
             )
             # Return just the tag names for backward compatibility
             return [item["tag"] for item in tags_with_confidence]
-        except TagGenerationError:
+        except AIServiceError:
             logger.exception("Failed to generate tag suggestions")
             return []
 
@@ -322,6 +351,7 @@ class TaggingService:
         tag_id: UUID,
         content_id: UUID,
         content_type: str,
+        user_id: UUID,
         confidence_score: float = 1.0,
         auto_generated: bool = True,
     ) -> TagAssociation:
@@ -331,6 +361,7 @@ class TaggingService:
             tag_id: ID of the tag
             content_id: ID of the content
             content_type: Type of content
+            user_id: User ID for the association
             confidence_score: Confidence score (0-1)
             auto_generated: Whether the tag was auto-generated
 
@@ -345,6 +376,7 @@ class TaggingService:
                     TagAssociation.tag_id == tag_id,
                     TagAssociation.content_id == content_id,
                     TagAssociation.content_type == content_type,
+                    TagAssociation.user_id == user_id,
                 ),
             ),
         )
@@ -357,6 +389,7 @@ class TaggingService:
             tag_id=tag_id,
             content_id=content_id,
             content_type=content_type,
+            user_id=user_id,
             confidence_score=confidence_score,
             auto_generated=auto_generated,
         )
@@ -415,13 +448,13 @@ async def update_content_tags_json(
         await session.execute(
             update(Video).where(Video.uuid == content_id).values(tags=tags_json),
         )
-    elif content_type == "course":
+    elif content_type in {"course", "roadmap"}:
         from sqlalchemy import update
 
         from src.courses.models import Course
 
         await session.execute(
-            update(Course).where(Course.id == content_id).values(tags_json=tags_json),
+            update(Course).where(Course.id == content_id).values(tags=tags_json),
         )
 
     await session.flush()
@@ -429,13 +462,13 @@ async def update_content_tags_json(
 async def apply_automatic_tagging(session: AsyncSession, book: "Book", metadata: "BookMetadata") -> None:
     """Apply automatic tagging to the book."""
     try:
-        model_manager = ModelManager()
-        tagging_service = TaggingService(session, model_manager)
+        tagging_service = TaggingService(session)
 
         content_preview = _build_content_preview(book, metadata)
         tags = await tagging_service.tag_content(
             content_id=book.id,
             content_type="book",
+            user_id=book.user_id,  # Use the book's user_id
             title=f"{book.title} {book.subtitle or ''}".strip(),
             content_preview="\n".join(content_preview),
         )
@@ -448,6 +481,40 @@ async def apply_automatic_tagging(session: AsyncSession, book: "Book", metadata:
 
     except Exception as e:
         logging.exception(f"Failed to tag book {book.id}: {e}")
+
+async def apply_automatic_tagging_to_course(session: AsyncSession, roadmap: "Course", _modules_data: list) -> None:
+    """Apply automatic tagging to the course/roadmap."""
+    # Capture roadmap ID early to avoid session issues in exception handling
+    roadmap_id = roadmap.id
+
+    try:
+        tagging_service = TaggingService(session)
+
+        # Use the CourseProcessor for consistent content extraction
+        from src.tagging.processors.course_processor import process_course_for_tagging
+
+        content_data = await process_course_for_tagging(str(roadmap_id), session)
+        if not content_data:
+            logging.warning(f"Could not extract content for course {roadmap_id}")
+            return
+
+        tags = await tagging_service.tag_content(
+            content_id=roadmap_id,
+            content_type="course",  # Use "course" instead of "roadmap"
+            user_id=roadmap.user_id,  # Use the course's user_id
+            title=content_data["title"],
+            content_preview=content_data["content_preview"],
+        )
+
+        if tags:
+            roadmap.tags = json.dumps(tags)
+            # Don't commit here - let the caller handle it
+
+        logging.info(f"Successfully tagged course {roadmap_id} with tags: {tags}")
+
+    except Exception as e:
+        logging.exception(f"Failed to tag course {roadmap_id}: {e}")
+
 
 def _build_content_preview(book: "Book", metadata: "BookMetadata") -> list[str]:
     """Build content preview for tagging."""
@@ -463,3 +530,5 @@ def _build_content_preview(book: "Book", metadata: "BookMetadata") -> list[str]:
                 content_preview.append(f"Table of Contents: {', '.join(toc_items)}")
 
     return content_preview
+
+

@@ -5,7 +5,14 @@ export const booksApi = {
 		const response = await fetch(`${BASE_URL}/books/${bookId}`);
 
 		if (!response.ok) {
-			throw new Error("Failed to fetch book");
+			if (response.status === 404) {
+				throw new Error(
+					`Book not found. The book you're looking for doesn't exist or has been removed.`,
+				);
+			}
+			throw new Error(
+				`Failed to fetch book (${response.status} ${response.statusText})`,
+			);
 		}
 
 		return response.json();

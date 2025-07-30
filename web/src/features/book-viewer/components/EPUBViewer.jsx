@@ -28,12 +28,10 @@ const EPUBViewerV2 = ({ url, bookInfo, onLocationChange }) => {
 
 	// Set up text selection handlers for EPUB
 	useTextSelectionTooltip(
-		(text) => {
-			console.log("Highlight in EPUB:", text);
+		(_text) => {
 			// Add highlight functionality here in the future
 		},
-		(text) => {
-			console.log("Ask AI about EPUB text:", text);
+		(_text) => {
 			// Add AI functionality here in the future
 		},
 	);

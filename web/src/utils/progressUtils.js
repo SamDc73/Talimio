@@ -1,71 +1,221 @@
 /**
- * Utility functions for progress calculations across videos and PDFs
- *
- * UNIFIED PROGRESS PHILOSOPHY:
- * - Videos: Time-based (currentTime/duration * 100) - smooth linear progress
- * - PDFs: Chapter-weighted sections - major chapters worth 5x more for meaningful progress
- * - Courses: Lesson-based (completedLessons/totalLessons * 100) - each lesson is a meaningful chunk
- *
- * This ensures consistent progress feel across all content types while respecting their unique structures.
+ * Shared utilities for progress tracking across all content types
  */
 
 /**
- * Get standardized progress percentage for videos
- * @param {Object} video - Video object with progress data
- * @param {number} currentTime - Current playback time (for live calculation)
- * @returns {number} Progress percentage (0-100)
+ * Dispatch a progress update event that the dashboard can listen to
+ * @param {string} contentType - Type of content (course, video, book)
+ * @param {string} contentId - ID of the content
+ * @param {Object} progressData - Progress data to send
  */
+export function dispatchProgressUpdate(contentType, contentId, progressData) {
+	const eventName = `${contentType}ProgressUpdate`;
+
+	window.dispatchEvent(
+		new CustomEvent(eventName, {
+			detail: {
+				[`${contentType}Id`]: contentId,
+				...progressData,
+			},
+		}),
+	);
+}
+
+/**
+ * Dispatch a progress refresh event to trigger data refetch
+ * @param {string} contentType - Type of content (course, video, book)
+ * @param {string} contentId - ID of the content
+ */
+export function dispatchProgressRefresh(contentType, contentId) {
+	const eventName = `${contentType}ProgressRefresh`;
+
+	window.dispatchEvent(
+		new CustomEvent(eventName, {
+			detail: {
+				[`${contentType}Id`]: contentId,
+			},
+		}),
+	);
+}
+
+/**
+ * Calculate progress percentage from items
+ * @param {Object} items - Object with item IDs as keys and completion status as values
+ * @returns {Object} Progress data with percentage, totalItems, completedItems
+ */
+export function calculateProgressFromItems(items) {
+	const itemIds = Object.keys(items);
+	const totalItems = itemIds.length;
+	const completedItems = itemIds.filter((id) => items[id]).length;
+	const percentage =
+		totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+
+	return {
+		percentage,
+		totalItems,
+		completedItems,
+	};
+}
+
+/**
+ * Show error toast with consistent formatting
+ * @param {Function} toast - Toast function from useToast hook
+ * @param {string} title - Error title
+ * @param {string} description - Error description
+ */
+export function showErrorToast(toast, title, description) {
+	toast({
+		title,
+		description,
+		variant: "destructive",
+	});
+}
+
+/**
+ * Show sync error toast with consistent messaging
+ * @param {Function} toast - Toast function from useToast hook
+ */
+export function showSyncErrorToast(toast) {
+	showErrorToast(
+		toast,
+		"Sync Error",
+		"Progress saved locally but failed to sync to server",
+	);
+}
+
+/**
+ * Track performance metrics for progress operations
+ * @param {string} operation - Name of the operation
+ * @param {Function} fn - Function to execute and measure
+ * @returns {Promise} Result of the function
+ */
+export async function trackPerformance(operation, fn) {
+	const startTime = performance.now();
+
+	try {
+		const result = await fn();
+		const duration = performance.now() - startTime;
+
+		// Log performance metrics
+		console.debug(`[Performance] ${operation} took ${duration.toFixed(2)}ms`);
+
+		// You could send this to analytics here
+		if (duration > 1000) {
+			console.warn(
+				`[Performance] ${operation} is slow: ${duration.toFixed(2)}ms`,
+			);
+		}
+
+		return result;
+	} catch (error) {
+		const duration = performance.now() - startTime;
+		console.error(
+			`[Performance] ${operation} failed after ${duration.toFixed(2)}ms`,
+			error,
+		);
+		throw error;
+	}
+}
+
+/**
+ * Debounce function for API calls
+ * @param {Function} fn - Function to debounce
+ * @param {number} delay - Delay in milliseconds
+ * @returns {Function} Debounced function
+ */
+export function debounce(fn, delay = 2000) {
+	let timeoutId;
+
+	return function (...args) {
+		clearTimeout(timeoutId);
+		timeoutId = setTimeout(() => fn.apply(this, args), delay);
+	};
+}
+
+/**
+ * Batch multiple progress updates into a single operation
+ * @param {Array} updates - Array of update objects with itemId and completed status
+ * @returns {Object} Object with completed and incomplete item arrays
+ */
+export function batchProgressUpdates(updates) {
+	const completed = [];
+	const incomplete = [];
+
+	for (const { itemId, completed: isCompleted } of updates) {
+		if (isCompleted) {
+			completed.push(itemId);
+		} else {
+			incomplete.push(itemId);
+		}
+	}
+
+	return { completed, incomplete };
+}
+
+/**
+ * Format progress for display
+ * @param {number} percentage - Progress percentage
+ * @param {number} completedItems - Number of completed items
+ * @param {number} totalItems - Total number of items
+ * @returns {string} Formatted progress string
+ */
+export function formatProgress(percentage, completedItems, totalItems) {
+	return `${percentage}% (${completedItems}/${totalItems})`;
+}
+
+/**
+ * Check if progress data is valid
+ * @param {Object} progress - Progress object to validate
+ * @returns {boolean} Whether the progress data is valid
+ */
+export function isValidProgress(progress) {
+	return (
+		progress &&
+		typeof progress.percentage === "number" &&
+		typeof progress.totalItems === "number" &&
+		typeof progress.completedItems === "number" &&
+		progress.items &&
+		typeof progress.items === "object"
+	);
+}
+
+/**
+ * Get empty progress object with standard structure
+ * @returns {Object} Empty progress object
+ */
+export function getEmptyProgress() {
+	return {
+		percentage: 0,
+		totalItems: 0,
+		completedItems: 0,
+		items: {},
+	};
+}
+
+// Legacy functions for backward compatibility
 export function getVideoProgress(video, currentTime = null) {
-	// If we have real-time current time and duration, calculate live progress
 	if (currentTime !== null && video?.duration > 0) {
 		return Math.round((currentTime / video.duration) * 100);
 	}
-
-	// Otherwise use stored progress
 	return Math.round(video?.progress || video?.completionPercentage || 0);
 }
 
-/**
- * Get standardized progress percentage for books/PDFs
- * @param {Object} book - Book object with progress data
- * @param {Object} progressStats - Progress statistics from ToC system
- * @returns {number} Progress percentage (0-100)
- */
 export function getBookProgress(book, progressStats = null) {
-	// Use ToC-based progress if available (more accurate)
 	if (progressStats?.percentage > 0) {
 		return Math.round(progressStats.percentage);
 	}
-
-	// Fall back to page-based progress (less accurate but still useful)
 	return Math.round(book?.progressPercentage || 0);
 }
 
-/**
- * Format progress display text
- * @param {number} percentage - Progress percentage
- * @param {string} type - Content type (video, book, course)
- * @returns {string} Formatted progress text
- */
 export function formatProgressText(percentage, _type = "content") {
 	const rounded = Math.round(percentage);
 	return `${rounded}%`;
 }
 
-/**
- * Determine if content is completed
- * @param {number} percentage - Progress percentage
- * @returns {boolean} Whether content is completed
- */
 export function isCompleted(percentage) {
 	return percentage >= 100;
 }
 
-/**
- * Get progress status for API calls
- * @param {number} percentage - Progress percentage
- * @returns {string} Status string
- */
 export function getProgressStatus(percentage) {
 	if (percentage >= 100) return "completed";
 	if (percentage > 0) return "in_progress";

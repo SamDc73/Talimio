@@ -17,7 +17,9 @@ export default function PinnedSection({ pinnedItems, renderCard }) {
 					<h2 className="text-xl font-semibold">Pinned</h2>
 				</div>
 				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-					{pinnedItems.map(renderCard)}
+					<AnimatePresence mode="popLayout">
+						{pinnedItems.map(renderCard)}
+					</AnimatePresence>
 				</div>
 				<div className="border-b border-border my-8" />
 			</motion.section>

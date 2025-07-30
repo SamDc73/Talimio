@@ -91,6 +91,10 @@ class BookProcessor:
             # Open PDF from bytes
             pdf_document = fitz.open(stream=file_content, filetype="pdf")
 
+            if pdf_document is None:
+                logger.warning("Failed to open PDF document")
+                return "\n\n".join(content_parts)
+
             # Extract text from first few pages
             pages_to_read = min(max_pages, pdf_document.page_count)
 
@@ -103,12 +107,17 @@ class BookProcessor:
                 if text:
                     content_parts.append(text)
 
-            # Also extract table of contents for better context
-            toc = pdf_document.get_toc()
-            if toc:
-                toc_text = self._format_toc_for_tagging(toc)
-                if toc_text:
-                    content_parts.insert(0, f"Table of Contents:\n{toc_text}\n")
+            # Try to extract table of contents for better context
+            try:
+                if hasattr(pdf_document, "get_toc"):
+                    toc = pdf_document.get_toc()  # type: ignore[call-non-callable]
+                    if toc:
+                        toc_text = self._format_toc_for_tagging(toc)
+                        if toc_text:
+                            content_parts.insert(0, f"Table of Contents:\n{toc_text}\n")
+            except (AttributeError, Exception):
+                # get_toc() method might not be available in some versions
+                logger.debug("get_toc() method not available for this PDF")
 
             pdf_document.close()
 

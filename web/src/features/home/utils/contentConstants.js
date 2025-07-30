@@ -21,6 +21,12 @@ export const VARIANTS = {
 		badge: "bg-book/10 text-book-text",
 		grad: "from-book to-book-accent",
 	},
+	video: {
+		label: "Video",
+		icon: Youtube,
+		badge: "bg-video/10 text-video-text",
+		grad: "from-video to-video-accent",
+	},
 	youtube: {
 		label: "Video",
 		icon: Youtube,
