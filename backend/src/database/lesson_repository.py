@@ -3,12 +3,13 @@ from typing import Any, cast
 from uuid import UUID
 
 import asyncpg
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class LessonRepository:
     """Repository for lesson-related database operations."""
 
-    def __init__(self, session):
+    def __init__(self, session: AsyncSession) -> None:
         """Initialize LessonRepository with a database session."""
         self.session = session
 

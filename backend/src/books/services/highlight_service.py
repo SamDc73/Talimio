@@ -145,6 +145,7 @@ class HighlightService:
 
     async def delete_highlight(self, book_id: UUID, highlight_id: str) -> bool:
         """Delete a highlight."""
+        _ = highlight_id
         # Verify book exists
         book_query = select(Book).where(Book.id == book_id)
         book_result = await self.session.execute(book_query)
@@ -162,6 +163,7 @@ class HighlightService:
 
     async def get_highlights_by_page(self, book_id: UUID, page_number: int) -> list[dict[str, Any]]:
         """Get highlights for a specific page."""
+        _ = page_number
         # Verify book exists
         book_query = select(Book).where(Book.id == book_id)
         book_result = await self.session.execute(book_query)
@@ -179,6 +181,7 @@ class HighlightService:
 
     async def get_highlights_by_color(self, book_id: UUID, color: str) -> list[dict[str, Any]]:
         """Get highlights by color."""
+        _ = color
         # Verify book exists
         book_query = select(Book).where(Book.id == book_id)
         book_result = await self.session.execute(book_query)
@@ -196,6 +199,7 @@ class HighlightService:
 
     async def search_highlights(self, book_id: UUID, query: str) -> list[dict[str, Any]]:
         """Search highlights by text content."""
+        _ = query
         # Verify book exists
         book_query = select(Book).where(Book.id == book_id)
         book_result = await self.session.execute(book_query)

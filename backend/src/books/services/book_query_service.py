@@ -144,6 +144,7 @@ class BookQueryService:
         -------
             List of matching books
         """
+        _ = include_content
         search_term = f"%{query_text}%"
 
         # Search across title, author, description, and tags
