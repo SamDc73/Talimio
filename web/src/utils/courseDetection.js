@@ -1,4 +1,4 @@
-import { api } from "@/lib/api";
+import { api } from "@/lib/apiClient";
 
 /**
  * Fetches course data with modules and lessons in a structured format
@@ -13,7 +13,7 @@ export async function getCourseWithModules(courseId) {
 	try {
 		// Fetch the complete course data from the main course endpoint
 		// This includes modules and lessons in the response
-		const courseData = await api.get(`/api/v1/courses/${courseId}`);
+		const courseData = await api.get(`/courses/${courseId}`);
 
 		// The API returns modules with nested lessons already structured
 		const modules = courseData.modules || [];

@@ -9,7 +9,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { Toaster } from "./components/toaster";
 import { TooltipProvider } from "./components/tooltip";
 import { TextSelectionProvider } from "./components/ui/GlobalTextSelectionTooltip";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { AuthProvider } from "./contexts/AuthContext";
 import { ProgressProvider } from "./contexts/ProgressContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import AuthPage from "./features/auth/AuthPage";
@@ -21,6 +21,7 @@ import LessonPage from "./features/lesson/LessonPage";
 import RoadmapPage from "./features/roadmap";
 import RoadmapPreviewPage from "./features/roadmap/RoadmapPreviewPage";
 import { VideoViewer } from "./features/video-viewer";
+import { useAuth } from "./hooks/useAuth";
 import useAppStore from "./stores/useAppStore";
 
 // Create a client instance

@@ -1,23 +1,9 @@
-import {
-	createContext,
-	useCallback,
-	useContext,
-	useEffect,
-	useState,
-} from "react";
+import { createContext, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/apiClient";
 import useAppStore from "@/stores/useAppStore";
 import { securityMonitor } from "@/utils/securityConfig";
 
-const AuthContext = createContext({});
-
-export const useAuth = () => {
-	const context = useContext(AuthContext);
-	if (!context) {
-		throw new Error("useAuth must be used within an AuthProvider");
-	}
-	return context;
-};
+export const AuthContext = createContext({});
 
 export const AuthProvider = ({ children }) => {
 	const [user, setUser] = useState(null);
@@ -96,14 +82,43 @@ export const AuthProvider = ({ children }) => {
 		}
 	}, [user?.id]);
 
+	// Handle token expiration and force re-authentication
+	const handleTokenExpiration = useCallback(() => {
+		console.log("🔄 Token expired, forcing re-authentication");
+		clearAppUser();
+		setUser(null);
+		setIsAuthenticated(false);
+
+		// Only redirect to auth if we're in multi-user mode
+		if (authMode === "supabase") {
+			// Small delay to allow state to update
+			setTimeout(() => {
+				if (window.location.pathname !== "/auth") {
+					window.location.href = "/auth";
+				}
+			}, 100);
+		}
+	}, [clearAppUser, authMode]);
+
+	// Listen for token expiration events from API client
+	useEffect(() => {
+		const handleTokenExpired = () => {
+			console.log("🚨 Received tokenExpired event from API client");
+			handleTokenExpiration();
+		};
+
+		window.addEventListener("tokenExpired", handleTokenExpired);
+		return () => window.removeEventListener("tokenExpired", handleTokenExpired);
+	}, [handleTokenExpiration]);
+
 	// Set up periodic token refresh for authenticated users
 	useEffect(() => {
 		if (!isAuthenticated || authMode !== "supabase") {
 			return;
 		}
 
-		// Refresh token 5 minutes before expiry (tokens expire in 15 minutes)
-		const refreshInterval = 10 * 60 * 1000; // 10 minutes
+		// Refresh token 5 minutes before expiry (tokens expire in 60 minutes)
+		const refreshInterval = 50 * 60 * 1000; // 50 minutes
 
 		const intervalId = setInterval(async () => {
 			try {
@@ -111,14 +126,26 @@ export const AuthProvider = ({ children }) => {
 				const response = await api.post("/auth/refresh");
 				if (response) {
 					console.log("✅ Token refreshed successfully");
+					// Update user data if it changed
+					if (response.user) {
+						setUser(response.user);
+						setAppUser(response.user);
+					}
 				}
 			} catch (error) {
 				console.error("❌ Periodic token refresh failed:", error);
+				// If refresh fails, check auth again
+				if (error.status === 401) {
+					console.log("🔄 Refresh token expired, need to re-authenticate");
+					clearAppUser();
+					setUser(null);
+					setIsAuthenticated(false);
+				}
 			}
 		}, refreshInterval);
 
 		return () => clearInterval(intervalId);
-	}, [isAuthenticated, authMode]);
+	}, [isAuthenticated, authMode, setAppUser, clearAppUser]);
 
 	const login = useCallback(
 		async (email, password) => {
@@ -255,6 +282,7 @@ export const AuthProvider = ({ children }) => {
 		signup,
 		logout,
 		checkAuth,
+		handleTokenExpiration,
 	};
 
 	// Debug logging

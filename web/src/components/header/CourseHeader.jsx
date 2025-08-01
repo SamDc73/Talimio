@@ -7,9 +7,10 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useChatSidebar } from "@/hooks/useChatSidebar";
 import { cn } from "../../lib/utils";
 import { TooltipButton } from "../TooltipButton";
-import { UserAvatarMenu, useChatSidebar } from "./MainHeader";
+import { UserAvatarMenu } from "./MainHeader";
 
 export function CourseHeader({
 	courseName,

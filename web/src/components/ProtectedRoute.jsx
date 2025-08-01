@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { Navigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 
 const ProtectedRoute = ({ children, strict = false }) => {
 	const { isAuthenticated, loading, authMode } = useAuth();

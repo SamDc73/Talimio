@@ -1,6 +1,6 @@
 import { ChevronLeft, Mail } from "lucide-react";
 import { useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 
 const PasswordResetForm = ({ onBack }) => {
 	const [email, setEmail] = useState("");

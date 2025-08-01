@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
-import { api } from "@/lib/api";
+import { api } from "@/lib/apiClient";
 
 /**
  * Tag store for managing user tags and tag-content associations
@@ -38,7 +38,7 @@ const useTagStore = create(
 				});
 
 				try {
-					const tags = await api.get("/api/tags/tags");
+					const tags = await api.get("/tags/tags");
 
 					set((state) => {
 						state.tags = {};
@@ -124,7 +124,7 @@ const useTagStore = create(
 					}
 
 					const tags = await api.get(
-						`/api/tags/${normalizedType}/${contentId}/tags`,
+						`/tags/${normalizedType}/${contentId}/tags`,
 					);
 
 					set((state) => {
@@ -157,7 +157,7 @@ const useTagStore = create(
 					}
 
 					const result = await api.put(
-						`/api/tags/${normalizedType}/${contentId}/tags`,
+						`/tags/${normalizedType}/${contentId}/tags`,
 						{
 							tags: tagNames,
 						},

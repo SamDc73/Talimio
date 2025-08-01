@@ -14,20 +14,11 @@ const init = async () => {
 		checkReactVersion();
 
 		// Check Radix UI components
-		if (import.meta.env.VITE_DEBUG_MODE === "true") {
-			console.log("[Debug] Checking Radix UI components...");
-		}
 		const radixComponentsLoaded = await checkRadixComponents();
 
 		if (!radixComponentsLoaded) {
 			console.error("[Error] Failed to load required Radix UI components");
 			return;
-		}
-
-		if (import.meta.env.VITE_DEBUG_MODE === "true") {
-			console.log(
-				"[Debug] All components loaded successfully, rendering app...",
-			);
 		}
 
 		// Create root and render app

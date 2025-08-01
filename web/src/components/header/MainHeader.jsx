@@ -20,13 +20,13 @@ import {
 import React, {
 	createContext,
 	useCallback,
-	useContext,
 	useEffect,
 	useRef,
 	useState,
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
+import { useChatSidebar } from "@/hooks/useChatSidebar";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useCurrentContext } from "../../hooks/useCurrentContext";
 import { cn } from "../../lib/utils";
@@ -38,7 +38,7 @@ import { Sheet, SheetContent, SheetTrigger } from "../sheet";
 import { TooltipButton } from "../TooltipButton";
 
 // Chat sidebar context
-const ChatSidebarContext = createContext(undefined);
+export const ChatSidebarContext = createContext(undefined);
 
 export function ChatSidebarProvider({ children }) {
 	const [isChatOpen, setIsChatOpen] = useState(false);
@@ -58,27 +58,6 @@ export function ChatSidebarProvider({ children }) {
 			{children}
 		</ChatSidebarContext.Provider>
 	);
-}
-
-export function useChatSidebar() {
-	const context = useContext(ChatSidebarContext);
-	// Return a default context if used outside provider to prevent errors
-	if (context === undefined) {
-		return {
-			isChatOpen: false,
-			toggleChat: () => {
-				console.warn(
-					"ChatSidebar: toggleChat called outside of ChatSidebarProvider",
-				);
-			},
-			closeChatSidebar: () => {
-				console.warn(
-					"ChatSidebar: closeChatSidebar called outside of ChatSidebarProvider",
-				);
-			},
-		};
-	}
-	return context;
 }
 
 // User Avatar Menu Component

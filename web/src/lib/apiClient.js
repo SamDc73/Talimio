@@ -86,11 +86,11 @@ const handleResponse = async (response, endpoint, retryRequest) => {
 			const { clearToken, clearUser } = useAppStore.getState();
 			clearToken();
 			clearUser();
-			// Redirect to auth page if we're in an auth-enabled environment
-			const authEnabled = import.meta.env.VITE_ENABLE_AUTH === "true";
-			if (authEnabled && window.location.pathname !== "/auth") {
-				console.log("🔄 Redirecting to /auth due to 401");
-				window.location.href = "/auth";
+
+			// Notify the auth context about token expiration
+			// This will be handled by the auth context's token expiration handler
+			if (typeof window !== "undefined") {
+				window.dispatchEvent(new CustomEvent("tokenExpired"));
 			}
 		}
 

@@ -2,9 +2,10 @@ import { MessageSquare, PanelRight } from "lucide-react";
 import { memo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { TooltipButton } from "@/components/TooltipButton";
+import { useChatSidebar } from "@/hooks/useChatSidebar";
 import { useVideoProgress } from "@/hooks/useVideoProgress";
 import { formatProgressText } from "@/utils/progressUtils";
-import { UserAvatarMenu, useChatSidebar } from "./MainHeader";
+import { UserAvatarMenu } from "./MainHeader";
 
 export const VideoHeader = memo(function VideoHeader({
 	video,

@@ -1,109 +1,13 @@
-const API_BASE = "/api/v1";
-const REQUEST_TIMEOUT = 10000; // 10 seconds
-
-/**
- * @typedef {Object} ContentItem
- * @property {string} id - The unique identifier for the content item
- * @property {"youtube" | "flashcards" | "book" | "roadmap" | "course"} type - The type of content
- * @property {string} title - The title of the content
- * @property {string} description - The description of the content
- * @property {string} lastAccessedDate - The last accessed date of the content
- * @property {string} createdDate - The created date of the content
- * @property {number} progress - The progress of the content (0-100)
- * @property {string[]} tags - An array of tags associated with the content
- * @property {boolean} [archived] - Whether the content is archived
- * @property {string} [channelName] - YouTube specific: channel name
- * @property {string} [channel_name] - YouTube specific: channel name (alternative)
- * @property {number} [duration] - YouTube specific: duration in seconds
- * @property {number} [cardCount] - Flashcards specific: number of cards
- * @property {number} [dueCount] - Flashcards specific: number of due cards
- * @property {string} [author] - Book specific: author name
- * @property {number} [pageCount] - Book specific: total page count
- * @property {number} [pages] - Book specific: total page count (alternative)
- * @property {number} [currentPage] - Book specific: current page number
- * @property {number} [nodeCount] - Roadmap specific: total node count
- * @property {number} [completedNodes] - Roadmap specific: completed node count
- * @property {number} [modules] - Course specific: number of modules
- */
-
-/**
- * @typedef {Object} FilterOption
- * @property {string} id
- * @property {string} label
- * @property {"Search" | "Youtube" | "Layers" | "BookOpen" | "FileText"} icon
- */
-
-/**
- * @typedef {Object} SortOption
- * @property {string} id
- * @property {string} label
- * @property {"Clock" | "CalendarDays" | "ArrowUpDown" | "FileText"} icon
- */
-
-async function request(url, options = {}) {
-	const headers = {
-		"Content-Type": "application/json",
-		...options.headers,
-	};
-
-	// Authentication is handled via httpOnly cookies, no Bearer token needed
-
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-
-	try {
-		const response = await fetch(url, {
-			...options,
-			headers,
-			credentials:
-				import.meta.env.VITE_ENABLE_AUTH === "false" ? "omit" : "include",
-			signal: controller.signal,
-		});
-		clearTimeout(timeout);
-
-		if (!response.ok) {
-			const errorData = await response
-				.json()
-				.catch(() => ({ message: response.statusText }));
-			const error = new Error(errorData.message || "API request failed");
-			error.status = response.status;
-			error.data = errorData;
-			throw error;
-		}
-
-		if (response.status === 204) {
-			return null;
-		}
-
-		return response.json();
-	} catch (error) {
-		clearTimeout(timeout);
-		if (error.name === "AbortError") {
-			throw new Error(`Request timeout after ${REQUEST_TIMEOUT}ms`);
-		}
-		throw error;
-	}
-}
-
-export const api = {
-	get: (url, options) => request(url, { ...options, method: "GET" }),
-	post: (url, body, options) =>
-		request(url, { ...options, method: "POST", body: JSON.stringify(body) }),
-	put: (url, body, options) =>
-		request(url, { ...options, method: "PUT", body: JSON.stringify(body) }),
-	patch: (url, body, options) =>
-		request(url, { ...options, method: "PATCH", body: JSON.stringify(body) }),
-	delete: (url, options) => request(url, { ...options, method: "DELETE" }),
-};
+import { api } from "./apiClient.js";
 
 /**
  * Fetches content data from the API.
  * @param {boolean} [includeArchived=false] - Whether to include archived content.
- * @returns {Promise<ContentItem[]>} - A promise that resolves to an array of ContentItem objects.
+ * @returns {Promise<Array>} - A promise that resolves to an array of content items.
  */
 export async function fetchContentData(includeArchived = false) {
 	try {
-		let url = `${API_BASE}/content`;
+		let url = "/content";
 		if (includeArchived) {
 			url += "?include_archived=true";
 		}
