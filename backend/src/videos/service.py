@@ -1,13 +1,12 @@
+import asyncio
 import json
 import logging
 import re
 from datetime import UTC, datetime
-from io import StringIO
 from typing import Any
 from uuid import UUID
 
 import aiohttp
-import webvtt
 import yt_dlp
 from fastapi import BackgroundTasks
 from sqlalchemy import or_, select
@@ -16,7 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 # AI imports removed - using facades instead
 from src.ai.rag.background_processor import process_video_rag_background as _process_video_rag_background
-from src.core.mode_aware_service import ModeAwareService
 
 # UserContext removed - using UUID directly
 from src.database.pagination import Paginator
@@ -43,6 +41,7 @@ logger = logging.getLogger(__name__)
 def parse_video_id(video_id: str) -> UUID:
     """Convert string UUID to UUID object with validation."""
     from uuid import UUID
+
     try:
         return UUID(video_id)
     except ValueError as e:
@@ -50,15 +49,112 @@ def parse_video_id(video_id: str) -> UUID:
         raise ValueError(msg) from e
 
 
-async def _extract_chapters_background(video_id: str, user_id: UUID) -> None:
-    """Extract chapters in background after video creation."""
+async def _mark_video_status(video_id: str, status: str, error_context: str = "") -> None:
+    """Mark video chapter extraction status."""
     try:
         async with async_session_maker() as db:
-            await video_service.extract_and_create_video_chapters(db, video_id, user_id)
-            logger.info(f"Successfully extracted chapters for video {video_id}")
+            video_result = await db.execute(select(Video).where(Video.id == video_id))
+            video = video_result.scalar_one_or_none()
+            if video:
+                video.chapters_status = status
+                video.chapters_extracted_at = datetime.now(UTC)
+                await db.commit()
+    except Exception as update_error:
+        logger.warning(f"Failed to mark video {video_id} as {status}{error_context}: {update_error}")
+
+
+async def _handle_video_not_found_error(
+    video_id: str, attempt: int, max_retries: int, retry_delay: int, e: ValueError
+) -> bool:
+    """Handle video not found error. Returns True if should retry, False if should stop."""
+    if attempt < max_retries - 1:
+        logger.warning(f"Video {video_id} not found on attempt {attempt + 1}, retrying in {retry_delay}s...")
+        await asyncio.sleep(retry_delay)
+        return True
+
+    logger.exception(f"Video {video_id} not found after {max_retries} attempts: {e}")
+    await _mark_video_status(video_id, "failed")
+    return False
+
+
+async def _try_extract_chapters(video_id: str, user_id: UUID) -> bool:
+    """Try to extract chapters. Returns True if successful, False if failed."""
+    async with async_session_maker() as db:
+        # Mark as processing
+        video_result = await db.execute(select(Video).where(Video.id == video_id))
+        video = video_result.scalar_one_or_none()
+        if video:
+            video.chapters_status = "processing"
+            await db.commit()
+
+        chapters = await video_service.extract_and_create_video_chapters(db, video_id, user_id)
+        logger.info(f"Successfully extracted {len(chapters)} chapters for video {video_id}")
+        return True
+
+
+async def _extract_chapters_background(video_id: str, user_id: UUID) -> None:
+    """Extract chapters in background after video creation with retry logic."""
+    max_retries = 3
+    retry_delay = 2  # seconds
+
+    for attempt in range(max_retries):
+        try:
+            if await _try_extract_chapters(video_id, user_id):
+                return
+        except ValueError as e:
+            if "not found" in str(e).lower():
+                if await _handle_video_not_found_error(video_id, attempt, max_retries, retry_delay, e):
+                    continue
+                return
+
+            logger.exception(f"Failed to extract chapters for video {video_id} on attempt {attempt + 1}: {e}")
+            await _mark_video_status(video_id, "failed", " after ValueError")
+            return
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.warning(
+                    f"Chapter extraction failed for video {video_id} on attempt {attempt + 1}, retrying in {retry_delay}s: {e}"
+                )
+                await asyncio.sleep(retry_delay)
+                continue
+
+            logger.exception(f"Failed to extract chapters for video {video_id} after {max_retries} attempts: {e}")
+            await _mark_video_status(video_id, "failed", " after final attempt")
+            return
+
+
+async def _process_transcript_to_jsonb(video_id: UUID) -> None:
+    """Process transcript text into JSONB segments in background."""
+    try:
+        async with async_session_maker() as db:
+            result = await db.execute(select(Video).where(Video.id == video_id))
+            video = result.scalar_one_or_none()
+
+            if not video or not video.transcript:
+                return
+
+            # Check if already processed
+            if video.transcript_data and video.transcript_data.get("segments"):
+                logger.info(f"Video {video_id} already has transcript segments")
+                return
+
+            logger.info(f"Processing transcript segments for video {video_id}")
+
+            # Extract segments with timestamps
+            segments = await video_service.extract_video_transcript_segments(video.url)
+
+            if segments:
+                # Store segments in JSONB
+                video.transcript_data = {
+                    "segments": [{"start": seg.start_time, "end": seg.end_time, "text": seg.text} for seg in segments],
+                    "total_segments": len(segments),
+                    "processed_at": datetime.now(UTC).isoformat(),
+                }
+                await db.commit()
+                logger.info(f"Stored {len(segments)} transcript segments for video {video_id}")
+
     except Exception as e:
-        logger.exception(f"Failed to extract chapters for video {video_id}: {e}")
-        # Don't fail the video creation if chapter extraction fails
+        logger.exception(f"Failed to process transcript segments for video {video_id}: {e}")
 
 
 async def _extract_video_transcript(video_url: str) -> str | None:
@@ -126,12 +222,26 @@ async def _extract_video_transcript(video_url: str) -> str | None:
     return None
 
 
-class VideoService(ModeAwareService):
+class VideoService:
     """Service for managing videos."""
 
     def __init__(self) -> None:
         """Initialize the video service."""
-        super().__init__()
+
+    async def _get_user_video(self, db: AsyncSession, video_id: str, user_id: UUID) -> Video:
+        """Get video with optimized user ownership validation."""
+        video_id_obj = parse_video_id(video_id)
+
+        # Single query with user filter
+        result = await db.execute(select(Video).where(Video.id == video_id_obj, Video.user_id == user_id))
+        video = result.scalar_one_or_none()
+
+        if not video:
+            # Generic error message to avoid exposing ownership info
+            msg = f"Video with ID {video_id} not found"
+            raise ValueError(msg)
+
+        return video
 
     def _video_to_dict(self, video: Video) -> dict[str, Any]:
         """Convert Video SQLAlchemy object to dict to avoid lazy loading issues."""
@@ -149,6 +259,8 @@ class VideoService(ModeAwareService):
             "tags": video.tags,
             "transcript": video.transcript,
             "transcript_data": video.transcript_data,
+            "chapters_status": video.chapters_status,
+            "chapters_extracted_at": video.chapters_extracted_at,
             "archived": video.archived,
             "archived_at": video.archived_at,
             "published_at": video.published_at,
@@ -160,20 +272,16 @@ class VideoService(ModeAwareService):
         self, db: AsyncSession, video_data: VideoCreate, background_tasks: BackgroundTasks, user_id: UUID
     ) -> VideoResponse:
         """Create a new video by fetching metadata from YouTube."""
-        # Log the access
-        self.log_access("create", user_id, "video")
-
         # Get the user ID for creation
-        query_builder = self.get_query_builder(Video)
-        user_id_for_creation = query_builder.apply_user_filter_for_creation(user_id)
+        user_id_for_creation = user_id
 
         # Extract video info using yt-dlp
         video_info = await self.fetch_video_info(video_data.url)
 
         # Check if video already exists for this user
-        existing_query = select(Video).where(Video.youtube_id == video_info["youtube_id"])
-        existing_filtered_query = query_builder.apply_user_filter(existing_query, user_id)
-        existing = await db.execute(existing_filtered_query)
+        existing = await db.execute(
+            select(Video).where(Video.youtube_id == video_info["youtube_id"], Video.user_id == user_id)
+        )
         existing_video = existing.scalar_one_or_none()
         if existing_video:
             # Return existing video with flag indicating it already existed
@@ -269,6 +377,10 @@ class VideoService(ModeAwareService):
         # Trigger background chapter extraction
         background_tasks.add_task(_extract_chapters_background, str(video.id), user_id)
 
+        # Trigger background transcript segment processing
+        if video.transcript:  # Only if we have transcript text
+            background_tasks.add_task(_process_transcript_to_jsonb, video.id)
+
         # Convert to dict first to avoid SQLAlchemy lazy loading issues
         return VideoResponse.model_validate(self._video_to_dict(video))
 
@@ -283,13 +395,8 @@ class VideoService(ModeAwareService):
         tags: list[str] | None = None,
     ) -> VideoListResponse:
         """Get paginated list of videos with optional filtering."""
-        # Log the access
-        self.log_access("list", user_id, "video")
-
         # Apply user filtering first
-        query_builder = self.get_query_builder(Video)
-        base_query = select(Video)
-        query = query_builder.apply_user_filter(base_query, user_id)
+        query = select(Video).where(Video.user_id == user_id)
 
         # Apply filters
         filters = []
@@ -334,55 +441,17 @@ class VideoService(ModeAwareService):
 
     async def get_video(self, db: AsyncSession, video_id: str, user_id: UUID) -> VideoResponse:
         """Get a single video by UUID."""
-        # Log the access
-        self.log_access("get", user_id, "video", video_id)
-
-        # Convert string UUID to UUID object
-        video_id_obj = parse_video_id(video_id)
-
-        # Apply user filtering
-        query_builder = self.get_query_builder(Video)
-        base_query = select(Video).where(Video.id == video_id_obj)
-        filtered_query = query_builder.apply_user_filter(base_query, user_id)
-
-        result = await db.execute(filtered_query)
-        video = result.scalar_one_or_none()
-
-        if not video:
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
-
-        # Validate user ownership
-        if not query_builder.validate_user_ownership(video, user_id):
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
+        # Get video with user validation (optimized single query)
+        video = await self._get_user_video(db, video_id, user_id)
 
         return VideoResponse.model_validate(self._video_to_dict(video))
 
-    async def update_video(self, db: AsyncSession, video_id: str, update_data: VideoUpdate, user_id: UUID) -> VideoResponse:
+    async def update_video(
+        self, db: AsyncSession, video_id: str, update_data: VideoUpdate, user_id: UUID
+    ) -> VideoResponse:
         """Update video metadata."""
-        # Log the access
-        self.log_access("update", user_id, "video", video_id)
-
-        # Convert string UUID to UUID object
-        video_id_obj = parse_video_id(video_id)
-
-        # Apply user filtering
-        query_builder = self.get_query_builder(Video)
-        base_query = select(Video).where(Video.id == video_id_obj)
-        filtered_query = query_builder.apply_user_filter(base_query, user_id)
-
-        result = await db.execute(filtered_query)
-        video = result.scalar_one_or_none()
-
-        if not video:
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
-
-        # Validate user ownership
-        if not query_builder.validate_user_ownership(video, user_id):
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
+        # Get video with user validation (optimized single query)
+        video = await self._get_user_video(db, video_id, user_id)
 
         # Update fields
         update_dict = update_data.model_dump(exclude_unset=True)
@@ -426,28 +495,8 @@ class VideoService(ModeAwareService):
 
     async def delete_video(self, db: AsyncSession, video_id: str, user_id: UUID) -> None:
         """Delete a video."""
-        # Log the access
-        self.log_access("delete", user_id, "video", video_id)
-
-        # Convert string UUID to UUID object
-        video_id_obj = parse_video_id(video_id)
-
-        # Apply user filtering
-        query_builder = self.get_query_builder(Video)
-        base_query = select(Video).where(Video.id == video_id_obj)
-        filtered_query = query_builder.apply_user_filter(base_query, user_id)
-
-        result = await db.execute(filtered_query)
-        video = result.scalar_one_or_none()
-
-        if not video:
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
-
-        # Validate user ownership
-        if not query_builder.validate_user_ownership(video, user_id):
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
+        # Get video with user validation (optimized single query)
+        video = await self._get_user_video(db, video_id, user_id)
 
         await db.delete(video)
         await db.commit()
@@ -498,73 +547,51 @@ class VideoService(ModeAwareService):
 
     async def get_video_chapters(self, db: AsyncSession, video_id: str, user_id: UUID) -> list[VideoChapterResponse]:
         """Get all chapters for a video."""
-        # Convert string UUID to UUID object
-        video_id_obj = parse_video_id(video_id)
+        # Get video with user validation (optimized single query)
+        video = await self._get_user_video(db, video_id, user_id)
 
         # Debug logging
-        logger.info(f"Getting chapters for video {video_id} (UUID: {video_id_obj}) for user {user_id}")
-
-        # Apply user filtering
-        query_builder = self.get_query_builder(Video)
-        base_query = select(Video).where(Video.id == video_id_obj)
-        filtered_query = query_builder.apply_user_filter(base_query, user_id)
-
-        video_result = await db.execute(filtered_query)
-        video = video_result.scalar_one_or_none()
-
-        if not video:
-            # Check if video exists without user filter
-            unfiltered_result = await db.execute(select(Video).where(Video.id == video_id_obj))
-            unfiltered_video = unfiltered_result.scalar_one_or_none()
-            if unfiltered_video:
-                logger.error(f"Video {video_id} exists but belongs to user {unfiltered_video.user_id}, not {user_id}")
-            else:
-                logger.error(f"Video {video_id} not found in database at all")
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
-
-        # Validate user ownership
-        if not query_builder.validate_user_ownership(video, user_id):
-            logger.error(f"User {user_id} does not own video {video_id} (owned by {video.user_id})")
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
+        logger.info(f"Getting chapters for video {video_id} (UUID: {video.id}) for user {user_id}")
 
         # Get chapters
         chapters_result = await db.execute(
-            select(VideoChapter).where(VideoChapter.video_id == video_id_obj).order_by(VideoChapter.chapter_number),
+            select(VideoChapter).where(VideoChapter.video_id == video.id).order_by(VideoChapter.chapter_number),
         )
         chapters = chapters_result.scalars().all()
 
-        # Return empty list if no chapters found - frontend will fall back to description extraction
+        # If no chapters found and extraction hasn't been attempted, try to extract automatically
+        if not chapters and video.chapters_status == "pending":
+            logger.info(
+                f"No chapters found for video {video_id} and status is pending, attempting automatic extraction as fallback"
+            )
+            try:
+                chapters = await self.extract_and_create_video_chapters(db, video_id, user_id)
+                logger.info(f"Successfully extracted {len(chapters)} chapters as fallback for video {video_id}")
+                return chapters
+            except Exception as e:
+                logger.warning(f"Fallback chapter extraction failed for video {video_id}: {e}")
+                # Mark as failed so we don't keep retrying
+                video.chapters_status = "failed"
+                video.chapters_extracted_at = datetime.now(UTC)
+                await db.commit()
+                # Return empty list - frontend will fall back to description extraction
+                return []
+
+        # Return existing chapters
         return [VideoChapterResponse.model_validate(chapter) for chapter in chapters]
 
-    async def get_video_chapter(self, db: AsyncSession, video_id: str, chapter_id: str, user_id: UUID) -> VideoChapterResponse:
+    async def get_video_chapter(
+        self, db: AsyncSession, video_id: str, chapter_id: str, user_id: UUID
+    ) -> VideoChapterResponse:
         """Get a specific chapter for a video."""
-        # Convert string UUID to UUID object
-        video_id_obj = parse_video_id(video_id)
-
-        # Apply user filtering
-        query_builder = self.get_query_builder(Video)
-        base_query = select(Video).where(Video.id == video_id_obj)
-        filtered_query = query_builder.apply_user_filter(base_query, user_id)
-
-        video_result = await db.execute(filtered_query)
-        video = video_result.scalar_one_or_none()
-
-        if not video:
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
-
-        # Validate user ownership
-        if not query_builder.validate_user_ownership(video, user_id):
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
+        # Get video with user validation (optimized single query)
+        video = await self._get_user_video(db, video_id, user_id)
 
         # Get chapter
         chapter_result = await db.execute(
             select(VideoChapter).where(
                 VideoChapter.id == chapter_id,
-                VideoChapter.video_id == video_id,
+                VideoChapter.video_id == video.id,
             ),
         )
         chapter = chapter_result.scalar_one_or_none()
@@ -584,28 +611,14 @@ class VideoService(ModeAwareService):
         user_id: UUID,
     ) -> VideoChapterResponse:
         """Update the status of a video chapter."""
-        # Apply user filtering
-        query_builder = self.get_query_builder(Video)
-        base_query = select(Video).where(Video.id == video_id)
-        filtered_query = query_builder.apply_user_filter(base_query, user_id)
-
-        video_result = await db.execute(filtered_query)
-        video = video_result.scalar_one_or_none()
-
-        if not video:
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
-
-        # Validate user ownership
-        if not query_builder.validate_user_ownership(video, user_id):
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
+        # Get video with user validation (optimized single query)
+        video = await self._get_user_video(db, video_id, user_id)
 
         # Get chapter
         chapter_result = await db.execute(
             select(VideoChapter).where(
                 VideoChapter.id == chapter_id,
-                VideoChapter.video_id == video_id,
+                VideoChapter.video_id == video.id,
             ),
         )
         chapter = chapter_result.scalar_one_or_none()
@@ -626,7 +639,7 @@ class VideoService(ModeAwareService):
 
         # Recalculate video completion percentage based on all chapters
         all_chapters_result = await db.execute(
-            select(VideoChapter).where(VideoChapter.video_id == video_id),
+            select(VideoChapter).where(VideoChapter.video_id == video.id),
         )
         all_chapters = all_chapters_result.scalars().all()
 
@@ -648,13 +661,17 @@ class VideoService(ModeAwareService):
         user_id: UUID | None = None,
     ) -> VideoResponse:
         """Sync chapter progress from web app and update video completion percentage."""
-        # Verify video exists
-        video_result = await db.execute(select(Video).where(Video.id == video_id))
-        video = video_result.scalar_one_or_none()
-
-        if not video:
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
+        # If user_id is provided, verify ownership; otherwise just get the video
+        if user_id:
+            video = await self._get_user_video(db, video_id, user_id)
+        else:
+            # Background tasks without user context
+            video_id_obj = parse_video_id(video_id)
+            video_result = await db.execute(select(Video).where(Video.id == video_id_obj))
+            video = video_result.scalar_one_or_none()
+            if not video:
+                msg = f"Video with ID {video_id} not found"
+                raise ValueError(msg)
 
         # Calculate completion percentage from chapter progress
         completed_count = len(completed_chapter_ids)
@@ -666,7 +683,7 @@ class VideoService(ModeAwareService):
 
             # Find or create progress record
             progress_query = select(VideoProgress).where(
-                VideoProgress.video_id == video_id,
+                VideoProgress.video_id == video.id,
                 VideoProgress.user_id == user_id,
             )
             progress_result = await db.execute(progress_query)
@@ -674,7 +691,7 @@ class VideoService(ModeAwareService):
 
             if not progress:
                 progress = VideoProgress(
-                    video_id=video_id,
+                    video_id=video.id,
                     user_id=user_id,
                 )
                 db.add(progress)
@@ -692,24 +709,12 @@ class VideoService(ModeAwareService):
 
         return VideoResponse.model_validate(self._video_to_dict(video))
 
-    async def extract_and_create_video_chapters(self, db: AsyncSession, video_id: str, user_id: UUID) -> list[VideoChapterResponse]:
+    async def extract_and_create_video_chapters(
+        self, db: AsyncSession, video_id: str, user_id: UUID
+    ) -> list[VideoChapterResponse]:
         """Extract chapters from YouTube video and create chapter records."""
-        # Apply user filtering
-        query_builder = self.get_query_builder(Video)
-        base_query = select(Video).where(Video.id == video_id)
-        filtered_query = query_builder.apply_user_filter(base_query, user_id)
-
-        video_result = await db.execute(filtered_query)
-        video = video_result.scalar_one_or_none()
-
-        if not video:
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
-
-        # Validate user ownership
-        if not query_builder.validate_user_ownership(video, user_id):
-            msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
+        # Get video with user validation (optimized single query)
+        video = await self._get_user_video(db, video_id, user_id)
 
         # Extract chapters using yt-dlp
         try:
@@ -731,7 +736,7 @@ class VideoService(ModeAwareService):
 
         # Clear existing chapters
         existing_chapters_result = await db.execute(
-            select(VideoChapter).where(VideoChapter.video_id == video_id),
+            select(VideoChapter).where(VideoChapter.video_id == video.id),
         )
         existing_chapters = existing_chapters_result.scalars().all()
         for chapter in existing_chapters:
@@ -751,6 +756,10 @@ class VideoService(ModeAwareService):
             db.add(chapter)
             chapters.append(chapter)
 
+        # Update video chapter extraction status
+        video.chapters_status = "completed"
+        video.chapters_extracted_at = datetime.now(UTC)
+
         await db.commit()
 
         # Refresh chapters to get IDs
@@ -759,40 +768,70 @@ class VideoService(ModeAwareService):
 
         return [VideoChapterResponse.model_validate(chapter) for chapter in chapters]
 
+    async def get_transcript_info(self, db: AsyncSession, video_id: str) -> dict[str, Any] | None:
+        """Get transcript metadata without loading full segments."""
+        video_id_obj = parse_video_id(video_id)
+
+        # Only fetch transcript_data field
+        result = await db.execute(select(Video.transcript_data).where(Video.id == video_id_obj))
+        row = result.first()
+
+        if not row or not row.transcript_data:
+            return None
+
+        return {
+            "has_transcript": True,
+            "segment_count": row.transcript_data.get("total_segments", 0),
+            "processed_at": row.transcript_data.get("processed_at"),
+        }
+
     async def get_video_transcript_segments(self, db: AsyncSession, video_id: str) -> VideoTranscriptResponse:
         """Get transcript segments with timestamps for a video."""
-        # Get video to ensure it exists
-        result = await db.execute(
-            select(Video).where(Video.id == video_id),
-        )
-        video = result.scalar_one_or_none()
+        # Convert string UUID to UUID object
+        video_id_obj = parse_video_id(video_id)
 
-        if not video:
+        # Get video to ensure it exists - ONLY load necessary fields
+        result = await db.execute(
+            select(Video.id, Video.url, Video.transcript_data).where(Video.id == video_id_obj),
+        )
+        video_data = result.first()
+
+        if not video_data:
             msg = f"Video with ID {video_id} not found"
             raise ValueError(msg)
 
         try:
             # Use JSONB data if available (fast path)
-            if video.transcript_data and video.transcript_data.get("segments"):
+            if video_data.transcript_data and video_data.transcript_data.get("segments"):
                 segments = [
-                    TranscriptSegment(
-                        start_time=seg["start"],
-                        end_time=seg["end"],
-                        text=seg["text"]
-                    )
-                    for seg in video.transcript_data["segments"]
+                    TranscriptSegment(start_time=seg["start"], end_time=seg["end"], text=seg["text"])
+                    for seg in video_data.transcript_data["segments"]
                 ]
                 return VideoTranscriptResponse(
-                    video_id=video.id,
+                    video_id=video_data.id,
                     segments=segments,
-                    total_segments=video.transcript_data.get("total_segments", len(segments)),
+                    total_segments=video_data.transcript_data.get("total_segments", len(segments)),
                 )
 
             # Fallback: extract segments from video URL (backward compatibility)
             logger.info(f"No JSONB data found for video {video_id}, extracting segments from URL")
-            segments = await self._extract_video_transcript_segments(video.url)
+            segments = await self.extract_video_transcript_segments(video_data.url)
+
+            # Store segments in JSONB for next time
+            if segments:
+                # Need to update the actual video record
+                update_result = await db.execute(select(Video).where(Video.id == video_id_obj))
+                video = update_result.scalar_one()
+                video.transcript_data = {
+                    "segments": [{"start": seg.start_time, "end": seg.end_time, "text": seg.text} for seg in segments],
+                    "total_segments": len(segments),
+                    "processed_at": datetime.now(UTC).isoformat(),
+                }
+                await db.commit()
+                logger.info(f"Stored {len(segments)} transcript segments in JSONB for video {video_id}")
+
             return VideoTranscriptResponse(
-                video_id=video.id,
+                video_id=video_data.id,
                 segments=segments,
                 total_segments=len(segments),
             )
@@ -801,7 +840,7 @@ class VideoService(ModeAwareService):
             msg = f"Failed to get transcript segments: {e!s}"
             raise ValueError(msg) from e
 
-    async def _extract_video_transcript_segments(self, video_url: str) -> list[TranscriptSegment]:
+    async def extract_video_transcript_segments(self, video_url: str) -> list[TranscriptSegment]:
         """Extract transcript segments with timestamps from YouTube video using yt-dlp."""
         try:
             # Updated options for cleaner subtitles - using SRT format
@@ -853,13 +892,6 @@ class VideoService(ModeAwareService):
             return []
 
         return []
-
-    def _parse_vtt_segments(self, vtt_content: str) -> list[TranscriptSegment]:
-        """Parse VTT content to extract transcript segments with timestamps."""
-        return [
-            TranscriptSegment(start_time=caption.start_in_seconds, end_time=caption.end_in_seconds, text=caption.text)
-            for caption in webvtt.read_buffer(StringIO(vtt_content))
-        ]
 
     def _parse_srt_segments(self, srt_content: str) -> list[TranscriptSegment]:
         """Parse SRT content to extract transcript segments with timestamps."""
@@ -923,95 +955,6 @@ class VideoService(ModeAwareService):
         except Exception as e:
             logger.exception(f"Error fetching video chapters: {e}")
             return []
-
-    async def get_video_progress_percentage(self, video_id: UUID, user_id: UUID | None = None) -> int:
-        """Calculate video progress based on user's watch progress.
-
-        Returns percentage (0-100) based on time-based progress from VideoProgress records.
-        This matches the ProgressCalculator interface and provides time-based progress.
-        """
-        from src.videos.models import VideoProgress
-
-        # Use async session from session maker
-        async with async_session_maker() as session:
-            # Get the video to get total duration
-            video_query = select(Video).where(Video.id == video_id)
-            video_result = await session.execute(video_query)
-            video = video_result.scalar_one_or_none()
-
-            if not video or not video.duration:
-                return 0
-
-            # If no user_id provided, try to use default user
-            if user_id is None:
-                from src.config.settings import get_settings
-                settings = get_settings()
-
-                # In single-user mode, use default user; in multi-user mode, return 0
-                if settings.AUTH_PROVIDER == "none":
-                    from src.auth.manager import NoAuthProvider
-                    user_id = NoAuthProvider.DEFAULT_USER_ID
-                else:
-                    # Multi-user mode - we can't determine user without context
-                    return 0
-
-            # Get progress record for time-based calculation
-            progress_query = select(VideoProgress).where(
-                VideoProgress.video_id == video_id,
-                VideoProgress.user_id == user_id
-            )
-            progress_result = await session.execute(progress_query)
-            progress = progress_result.scalar_one_or_none()
-
-            if not progress or progress.last_position is None:
-                return 0
-
-            # Calculate time-based progress percentage
-            progress_percentage = min(100, (progress.last_position / video.duration) * 100)
-            return int(progress_percentage)
-
-    async def get_chapter_completion_stats(self, video_id: UUID) -> dict:
-        """Get detailed chapter completion statistics.
-
-        Returns statistics about chapter completion for the video.
-        """
-        from sqlalchemy import func
-
-        # Use async session from session maker
-        async with async_session_maker() as session:
-            # Count total and completed chapters
-            stats_query = select(
-                func.count(VideoChapter.id).label("total"),
-                func.count(VideoChapter.id).filter(VideoChapter.status == "completed").label("completed"),
-                func.count(VideoChapter.id).filter(VideoChapter.status == "in_progress").label("in_progress"),
-            ).where(VideoChapter.video_id == video_id)
-
-            result = await session.execute(stats_query)
-            stats = result.first()
-
-            if not stats or stats.total == 0:
-                # No chapters available, return default stats
-                return {
-                    "total_chapters": 0,
-                    "completed_chapters": 0,
-                    "in_progress_chapters": 0,
-                    "not_started_chapters": 0,
-                    "completion_percentage": 0,
-                    "uses_video_based_progress": True,
-                }
-
-            completed_chapters = stats.completed
-            in_progress_chapters = stats.in_progress
-            not_started_chapters = stats.total - completed_chapters - in_progress_chapters
-
-            return {
-                "total_chapters": stats.total,
-                "completed_chapters": completed_chapters,
-                "in_progress_chapters": in_progress_chapters,
-                "not_started_chapters": not_started_chapters,
-                "completion_percentage": int((completed_chapters / stats.total) * 100) if stats.total > 0 else 0,
-                "uses_video_based_progress": False,
-            }
 
 
 # Service instance

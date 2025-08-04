@@ -36,4 +36,6 @@ class SimpleSecurityMiddleware(BaseHTTPMiddleware):
 
 # Rate limiting decorators (use on endpoints)
 auth_rate_limit = limiter.limit("5/minute")  # Login attempts
+upload_rate_limit = limiter.limit("20/minute")  # File uploads, video creation
+ai_rate_limit = limiter.limit("50/minute")  # AI-powered operations
 api_rate_limit = limiter.limit("100/minute")  # General API calls

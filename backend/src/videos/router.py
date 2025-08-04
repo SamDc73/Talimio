@@ -5,14 +5,14 @@ from typing import Annotated, Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.dependencies import UserId
+from src.auth import UserId
 from src.database.session import get_db_session
-from src.videos.models import Video
 from src.videos.schemas import (
     VideoChapterProgressSync,
     VideoChapterResponse,
     VideoChapterStatusUpdate,
     VideoCreate,
+    VideoDetailResponse,
     VideoListResponse,
     VideoProgressResponse,
     VideoProgressUpdate,
@@ -26,32 +26,11 @@ from src.videos.service import video_service
 logger = logging.getLogger(__name__)
 
 
-def _video_to_dict(video: Video) -> dict[str, Any]:
-    """Convert Video SQLAlchemy object to dict to avoid lazy loading issues."""
-    return {
-        "id": video.id,
-        "uuid": video.id,  # Map id to uuid for compatibility
-        "youtube_id": video.youtube_id,
-        "url": video.url,
-        "title": video.title,
-        "channel": video.channel,
-        "channel_id": video.channel_id,
-        "duration": video.duration,
-        "thumbnail_url": video.thumbnail_url,
-        "description": video.description,
-        "tags": video.tags,
-        "archived": video.archived,
-        "archived_at": video.archived_at,
-        "published_at": video.published_at,
-        "created_at": video.created_at,
-        "updated_at": video.updated_at,
-    }
-
-
 router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
+# @upload_rate_limit  # TODO: Enable rate limiting with request parameter
 async def create_video(
     video_data: VideoCreate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -61,10 +40,7 @@ async def create_video(
     """Add a YouTube video to the library."""
     try:
         return await video_service.create_video(
-            db=db,
-            video_data=video_data,
-            background_tasks=background_tasks,
-            user_id=user_id
+            db=db, video_data=video_data, background_tasks=background_tasks, user_id=user_id
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -74,6 +50,7 @@ async def create_video(
 
 
 @router.get("")
+# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def list_videos(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_id: UserId,
@@ -84,18 +61,17 @@ async def list_videos(
     tags: Annotated[list[str] | None, Query(description="Filter by tags")] = None,
 ) -> VideoListResponse:
     """List all YouTube videos in library with optional filtering."""
-    return await video_service.get_videos(
-        db=db,
-        user_id=user_id,
-        page=page,
-        size=limit,
-        channel=channel,
-        search=search,
-        tags=tags
-    )
+    try:
+        return await video_service.get_videos(
+            db=db, user_id=user_id, page=page, size=limit, channel=channel, search=search, tags=tags
+        )
+    except Exception as e:
+        logger.exception(f"Error listing videos: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.get("/{video_id}")
+# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video(
     video_id: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -103,16 +79,16 @@ async def get_video(
 ) -> VideoResponse:
     """Get a specific video by ID."""
     try:
-        return await video_service.get_video(
-            db=db,
-            video_id=video_id,
-            user_id=user_id
-        )
+        return await video_service.get_video(db=db, video_id=video_id, user_id=user_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(f"Error fetching video {video_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.patch("/{video_id}")
+# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def update_video(
     video_id: str,
     update_data: VideoUpdate,
@@ -121,17 +97,16 @@ async def update_video(
 ) -> VideoResponse:
     """Update video metadata."""
     try:
-        return await video_service.update_video(
-            db=db,
-            video_id=video_id,
-            update_data=update_data,
-            user_id=user_id
-        )
+        return await video_service.update_video(db=db, video_id=video_id, update_data=update_data, user_id=user_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(f"Error updating video {video_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.delete("/{video_id}")
+# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def delete_video(
     video_id: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -139,16 +114,16 @@ async def delete_video(
 ) -> None:
     """Delete a video."""
     try:
-        return await video_service.delete_video(
-            db=db,
-            video_id=video_id,
-            user_id=user_id
-        )
+        return await video_service.delete_video(db=db, video_id=video_id, user_id=user_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(f"Error deleting video {video_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.patch("/{video_id}/progress")
+# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def update_video_progress(
     video_id: str,
     progress_data: VideoProgressUpdate,
@@ -170,10 +145,7 @@ async def update_video_progress(
         try:
             video_id_uuid = UUID(video_id)
         except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid video ID format"
-            ) from None
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid video ID format") from None
 
         # Build metadata for video progress
         metadata = {
@@ -192,14 +164,11 @@ async def update_video_progress(
 
         # Create progress update
         progress_update = ProgressUpdate(
-            progress_percentage=progress_data.completion_percentage or 0.0,
-            metadata=metadata
+            progress_percentage=progress_data.completion_percentage or 0.0, metadata=metadata
         )
 
         # Update via unified service
-        result = await service.update_progress(
-            user_id, video_id_uuid, "video", progress_update
-        )
+        result = await service.update_progress(user_id, video_id_uuid, "video", progress_update)
 
         # Convert to legacy response format for backward compatibility
         return VideoProgressResponse(
@@ -210,7 +179,7 @@ async def update_video_progress(
             completion_percentage=result.progress_percentage,
             last_watched_at=result.updated_at,
             created_at=result.created_at,
-            updated_at=result.updated_at
+            updated_at=result.updated_at,
         )
     except HTTPException:
         raise
@@ -220,6 +189,7 @@ async def update_video_progress(
 
 
 @router.get("/{video_id}/progress")
+# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video_progress(
     video_id: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -239,10 +209,7 @@ async def get_video_progress(
         try:
             video_id_uuid = UUID(video_id)
         except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid video ID format"
-            ) from None
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid video ID format") from None
 
         # Use unified progress service
         service = ProgressService(db)
@@ -258,7 +225,7 @@ async def get_video_progress(
                 completion_percentage=0,
                 last_watched_at=None,
                 created_at=datetime.now(UTC),
-                updated_at=datetime.now(UTC)
+                updated_at=datetime.now(UTC),
             )
 
         # Convert to legacy response format
@@ -271,7 +238,7 @@ async def get_video_progress(
             completion_percentage=progress.progress_percentage,
             last_watched_at=metadata.get("last_watched_at", progress.updated_at),
             created_at=progress.created_at,
-            updated_at=progress.updated_at
+            updated_at=progress.updated_at,
         )
     except HTTPException:
         raise
@@ -281,6 +248,7 @@ async def get_video_progress(
 
 
 @router.post("/{video_id}/progress")
+# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def update_video_progress_post(
     video_id: str,
     progress_data: VideoProgressUpdate,
@@ -297,6 +265,7 @@ async def update_video_progress_post(
 
 
 @router.get("/{video_id}/chapters")
+# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video_chapters(
     video_id: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -307,9 +276,13 @@ async def get_video_chapters(
         return await video_service.get_video_chapters(db, video_id, user_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(f"Error fetching chapters for video {video_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.get("/{video_id}/chapters/{chapter_id}")
+# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video_chapter(
     video_id: str,
     chapter_id: str,
@@ -321,9 +294,13 @@ async def get_video_chapter(
         return await video_service.get_video_chapter(db, video_id, chapter_id, user_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(f"Error fetching chapter {chapter_id} for video {video_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.put("/{video_id}/chapters/{chapter_id}/status")
+# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def update_video_chapter_status(
     video_id: str,
     chapter_id: str,
@@ -338,9 +315,13 @@ async def update_video_chapter_status(
         if "Invalid status" in str(e):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(f"Error updating chapter {chapter_id} status for video {video_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.post("/{video_id}/extract-chapters")
+# @ai_rate_limit  # TODO: Enable rate limiting with request parameter
 async def extract_video_chapters(
     video_id: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -353,10 +334,14 @@ async def extract_video_chapters(
     except ValueError as e:
         if "not found" in str(e):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(f"Error extracting chapters for video {video_id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.post("/{video_id}/sync-chapter-progress")
+# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def sync_video_chapter_progress(
     video_id: str,
     progress_data: VideoChapterProgressSync,
@@ -364,20 +349,23 @@ async def sync_video_chapter_progress(
     user_id: UserId,
 ) -> VideoResponse:
     """Sync chapter progress from web app to update video completion percentage."""
-    # Pass user_id to track progress per user
     try:
         return await video_service.sync_chapter_progress(
             db,
-            video_id,  # Fixed: was video_uuid (undefined variable)
+            video_id,
             progress_data.completed_chapter_ids,
             progress_data.total_chapters,
             user_id=user_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(f"Error syncing chapter progress for video {video_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.get("/{video_id}/transcript")
+# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video_transcript(
     video_id: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -390,4 +378,46 @@ async def get_video_transcript(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
         logger.exception(f"Error fetching transcript for video {video_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+
+
+@router.get("/{video_id}/details")
+# @api_rate_limit  # TODO: Enable rate limiting with request parameter
+async def get_video_details(
+    video_id: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    user_id: UserId,
+) -> VideoDetailResponse:
+    """Get video with chapters and transcript info in a single optimized request."""
+    try:
+        # Get video
+        video = await video_service.get_video(db, video_id, user_id)
+
+        # Get chapters
+        try:
+            chapters = await video_service.get_video_chapters(db, video_id, user_id)
+        except Exception:
+            chapters = []
+
+        # Get transcript info (not the full segments, just metadata)
+        transcript_info = await video_service.get_transcript_info(db, video_id)
+
+        # Get progress
+        try:
+            progress = await video_service.get_video_progress(db, video_id, user_id)
+        except Exception:
+            progress = None
+
+        # Build response
+        return VideoDetailResponse(
+            **video.model_dump(),
+            chapters=chapters,
+            transcript_info=transcript_info,
+            progress=progress
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(f"Error fetching video details for {video_id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e

@@ -5,7 +5,7 @@ import { VideoHeader } from "@/components/header/VideoHeader";
 import { VideoSidebar } from "@/components/sidebar";
 import { useToast } from "@/hooks/use-toast";
 import { useVideoProgressWithPosition } from "@/hooks/useVideoProgress";
-import { videoApi } from "@/services/videoApi";
+import { getVideo } from "@/services/videosService";
 import useAppStore from "@/stores/useAppStore";
 import "@justinribeiro/lite-youtube";
 import { CollapsibleDescription } from "./CollapsibleDescription";
@@ -54,7 +54,7 @@ function VideoViewerContent() {
 			setLoading(true);
 			setError(null);
 
-			const data = await videoApi.getVideo(videoId);
+			const data = await getVideo(videoId);
 			setVideo(data);
 
 			// Set initial duration if available

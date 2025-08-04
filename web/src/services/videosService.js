@@ -1,9 +1,81 @@
 /**
- * Service for managing video chapters and their progress
+ * Service for managing videos, chapters and their progress
  */
 import { api } from "@/lib/apiClient";
 
 const _API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
+
+/**
+ * Get a video by ID (with authentication)
+ * @param {string} videoId - The ID of the video
+ * @returns {Promise<Object>} Video data
+ */
+export async function getVideo(videoId) {
+	try {
+		return await api.get(`/videos/${videoId}`);
+	} catch (error) {
+		console.error("Error fetching video:", error);
+		throw error;
+	}
+}
+
+/**
+ * Get video details including chapters and transcript info (optimized)
+ * @param {string} videoId - The ID of the video
+ * @returns {Promise<Object>} Video details with chapters and transcript info
+ */
+export async function getVideoDetails(videoId) {
+	try {
+		return await api.get(`/videos/${videoId}/details`);
+	} catch (error) {
+		console.error("Error fetching video details:", error);
+		throw error;
+	}
+}
+
+/**
+ * Create a new video
+ * @param {string} url - YouTube URL
+ * @returns {Promise<Object>} Created video data
+ */
+export async function createVideo(url) {
+	try {
+		return await api.post("/videos", { url });
+	} catch (error) {
+		console.error("Error creating video:", error);
+		throw error;
+	}
+}
+
+/**
+ * Get all videos (with authentication)
+ * @param {Object} params - Query parameters
+ * @returns {Promise<Object>} Videos list response
+ */
+export async function getVideos(params = {}) {
+	try {
+		const queryString = new URLSearchParams(params).toString();
+		const endpoint = queryString ? `/videos?${queryString}` : "/videos";
+		return await api.get(endpoint);
+	} catch (error) {
+		console.error("Error fetching videos:", error);
+		throw error;
+	}
+}
+
+/**
+ * Get video transcript
+ * @param {string} videoId - The ID of the video
+ * @returns {Promise<Object>} Transcript data
+ */
+export async function getVideoTranscript(videoId) {
+	try {
+		return await api.get(`/videos/${videoId}/transcript`);
+	} catch (error) {
+		console.error("Error fetching transcript:", error);
+		throw error;
+	}
+}
 
 /**
  * Fetch chapters for a video

@@ -55,7 +55,9 @@ class VideoProgressUpdate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, populate_by_name=True)
 
     last_position: float | None = Field(None, ge=0, description="Current position in seconds", alias="lastPosition")
-    completion_percentage: float | None = Field(None, ge=0, le=100, description="Completion percentage", alias="completionPercentage")
+    completion_percentage: float | None = Field(
+        None, ge=0, le=100, description="Completion percentage", alias="completionPercentage"
+    )
 
 
 class VideoProgressResponse(BaseModel):
@@ -187,3 +189,11 @@ class RAGStatusResponse(BaseModel):
     rag_status: str  # pending, processing, completed, failed
     rag_processed_at: str | None = None
     message: str
+
+
+class VideoDetailResponse(VideoResponse):
+    """Enhanced video response with chapters and transcript info."""
+
+    chapters: list[VideoChapterResponse] | None = None
+    transcript_info: dict[str, Any] | None = None  # Contains segment count and availability
+    progress: VideoProgressResponse | None = None
