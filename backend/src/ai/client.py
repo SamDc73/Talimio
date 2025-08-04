@@ -53,6 +53,7 @@ class ModelManager:
 
     def __init__(self, memory_wrapper: Any = None) -> None:
         from src.config import env
+
         self.settings = get_settings()
         self.model = env("PRIMARY_LLM_MODEL")
 
@@ -133,9 +134,7 @@ class ModelManager:
                 messages = list(messages)  # Convert to mutable list
 
                 # Find existing system message or create new one
-                system_message_idx = next(
-                    (i for i, msg in enumerate(messages) if msg.get("role") == "system"), None
-                )
+                system_message_idx = next((i for i, msg in enumerate(messages) if msg.get("role") == "system"), None)
 
                 memory_prompt = f"""Personal Context:
 {memory_context}
@@ -225,23 +224,21 @@ Please use this context to personalize your response appropriately."""
         for tool in tools:
             if "function" not in tool:
                 # Wrap in function key for OpenRouter compatibility
-                formatted_tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": tool.get("name"),
-                        "description": tool.get("description"),
-                        "parameters": tool.get("parameters", {})
+                formatted_tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": tool.get("name"),
+                            "description": tool.get("description"),
+                            "parameters": tool.get("parameters", {}),
+                        },
                     }
-                })
+                )
             else:
                 formatted_tools.append(tool)
         return formatted_tools
 
-    async def _execute_tool_call(
-        self,
-        tool_call: dict[str, Any],
-        messages: list[dict[str, Any]]
-    ) -> None:
+    async def _execute_tool_call(self, tool_call: dict[str, Any], messages: list[dict[str, Any]]) -> None:
         """Execute a single tool call and update messages."""
         from src.ai.functions import execute_function
 
@@ -264,9 +261,7 @@ Please use this context to personalize your response appropriately."""
         except Exception as e:
             # Add error response to messages
             error_result = {"success": False, "error": str(e), "function_name": function_name}
-            messages.append(
-                {"role": "tool", "tool_call_id": tool_call_id, "content": json.dumps(error_result)}
-            )
+            messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": json.dumps(error_result)})
 
             self._logger.exception("Error executing tool call %s", function_name)
 
@@ -355,7 +350,9 @@ Please use this context to personalize your response appropriately."""
                 # Check if it's a quota error
                 if "insufficient_quota" in str(e) or "429" in str(e):
                     self._logger.exception("API Quota exceeded for model: %s", self.model)
-                    self._logger.exception("OpenAI API quota has been exceeded. Please check your billing at https://platform.openai.com/usage")
+                    self._logger.exception(
+                        "OpenAI API quota has been exceeded. Please check your billing at https://platform.openai.com/usage"
+                    )
                     msg = "OpenAI API quota exceeded. Please check your OpenAI account billing and usage limits."
                     raise AIError(msg) from e
 
@@ -420,12 +417,7 @@ Please use this context to personalize your response appropriately."""
         async for chunk in self.get_streaming_completion(messages):
             yield chunk
 
-    async def _enhance_description_with_tools(
-        self,
-        user_prompt: str,
-        skill_level: str,
-        description: str
-    ) -> str:
+    async def _enhance_description_with_tools(self, user_prompt: str, skill_level: str, description: str) -> str:
         """Enhance description by discovering content with function calling."""
         self._logger.info("Using function calling to discover content for roadmap generation")
         from src.ai.functions import get_roadmap_functions
@@ -435,17 +427,20 @@ Please use this context to personalize your response appropriately."""
 
         # Build enhanced prompt with function calling
         enhanced_messages = [
-            {"role": "system", "content": "You are a curriculum design expert. Use the content discovery tools to find relevant learning resources and incorporate them into your roadmap design."},
-            {"role": "user", "content": f"Create a comprehensive learning roadmap for '{user_prompt}' at {skill_level} level. Search for existing courses, YouTube videos, articles, and other resources to inform your curriculum design."}
+            {
+                "role": "system",
+                "content": "You are a curriculum design expert. Use the content discovery tools to find relevant learning resources and incorporate them into your roadmap design.",
+            },
+            {
+                "role": "user",
+                "content": f"Create a comprehensive learning roadmap for '{user_prompt}' at {skill_level} level. Search for existing courses, YouTube videos, articles, and other resources to inform your curriculum design.",
+            },
         ]
 
         try:
             # Get AI response with tools
             discovery_response = await self.get_completion_with_tools(
-                messages=enhanced_messages,
-                tools=tools,
-                tool_choice="auto",
-                format_json=False
+                messages=enhanced_messages, tools=tools, tool_choice="auto", format_json=False
             )
             self._logger.info("Function calling completed successfully")
 
@@ -573,7 +568,10 @@ Please use this context to personalize your response appropriately."""
 
         # Include JSON instruction in the main prompt for better compliance
         messages = [
-            {"role": "system", "content": "You are a curriculum design expert. You must always respond with valid JSON only, no other text."},
+            {
+                "role": "system",
+                "content": "You are a curriculum design expert. You must always respond with valid JSON only, no other text.",
+            },
             {"role": "user", "content": prompt},
         ]
 
@@ -607,11 +605,7 @@ Please use this context to personalize your response appropriately."""
             self._logger.exception("Error generating roadmap content")
             raise RoadmapGenerationError from e
         else:
-            return {
-                "title": roadmap_title,
-                "description": roadmap_description,
-                "coreTopics": validated_nodes
-            }
+            return {"title": roadmap_title, "description": roadmap_description, "coreTopics": validated_nodes}
 
     def _process_subtopics(self, subtopics: list[Any]) -> list[dict[str, Any]]:
         """Process and validate subtopics for roadmap nodes.
@@ -649,7 +643,6 @@ Please use this context to personalize your response appropriately."""
                     }
                 )
         return processed_children
-
 
     async def generate_content_tags(
         self,
@@ -741,12 +734,16 @@ def _build_course_context(metadata: dict[str, Any]) -> str:
         if current_index > 0:
             content_info += "\n\nPrevious topics covered:"
             for i in range(max(0, current_index - 2), current_index):
-                content_info += f"\n- {metadata['course_outline'][i]['title']}: {metadata['course_outline'][i]['description']}"
+                content_info += (
+                    f"\n- {metadata['course_outline'][i]['title']}: {metadata['course_outline'][i]['description']}"
+                )
 
         if current_index < len(metadata["course_outline"]) - 1:
             content_info += "\n\nUpcoming topics:"
             for i in range(current_index + 1, min(len(metadata["course_outline"]), current_index + 3)):
-                content_info += f"\n- {metadata['course_outline'][i]['title']}: {metadata['course_outline'][i]['description']}"
+                content_info += (
+                    f"\n- {metadata['course_outline'][i]['title']}: {metadata['course_outline'][i]['description']}"
+                )
 
     return content_info
 
@@ -774,16 +771,20 @@ async def _get_rag_context(roadmap_id: str | None, node_title: str, node_descrip
 
             for result in search_results:
                 context_parts.append(f"[Source: {result.document_title}]\n{result.chunk_content}\n")
-                citations_info.append({
-                    "document_id": result.document_id,
-                    "document_title": result.document_title,
-                    "similarity_score": result.similarity_score,
-                })
+                citations_info.append(
+                    {
+                        "document_id": result.document_id,
+                        "document_title": result.document_title,
+                        "similarity_score": result.similarity_score,
+                    }
+                )
 
             rag_context = "\n\nReference Materials:\n" + "\n".join(context_parts)
             logging.info(
                 "Added RAG context for lesson '%s' from roadmap %s with %s citations",
-                node_title, roadmap_id, len(citations_info)
+                node_title,
+                roadmap_id,
+                len(citations_info),
             )
 
             return rag_context, citations_info
@@ -793,25 +794,46 @@ async def _get_rag_context(roadmap_id: str | None, node_title: str, node_descrip
         return "", []
 
 
-def _analyze_content_preferences(original_user_prompt: str, course_title: str, roadmap_id: str | None) -> dict[str, bool]:
+def _analyze_content_preferences(
+    original_user_prompt: str, course_title: str, roadmap_id: str | None
+) -> dict[str, bool]:
     """Analyze user prompt and course title to determine content preferences."""
     preferences = {
         "videos": False,
         "articles": False,
         "hackernews": False,
         "existing_content": False,
-        "all_content": False
+        "all_content": False,
     }
 
     if original_user_prompt:
         prompt_lower = original_user_prompt.lower()
 
         # Check for video preferences
-        video_keywords = ["video", "videos", "youtube", "watch", "tutorial video", "focus on video", "video content", "video-based"]
+        video_keywords = [
+            "video",
+            "videos",
+            "youtube",
+            "watch",
+            "tutorial video",
+            "focus on video",
+            "video content",
+            "video-based",
+        ]
         preferences["videos"] = any(keyword in prompt_lower for keyword in video_keywords)
 
         # Check for article/documentation preferences
-        article_keywords = ["article", "articles", "documentation", "docs", "blog", "tutorial", "guide", "resource", "reading"]
+        article_keywords = [
+            "article",
+            "articles",
+            "documentation",
+            "docs",
+            "blog",
+            "tutorial",
+            "guide",
+            "resource",
+            "reading",
+        ]
         preferences["articles"] = any(keyword in prompt_lower for keyword in article_keywords)
 
         # Check for technical/developer content
@@ -819,7 +841,13 @@ def _analyze_content_preferences(original_user_prompt: str, course_title: str, r
         preferences["hackernews"] = any(keyword in prompt_lower for keyword in tech_keywords)
 
         # Check for comprehensive content
-        comprehensive_keywords = ["comprehensive", "all resources", "various sources", "multiple sources", "diverse content"]
+        comprehensive_keywords = [
+            "comprehensive",
+            "all resources",
+            "various sources",
+            "multiple sources",
+            "diverse content",
+        ]
         preferences["all_content"] = any(keyword in prompt_lower for keyword in comprehensive_keywords)
 
         logging.info("Original prompt: %s", original_user_prompt)
@@ -851,7 +879,9 @@ def _build_discovery_prompts(preferences: dict[str, bool], search_query: str) ->
     discovery_prompts = []
 
     if preferences.get("all_content"):
-        discovery_prompts.append(f"Find comprehensive learning resources about {search_query} including videos, articles, tutorials, and technical discussions")
+        discovery_prompts.append(
+            f"Find comprehensive learning resources about {search_query} including videos, articles, tutorials, and technical discussions"
+        )
     else:
         if preferences.get("videos"):
             discovery_prompts.append(f"Find YouTube videos and video tutorials about {search_query}")
@@ -910,7 +940,9 @@ def _format_discovery_results(discovery_result: str | dict[str, Any]) -> str:
         discovered_content_prompt += _format_articles_section(discovery_result.get("articles", []))
         discovered_content_prompt += _format_hackernews_section(discovery_result.get("hackernews", []))
 
-    discovered_content_prompt += "\n\nIntegrate these resources naturally into the lesson content, providing context and building upon them."
+    discovered_content_prompt += (
+        "\n\nIntegrate these resources naturally into the lesson content, providing context and building upon them."
+    )
     return discovered_content_prompt
 
 
@@ -938,10 +970,7 @@ def _clean_markdown_content(markdown_content: str) -> str:
 
 
 async def _discover_content_with_tools(
-    node_title: str,
-    node_description: str,
-    preferences: dict[str, bool],
-    messages: list[dict[str, str]]
+    node_title: str, node_description: str, preferences: dict[str, bool], messages: list[dict[str, str]]
 ) -> None:
     """Discover content using function calling and add to messages."""
     logging.info(
@@ -959,24 +988,21 @@ async def _discover_content_with_tools(
     full_discovery_prompt = _build_discovery_prompts(preferences, search_query)
 
     discovery_messages = [
-        {"role": "system", "content": "You are helping discover educational content for a lesson. Use all available tools to find relevant resources."},
-        {"role": "user", "content": full_discovery_prompt}
+        {
+            "role": "system",
+            "content": "You are helping discover educational content for a lesson. Use all available tools to find relevant resources.",
+        },
+        {"role": "user", "content": full_discovery_prompt},
     ]
 
     try:
         discovery_result = await model_manager.get_completion_with_tools(
-            messages=discovery_messages,
-            tools=tools,
-            tool_choice="auto",
-            format_json=False
+            messages=discovery_messages, tools=tools, tool_choice="auto", format_json=False
         )
 
         if discovery_result:
             discovered_content_prompt = _format_discovery_results(discovery_result)
-            messages.append({
-                "role": "system",
-                "content": discovered_content_prompt
-            })
+            messages.append({"role": "system", "content": discovered_content_prompt})
             logging.info("Added content discovery results for lesson '%s'", node_title)
 
     except Exception as e:
@@ -1009,9 +1035,7 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
 
         # Get RAG context and citations
         rag_context, citations_info = await _get_rag_context(
-            metadata["roadmap_id"],
-            metadata["node_title"],
-            metadata["node_description"]
+            metadata["roadmap_id"], metadata["node_title"], metadata["node_description"]
         )
 
         # Prepare initial messages
@@ -1024,26 +1048,24 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
             {"role": "user", "content": prompt},
         ]
 
-        logging.info("Generating lesson for '%s' with skill level '%s'", metadata["node_title"], metadata["skill_level"])
+        logging.info(
+            "Generating lesson for '%s' with skill level '%s'", metadata["node_title"], metadata["skill_level"]
+        )
 
         # Analyze content preferences
         content_preferences = _analyze_content_preferences(
-            metadata["original_user_prompt"],
-            metadata["course_title"],
-            metadata["roadmap_id"]
+            metadata["original_user_prompt"], metadata["course_title"], metadata["roadmap_id"]
         )
 
         # Use function calling if any content preference is enabled
         if any(content_preferences.values()):
             await _discover_content_with_tools(
-                metadata["node_title"],
-                metadata["node_description"],
-                content_preferences,
-                messages
+                metadata["node_title"], metadata["node_description"], content_preferences, messages
             )
 
         # Generate lesson content
         from src.config import env
+
         response = await acompletion(
             model=env("PRIMARY_LLM_MODEL"),
             messages=messages,

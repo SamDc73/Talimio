@@ -27,11 +27,7 @@ class LessonUpdateService:
         self._logger = logging.getLogger(__name__)
 
     async def update_lesson(
-        self,
-        course_id: UUID,
-        lesson_id: UUID,
-        request: LessonUpdate,
-        _user_id: UUID | None = None
+        self, course_id: UUID, lesson_id: UUID, request: LessonUpdate, _user_id: UUID | None = None
     ) -> LessonResponse:
         """Update lesson metadata/content.
 
@@ -51,18 +47,13 @@ class LessonUpdateService:
         """
         # Get lesson
         lesson_query = select(Node).where(
-            Node.id == lesson_id,
-            Node.roadmap_id == course_id,
-            Node.parent_id.is_not(None)
+            Node.id == lesson_id, Node.roadmap_id == course_id, Node.parent_id.is_not(None)
         )
         lesson_result = await self.session.execute(lesson_query)
         lesson = lesson_result.scalar_one_or_none()
 
         if not lesson:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lesson not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
         # Update fields if provided
         if request.slug is not None:

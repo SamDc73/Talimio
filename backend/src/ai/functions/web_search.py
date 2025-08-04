@@ -223,8 +223,7 @@ def calculate_relevance(result: Any, topic: str, content_type: str, difficulty: 
         }
 
         type_matches = sum(
-            1 for keyword in type_keywords.get(content_type, [])
-            if keyword in title or keyword in text[:200]
+            1 for keyword in type_keywords.get(content_type, []) if keyword in title or keyword in text[:200]
         )
         score += min(type_matches * 0.05, 0.15)
 

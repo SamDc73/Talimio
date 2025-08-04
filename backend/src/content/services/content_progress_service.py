@@ -19,7 +19,6 @@ class ContentProgressService:
         """Initialize the content service."""
         self.session = session
 
-
     def _convert_to_uuid(self, content_id: str | UUID) -> UUID | None:
         """Convert string to UUID if needed."""
         if isinstance(content_id, UUID):
@@ -32,6 +31,7 @@ class ContentProgressService:
     async def _get_course_progress(self, content_id: UUID, user_id: UUID | None) -> int:
         """Get course progress."""
         from src.courses.services.course_progress_service import CourseProgressService
+
         if user_id is None:
             return 0
         try:
@@ -47,6 +47,7 @@ class ContentProgressService:
 
         # Use book facade for progress calculation
         from src.books.facade import BooksFacade
+
         try:
             facade = BooksFacade(self.session)
             book_data = await facade.get_book_with_progress(content_id, user_id)
@@ -61,6 +62,7 @@ class ContentProgressService:
 
         # Use video facade for progress calculation
         from src.videos.facade import VideosFacade
+
         try:
             facade = VideosFacade()
             # Use get_video_with_progress which exists in the facade
@@ -75,8 +77,9 @@ class ContentProgressService:
         """Get flashcard progress."""
         return 0  # TODO: Implement when flashcard progress is needed
 
-
-    def _group_items_by_type(self, items: list[tuple[str, str | UUID, UUID | None]]) -> dict[str, list[tuple[str | UUID, UUID | None]]]:
+    def _group_items_by_type(
+        self, items: list[tuple[str, str | UUID, UUID | None]]
+    ) -> dict[str, list[tuple[str | UUID, UUID | None]]]:
         """Group items by content type."""
         grouped = {}
         for content_type, content_id, user_id in items:
@@ -86,15 +89,17 @@ class ContentProgressService:
         return grouped
 
 
-
-
 async def _calculate_course_progress(session: AsyncSession, items: list[Any], user_id: UUID) -> list[Any]:
     """Calculate accurate course progress using CourseProgressService (DRY)."""
     # Filter for course items only (roadmap type in DB, but shows as course in enum)
     # Check for ContentType.COURSE enum value
     from src.courses.services.course_progress_service import CourseProgressService
 
-    course_items = [item for item in items if hasattr(item, "type") and (item.type == ContentType.COURSE or str(item.type) == "course")]
+    course_items = [
+        item
+        for item in items
+        if hasattr(item, "type") and (item.type == ContentType.COURSE or str(item.type) == "course")
+    ]
 
     if not course_items:
         return items
@@ -113,10 +118,11 @@ async def _calculate_course_progress(session: AsyncSession, items: list[Any], us
 
             # Update the item's progress with standardized ProgressData
             from src.content.schemas import ProgressData
+
             item.progress = ProgressData(
                 percentage=float(progress),
                 completed_items=stats["completed_lessons"],
-                total_items=stats["total_lessons"]
+                total_items=stats["total_lessons"],
             )
 
             # Update completed_lessons count for backward compatibility
@@ -144,6 +150,7 @@ async def _calculate_book_progress(_session: AsyncSession, items: list[Any], use
     import json
 
     from src.content.schemas import ContentType
+
     book_items = [item for item in items if hasattr(item, "type") and item.type == ContentType.BOOK]
 
     logger.info(f"📚 _calculate_book_progress called with {len(book_items)} book items for user {user_id}")
@@ -176,10 +183,13 @@ async def _calculate_book_progress(_session: AsyncSession, items: list[Any], use
 
             # Check if we already have a stored progress percentage from the query
             stored_progress = getattr(item, "progress", None)
-            logger.info(f"📚 Book {book_id}: Raw stored_progress value = {stored_progress}, type = {type(stored_progress)}")
+            logger.info(
+                f"📚 Book {book_id}: Raw stored_progress value = {stored_progress}, type = {type(stored_progress)}"
+            )
 
             # Always use stored progress from database - it's already calculated by BookProgressService
             from src.content.schemas import ProgressData
+
             if isinstance(stored_progress, ProgressData):
                 # If it's already a ProgressData object, just use it
                 item.progress = stored_progress
@@ -195,25 +205,23 @@ async def _calculate_book_progress(_session: AsyncSession, items: list[Any], use
             else:
                 total_sections = len(toc_progress) if toc_progress else 0
 
-            logger.info(f"📚 Book {book_id}: Using stored progress from DB = {progress}% ({completed_sections} completed)")
+            logger.info(
+                f"📚 Book {book_id}: Using stored progress from DB = {progress}% ({completed_sections} completed)"
+            )
 
             # Update the item's progress with standardized ProgressData
             from src.content.schemas import ProgressData
+
             item.progress = ProgressData(
-                percentage=float(progress),
-                completed_items=completed_sections,
-                total_items=total_sections
+                percentage=float(progress), completed_items=completed_sections, total_items=total_sections
             )
 
         except (ValueError, Exception) as e:
             # Keep original progress if there's an error
             logger.exception(f"Error calculating book progress for book {item.id}: {e}")
             from src.content.schemas import ProgressData
-            item.progress = ProgressData(
-                percentage=0.0,
-                completed_items=0,
-                total_items=0
-            )
+
+            item.progress = ProgressData(percentage=0.0, completed_items=0, total_items=0)
 
     return items
 
@@ -223,6 +231,7 @@ async def _calculate_video_progress(session: AsyncSession, items: list[Any], use
     # Filter for video items only (youtube type)
     from src.content.schemas import ContentType
     from src.videos.models import Video, VideoProgress
+
     video_items = [item for item in items if hasattr(item, "type") and item.type == ContentType.YOUTUBE]
 
     if not video_items:
@@ -235,34 +244,28 @@ async def _calculate_video_progress(session: AsyncSession, items: list[Any], use
 
             # Get video duration first
             from sqlalchemy import select
+
             video_query = select(Video).where(Video.uuid == video_id)
             video_result = await session.execute(video_query)
             video = video_result.scalar_one_or_none()
 
             if not video or not video.duration:
                 from src.content.schemas import ProgressData
-                item.progress = ProgressData(
-                    percentage=0.0,
-                    completed_items=0,
-                    total_items=0
-                )
+
+                item.progress = ProgressData(percentage=0.0, completed_items=0, total_items=0)
                 continue
 
             # Get progress record for this user and video
             progress_query = select(VideoProgress).where(
-                VideoProgress.video_uuid == video_id,
-                VideoProgress.user_id == user_id
+                VideoProgress.video_uuid == video_id, VideoProgress.user_id == user_id
             )
             progress_result = await session.execute(progress_query)
             progress = progress_result.scalar_one_or_none()
 
             if not progress:
                 from src.content.schemas import ProgressData
-                item.progress = ProgressData(
-                    percentage=0.0,
-                    completed_items=0,
-                    total_items=0
-                )
+
+                item.progress = ProgressData(percentage=0.0, completed_items=0, total_items=0)
                 continue
 
             # Use stored completion_percentage if available (from chapter-based progress)
@@ -272,6 +275,7 @@ async def _calculate_video_progress(session: AsyncSession, items: list[Any], use
             # For videos, completed_items and total_items refer to chapters if available
             # Get chapter count and completed chapters
             from src.videos.models import VideoChapter
+
             chapters_query = select(VideoChapter).where(VideoChapter.video_uuid == video_id)
             chapters_result = await session.execute(chapters_query)
             chapters = chapters_result.scalars().all()
@@ -287,20 +291,15 @@ async def _calculate_video_progress(session: AsyncSession, items: list[Any], use
                 percentage = 0.0
 
             item.progress = ProgressData(
-                percentage=percentage,
-                completed_items=completed_chapters,
-                total_items=total_chapters
+                percentage=percentage, completed_items=completed_chapters, total_items=total_chapters
             )
 
         except (ValueError, Exception) as e:
             # Keep original progress if there's an error
             logger.debug(f"Error calculating video progress for video {item.id}: {e}")
             from src.content.schemas import ProgressData
-            item.progress = ProgressData(
-                percentage=0.0,
-                completed_items=0,
-                total_items=0
-            )
+
+            item.progress = ProgressData(percentage=0.0, completed_items=0, total_items=0)
 
     return items
 
@@ -314,6 +313,7 @@ async def _calculate_flashcard_progress(session: AsyncSession, items: list[Any],
     # Filter for flashcard items only
     from src.content.schemas import ContentType
     from src.flashcards.models import FlashcardCard, FlashcardDeck
+
     flashcard_items = [item for item in items if hasattr(item, "type") and item.type == ContentType.FLASHCARDS]
 
     if not flashcard_items:
@@ -326,14 +326,15 @@ async def _calculate_flashcard_progress(session: AsyncSession, items: list[Any],
             now = datetime.now(UTC)
 
             # Get total cards, due cards, and overdue cards
-            stats_query = select(
-                func.count(FlashcardCard.id).label("total"),
-                func.count(FlashcardCard.id).filter(FlashcardCard.due <= now).label("due"),
-                func.count(FlashcardCard.id).filter(FlashcardCard.due < now).label("overdue")
-            ).where(
-                FlashcardCard.deck_id == deck_id,
-                FlashcardDeck.user_id == user_id
-            ).join(FlashcardDeck)
+            stats_query = (
+                select(
+                    func.count(FlashcardCard.id).label("total"),
+                    func.count(FlashcardCard.id).filter(FlashcardCard.due <= now).label("due"),
+                    func.count(FlashcardCard.id).filter(FlashcardCard.due < now).label("overdue"),
+                )
+                .where(FlashcardCard.deck_id == deck_id, FlashcardDeck.user_id == user_id)
+                .join(FlashcardDeck)
+            )
 
             result = await session.execute(stats_query)
             stats = result.first()
@@ -342,18 +343,12 @@ async def _calculate_flashcard_progress(session: AsyncSession, items: list[Any],
 
             if not stats or stats.total == 0:
                 # No cards in deck
-                item.progress = ProgressData(
-                    percentage=0.0,
-                    completed_items=0,
-                    total_items=0
-                )
+                item.progress = ProgressData(percentage=0.0, completed_items=0, total_items=0)
             else:
                 reviewed_cards = stats.total - stats.due
                 progress = (reviewed_cards / stats.total) * 100
                 item.progress = ProgressData(
-                    percentage=float(max(0, progress)),
-                    completed_items=reviewed_cards,
-                    total_items=stats.total
+                    percentage=float(max(0, progress)), completed_items=reviewed_cards, total_items=stats.total
                 )
 
             # Store additional stats for web app if needed
@@ -366,10 +361,7 @@ async def _calculate_flashcard_progress(session: AsyncSession, items: list[Any],
             # Keep original progress (0) if there's an error
             logger.debug(f"Error calculating flashcard progress for deck {item.id}: {e}")
             from src.content.schemas import ProgressData
-            item.progress = ProgressData(
-                percentage=0.0,
-                completed_items=0,
-                total_items=0
-            )
+
+            item.progress = ProgressData(percentage=0.0, completed_items=0, total_items=0)
 
     return items

@@ -1,11 +1,6 @@
 from functools import lru_cache
-from uuid import UUID
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-# Default user ID for self-hosted deployments with AUTH_DISABLED=True
-DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
 class Settings(BaseSettings):
@@ -20,7 +15,7 @@ class Settings(BaseSettings):
 
     # Auth settings
     AUTH_DISABLED: bool = False
-    AUTH_PROVIDER: str = "none"  # "none" or "supabase"
+    AUTH_PROVIDER: str = "none"  # "none" (single-user mode) or "supabase" (multi-user mode)
 
     # Supabase Auth (2025 API patterns)
     SUPABASE_URL: str = ""

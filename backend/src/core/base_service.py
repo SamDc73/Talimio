@@ -90,10 +90,7 @@ class BaseContentService(ABC):
                 tagging_service = TaggingService(session)
                 content_type = self._get_content_type()
                 await tagging_service.process_tags(
-                    content_type=content_type,
-                    content_id=str(content_id),
-                    user_id=user_id,
-                    tags=tags
+                    content_type=content_type, content_id=str(content_id), user_id=user_id, tags=tags
                 )
         except Exception as e:
             logger.exception(f"Failed to process tags: {e}")
@@ -119,9 +116,7 @@ class BaseContentService(ABC):
             content_type = self._get_content_type()
             # Use the AI service for processing
             await self.ai_service.queue_processing(
-                content_type=content_type,
-                content_id=str(content_id),
-                user_id=user_id
+                content_type=content_type, content_id=str(content_id), user_id=user_id
             )
         except Exception as e:
             logger.exception(f"Failed to queue AI processing: {e}")
@@ -136,9 +131,7 @@ class BaseContentService(ABC):
                 tagging_service = TaggingService(session)
                 content_type = self._get_content_type()
                 await tagging_service.remove_all_tags(
-                    content_type=content_type,
-                    content_id=str(content_id),
-                    user_id=user_id
+                    content_type=content_type, content_id=str(content_id), user_id=user_id
                 )
         except Exception as e:
             logger.exception(f"Failed to cleanup associated data: {e}")

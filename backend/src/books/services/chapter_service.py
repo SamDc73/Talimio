@@ -38,9 +38,7 @@ class ChapterService:
             )
 
         # Get chapters
-        chapters_query = (
-            select(BookChapter).where(BookChapter.book_id == book_id).order_by(BookChapter.chapter_number)
-        )
+        chapters_query = select(BookChapter).where(BookChapter.book_id == book_id).order_by(BookChapter.chapter_number)
         chapters_result = await self.session.execute(chapters_query)
         chapters = chapters_result.scalars().all()
 
@@ -75,7 +73,9 @@ class ChapterService:
 
         return BookResponseBuilder.build_chapter_response(chapter)
 
-    async def update_chapter_status(self, book_id: UUID, chapter_id: UUID, chapter_status: str, user_id: UUID) -> BookChapterResponse:
+    async def update_chapter_status(
+        self, book_id: UUID, chapter_id: UUID, chapter_status: str, user_id: UUID
+    ) -> BookChapterResponse:
         """Update the status of a book chapter."""
         # Verify book exists
         book_query = select(Book).where(Book.id == book_id)
@@ -116,10 +116,8 @@ class ChapterService:
 
         # Update toc_progress in book_progress table
         from src.books.models import BookProgress
-        progress_query = select(BookProgress).where(
-            BookProgress.book_id == book_id,
-            BookProgress.user_id == user_id
-        )
+
+        progress_query = select(BookProgress).where(BookProgress.book_id == book_id, BookProgress.user_id == user_id)
         progress_result = await self.session.execute(progress_query)
         progress = progress_result.scalar_one_or_none()
 
@@ -135,6 +133,7 @@ class ChapterService:
 
         # Update the overall book progress
         from src.books.services.book_progress_service import BookProgressService
+
         progress_service = BookProgressService(self.session, user_id)
         await progress_service.update_book_progress(book_id, BookProgressUpdate())
 
@@ -202,7 +201,9 @@ class ChapterService:
 
         return BookResponseBuilder.build_chapter_list(chapters)
 
-    async def batch_update_chapter_statuses(self, book_id: UUID, updates: list[dict[str, str]]) -> list[BookChapterResponse]:
+    async def batch_update_chapter_statuses(
+        self, book_id: UUID, updates: list[dict[str, str]]
+    ) -> list[BookChapterResponse]:
         """Update multiple chapter statuses in one transaction."""
         # Verify book exists
         book_query = select(Book).where(Book.id == book_id)
@@ -264,10 +265,15 @@ class ChapterService:
             return None
 
         # Get next chapter by chapter number
-        next_chapter_query = select(BookChapter).where(
-            BookChapter.book_id == book_id,
-            BookChapter.chapter_number > current_chapter.chapter_number,
-        ).order_by(BookChapter.chapter_number).limit(1)
+        next_chapter_query = (
+            select(BookChapter)
+            .where(
+                BookChapter.book_id == book_id,
+                BookChapter.chapter_number > current_chapter.chapter_number,
+            )
+            .order_by(BookChapter.chapter_number)
+            .limit(1)
+        )
 
         next_result = await self.session.execute(next_chapter_query)
         next_chapter = next_result.scalar_one_or_none()
@@ -288,10 +294,15 @@ class ChapterService:
             return None
 
         # Get previous chapter by chapter number
-        prev_chapter_query = select(BookChapter).where(
-            BookChapter.book_id == book_id,
-            BookChapter.chapter_number < current_chapter.chapter_number,
-        ).order_by(BookChapter.chapter_number.desc()).limit(1)
+        prev_chapter_query = (
+            select(BookChapter)
+            .where(
+                BookChapter.book_id == book_id,
+                BookChapter.chapter_number < current_chapter.chapter_number,
+            )
+            .order_by(BookChapter.chapter_number.desc())
+            .limit(1)
+        )
 
         prev_result = await self.session.execute(prev_chapter_query)
         prev_chapter = prev_result.scalar_one_or_none()
@@ -311,10 +322,14 @@ class ChapterService:
 
     async def get_chapters_by_status(self, book_id: UUID, status: str) -> list[BookChapterResponse]:
         """Get chapters by their status."""
-        chapters_query = select(BookChapter).where(
-            BookChapter.book_id == book_id,
-            BookChapter.status == status,
-        ).order_by(BookChapter.chapter_number)
+        chapters_query = (
+            select(BookChapter)
+            .where(
+                BookChapter.book_id == book_id,
+                BookChapter.status == status,
+            )
+            .order_by(BookChapter.chapter_number)
+        )
 
         result = await self.session.execute(chapters_query)
         chapters = result.scalars().all()

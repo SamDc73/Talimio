@@ -42,7 +42,7 @@ class CourseProgressTracker(ProgressTracker):
                     "completed_lessons": [],
                     "current_lesson_id": None,
                     "total_lessons": 0,
-                    "last_accessed_at": None
+                    "last_accessed_at": None,
                 }
 
             # Extract metadata
@@ -56,6 +56,7 @@ class CourseProgressTracker(ProgressTracker):
             if course and total_lessons == 0:
                 # Get actual lesson count from the course structure
                 from src.courses.services.lesson_query_service import LessonQueryService
+
                 lesson_service = LessonQueryService(session, user_id)
                 try:
                     lessons = await lesson_service.list_lessons(content_id, user_id)
@@ -72,15 +73,10 @@ class CourseProgressTracker(ProgressTracker):
                 "total_lessons": total_lessons,
                 "last_accessed_at": progress_data.updated_at,
                 "created_at": progress_data.created_at,
-                "updated_at": progress_data.updated_at
+                "updated_at": progress_data.updated_at,
             }
 
-    async def update_progress(
-        self,
-        content_id: UUID,
-        user_id: UUID,
-        progress_data: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update progress data for specific course and user."""
         async with async_session_maker() as session:
             # Use unified progress service
@@ -99,6 +95,7 @@ class CourseProgressTracker(ProgressTracker):
 
                 # Calculate completion percentage based on completed lessons
                 from src.courses.services.lesson_query_service import LessonQueryService
+
                 lesson_service = LessonQueryService(session, user_id)
                 try:
                     lessons = await lesson_service.list_lessons(content_id, user_id)
@@ -136,14 +133,9 @@ class CourseProgressTracker(ProgressTracker):
             metadata["content_type"] = "course"
 
             # Update using unified progress service
-            progress_update = ProgressUpdate(
-                progress_percentage=completion_percentage,
-                metadata=metadata
-            )
+            progress_update = ProgressUpdate(progress_percentage=completion_percentage, metadata=metadata)
 
-            updated = await progress_service.update_progress(
-                user_id, content_id, "course", progress_update
-            )
+            updated = await progress_service.update_progress(user_id, content_id, "course", progress_update)
 
             # Return updated progress in expected format
             return {
@@ -153,41 +145,20 @@ class CourseProgressTracker(ProgressTracker):
                 "total_lessons": metadata.get("total_lessons", 0),
                 "last_accessed_at": updated.updated_at,
                 "created_at": updated.created_at,
-                "updated_at": updated.updated_at
+                "updated_at": updated.updated_at,
             }
 
-    async def calculate_completion_percentage(
-        self,
-        content_id: UUID,
-        user_id: UUID
-    ) -> float:
+    async def calculate_completion_percentage(self, content_id: UUID, user_id: UUID) -> float:
         """Calculate completion percentage (0.0 to 100.0)."""
         progress = await self.get_progress(content_id, user_id)
         return progress.get("completion_percentage", 0.0)
 
     async def update_lesson_status(
-        self,
-        course_id: UUID,
-        lesson_id: UUID,
-        user_id: UUID,
-        status: str
+        self, course_id: UUID, lesson_id: UUID, user_id: UUID, status: str
     ) -> dict[str, Any]:
         """Update a specific lesson's status and recalculate course progress."""
         # This is a convenience method for updating lesson completion
         if status == "completed":
-            return await self.update_progress(
-                course_id,
-                user_id,
-                {
-                    "lesson_status": status,
-                    "lesson_id": lesson_id
-                }
-            )
+            return await self.update_progress(course_id, user_id, {"lesson_status": status, "lesson_id": lesson_id})
         # For non-completed status, just update current lesson
-        return await self.update_progress(
-            course_id,
-            user_id,
-            {
-                "current_lesson_id": str(lesson_id)
-            }
-        )
+        return await self.update_progress(course_id, user_id, {"current_lesson_id": str(lesson_id)})

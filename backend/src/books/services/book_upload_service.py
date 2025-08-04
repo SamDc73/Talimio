@@ -1,4 +1,3 @@
-
 import hashlib
 import logging
 from datetime import UTC, datetime
@@ -54,15 +53,7 @@ class BookUploadService:
             storage_key = await self._upload_file_to_storage(file_content, book_id, file_extension)
 
             # Create book record with pending RAG status
-            book = self._create_book_record(
-                book_data,
-                storage_key,
-                file_content,
-                file_hash,
-                metadata,
-                book_id,
-                user_id
-            )
+            book = self._create_book_record(book_data, storage_key, file_content, file_hash, metadata, book_id, user_id)
             book.rag_status = "pending"  # Will be processed in background
             self.session.add(book)
 
@@ -141,7 +132,7 @@ class BookUploadService:
         file_hash: str,
         metadata: "BookMetadata",
         book_id: UUID,
-        user_id: UUID
+        user_id: UUID,
     ) -> Book:
         """Create a Book model instance from the provided data."""
         import json
@@ -168,7 +159,6 @@ class BookUploadService:
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )
-
 
     def _book_to_response(self, book: Book) -> BookResponse:
         """Convert Book model to BookResponse with proper tags handling."""

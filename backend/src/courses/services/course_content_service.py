@@ -35,12 +35,7 @@ class CourseContentService(BaseContentService):
                 data["tags"] = json.dumps(data["tags"])
 
             # Create course instance
-            course = Course(
-                **data,
-                user_id=user_id,
-                created_at=datetime.now(UTC),
-                updated_at=datetime.now(UTC)
-            )
+            course = Course(**data, user_id=user_id, created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
 
             session.add(course)
             await session.commit()
@@ -53,10 +48,7 @@ class CourseContentService(BaseContentService):
         """Update an existing course."""
         async with async_session_maker() as session:
             # Get the course
-            query = select(Course).where(
-                Course.id == content_id,
-                Course.user_id == user_id
-            )
+            query = select(Course).where(Course.id == content_id, Course.user_id == user_id)
             result = await session.execute(query)
             course = result.scalar_one_or_none()
 
@@ -83,10 +75,7 @@ class CourseContentService(BaseContentService):
         """Delete a course."""
         async with async_session_maker() as session:
             # Get the course
-            query = select(Course).where(
-                Course.id == content_id,
-                Course.user_id == user_id
-            )
+            query = select(Course).where(Course.id == content_id, Course.user_id == user_id)
             result = await session.execute(query)
             course = result.scalar_one_or_none()
 

@@ -20,7 +20,6 @@ from src.books.schemas import (
     BookWithProgress,
     TableOfContentsItem,
 )
-from src.core.mode_aware_service import ModeAwareService
 from src.database.session import async_session_maker
 
 
@@ -109,7 +108,6 @@ def _convert_toc_to_schema(toc_data: list[dict]) -> list[TableOfContentsItem]:
     return result
 
 
-
 async def get_books(user_id: UUID, page: int = 1, per_page: int = 20) -> BookListResponse:
     """
     Get list of books with pagination, filtered by user ownership.
@@ -129,13 +127,6 @@ async def get_books(user_id: UUID, page: int = 1, per_page: int = 20) -> BookLis
     """
     try:
         async with async_session_maker() as session:
-            # Create mode-aware service for query building
-            mode_aware_service = ModeAwareService()
-            query_builder = mode_aware_service.get_query_builder(Book)
-
-            # Log the access
-            mode_aware_service.log_access("list", user_id, "book")
-
             # Build base query with user filtering
             base_query = select(Book)
             filtered_query = query_builder.apply_user_filter(base_query, user_id)
@@ -148,7 +139,7 @@ async def get_books(user_id: UUID, page: int = 1, per_page: int = 20) -> BookLis
 
             # Get paginated books
             offset = (page - 1) * per_page
-            paginated_query = filtered_query.offset(offset).limit(per_page).order_by(Book.updated_at.desc())
+            paginated_query = base_query.offset(offset).limit(per_page).order_by(Book.updated_at.desc())
             result = await session.execute(paginated_query)
             books = result.scalars().all()
 
@@ -187,12 +178,6 @@ async def get_book(book_id: UUID, user_id: UUID) -> BookWithProgress:
     """
     try:
         async with async_session_maker() as session:
-            # Create mode-aware service for query building
-            mode_aware_service = ModeAwareService()
-            query_builder = mode_aware_service.get_query_builder(Book)
-
-            # Log the access
-            mode_aware_service.log_access("get", user_id, "book", str(book_id))
 
             # Build query with user filtering and book ID
             base_query = select(Book).options(selectinload(Book.progress_records)).where(Book.id == book_id)
@@ -301,14 +286,8 @@ async def delete_book(book_id: UUID, user_id: UUID | None = None, session: Async
         HTTPException: If book not found or deletion fails
     """
     try:
-        async def _delete_book_logic(db_session: AsyncSession) -> None:
-            # Create mode-aware service for query building
-            mode_aware_service = ModeAwareService()
-            query_builder = mode_aware_service.get_query_builder(Book)
 
-            # Log the access
-            if user_id:
-                mode_aware_service.log_access("delete", user_id, "book", str(book_id))
+        async def _delete_book_logic(db_session: AsyncSession) -> None:
 
             # Build query with user filtering if user_id provided
             base_query = select(Book).where(Book.id == book_id)
@@ -333,6 +312,7 @@ async def delete_book(book_id: UUID, user_id: UUID | None = None, session: Async
             # Delete dependent records first to avoid FK constraint violations
             # 1. Delete book progress records
             from src.books.models import BookChapter, BookProgress
+
             await db_session.execute(delete(BookProgress).where(BookProgress.book_id == book_id))
 
             # 2. Delete book chapters (these should CASCADE but be explicit)
@@ -362,12 +342,11 @@ async def delete_book(book_id: UUID, user_id: UUID | None = None, session: Async
         ) from e
 
 
-class BookService(ModeAwareService):
+class BookService:
     """Service for managing book progress and operations."""
 
     def __init__(self, session: AsyncSession) -> None:
         """Initialize the book service."""
-        super().__init__()
         self.session = session
 
     async def get_book(self, book_id: UUID) -> Book | None:
@@ -408,9 +387,6 @@ class BookService(ModeAwareService):
             book_id: ID of the book to get progress for
             user_id: User ID for filtering books
         """
-        # Log the access
-        self.log_access("get_progress", user_id, "book", str(book_id))
-
         from src.books.models import BookProgress
 
         # Get the book to get total pages
@@ -422,10 +398,7 @@ class BookService(ModeAwareService):
             return 0
 
         # Get progress record for page-based calculation
-        progress_query = select(BookProgress).where(
-            BookProgress.book_id == book_id,
-            BookProgress.user_id == user_id
-        )
+        progress_query = select(BookProgress).where(BookProgress.book_id == book_id, BookProgress.user_id == user_id)
         progress_result = await self.session.execute(progress_query)
         progress = progress_result.scalar_one_or_none()
 
@@ -493,9 +466,6 @@ async def create_book(book_data: dict, file: object, background_tasks: object, u
     from src.books.services.book_upload_service import BookUploadService
     from src.database.session import async_session_maker
 
-    # Create mode-aware service for logging
-    mode_aware_service = ModeAwareService()
-    mode_aware_service.log_access("create", user_id, "book")
 
     async with async_session_maker() as session:
         upload_service = BookUploadService(session)
@@ -530,9 +500,7 @@ async def extract_and_update_toc(book_id: UUID, user_id: UUID) -> BookResponse:
 
         # 4. Update the book with the new table of contents
         if metadata.table_of_contents:
-            book_update = BookUpdate(
-                table_of_contents=json.dumps(metadata.table_of_contents)
-            )
+            book_update = BookUpdate(table_of_contents=json.dumps(metadata.table_of_contents))
             return await update_book(book_id, book_update)
         return _book_to_response(book)
 

@@ -18,6 +18,7 @@ from src.ai.constants import rag_config
 
 logger = logging.getLogger(__name__)
 
+
 class BaseIngestor:
     """Base class for document ingestors with common functionality."""
 

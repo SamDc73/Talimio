@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 # === Error Categories ===
 
+
 class ErrorCategory:
     """Error category constants."""
 
@@ -92,34 +93,26 @@ class ErrorCode:
 
 # === Custom Exception Classes ===
 
+
 class AuthorizationError(HTTPException):
     """User is authenticated but lacks permissions."""
 
     def __init__(self, detail: str = "Insufficient permissions") -> None:
-        super().__init__(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=detail
-        )
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
 class DatabaseConnectionError(HTTPException):
     """Database connection failed."""
 
     def __init__(self, detail: str = "Database connection failed") -> None:
-        super().__init__(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=detail
-        )
+        super().__init__(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
 
 
 class ExternalServiceError(HTTPException):
     """External service (AI, YouTube, etc.) failed."""
 
     def __init__(self, service: str, detail: str) -> None:
-        super().__init__(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"{service} service error: {detail}"
-        )
+        super().__init__(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"{service} service error: {detail}")
 
 
 class RateLimitError(HTTPException):
@@ -129,11 +122,12 @@ class RateLimitError(HTTPException):
         super().__init__(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=detail,
-            headers={"Retry-After": str(retry_after)} if retry_after else None
+            headers={"Retry-After": str(retry_after)} if retry_after else None,
         )
 
 
 # === Error Response Formatting ===
+
 
 def format_error_response(
     category: str,
@@ -158,13 +152,11 @@ def format_error_response(
     if metadata:
         content["error"]["metadata"] = metadata
 
-    return JSONResponse(
-        status_code=status_code,
-        content=content
-    )
+    return JSONResponse(status_code=status_code, content=content)
 
 
 # === Exception Handlers ===
+
 
 async def handle_authentication_errors(request: Request, exc: Exception) -> JSONResponse:
     """Handle authentication-related errors."""
@@ -173,7 +165,7 @@ async def handle_authentication_errors(request: Request, exc: Exception) -> JSON
         extra={
             "client_host": request.client.host if request.client else "unknown",
             "error_type": type(exc).__name__,
-        }
+        },
     )
 
     if isinstance(exc, InvalidTokenError):
@@ -198,7 +190,7 @@ async def handle_authentication_errors(request: Request, exc: Exception) -> JSON
         code=code,
         detail=detail,
         status_code=status.HTTP_401_UNAUTHORIZED,
-        suggestions=suggestions
+        suggestions=suggestions,
     )
 
 
@@ -209,7 +201,7 @@ async def handle_authorization_errors(request: Request, exc: AuthorizationError)
         extra={
             "client_host": request.client.host if request.client else "unknown",
             "user_id": getattr(request.state, "user_id", None),
-        }
+        },
     )
 
     return format_error_response(
@@ -217,49 +209,41 @@ async def handle_authorization_errors(request: Request, exc: AuthorizationError)
         code=ErrorCode.ACCESS_DENIED,
         detail=exc.detail,
         status_code=status.HTTP_403_FORBIDDEN,
-        suggestions=["You don't have permission to access this resource"]
+        suggestions=["You don't have permission to access this resource"],
     )
 
 
 async def handle_validation_errors(request: Request, exc: Exception) -> JSONResponse:
     """Handle validation errors from Pydantic and custom validators."""
-    logger.info(
-        f"Validation error on {request.method} {request.url.path}",
-        extra={"error": str(exc)}
-    )
+    logger.info(f"Validation error on {request.method} {request.url.path}", extra={"error": str(exc)})
 
     if isinstance(exc, PydanticValidationError):
         # Extract field errors from Pydantic
         errors = []
         for error in exc.errors():
             field = " -> ".join(str(loc) for loc in error["loc"])
-            errors.append({
-                "field": field,
-                "message": error["msg"],
-                "type": error["type"]
-            })
+            errors.append({"field": field, "message": error["msg"], "type": error["type"]})
 
         return format_error_response(
             category=ErrorCategory.VALIDATION,
             code=ErrorCode.INVALID_INPUT,
             detail="Invalid input data",
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            metadata={"errors": errors}
+            metadata={"errors": errors},
         )
     # Custom validation error
     return format_error_response(
         category=ErrorCategory.VALIDATION,
         code=ErrorCode.INVALID_INPUT,
         detail=str(exc),
-        status_code=status.HTTP_400_BAD_REQUEST
+        status_code=status.HTTP_400_BAD_REQUEST,
     )
 
 
 async def handle_database_errors(request: Request, exc: Exception) -> JSONResponse:
     """Handle database-related errors."""
     logger.error(
-        f"Database error on {request.method} {request.url.path}: {exc}",
-        extra={"error_type": type(exc).__name__}
+        f"Database error on {request.method} {request.url.path}: {exc}", extra={"error_type": type(exc).__name__}
     )
 
     # Map specific database errors to user-friendly messages
@@ -269,7 +253,7 @@ async def handle_database_errors(request: Request, exc: Exception) -> JSONRespon
             code=ErrorCode.DB_UNIQUE_VIOLATION,
             detail="This resource already exists",
             status_code=status.HTTP_409_CONFLICT,
-            suggestions=["Try using a different identifier"]
+            suggestions=["Try using a different identifier"],
         )
 
     if isinstance(exc, ForeignKeyViolationError):
@@ -277,7 +261,7 @@ async def handle_database_errors(request: Request, exc: Exception) -> JSONRespon
             category=ErrorCategory.DATABASE,
             code=ErrorCode.DB_FOREIGN_KEY_VIOLATION,
             detail="Referenced resource does not exist",
-            status_code=status.HTTP_400_BAD_REQUEST
+            status_code=status.HTTP_400_BAD_REQUEST,
         )
 
     if isinstance(exc, (NotNullViolationError, CheckViolationError)):
@@ -285,7 +269,7 @@ async def handle_database_errors(request: Request, exc: Exception) -> JSONRespon
             category=ErrorCategory.DATABASE,
             code=ErrorCode.DB_CONSTRAINT_VIOLATION,
             detail="Required data is missing or invalid",
-            status_code=status.HTTP_400_BAD_REQUEST
+            status_code=status.HTTP_400_BAD_REQUEST,
         )
 
     if isinstance(exc, OperationalError):
@@ -294,7 +278,7 @@ async def handle_database_errors(request: Request, exc: Exception) -> JSONRespon
             code=ErrorCode.DB_CONNECTION_FAILED,
             detail="Database connection error",
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            suggestions=["Please try again later"]
+            suggestions=["Please try again later"],
         )
 
     # Generic database error
@@ -302,22 +286,20 @@ async def handle_database_errors(request: Request, exc: Exception) -> JSONRespon
         category=ErrorCategory.DATABASE,
         code=ErrorCode.INTERNAL,
         detail="A database error occurred",
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
 
 
 async def handle_external_service_errors(request: Request, exc: ExternalServiceError) -> JSONResponse:
     """Handle external service failures."""
-    logger.error(
-        f"External service error on {request.method} {request.url.path}: {exc.detail}"
-    )
+    logger.error(f"External service error on {request.method} {request.url.path}: {exc.detail}")
 
     return format_error_response(
         category=ErrorCategory.EXTERNAL_SERVICE,
         code=ErrorCode.SERVICE_UNAVAILABLE,
         detail=exc.detail,
         status_code=exc.status_code,
-        suggestions=["The service is temporarily unavailable", "Please try again later"]
+        suggestions=["The service is temporarily unavailable", "Please try again later"],
     )
 
 
@@ -328,7 +310,7 @@ async def handle_rate_limit_errors(request: Request, exc: RateLimitError) -> JSO
         extra={
             "client_host": request.client.host if request.client else "unknown",
             "user_id": getattr(request.state, "user_id", None),
-        }
+        },
     )
 
     return format_error_response(
@@ -337,11 +319,12 @@ async def handle_rate_limit_errors(request: Request, exc: RateLimitError) -> JSO
         detail=exc.detail,
         status_code=exc.status_code,
         suggestions=["Please wait before making more requests"],
-        metadata={"retry_after": exc.headers.get("Retry-After")} if exc.headers else None
+        metadata={"retry_after": exc.headers.get("Retry-After")} if exc.headers else None,
     )
 
 
 # === Utility Functions ===
+
 
 def log_error_context(request: Request, exc: Exception, error_id: UUID | None = None) -> None:
     """Log comprehensive error context for debugging."""
@@ -358,8 +341,7 @@ def log_error_context(request: Request, exc: Exception, error_id: UUID | None = 
 
     # Add request headers (excluding sensitive ones)
     safe_headers = {
-        k: v for k, v in request.headers.items()
-        if k.lower() not in ["authorization", "cookie", "x-api-key"]
+        k: v for k, v in request.headers.items() if k.lower() not in ["authorization", "cookie", "x-api-key"]
     }
     context["headers"] = safe_headers
 

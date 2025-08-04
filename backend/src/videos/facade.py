@@ -34,11 +34,7 @@ class VideosFacade(ContentFacade):
         self._progress_service = VideoProgressTracker()  # Implements ProgressTracker protocol
         self._ai_service = get_ai_service()
 
-    async def get_content_with_progress(
-        self,
-        content_id: UUID,
-        user_id: UUID
-    ) -> dict[str, Any]:
+    async def get_content_with_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
         """
         Get video with progress information.
 
@@ -46,11 +42,7 @@ class VideosFacade(ContentFacade):
         """
         return await self.get_video_with_progress(content_id, user_id)
 
-    async def get_video_with_progress(
-        self,
-        video_id: UUID,
-        user_id: UUID
-    ) -> dict[str, Any]:
+    async def get_video_with_progress(self, video_id: UUID, user_id: UUID) -> dict[str, Any]:
         """
         Get complete video information with progress.
 
@@ -60,6 +52,7 @@ class VideosFacade(ContentFacade):
             # Get video information - need to pass user_id as well
             # Create a temporary session for the video service call
             from src.database.session import async_session_maker
+
             async with async_session_maker() as session:
                 video_response = await self._video_service.get_video(session, str(video_id), user_id)
                 # Convert response to dict
@@ -79,18 +72,14 @@ class VideosFacade(ContentFacade):
                 "last_position": progress.get("last_position", 0),
                 "total_duration": video.get("duration", 0),
                 "playback_speed": progress.get("playback_speed", 1.0),
-                "success": True
+                "success": True,
             }
 
         except Exception as e:
             logger.exception(f"Error getting video {video_id} for user {user_id}: {e}")
             return {"error": "Failed to retrieve video"}
 
-    async def create_content(
-        self,
-        content_data: dict[str, Any],
-        user_id: UUID
-    ) -> dict[str, Any]:
+    async def create_content(self, content_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
         """
         Create new video content.
 
@@ -98,11 +87,7 @@ class VideosFacade(ContentFacade):
         """
         return await self.create_video(content_data, user_id)
 
-    async def create_video(
-        self,
-        video_data: dict[str, Any],
-        user_id: UUID
-    ) -> dict[str, Any]:
+    async def create_video(self, video_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
         """
         Create new video entry.
 
@@ -119,10 +104,7 @@ class VideosFacade(ContentFacade):
             return {"error": "Failed to create video", "success": False}
 
     async def add_youtube_video(
-        self,
-        youtube_url: str,
-        user_id: UUID,
-        metadata: dict[str, Any] | None = None
+        self, youtube_url: str, user_id: UUID, metadata: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Add YouTube video to user's library.
@@ -132,9 +114,7 @@ class VideosFacade(ContentFacade):
         try:
             # Process YouTube URL and extract metadata
             video_data = await self._video_service.process_youtube_url(
-                youtube_url,
-                user_id,
-                additional_metadata=metadata or {}
+                youtube_url, user_id, additional_metadata=metadata or {}
             )
 
             if not video_data.get("success"):
@@ -144,9 +124,7 @@ class VideosFacade(ContentFacade):
 
             # Initialize progress tracking
             await self._progress_service.initialize_progress(
-                video_id,
-                user_id,
-                total_duration=video_data["video"].get("duration", 0)
+                video_id, user_id, total_duration=video_data["video"].get("duration", 0)
             )
 
             return video_data
@@ -155,12 +133,7 @@ class VideosFacade(ContentFacade):
             logger.exception(f"Error adding YouTube video {youtube_url} for user {user_id}: {e}")
             return {"error": "Failed to add YouTube video", "success": False}
 
-    async def update_progress(
-        self,
-        content_id: UUID,
-        user_id: UUID,
-        progress_data: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """
         Update video watching progress.
 
@@ -169,10 +142,7 @@ class VideosFacade(ContentFacade):
         return await self.update_video_progress(content_id, user_id, progress_data)
 
     async def update_video_progress(
-        self,
-        video_id: UUID,
-        user_id: UUID,
-        progress_data: dict[str, Any]
+        self, video_id: UUID, user_id: UUID, progress_data: dict[str, Any]
     ) -> dict[str, Any]:
         """
         Update video watching progress.
@@ -181,9 +151,7 @@ class VideosFacade(ContentFacade):
         """
         try:
             # Update progress using the progress tracker
-            updated_progress = await self._progress_service.update_progress(
-                video_id, user_id, progress_data
-            )
+            updated_progress = await self._progress_service.update_progress(video_id, user_id, progress_data)
 
             if "error" in updated_progress:
                 return {"error": updated_progress["error"], "success": False}
@@ -194,18 +162,11 @@ class VideosFacade(ContentFacade):
             logger.exception(f"Error updating progress for video {video_id}: {e}")
             return {"error": "Failed to update progress", "success": False}
 
-    async def update_playback_settings(
-        self,
-        video_id: UUID,
-        user_id: UUID,
-        settings: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def update_playback_settings(self, video_id: UUID, user_id: UUID, settings: dict[str, Any]) -> dict[str, Any]:
         """Update video playback settings (speed, quality, etc.)."""
         try:
             # Update playback settings
-            updated_settings = await self._progress_service.update_playback_settings(
-                video_id, user_id, settings
-            )
+            updated_settings = await self._progress_service.update_playback_settings(video_id, user_id, settings)
 
             return {"settings": updated_settings, "success": True}
 
@@ -235,21 +196,14 @@ class VideosFacade(ContentFacade):
             logger.exception(f"Error deleting video {video_id}: {e}")
             return False
 
-    async def search_videos(
-        self,
-        query: str,
-        user_id: UUID,
-        filters: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    async def search_videos(self, query: str, user_id: UUID, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Search user's videos.
 
         Provides unified search across video content and metadata.
         """
         try:
-            results = await self._video_service.search_videos(
-                query, user_id, filters or {}
-            )
+            results = await self._video_service.search_videos(query, user_id, filters or {})
 
             return {"results": results, "success": True}
 
@@ -257,11 +211,7 @@ class VideosFacade(ContentFacade):
             logger.exception(f"Error searching videos for user {user_id}: {e}")
             return {"error": "Search failed", "success": False}
 
-    async def get_user_videos(
-        self,
-        user_id: UUID,
-        include_progress: bool = True
-    ) -> dict[str, Any]:
+    async def get_user_videos(self, user_id: UUID, include_progress: bool = True) -> dict[str, Any]:
         """
         Get all videos for user.
 
@@ -273,9 +223,7 @@ class VideosFacade(ContentFacade):
             if include_progress:
                 # Add progress information to each video
                 for video in videos:
-                    progress = await self._progress_service.get_progress(
-                        video.id, user_id
-                    )
+                    progress = await self._progress_service.get_progress(video.id, user_id)
                     video.progress = progress
 
             return {"videos": videos, "success": True}
@@ -284,15 +232,12 @@ class VideosFacade(ContentFacade):
             logger.exception(f"Error getting videos for user {user_id}: {e}")
             return {"error": "Failed to get videos", "success": False}
 
-    async def get_video_chapters(
-        self,
-        video_id: UUID,
-        user_id: UUID
-    ) -> dict[str, Any]:
+    async def get_video_chapters(self, video_id: UUID, user_id: UUID) -> dict[str, Any]:
         """Get video chapters/segments if available."""
         try:
             # Get chapters - need to pass db session
             from src.database.session import async_session_maker
+
             async with async_session_maker() as session:
                 chapters = await self._video_service.get_video_chapters(session, str(video_id))
 
@@ -310,17 +255,10 @@ class VideosFacade(ContentFacade):
             logger.exception(f"Error getting chapters for video {video_id}: {e}")
             return {"error": "Failed to get chapters", "success": False}
 
-    async def mark_chapter_complete(
-        self,
-        video_id: UUID,
-        user_id: UUID,
-        chapter_id: str
-    ) -> dict[str, Any]:
+    async def mark_chapter_complete(self, video_id: UUID, user_id: UUID, chapter_id: str) -> dict[str, Any]:
         """Mark a video chapter as completed."""
         try:
-            result = await self._progress_service.mark_chapter_complete(
-                video_id, user_id, chapter_id
-            )
+            result = await self._progress_service.mark_chapter_complete(video_id, user_id, chapter_id)
 
             return {"result": result, "success": True}
 
@@ -329,50 +267,28 @@ class VideosFacade(ContentFacade):
             return {"error": "Failed to mark chapter complete", "success": False}
 
     # AI operations
-    async def get_video_transcript(
-        self,
-        video_id: UUID,
-        user_id: UUID,
-        url: str
-    ) -> str:
+    async def get_video_transcript(self, video_id: UUID, user_id: UUID, url: str) -> str:
         """Get or generate transcript for a video."""
         try:
             return await self._ai_service.process_content(
-                content_type="video",
-                action="transcript",
-                user_id=user_id,
-                video_id=str(video_id),
-                url=url
+                content_type="video", action="transcript", user_id=user_id, video_id=str(video_id), url=url
             )
         except Exception as e:
             logger.exception(f"Error getting transcript for video {video_id}: {e}")
             raise
 
-    async def summarize_video(
-        self,
-        video_id: UUID,
-        user_id: UUID,
-        transcript: str
-    ) -> str:
+    async def summarize_video(self, video_id: UUID, user_id: UUID, transcript: str) -> str:
         """Generate a summary of the video."""
         try:
             return await self._ai_service.process_content(
-                content_type="video",
-                action="summarize",
-                user_id=user_id,
-                video_id=str(video_id),
-                transcript=transcript
+                content_type="video", action="summarize", user_id=user_id, video_id=str(video_id), transcript=transcript
             )
         except Exception as e:
             logger.exception(f"Error summarizing video {video_id}: {e}")
             raise
 
     async def ask_video_question(
-        self,
-        video_id: UUID,
-        user_id: UUID,
-        question: str,
-        timestamp: float | None = None
+        self, video_id: UUID, user_id: UUID, question: str, timestamp: float | None = None
     ) -> str:
         """Ask a question about the video content."""
         try:
@@ -382,18 +298,14 @@ class VideosFacade(ContentFacade):
                 user_id=user_id,
                 video_id=str(video_id),
                 question=question,
-                timestamp=timestamp
+                timestamp=timestamp,
             )
         except Exception as e:
             logger.exception(f"Error answering question for video {video_id}: {e}")
             raise
 
     async def chat_about_video(
-        self,
-        video_id: UUID,
-        user_id: UUID,
-        message: str,
-        history: list[dict[str, Any]] | None = None
+        self, video_id: UUID, user_id: UUID, message: str, history: list[dict[str, Any]] | None = None
     ) -> str:
         """Have a conversation about the video."""
         try:
@@ -403,18 +315,13 @@ class VideosFacade(ContentFacade):
                 user_id=user_id,
                 video_id=str(video_id),
                 message=message,
-                history=history
+                history=history,
             )
         except Exception as e:
             logger.exception(f"Error in video chat for {video_id}: {e}")
             raise
 
-    async def process_video_for_rag(
-        self,
-        video_id: UUID,
-        user_id: UUID,
-        transcript: str
-    ) -> dict[str, Any]:
+    async def process_video_for_rag(self, video_id: UUID, user_id: UUID, transcript: str) -> dict[str, Any]:
         """Process video transcript for RAG indexing."""
         try:
             return await self._ai_service.process_content(
@@ -422,10 +329,8 @@ class VideosFacade(ContentFacade):
                 action="process_rag",
                 user_id=user_id,
                 video_id=str(video_id),
-                transcript=transcript
+                transcript=transcript,
             )
         except Exception as e:
             logger.exception(f"Error processing video {video_id} for RAG: {e}")
             raise
-
-

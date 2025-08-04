@@ -49,7 +49,7 @@ class Reranker:
                 model=f"huggingface/{self.model}",
                 query=query,
                 documents=[pair[1] for pair in rerank_pairs],
-                top_n=top_k
+                top_n=top_k,
             )
 
             # Extract reranked indices and scores
@@ -281,9 +281,7 @@ class ContextAwareRetriever:
             return 1.05  # Nearby
         return 1.0  # No boost
 
-    def _calculate_timestamp_proximity_boost(
-        self, current_time: float, chunk_start: float, chunk_end: float
-    ) -> float:
+    def _calculate_timestamp_proximity_boost(self, current_time: float, chunk_start: float, chunk_end: float) -> float:
         """Calculate boost based on timestamp proximity."""
         # Check if current time is within chunk
         if chunk_start <= current_time <= chunk_end:
@@ -308,17 +306,13 @@ class ContextAwareRetriever:
 
             # Page proximity boost for books/documents
             if "page" in context_meta and "page" in result.metadata:
-                boost *= self._calculate_page_proximity_boost(
-                    context_meta["page"], result.metadata["page"]
-                )
+                boost *= self._calculate_page_proximity_boost(context_meta["page"], result.metadata["page"])
 
             # Timestamp proximity boost for videos
             if "timestamp" in context_meta and "start_time" in result.metadata:
                 chunk_end = result.metadata.get("end_time", result.metadata["start_time"] + 60)
                 boost *= self._calculate_timestamp_proximity_boost(
-                    context_meta["timestamp"],
-                    result.metadata["start_time"],
-                    chunk_end
+                    context_meta["timestamp"], result.metadata["start_time"], chunk_end
                 )
 
             # Apply boost to final score
@@ -344,7 +338,6 @@ class ContextAwareRetriever:
             )
             results.append(result)
         return results
-
 
     async def global_retrieve(
         self,

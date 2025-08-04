@@ -114,9 +114,7 @@ async def list_documents(
             logger.error("RAG service not available")
             return DocumentList(documents=[], total=0, page=1, size=limit)
 
-        documents = await rag_service.get_documents(
-            session=session, roadmap_id=roadmap_id, skip=skip, limit=limit
-        )
+        documents = await rag_service.get_documents(session=session, roadmap_id=roadmap_id, skip=skip, limit=limit)
 
         # Get total count
         total = await rag_service.count_documents(session=session, roadmap_id=roadmap_id)

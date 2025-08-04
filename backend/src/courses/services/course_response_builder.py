@@ -20,9 +20,7 @@ class CourseResponseBuilder:
         """
         self.session = session
 
-    async def build_module_response(
-        self, module: Node, course_id: UUID
-    ) -> ModuleResponse:
+    async def build_module_response(self, module: Node, course_id: UUID) -> ModuleResponse:
         """Build a module response with lessons.
 
         Args:
@@ -34,11 +32,7 @@ class CourseResponseBuilder:
             Module response with lessons
         """
         # Get lessons for this module
-        lessons_query = (
-            select(Node)
-            .where(Node.parent_id == module.id)
-            .order_by(Node.order)
-        )
+        lessons_query = select(Node).where(Node.parent_id == module.id).order_by(Node.order)
 
         lessons_result = await self.session.execute(lessons_query)
         lessons = [

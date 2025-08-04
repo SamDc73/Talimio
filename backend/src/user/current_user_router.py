@@ -10,7 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.dependencies import EffectiveUserId
+from src.auth import UserId
 from src.database.session import get_db_session
 from src.user.schemas import (
     ClearMemoryResponse,
@@ -33,8 +33,7 @@ router = APIRouter(prefix="/api/v1/user", tags=["current-user"])
 
 @router.get("/settings")
 async def get_current_user_settings(
-    user_id: EffectiveUserId,
-    db: Annotated[AsyncSession, Depends(get_db_session)]
+    user_id: UserId, db: Annotated[AsyncSession, Depends(get_db_session)]
 ) -> UserSettingsResponse:
     """
     Get current user settings including custom instructions and memory count.
@@ -48,15 +47,13 @@ async def get_current_user_settings(
     except Exception as e:
         logger.exception(f"Error in get_current_user_settings for user {user_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get user settings: {e}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get user settings: {e}"
         ) from e
 
 
 @router.put("/settings/instructions")
 async def update_current_user_instructions(
-    user_id: EffectiveUserId,
-    request: CustomInstructionsRequest
+    user_id: UserId, request: CustomInstructionsRequest
 ) -> CustomInstructionsResponse:
     """
     Update custom instructions for AI personalization for current user.
@@ -73,15 +70,13 @@ async def update_current_user_instructions(
     except Exception as e:
         logger.exception(f"Error in update_current_user_instructions for user {user_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update instructions: {e}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update instructions: {e}"
         ) from e
 
 
 @router.get("/settings/instructions")
 async def get_current_user_instructions(
-    user_id: EffectiveUserId,
-    db: Annotated[AsyncSession, Depends(get_db_session)]
+    user_id: UserId, db: Annotated[AsyncSession, Depends(get_db_session)]
 ) -> dict[str, str]:
     """
     Get custom instructions for the current user.
@@ -96,13 +91,12 @@ async def get_current_user_instructions(
     except Exception as e:
         logger.exception(f"Error in get_current_user_instructions for user {user_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get instructions: {e}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get instructions: {e}"
         ) from e
 
 
 @router.delete("/memory")
-async def clear_current_user_memory(user_id: EffectiveUserId) -> ClearMemoryResponse:
+async def clear_current_user_memory(user_id: UserId) -> ClearMemoryResponse:
     """
     Clear all stored memories for the current user.
 
@@ -115,13 +109,12 @@ async def clear_current_user_memory(user_id: EffectiveUserId) -> ClearMemoryResp
     except Exception as e:
         logger.exception(f"Error in clear_current_user_memory for user {user_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to clear memory: {e}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to clear memory: {e}"
         ) from e
 
 
 @router.get("/memories")
-async def get_current_user_memories(user_id: EffectiveUserId) -> list[dict]:
+async def get_current_user_memories(user_id: UserId) -> list[dict]:
     """
     Get all memories for the current user.
 
@@ -134,6 +127,5 @@ async def get_current_user_memories(user_id: EffectiveUserId) -> list[dict]:
     except Exception as e:
         logger.exception(f"Error in get_current_user_memories for user {user_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get memories: {e}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get memories: {e}"
         ) from e

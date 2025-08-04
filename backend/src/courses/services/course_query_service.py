@@ -7,7 +7,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config.settings import DEFAULT_USER_ID
 from src.courses.models import Node, Roadmap
 from src.courses.schemas import CourseResponse, ModuleResponse
 from src.courses.services.course_response_builder import CourseResponseBuilder
@@ -47,50 +46,38 @@ class CourseQueryService:
         effective_user_id = user_id or self.user_id
 
         # Get the roadmap/course with user filtering
-        # Include DEFAULT_USER_ID fallback for legacy courses from single-user mode
         query = select(Roadmap).where(
-            Roadmap.id == course_id,
-            or_(
-                Roadmap.user_id == effective_user_id,
-                Roadmap.user_id == DEFAULT_USER_ID
-            )
+            Roadmap.id == course_id, Roadmap.user_id == effective_user_id
         )
 
         result = await self.session.execute(query)
         roadmap = result.scalar_one_or_none()
 
         if not roadmap:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
         # Get modules and lessons
-        modules_query = select(Node).where(
-            Node.roadmap_id == course_id,
-            Node.parent_id.is_(None)  # Modules have no parent
-        ).order_by(Node.order)
+        modules_query = (
+            select(Node)
+            .where(
+                Node.roadmap_id == course_id,
+                Node.parent_id.is_(None),  # Modules have no parent
+            )
+            .order_by(Node.order)
+        )
 
         modules_result = await self.session.execute(modules_query)
         modules = modules_result.scalars().all()
 
         modules_data = []
         for module in modules:
-            module_response = await self.response_builder.build_module_response(
-                module, course_id
-            )
+            module_response = await self.response_builder.build_module_response(module, course_id)
             modules_data.append(module_response)
 
-        return self.response_builder.build_course_response_from_roadmap(
-            roadmap, modules_data
-        )
+        return self.response_builder.build_course_response_from_roadmap(roadmap, modules_data)
 
     async def list_courses(
-        self,
-        page: int = 1,
-        per_page: int = 20,
-        search: str | None = None,
-        user_id: UUID | None = None
+        self, page: int = 1, per_page: int = 20, search: str | None = None, user_id: UUID | None = None
     ) -> tuple[list[CourseResponse], int]:
         """List courses with pagination and optional search.
 
@@ -110,19 +97,11 @@ class CourseQueryService:
         effective_user_id = user_id or self.user_id
 
         # Build query with user filtering
-        # Include DEFAULT_USER_ID fallback for legacy courses from single-user mode
-        user_filter = or_(
-            Roadmap.user_id == effective_user_id,
-            Roadmap.user_id == DEFAULT_USER_ID
-        )
-        query = select(Roadmap).where(user_filter)
-        count_query = select(func.count(Roadmap.id)).where(user_filter)
+        query = select(Roadmap).where(Roadmap.user_id == effective_user_id)
+        count_query = select(func.count(Roadmap.id)).where(Roadmap.user_id == effective_user_id)
 
         if search:
-            search_filter = or_(
-                Roadmap.title.ilike(f"%{search}%"),
-                Roadmap.description.ilike(f"%{search}%")
-            )
+            search_filter = or_(Roadmap.title.ilike(f"%{search}%"), Roadmap.description.ilike(f"%{search}%"))
             query = query.where(search_filter)
             count_query = count_query.where(search_filter)
 
@@ -138,7 +117,8 @@ class CourseQueryService:
         # Convert to responses (simplified, without modules for list view)
         courses = [
             self.response_builder.build_course_response_from_roadmap(
-                roadmap, []  # Empty modules for list view
+                roadmap,
+                [],  # Empty modules for list view
             )
             for roadmap in roadmaps
         ]
@@ -164,32 +144,25 @@ class CourseQueryService:
         effective_user_id = user_id or self.user_id
 
         # Verify course exists and user has access
-        # Include DEFAULT_USER_ID fallback for legacy courses from single-user mode
         course_query = select(Roadmap).where(
-            Roadmap.id == course_id,
-            or_(
-                Roadmap.user_id == effective_user_id,
-                Roadmap.user_id == DEFAULT_USER_ID
-            )
+            Roadmap.id == course_id, Roadmap.user_id == effective_user_id
         )
 
         course_result = await self.session.execute(course_query)
         if not course_result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
         # Get modules
-        modules_query = select(Node).where(
-            Node.roadmap_id == course_id,
-            Node.parent_id.is_(None)  # Modules have no parent
-        ).order_by(Node.order)
+        modules_query = (
+            select(Node)
+            .where(
+                Node.roadmap_id == course_id,
+                Node.parent_id.is_(None),  # Modules have no parent
+            )
+            .order_by(Node.order)
+        )
 
         modules_result = await self.session.execute(modules_query)
         modules = modules_result.scalars().all()
 
-        return [
-            self.response_builder.build_module_response_simple(module, course_id)
-            for module in modules
-        ]
+        return [self.response_builder.build_module_response_simple(module, course_id) for module in modules]

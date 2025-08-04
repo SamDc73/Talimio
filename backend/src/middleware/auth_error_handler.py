@@ -32,7 +32,7 @@ class AuthErrorMiddleware(BaseHTTPMiddleware):
                 extra={
                     "client_host": request.client.host if request.client else "unknown",
                     "auth_error_type": type(exc).__name__,
-                }
+                },
             )
             return JSONResponse(
                 status_code=401,
@@ -43,8 +43,8 @@ class AuthErrorMiddleware(BaseHTTPMiddleware):
                         "Ensure you are logged in",
                         "Check if your session has expired",
                         "Try logging in again",
-                    ]
-                }
+                    ],
+                },
             )
         except HTTPException as exc:
             # Handle other HTTP exceptions (403, etc.)
@@ -53,14 +53,14 @@ class AuthErrorMiddleware(BaseHTTPMiddleware):
                     f"Access forbidden for {request.method} {request.url.path}",
                     extra={
                         "client_host": request.client.host if request.client else "unknown",
-                    }
+                    },
                 )
                 return JSONResponse(
                     status_code=403,
                     content={
                         "detail": exc.detail or "Access forbidden",
                         "error_code": "ACCESS_DENIED",
-                    }
+                    },
                 )
             # Re-raise all other HTTP exceptions (including database errors that return 500)
             raise

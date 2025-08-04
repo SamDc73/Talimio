@@ -43,6 +43,12 @@ class Video(Base):
     )  # pending, processing, completed, failed
     rag_processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Chapter extraction status
+    chapters_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending"
+    )  # pending, processing, completed, failed
+    chapters_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     # Archive status
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

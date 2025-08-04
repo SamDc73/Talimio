@@ -60,8 +60,8 @@ class TaggingService:
             # For tagging, we use the actual content type as the routing key
             tags_with_confidence = await self._ai_service.process_content(
                 content_type,  # The actual content type (book, video, etc.)
-                "tag",         # This is the action
-                user_id,       # Use the actual user_id for personalized tags
+                "tag",  # This is the action
+                user_id,  # Use the actual user_id for personalized tags
                 title=title,
                 preview=content_preview,
             )
@@ -193,14 +193,10 @@ class TaggingService:
         query_conditions = and_(
             TagAssociation.content_id == content_id,
             TagAssociation.content_type == content_type,
-            TagAssociation.user_id == user_id
+            TagAssociation.user_id == user_id,
         )
 
-        query = (
-            select(Tag)
-            .join(TagAssociation)
-            .where(query_conditions)
-        )
+        query = select(Tag).join(TagAssociation).where(query_conditions)
 
         result = await self.session.execute(query)
         return list(result.scalars().all())
@@ -270,8 +266,8 @@ class TaggingService:
         try:
             tags_with_confidence = await self._ai_service.process_content(
                 content_type,  # The actual content type (book, video, etc.)
-                "tag",         # This is the action
-                user_id,       # Use the actual user_id for personalized tags
+                "tag",  # This is the action
+                user_id,  # Use the actual user_id for personalized tags
                 title=title,
                 preview=content_preview,
             )
@@ -459,6 +455,7 @@ async def update_content_tags_json(
 
     await session.flush()
 
+
 async def apply_automatic_tagging(session: AsyncSession, book: "Book", metadata: "BookMetadata") -> None:
     """Apply automatic tagging to the book."""
     try:
@@ -481,6 +478,7 @@ async def apply_automatic_tagging(session: AsyncSession, book: "Book", metadata:
 
     except Exception as e:
         logging.exception(f"Failed to tag book {book.id}: {e}")
+
 
 async def apply_automatic_tagging_to_course(session: AsyncSession, roadmap: "Course", _modules_data: list) -> None:
     """Apply automatic tagging to the course/roadmap."""
@@ -530,5 +528,3 @@ def _build_content_preview(book: "Book", metadata: "BookMetadata") -> list[str]:
                 content_preview.append(f"Table of Contents: {', '.join(toc_items)}")
 
     return content_preview
-
-

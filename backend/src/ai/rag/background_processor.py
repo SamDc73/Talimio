@@ -77,10 +77,7 @@ class BookContentExtractor(ContentExtractor):
             file_type = Path(book.file_path).suffix.lstrip(".")
             logger.info(f"Processing document as type: {file_type}")
 
-            text_content = await document_processor.process_document(
-                temp_file,
-                file_type
-            )
+            text_content = await document_processor.process_document(temp_file, file_type)
 
             logger.info(f"Extracted {len(text_content)} characters from book")
 
@@ -89,7 +86,7 @@ class BookContentExtractor(ContentExtractor):
                 "book_id": str(book_id),
                 "title": book.title,
                 "author": book.author,
-                "user_id": str(book.user_id)
+                "user_id": str(book.user_id),
             }
 
             return text_content, metadata
@@ -122,16 +119,13 @@ class VideoContentExtractor(ContentExtractor):
         try:
             # Import here to avoid circular imports
             from src.videos.service import VideoService
+
             service = VideoService()
             # Use public method instead of private one
             transcript_response = await service.get_video_transcript_segments(session, str(video_uuid))
             if transcript_response and transcript_response.segments:
                 transcript_segments = [
-                    {
-                        "start": seg.start_time,
-                        "end": seg.end_time,
-                        "text": seg.text
-                    }
+                    {"start": seg.start_time, "end": seg.end_time, "text": seg.text}
                     for seg in transcript_response.segments
                 ]
         except Exception as e:
@@ -142,7 +136,7 @@ class VideoContentExtractor(ContentExtractor):
             "video_uuid": str(video_uuid),
             "title": video.title,
             "channel": video.channel,
-            "user_id": str(video.user_id) if hasattr(video, "user_id") else None
+            "user_id": str(video.user_id) if hasattr(video, "user_id") else None,
         }
 
         # Return segments if available, otherwise plain transcript
@@ -154,6 +148,7 @@ class VideoContentExtractor(ContentExtractor):
             # Try to extract it using public method
             try:
                 from src.videos.service import VideoService
+
                 service = VideoService()
                 transcript_response = await service.get_video_transcript_segments(session, str(video_uuid))
                 # Combine segments into plain text
@@ -170,18 +165,12 @@ class VideoContentExtractor(ContentExtractor):
 
 
 async def _update_content_status[ContentModel: (Book, Video)](
-    content_id: UUID,
-    content_type: str,
-    model_class: type[ContentModel],
-    status: str,
-    error_msg: str | None = None
+    content_id: UUID, content_type: str, model_class: type[ContentModel], status: str, error_msg: str | None = None
 ) -> None:
     """Update content RAG status in database."""
     try:
         async with async_session_maker() as session:
-            result = await session.execute(
-                select(model_class).where(model_class.id == content_id)
-            )
+            result = await session.execute(select(model_class).where(model_class.id == content_id))
             content = result.scalar_one_or_none()
             if content:
                 content.rag_status = status
@@ -195,11 +184,7 @@ async def _update_content_status[ContentModel: (Book, Video)](
         logger.exception(f"Failed to update {content_type} {content_id} status to {status}: {e}")
 
 
-async def _log_extraction_details(
-    content_type: str,
-    content_id: UUID,
-    extracted_content: str | list[dict]
-) -> None:
+async def _log_extraction_details(content_type: str, content_id: UUID, extracted_content: str | list[dict]) -> None:
     """Log details about extracted content."""
     if content_type == "book":
         logger.info(f"Extracted {len(extracted_content)} characters from book {content_id}")
@@ -216,24 +201,17 @@ async def _store_content_embeddings(
     content_id: UUID,
     chunks: list[str] | list[dict],
     metadata: dict[str, Any],
-    vector_store: VectorStore
+    vector_store: VectorStore,
 ) -> None:
     """Store content embeddings in vector store."""
     if content_type == "book":
-        await vector_store.store_chunks_with_embeddings(
-            session, content_id, content_type, chunks, metadata
-        )
+        await vector_store.store_chunks_with_embeddings(session, content_id, content_type, chunks, metadata)
     else:  # video
-        await vector_store.store_chunks_with_embeddings(
-            session, content_id, chunks, doc_type=content_type
-        )
+        await vector_store.store_chunks_with_embeddings(session, content_id, chunks, doc_type=content_type)
 
 
 async def process_content_rag_background[ContentModel: (Book, Video)](
-    content_id: UUID,
-    content_type: str,
-    content_extractor: ContentExtractor,
-    model_class: type[ContentModel]
+    content_id: UUID, content_type: str, content_extractor: ContentExtractor, model_class: type[ContentModel]
 ) -> None:
     """
     Unified background processor for content RAG embeddings.
@@ -249,9 +227,7 @@ async def process_content_rag_background[ContentModel: (Book, Video)](
 
         async with async_session_maker() as session:
             # Get and validate content record
-            result = await session.execute(
-                select(model_class).where(model_class.id == content_id)
-            )
+            result = await session.execute(select(model_class).where(model_class.id == content_id))
             content = result.scalar_one_or_none()
 
             if not content:
@@ -299,17 +275,11 @@ async def process_content_rag_background[ContentModel: (Book, Video)](
         logger.exception(f"❌ {error_msg}: {type(e).__name__}: {e!s}")
 
         # Update status to failed
-        await _update_content_status(
-            content_id, content_type, model_class, "failed",
-            f"{type(e).__name__}: {e!s}"
-        )
+        await _update_content_status(content_id, content_type, model_class, "failed", f"{type(e).__name__}: {e!s}")
 
 
 async def _process_book_content(
-    text_content: str,
-    book_id: UUID,
-    _session: AsyncSession,
-    _metadata: dict[str, Any]
+    text_content: str, book_id: UUID, _session: AsyncSession, _metadata: dict[str, Any]
 ) -> list[str]:
     """Process book content into chunks."""
     # Chunk the text with chapter-aware chunking
@@ -320,22 +290,20 @@ async def _process_book_content(
 
 
 async def _process_video_content(
-    content: list[dict] | str,
-    video_uuid: UUID,
-    session: AsyncSession,
-    metadata: dict[str, Any]
+    content: list[dict] | str, video_uuid: UUID, session: AsyncSession, metadata: dict[str, Any]
 ) -> list[dict]:
     """Process video content into chunks."""
     # Check if we have transcript segments with timestamps
     if isinstance(content, list) and content:
         # Use timestamp-aware chunking with settings
         from src.config.settings import get_settings
+
         settings = get_settings()
 
         video_chunker = VideoTranscriptChunker(
             max_tokens=settings.RAG_VIDEO_MAX_TOKENS,
             overlap_tokens=settings.RAG_VIDEO_OVERLAP_TOKENS,
-            target_duration_seconds=settings.RAG_VIDEO_TARGET_DURATION
+            target_duration_seconds=settings.RAG_VIDEO_TARGET_DURATION,
         )
 
         # Check if video has chapters
@@ -348,12 +316,7 @@ async def _process_video_content(
         if chapters and len(chapters) > 1:
             # Convert chapters to dict format
             chapter_dicts = [
-                {
-                    "start_time": ch.start_time,
-                    "end_time": ch.end_time,
-                    "title": ch.title
-                }
-                for ch in chapters
+                {"start_time": ch.start_time, "end_time": ch.end_time, "title": ch.title} for ch in chapters
             ]
 
             # Get video duration
@@ -363,9 +326,7 @@ async def _process_video_content(
                 msg = f"Video {video_uuid} not found"
                 raise ValueError(msg)
 
-            video_chunks = video_chunker.chunk_by_chapters(
-                content, chapter_dicts, str(video_uuid)
-            )
+            video_chunks = video_chunker.chunk_by_chapters(content, chapter_dicts, str(video_uuid))
         else:
             # Use time-based chunking
             video_result = await session.execute(select(Video).where(Video.id == video_uuid))
@@ -374,9 +335,7 @@ async def _process_video_content(
                 msg = f"Video {video_uuid} not found"
                 raise ValueError(msg)
 
-            video_chunks = video_chunker.chunk_transcript(
-                content, video.duration, str(video_uuid)
-            )
+            video_chunks = video_chunker.chunk_transcript(content, video.duration, str(video_uuid))
 
         # Convert to format expected by vector store
         chunks = []
@@ -389,7 +348,7 @@ async def _process_video_content(
                     "end_time": vc.end_time,
                     "chunk_index": vc.chunk_index,
                     "total_chunks": vc.total_chunks,
-                }
+                },
             }
             chunks.append(chunk_dict)
 

@@ -365,7 +365,7 @@ export function withProgressCompatibility(Component, options = {}) {
  * Hook for automatic progress system detection
  */
 export function useProgressSystemDetection(context = {}) {
-	const { courseId, roadmapId, moduleId, lessonId, nodeId } = context;
+	const { courseId, roadmapId, moduleId, nodeId } = context;
 
 	const detection = {
 		hasNewContext: Boolean(courseId && moduleId),

@@ -1,5 +1,5 @@
 import { ChevronLeft, Mail } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 
 const PasswordResetForm = ({ onBack }) => {
@@ -9,8 +9,23 @@ const PasswordResetForm = ({ onBack }) => {
 	const [successMessage, setSuccessMessage] = useState("");
 	const { resetPassword } = useAuth();
 
+	// Check if auth is enabled
+	const authEnabled = import.meta.env.VITE_ENABLE_AUTH === "true";
+
+	useEffect(() => {
+		if (!authEnabled) {
+			setError("Password reset is not available in single-user mode");
+		}
+	}, []);
+
 	const handleSubmit = async (e) => {
 		e.preventDefault();
+
+		if (!authEnabled) {
+			setError("Password reset is not available in single-user mode");
+			return;
+		}
+
 		setError("");
 		setSuccessMessage("");
 		setLoading(true);

@@ -45,11 +45,7 @@ logger = logging.getLogger(__name__)
     }
 )
 async def search_hackernews_discussions(
-    topic: str,
-    content_type: str = "any",
-    time_range: str = "month",
-    min_points: int = 10,
-    max_results: int = 10
+    topic: str, content_type: str = "any", time_range: str = "month", min_points: int = 10, max_results: int = 10
 ) -> dict[str, Any]:
     """Search HackerNews for educational discussions and resources.
 
@@ -141,11 +137,7 @@ async def search_hackernews_discussions(
             "results": results,
             "total_found": len(results),
             "search_query": query,
-            "filters_applied": {
-                "content_type": content_type,
-                "time_range": time_range,
-                "min_points": min_points
-            },
+            "filters_applied": {"content_type": content_type, "time_range": time_range, "min_points": min_points},
         }
 
     except Exception as e:

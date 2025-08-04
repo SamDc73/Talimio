@@ -31,7 +31,6 @@ from .auth.exceptions import (
     InvalidTokenError,
     TokenExpiredError,
 )
-from .auth.manager import auth_manager
 from .auth.router import router as auth_router
 
 # Import models to register them with SQLAlchemy - MUST be after database.base import
@@ -225,8 +224,55 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def inject_user_context(request: Request, call_next: Callable) -> Response:
         """Inject user context into every request."""
-        # Get user ID, with AuthManager handling fallbacks to the default user
-        request.state.user_id = auth_manager.get_effective_user_id(request)
+        # Skip authentication for certain endpoints
+        path = request.url.path
+        auth_skip_paths = [
+            "/health",
+            "/health/db",
+            "/health/auth",
+            "/api/v1/auth/login",
+            "/api/v1/auth/signup",
+            "/api/v1/auth/refresh",
+            "/api/v1/auth/logout",
+            "/api/v1/auth/callback",
+            "/api/v1/auth/verify",
+            "/api/v1/auth/request-password-reset",
+            "/api/v1/auth/reset-password",
+            "/api/v1/auth/me",  # This endpoint handles its own auth
+            "/api/v1/auth/debug",
+            "/docs",
+            "/redoc",
+            "/openapi.json"
+        ]
+
+        # Also skip any static files
+        if any(path.startswith(skip_path) for skip_path in auth_skip_paths) or path.startswith("/static"):
+            # For auth endpoints, don't try to get user_id
+            request.state.user_id = None
+        else:
+            # Get user ID for protected endpoints
+            try:
+                from src.auth.config import get_user_id
+                request.state.user_id = await get_user_id(request)
+            except Exception as e:
+                # Import auth exceptions
+                from src.auth.exceptions import (
+                    AuthenticationError,
+                    InvalidTokenError,
+                    MissingTokenError,
+                    TokenExpiredError,
+                )
+                from src.core.error_handlers import handle_authentication_errors
+
+                # Log the error for debugging
+                logger.error(f"Auth error in middleware for {path}: {type(e).__name__}: {e}")
+
+                # Handle auth errors directly in middleware since exception handlers don't catch middleware errors
+                if isinstance(e, (AuthenticationError, InvalidTokenError, MissingTokenError, TokenExpiredError)):
+                    return await handle_authentication_errors(request, e)
+
+                # For other errors, let them propagate
+                raise
 
         return await call_next(request)
 
@@ -241,7 +287,7 @@ def create_app() -> FastAPI:
             code=ErrorCode.NOT_FOUND,
             detail=str(exc),
             status_code=404,
-            suggestions=["The requested resource does not exist"]
+            suggestions=["The requested resource does not exist"],
         )
 
     # Authentication errors (401)
@@ -316,7 +362,7 @@ def create_app() -> FastAPI:
             detail="An unexpected error occurred",
             status_code=500,
             metadata={"error_id": str(error_id)},
-            suggestions=["Please try again later", "If the problem persists, contact support with the error ID"]
+            suggestions=["Please try again later", "If the problem persists, contact support with the error ID"],
         )
 
     # Register health check endpoints
@@ -332,16 +378,14 @@ def create_app() -> FastAPI:
             from sqlalchemy import text
 
             from src.database.session import async_session_maker
+
             async with async_session_maker() as session:
                 # Simple query to check database connectivity
                 await session.execute(text("SELECT 1"))
             return {"db_status": "healthy"}
         except Exception as e:
             logger.exception("Database health check failed")
-            return JSONResponse(
-                status_code=503,
-                content={"db_status": "unhealthy", "error": str(e)}
-            )
+            return JSONResponse(status_code=503, content={"db_status": "unhealthy", "error": str(e)})
 
     @app.get("/health/auth")
     async def health_check_auth() -> dict[str, str]:
@@ -355,10 +399,7 @@ def create_app() -> FastAPI:
             return {"auth_status": "healthy", "provider": "none"}
         except Exception as e:
             logger.exception("Auth health check failed")
-            return JSONResponse(
-                status_code=503,
-                content={"auth_status": "unhealthy", "error": str(e)}
-            )
+            return JSONResponse(status_code=503, content={"auth_status": "unhealthy", "error": str(e)})
 
     # Register routers
     # Note: Auth router removed - using new auth manager system

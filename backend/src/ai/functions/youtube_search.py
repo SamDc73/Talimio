@@ -23,8 +23,14 @@ logger = logging.getLogger(__name__)
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Search query for YouTube"},
-                "search_count": {"type": "integer", "description": "Number of results to search for (overrides smart calculation)"},
-                "desired_count": {"type": "integer", "description": "Number of videos you want after filtering (used for smart search count)"},
+                "search_count": {
+                    "type": "integer",
+                    "description": "Number of results to search for (overrides smart calculation)",
+                },
+                "desired_count": {
+                    "type": "integer",
+                    "description": "Number of videos you want after filtering (used for smart search count)",
+                },
                 "min_duration": {"type": "integer", "description": "Minimum video duration in seconds"},
                 "max_duration": {"type": "integer", "description": "Maximum video duration in seconds"},
             },
@@ -66,9 +72,7 @@ async def search_youtube_videos(
     try:
         # Run yt-dlp subprocess
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
 
@@ -91,7 +95,7 @@ async def search_youtube_videos(
             "filters": {
                 "min_duration": min_duration,
                 "max_duration": max_duration,
-            }
+            },
         }
 
     except Exception as e:
@@ -120,7 +124,8 @@ def _build_ytdlp_command(
         "--ignore-errors",
         "--quiet",  # Suppress progress output
         "--no-warnings",
-        "--print", "%(.{id,title,description,channel,duration,chapters,view_count,like_count,channel_follower_count,upload_date})j",
+        "--print",
+        "%(.{id,title,description,channel,duration,chapters,view_count,like_count,channel_follower_count,upload_date})j",
     ]
 
     # Add duration filter if specified
@@ -151,10 +156,4 @@ def _parse_ytdlp_output(output: str) -> list[dict[str, Any]]:
 
 def _create_youtube_error_response(query: str, error_message: str) -> dict[str, Any]:
     """Create standardized error response for YouTube search."""
-    return {
-        "success": False,
-        "videos": [],
-        "total_found": 0,
-        "search_query": query,
-        "error": error_message
-    }
+    return {"success": False, "videos": [], "total_found": 0, "search_query": query, "error": error_message}

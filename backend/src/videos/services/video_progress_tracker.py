@@ -32,12 +32,7 @@ class VideoProgressTracker(ProgressTracker):
             progress_data = await progress_service.get_single_progress(user_id, content_id)
 
             if not progress_data:
-                return {
-                    "last_position": 0,
-                    "completion_percentage": 0,
-                    "playback_speed": 1.0,
-                    "completed_chapters": []
-                }
+                return {"last_position": 0, "completion_percentage": 0, "playback_speed": 1.0, "completed_chapters": []}
 
             # Get metadata from unified progress
             metadata = progress_data.metadata or {}
@@ -65,15 +60,10 @@ class VideoProgressTracker(ProgressTracker):
                 "completed_chapters": metadata.get("completed_chapters", []),
                 "last_watched_at": metadata.get("last_watched_at", progress_data.updated_at),
                 "created_at": progress_data.created_at,
-                "updated_at": progress_data.updated_at
+                "updated_at": progress_data.updated_at,
             }
 
-    async def update_progress(
-        self,
-        content_id: UUID,
-        user_id: UUID,
-        progress_data: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update progress data for specific video and user."""
         async with async_session_maker() as session:
             # Check if video exists
@@ -95,7 +85,7 @@ class VideoProgressTracker(ProgressTracker):
                 **existing_metadata,
                 "content_type": "video",
                 "duration": video.duration or 0,
-                "last_watched_at": datetime.now(UTC).isoformat()
+                "last_watched_at": datetime.now(UTC).isoformat(),
             }
 
             # Update video-specific fields in metadata
@@ -126,14 +116,9 @@ class VideoProgressTracker(ProgressTracker):
                     completion_percentage = current_progress.progress_percentage if current_progress else 0
 
             # Update using unified progress service
-            progress_update = ProgressUpdate(
-                progress_percentage=completion_percentage,
-                metadata=metadata
-            )
+            progress_update = ProgressUpdate(progress_percentage=completion_percentage, metadata=metadata)
 
-            updated = await progress_service.update_progress(
-                user_id, content_id, "video", progress_update
-            )
+            updated = await progress_service.update_progress(user_id, content_id, "video", progress_update)
 
             # Return updated progress in expected format
             return {
@@ -142,24 +127,15 @@ class VideoProgressTracker(ProgressTracker):
                 "completion_percentage": updated.progress_percentage,
                 "last_watched_at": metadata.get("last_watched_at"),
                 "created_at": updated.created_at,
-                "updated_at": updated.updated_at
+                "updated_at": updated.updated_at,
             }
 
-    async def calculate_completion_percentage(
-        self,
-        content_id: UUID,
-        user_id: UUID
-    ) -> float:
+    async def calculate_completion_percentage(self, content_id: UUID, user_id: UUID) -> float:
         """Calculate completion percentage (0.0 to 100.0)."""
         progress = await self.get_progress(content_id, user_id)
         return progress.get("completion_percentage", 0.0)
 
-    async def initialize_progress(
-        self,
-        content_id: UUID,
-        user_id: UUID,
-        total_duration: float | None = None
-    ) -> None:
+    async def initialize_progress(self, content_id: UUID, user_id: UUID, total_duration: float | None = None) -> None:
         """Initialize progress tracking for a video."""
         async with async_session_maker() as session:
             # Check if progress already exists
@@ -174,23 +150,15 @@ class VideoProgressTracker(ProgressTracker):
                     "playback_speed": 1.0,
                     "completed_chapters": [],
                     "duration": total_duration or 0,
-                    "last_watched_at": datetime.now(UTC).isoformat()
+                    "last_watched_at": datetime.now(UTC).isoformat(),
                 }
 
-                progress_update = ProgressUpdate(
-                    progress_percentage=0.0,
-                    metadata=metadata
-                )
+                progress_update = ProgressUpdate(progress_percentage=0.0, metadata=metadata)
 
-                await progress_service.update_progress(
-                    user_id, content_id, "video", progress_update
-                )
+                await progress_service.update_progress(user_id, content_id, "video", progress_update)
 
     async def update_playback_settings(
-        self,
-        content_id: UUID,
-        user_id: UUID,
-        settings: dict[str, Any]
+        self, content_id: UUID, user_id: UUID, settings: dict[str, Any]
     ) -> dict[str, Any]:
         """Update playback settings for a video."""
         async with async_session_maker() as session:
@@ -202,22 +170,14 @@ class VideoProgressTracker(ProgressTracker):
                 metadata.update(settings)
 
                 progress_update = ProgressUpdate(
-                    progress_percentage=current_progress.progress_percentage,
-                    metadata=metadata
+                    progress_percentage=current_progress.progress_percentage, metadata=metadata
                 )
 
-                await progress_service.update_progress(
-                    user_id, content_id, "video", progress_update
-                )
+                await progress_service.update_progress(user_id, content_id, "video", progress_update)
 
             return settings
 
-    async def mark_chapter_complete(
-        self,
-        content_id: UUID,
-        user_id: UUID,
-        chapter_id: str
-    ) -> dict[str, Any]:
+    async def mark_chapter_complete(self, content_id: UUID, user_id: UUID, chapter_id: str) -> dict[str, Any]:
         """Mark a chapter as complete."""
         async with async_session_maker() as session:
             progress_service = ProgressService(session)
@@ -233,11 +193,9 @@ class VideoProgressTracker(ProgressTracker):
                 # Update progress with new metadata
                 progress_update = ProgressUpdate(
                     progress_percentage=current_progress.progress_percentage if current_progress else 0,
-                    metadata=metadata
+                    metadata=metadata,
                 )
 
-                await progress_service.update_progress(
-                    user_id, content_id, "video", progress_update
-                )
+                await progress_service.update_progress(user_id, content_id, "video", progress_update)
 
             return {"success": True, "completed_chapters": completed_chapters}

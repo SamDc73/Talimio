@@ -1,4 +1,3 @@
-
 """Book metadata extraction utilities."""
 
 import logging

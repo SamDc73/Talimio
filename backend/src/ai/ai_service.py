@@ -31,13 +31,7 @@ class AIService:
         self._model_manager = ModelManager()
         self._rag_service = RAGService()
 
-    async def process_content(
-        self,
-        content_type: str,
-        action: str,
-        user_id: UUID,
-        **kwargs: Any
-    ) -> Any:
+    async def process_content(self, content_type: str, action: str, user_id: UUID, **kwargs: Any) -> Any:
         """Route AI requests to appropriate handlers.
 
         Args:
@@ -62,32 +56,27 @@ class AIService:
             ("book", "extract"): self._book_extract,
             ("book", "chat"): self._book_chat,
             ("book", "process_rag"): self._book_process_rag,
-
             # Video operations
             ("video", "transcript"): self._video_transcript,
             ("video", "summarize"): self._video_summary,
             ("video", "question"): self._video_question,
             ("video", "chat"): self._video_chat,
             ("video", "process_rag"): self._video_process_rag,
-
             # Course operations
             ("course", "generate"): self._course_generate,
             ("course", "lesson"): self._course_lesson,
             ("course", "update"): self._course_update,
             ("course", "chat"): self._course_chat,
-
             # Flashcard operations
             ("flashcard", "generate"): self._flashcard_generate,
             ("flashcard", "hint"): self._flashcard_hint,
             ("flashcard", "explain"): self._flashcard_explain,
-
             # Tagging operations (all content types use the same handler)
             ("book", "tag"): self._content_tag,
             ("video", "tag"): self._content_tag,
             ("course", "tag"): self._content_tag,
             ("flashcard", "tag"): self._content_tag,
             ("content", "tag"): self._content_tag,  # Keep for backward compatibility
-
             # General operations
             ("assistant", "chat"): self._assistant_chat,
         }.get((content_type, action))
@@ -104,7 +93,9 @@ class AIService:
         return await handler(user_id, **kwargs)
 
     # Book operations
-    async def _book_question(self, user_id: UUID, book_id: str, question: str, _page: int | None = None, **_kwargs: Any) -> str:
+    async def _book_question(
+        self, user_id: UUID, book_id: str, question: str, _page: int | None = None, **_kwargs: Any
+    ) -> str:
         """Answer a question about a book."""
         logger.info("Processing book question for user %s: %s", user_id, question[:50])
 
@@ -116,57 +107,43 @@ class AIService:
                     session=session,
                     roadmap_id=UUID(book_id),  # Using roadmap_id for now
                     query=question,
-                    top_k=5
+                    top_k=5,
                 )
 
                 if search_results:
-                    context_parts = [
-                        f"[Page {r.chunk_number}] {r.chunk_content}"
-                        for r in search_results
-                    ]
+                    context_parts = [f"[Page {r.chunk_number}] {r.chunk_content}" for r in search_results]
                     context = "\n\n".join(context_parts)
 
         # Prepare messages
         messages = [
             {
                 "role": "system",
-                "content": "You are an expert at answering questions about books. Use the provided context to give accurate answers."
+                "content": "You are an expert at answering questions about books. Use the provided context to give accurate answers.",
             },
-            {
-                "role": "user",
-                "content": f"Context from the book:\n{context}\n\nQuestion: {question}"
-            }
+            {"role": "user", "content": f"Context from the book:\n{context}\n\nQuestion: {question}"},
         ]
 
         # Get response
         response = await self._model_manager.get_completion_with_memory(
-            messages=messages,
-            user_id=user_id,
-            format_json=False
+            messages=messages, user_id=user_id, format_json=False
         )
 
         return str(response)
 
-    async def _book_summary(self, user_id: UUID, _book_id: str, _page_range: tuple[int, int] | None = None, **_kwargs: Any) -> str:
+    async def _book_summary(
+        self, user_id: UUID, _book_id: str, _page_range: tuple[int, int] | None = None, **_kwargs: Any
+    ) -> str:
         """Generate a summary of a book or specific pages."""
         logger.info("Generating book summary for user %s", user_id)
 
         # TODO: Implement book summarization with RAG
         messages = [
-            {
-                "role": "system",
-                "content": "You are an expert at summarizing educational content."
-            },
-            {
-                "role": "user",
-                "content": "Please summarize the key points from this book section."
-            }
+            {"role": "system", "content": "You are an expert at summarizing educational content."},
+            {"role": "user", "content": "Please summarize the key points from this book section."},
         ]
 
         response = await self._model_manager.get_completion_with_memory(
-            messages=messages,
-            user_id=user_id,
-            format_json=False
+            messages=messages, user_id=user_id, format_json=False
         )
 
         return str(response)
@@ -178,7 +155,9 @@ class AIService:
         # TODO: Implement extraction logic
         return []
 
-    async def _book_chat(self, user_id: UUID, _book_id: str, message: str, history: list[dict] | None = None, **_kwargs: Any) -> str:
+    async def _book_chat(
+        self, user_id: UUID, _book_id: str, message: str, history: list[dict] | None = None, **_kwargs: Any
+    ) -> str:
         """Chat about a book with context."""
         logger.info("Book chat for user %s", user_id)
 
@@ -187,9 +166,7 @@ class AIService:
         messages.append({"role": "user", "content": message})
 
         response = await self._model_manager.get_completion_with_memory(
-            messages=messages,
-            user_id=user_id,
-            format_json=False
+            messages=messages, user_id=user_id, format_json=False
         )
 
         return str(response)
@@ -217,47 +194,38 @@ class AIService:
         messages = [
             {
                 "role": "system",
-                "content": "You are an expert at summarizing educational videos. Create clear, structured summaries."
+                "content": "You are an expert at summarizing educational videos. Create clear, structured summaries.",
             },
-            {
-                "role": "user",
-                "content": f"Please summarize this video transcript:\n\n{transcript[:3000]}"
-            }
+            {"role": "user", "content": f"Please summarize this video transcript:\n\n{transcript[:3000]}"},
         ]
 
         response = await self._model_manager.get_completion_with_memory(
-            messages=messages,
-            user_id=user_id,
-            format_json=False
+            messages=messages, user_id=user_id, format_json=False
         )
 
         return str(response)
 
-    async def _video_question(self, user_id: UUID, _video_id: str, question: str, _timestamp: float | None = None, **_kwargs: Any) -> str:
+    async def _video_question(
+        self, user_id: UUID, _video_id: str, question: str, _timestamp: float | None = None, **_kwargs: Any
+    ) -> str:
         """Answer a question about a video."""
         logger.info("Answering video question for user %s", user_id)
 
         # TODO: Get context from video transcript/RAG
         messages = [
-            {
-                "role": "system",
-                "content": "You are an expert at answering questions about educational videos."
-            },
-            {
-                "role": "user",
-                "content": question
-            }
+            {"role": "system", "content": "You are an expert at answering questions about educational videos."},
+            {"role": "user", "content": question},
         ]
 
         response = await self._model_manager.get_completion_with_memory(
-            messages=messages,
-            user_id=user_id,
-            format_json=False
+            messages=messages, user_id=user_id, format_json=False
         )
 
         return str(response)
 
-    async def _video_chat(self, user_id: UUID, video_id: str, message: str, history: list[dict] | None = None, **_kwargs: Any) -> str:
+    async def _video_chat(
+        self, user_id: UUID, video_id: str, message: str, history: list[dict] | None = None, **_kwargs: Any
+    ) -> str:
         """Chat about a video with context."""
         return await self._book_chat(user_id, video_id, message, history)
 
@@ -275,27 +243,20 @@ class AIService:
         skill_level: str,
         description: str = "",
         use_tools: bool = False,
-        **_kwargs: Any  # Accept additional kwargs like content_type
+        **_kwargs: Any,  # Accept additional kwargs like content_type
     ) -> dict:
         """Generate a course roadmap."""
         logger.info("Generating course for user %s: %s", user_id, topic)
 
         # Use the existing roadmap generation logic
         roadmap = await self._model_manager.generate_roadmap_content(
-            user_prompt=topic,
-            skill_level=skill_level,
-            description=description,
-            use_tools=use_tools
+            user_prompt=topic, skill_level=skill_level, description=description, use_tools=use_tools
         )
 
         return roadmap  # noqa: RET504
 
     async def _course_lesson(
-        self,
-        user_id: UUID,
-        course_id: str,
-        lesson_meta: dict[str, Any],
-        **_kwargs: Any
+        self, user_id: UUID, course_id: str, lesson_meta: dict[str, Any], **_kwargs: Any
     ) -> tuple[str, list[dict]]:
         """Generate a lesson for a course."""
         logger.info("Generating lesson for course %s", course_id)
@@ -315,7 +276,9 @@ class AIService:
         # TODO: Implement course update logic
         return {"status": "updated", "course_id": course_id}
 
-    async def _course_chat(self, user_id: UUID, course_id: str, message: str, history: list[dict] | None = None, **_kwargs: Any) -> str:
+    async def _course_chat(
+        self, user_id: UUID, course_id: str, message: str, history: list[dict] | None = None, **_kwargs: Any
+    ) -> str:
         """Chat about a course with context."""
         return await self._book_chat(user_id, course_id, message, history)
 
@@ -327,18 +290,13 @@ class AIService:
         messages = [
             {
                 "role": "system",
-                "content": f"Generate {count} flashcards from the provided content. Return as JSON array with 'front' and 'back' fields."
+                "content": f"Generate {count} flashcards from the provided content. Return as JSON array with 'front' and 'back' fields.",
             },
-            {
-                "role": "user",
-                "content": f"Create flashcards from this content:\n\n{content[:2000]}"
-            }
+            {"role": "user", "content": f"Create flashcards from this content:\n\n{content[:2000]}"},
         ]
 
         response = await self._model_manager.get_completion_with_memory(
-            messages=messages,
-            user_id=user_id,
-            format_json=True
+            messages=messages, user_id=user_id, format_json=True
         )
 
         return response if isinstance(response, list) else []
@@ -348,20 +306,12 @@ class AIService:
         logger.info("Generating hint for flashcard %s", _card_id)
 
         messages = [
-            {
-                "role": "system",
-                "content": "Generate a helpful hint for this flashcard without giving away the answer."
-            },
-            {
-                "role": "user",
-                "content": f"Front: {front}\nBack: {back}\n\nGenerate a hint:"
-            }
+            {"role": "system", "content": "Generate a helpful hint for this flashcard without giving away the answer."},
+            {"role": "user", "content": f"Front: {front}\nBack: {back}\n\nGenerate a hint:"},
         ]
 
         response = await self._model_manager.get_completion_with_memory(
-            messages=messages,
-            user_id=user_id,
-            format_json=False
+            messages=messages, user_id=user_id, format_json=False
         )
 
         return str(response)
@@ -371,20 +321,12 @@ class AIService:
         logger.info("Explaining flashcard %s", _card_id)
 
         messages = [
-            {
-                "role": "system",
-                "content": "Explain this flashcard concept in detail with examples."
-            },
-            {
-                "role": "user",
-                "content": f"Front: {front}\nBack: {back}\n\nExplain this concept:"
-            }
+            {"role": "system", "content": "Explain this flashcard concept in detail with examples."},
+            {"role": "user", "content": f"Front: {front}\nBack: {back}\n\nExplain this concept:"},
         ]
 
         response = await self._model_manager.get_completion_with_memory(
-            messages=messages,
-            user_id=user_id,
-            format_json=False
+            messages=messages, user_id=user_id, format_json=False
         )
 
         return str(response)
@@ -395,9 +337,7 @@ class AIService:
         logger.info("Generating tags for %s content", content_type)
 
         return await self._model_manager.generate_content_tags(
-            content_type=content_type,
-            title=title,
-            content_preview=preview
+            content_type=content_type, title=title, content_preview=preview
         )
 
     async def _assistant_chat(
@@ -406,15 +346,13 @@ class AIService:
         message: str,
         context: dict | None = None,
         history: list[dict] | None = None,
-        **_kwargs: Any
+        **_kwargs: Any,
     ) -> str:
         """General assistant chat with optional context."""
         logger.info("Assistant chat for user %s", user_id)
 
         # Build messages
-        messages = [
-            {"role": "system", "content": ASSISTANT_CHAT_SYSTEM_PROMPT}
-        ]
+        messages = [{"role": "system", "content": ASSISTANT_CHAT_SYSTEM_PROMPT}]
 
         if history:
             messages.extend(history)
@@ -427,9 +365,7 @@ class AIService:
             messages[-1]["content"] += context_str
 
         response = await self._model_manager.get_completion_with_memory(
-            messages=messages,
-            user_id=user_id,
-            format_json=False
+            messages=messages, user_id=user_id, format_json=False
         )
 
         return str(response)

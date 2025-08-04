@@ -35,12 +35,7 @@ class VideoContentService(BaseContentService):
                 data["tags"] = json.dumps(data["tags"])
 
             # Create video instance
-            video = Video(
-                **data,
-                user_id=user_id,
-                created_at=datetime.now(UTC),
-                updated_at=datetime.now(UTC)
-            )
+            video = Video(**data, user_id=user_id, created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
 
             session.add(video)
             await session.commit()
@@ -53,10 +48,7 @@ class VideoContentService(BaseContentService):
         """Update an existing video."""
         async with async_session_maker() as session:
             # Get the video
-            query = select(Video).where(
-                Video.id == content_id,
-                Video.user_id == user_id
-            )
+            query = select(Video).where(Video.id == content_id, Video.user_id == user_id)
             result = await session.execute(query)
             video = result.scalar_one_or_none()
 
@@ -83,10 +75,7 @@ class VideoContentService(BaseContentService):
         """Delete a video."""
         async with async_session_maker() as session:
             # Get the video
-            query = select(Video).where(
-                Video.id == content_id,
-                Video.user_id == user_id
-            )
+            query = select(Video).where(Video.id == content_id, Video.user_id == user_id)
             result = await session.execute(query)
             video = result.scalar_one_or_none()
 

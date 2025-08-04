@@ -24,8 +24,6 @@ const DEFAULT_VIDEO_PROGRESS = {
 };
 
 const DEFAULT_AUTH_STATE = {
-	token: null,
-	isAuthenticated: false,
 	user: null,
 };
 
@@ -37,22 +35,10 @@ const useAppStore = create(
 	devtools(
 		persist(
 			immer((set, get) => ({
-				// Authentication state
-				token: DEFAULT_AUTH_STATE.token,
-				isAuthenticated: DEFAULT_AUTH_STATE.isAuthenticated,
+				// Authentication state (only user, no token - using httpOnly cookies)
 				user: DEFAULT_AUTH_STATE.user,
 
 				// Authentication actions
-				setToken: (token) =>
-					set((state) => {
-						state.token = token;
-						state.isAuthenticated = !!token;
-					}),
-				clearToken: () =>
-					set((state) => {
-						state.token = null;
-						state.isAuthenticated = false;
-					}),
 				setUser: (user) =>
 					set((state) => {
 						state.user = user;
@@ -1061,9 +1047,8 @@ const useAppStore = create(
 					courses: state.courses,
 					flashcards: state.flashcards,
 					preferences: state.preferences,
-					token: state.token,
 					user: state.user,
-					// Don't persist UI state
+					// Don't persist UI state or tokens (using httpOnly cookies)
 				}),
 				version: 4, // Increment version to trigger migration
 				migrate: (persistedState, version) => {

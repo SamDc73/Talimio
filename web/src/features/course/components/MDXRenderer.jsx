@@ -128,17 +128,61 @@ export function MDXRenderer({ content }) {
 
 		const compileMdx = async () => {
 			try {
-				// Preprocess content to fix common MDX issues
+				// Smart LaTeX escaping to prevent MDX parsing issues while keeping LaTeX functional
 				let processedContent = content;
 
-				// Fix unclosed JSX expressions that might cause parsing errors
-				// Replace problematic patterns that could break MDX parsing
-				processedContent = processedContent
-					.replace(/\{\s*$/gm, "{ ") // Fix trailing open braces
-					.replace(/^\s*\}/gm, " }") // Fix leading close braces
-					.replace(/\{\s*\}/g, "{ }") // Fix empty expressions
-					.replace(/\{([^}]*)\{/g, "{$1\\{") // Escape nested braces
-					.replace(/\}([^{]*)\}/g, "\\}$1}"); // Escape nested braces
+				// List of problematic escape sequences that JavaScript interprets
+				const problemSequences = [
+					"\\t",
+					"\\n",
+					"\\r",
+					"\\f",
+					"\\b",
+					"\\v",
+					"\\0",
+					"\\x",
+					"\\u",
+				];
+
+				// Function to escape only problematic sequences
+				const smartEscape = (mathContent) => {
+					let escaped = mathContent;
+					// Only escape backslashes that are followed by problematic characters
+					problemSequences.forEach((seq) => {
+						const char = seq[1];
+						const regex = new RegExp(`\\\\${char}`, "g");
+						escaped = escaped.replace(regex, `\\\\${char}`);
+					});
+					return escaped;
+				};
+
+				// First, handle display math blocks \[...\]
+				processedContent = processedContent.replace(
+					/\\\[[\s\S]*?\\\]/g,
+					(match) => {
+						return smartEscape(match);
+					},
+				);
+
+				// Handle $$ ... $$ blocks
+				processedContent = processedContent.replace(
+					/\$\$[\s\S]*?\$\$/g,
+					(match) => {
+						return smartEscape(match);
+					},
+				);
+
+				// Handle inline math $ ... $ (more carefully to avoid false matches)
+				processedContent = processedContent.replace(
+					/\$([^$\n]+)\$/g,
+					(match, mathContent) => {
+						// Only process if it looks like actual math (contains backslash)
+						if (mathContent.includes("\\")) {
+							return `$${smartEscape(mathContent)}$`;
+						}
+						return match;
+					},
+				);
 
 				// Evaluate the MDX content with the runtime and rehype plugins
 				const result = await evaluate(processedContent, {
@@ -153,6 +197,23 @@ export function MDXRenderer({ content }) {
 				setError(null);
 			} catch (err) {
 				console.error("Error compiling MDX:", err);
+				// Log the content around the error location if possible
+				if (err.message.includes(":")) {
+					const match = err.message.match(/(\d+):(\d+):/);
+					if (match) {
+						const line = parseInt(match[1]);
+						const col = parseInt(match[2]);
+						const lines = processedContent.split("\n");
+						console.error(`Error at line ${line}, column ${col}`);
+						if (lines[line - 1]) {
+							console.error("Problem line:", lines[line - 1]);
+							console.error(
+								"Around:",
+								lines[line - 1].substring(Math.max(0, col - 20), col + 20),
+							);
+						}
+					}
+				}
 				setError(err.message);
 			}
 		};
@@ -166,11 +227,11 @@ export function MDXRenderer({ content }) {
 
 	if (error) {
 		console.warn("MDX rendering error:", error);
-		// Fallback to simple text display when MDX fails
+		// Simple error display
 		return (
 			<div className="markdown-content">
 				<div className="text-red-500 mb-4">
-					Error rendering content. Displaying plain text version:
+					Error rendering content: {error}
 				</div>
 				<pre className="whitespace-pre-wrap text-zinc-700">{content}</pre>
 			</div>

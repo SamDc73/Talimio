@@ -14,9 +14,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.auth.config import DEFAULT_USER_ID
 from src.books.models import Book, BookProgress
 from src.books.schemas import BookProgressResponse, BookProgressUpdate
-from src.config.settings import DEFAULT_USER_ID
 
 
 logger = logging.getLogger(__name__)
@@ -68,9 +68,7 @@ class BookProgressService:
             return None, {}
 
         # Get progress record with toc_progress
-        progress_query = select(BookProgress).where(
-            BookProgress.book_id == book_id, BookProgress.user_id == user_id
-        )
+        progress_query = select(BookProgress).where(BookProgress.book_id == book_id, BookProgress.user_id == user_id)
         progress_result = await self.session.execute(progress_query)
         progress = progress_result.scalar_one_or_none()
 
@@ -169,7 +167,9 @@ class BookProgressService:
 
         return total, completed
 
-    def _get_chapter_page_range(self, item: dict, siblings: list[dict], index: int, total_pages: int) -> tuple[int, int]:
+    def _get_chapter_page_range(
+        self, item: dict, siblings: list[dict], index: int, total_pages: int
+    ) -> tuple[int, int]:
         """Get the start and end page for a chapter."""
         start_page = int(item.get("page", 0))
 
@@ -198,7 +198,7 @@ class BookProgressService:
         toc_progress: dict,
         total_pages: int,
         processed_ranges: list[tuple[int, int]],
-        parent_completed: bool = False
+        parent_completed: bool = False,
     ) -> int:
         """Process TOC chapters and calculate completed pages."""
         completed_pages = 0
@@ -254,9 +254,7 @@ class BookProgressService:
 
         # Process the TOC
         items_to_process = toc_items if isinstance(toc_items, list) else [toc_items]
-        completed_pages = self._process_toc_chapters(
-            items_to_process, toc_progress, total_pages, processed_page_ranges
-        )
+        completed_pages = self._process_toc_chapters(items_to_process, toc_progress, total_pages, processed_page_ranges)
 
         progress = int((completed_pages / total_pages) * 100)
         logger.info(f"Chapter-weighted progress: {completed_pages}/{total_pages} pages = {progress}%")
@@ -281,7 +279,7 @@ class BookProgressService:
                 "section_percentage": 0,
                 "page_percentage": 0,
                 "completed_pages": 0,
-                "total_pages": 0
+                "total_pages": 0,
             }
 
         # Parse table of contents
@@ -298,7 +296,7 @@ class BookProgressService:
                 "section_percentage": 0,
                 "page_percentage": 0,
                 "completed_pages": 0,
-                "total_pages": 0
+                "total_pages": 0,
             }
 
         # Get progress record
@@ -330,7 +328,7 @@ class BookProgressService:
             "section_percentage": section_percentage,
             "page_percentage": page_percentage,
             "completed_pages": completed_pages,
-            "total_pages": total_pages
+            "total_pages": total_pages,
         }
 
     async def _get_or_create_progress(self, book_id: UUID) -> BookProgress:
@@ -375,7 +373,9 @@ class BookProgressService:
             merged_progress.update(parsed_toc_value)
             progress.toc_progress = merged_progress
             completed_count = sum(1 for v in merged_progress.values() if v)
-            logger.info(f"📚 Updated toc_progress for book, now has {len(merged_progress)} entries, {completed_count} completed")
+            logger.info(
+                f"📚 Updated toc_progress for book, now has {len(merged_progress)} entries, {completed_count} completed"
+            )
         else:
             # Fallback if types are not as expected
             progress.toc_progress = parsed_toc_value
@@ -409,7 +409,9 @@ class BookProgressService:
         if progress_data.progress_percentage is not None:
             progress.progress_percentage = progress_data.progress_percentage
 
-    async def update_book_progress(self, book_id: UUID, progress_data: BookProgressUpdate | None = None) -> BookProgressResponse:
+    async def update_book_progress(
+        self, book_id: UUID, progress_data: BookProgressUpdate | None = None
+    ) -> BookProgressResponse:
         """Update reading progress for a book.
 
         Args:
@@ -461,7 +463,9 @@ class BookProgressService:
                 logger.info(f"📚 [PERF] Recalculating progress for book {book_id}")
                 progress.progress_percentage = await self.get_book_toc_progress_percentage(book_id)
                 calc_time = int((datetime.now(UTC) - calc_start).total_seconds() * 1000)
-                logger.info(f"📚 [PERF] Progress calculation took {calc_time}ms, result: {progress.progress_percentage}%")
+                logger.info(
+                    f"📚 [PERF] Progress calculation took {calc_time}ms, result: {progress.progress_percentage}%"
+                )
             elif progress.toc_progress:
                 # If we have toc_progress but no ToC in book (shouldn't happen), log warning
                 logger.warning(f"⚠️ Book {book_id} has toc_progress but no table_of_contents")

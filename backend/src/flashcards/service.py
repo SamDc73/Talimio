@@ -473,7 +473,9 @@ async def get_card(deck_id: UUID, card_id: UUID, user_id: UUID) -> FlashcardCard
         ) from e
 
 
-async def update_card(deck_id: UUID, card_id: UUID, card_data: FlashcardCardUpdate, user_id: UUID) -> FlashcardCardResponse:
+async def update_card(
+    deck_id: UUID, card_id: UUID, card_data: FlashcardCardUpdate, user_id: UUID
+) -> FlashcardCardResponse:
     """
     Update a card in a deck.
 
@@ -599,7 +601,9 @@ async def delete_card(deck_id: UUID, card_id: UUID, user_id: UUID) -> None:
         ) from e
 
 
-async def review_card(deck_id: UUID, card_id: UUID, review_data: FlashcardReviewRequest, user_id: UUID) -> FlashcardReviewResponse:
+async def review_card(
+    deck_id: UUID, card_id: UUID, review_data: FlashcardReviewRequest, user_id: UUID
+) -> FlashcardReviewResponse:
     """
     Submit a card review and update spaced repetition scheduling.
 

@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from src.auth.dependencies import EffectiveUserId
+from src.auth import UserId
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_service import ContentService
 
@@ -18,12 +18,12 @@ router = APIRouter(prefix="/api/v1/content", tags=["content"])
 
 @router.get("")
 async def get_all_content(
+    current_user_id: UserId,
     search: Annotated[str | None, Query(description="Search term for filtering content")] = None,
     content_type: Annotated[ContentType | None, Query(description="Filter by content type")] = None,
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
     include_archived: Annotated[bool, Query(description="Include archived content")] = False,
-    current_user_id: EffectiveUserId = None,  # This will never be None!
 ) -> ContentListResponse:
     """
     List all content across different types (videos, flashcards, books, roadmaps).
@@ -45,7 +45,7 @@ async def get_all_content(
 async def delete_content(
     content_type: ContentType,
     content_id: str,
-    current_user_id: EffectiveUserId = None,  # This will never be None!
+    current_user_id: UserId,
 ) -> None:
     """
     Delete a content item by type and ID.

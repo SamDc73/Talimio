@@ -43,6 +43,7 @@ class FlashcardDeckResponse(FlashcardDeckBase):
         """Convert tags JSON string to list during validation."""
         if isinstance(v, str):
             import json
+
             try:
                 return json.loads(v)
             except (json.JSONDecodeError, TypeError):
@@ -109,6 +110,7 @@ class FlashcardCardResponse(FlashcardCardBase):
         """Convert tags JSON string to list during validation."""
         if isinstance(v, str):
             import json
+
             try:
                 return json.loads(v)
             except (json.JSONDecodeError, TypeError):

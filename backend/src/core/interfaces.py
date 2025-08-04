@@ -17,20 +17,11 @@ class ProgressTracker(Protocol):
         """Get progress data for specific content and user."""
         ...
 
-    async def update_progress(
-        self,
-        content_id: UUID,
-        user_id: UUID,
-        progress_data: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update progress data for specific content and user."""
         ...
 
-    async def calculate_completion_percentage(
-        self,
-        content_id: UUID,
-        user_id: UUID
-    ) -> float:
+    async def calculate_completion_percentage(self, content_id: UUID, user_id: UUID) -> float:
         """Calculate completion percentage (0.0 to 100.0)."""
         ...
 
@@ -39,10 +30,7 @@ class ContentProcessor(Protocol):
     """Protocol for processing different types of content."""
 
     async def process_content(
-        self,
-        content_id: UUID,
-        content_type: str,
-        processing_options: dict[str, Any] | None = None
+        self, content_id: UUID, content_type: str, processing_options: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """Process content for AI/RAG/search indexing."""
         ...
@@ -63,12 +51,7 @@ class UserResolver(Protocol):
         """Resolve current user ID from request context."""
         ...
 
-    async def has_permission(
-        self,
-        user_id: UUID,
-        resource_id: UUID,
-        action: str
-    ) -> bool:
+    async def has_permission(self, user_id: UUID, resource_id: UUID, action: str) -> bool:
         """Check if user has permission for specific action on resource."""
         ...
 
@@ -81,28 +64,15 @@ class ContentFacade(ABC):
     """Base class for content module facades."""
 
     @abstractmethod
-    async def get_content_with_progress(
-        self,
-        content_id: UUID,
-        user_id: UUID
-    ) -> dict[str, Any]:
+    async def get_content_with_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
         """Get content with progress information."""
 
     @abstractmethod
-    async def create_content(
-        self,
-        content_data: dict[str, Any],
-        user_id: UUID
-    ) -> dict[str, Any]:
+    async def create_content(self, content_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
         """Create new content."""
 
     @abstractmethod
-    async def update_progress(
-        self,
-        content_id: UUID,
-        user_id: UUID,
-        progress_data: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update content progress."""
 
     @abstractmethod
@@ -113,20 +83,11 @@ class ContentFacade(ABC):
 class EventPublisher(Protocol):
     """Protocol for publishing events to decouple modules."""
 
-    async def publish(
-        self,
-        event_type: str,
-        event_data: dict[str, Any],
-        delay_seconds: int | None = None
-    ) -> bool:
+    async def publish(self, event_type: str, event_data: dict[str, Any], delay_seconds: int | None = None) -> bool:
         """Publish event to event bus."""
         ...
 
-    def subscribe(
-        self,
-        event_type: str,
-        handler_function: Any
-    ) -> None:
+    def subscribe(self, event_type: str, handler_function: Any) -> None:
         """Subscribe to event type."""
         ...
 
@@ -201,7 +162,7 @@ class ProgressData:
         user_id: UUID,
         completion_percentage: float,
         last_accessed: str | None = None,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         self.content_id = content_id
         self.user_id = user_id
@@ -222,7 +183,7 @@ class ContentMetadata:
         created_at: str,
         tags: list[str] | None = None,
         summary: str | None = None,
-        additional_metadata: dict[str, Any] | None = None
+        additional_metadata: dict[str, Any] | None = None,
     ) -> None:
         self.content_id = content_id
         self.title = title

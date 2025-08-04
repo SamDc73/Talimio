@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, status
 
-from src.auth.dependencies import UserId
+from src.auth import UserId
 from src.config.settings import get_settings
 
 from .facade import FlashcardsFacade
@@ -59,12 +59,7 @@ async def list_decks(
             result = await facade.get_user_decks(user_id, page, per_page)
 
             if result.get("success"):
-                return DeckListResponse(
-                    items=result["decks"],
-                    total=result["total"],
-                    page=page,
-                    pages=result["pages"]
-                )
+                return DeckListResponse(items=result["decks"], total=result["total"], page=page, pages=result["pages"])
             logger.error(f"Facade error: {result.get('error')}")
         except Exception as e:
             logger.exception(f"Facade exception, falling back: {e}")
@@ -100,9 +95,7 @@ async def create_deck_endpoint(deck_data: FlashcardDeckCreate, user_id: UserId) 
 
 
 @router.put("/{deck_id}")
-async def update_deck_endpoint(
-    deck_id: UUID, deck_data: FlashcardDeckUpdate, user_id: UserId
-) -> FlashcardDeckResponse:
+async def update_deck_endpoint(deck_id: UUID, deck_data: FlashcardDeckUpdate, user_id: UserId) -> FlashcardDeckResponse:
     """Update deck details."""
     return await update_deck(deck_id, deck_data, user_id=user_id)
 
@@ -126,9 +119,7 @@ async def get_deck_cards_endpoint(
 
 
 @router.post("/{deck_id}/cards", status_code=status.HTTP_201_CREATED)
-async def create_card_endpoint(
-    deck_id: UUID, card_data: FlashcardCardCreate, user_id: UserId
-) -> FlashcardCardResponse:
+async def create_card_endpoint(deck_id: UUID, card_data: FlashcardCardCreate, user_id: UserId) -> FlashcardCardResponse:
     """Add a card to a deck."""
     return await create_card(deck_id, card_data, user_id=user_id)
 

@@ -29,11 +29,7 @@ def _safe_parse_tags(tags_json: str | None) -> list[str]:
 
 def _create_progress_data(percentage: float = 0, completed_items: int = 0, total_items: int = 0) -> ProgressData:
     """Create standardized progress data."""
-    return ProgressData(
-        percentage=percentage,
-        completed_items=completed_items,
-        total_items=total_items
-    )
+    return ProgressData(percentage=percentage, completed_items=completed_items, total_items=total_items)
 
 
 class ContentTransformService:
@@ -69,17 +65,10 @@ class ContentTransformService:
                     video_id = part
                     break
 
-        metadata = ContentMetadata(
-            platform="youtube",
-            video_id=video_id
-        )
+        metadata = ContentMetadata(platform="youtube", video_id=video_id)
 
         # Progress will be calculated later by the progress service
-        progress = _create_progress_data(
-            percentage=row.progress or 0,
-            completed_items=0,
-            total_items=0
-        )
+        progress = _create_progress_data(percentage=row.progress or 0, completed_items=0, total_items=0)
 
         return YoutubeContent(
             id=row.id,
@@ -102,11 +91,7 @@ class ContentTransformService:
         metadata = ContentMetadata()
 
         # Progress will be calculated later by the progress service
-        progress = _create_progress_data(
-            percentage=row.progress or 0,
-            completed_items=0,
-            total_items=row.count1 or 0
-        )
+        progress = _create_progress_data(percentage=row.progress or 0, completed_items=0, total_items=row.count1 or 0)
 
         return FlashcardContent(
             id=row.id,
@@ -135,18 +120,14 @@ class ContentTransformService:
 
         metadata = ContentMetadata(
             pages=row.count1,
-            file_type="pdf"  # Default for now, could be extracted from file
+            file_type="pdf",  # Default for now, could be extracted from file
         )
 
         # Log the raw progress value from database
         logger.info(f"📚 Transform: Book {row.id} has row.progress = {row.progress}")
 
         # Progress will be calculated later by the progress service
-        progress = _create_progress_data(
-            percentage=row.progress or 0,
-            completed_items=0,
-            total_items=0
-        )
+        progress = _create_progress_data(percentage=row.progress or 0, completed_items=0, total_items=0)
 
         book_content = BookContent(
             id=row.id,
@@ -176,14 +157,12 @@ class ContentTransformService:
         """Create CourseContent from row data (handles both roadmap and course types)."""
         metadata = ContentMetadata(
             ai_generated=True,  # Default for now
-            modules_count=None  # Could be calculated from course structure
+            modules_count=None,  # Could be calculated from course structure
         )
 
         # Progress will be calculated later by the progress service
         progress = _create_progress_data(
-            percentage=row.progress or 0,
-            completed_items=row.count2 or 0,
-            total_items=row.count1 or 0
+            percentage=row.progress or 0, completed_items=row.count2 or 0, total_items=row.count1 or 0
         )
 
         return CourseContent(

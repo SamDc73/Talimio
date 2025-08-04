@@ -23,36 +23,20 @@ logger = logging.getLogger(__name__)
 class BookProgressTracker(ProgressTracker):
     """Simplified progress tracker for books that implements the ProgressTracker protocol."""
 
-    async def initialize_progress(
-        self,
-        content_id: UUID,
-        user_id: UUID,
-        total_pages: int = 0
-    ) -> None:
+    async def initialize_progress(self, content_id: UUID, user_id: UUID, total_pages: int = 0) -> None:
         """Initialize progress tracking for a new book."""
         async with async_session_maker() as session:
             # Use unified progress service
             progress_service = ProgressService(session)
 
             # Create initial progress entry
-            metadata = {
-                "current_page": 1,
-                "total_pages": total_pages,
-                "toc_progress": {},
-                "bookmarks": []
-            }
+            metadata = {"current_page": 1, "total_pages": total_pages, "toc_progress": {}, "bookmarks": []}
 
             # Create progress update object
-            progress_update = ProgressUpdate(
-                progress_percentage=0,
-                metadata=metadata
-            )
+            progress_update = ProgressUpdate(progress_percentage=0, metadata=metadata)
 
             await progress_service.update_progress(
-                user_id=user_id,
-                content_id=content_id,
-                content_type="book",
-                progress=progress_update
+                user_id=user_id, content_id=content_id, content_type="book", progress=progress_update
             )
 
     async def get_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
@@ -76,7 +60,7 @@ class BookProgressTracker(ProgressTracker):
                     "completion_percentage": 0,
                     "progress_percentage": 0,  # Add both for compatibility
                     "toc_progress": {},
-                    "bookmarks": []
+                    "bookmarks": [],
                 }
 
             # Extract metadata
@@ -90,6 +74,7 @@ class BookProgressTracker(ProgressTracker):
                 try:
                     # Import the progress service to calculate percentage
                     from src.books.services.book_progress_service import BookProgressService
+
                     service = BookProgressService(session, user_id)
                     progress_percentage = await service.get_book_toc_progress_percentage(content_id, user_id)
                 except Exception as e:
@@ -105,15 +90,10 @@ class BookProgressTracker(ProgressTracker):
                 "bookmarks": metadata.get("bookmarks", []),
                 "last_accessed_at": progress_data.updated_at,
                 "created_at": progress_data.created_at,
-                "updated_at": progress_data.updated_at
+                "updated_at": progress_data.updated_at,
             }
 
-    async def update_progress(
-        self,
-        content_id: UUID,
-        user_id: UUID,
-        progress_data: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update progress data for specific book and user."""
         async with async_session_maker() as session:
             # Use unified progress service
@@ -154,6 +134,7 @@ class BookProgressTracker(ProgressTracker):
                 if book and book.table_of_contents and progress_data["toc_progress"]:
                     try:
                         from src.books.services.book_progress_service import BookProgressService
+
                         book_service = BookProgressService(session, user_id)
                         new_percentage = await book_service.get_book_toc_progress_percentage(content_id, user_id)
                         completion_percentage = new_percentage
@@ -173,14 +154,9 @@ class BookProgressTracker(ProgressTracker):
             metadata["content_type"] = "book"
 
             # Update using unified progress service
-            progress_update = ProgressUpdate(
-                progress_percentage=completion_percentage,
-                metadata=metadata
-            )
+            progress_update = ProgressUpdate(progress_percentage=completion_percentage, metadata=metadata)
 
-            updated = await progress_service.update_progress(
-                user_id, content_id, "book", progress_update
-            )
+            updated = await progress_service.update_progress(user_id, content_id, "book", progress_update)
 
             # Return updated progress in expected format
             return {
@@ -189,24 +165,16 @@ class BookProgressTracker(ProgressTracker):
                 "toc_progress": metadata.get("toc_progress", {}),
                 "last_accessed_at": updated.updated_at,
                 "created_at": updated.created_at,
-                "updated_at": updated.updated_at
+                "updated_at": updated.updated_at,
             }
 
-    async def calculate_completion_percentage(
-        self,
-        content_id: UUID,
-        user_id: UUID
-    ) -> float:
+    async def calculate_completion_percentage(self, content_id: UUID, user_id: UUID) -> float:
         """Calculate completion percentage (0.0 to 100.0)."""
         progress = await self.get_progress(content_id, user_id)
         return progress.get("completion_percentage", 0.0)
 
     async def mark_chapter_complete(
-        self,
-        content_id: UUID,
-        user_id: UUID,
-        chapter_id: str,
-        completed: bool = True
+        self, content_id: UUID, user_id: UUID, chapter_id: str, completed: bool = True
     ) -> None:
         """Mark a book chapter as complete or incomplete."""
         async with async_session_maker() as session:
@@ -230,6 +198,7 @@ class BookProgressTracker(ProgressTracker):
             # Recalculate completion percentage
             try:
                 from src.books.services.book_progress_service import BookProgressService
+
                 book_service = BookProgressService(session, user_id)
                 completion_percentage = await book_service.get_book_toc_progress_percentage(content_id, user_id)
             except Exception as e:
@@ -237,11 +206,6 @@ class BookProgressTracker(ProgressTracker):
                 completion_percentage = current_progress.progress_percentage if current_progress else 0
 
             # Update progress
-            progress_update = ProgressUpdate(
-                progress_percentage=completion_percentage,
-                metadata=metadata
-            )
+            progress_update = ProgressUpdate(progress_percentage=completion_percentage, metadata=metadata)
 
-            await progress_service.update_progress(
-                user_id, content_id, "book", progress_update
-            )
+            await progress_service.update_progress(user_id, content_id, "book", progress_update)

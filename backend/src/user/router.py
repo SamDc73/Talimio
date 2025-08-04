@@ -99,10 +99,7 @@ async def delete_user_endpoint(user_id: UUID) -> None:
 
 
 @router.get("/{user_id}/settings")
-async def get_settings(
-    user_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db_session)]
-) -> UserSettingsResponse:
+async def get_settings(user_id: UUID, db: Annotated[AsyncSession, Depends(get_db_session)]) -> UserSettingsResponse:
     """
     Get user settings including custom instructions and memory count.
 
@@ -123,9 +120,7 @@ async def get_settings(
 
 
 @router.put("/{user_id}/settings/instructions")
-async def update_instructions(
-    user_id: UUID, request: CustomInstructionsRequest
-) -> CustomInstructionsResponse:
+async def update_instructions(user_id: UUID, request: CustomInstructionsRequest) -> CustomInstructionsResponse:
     """
     Update custom instructions for AI personalization.
 
@@ -168,10 +163,7 @@ async def clear_memory(user_id: UUID) -> ClearMemoryResponse:
 
 
 @router.get("/{user_id}/settings/instructions")
-async def get_instructions(
-    user_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db_session)]
-) -> dict[str, str]:
+async def get_instructions(user_id: UUID, db: Annotated[AsyncSession, Depends(get_db_session)]) -> dict[str, str]:
     """
     Get custom instructions for the user.
 
@@ -215,9 +207,7 @@ async def get_memories(user_id: UUID) -> list[dict]:
 
 @router.put("/{user_id}/preferences")
 async def update_preferences(
-    user_id: UUID,
-    request: PreferencesUpdateRequest,
-    db: Annotated[AsyncSession, Depends(get_db_session)]
+    user_id: UUID, request: PreferencesUpdateRequest, db: Annotated[AsyncSession, Depends(get_db_session)]
 ) -> PreferencesUpdateResponse:
     """
     Update user preferences.
@@ -237,4 +227,3 @@ async def update_preferences(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update preferences: {e}"
         ) from e
-

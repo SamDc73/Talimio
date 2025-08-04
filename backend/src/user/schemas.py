@@ -16,10 +16,8 @@ class UserCreate(UserBase):
     """Schema for creating a new user."""
 
 
-
 class UserUpdate(UserBase):
     """Schema for updating user information."""
-
 
 
 class User(UserBase):

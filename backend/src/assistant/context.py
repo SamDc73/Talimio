@@ -29,7 +29,9 @@ class ContextRetriever(ABC):
 
     @abstractmethod
     async def retrieve_context(
-        self, resource_id: UUID, context_meta: dict[str, Any] | None = None,
+        self,
+        resource_id: UUID,
+        context_meta: dict[str, Any] | None = None,
     ) -> ContextData | None:
         """
         Retrieve context for a specific resource.
@@ -48,7 +50,9 @@ class BookContextStrategy(ContextRetriever):
     """Context retrieval strategy for PDF books."""
 
     async def retrieve_context(
-        self, resource_id: UUID, context_meta: dict[str, Any] | None = None,
+        self,
+        resource_id: UUID,
+        context_meta: dict[str, Any] | None = None,
     ) -> ContextData | None:
         """
         Extract text from current page +/- 2 pages for context window.
@@ -122,7 +126,9 @@ class VideoContextStrategy(ContextRetriever):
     """Context retrieval strategy for video transcripts."""
 
     async def retrieve_context(
-        self, resource_id: UUID, context_meta: dict[str, Any] | None = None,
+        self,
+        resource_id: UUID,
+        context_meta: dict[str, Any] | None = None,
     ) -> ContextData | None:
         """
         Extract transcript around current timestamp (+/- 60 seconds).
@@ -186,7 +192,9 @@ class VideoContextStrategy(ContextRetriever):
             logging.exception(f"Failed to retrieve video context for {resource_id}: {e}")
             return None
 
-    def _filter_transcript_segments(self, transcript_segments: list[dict], current_timestamp: float, context_window: int) -> list[dict]:
+    def _filter_transcript_segments(
+        self, transcript_segments: list[dict], current_timestamp: float, context_window: int
+    ) -> list[dict]:
         """Filter transcript segments within the time window."""
         start_time = max(0, current_timestamp - context_window)
         end_time = current_timestamp + context_window
@@ -219,7 +227,9 @@ class CourseContextStrategy(ContextRetriever):
     """Enhanced context retrieval strategy for course lessons with hierarchical context and progress tracking."""
 
     async def retrieve_context(
-        self, resource_id: UUID, context_meta: dict[str, Any] | None = None,
+        self,
+        resource_id: UUID,
+        context_meta: dict[str, Any] | None = None,
     ) -> ContextData | None:
         """
         Fetch hierarchical course content with real-time aggregation and progress tracking.
@@ -267,8 +277,15 @@ class CourseContextStrategy(ContextRetriever):
                 # Build context based on request type
                 if lesson_id and target_lesson:
                     self._add_lesson_context(
-                        content_parts, metadata, target_lesson, target_module,
-                        current_module_lessons, progress_data, include_hierarchy, include_progress, lesson_id
+                        content_parts,
+                        metadata,
+                        target_lesson,
+                        target_module,
+                        current_module_lessons,
+                        progress_data,
+                        include_hierarchy,
+                        include_progress,
+                        lesson_id,
                     )
                 elif module_id and target_module:
                     self._add_module_context(
@@ -375,18 +392,27 @@ class CourseContextStrategy(ContextRetriever):
         return []
 
     def _add_lesson_context(
-        self, content_parts: list[str], metadata: dict[str, Any], target_lesson: Any, target_module: Any,
-        current_module_lessons: list[Any], progress_data: dict[str, str], include_hierarchy: bool,
-        include_progress: bool, lesson_id: str
+        self,
+        content_parts: list[str],
+        metadata: dict[str, Any],
+        target_lesson: Any,
+        target_module: Any,
+        current_module_lessons: list[Any],
+        progress_data: dict[str, str],
+        include_hierarchy: bool,
+        include_progress: bool,
+        lesson_id: str,
     ) -> None:
         """Add lesson-specific context to content."""
-        metadata.update({
-            "lesson_id": str(target_lesson.id),
-            "lesson_title": target_lesson.title,
-            "lesson_order": target_lesson.order,
-            "module_id": str(target_module.id),
-            "module_title": target_module.title,
-        })
+        metadata.update(
+            {
+                "lesson_id": str(target_lesson.id),
+                "lesson_title": target_lesson.title,
+                "lesson_order": target_lesson.order,
+                "module_id": str(target_module.id),
+                "module_title": target_module.title,
+            }
+        )
 
         # Current lesson content
         lesson_content = self._get_lesson_content(target_lesson, metadata)
@@ -416,8 +442,13 @@ class CourseContextStrategy(ContextRetriever):
         return getattr(target_lesson, "content", "[Lesson content not available]")
 
     def _add_module_hierarchy_context(
-        self, content_parts: list[str], target_module: Any, current_module_lessons: list[Any],
-        progress_data: dict[str, str], include_progress: bool, lesson_id: str
+        self,
+        content_parts: list[str],
+        target_module: Any,
+        current_module_lessons: list[Any],
+        progress_data: dict[str, str],
+        include_progress: bool,
+        lesson_id: str,
     ) -> None:
         """Add module hierarchy context to content."""
         content_parts.append(f"=== MODULE CONTEXT: {target_module.title} ===")
@@ -437,14 +468,21 @@ class CourseContextStrategy(ContextRetriever):
         content_parts.append("")
 
     def _add_module_context(
-        self, content_parts: list[str], metadata: dict[str, Any], target_module: Any,
-        current_module_lessons: list[Any], progress_data: dict[str, str], include_progress: bool
+        self,
+        content_parts: list[str],
+        metadata: dict[str, Any],
+        target_module: Any,
+        current_module_lessons: list[Any],
+        progress_data: dict[str, str],
+        include_progress: bool,
     ) -> None:
         """Add module-specific context to content."""
-        metadata.update({
-            "module_id": str(target_module.id),
-            "module_title": target_module.title,
-        })
+        metadata.update(
+            {
+                "module_id": str(target_module.id),
+                "module_title": target_module.title,
+            }
+        )
 
         content_parts.append(f"=== MODULE: {target_module.title} ===")
         if hasattr(target_module, "description") and target_module.description:
@@ -473,7 +511,9 @@ class CourseContextStrategy(ContextRetriever):
                 if hasattr(module, "description") and module.description:
                     content_parts.append(f"  Description: {module.description}")
 
-    def _add_progress_summary(self, content_parts: list[str], metadata: dict[str, Any], progress_data: dict[str, str]) -> None:
+    def _add_progress_summary(
+        self, content_parts: list[str], metadata: dict[str, Any], progress_data: dict[str, str]
+    ) -> None:
         """Add progress summary to content."""
         completed_lessons = sum(1 for status in progress_data.values() if status == "completed")
         total_lessons = len(progress_data)
@@ -610,7 +650,11 @@ class DynamicContextManager:
         self._context_history = {}  # Track context changes over time
 
     async def get_context(
-        self, context_type: str, resource_id: UUID, context_meta: dict[str, Any] | None = None, max_tokens: int = 4000,
+        self,
+        context_type: str,
+        resource_id: UUID,
+        context_meta: dict[str, Any] | None = None,
+        max_tokens: int = 4000,
     ) -> ContextData | None:
         """
         Get context using the appropriate strategy with validation and size limiting.
@@ -634,7 +678,9 @@ class DynamicContextManager:
             return None
 
         try:
-            logging.debug(f"DynamicContextManager.get_context: context_type={context_type}, resource_id={resource_id}, context_meta={context_meta}")
+            logging.debug(
+                f"DynamicContextManager.get_context: context_type={context_type}, resource_id={resource_id}, context_meta={context_meta}"
+            )
             strategy = self._strategies[context_type]
             context_data = await strategy.retrieve_context(resource_id, context_meta)
 
@@ -666,7 +712,11 @@ class DynamicContextManager:
             return None
 
     async def update_context(
-        self, context_type: str, resource_id: UUID, new_context_meta: dict[str, Any], max_tokens: int = 4000,
+        self,
+        context_type: str,
+        resource_id: UUID,
+        new_context_meta: dict[str, Any],
+        max_tokens: int = 4000,
     ) -> ContextData | None:
         """
         Update context with new metadata (e.g., new page, timestamp, lesson).
@@ -739,7 +789,11 @@ class DynamicContextManager:
         self._context_history[history_key] = self._context_history[history_key][-50:]
 
     def _track_context_switch(
-        self, context_type: str, resource_id: UUID, old_meta: dict | None, new_meta: dict,
+        self,
+        context_type: str,
+        resource_id: UUID,
+        old_meta: dict | None,
+        new_meta: dict,
     ) -> None:
         """Track context switches for pattern analysis."""
         history_key = f"{context_type}:{resource_id}"

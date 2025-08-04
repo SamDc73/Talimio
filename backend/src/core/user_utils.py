@@ -2,22 +2,19 @@
 
 from uuid import UUID
 
+from src.auth.config import DEFAULT_USER_ID
 from src.config.settings import get_settings
-
-
-# Default user ID for single-user deployments
-DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
 def resolve_user_id(provided_user_id: UUID | None = None) -> UUID:
     """
     Resolve the effective user ID based on deployment mode.
 
-    For self-hosted (AUTH_DISABLED=True):
+    For single-user mode (AUTH_PROVIDER="none"):
         - Always returns DEFAULT_USER_ID regardless of provided_user_id
         - This allows single-user mode to work without authentication
 
-    For cloud (AUTH_DISABLED=False):
+    For multi-user mode (AUTH_PROVIDER="supabase"):
         - Returns provided_user_id if present
         - Raises error if no user_id provided (requires authentication)
 
@@ -30,17 +27,17 @@ def resolve_user_id(provided_user_id: UUID | None = None) -> UUID:
 
     Raises
     ------
-        ValueError: If cloud mode but no user_id provided
+        ValueError: If multi-user mode but no user_id provided
     """
     settings = get_settings()
 
-    if settings.AUTH_DISABLED:
-        # Self-hosted mode: always use default user
+    if settings.AUTH_PROVIDER == "none":
+        # Single-user mode: always use default user
         return DEFAULT_USER_ID
 
-    # Cloud mode: require authenticated user
+    # Multi-user mode: require authenticated user
     if provided_user_id is None:
-        msg = "Authentication required in cloud mode"
+        msg = "Authentication required in multi-user mode"
         raise ValueError(msg)
 
     return provided_user_id

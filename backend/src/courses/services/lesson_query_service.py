@@ -47,16 +47,17 @@ class LessonQueryService:
 
         course_result = await self.session.execute(course_query)
         if not course_result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
         # Get all lessons for the course
-        lessons_query = select(Node).where(
-            Node.roadmap_id == course_id
-            # Removed parent_id check - in simplified backend, modules ARE lessons
-        ).order_by(Node.order)
+        lessons_query = (
+            select(Node)
+            .where(
+                Node.roadmap_id == course_id
+                # Removed parent_id check - in simplified backend, modules ARE lessons
+            )
+            .order_by(Node.order)
+        )
 
         lessons_result = await self.session.execute(lessons_query)
         lessons = lessons_result.scalars().all()
@@ -79,11 +80,7 @@ class LessonQueryService:
         ]
 
     async def get_lesson(
-        self,
-        course_id: UUID,
-        lesson_id: UUID,
-        generate: bool = False,
-        _user_id: UUID | None = None
+        self, course_id: UUID, lesson_id: UUID, generate: bool = False, _user_id: UUID | None = None
     ) -> LessonResponse:
         """Get a specific lesson, optionally generating if missing.
 
@@ -107,15 +104,12 @@ class LessonQueryService:
         course_result = await self.session.execute(course_query)
         course = course_result.scalar_one_or_none()
         if not course:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
         # Get the lesson
         lesson_query = select(Node).where(
             Node.id == lesson_id,
-            Node.roadmap_id == course_id
+            Node.roadmap_id == course_id,
             # Removed parent_id check - in simplified backend, modules ARE lessons
         )
 
@@ -123,10 +117,7 @@ class LessonQueryService:
         lesson = lesson_result.scalar_one_or_none()
 
         if not lesson:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lesson not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
         # Generate content if requested and missing
         if generate and not lesson.content:
@@ -166,11 +157,7 @@ class LessonQueryService:
         )
 
     async def get_lesson_simplified(
-        self,
-        course_id: UUID,
-        lesson_id: UUID,
-        generate: bool = False,
-        user_id: UUID | None = None
+        self, course_id: UUID, lesson_id: UUID, generate: bool = False, user_id: UUID | None = None
     ) -> LessonResponse:
         """Get a lesson without requiring module_id (searches through modules).
 
@@ -195,15 +182,12 @@ class LessonQueryService:
 
         course_result = await self.session.execute(course_query)
         if not course_result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
         # Find lesson across all modules in the course
         lesson_query = select(Node).where(
             Node.id == lesson_id,
-            Node.roadmap_id == course_id
+            Node.roadmap_id == course_id,
             # Removed parent_id check - in simplified backend, modules ARE lessons
         )
 
@@ -211,10 +195,7 @@ class LessonQueryService:
         lesson = lesson_result.scalar_one_or_none()
 
         if not lesson:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lesson not found in this course"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found in this course")
 
         # Use the regular get_lesson method
         return await self.get_lesson(course_id, lesson_id, generate, effective_user_id)

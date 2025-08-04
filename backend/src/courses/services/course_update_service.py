@@ -29,10 +29,7 @@ class CourseUpdateService:
         self._logger = logging.getLogger(__name__)
 
     async def update_course(
-        self,
-        course_id: UUID,
-        request: CourseUpdate,
-        user_id: UUID | None = None
+        self, course_id: UUID, request: CourseUpdate, user_id: UUID | None = None
     ) -> CourseResponse:
         """Update a course.
 
@@ -52,19 +49,13 @@ class CourseUpdateService:
         effective_user_id = user_id or self.user_id
 
         # Get the roadmap/course with user filtering
-        query = select(Roadmap).where(
-            Roadmap.id == course_id,
-            Roadmap.user_id == effective_user_id
-        )
+        query = select(Roadmap).where(Roadmap.id == course_id, Roadmap.user_id == effective_user_id)
 
         result = await self.session.execute(query)
         roadmap = result.scalar_one_or_none()
 
         if not roadmap:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
         # Update fields if provided
         if request.title is not None:

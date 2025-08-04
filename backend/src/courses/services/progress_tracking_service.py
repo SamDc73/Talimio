@@ -33,11 +33,7 @@ class ProgressTrackingService:
         self.user_id = user_id
         self._logger = logging.getLogger(__name__)
 
-    async def get_course_progress(
-        self,
-        course_id: UUID,
-        user_id: UUID | None = None
-    ) -> CourseProgressResponse:
+    async def get_course_progress(self, course_id: UUID, user_id: UUID | None = None) -> CourseProgressResponse:
         """Get overall progress for a course.
 
         Args:
@@ -56,8 +52,7 @@ class ProgressTrackingService:
 
         if not effective_user_id:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User ID required for progress tracking"
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID required for progress tracking"
             )
 
         # Verify course exists
@@ -66,10 +61,7 @@ class ProgressTrackingService:
         course = course_result.scalar_one_or_none()
 
         if not course:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
         from src.courses.services.course_management_service import CourseManagementService
         from src.courses.services.lesson_query_service import LessonQueryService
@@ -100,7 +92,7 @@ class ProgressTrackingService:
         module_id: UUID,
         lesson_id: UUID,
         request: LessonStatusUpdate,
-        user_id: UUID | None = None
+        user_id: UUID | None = None,
     ) -> LessonStatusResponse:
         """Update the status of a specific lesson.
 
@@ -123,25 +115,21 @@ class ProgressTrackingService:
 
         if not effective_user_id:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User ID required for progress tracking"
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID required for progress tracking"
             )
 
         # Verify course exists
         course_query = select(Roadmap).where(Roadmap.id == course_id)
         course_result = await self.session.execute(course_query)
         if not course_result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
         # Get or create lesson progress record
         # Note: course_id field in the database actually stores module_id
         progress_query = select(Progress).where(
             Progress.user_id == effective_user_id,
             Progress.course_id == str(module_id),  # course_id field stores module_id
-            Progress.lesson_id == str(lesson_id)
+            Progress.lesson_id == str(lesson_id),
         )
 
         progress_result = await self.session.execute(progress_query)
@@ -176,11 +164,7 @@ class ProgressTrackingService:
         )
 
     async def get_lesson_status(
-        self,
-        course_id: UUID,
-        module_id: UUID,
-        lesson_id: UUID,
-        user_id: UUID | None = None
+        self, course_id: UUID, module_id: UUID, lesson_id: UUID, user_id: UUID | None = None
     ) -> LessonStatusResponse:
         """Get the status of a specific lesson.
 
@@ -202,25 +186,21 @@ class ProgressTrackingService:
 
         if not effective_user_id:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User ID required for progress tracking"
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID required for progress tracking"
             )
 
         # Verify course exists
         course_query = select(Roadmap).where(Roadmap.id == course_id)
         course_result = await self.session.execute(course_query)
         if not course_result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
         # Get lesson progress
         # Note: course_id field in the database actually stores module_id
         progress_query = select(Progress).where(
             Progress.user_id == effective_user_id,
             Progress.course_id == str(module_id),  # course_id field stores module_id
-            Progress.lesson_id == str(lesson_id)
+            Progress.lesson_id == str(lesson_id),
         )
 
         progress_result = await self.session.execute(progress_query)
@@ -247,11 +227,7 @@ class ProgressTrackingService:
             updated_at=progress.updated_at,
         )
 
-    async def get_all_lesson_statuses(
-        self,
-        course_id: UUID,
-        user_id: UUID | None = None
-    ) -> dict[str, str]:
+    async def get_all_lesson_statuses(self, course_id: UUID, user_id: UUID | None = None) -> dict[str, str]:
         """Get all lesson statuses for a course.
 
         Args:
@@ -270,21 +246,18 @@ class ProgressTrackingService:
 
         if not effective_user_id:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User ID required for progress tracking"
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID required for progress tracking"
             )
 
         # Verify course exists
         course_query = select(Roadmap).where(Roadmap.id == course_id)
         course_result = await self.session.execute(course_query)
         if not course_result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
         # Get all lessons for the course through the lesson service
         from src.courses.services.lesson_query_service import LessonQueryService
+
         lesson_service = LessonQueryService(self.session, effective_user_id)
         lessons = await lesson_service.list_lessons(course_id, effective_user_id)
 
@@ -292,8 +265,7 @@ class ProgressTrackingService:
         # Note: Progress.course_id field actually stores module_id
         lesson_ids = [str(lesson.id) for lesson in lessons]
         progress_query = select(Progress).where(
-            Progress.user_id == effective_user_id,
-            Progress.lesson_id.in_(lesson_ids)
+            Progress.user_id == effective_user_id, Progress.lesson_id.in_(lesson_ids)
         )
 
         progress_result = await self.session.execute(progress_query)
@@ -313,10 +285,7 @@ class ProgressTrackingService:
         return status_map
 
     async def update_course_progress(
-        self,
-        course_id: UUID,
-        user_id: UUID | None,
-        progress_data: dict[str, Any]
+        self, course_id: UUID, user_id: UUID | None, progress_data: dict[str, Any]
     ) -> dict[str, Any]:
         """Update course progress using the unified progress system.
 
@@ -333,19 +302,14 @@ class ProgressTrackingService:
 
         if not effective_user_id:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User ID required for progress tracking"
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID required for progress tracking"
             )
 
         # Use the unified course progress tracker
         tracker = CourseProgressTracker()
         return await tracker.update_progress(course_id, effective_user_id, progress_data)
 
-    async def calculate_course_progress(
-        self,
-        course_id: UUID,
-        user_id: UUID | None
-    ) -> float:
+    async def calculate_course_progress(self, course_id: UUID, user_id: UUID | None) -> float:
         """Calculate course completion percentage using unified progress system.
 
         Args:
@@ -360,36 +324,19 @@ class ProgressTrackingService:
 
         if not effective_user_id:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User ID required for progress tracking"
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID required for progress tracking"
             )
 
         # Use the unified course progress tracker
         tracker = CourseProgressTracker()
         return await tracker.calculate_completion_percentage(course_id, effective_user_id)
 
-    async def get_lesson_progress(
-        self,
-        lesson_id: UUID,
-        _user_id: UUID | None
-    ) -> dict[str, Any]:
+    async def get_lesson_progress(self, lesson_id: UUID, _user_id: UUID | None) -> dict[str, Any]:
         """Get lesson progress (stub for compatibility)."""
         # This is a placeholder - individual lesson progress is tracked as part of course progress
-        return {
-            "lesson_id": str(lesson_id),
-            "status": "not_started",
-            "completed": False
-        }
+        return {"lesson_id": str(lesson_id), "status": "not_started", "completed": False}
 
-    async def mark_lesson_complete(
-        self,
-        lesson_id: UUID,
-        _user_id: UUID | None
-    ) -> dict[str, Any]:
+    async def mark_lesson_complete(self, lesson_id: UUID, _user_id: UUID | None) -> dict[str, Any]:
         """Mark lesson as complete (stub for compatibility)."""
         # This is a placeholder - will be replaced with proper implementation
-        return {
-            "lesson_id": str(lesson_id),
-            "status": "completed",
-            "success": True
-        }
+        return {"lesson_id": str(lesson_id), "status": "completed", "success": True}

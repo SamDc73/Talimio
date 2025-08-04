@@ -303,7 +303,11 @@ class ConversationManager:
         """
         try:
             messages = await self.get_conversation_history(
-                user_id, context_type, context_id, limit=0, include_context=True,
+                user_id,
+                context_type,
+                context_id,
+                limit=0,
+                include_context=True,
             )
 
             if not messages:
@@ -370,7 +374,11 @@ class ConversationManager:
             self._logger.exception(f"Error pruning context for tokens: {e}")
             # Fallback to simple recent message limiting
             return await self.get_conversation_history(
-                user_id, context_type, context_id, limit=preserve_recent, include_context=False,
+                user_id,
+                context_type,
+                context_id,
+                limit=preserve_recent,
+                include_context=False,
             )
 
     def get_conversation_stats(self, user_id: UUID) -> dict[str, Any]:

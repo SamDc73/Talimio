@@ -66,9 +66,7 @@ class R2Storage(AbstractStorage):
         """
         try:
             async with await self._get_client() as client:
-                await client.put_object(
-                    Bucket=self.bucket_name, Key=key, Body=file_content
-                )
+                await client.put_object(Bucket=self.bucket_name, Key=key, Body=file_content)
         except ClientError as e:
             msg = f"Failed to upload to R2: {key}"
             raise FileUploadError(msg) from e

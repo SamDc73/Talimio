@@ -26,7 +26,9 @@ class IBookService(Protocol):
     """
 
     # Book CRUD operations
-    async def create_book(self, book_data: BookCreate, file: UploadFile, background_tasks: BackgroundTasks) -> BookResponse:
+    async def create_book(
+        self, book_data: BookCreate, file: UploadFile, background_tasks: BackgroundTasks
+    ) -> BookResponse:
         """Create a new book with uploaded file."""
         ...
 
@@ -56,7 +58,9 @@ class IBookService(Protocol):
         """Get a specific chapter for a book."""
         ...
 
-    async def update_book_chapter_status(self, book_id: UUID, chapter_id: UUID, chapter_status: str) -> BookChapterResponse:
+    async def update_book_chapter_status(
+        self, book_id: UUID, chapter_id: UUID, chapter_status: str
+    ) -> BookChapterResponse:
         """Update the status of a book chapter."""
         ...
 
@@ -64,7 +68,9 @@ class IBookService(Protocol):
         """Extract chapters from book's table of contents and create chapter records."""
         ...
 
-    async def batch_update_chapter_statuses(self, book_id: UUID, updates: list[dict[str, str]]) -> list[BookChapterResponse]:
+    async def batch_update_chapter_statuses(
+        self, book_id: UUID, updates: list[dict[str, str]]
+    ) -> list[BookChapterResponse]:
         """Update multiple chapter statuses in one transaction."""
         ...
 

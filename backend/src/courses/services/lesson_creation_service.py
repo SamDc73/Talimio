@@ -28,10 +28,7 @@ class LessonCreationService:
         self._logger = logging.getLogger(__name__)
 
     async def generate_lesson(
-        self,
-        course_id: UUID,
-        request: LessonCreate,
-        _user_id: UUID | None = None
+        self, course_id: UUID, request: LessonCreate, _user_id: UUID | None = None
     ) -> LessonResponse:
         """Generate a new lesson for a course.
 
@@ -54,10 +51,7 @@ class LessonCreationService:
         course_result = await self.session.execute(course_query)
         course = course_result.scalar_one_or_none()
         if not course:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
         # Verify module exists if provided
         module = None
@@ -65,28 +59,22 @@ class LessonCreationService:
             module_query = select(Node).where(
                 Node.id == request.module_id,
                 Node.roadmap_id == course_id,
-                Node.parent_id.is_(None)  # Modules have no parent
+                Node.parent_id.is_(None),  # Modules have no parent
             )
             module_result = await self.session.execute(module_query)
             module = module_result.scalar_one_or_none()
             if not module:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Module not found"
-                )
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module not found")
 
         # Check if lesson already exists
         existing_query = select(Node).where(
             Node.title == request.slug,  # Using slug as title for now
             Node.roadmap_id == course_id,
-            Node.parent_id.is_not(None)
+            Node.parent_id.is_not(None),
         )
         existing_result = await self.session.execute(existing_query)
         if existing_result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Lesson with this title already exists"
-            )
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Lesson with this title already exists")
 
         try:
             # Generate lesson content
@@ -101,10 +89,7 @@ class LessonCreationService:
             content, citations = await create_lesson_body(context)
 
             # Get next order index
-            order_query = select(Node).where(
-                Node.roadmap_id == course_id,
-                Node.parent_id.is_not(None)
-            )
+            order_query = select(Node).where(Node.roadmap_id == course_id, Node.parent_id.is_not(None))
             if module:
                 order_query = order_query.where(Node.parent_id == module.id)
 
@@ -145,24 +130,15 @@ class LessonCreationService:
         except AIError as e:
             self._logger.exception("Failed to generate lesson: %s", e)
             await self.session.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"AI service error: {e!s}"
-            ) from e
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"AI service error: {e!s}") from e
         except Exception as e:
             self._logger.exception("Unexpected error during lesson generation: %s", e)
             await self.session.rollback()
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to generate lesson"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate lesson"
             ) from e
 
-    async def regenerate_lesson(
-        self,
-        course_id: UUID,
-        lesson_id: UUID,
-        _user_id: UUID | None = None
-    ) -> LessonResponse:
+    async def regenerate_lesson(self, course_id: UUID, lesson_id: UUID, _user_id: UUID | None = None) -> LessonResponse:
         """Regenerate an existing lesson.
 
         Args:
@@ -180,18 +156,13 @@ class LessonCreationService:
         """
         # Get lesson node
         lesson_query = select(Node).where(
-            Node.id == lesson_id,
-            Node.roadmap_id == course_id,
-            Node.parent_id.is_not(None)
+            Node.id == lesson_id, Node.roadmap_id == course_id, Node.parent_id.is_not(None)
         )
         lesson_result = await self.session.execute(lesson_query)
         lesson = lesson_result.scalar_one_or_none()
 
         if not lesson:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lesson not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
         try:
             # Get course and module context
@@ -239,7 +210,4 @@ class LessonCreationService:
         except AIError as e:
             self._logger.exception("Failed to regenerate lesson: %s", e)
             await self.session.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"AI service error: {e!s}"
-            ) from e
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"AI service error: {e!s}") from e

@@ -65,6 +65,7 @@ class VideoTranscriptChunker:
 
         # Get settings for thresholds
         from src.config.settings import get_settings
+
         settings = get_settings()
 
         # Determine chunking strategy based on video duration
@@ -125,9 +126,7 @@ class VideoTranscriptChunker:
 
             # Check if adding this segment would exceed limits
             duration = segment_end - current_chunk["start_time"]
-            would_exceed_tokens = (
-                current_chunk["token_count"] + segment_tokens > self.max_tokens
-            )
+            would_exceed_tokens = current_chunk["token_count"] + segment_tokens > self.max_tokens
             would_exceed_time = duration > target_seconds
 
             # Start new chunk if limits exceeded and current chunk has content
@@ -136,18 +135,15 @@ class VideoTranscriptChunker:
                 chunks.append(self._finalize_chunk(current_chunk, len(chunks)))
 
                 # Start new chunk with overlap
-                overlap_segments = self._get_overlap_segments(
-                    current_chunk["segments"], self.overlap_tokens
-                )
+                overlap_segments = self._get_overlap_segments(current_chunk["segments"], self.overlap_tokens)
 
                 current_chunk = {
                     "segments": overlap_segments,
                     "text_parts": [s.get("text", "") for s in overlap_segments],
-                    "start_time": overlap_segments[0].get("start", segment_start) if overlap_segments else segment_start,
-                    "token_count": sum(
-                        len(self.encoder.encode(s.get("text", "")))
-                        for s in overlap_segments
-                    ),
+                    "start_time": overlap_segments[0].get("start", segment_start)
+                    if overlap_segments
+                    else segment_start,
+                    "token_count": sum(len(self.encoder.encode(s.get("text", ""))) for s in overlap_segments),
                 }
 
             # Add segment to current chunk
@@ -167,9 +163,7 @@ class VideoTranscriptChunker:
 
         return chunks
 
-    def _get_overlap_segments(
-        self, segments: list[dict[str, Any]], target_overlap_tokens: int
-    ) -> list[dict[str, Any]]:
+    def _get_overlap_segments(self, segments: list[dict[str, Any]], target_overlap_tokens: int) -> list[dict[str, Any]]:
         """Get segments from the end to create overlap."""
         if not segments or target_overlap_tokens <= 0:
             return []
@@ -222,10 +216,7 @@ class VideoTranscriptChunker:
             chapter_title = chapter.get("title", f"Chapter {i + 1}")
 
             # Find segments within this chapter
-            chapter_segments = [
-                seg for seg in segments
-                if chapter_start <= seg.get("start", 0) < chapter_end
-            ]
+            chapter_segments = [seg for seg in segments if chapter_start <= seg.get("start", 0) < chapter_end]
 
             if not chapter_segments:
                 continue
@@ -238,6 +229,7 @@ class VideoTranscriptChunker:
             if token_count > self.max_tokens:
                 # Use target duration from settings
                 from src.config.settings import get_settings
+
                 settings = get_settings()
                 sub_chunks = self._chunk_by_time(chapter_segments, settings.RAG_VIDEO_TARGET_DURATION, video_id)
                 for sub_chunk in sub_chunks:
@@ -250,10 +242,7 @@ class VideoTranscriptChunker:
                     VideoChunk(
                         text=chapter_text,
                         start_time=chapter_start,
-                        end_time=min(
-                            chapter_end,
-                            chapter_segments[-1].get("end", chapter_end)
-                        ),
+                        end_time=min(chapter_end, chapter_segments[-1].get("end", chapter_end)),
                         chunk_index=len(chunks),
                         total_chunks=0,  # Will be set later
                         metadata={

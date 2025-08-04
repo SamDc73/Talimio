@@ -53,6 +53,25 @@ export const AuthProvider = ({ children }) => {
 					authError.response?.status,
 					authError.message,
 				);
+
+				// If it's a 401, try to refresh the token first
+				if (authError.response?.status === 401) {
+					console.log("🔄 Attempting to refresh token due to 401 error");
+					try {
+						const refreshResponse = await api.post("/auth/refresh");
+						if (refreshResponse?.user) {
+							console.log("✅ Token refreshed successfully during auth check");
+							setUser(refreshResponse.user);
+							setAppUser(refreshResponse.user);
+							setIsAuthenticated(true);
+							setAuthMode("supabase");
+							return;
+						}
+					} catch (refreshError) {
+						console.log("❌ Token refresh failed:", refreshError.message);
+					}
+				}
+
 				clearAppUser();
 				setUser(null);
 				setIsAuthenticated(false);
@@ -273,6 +292,33 @@ export const AuthProvider = ({ children }) => {
 		}
 	}, [clearAppUser]);
 
+	const resetPassword = useCallback(async (email) => {
+		// Check if auth is enabled
+		const authEnabled = import.meta.env.VITE_ENABLE_AUTH === "true";
+		if (!authEnabled) {
+			return {
+				success: false,
+				error: "Password reset is not available in single-user mode",
+			};
+		}
+
+		try {
+			const response = await api.post("/auth/reset-password", { email });
+			return {
+				success: true,
+				message:
+					response.message || "Password reset instructions sent to your email",
+			};
+		} catch (error) {
+			console.error("Password reset failed:", error);
+			return {
+				success: false,
+				error:
+					error.data?.detail || error.message || "Failed to send reset email",
+			};
+		}
+	}, []);
+
 	const value = {
 		user,
 		loading,
@@ -281,6 +327,7 @@ export const AuthProvider = ({ children }) => {
 		login,
 		signup,
 		logout,
+		resetPassword,
 		checkAuth,
 		handleTokenExpiration,
 	};

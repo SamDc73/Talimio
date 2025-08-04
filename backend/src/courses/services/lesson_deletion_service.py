@@ -24,12 +24,7 @@ class LessonDeletionService:
         self.user_id = user_id
         self._logger = logging.getLogger(__name__)
 
-    async def delete_lesson(
-        self,
-        course_id: UUID,
-        lesson_id: UUID,
-        _user_id: UUID | None = None
-    ) -> bool:
+    async def delete_lesson(self, course_id: UUID, lesson_id: UUID, _user_id: UUID | None = None) -> bool:
         """Delete a lesson.
 
         Args:
@@ -47,18 +42,13 @@ class LessonDeletionService:
         """
         # Get lesson
         lesson_query = select(Node).where(
-            Node.id == lesson_id,
-            Node.roadmap_id == course_id,
-            Node.parent_id.is_not(None)
+            Node.id == lesson_id, Node.roadmap_id == course_id, Node.parent_id.is_not(None)
         )
         lesson_result = await self.session.execute(lesson_query)
         lesson = lesson_result.scalar_one_or_none()
 
         if not lesson:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lesson not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
         await self.session.delete(lesson)
         await self.session.commit()

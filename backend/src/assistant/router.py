@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.ai.constants import rag_config
-from src.auth.dependencies import CurrentUserId
+from src.auth import UserId
 from src.config import env
 
 from .schemas import (
@@ -48,7 +48,7 @@ async def debug_config() -> dict:
 @router.post("/chat", response_model=None)
 async def chat_endpoint(
     request: ChatRequest,
-    current_user_id: CurrentUserId = None,
+    current_user_id: UserId,
 ) -> StreamingResponse | JSONResponse:
     """Send a message to the AI assistant with enhanced RAG capabilities."""
     # Override the user_id from the request with the authenticated user_id

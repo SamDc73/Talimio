@@ -27,10 +27,7 @@ async def _search_roadmaps(session: Any, topic: str, user_id: UUID | None = None
     roadmap_query = select(Roadmap).options(selectinload(Roadmap.nodes))
 
     # Build search conditions
-    search_conditions = [
-        Roadmap.title.ilike(f"%{topic}%"),
-        Roadmap.description.ilike(f"%{topic}%")
-    ]
+    search_conditions = [Roadmap.title.ilike(f"%{topic}%"), Roadmap.description.ilike(f"%{topic}%")]
 
     if user_id:
         search_conditions.append(Roadmap.user_id == user_id)
@@ -53,15 +50,11 @@ async def _search_roadmaps(session: Any, topic: str, user_id: UUID | None = None
     ]
 
 
-
 async def _search_books(session: Any, topic: str, user_id: UUID | None = None) -> list[dict[str, Any]]:
     """Search for books in the database."""
     book_query = select(Book)
 
-    search_conditions = [
-        Book.title.ilike(f"%{topic}%"),
-        Book.author.ilike(f"%{topic}%")
-    ]
+    search_conditions = [Book.title.ilike(f"%{topic}%"), Book.author.ilike(f"%{topic}%")]
 
     if user_id:
         search_conditions.append(Book.user_id == user_id)
@@ -83,7 +76,6 @@ async def _search_books(session: Any, topic: str, user_id: UUID | None = None) -
         }
         for book in books
     ]
-
 
 
 async def _search_videos(session: Any, topic: str, user_id: UUID | None = None) -> list[dict[str, Any]]:
@@ -116,7 +108,6 @@ async def _search_videos(session: Any, topic: str, user_id: UUID | None = None) 
     ]
 
 
-
 @register_function(
     {
         "type": "function",
@@ -135,11 +126,7 @@ async def _search_videos(session: Any, topic: str, user_id: UUID | None = None) 
         "strict": True,
     }
 )
-async def search_internal_library(
-    topic: str,
-    content_type: str = "all",
-    user_id: UUID | None = None
-) -> dict[str, Any]:
+async def search_internal_library(topic: str, content_type: str = "all", user_id: UUID | None = None) -> dict[str, Any]:
     """Search platform's internal library for existing content.
 
     Args:
@@ -154,12 +141,7 @@ async def search_internal_library(
     try:
         logger.info("Searching internal library for topic: %s, type: %s", topic, content_type)
 
-        results = {
-            "courses": [],
-            "books": [],
-            "videos": [],
-            "total_found": 0
-        }
+        results = {"courses": [], "books": [], "videos": [], "total_found": 0}
 
         async with async_session_maker() as session:
             # Search roadmaps (courses)

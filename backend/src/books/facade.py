@@ -34,11 +34,7 @@ class BooksFacade(ContentFacade):
         self._progress_service = BookProgressTracker()  # Implements ProgressTracker protocol
         self._ai_service = get_ai_service()
 
-    async def get_content_with_progress(
-        self,
-        content_id: UUID,
-        user_id: UUID
-    ) -> dict[str, Any]:
+    async def get_content_with_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
         """
         Get book with progress information.
 
@@ -46,11 +42,7 @@ class BooksFacade(ContentFacade):
         """
         return await self.get_book_with_progress(content_id, user_id)
 
-    async def get_book_with_progress(
-        self,
-        book_id: UUID,
-        user_id: UUID
-    ) -> dict[str, Any]:
+    async def get_book_with_progress(self, book_id: UUID, user_id: UUID) -> dict[str, Any]:
         """
         Get complete book information with progress.
 
@@ -60,6 +52,7 @@ class BooksFacade(ContentFacade):
             # Get book information - need to pass user_id as well
             # Create a temporary session for the book service call
             from src.database.session import async_session_maker
+
             async with async_session_maker() as session:
                 book_response = await self._book_service.get_book(session, str(book_id), user_id)
                 # Convert response to dict
@@ -79,18 +72,14 @@ class BooksFacade(ContentFacade):
                 "current_page": progress.get("current_page", 1),
                 "total_pages": book.get("total_pages", 0),
                 "completed_chapters": progress.get("completed_chapters", {}),
-                "success": True
+                "success": True,
             }
 
         except Exception:
             logger.exception("Error getting book %s for user %s", book_id, user_id)
             return {"error": "Failed to retrieve book"}
 
-    async def create_content(
-        self,
-        content_data: dict[str, Any],
-        user_id: UUID
-    ) -> dict[str, Any]:
+    async def create_content(self, content_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
         """
         Create new book content.
 
@@ -98,11 +87,7 @@ class BooksFacade(ContentFacade):
         """
         return await self.create_book(content_data, user_id)
 
-    async def create_book(
-        self,
-        book_data: dict[str, Any],
-        user_id: UUID
-    ) -> dict[str, Any]:
+    async def create_book(self, book_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
         """
         Create new book entry.
 
@@ -119,11 +104,7 @@ class BooksFacade(ContentFacade):
             return {"error": "Failed to create book", "success": False}
 
     async def upload_book(
-        self,
-        file_path: str,
-        title: str,
-        user_id: UUID,
-        metadata: dict[str, Any] | None = None
+        self, file_path: str, title: str, user_id: UUID, metadata: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Upload book file to user's library.
@@ -133,10 +114,7 @@ class BooksFacade(ContentFacade):
         try:
             # Process book file and extract metadata
             book_data = await self._book_service.process_book_upload(
-                file_path,
-                title,
-                user_id,
-                additional_metadata=metadata or {}
+                file_path, title, user_id, additional_metadata=metadata or {}
             )
 
             if not book_data.get("success"):
@@ -147,9 +125,7 @@ class BooksFacade(ContentFacade):
             # Initialize progress tracking
             try:
                 await self._progress_service.initialize_progress(
-                    book_id,
-                    user_id,
-                    total_pages=book_data["book"].get("total_pages", 0)
+                    book_id, user_id, total_pages=book_data["book"].get("total_pages", 0)
                 )
             except Exception as e:
                 logger.warning(f"Failed to initialize progress tracking: {e}")
@@ -161,12 +137,7 @@ class BooksFacade(ContentFacade):
             logger.exception(f"Error uploading book {title} for user {user_id}: {e}")
             return {"error": f"Failed to upload book: {e!s}", "success": False}
 
-    async def update_progress(
-        self,
-        content_id: UUID,
-        user_id: UUID,
-        progress_data: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """
         Update book reading progress.
 
@@ -174,12 +145,7 @@ class BooksFacade(ContentFacade):
         """
         return await self.update_book_progress(content_id, user_id, progress_data)
 
-    async def update_book_progress(
-        self,
-        book_id: UUID,
-        user_id: UUID,
-        progress_data: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def update_book_progress(self, book_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """
         Update book reading progress.
 
@@ -187,9 +153,7 @@ class BooksFacade(ContentFacade):
         """
         try:
             # Update progress using the progress tracker
-            updated_progress = await self._progress_service.update_progress(
-                book_id, user_id, progress_data
-            )
+            updated_progress = await self._progress_service.update_progress(book_id, user_id, progress_data)
 
             if "error" in updated_progress:
                 return {"error": updated_progress["error"], "success": False}
@@ -200,18 +164,11 @@ class BooksFacade(ContentFacade):
             logger.exception(f"Error updating progress for book {book_id}: {e}")
             return {"error": f"Failed to update progress: {e!s}", "success": False}
 
-    async def update_reading_settings(
-        self,
-        book_id: UUID,
-        user_id: UUID,
-        settings: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def update_reading_settings(self, book_id: UUID, user_id: UUID, settings: dict[str, Any]) -> dict[str, Any]:
         """Update book reading settings (zoom, theme, etc.)."""
         try:
             # Update reading settings
-            updated_settings = await self._progress_service.update_reading_settings(
-                book_id, user_id, settings
-            )
+            updated_settings = await self._progress_service.update_reading_settings(book_id, user_id, settings)
 
             return {"settings": updated_settings, "success": True}
 
@@ -227,12 +184,7 @@ class BooksFacade(ContentFacade):
         """
         return await self.delete_book(content_id, user_id)
 
-    async def update_book(
-        self,
-        book_id: UUID,
-        user_id: UUID,
-        update_data: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def update_book(self, book_id: UUID, user_id: UUID, update_data: dict[str, Any]) -> dict[str, Any]:
         """
         Update book metadata.
 
@@ -262,21 +214,14 @@ class BooksFacade(ContentFacade):
             logger.exception("Error deleting book %s", book_id)
             return False
 
-    async def search_books(
-        self,
-        query: str,
-        user_id: UUID,
-        filters: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    async def search_books(self, query: str, user_id: UUID, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Search user's books.
 
         Provides unified search across book content and metadata.
         """
         try:
-            results = await self._book_service.search_books(
-                query, user_id, filters or {}
-            )
+            results = await self._book_service.search_books(query, user_id, filters or {})
 
             return {"results": results, "success": True}
 
@@ -284,11 +229,7 @@ class BooksFacade(ContentFacade):
             logger.exception("Error searching books for user %s", user_id)
             return {"error": "Search failed", "success": False}
 
-    async def get_user_books(
-        self,
-        user_id: UUID,
-        include_progress: bool = True
-    ) -> dict[str, Any]:
+    async def get_user_books(self, user_id: UUID, include_progress: bool = True) -> dict[str, Any]:
         """
         Get all books for user.
 
@@ -304,9 +245,7 @@ class BooksFacade(ContentFacade):
 
                 if include_progress:
                     # Add progress information to each book
-                    progress = await self._progress_service.get_progress(
-                        book.id, user_id
-                    )
+                    progress = await self._progress_service.get_progress(book.id, user_id)
                     book_dict["progress"] = progress
 
                 book_dicts.append(book_dict)
@@ -317,15 +256,12 @@ class BooksFacade(ContentFacade):
             logger.exception(f"Error getting books for user {user_id}: {e}")
             return {"error": f"Failed to get books: {e!s}", "success": False}
 
-    async def get_book_chapters(
-        self,
-        book_id: UUID,
-        user_id: UUID
-    ) -> dict[str, Any]:
+    async def get_book_chapters(self, book_id: UUID, user_id: UUID) -> dict[str, Any]:
         """Get book chapters/table of contents if available."""
         try:
             # Get database session
             from src.database.session import async_session_maker
+
             async with async_session_maker() as db:
                 # Get chapters - pass db, book_id, and user_id (following video service pattern)
                 try:
@@ -350,17 +286,11 @@ class BooksFacade(ContentFacade):
             return {"error": "Failed to get chapters", "success": False}
 
     async def mark_chapter_complete(
-        self,
-        book_id: UUID,
-        user_id: UUID,
-        chapter_id: str,
-        completed: bool = True
+        self, book_id: UUID, user_id: UUID, chapter_id: str, completed: bool = True
     ) -> dict[str, Any]:
         """Mark a book chapter as completed."""
         try:
-            result = await self._progress_service.mark_chapter_complete(
-                book_id, user_id, chapter_id, completed
-            )
+            result = await self._progress_service.mark_chapter_complete(book_id, user_id, chapter_id, completed)
 
             return {"result": result, "success": True}
 
@@ -369,13 +299,7 @@ class BooksFacade(ContentFacade):
             return {"error": "Failed to mark chapter complete", "success": False}
 
     # AI operations
-    async def ask_book_question(
-        self,
-        book_id: UUID,
-        user_id: UUID,
-        question: str,
-        page: int | None = None
-    ) -> str:
+    async def ask_book_question(self, book_id: UUID, user_id: UUID, question: str, page: int | None = None) -> str:
         """Ask a question about the book content."""
         try:
             await self._ai_service.process_content(
@@ -384,37 +308,24 @@ class BooksFacade(ContentFacade):
                 user_id=user_id,
                 book_id=str(book_id),
                 question=question,
-                page=page
+                page=page,
             )
         except Exception:
             logger.exception("Error answering question for book %s", book_id)
             raise
 
-    async def summarize_book(
-        self,
-        book_id: UUID,
-        user_id: UUID,
-        page_range: tuple[int, int] | None = None
-    ) -> str:
+    async def summarize_book(self, book_id: UUID, user_id: UUID, page_range: tuple[int, int] | None = None) -> str:
         """Generate a summary of the book."""
         try:
             await self._ai_service.process_content(
-                content_type="book",
-                action="summarize",
-                user_id=user_id,
-                book_id=str(book_id),
-                page_range=page_range
+                content_type="book", action="summarize", user_id=user_id, book_id=str(book_id), page_range=page_range
             )
         except Exception:
             logger.exception("Error summarizing book %s", book_id)
             raise
 
     async def chat_about_book(
-        self,
-        book_id: UUID,
-        user_id: UUID,
-        message: str,
-        history: list[dict[str, Any]] | None = None
+        self, book_id: UUID, user_id: UUID, message: str, history: list[dict[str, Any]] | None = None
     ) -> str:
         """Have a conversation about the book."""
         try:
@@ -424,28 +335,18 @@ class BooksFacade(ContentFacade):
                 user_id=user_id,
                 book_id=str(book_id),
                 message=message,
-                history=history
+                history=history,
             )
         except Exception:
             logger.exception("Error in book chat for %s", book_id)
             raise
 
-    async def process_book_for_rag(
-        self,
-        book_id: UUID,
-        user_id: UUID,
-        file_path: str
-    ) -> dict[str, Any]:
+    async def process_book_for_rag(self, book_id: UUID, user_id: UUID, file_path: str) -> dict[str, Any]:
         """Process book content for RAG indexing."""
         try:
             await self._ai_service.process_content(
-                content_type="book",
-                action="process_rag",
-                user_id=user_id,
-                book_id=str(book_id),
-                file_path=file_path
+                content_type="book", action="process_rag", user_id=user_id, book_id=str(book_id), file_path=file_path
             )
         except Exception:
             logger.exception("Error processing book %s for RAG", book_id)
             raise
-

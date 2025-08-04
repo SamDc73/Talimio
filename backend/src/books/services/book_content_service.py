@@ -36,12 +36,7 @@ class BookContentService(BaseContentService):
                 data["tags"] = json.dumps(data["tags"])
 
             # Create book instance
-            book = Book(
-                **data,
-                user_id=user_id,
-                created_at=datetime.now(UTC),
-                updated_at=datetime.now(UTC)
-            )
+            book = Book(**data, user_id=user_id, created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
 
             session.add(book)
             await session.commit()
@@ -54,10 +49,7 @@ class BookContentService(BaseContentService):
         """Update an existing book."""
         async with async_session_maker() as session:
             # Get the book
-            query = select(Book).where(
-                Book.id == content_id,
-                Book.user_id == user_id
-            )
+            query = select(Book).where(Book.id == content_id, Book.user_id == user_id)
             result = await session.execute(query)
             book = result.scalar_one_or_none()
 
@@ -84,10 +76,7 @@ class BookContentService(BaseContentService):
         """Delete a book."""
         async with async_session_maker() as session:
             # Get the book
-            query = select(Book).where(
-                Book.id == content_id,
-                Book.user_id == user_id
-            )
+            query = select(Book).where(Book.id == content_id, Book.user_id == user_id)
             result = await session.execute(query)
             book = result.scalar_one_or_none()
 

@@ -12,7 +12,6 @@ class AuthConfigurationError(Exception):
     """Exception raised when auth configuration is invalid or inconsistent."""
 
 
-
 class AuthConfigValidator:
     """Validates authentication configuration consistency."""
 
@@ -70,7 +69,7 @@ class AuthConfigValidator:
             "auth_provider": auth_provider,
             "issues": issues,
             "warnings": warnings,
-            "recommendations": AuthConfigValidator._get_recommendations(auth_provider, issues, warnings)
+            "recommendations": AuthConfigValidator._get_recommendations(auth_provider, issues, warnings),
         }
 
     @staticmethod
@@ -127,9 +126,7 @@ class AuthConfigValidator:
                         logger.info(f"   {rec}")
 
                 msg = f"Invalid auth configuration: {'; '.join(result['issues'])}"
-                raise AuthConfigurationError(
-                    msg
-                )
+                raise AuthConfigurationError(msg)
 
         except Exception as e:
             logger.exception(f"Failed to validate auth configuration: {e}")
@@ -148,26 +145,26 @@ class AuthConfigValidator:
         potential_issues = []
 
         if backend_auth == "none":
-            potential_issues.append({
-                "type": "mismatch_warning",
-                "message": "Backend in single-user mode (AUTH_PROVIDER=none)",
-                "recommendation": "Ensure frontend has VITE_ENABLE_AUTH=false"
-            })
+            potential_issues.append(
+                {
+                    "type": "mismatch_warning",
+                    "message": "Backend in single-user mode (AUTH_PROVIDER=none)",
+                    "recommendation": "Ensure frontend has VITE_ENABLE_AUTH=false",
+                }
+            )
 
         if backend_auth == "supabase":
             supabase_url = getattr(settings, "SUPABASE_URL", None)
             if supabase_url:
-                potential_issues.append({
-                    "type": "mismatch_warning",
-                    "message": "Backend in multi-user mode (AUTH_PROVIDER=supabase)",
-                    "recommendation": f"Ensure frontend has VITE_ENABLE_AUTH=true and VITE_SUPABASE_URL={supabase_url}"
-                })
+                potential_issues.append(
+                    {
+                        "type": "mismatch_warning",
+                        "message": "Backend in multi-user mode (AUTH_PROVIDER=supabase)",
+                        "recommendation": f"Ensure frontend has VITE_ENABLE_AUTH=true and VITE_SUPABASE_URL={supabase_url}",
+                    }
+                )
 
-        return {
-            "backend_auth_provider": backend_auth,
-            "potential_issues": potential_issues,
-            "timestamp": "2025-07-28"
-        }
+        return {"backend_auth_provider": backend_auth, "potential_issues": potential_issues, "timestamp": "2025-07-28"}
 
 
 def validate_auth_on_startup() -> None:

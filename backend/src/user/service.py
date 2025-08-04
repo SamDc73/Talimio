@@ -58,10 +58,7 @@ async def _save_user_preferences(user_id: UUID, preferences: UserPreferences, db
             db_preferences.preferences = preferences_dict
         else:
             # Create new preferences record
-            db_preferences = UserPreferencesModel(
-                user_id=user_uuid,
-                preferences=preferences_dict
-            )
+            db_preferences = UserPreferencesModel(user_id=user_uuid, preferences=preferences_dict)
             db_session.add(db_preferences)
 
         await db_session.commit()

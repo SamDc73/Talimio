@@ -78,7 +78,10 @@ class ContextAwareMemoryManager:
 
                 # Get current context data for richer memory storage
                 context_data = await self.context_manager.get_context(
-                    context_type, context_id, context_meta, max_tokens=1000,
+                    context_type,
+                    context_id,
+                    context_meta,
+                    max_tokens=1000,
                 )
                 if context_data:
                     enhanced_metadata["context_source"] = context_data.source
@@ -133,7 +136,10 @@ class ContextAwareMemoryManager:
 
             # Search memories
             memories = await self.memory_wrapper.search_memories(
-                user_id, enhanced_query, limit=limit * 2, relevance_threshold=relevance_threshold,
+                user_id,
+                enhanced_query,
+                limit=limit * 2,
+                relevance_threshold=relevance_threshold,
             )
 
             # Filter by context if specified

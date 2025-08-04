@@ -1,12 +1,13 @@
 """Simplified Supabase authentication using their built-in session management."""
 
 import logging
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import HTTPException, Request
 from supabase import Client, ClientOptions, create_client
 
-from src.auth.manager import AuthUser
+from src.auth.models import UserInDB
 from src.config.settings import get_settings
 
 
@@ -30,13 +31,9 @@ class SupabaseAuth:
             auto_refresh_token=True,
             persist_session=False,  # Don't persist on server
         )
-        self.supabase: Client = create_client(
-            settings.SUPABASE_URL,
-            settings.SUPABASE_PUBLISHABLE_KEY,
-            options=options
-        )
+        self.supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_PUBLISHABLE_KEY, options=options)
 
-    async def get_user_from_request(self, request: Request) -> AuthUser | None:
+    async def get_user_from_request(self, request: Request) -> UserInDB | None:
         """Extract and verify user from Supabase JWT in request."""
         # Get token from Authorization header
         auth_header = request.headers.get("Authorization")
@@ -54,17 +51,19 @@ class SupabaseAuth:
                 return None
 
             user = user_response.user
-            return AuthUser(
+
+            return UserInDB(
                 id=UUID(str(user.id)),
                 email=user.email,
-                name=user.user_metadata.get("username"),
-                metadata=user.user_metadata
+                username=user.user_metadata.get("username"),
+                created_at=datetime.fromisoformat(user.created_at),
+                metadata=user.user_metadata,
             )
         except Exception:
             logger.exception("Token verification failed")
             return None
 
-    async def require_user(self, request: Request) -> AuthUser:
+    async def require_user(self, request: Request) -> UserInDB:
         """Get user or raise 401."""
         user = await self.get_user_from_request(request)
         if not user:

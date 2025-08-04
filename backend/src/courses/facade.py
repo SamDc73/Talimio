@@ -91,7 +91,6 @@ class CoursesFacade(ContentFacade):
                 course=course, lessons=lessons, progress=progress, overall_progress=overall_progress, user_id=user_id
             )
 
-
         except Exception as e:
             logger.exception(f"Error getting course {course_id} for user {user_id}: {e}")
             return {"error": "Failed to retrieve course"}
@@ -193,7 +192,6 @@ class CoursesFacade(ContentFacade):
         try:
             # Use content service which handles cleanup of tags and associated data
             return await self._content_service.delete_content(course_id, user_id)
-
 
         except Exception as e:
             logger.exception(f"Error deleting course {course_id}: {e}")
@@ -336,12 +334,7 @@ class CoursesFacade(ContentFacade):
 
     # AI operations
     async def generate_course(
-        self,
-        user_id: UUID,
-        topic: str,
-        skill_level: str,
-        description: str = "",
-        use_tools: bool = False
+        self, user_id: UUID, topic: str, skill_level: str, description: str = "", use_tools: bool = False
     ) -> dict[str, Any]:
         """Generate a new AI-powered course."""
         try:
@@ -352,17 +345,14 @@ class CoursesFacade(ContentFacade):
                 topic=topic,
                 skill_level=skill_level,
                 description=description,
-                use_tools=use_tools
+                use_tools=use_tools,
             )
         except Exception as e:
             logger.exception(f"Error generating course for user {user_id}: {e}")
             raise
 
     async def generate_lesson_content(
-        self,
-        course_id: UUID,
-        user_id: UUID,
-        lesson_meta: dict[str, Any]
+        self, course_id: UUID, user_id: UUID, lesson_meta: dict[str, Any]
     ) -> tuple[str, list[dict]]:
         """Generate AI content for a lesson."""
         try:
@@ -374,38 +364,25 @@ class CoursesFacade(ContentFacade):
                 action="lesson",
                 user_id=user_id,
                 course_id=str(course_id),
-                lesson_meta=lesson_meta
+                lesson_meta=lesson_meta,
             )
             return content, citations
         except Exception as e:
             logger.exception(f"Error generating lesson for course {course_id}: {e}")
             raise
 
-    async def update_course_with_ai(
-        self,
-        course_id: UUID,
-        user_id: UUID,
-        updates: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def update_course_with_ai(self, course_id: UUID, user_id: UUID, updates: dict[str, Any]) -> dict[str, Any]:
         """Update course content using AI."""
         try:
             return await self._ai_service.process_content(
-                content_type="course",
-                action="update",
-                user_id=user_id,
-                course_id=str(course_id),
-                updates=updates
+                content_type="course", action="update", user_id=user_id, course_id=str(course_id), updates=updates
             )
         except Exception as e:
             logger.exception(f"Error updating course {course_id} with AI: {e}")
             raise
 
     async def chat_about_course(
-        self,
-        course_id: UUID,
-        user_id: UUID,
-        message: str,
-        history: list[dict[str, Any]] | None = None
+        self, course_id: UUID, user_id: UUID, message: str, history: list[dict[str, Any]] | None = None
     ) -> str:
         """Have a conversation about the course."""
         try:
@@ -415,9 +392,8 @@ class CoursesFacade(ContentFacade):
                 user_id=user_id,
                 course_id=str(course_id),
                 message=message,
-                history=history
+                history=history,
             )
         except Exception as e:
             logger.exception(f"Error in course chat for {course_id}: {e}")
             raise
-

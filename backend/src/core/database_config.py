@@ -15,7 +15,9 @@ class DatabaseConfig(BaseSettings):
     """Database configuration with fallback support."""
 
     # Primary database (Supabase)
-    supabase_url: str = "postgresql+asyncpg://postgres:02ML8dXOrCAbSCbz@db.sznfaqmsormdwmafnrrt.supabase.co:5432/postgres"
+    supabase_url: str = (
+        "postgresql+asyncpg://postgres:02ML8dXOrCAbSCbz@db.sznfaqmsormdwmafnrrt.supabase.co:5432/postgres"
+    )
 
     # Fallback database (local)
     local_url: str = "postgresql+asyncpg://samdc:1234@192.168.8.188:5432/talimio"
@@ -39,10 +41,7 @@ async def test_database_connection(database_url: str, timeout: int = 10) -> bool
             asyncpg_url = database_url
 
         # Test connection
-        conn = await asyncio.wait_for(
-            asyncpg.connect(asyncpg_url),
-            timeout=timeout
-        )
+        conn = await asyncio.wait_for(asyncpg.connect(asyncpg_url), timeout=timeout)
         await conn.close()
         logger.info(f"Database connection successful: {database_url.split('@')[1].split('/')[0]}")
         return True
@@ -84,10 +83,7 @@ def create_database_engine(database_url: str):  # noqa: ANN201
         pool_recycle=3600,
         # Force IPv4 and optimize connection
         connect_args={
-            "server_settings": {
-                "application_name": "talimio_backend",
-                "jit": "off"
-            },
+            "server_settings": {"application_name": "talimio_backend", "jit": "off"},
             "command_timeout": 10,
-        }
+        },
     )

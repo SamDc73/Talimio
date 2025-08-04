@@ -12,7 +12,6 @@ from src.content.schemas import ContentListResponse, ContentType
 # Progress calculation imports removed - progress now fetched separately
 from src.content.services.content_transform_service import ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
-from src.core.mode_aware_service import ModeAwareService
 
 # UserContext removed - using UUID directly
 from src.database.session import async_session_maker
@@ -21,12 +20,11 @@ from src.database.session import async_session_maker
 logger = logging.getLogger(__name__)
 
 
-class ContentService(ModeAwareService):
+class ContentService:
     """Main service for content operations."""
 
     def __init__(self, session: AsyncSession | None = None) -> None:
         """Initialize the content service."""
-        super().__init__()
         self._session = session
 
     async def list_content_fast(
@@ -47,9 +45,6 @@ class ContentService(ModeAwareService):
         3. Single database round-trip
         4. No ORM overhead
         """
-        # Log the access
-        self.log_access("list", user_id, "content")
-
         offset = (page - 1) * page_size
         search_term = f"%{search}%" if search else None
         # Use user ID for user-specific filtering
@@ -61,14 +56,18 @@ class ContentService(ModeAwareService):
             queries: list[str] = []
             needs_user_id = False
 
-            queries, needs_user_id = QueryBuilderService.build_content_queries(content_type, search, include_archived, effective_user_id)
+            queries, needs_user_id = QueryBuilderService.build_content_queries(
+                content_type, search, include_archived, effective_user_id
+            )
 
             if not queries:
                 return ContentListResponse(items=[], total=0, page=page, per_page=page_size)
 
             combined_query = " UNION ALL ".join(f"({q})" for q in queries)
             total = await QueryBuilderService.get_total_count(session, combined_query, search_term, effective_user_id)
-            rows = await self.get_paginated_results(session, combined_query, search_term, page_size, offset, effective_user_id)
+            rows = await self.get_paginated_results(
+                session, combined_query, search_term, page_size, offset, effective_user_id
+            )
             items = ContentTransformService.transform_rows_to_items(rows)
 
             # PERFORMANCE OPTIMIZATION: Progress calculations removed
@@ -95,14 +94,18 @@ class ContentService(ModeAwareService):
             queries: list[str] = []
             needs_user_id = False
 
-            queries, needs_user_id = QueryBuilderService.build_content_queries(content_type, search, include_archived, effective_user_id)
+            queries, needs_user_id = QueryBuilderService.build_content_queries(
+                content_type, search, include_archived, effective_user_id
+            )
 
             if not queries:
                 return ContentListResponse(items=[], total=0, page=page, per_page=page_size)
 
             combined_query = " UNION ALL ".join(f"({q})" for q in queries)
             total = await QueryBuilderService.get_total_count(session, combined_query, search_term, effective_user_id)
-            rows = await self.get_paginated_results(session, combined_query, search_term, page_size, offset, effective_user_id)
+            rows = await self.get_paginated_results(
+                session, combined_query, search_term, page_size, offset, effective_user_id
+            )
             items = ContentTransformService.transform_rows_to_items(rows)
 
             # PERFORMANCE OPTIMIZATION: Progress calculations removed
@@ -160,9 +163,6 @@ class ContentService(ModeAwareService):
         user_id: UUID,
     ) -> None:
         """Delete content by type and ID."""
-        # Log the access
-        self.log_access("delete", user_id, f"content_{content_type.value}", content_id)
-
         from src.books.services import delete_book
         from src.courses.services.course_service import CourseService
         from src.flashcards.service import delete_deck

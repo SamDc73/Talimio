@@ -41,7 +41,7 @@ export function CourseProgressProvider({ children, courseId }) {
 	const { toast } = useToast();
 
 	// Get progress service for this course
-	const progressService = courseId ? useCourseProgressService(courseId) : null;
+	const progressService = useCourseProgressService(courseId);
 
 	/**
 	 * Fetch all progress data for the course
@@ -447,12 +447,12 @@ export function useCourseProgressSafe() {
 export function useUnifiedProgress(_courseId, legacyMode = false) {
 	const courseProgress = useCourseProgressSafe();
 
+	// Import legacy hook unconditionally at the top
+	const { useProgressSafe } = require("./useProgress");
+	const legacyProgress = useProgressSafe();
+
 	// Legacy mode would use the old useProgress hook
 	if (legacyMode) {
-		// Import legacy hook dynamically to avoid issues
-		const { useProgressSafe } = require("./useProgress");
-		const legacyProgress = useProgressSafe();
-
 		return {
 			...legacyProgress,
 			isLegacyMode: true,

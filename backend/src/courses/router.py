@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.dependencies import UserId
+from src.auth import UserId
 from src.courses.schemas import (
     CourseCreate,
     CourseListResponse,
@@ -59,18 +59,14 @@ async def _find_module_id_for_lesson(session: AsyncSession, course_id: UUID, les
     from src.courses.models import Node
 
     # Find the lesson and get its parent_id (module_id)
-    lesson_query = select(Node).where(
-        Node.id == lesson_id,
-        Node.roadmap_id == course_id
-    )
+    lesson_query = select(Node).where(Node.id == lesson_id, Node.roadmap_id == course_id)
 
     result = await session.execute(lesson_query)
     lesson = result.scalar_one_or_none()
 
     if not lesson:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Lesson {lesson_id} not found in course {course_id}"
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Lesson {lesson_id} not found in course {course_id}"
         )
 
     # Return the parent_id as module_id, or use lesson_id if no parent (for top-level lessons)
@@ -81,7 +77,7 @@ async def _find_module_id_for_lesson(session: AsyncSession, course_id: UUID, les
 @router.post("/")
 async def create_course(
     request: CourseCreate,
-    course_service: Annotated[CourseService, Depends(get_course_service)],  #Simple dependency injection
+    course_service: Annotated[CourseService, Depends(get_course_service)],  # Simple dependency injection
 ) -> CourseResponse:
     """Create a new course using AI generation."""
     return await course_service.create_course(request)
@@ -238,5 +234,3 @@ async def get_lesson_status_simplified(
     # Find the actual module_id (parent_id) for this lesson
     module_id = await _find_module_id_for_lesson(session, course_id, lesson_id)
     return await course_service.get_lesson_status(course_id, module_id, lesson_id)
-
-

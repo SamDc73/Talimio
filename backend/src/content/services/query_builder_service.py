@@ -51,9 +51,9 @@ class QueryBuilderService:
     @staticmethod
     def _get_video_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
         """Get SQL query for videos."""
-        # If DEFAULT_USER_ID, show all videos (for demo/development)
-        effective_user_id = user_id if str(user_id) != "00000000-0000-0000-0000-000000000001" else None
-        return QueryBuilderService.get_youtube_query(search, archived_only=False, include_archived=include_archived, user_id=effective_user_id)
+        return QueryBuilderService.get_youtube_query(
+            search, archived_only=False, include_archived=include_archived, user_id=user_id
+        )
 
     @staticmethod
     def get_youtube_query(
@@ -106,12 +106,14 @@ class QueryBuilderService:
     @staticmethod
     def _get_flashcard_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
         """Get SQL query for flashcards."""
-        # If DEFAULT_USER_ID, show all flashcards (for demo/development)
-        effective_user_id = user_id if str(user_id) != "00000000-0000-0000-0000-000000000001" else None
-        return QueryBuilderService.get_flashcards_query(search, archived_only=False, include_archived=include_archived, user_id=effective_user_id)
+        return QueryBuilderService.get_flashcards_query(
+            search, archived_only=False, include_archived=include_archived, user_id=user_id
+        )
 
     @staticmethod
-    def get_flashcards_query(search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: UUID | None = None) -> str:
+    def get_flashcards_query(
+        search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: UUID | None = None
+    ) -> str:
         """Get SQL query for flashcards with user filtering."""
         query = """
             SELECT
@@ -136,8 +138,7 @@ class QueryBuilderService:
         # Build WHERE clause
         where_conditions = []
 
-        # CRITICAL: Filter by user_id since flashcards are user-specific
-        # Skip filtering if no user_id (for demo/development with DEFAULT_USER_ID)
+        # Filter by user_id since flashcards are user-specific
         if user_id:
             where_conditions.append("user_id = :user_id")
 
@@ -158,10 +159,8 @@ class QueryBuilderService:
     @staticmethod
     def _get_book_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
         """Get SQL query for books."""
-        # If DEFAULT_USER_ID, show all books (for demo/development)
-        effective_user_id = user_id if str(user_id) != "00000000-0000-0000-0000-000000000001" else None
         return QueryBuilderService.get_books_query(
-            search, archived_only=False, include_archived=include_archived, user_id=effective_user_id
+            search, archived_only=False, include_archived=include_archived, user_id=user_id
         )
 
     @staticmethod
@@ -192,8 +191,7 @@ class QueryBuilderService:
         # Build WHERE clause
         where_conditions = []
 
-        # CRITICAL: Filter by user_id since books are user-specific
-        # Skip filtering if no user_id (for demo/development with DEFAULT_USER_ID)
+        # Filter by user_id since books are user-specific
         if user_id:
             where_conditions.append("b.user_id = :user_id")
 
@@ -214,10 +212,8 @@ class QueryBuilderService:
     @staticmethod
     def _get_roadmap_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
         """Get SQL query for roadmaps."""
-        # If DEFAULT_USER_ID, show all roadmaps (for demo/development)
-        effective_user_id = user_id if str(user_id) != "00000000-0000-0000-0000-000000000001" else None
         return QueryBuilderService.get_roadmaps_query(
-            search, archived_only=False, include_archived=include_archived, user_id=effective_user_id
+            search, archived_only=False, include_archived=include_archived, user_id=user_id
         )
 
     @staticmethod
@@ -250,8 +246,7 @@ class QueryBuilderService:
         # Build WHERE clause
         where_conditions = []
 
-        # CRITICAL: Filter by user_id since roadmaps are user-specific
-        # Skip filtering if no user_id (for demo/development with DEFAULT_USER_ID)
+        # Filter by user_id since roadmaps are user-specific
         if user_id:
             where_conditions.append("r.user_id = :user_id")
 
@@ -278,7 +273,7 @@ class QueryBuilderService:
         params = {}
         if search_term:
             params["search"] = search_term
-        # Only include user_id if it's not None (since we build different queries based on user_id)
+        # Include user_id if provided
         if user_id is not None:
             params["user_id"] = user_id
         count_result = await session.execute(

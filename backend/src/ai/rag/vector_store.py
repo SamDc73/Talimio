@@ -61,13 +61,12 @@ class EmbeddingGenerator:
                 logger.debug(f"First chunk sample ({sample_length} chars): {texts[0][:100]}...")
 
             # Generate embeddings - LiteLLM handles provider-specific config
-            response = embedding(
-                model=self.model,
-                input=texts
-            )
+            response = embedding(model=self.model, input=texts)
 
             embeddings = [emb["embedding"] for emb in response.data]
-            logger.info(f"✅ Successfully generated {len(embeddings)} embeddings, dimension: {len(embeddings[0]) if embeddings else 0}")
+            logger.info(
+                f"✅ Successfully generated {len(embeddings)} embeddings, dimension: {len(embeddings[0]) if embeddings else 0}"
+            )
             return embeddings
 
         except Exception as e:
@@ -93,7 +92,14 @@ class VectorStore:
         # Create embedding generator but don't call any methods
         self.embedding_generator = EmbeddingGenerator()
 
-    async def store_chunks_with_embeddings(self, session: AsyncSession, doc_id: uuid.UUID, chunks: list[str] | list[dict], doc_type: str = "video", metadata: dict | None = None) -> None:
+    async def store_chunks_with_embeddings(
+        self,
+        session: AsyncSession,
+        doc_id: uuid.UUID,
+        chunks: list[str] | list[dict],
+        doc_type: str = "video",
+        metadata: dict | None = None,
+    ) -> None:
         """Store text chunks with their embeddings in rag_document_chunks table.
 
         Args:
@@ -182,16 +188,25 @@ class VectorStore:
                     )
                     stored_count += 1
 
-            logger.info(f"✅ Successfully stored embeddings: {stored_count} new, {updated_count} updated for document {doc_id}")
+            logger.info(
+                f"✅ Successfully stored embeddings: {stored_count} new, {updated_count} updated for document {doc_id}"
+            )
 
         except Exception as e:
-            logger.exception(f"❌ Failed to store chunks with embeddings for document {doc_id}: {type(e).__name__}: {e!s}")
+            logger.exception(
+                f"❌ Failed to store chunks with embeddings for document {doc_id}: {type(e).__name__}: {e!s}"
+            )
             logger.exception("Full storage error traceback:")
             # Don't crash - just log and continue
             logger.warning("Continuing without embeddings due to error")
 
     async def similarity_search(
-        self, session: AsyncSession, query_embedding: list[float], top_k: int, doc_type: str | None = None, roadmap_id: uuid.UUID | None = None
+        self,
+        session: AsyncSession,
+        query_embedding: list[float],
+        top_k: int,
+        doc_type: str | None = None,
+        roadmap_id: uuid.UUID | None = None,
     ) -> list[dict]:
         """Perform similarity search using pgvector."""
         try:
@@ -302,15 +317,17 @@ class VectorStore:
                 if not doc_title:
                     doc_title = f"{row.doc_type.title()} Document"
 
-                results.append({
-                    "document_id": row.doc_id,
-                    "document_title": doc_title,
-                    "content": row.content,
-                    "similarity_score": float(row.similarity_score),
-                    "doc_metadata": row.doc_metadata or {},
-                    "doc_type": row.doc_type,
-                    "chunk_index": row.chunk_index,
-                })
+                results.append(
+                    {
+                        "document_id": row.doc_id,
+                        "document_title": doc_title,
+                        "content": row.content,
+                        "similarity_score": float(row.similarity_score),
+                        "doc_metadata": row.doc_metadata or {},
+                        "doc_type": row.doc_type,
+                        "chunk_index": row.chunk_index,
+                    }
+                )
 
             return results
 
@@ -389,15 +406,17 @@ class VectorStore:
                 if not doc_title:
                     doc_title = f"{row.doc_type.title()} Document"
 
-                results.append({
-                    "document_id": row.doc_id,
-                    "document_title": doc_title,
-                    "content": row.content,
-                    "similarity_score": float(row.similarity_score),
-                    "doc_metadata": row.doc_metadata or {},
-                    "doc_type": row.doc_type,
-                    "chunk_index": row.chunk_index,
-                })
+                results.append(
+                    {
+                        "document_id": row.doc_id,
+                        "document_title": doc_title,
+                        "content": row.content,
+                        "similarity_score": float(row.similarity_score),
+                        "doc_metadata": row.doc_metadata or {},
+                        "doc_type": row.doc_type,
+                        "chunk_index": row.chunk_index,
+                    }
+                )
 
             return results
 

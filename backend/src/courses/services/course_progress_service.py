@@ -33,7 +33,9 @@ class CourseProgressService:
         self.session = session
         self.user_id = user_id
 
-    async def get_course_progress(self, course_id: UUID, modules: list, lessons: list, user_id: UUID | None = None) -> dict:
+    async def get_course_progress(
+        self, course_id: UUID, modules: list, lessons: list, user_id: UUID | None = None
+    ) -> dict:
         """Get overall progress for a course."""
         total_modules = len(modules)
 
@@ -45,11 +47,15 @@ class CourseProgressService:
         in_progress_lessons = 0
 
         for lesson in lessons:
-            stmt = select(Progress).where(
-            Progress.lesson_id == str(lesson.id),
-            Progress.user_id == (user_id or self.user_id),
-            Progress.status == "completed"
-        ).limit(1)  # Handle potential duplicates
+            stmt = (
+                select(Progress)
+                .where(
+                    Progress.lesson_id == str(lesson.id),
+                    Progress.user_id == (user_id or self.user_id),
+                    Progress.status == "completed",
+                )
+                .limit(1)
+            )  # Handle potential duplicates
             result = await self.session.execute(stmt)
             progress = result.scalar_one_or_none()
             if progress:
@@ -57,11 +63,15 @@ class CourseProgressService:
                 continue
 
             # Check for in_progress status
-            stmt_progress = select(Progress).where(
-                Progress.lesson_id == str(lesson.id),
-                Progress.user_id == (user_id or self.user_id),
-                Progress.status == "in_progress"
-            ).limit(1)  # Handle potential duplicates
+            stmt_progress = (
+                select(Progress)
+                .where(
+                    Progress.lesson_id == str(lesson.id),
+                    Progress.user_id == (user_id or self.user_id),
+                    Progress.status == "in_progress",
+                )
+                .limit(1)
+            )  # Handle potential duplicates
             result_progress = await self.session.execute(stmt_progress)
             progress_in_progress = result_progress.scalar_one_or_none()
             if progress_in_progress:
@@ -103,11 +113,15 @@ class CourseProgressService:
         """Update the status of a specific lesson."""
         # Check if progress record exists
         # Note: Progress.course_id actually stores module_id (legacy naming)
-        stmt = select(Progress).where(
-            Progress.lesson_id == str(lesson_id),
-            Progress.course_id == str(module_id),  # course_id field stores module_id
-            Progress.user_id == (_user_id or self.user_id),
-        ).limit(1)  # Handle potential duplicates
+        stmt = (
+            select(Progress)
+            .where(
+                Progress.lesson_id == str(lesson_id),
+                Progress.course_id == str(module_id),  # course_id field stores module_id
+                Progress.user_id == (_user_id or self.user_id),
+            )
+            .limit(1)
+        )  # Handle potential duplicates
         result = await self.session.execute(stmt)
         progress = result.scalar_one_or_none()
 
@@ -156,21 +170,26 @@ class CourseProgressService:
         # This matches the content endpoint counting method for consistency
         total_query = select(func.count(Node.id)).where(
             Node.roadmap_id == course_id,
-            Node.parent_id.is_not(None)  # Only lessons, not modules
+            Node.parent_id.is_not(None),  # Only lessons, not modules
         )
         total_result = await self.session.execute(total_query)
         total_lessons = total_result.scalar() or 0
 
         # Debug logging
-        logger.info(f"📊 Progress calculation for course {course_id}, user {user_id}: found {total_lessons} total lessons")
+        logger.info(
+            f"📊 Progress calculation for course {course_id}, user {user_id}: found {total_lessons} total lessons"
+        )
 
         if total_lessons == 0:
             return 0
 
         # Create a subquery that gets the latest status per lesson
         # Handle legacy records with user_id = None for backward compatibility
-        from src.config.settings import DEFAULT_USER_ID
-        user_filter = (Progress.user_id == user_id) | (Progress.user_id.is_(None) if user_id == DEFAULT_USER_ID else False)
+        from src.auth.config import DEFAULT_USER_ID
+
+        user_filter = (Progress.user_id == user_id) | (
+            Progress.user_id.is_(None) if user_id == DEFAULT_USER_ID else False
+        )
 
         latest_status_subquery = (
             select(
@@ -195,7 +214,9 @@ class CourseProgressService:
         completed_lessons = completed_result.scalar() or 0
 
         # Debug logging
-        logger.info(f"📊 Progress calculation result: {completed_lessons}/{total_lessons} = {int((completed_lessons / total_lessons) * 100)}%")
+        logger.info(
+            f"📊 Progress calculation result: {completed_lessons}/{total_lessons} = {int((completed_lessons / total_lessons) * 100)}%"
+        )
 
         return int((completed_lessons / total_lessons) * 100)
 
@@ -212,7 +233,7 @@ class CourseProgressService:
         # This matches the content endpoint counting method for consistency
         total_query = select(func.count(Node.id)).where(
             Node.roadmap_id == course_id,
-            Node.parent_id.is_not(None)  # Only lessons, not modules
+            Node.parent_id.is_not(None),  # Only lessons, not modules
         )
         total_result = await self.session.execute(total_query)
         total_lessons = total_result.scalar() or 0
@@ -228,8 +249,11 @@ class CourseProgressService:
 
         # Create a subquery that gets the latest status per lesson
         # Handle legacy records with user_id = None for backward compatibility
-        from src.config.settings import DEFAULT_USER_ID
-        user_filter = (Progress.user_id == user_id) | (Progress.user_id.is_(None) if user_id == DEFAULT_USER_ID else False)
+        from src.auth.config import DEFAULT_USER_ID
+
+        user_filter = (Progress.user_id == user_id) | (
+            Progress.user_id.is_(None) if user_id == DEFAULT_USER_ID else False
+        )
 
         latest_status_subquery = (
             select(
@@ -246,10 +270,7 @@ class CourseProgressService:
 
         # Count lessons by status
         status_query = (
-            select(
-                latest_status_subquery.c.status,
-                func.count().label("count")
-            )
+            select(latest_status_subquery.c.status, func.count().label("count"))
             .select_from(latest_status_subquery)
             .where(latest_status_subquery.c.rn == 1)
             .group_by(latest_status_subquery.c.status)
@@ -276,11 +297,15 @@ class CourseProgressService:
         effective_user_id = _user_id or self.user_id
 
         # Note: Progress.course_id actually stores module_id (legacy naming)
-        stmt = select(Progress).where(
-            Progress.lesson_id == str(lesson_id),
-            Progress.course_id == str(module_id),  # course_id field stores module_id
-            Progress.user_id == effective_user_id,
-        ).limit(1)  # Handle potential duplicates
+        stmt = (
+            select(Progress)
+            .where(
+                Progress.lesson_id == str(lesson_id),
+                Progress.course_id == str(module_id),  # course_id field stores module_id
+                Progress.user_id == effective_user_id,
+            )
+            .limit(1)
+        )  # Handle potential duplicates
         result = await self.session.execute(stmt)
         progress = result.scalar_one_or_none()
 

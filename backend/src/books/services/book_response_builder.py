@@ -168,7 +168,9 @@ class BookResponseBuilder:
             return None
 
     @staticmethod
-    def build_error_response(error_code: str, error_message: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
+    def build_error_response(
+        error_code: str, error_message: str, details: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Build consistent error response format."""
         response = {
             "error": error_code,

@@ -101,7 +101,9 @@ async def trigger_course_generation(message: str, user_id: UUID | None = None) -
     try:
         # Extract topic from message
         course_topic = re.sub(
-            r"(?:generate|create|make|build|course|roadmap|for|me|a|an|the)\s*", "", message.lower(),
+            r"(?:generate|create|make|build|course|roadmap|for|me|a|an|the)\s*",
+            "",
+            message.lower(),
         ).strip()
         if not course_topic:
             course_topic = "General Programming Course"
@@ -110,17 +112,9 @@ async def trigger_course_generation(message: str, user_id: UUID | None = None) -
         course_request = CourseCreate(prompt=course_topic)
 
         async with async_session_maker() as session:
-            # Use default user ID if none provided
+            # user_id is now required - no auth checks in services
             if user_id is None:
-                from src.auth.manager import NoAuthProvider
-                from src.config.settings import get_settings
-                settings = get_settings()
-                if settings.AUTH_PROVIDER == "none":
-                    user_id = NoAuthProvider.DEFAULT_USER_ID
-                else:
-                    # In multi-user mode, we need a user ID
-                    error_msg = "User ID required for course generation in multi-user mode"
-                    raise ValueError(error_msg)
+                raise ValueError("user_id is required for course generation")
 
             course_service = CourseService(session, user_id)
             course = await course_service.create_course(course_request)
@@ -168,7 +162,10 @@ class EnhancedAssistantService:
             roadmap_context = await self._get_roadmap_context(request)
 
             messages = await self._build_enhanced_messages(
-                request, immediate_context, semantic_context, roadmap_context,
+                request,
+                immediate_context,
+                semantic_context,
+                roadmap_context,
             )
 
             response = await self._generate_response(request, messages)
@@ -200,7 +197,9 @@ class EnhancedAssistantService:
 
         try:
             context_data = await self.context_manager.get_context(
-                context_type=request.context_type, resource_id=request.context_id, context_meta=request.context_meta,
+                context_type=request.context_type,
+                resource_id=request.context_id,
+                context_meta=request.context_meta,
             )
 
             if context_data:
@@ -355,7 +354,10 @@ class EnhancedAssistantService:
 
             async with async_session_maker() as session:
                 search_results = await rag_service.search_documents(
-                    session=session, roadmap_id=UUID(request.roadmap_id), query=request.message, top_k=3,
+                    session=session,
+                    roadmap_id=UUID(request.roadmap_id),
+                    query=request.message,
+                    top_k=3,
                 )
 
                 if search_results:
@@ -489,7 +491,10 @@ class EnhancedAssistantService:
             return fallback_response
 
     def _collect_citations(
-        self, semantic_context: list[SearchResult], roadmap_context: tuple[str, list[Citation]], _request: ChatRequest,
+        self,
+        semantic_context: list[SearchResult],
+        roadmap_context: tuple[str, list[Citation]],
+        _request: ChatRequest,
     ) -> list[Citation]:
         """Collect citations from all context sources."""
         citations = []
@@ -537,7 +542,10 @@ class EnhancedAssistantService:
             logger.warning("Failed to store enhanced chat memory for user %s: %s", request.user_id, e)
 
     async def find_book_citations(
-        self, book_id: UUID, _response_text: str, _similarity_threshold: float = 0.75,
+        self,
+        book_id: UUID,
+        _response_text: str,
+        _similarity_threshold: float = 0.75,
     ) -> list[dict]:
         """Find text locations in a book for citation highlighting.
 
@@ -597,7 +605,10 @@ class StreamingEnhancedAssistantService(EnhancedAssistantService):
 
             # Build enhanced messages
             messages = await self._build_enhanced_messages(
-                request, immediate_context, semantic_context, roadmap_context,
+                request,
+                immediate_context,
+                semantic_context,
+                roadmap_context,
             )
 
             # Since AIService doesn't support streaming yet, we'll get the full response
@@ -616,7 +627,7 @@ class StreamingEnhancedAssistantService(EnhancedAssistantService):
                 # Simulate streaming by chunking the response
                 chunk_size = 50  # Characters per chunk
                 for i in range(0, len(response), chunk_size):
-                    chunk = response[i:i + chunk_size]
+                    chunk = response[i : i + chunk_size]
                     yield f"data: {json.dumps({'content': chunk, 'done': False})}\n\n"
 
                 full_response = response

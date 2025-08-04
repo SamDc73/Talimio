@@ -8,10 +8,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.auth.config import DEFAULT_USER_ID
 from src.books.models import Book, BookProgress
 from src.books.schemas import BookListResponse, BookResponse, BookWithProgress
 from src.books.services.book_response_builder import BookResponseBuilder
-from src.config.settings import DEFAULT_USER_ID
 
 
 logger = logging.getLogger(__name__)
@@ -60,9 +60,7 @@ class BookQueryService:
         if search:
             search_term = f"%{search}%"
             query = query.where(
-                Book.title.ilike(search_term)
-                | Book.author.ilike(search_term)
-                | Book.description.ilike(search_term)
+                Book.title.ilike(search_term) | Book.author.ilike(search_term) | Book.description.ilike(search_term)
             )
 
         # Apply tag filter
@@ -148,12 +146,16 @@ class BookQueryService:
         search_term = f"%{query_text}%"
 
         # Search across title, author, description, and tags
-        query = select(Book).where(
-            Book.title.ilike(search_term)
-            | Book.author.ilike(search_term)
-            | Book.description.ilike(search_term)
-            | Book.tags.ilike(search_term)
-        ).limit(limit)
+        query = (
+            select(Book)
+            .where(
+                Book.title.ilike(search_term)
+                | Book.author.ilike(search_term)
+                | Book.description.ilike(search_term)
+                | Book.tags.ilike(search_term)
+            )
+            .limit(limit)
+        )
 
         result = await self.session.execute(query)
         books = result.scalars().all()
@@ -187,6 +189,7 @@ class BookQueryService:
 
             if tag_conditions:
                 from sqlalchemy import or_
+
                 query = query.where(or_(*tag_conditions))
 
         result = await self.session.execute(query)
@@ -311,5 +314,6 @@ class BookQueryService:
             "average_progress": round(float(avg_progress), 2) if avg_progress else 0,
             "completion_rate": round((completed_books / total_books) * 100, 2) if total_books > 0 else 0,
         }
+
 
 # Removed _book_to_response - now handled by BookResponseBuilder

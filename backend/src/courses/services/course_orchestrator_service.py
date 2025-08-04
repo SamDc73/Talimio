@@ -71,7 +71,9 @@ class CourseOrchestratorService(ICourseService):
         """List courses with pagination and optional search."""
         return await self.course_management.list_courses(page, per_page, search, user_id)
 
-    async def update_course(self, course_id: UUID, request: CourseUpdate, user_id: UUID | None = None) -> CourseResponse:
+    async def update_course(
+        self, course_id: UUID, request: CourseUpdate, user_id: UUID | None = None
+    ) -> CourseResponse:
         """Update a course."""
         return await self.course_management.update_course(course_id, request, user_id)
 
@@ -127,7 +129,12 @@ class CourseOrchestratorService(ICourseService):
         return await self.progress_tracking.get_course_progress(course_id, user_id)
 
     async def update_lesson_status(
-        self, course_id: UUID, module_id: UUID, lesson_id: UUID, request: LessonStatusUpdate, user_id: UUID | None = None
+        self,
+        course_id: UUID,
+        module_id: UUID,
+        lesson_id: UUID,
+        request: LessonStatusUpdate,
+        user_id: UUID | None = None,
     ) -> LessonStatusResponse:
         """Update the status of a specific lesson."""
         return await self.progress_tracking.update_lesson_status(course_id, module_id, lesson_id, request, user_id)

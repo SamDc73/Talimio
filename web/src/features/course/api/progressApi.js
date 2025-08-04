@@ -374,7 +374,7 @@ export function useCourseProgressService(courseId) {
 	const courseService = useCourseService(courseId);
 
 	if (!courseId) {
-		throw new Error("Course ID is required for progress service");
+		return null;
 	}
 
 	return new CourseProgressService(courseId, courseService);

@@ -1,7 +1,7 @@
 import PropTypes from "prop-types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { videoApi } from "@/services/videoApi";
+import { getVideoTranscript } from "@/services/videosService";
 import "./VideoTranscript.css";
 
 const VideoTranscript = ({ videoId, currentTime, onSeek }) => {
@@ -22,7 +22,7 @@ const VideoTranscript = ({ videoId, currentTime, onSeek }) => {
 			setError(null);
 
 			try {
-				const data = await videoApi.fetchTranscript(videoId);
+				const data = await getVideoTranscript(videoId);
 				setTranscript(data);
 			} catch (err) {
 				console.error("Failed to load transcript:", err);

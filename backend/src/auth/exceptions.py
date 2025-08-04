@@ -7,7 +7,11 @@ class AuthenticationError(HTTPException):
     """Base authentication error."""
 
     def __init__(self, detail: str = "Authentication failed") -> None:
-        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
+        super().__init__(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=detail,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 class InvalidCredentialsError(AuthenticationError):
@@ -51,5 +55,32 @@ class AuthProviderNotConfiguredError(HTTPException):
     def __init__(self, provider: str) -> None:
         super().__init__(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Authentication provider '{provider}' is not properly configured"
+            detail=f"Authentication provider '{provider}' is not properly configured",
+        )
+
+
+class MissingTokenError(AuthenticationError):
+    """Raised when authentication token is missing."""
+
+    def __init__(self) -> None:
+        super().__init__(detail="Missing or invalid Authorization header")
+
+
+class SupabaseConfigError(HTTPException):
+    """Raised when Supabase is not properly configured."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase not configured for multi-user mode"
+        )
+
+
+class UnknownAuthProviderError(HTTPException):
+    """Raised when an unknown auth provider is configured."""
+
+    def __init__(self, provider: str) -> None:
+        super().__init__(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unknown AUTH_PROVIDER: {provider}"
         )

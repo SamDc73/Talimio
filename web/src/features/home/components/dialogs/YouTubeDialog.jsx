@@ -11,7 +11,7 @@ import {
 	SheetTitle,
 } from "@/components/sheet";
 import { useToast } from "@/hooks/use-toast";
-import { videoApi } from "@/services/videoApi";
+import { createVideo } from "@/services/videosService";
 
 export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 	const { toast } = useToast();
@@ -35,7 +35,7 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 
 		setIsAddingVideo(true);
 		try {
-			const response = await videoApi.createVideo(youtubeUrl);
+			const response = await createVideo(youtubeUrl);
 
 			toast({
 				title: response.alreadyExists ? "Video Found!" : "Video Added!",

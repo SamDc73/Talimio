@@ -38,10 +38,10 @@ class RAGConfig:
 
         # File Storage Paths
         from src.config.settings import get_settings
+
         settings = get_settings()
         self.upload_dir = Path(settings.LOCAL_STORAGE_PATH) / "roadmap_docs"
         self.upload_dir.mkdir(parents=True, exist_ok=True)
-
 
     @property
     def words_per_chunk(self) -> int:

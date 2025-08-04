@@ -355,6 +355,7 @@ const DocumentPreviewModal = ({
 									<div className="bg-white rounded-lg p-6 max-w-4xl mx-auto">
 										<div
 											className="prose prose-sm max-w-none"
+											// biome-ignore lint/security/noDangerouslySetInnerHtml: Content is sanitized with DOMPurify
 											dangerouslySetInnerHTML={{
 												__html: DOMPurify.sanitize(contentPreview.content),
 											}}

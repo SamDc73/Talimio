@@ -9,8 +9,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.auth.config import DEFAULT_USER_ID
 from src.books.models import Book
-from src.config.settings import DEFAULT_USER_ID
 
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,6 @@ class HighlightService:
             "updated_at": datetime.now(UTC),
         }
 
-
     async def get_highlights(self, book_id: UUID) -> list[dict[str, Any]]:
         """Get all highlights for a book."""
         # Verify book exists
@@ -106,7 +105,6 @@ class HighlightService:
             "updated_at": datetime.now(UTC),
         }
 
-
     async def update_highlight(
         self,
         book_id: UUID,
@@ -141,7 +139,6 @@ class HighlightService:
             "created_at": datetime.now(UTC),
             "updated_at": datetime.now(UTC),
         }
-
 
     async def delete_highlight(self, book_id: UUID, highlight_id: str) -> bool:
         """Delete a highlight."""

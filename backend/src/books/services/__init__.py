@@ -16,5 +16,5 @@ __all__ = [
     "delete_book",
     "get_book",
     "get_books",
-    "update_book"
+    "update_book",
 ]

@@ -137,11 +137,17 @@ class ContentArchiveService:
             if content_type == ContentType.YOUTUBE:
                 combined_query = QueryBuilderService.get_youtube_query(search, archived_only=True)
             elif content_type == ContentType.FLASHCARDS:
-                combined_query = QueryBuilderService.get_flashcards_query(search, archived_only=True, user_id=effective_user_id)
+                combined_query = QueryBuilderService.get_flashcards_query(
+                    search, archived_only=True, user_id=effective_user_id
+                )
             elif content_type == ContentType.BOOK:
-                combined_query = QueryBuilderService.get_books_query(search, archived_only=True, user_id=effective_user_id)
+                combined_query = QueryBuilderService.get_books_query(
+                    search, archived_only=True, user_id=effective_user_id
+                )
             elif content_type == ContentType.COURSE:
-                combined_query = QueryBuilderService.get_roadmaps_query(search, archived_only=True, user_id=effective_user_id)
+                combined_query = QueryBuilderService.get_roadmaps_query(
+                    search, archived_only=True, user_id=effective_user_id
+                )
             else:
                 msg = f"Unsupported content type: {content_type}"
                 raise ValueError(msg)
@@ -160,7 +166,9 @@ class ContentArchiveService:
         async with async_session_maker() as session:
             # Get total count and paginated results
             total = await QueryBuilderService.get_total_count(session, combined_query, search_term, effective_user_id)
-            rows = await ContentService.get_paginated_results(session, combined_query, search_term, page_size, offset, effective_user_id)
+            rows = await ContentService.get_paginated_results(
+                session, combined_query, search_term, page_size, offset, effective_user_id
+            )
 
             # Transform rows to content items
             items = ContentTransformService.transform_rows_to_items(rows)

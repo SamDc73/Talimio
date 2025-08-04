@@ -160,16 +160,18 @@ const LoginForm = ({
 							)}
 						</div>
 
-						{/* Forgot Password */}
-						<div className="flex justify-end">
-							<button
-								type="button"
-								onClick={onForgotPassword}
-								className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
-							>
-								Forgot password?
-							</button>
-						</div>
+						{/* Forgot Password - Only show in multi-user mode */}
+						{import.meta.env.VITE_ENABLE_AUTH === "true" && (
+							<div className="flex justify-end">
+								<button
+									type="button"
+									onClick={onForgotPassword}
+									className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+								>
+									Forgot password?
+								</button>
+							</div>
+						)}
 
 						{/* Submit Button */}
 						<button

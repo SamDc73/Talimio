@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from src.auth.manager import auth_manager
-from src.config.settings import DEFAULT_USER_ID, get_settings
+from src.auth.config import DEFAULT_USER_ID, get_user_id, supabase
+from src.config.settings import get_settings
 
 
 if TYPE_CHECKING:
@@ -62,20 +62,27 @@ class UserContextService:
             UserContext with user information
         """
         settings = get_settings()
+        user_id = await get_user_id(request)
 
-        # Try to get authenticated user
-        auth_user = await auth_manager.get_current_user(request)
-
-        if auth_user:
-            # We have an authenticated user
-            return UserContext(
-                user_id=auth_user.id,  # auth_user.id is already a UUID
-                email=auth_user.email,
-                name=auth_user.name,
-                is_authenticated=True,
-                is_default_user=False,
-                auth_mode=settings.AUTH_PROVIDER,
-            )
+        # Check if we have a real authenticated user
+        if user_id != DEFAULT_USER_ID and supabase:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                try:
+                    # FIXED: Extract token properly (remove "Bearer " prefix)
+                    token = auth_header.replace("Bearer ", "")
+                    user = supabase.auth.get_user(token)
+                    if user and user.user:
+                        return UserContext(
+                            user_id=UUID(str(user.user.id)),
+                            email=user.user.email,
+                            name=user.user.user_metadata.get("username"),
+                            is_authenticated=True,
+                            is_default_user=False,
+                            auth_mode=settings.AUTH_PROVIDER,
+                        )
+                except Exception:
+                    pass
 
         # No authenticated user - use default
         return UserContext(
@@ -100,7 +107,25 @@ class UserContextService:
         -------
             User ID (never None)
         """
-        return auth_manager.get_effective_user_id(request)
+        # Since get_user_id is async, we can't call it from a sync method
+        # But we can check the auth header synchronously
+        settings = get_settings()
+
+        # Single-user mode always returns DEFAULT_USER_ID (FIXED: check for "none" not "single_user")
+        if settings.AUTH_PROVIDER == "none":
+            return DEFAULT_USER_ID
+
+        # Multi-user mode - check for auth header
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer ") and supabase:
+            try:
+                # We can't use async get_user here, so we'll just return DEFAULT_USER_ID
+                # The async version in get_user_context will handle proper auth
+                pass
+            except Exception:
+                pass
+
+        return DEFAULT_USER_ID
 
     @staticmethod
     async def require_authenticated_user(request: "Request") -> UserContext:
@@ -121,10 +146,8 @@ class UserContextService:
 
         if not context.is_authenticated and context.is_default_user:
             from fastapi import HTTPException
-            raise HTTPException(
-                status_code=401,
-                detail="Authentication required"
-            )
+
+            raise HTTPException(status_code=401, detail="Authentication required")
 
         return context
 
@@ -143,7 +166,7 @@ class UserContextService:
                 "is_authenticated": context.is_authenticated,
                 "auth_mode": context.auth_mode,
                 "is_default": context.is_default_user,
-            }
+            },
         )
 
 

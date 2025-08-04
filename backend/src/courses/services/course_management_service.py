@@ -63,11 +63,7 @@ class CourseManagementService:
         return await self.query_service.get_course(course_id, user_id)
 
     async def list_courses(
-        self,
-        page: int = 1,
-        per_page: int = 20,
-        search: str | None = None,
-        user_id: UUID | None = None
+        self, page: int = 1, per_page: int = 20, search: str | None = None, user_id: UUID | None = None
     ) -> tuple[list[CourseResponse], int]:
         """List courses with pagination and optional search.
 
@@ -84,10 +80,7 @@ class CourseManagementService:
         return await self.query_service.list_courses(page, per_page, search, user_id)
 
     async def update_course(
-        self,
-        course_id: UUID,
-        request: CourseUpdate,
-        user_id: UUID | None = None
+        self, course_id: UUID, request: CourseUpdate, user_id: UUID | None = None
     ) -> CourseResponse:
         """Update a course.
 
@@ -147,19 +140,13 @@ class CourseManagementService:
 
         # Delete related records first to avoid foreign key constraints
         # 1. Delete progress records (uses string course_id/module_id)
-        await self.session.execute(
-            delete(LessonProgress).where(LessonProgress.course_id == str(course_id))
-        )
+        await self.session.execute(delete(LessonProgress).where(LessonProgress.course_id == str(course_id)))
 
         # 2. Delete lessons
-        await self.session.execute(
-            delete(Lesson).where(Lesson.roadmap_id == course_id)
-        )
+        await self.session.execute(delete(Lesson).where(Lesson.roadmap_id == course_id))
 
         # 3. Delete modules/nodes
-        await self.session.execute(
-            delete(CourseModule).where(CourseModule.roadmap_id == course_id)
-        )
+        await self.session.execute(delete(CourseModule).where(CourseModule.roadmap_id == course_id))
 
         # 4. Finally delete the course (documents should cascade)
         await self.session.execute(delete(Course).where(Course.id == course_id))

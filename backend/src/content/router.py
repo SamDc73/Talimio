@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
-from src.auth.dependencies import UserId
+from src.auth import UserId
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_service import ContentService
 from src.courses.schemas import LessonResponse
@@ -134,9 +134,7 @@ async def get_lesson_by_id(
             LIMIT 1
         """)
 
-        result = await session.execute(query, {
-            "lesson_id": lesson_id
-        })
+        result = await session.execute(query, {"lesson_id": lesson_id})
 
         row = result.fetchone()
         if not row:

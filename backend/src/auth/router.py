@@ -1,18 +1,18 @@
 """Authentication routes for user login, signup, and session management."""
 
 import contextlib
-from uuid import UUID
+import logging
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr
-from supabase import Client, create_client
 
-from src.auth.dependencies import CurrentUser, EffectiveUserId, RequireAuthInMultiUser
+from src.auth.config import DEFAULT_USER_ID, get_user_id, supabase
 from src.config.settings import get_settings
 from src.middleware.security import auth_rate_limit
 
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 def set_auth_cookie(response: Response, token: str) -> None:
@@ -30,10 +30,11 @@ def set_auth_cookie(response: Response, token: str) -> None:
 
 def clear_auth_cookie(response: Response) -> None:
     """Clear auth cookie on logout."""
+    settings = get_settings()
     response.delete_cookie(
         key="access_token",
         httponly=True,
-        secure=True,  # Always use secure for deletion
+        secure=settings.ENVIRONMENT == "production",  # Match set_auth_cookie logic
         samesite="lax",
     )
 
@@ -81,12 +82,13 @@ class UserResponse(BaseModel):
     username: str | None = None
 
 
-def get_supabase_client() -> Client | None:
-    """Get Supabase client if configured."""
-    settings = get_settings()
-    if not settings.SUPABASE_URL or not settings.SUPABASE_SECRET_KEY:
-        return None
-    return create_client(settings.SUPABASE_URL, settings.SUPABASE_SECRET_KEY)
+class PasswordResetRequest(BaseModel):
+    """Password reset request model."""
+
+    email: EmailStr
+
+
+# Removed get_supabase_client() - now using shared client from config.py
 
 
 @router.post("/signup")
@@ -96,27 +98,20 @@ async def signup(request: Request, data: SignupRequest) -> SignupResponse:  # no
     settings = get_settings()
 
     if settings.AUTH_PROVIDER != "supabase":
-        raise HTTPException(
-            status_code=400,
-            detail="Signup is only available with Supabase authentication"
-        )
+        raise HTTPException(status_code=400, detail="Signup is only available with Supabase authentication")
 
-    supabase = get_supabase_client()
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured")
 
     try:
         # Create user with Supabase Auth
-        auth_response = supabase.auth.sign_up({
-            "email": data.email,
-            "password": data.password,
-            "options": {
-                "data": {
-                    "username": data.username or data.email.split("@")[0]
-                }
+        auth_response = supabase.auth.sign_up(
+            {
+                "email": data.email,
+                "password": data.password,
+                "options": {"data": {"username": data.username or data.email.split("@")[0]}},
             }
-        })
-
+        )
 
         if not auth_response.user:
             raise HTTPException(status_code=400, detail="Failed to create user")
@@ -131,7 +126,7 @@ async def signup(request: Request, data: SignupRequest) -> SignupResponse:  # no
                     "username": auth_response.user.user_metadata.get("username"),
                 },
                 message="Please check your email to confirm your account",
-                email_confirmation_required=True
+                email_confirmation_required=True,
             )
 
         return SignupResponse(
@@ -142,11 +137,10 @@ async def signup(request: Request, data: SignupRequest) -> SignupResponse:  # no
             },
             access_token=auth_response.session.access_token,
             expires_in=auth_response.session.expires_in,
-            email_confirmation_required=False
+            email_confirmation_required=False,
         )
 
     except Exception as e:
-
         # If it's a Supabase auth error, try to get more details
         error_detail = str(e)
         if hasattr(e, "message"):
@@ -163,21 +157,14 @@ async def login(request: Request, response: Response, data: LoginRequest) -> dic
     """Login with email and password."""
     settings = get_settings()
     if settings.AUTH_PROVIDER != "supabase":
-        raise HTTPException(
-            status_code=400,
-            detail="Login is only available with Supabase authentication"
-        )
+        raise HTTPException(status_code=400, detail="Login is only available with Supabase authentication")
 
-    supabase = get_supabase_client()
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured")
 
     try:
         # Authenticate with Supabase
-        auth_response = supabase.auth.sign_in_with_password({
-            "email": data.email,
-            "password": data.password
-        })
+        auth_response = supabase.auth.sign_in_with_password({"email": data.email, "password": data.password})
 
         if not auth_response.user or not auth_response.session:
             raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -208,13 +195,12 @@ async def login(request: Request, response: Response, data: LoginRequest) -> dic
 
 
 @router.post("/logout")
-async def logout(request: Request, response: Response) -> dict[str, str]:  # noqa: ARG001
+async def logout(_request: Request, response: Response) -> dict[str, str]:
     """Logout the current user."""
     settings = get_settings()
     if settings.AUTH_PROVIDER != "supabase":
         return {"message": "Logout not required in current auth mode"}
 
-    supabase = get_supabase_client()
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured")
 
@@ -223,7 +209,7 @@ async def logout(request: Request, response: Response) -> dict[str, str]:  # noq
     response.delete_cookie(
         key="refresh_token",
         httponly=True,
-        secure=True,
+        secure=settings.ENVIRONMENT == "production",  # Consistent with other cookies
         samesite="lax",
     )
 
@@ -235,12 +221,52 @@ async def logout(request: Request, response: Response) -> dict[str, str]:  # noq
 
 
 @router.get("/me")
-async def get_current_user(context: RequireAuthInMultiUser) -> UserResponse:
+async def get_current_user(request: Request) -> UserResponse:
     """Get the current user (authenticated in multi-user mode, default in single-user mode)."""
+    user_id = await get_user_id(request)
+    settings = get_settings()
+
+    # In single-user mode, return default user (FIXED: check for "none" not "single_user")
+    if settings.AUTH_PROVIDER == "none" or user_id == DEFAULT_USER_ID:
+        return UserResponse(
+            id=str(DEFAULT_USER_ID),
+            email="demo@talimio.com",
+            username="Demo User"
+        )
+
+    # In multi-user mode, get user from Supabase
+    if supabase:
+        # Try Authorization header first
+        auth_header = request.headers.get("Authorization", "")
+        token = None
+
+        if auth_header.startswith("Bearer "):
+            token = auth_header.replace("Bearer ", "")
+        else:
+            # Check for token in cookies (for httpOnly cookie auth)
+            cookie_token = request.cookies.get("access_token")
+            if cookie_token:
+                # Strip "Bearer " prefix if present
+                token = cookie_token.replace("Bearer ", "") if cookie_token.startswith("Bearer ") else cookie_token
+
+        if token:
+            try:
+                # Supabase SDK expects just the token, not "Bearer " + token
+                user = supabase.auth.get_user(token)
+                if user and user.user:
+                    return UserResponse(
+                        id=str(user.user.id),
+                        email=user.user.email,
+                        username=user.user.user_metadata.get("username", user.user.email.split("@")[0])
+                    )
+            except Exception:
+                logger.warning("Failed to get user info from token")
+
+    # Fallback to default user
     return UserResponse(
-        id=str(context.user_id),
-        email=context.email or "user@talmio.local",
-        username=context.name or "Default User"
+        id=str(DEFAULT_USER_ID),
+        email="demo@talimio.com",
+        username="Demo User"
     )
 
 
@@ -249,31 +275,28 @@ async def refresh_token(request: Request, response: Response) -> dict:
     """Refresh the access token using the refresh_token cookie."""
     settings = get_settings()
     if settings.AUTH_PROVIDER != "supabase":
-        raise HTTPException(
-            status_code=400,
-            detail="Token refresh is only available with Supabase authentication"
-        )
+        raise HTTPException(status_code=400, detail="Token refresh is only available with Supabase authentication")
 
-    supabase = get_supabase_client()
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured")
 
     try:
         # Get refresh token from cookie
-        refresh_token = request.cookies.get("refresh_token")
-        if not refresh_token:
+        refresh_token_value = request.cookies.get("refresh_token")
+        if not refresh_token_value:
             raise HTTPException(status_code=401, detail="No refresh token provided")
 
-        # Refresh the session using the refresh token
-        auth_response = supabase.auth.refresh_session(refresh_token)
+        # Use the refresh token to get a new session
+        # The correct Supabase method expects the refresh_token as a parameter
+        auth_response = supabase.auth.refresh_session(refresh_token_value)
 
-        if not auth_response.user or not auth_response.session:
+        if not auth_response or not auth_response.session:
             raise HTTPException(status_code=401, detail="Invalid refresh token")
 
         # Update both access and refresh tokens in cookies
         set_auth_cookie(response, auth_response.session.access_token)
 
-        # Also set refresh token cookie
+        # Also update the refresh token cookie with the new one
         response.set_cookie(
             key="refresh_token",
             value=auth_response.session.refresh_token,
@@ -289,33 +312,73 @@ async def refresh_token(request: Request, response: Response) -> dict:
                 "id": str(auth_response.user.id),
                 "email": auth_response.user.email,
                 "username": auth_response.user.user_metadata.get("username"),
-            }
+            },
         }
 
     except Exception as e:
-        raise HTTPException(status_code=401, detail="Invalid refresh token") from e
+        # Log the actual error for debugging
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception("Token refresh failed")
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token") from e
+
+
+@router.post("/reset-password")
+@auth_rate_limit
+async def reset_password(request: Request, data: PasswordResetRequest) -> dict[str, str]:  # noqa: ARG001
+    """Send password reset email via Supabase Auth."""
+    settings = get_settings()
+    if settings.AUTH_PROVIDER != "supabase":
+        raise HTTPException(
+            status_code=400,
+            detail="Password reset is only available with Supabase authentication"
+        )
+
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+
+    try:
+        # Use Supabase's built-in password reset
+        # According to the docs, it's resetPasswordForEmail in JS but Python uses snake_case
+        supabase.auth.reset_password_email(data.email)
+        # Don't reveal if email exists or not for security
+        return {"message": "If the email exists, password reset instructions have been sent"}
+    except Exception:
+        # Always return the same message for security (don't reveal if email exists)
+        return {"message": "If the email exists, password reset instructions have been sent"}
 
 
 # Debug endpoint to verify authentication
 @router.get("/debug")
-async def debug_auth(
-    request: Request,
-    effective_user_id: EffectiveUserId,
-    current_user: CurrentUser,
-) -> dict:
+async def debug_auth(request: Request) -> dict:
     """Debug endpoint to check authentication status."""
     settings = get_settings()
     auth_header = request.headers.get("Authorization")
+    user_id = await get_user_id(request)
+
+    # Try to get current user info if available
+    current_user_info = None
+    if supabase and auth_header and auth_header.startswith("Bearer "):
+        try:
+            # Extract token properly (remove "Bearer " prefix)
+            token = auth_header.replace("Bearer ", "")
+            # Supabase SDK expects just the token, not "Bearer " + token
+            user = supabase.auth.get_user(token)
+            if user and user.user:
+                current_user_info = {
+                    "id": str(user.user.id),
+                    "email": user.user.email,
+                    "username": user.user.user_metadata.get("username")
+                }
+        except Exception:
+            logger.warning("Failed to get debug user info from token")
 
     return {
         "auth_provider": settings.AUTH_PROVIDER,
         "has_auth_header": bool(auth_header),
         "auth_header_preview": auth_header[:50] + "..." if auth_header and len(auth_header) > 50 else auth_header,
-        "effective_user_id": str(effective_user_id),  # Keep as string for JSON serialization
-        "current_user": {
-            "id": current_user.id if current_user else None,
-            "email": current_user.email if current_user else None,
-            "name": current_user.name if current_user else None,
-        } if current_user else None,
-        "is_default_user": effective_user_id == UUID("00000000-0000-0000-0000-000000000001"),
+        "effective_user_id": str(user_id),
+        "current_user": current_user_info,
+        "is_default_user": user_id == DEFAULT_USER_ID,
     }

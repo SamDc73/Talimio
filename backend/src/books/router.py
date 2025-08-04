@@ -8,7 +8,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, sta
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
-from src.auth.dependencies import UserId
+from src.auth import UserId
 from src.database.session import DbSession
 from src.storage.factory import get_storage_provider
 
@@ -67,6 +67,7 @@ def _build_progress_dict(progress_data: BookProgressUpdate) -> dict:
 def _convert_to_progress_response(progress: dict, book_id: UUID, user_id: UUID) -> BookProgressResponse:
     """Convert progress dict to response format."""
     from datetime import UTC, datetime
+
     return BookProgressResponse(
         id=progress.get("id", UUID("00000000-0000-0000-0000-000000000000")),
         book_id=book_id,
@@ -78,7 +79,7 @@ def _convert_to_progress_response(progress: dict, book_id: UUID, user_id: UUID) 
         total_pages_read=progress.get("page", 1),  # Add this field
         last_read_at=progress.get("last_accessed_at", progress.get("last_read_at")),
         created_at=progress.get("created_at", datetime.now(UTC)),
-        updated_at=progress.get("updated_at", datetime.now(UTC))
+        updated_at=progress.get("updated_at", datetime.now(UTC)),
     )
 
 
@@ -110,8 +111,7 @@ async def list_books(
 
         if not result.get("success"):
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get("error", "Failed to get books")
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result.get("error", "Failed to get books")
             )
 
         books = result.get("books", [])
@@ -120,7 +120,8 @@ async def list_books(
         if search:
             search_lower = search.lower()
             books = [
-                book for book in books
+                book
+                for book in books
                 if search_lower in (book.title or "").lower()
                 or search_lower in (book.author or "").lower()
                 or search_lower in (book.description or "").lower()
@@ -128,10 +129,7 @@ async def list_books(
 
         # Apply tag filter if provided
         if tags:
-            books = [
-                book for book in books
-                if any(tag in (book.tags or []) for tag in tags)
-            ]
+            books = [book for book in books if any(tag in (book.tags or []) for tag in tags)]
 
         # Pagination
         total = len(books)
@@ -150,10 +148,7 @@ async def list_books(
         raise
     except Exception as e:
         logger.exception(f"Error listing books: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.get("/{book_id}")
@@ -164,13 +159,9 @@ async def get_book_endpoint(book_id: UUID, user_id: UserId) -> BookWithProgress:
 
         if not result.get("success"):
             if "not found" in result.get("error", "").lower():
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Book not found"
-                )
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get("error", "Failed to get book")
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result.get("error", "Failed to get book")
             )
 
         book = result.get("book", {})
@@ -178,6 +169,7 @@ async def get_book_endpoint(book_id: UUID, user_id: UserId) -> BookWithProgress:
 
         # Convert to BookWithProgress format
         from datetime import UTC, datetime
+
         return BookWithProgress(
             **book,
             progress=BookProgressResponse(
@@ -191,17 +183,16 @@ async def get_book_endpoint(book_id: UUID, user_id: UserId) -> BookWithProgress:
                 total_pages_read=progress.get("page", 1),  # Add this field
                 last_read_at=progress.get("last_read_at"),
                 created_at=progress.get("created_at", datetime.now(UTC)),
-                updated_at=progress.get("updated_at", datetime.now(UTC))
-            ) if progress else None
+                updated_at=progress.get("updated_at", datetime.now(UTC)),
+            )
+            if progress
+            else None,
         )
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(f"Error getting book {book_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.post("/extract-metadata")
@@ -306,6 +297,7 @@ async def create_book_endpoint(
 
         # Calculate file hash
         import hashlib
+
         file_hash = hashlib.sha256(file_content).hexdigest()
 
         # Build book data combining form data with extracted metadata
@@ -327,10 +319,7 @@ async def create_book_endpoint(
 
         # Upload book through facade
         result = await books_facade.upload_book(
-            file_path=file_path,
-            title=title,
-            user_id=user_id,
-            metadata=book_metadata
+            file_path=file_path, title=title, user_id=user_id, metadata=book_metadata
         )
 
         if not result.get("success"):
@@ -340,8 +329,7 @@ async def create_book_endpoint(
             except Exception:
                 logger.debug("Failed to clean up uploaded file")
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get("error", "Failed to create book")
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result.get("error", "Failed to create book")
             )
 
         book = result.get("book", {})
@@ -351,18 +339,11 @@ async def create_book_endpoint(
         raise
     except Exception as e:
         logger.exception(f"Error creating book: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.patch("/{book_id}")
-async def update_book_endpoint(
-    book_id: UUID,
-    book_data: BookUpdate,
-    user_id: UserId
-) -> BookResponse:
+async def update_book_endpoint(book_id: UUID, book_data: BookUpdate, user_id: UserId) -> BookResponse:
     """Update book details."""
     try:
         # Convert Pydantic model to dict
@@ -372,8 +353,7 @@ async def update_book_endpoint(
 
         if not result.get("success"):
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get("error", "Failed to update book")
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result.get("error", "Failed to update book")
             )
 
         book = result.get("book", {})
@@ -382,10 +362,7 @@ async def update_book_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
         logger.exception(f"Error updating book {book_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.delete("/{book_id}")
@@ -394,18 +371,12 @@ async def delete_book_endpoint(book_id: UUID, user_id: UserId) -> None:
     try:
         success = await books_facade.delete_book(book_id, user_id)
         if not success:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Book not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(f"Error deleting book {book_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.put("/{book_id}/progress")
@@ -429,7 +400,7 @@ async def update_book_progress_endpoint(
         if not result.get("success"):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get("error", "Failed to update progress")
+                detail=result.get("error", "Failed to update progress"),
             )
 
         progress = result.get("progress", {})
@@ -438,10 +409,7 @@ async def update_book_progress_endpoint(
         raise
     except Exception as e:
         logger.exception(f"Error updating book progress: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.post("/{book_id}/progress")
@@ -463,24 +431,15 @@ async def serve_book_file(book_id: UUID, user_id: UserId, db: DbSession) -> File
 
     from src.books.models import Book
 
-    query = select(Book).where(
-        Book.id == book_id,
-        Book.user_id == user_id
-    )
+    query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
     result = await db.execute(query)
     book = result.scalar_one_or_none()
 
     if not book:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Book not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
 
     if not book.file_path:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Book file not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book file not found")
 
     # Get storage provider and download URL
     storage = get_storage_provider()
@@ -509,10 +468,7 @@ async def extract_table_of_contents(book_id: UUID, user_id: UserId) -> BookRespo
         result = await books_facade.get_book_with_progress(book_id, user_id)
 
         if not result.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Book not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
 
         book = result.get("book", {})
         return BookResponse.model_validate(book)
@@ -520,10 +476,7 @@ async def extract_table_of_contents(book_id: UUID, user_id: UserId) -> BookRespo
         raise
     except Exception as e:
         logger.exception(f"Error extracting ToC for book {book_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.get("/{book_id}/chapters")
@@ -539,14 +492,8 @@ async def get_book_chapters_endpoint(book_id: UUID, user_id: UserId) -> list[dic
             # Check if it's a "not found" error
             error_msg = result.get("error", "Failed to get chapters")
             if "not found" in error_msg.lower():
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Book {book_id} not found"
-                )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=error_msg
-            )
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Book {book_id} not found")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_msg)
 
         return result.get("chapters", [])
         # Return raw TOC data - don't try to validate as BookChapterResponse
@@ -554,10 +501,7 @@ async def get_book_chapters_endpoint(book_id: UUID, user_id: UserId) -> list[dic
         raise
     except Exception as e:
         logger.exception(f"Error getting book chapters: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @router.put("/{book_id}/chapters/{chapter_id}/status")
@@ -571,14 +515,12 @@ async def update_book_chapter_status_endpoint(
     try:
         # Use mark_chapter_complete on the facade
         completed = status_data.status == "completed"
-        result = await books_facade.mark_chapter_complete(
-            book_id, user_id, str(chapter_id), completed
-        )
+        result = await books_facade.mark_chapter_complete(book_id, user_id, str(chapter_id), completed)
 
         if not result.get("success"):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get("error", "Failed to update chapter status")
+                detail=result.get("error", "Failed to update chapter status"),
             )
 
         # Return a chapter response - for now just return success
@@ -589,16 +531,13 @@ async def update_book_chapter_status_endpoint(
             status=status_data.status,
             completed_at=None,
             created_at=None,
-            updated_at=None
+            updated_at=None,
         )
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(f"Error updating chapter status: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 class RAGStatusResponse(BaseModel):
@@ -625,17 +564,14 @@ async def get_book_rag_status(book_id: UUID) -> RAGStatusResponse:
         book = result.scalar_one_or_none()
 
         if not book:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Book not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
 
         # Generate status message
         status_messages = {
             "pending": "Book is ready to read! AI chat will be available once processing completes.",
             "processing": "Book is being processed for AI chat. You can start reading now!",
             "completed": "Book is ready! AI chat is now available.",
-            "failed": "Processing failed. AI chat is not available, but you can still read the book."
+            "failed": "Processing failed. AI chat is not available, but you can still read the book.",
         }
 
         # Get chunk count if available
@@ -643,9 +579,9 @@ async def get_book_rag_status(book_id: UUID) -> RAGStatusResponse:
         if book.rag_status in ["completed", "processing"]:
             try:
                 from sqlalchemy import text
+
                 count_result = await session.execute(
-                    text("SELECT COUNT(*) FROM rag_document_chunks WHERE doc_id = :doc_id"),
-                    {"doc_id": str(book_id)}
+                    text("SELECT COUNT(*) FROM rag_document_chunks WHERE doc_id = :doc_id"), {"doc_id": str(book_id)}
                 )
                 chunk_count = count_result.scalar()
             except Exception:
@@ -662,5 +598,5 @@ async def get_book_rag_status(book_id: UUID) -> RAGStatusResponse:
             rag_processed_at=book.rag_processed_at.isoformat() if book.rag_processed_at else None,
             message=status_messages.get(book.rag_status, "Unknown status"),
             chunk_count=chunk_count,
-            error_details=error_details
+            error_details=error_details,
         )

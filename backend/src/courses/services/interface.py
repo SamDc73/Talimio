@@ -39,7 +39,9 @@ class ICourseService(Protocol):
         """List courses with pagination and optional search."""
         ...
 
-    async def update_course(self, course_id: UUID, request: CourseUpdate, user_id: UUID | None = None) -> CourseResponse:
+    async def update_course(
+        self, course_id: UUID, request: CourseUpdate, user_id: UUID | None = None
+    ) -> CourseResponse:
         """Update a course."""
         ...
 
@@ -90,7 +92,12 @@ class ICourseService(Protocol):
         ...
 
     async def update_lesson_status(
-        self, course_id: UUID, module_id: UUID, lesson_id: UUID, request: LessonStatusUpdate, user_id: UUID | None = None
+        self,
+        course_id: UUID,
+        module_id: UUID,
+        lesson_id: UUID,
+        request: LessonStatusUpdate,
+        user_id: UUID | None = None,
     ) -> LessonStatusResponse:
         """Update the status of a specific lesson."""
         ...

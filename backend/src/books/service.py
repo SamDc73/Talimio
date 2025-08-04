@@ -16,7 +16,6 @@ from src.books.schemas import (
     BookUpdate,
     TableOfContentsItem,
 )
-from src.core.mode_aware_service import ModeAwareService
 from src.database.pagination import Paginator
 from src.database.session import async_session_maker
 from src.storage.factory import get_storage_provider
@@ -35,12 +34,11 @@ def parse_book_id(book_id: str) -> UUID:
         raise ValueError(msg) from e
 
 
-class BookService(ModeAwareService):
+class BookService:
     """Service for managing books."""
 
     def __init__(self) -> None:
         """Initialize the book service."""
-        super().__init__()
 
     def _book_to_dict(self, book: Book) -> dict[str, Any]:
         """Convert Book SQLAlchemy object to dict to avoid lazy loading issues."""
@@ -98,17 +96,13 @@ class BookService(ModeAwareService):
                 title=item.get("title", ""),
                 page=item.get("page", 1),
                 children=children,
-                level=item.get("level", 0)
+                level=item.get("level", 0),
             )
             result.append(toc_item)
         return result
 
     async def process_book_upload(
-        self,
-        file_path: str,
-        title: str,
-        user_id: UUID,
-        additional_metadata: dict[str, Any] | None = None
+        self, file_path: str, title: str, user_id: UUID, additional_metadata: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """Process book file upload and create book record."""
         try:
@@ -129,7 +123,7 @@ class BookService(ModeAwareService):
                 language=metadata.get("language", "en"),
                 publication_year=metadata.get("publication_year"),
                 publisher=metadata.get("publisher"),
-                tags=metadata.get("tags", [])
+                tags=metadata.get("tags", []),
             )
 
             # Add extra fields for internal use
@@ -146,28 +140,18 @@ class BookService(ModeAwareService):
             async with async_session_maker() as db:
                 book_response = await self.create_book(db, book_data, user_id, extra_data)
 
-                return {
-                    "book": book_response.model_dump(),
-                    "success": True
-                }
+                return {"book": book_response.model_dump(), "success": True}
 
         except Exception as e:
             logger.exception(f"Error processing book upload: {e}")
-            return {
-                "error": str(e),
-                "success": False
-            }
+            return {"error": str(e), "success": False}
 
     async def create_book(
         self, db: AsyncSession, book_data: BookCreate, user_id: UUID, extra_data: dict[str, Any] | None = None
     ) -> BookResponse:
         """Create a new book record."""
-        # Log the access
-        self.log_access("create", user_id, "book")
-
         # Get the user ID for creation
-        query_builder = self.get_query_builder(Book)
-        user_id_for_creation = query_builder.apply_user_filter_for_creation(user_id)
+        user_id_for_creation = user_id
 
         # Merge extra data if provided
         extra_data = extra_data or {}
@@ -252,13 +236,8 @@ class BookService(ModeAwareService):
         tags: list[str] | None = None,
     ) -> BookListResponse:
         """Get paginated list of books with optional filtering."""
-        # Log the access
-        self.log_access("list", user_id, "book")
-
         # Apply user filtering first
-        query_builder = self.get_query_builder(Book)
-        base_query = select(Book)
-        query = query_builder.apply_user_filter(base_query, user_id)
+        query = select(Book).where(Book.user_id == user_id)
 
         # Apply filters
         filters = []
@@ -300,18 +279,12 @@ class BookService(ModeAwareService):
 
     async def get_book(self, db: AsyncSession, book_id: str, user_id: UUID) -> BookResponse:
         """Get a single book by UUID."""
-        # Log the access
-        self.log_access("get", user_id, "book", book_id)
-
         # Convert string UUID to UUID object
         book_id_obj = parse_book_id(book_id)
 
         # Apply user filtering
-        query_builder = self.get_query_builder(Book)
-        base_query = select(Book).where(Book.id == book_id_obj)
-        filtered_query = query_builder.apply_user_filter(base_query, user_id)
-
-        result = await db.execute(filtered_query)
+        query = select(Book).where(Book.id == book_id_obj, Book.user_id == user_id)
+        result = await db.execute(query)
         book = result.scalar_one_or_none()
 
         if not book:
@@ -319,7 +292,7 @@ class BookService(ModeAwareService):
             raise ValueError(msg)
 
         # Validate user ownership
-        if not query_builder.validate_user_ownership(book, user_id):
+        if book.user_id != user_id:
             msg = f"Book with ID {book_id} not found"
             raise ValueError(msg)
 
@@ -327,18 +300,12 @@ class BookService(ModeAwareService):
 
     async def update_book(self, db: AsyncSession, book_id: str, update_data: BookUpdate, user_id: UUID) -> BookResponse:
         """Update book metadata."""
-        # Log the access
-        self.log_access("update", user_id, "book", book_id)
-
         # Convert string UUID to UUID object
         book_id_obj = parse_book_id(book_id)
 
         # Apply user filtering
-        query_builder = self.get_query_builder(Book)
-        base_query = select(Book).where(Book.id == book_id_obj)
-        filtered_query = query_builder.apply_user_filter(base_query, user_id)
-
-        result = await db.execute(filtered_query)
+        query = select(Book).where(Book.id == book_id_obj, Book.user_id == user_id)
+        result = await db.execute(query)
         book = result.scalar_one_or_none()
 
         if not book:
@@ -346,7 +313,7 @@ class BookService(ModeAwareService):
             raise ValueError(msg)
 
         # Validate user ownership
-        if not query_builder.validate_user_ownership(book, user_id):
+        if book.user_id != user_id:
             msg = f"Book with ID {book_id} not found"
             raise ValueError(msg)
 
@@ -373,18 +340,12 @@ class BookService(ModeAwareService):
 
     async def delete_book(self, db: AsyncSession, book_id: str, user_id: UUID) -> None:
         """Delete a book."""
-        # Log the access
-        self.log_access("delete", user_id, "book", book_id)
-
         # Convert string UUID to UUID object
         book_id_obj = parse_book_id(book_id)
 
         # Apply user filtering
-        query_builder = self.get_query_builder(Book)
-        base_query = select(Book).where(Book.id == book_id_obj)
-        filtered_query = query_builder.apply_user_filter(base_query, user_id)
-
-        result = await db.execute(filtered_query)
+        query = select(Book).where(Book.id == book_id_obj, Book.user_id == user_id)
+        result = await db.execute(query)
         book = result.scalar_one_or_none()
 
         if not book:
@@ -392,7 +353,7 @@ class BookService(ModeAwareService):
             raise ValueError(msg)
 
         # Validate user ownership
-        if not query_builder.validate_user_ownership(book, user_id):
+        if book.user_id != user_id:
             msg = f"Book with ID {book_id} not found"
             raise ValueError(msg)
 
@@ -414,10 +375,7 @@ class BookService(ModeAwareService):
                 logger.exception(f"Failed to delete file from storage: {e}")
 
     async def search_books(
-        self,
-        query: str,
-        user_id: UUID,
-        filters: dict[str, Any] | None = None
+        self, query: str, user_id: UUID, filters: dict[str, Any] | None = None
     ) -> list[BookResponse]:
         """Search books with filters."""
         async with async_session_maker() as db:
@@ -428,7 +386,7 @@ class BookService(ModeAwareService):
                 search=query,
                 tags=filters.get("tags") if filters else None,
                 page=1,
-                size=50  # Reasonable limit for search results
+                size=50,  # Reasonable limit for search results
             )
             return result.items
 
@@ -440,7 +398,7 @@ class BookService(ModeAwareService):
                 db=db,
                 user_id=user_id,
                 page=1,
-                size=1000  # Large limit to get all books
+                size=1000,  # Large limit to get all books
             )
             return result.items
 
@@ -450,11 +408,8 @@ class BookService(ModeAwareService):
         book_id_obj = parse_book_id(book_id)
 
         # Get the book with user filtering (following video service pattern)
-        query_builder = self.get_query_builder(Book)
-        base_query = select(Book).where(Book.id == book_id_obj)
-        filtered_query = query_builder.apply_user_filter(base_query, user_id)
-
-        result = await db.execute(filtered_query)
+        query = select(Book).where(Book.id == book_id_obj, Book.user_id == user_id)
+        result = await db.execute(query)
         book = result.scalar_one_or_none()
 
         if not book:
@@ -480,19 +435,13 @@ class BookService(ModeAwareService):
 
         return []
 
-    async def extract_and_update_toc(
-        self,
-        db: AsyncSession,
-        book_id: str,
-        user_id: UUID
-    ) -> BookResponse:
+    async def extract_and_update_toc(self, db: AsyncSession, book_id: str, user_id: UUID) -> BookResponse:
         """Extract and update table of contents for a book."""
         # Get the book
         return await self.get_book(db, book_id, user_id)
 
         # TODO: Implement actual TOC extraction logic
         # For now, just return the book as-is
-
 
 
 # Service instance

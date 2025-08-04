@@ -46,7 +46,6 @@ class CourseCreationService:
             self._logger.exception(f"Failed to initialize memory service: {e}")
             self.memory_service = None
 
-
     async def create_course(self, request: CourseCreate, user_id: UUID) -> CourseResponse:
         """Create a new course using AI generation.
 
@@ -96,10 +95,7 @@ class CourseCreationService:
 
             # Check for duplicate title (basic validation)
             title = course_title
-            existing_query = select(Roadmap).where(
-                Roadmap.title == title,
-                Roadmap.user_id == user_id
-            )
+            existing_query = select(Roadmap).where(Roadmap.title == title, Roadmap.user_id == user_id)
             existing_course = await self.session.execute(existing_query)
             if existing_course.scalar_one_or_none():
                 # Add timestamp to make it unique
@@ -127,6 +123,7 @@ class CourseCreationService:
             # Apply automatic tagging (non-blocking - don't fail course creation if tagging fails)
             try:
                 from src.tagging.service import apply_automatic_tagging_to_course
+
                 await apply_automatic_tagging_to_course(self.session, roadmap, modules_data)
                 await self.session.commit()
                 await self.session.refresh(roadmap)
@@ -144,34 +141,26 @@ class CourseCreationService:
                             "title": roadmap.title,
                             "description": roadmap.description,
                             "modules": modules_data,
-                        }
+                        },
                     )
                 except Exception as e:
                     self._logger.warning("Failed to store course in memory service: %s", e)
 
             self._logger.info("Successfully created course %s for user %s", roadmap.id, user_id)
 
-            return self.response_builder.build_course_response_from_roadmap(
-                roadmap, modules_data
-            )
+            return self.response_builder.build_course_response_from_roadmap(roadmap, modules_data)
 
         except AIServiceError as e:
             self._logger.exception("AI service error during course creation")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"AI service error: {e!s}"
-            ) from e
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"AI service error: {e!s}") from e
         except Exception as e:
             self._logger.exception("Unexpected error during course creation")
             await self.session.rollback()
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create course"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create course"
             ) from e
 
-    async def _create_modules_and_lessons(
-        self, roadmap_id: UUID, nodes_data: list
-    ) -> list[ModuleResponse]:
+    async def _create_modules_and_lessons(self, roadmap_id: UUID, nodes_data: list) -> list[ModuleResponse]:
         """Create modules and lessons from AI-generated data.
 
         Args:
@@ -215,9 +204,7 @@ class CourseCreationService:
                 await self.session.flush()
 
                 # Add lesson to lessons_data list
-                lessons_data.append(
-                    self.response_builder.build_lesson_response(lesson_node)
-                )
+                lessons_data.append(self.response_builder.build_lesson_response(lesson_node))
 
             modules_data.append(
                 ModuleResponse(
@@ -237,4 +224,3 @@ class CourseCreationService:
             )
 
         return modules_data
-
