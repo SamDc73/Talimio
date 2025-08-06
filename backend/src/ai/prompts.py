@@ -130,12 +130,30 @@ Create a detailed, engaging lesson that includes:
 
 Requirements:
 - Write in clear, conversational tone
-- Use proper Markdown formatting (headers, lists, code blocks, etc.)
-- Include code examples where relevant
+- Use standard Markdown formatting (headers, lists, code blocks, etc.)
+- Include code examples in properly formatted code blocks (```language)
 - Target length: 1000+ words
 - Make it engaging and practical
 
-Remember: You're not just conveying information, you're inspiring learning!
+CRITICAL FORMATTING RULES FOR MDX COMPATIBILITY:
+- Use only standard Markdown syntax - NO custom expressions or braces {{}} outside of code blocks
+- When referencing variables or dynamic content, write them as plain text
+- Use backticks for inline code: `variableName` or `functionName()`
+- Use triple backticks for code blocks: ```python or ```javascript
+- Do NOT use curly braces {{}} anywhere except inside code block examples
+- Avoid any syntax that could be interpreted as JavaScript expressions
+- Write all text content as plain Markdown without dynamic expressions
+
+HTML/XML TAG RULES (CRITICAL FOR MDX):
+- NEVER use HTML tags like <div>, <span>, <br>, etc. - use Markdown equivalents instead
+- If you must use HTML tags in examples, they MUST be inside code blocks
+- All self-closing tags must use proper syntax: <br /> not <br>
+- Never use partial tags or unclosed tags
+- Never use HTML comments <!-- --> outside of code blocks
+- For line breaks, use two spaces at end of line or double newline
+- For emphasis, use Markdown (*italic*, **bold**) not HTML tags
+
+Remember: You're creating educational content that will be processed as Markdown, so stick to standard Markdown syntax only!
 """
 
 # Assistant Chat Prompts

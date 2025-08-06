@@ -122,14 +122,15 @@ class LessonQueryService:
         # Generate content if requested and missing
         if generate and not lesson.content:
             try:
-                # In simplified backend, modules ARE lessons, so we use lesson data directly
+                # Build proper context that matches what create_lesson_body expects
                 context = {
+                    "title": lesson.title,  # This is what _extract_lesson_metadata expects
+                    "description": lesson.description or "",
+                    "skill_level": course.skill_level or "beginner",
+                    "roadmap_id": str(course.id) if course.id else None,
                     "course_title": course.title,
                     "course_description": course.description,
-                    "module_title": lesson.title,  # Use lesson title as module title
-                    "module_description": lesson.description,  # Use lesson description
-                    "lesson_title": lesson.title,
-                    "lesson_description": lesson.description,
+                    "original_user_prompt": course.description,  # Use course description as fallback
                 }
 
                 content, citations = await create_lesson_body(context)
@@ -150,6 +151,7 @@ class LessonQueryService:
             description=lesson.description,
             slug=lesson.title.lower().replace(" ", "-"),
             md_source=lesson.content or "",
+            content=lesson.content or "",  # Also set content field for frontend compatibility
             html_cache=None,
             citations=[],
             created_at=lesson.created_at,
