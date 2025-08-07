@@ -1,35 +1,29 @@
-import { ArrowLeft, CheckCircle, RotateCcw } from "lucide-react";
-import { Button } from "@/components/button";
-import { useTextSelectionTooltip } from "@/hooks/useTextSelectionTooltip";
-import { cn } from "@/lib/utils";
-import { ContentRenderer } from "./ContentRenderer";
-import "./LessonViewer.css";
+import { ArrowLeft, CheckCircle, RotateCcw } from "lucide-react"
+import { Button } from "@/components/button"
+import { useTextSelectionTooltip } from "@/hooks/useTextSelectionTooltip"
+import { cn } from "@/lib/utils"
+import { ContentRenderer } from "./ContentRenderer"
+import "./LessonViewer.css"
+
+// Define stable handlers outside component to prevent recreating them
+const handleHighlight = (text) => {
+	console.log("Highlight in lesson:", text)
+	// Add highlight functionality here in the future
+}
+
+const handleAskAI = (text) => {
+	console.log("Ask AI about lesson text:", text)
+	// Add AI functionality here in the future
+}
 
 /**
  * Simplified lesson viewer component
  */
-export function LessonViewer({
-	lesson,
-	isLoading,
-	error,
-	onBack,
-	onMarkComplete,
-	onRegenerate,
-	isDarkMode = false,
-}) {
-	// Set up text selection handlers for lessons
-	useTextSelectionTooltip(
-		(text) => {
-			console.log("Highlight in lesson:", text);
-			// Add highlight functionality here in the future
-		},
-		(text) => {
-			console.log("Ask AI about lesson text:", text);
-			// Add AI functionality here in the future
-		},
-	);
-	// Loading state
-	if (isLoading) {
+export function LessonViewer({ lesson, isLoading, error, onBack, onMarkComplete, onRegenerate, isDarkMode = false }) {
+	// Set up text selection handlers for lessons with stable references
+	useTextSelectionTooltip(handleHighlight, handleAskAI)
+	// Loading state - keep component mounted, just show loading overlay
+	if (isLoading && !lesson) {
 		return (
 			<div className="h-[calc(100vh-4rem)] overflow-y-auto w-full">
 				<div className="flex flex-col items-center justify-center min-h-full text-zinc-500">
@@ -37,29 +31,43 @@ export function LessonViewer({
 					<p>Loading lesson...</p>
 				</div>
 			</div>
-		);
+		)
 	}
 
 	// Error state
 	if (error) {
 		return (
 			<div className="h-[calc(100vh-4rem)] overflow-y-auto w-full">
-				<div className="flex flex-col items-center justify-center min-h-full text-red-600">
-					<div className="max-w-3xl mx-auto p-6 bg-red-50 rounded-lg border border-red-200">
-						<h2 className="text-xl font-semibold mb-4">Error loading lesson</h2>
-						<p className="mb-4">{error}</p>
-						<Button
-							onClick={onBack}
-							variant="outline"
-							className="flex items-center gap-2"
-						>
-							<ArrowLeft className="w-4 h-4" />
-							Back
-						</Button>
+				<div className="flex flex-col items-center justify-center min-h-full">
+					<div className="max-w-3xl mx-auto p-6 bg-amber-50 rounded-lg border border-amber-200">
+						<h2 className="text-xl font-semibold mb-4 text-amber-900">Unable to Load Lesson Content</h2>
+						<p className="mb-4 text-amber-800">{error}</p>
+						<div className="flex gap-3">
+							<Button
+								onClick={() => window.location.reload()}
+								variant="default"
+								className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700"
+							>
+								<RotateCcw className="w-4 h-4" />
+								Retry
+							</Button>
+							<Button onClick={onBack} variant="outline" className="flex items-center gap-2">
+								<ArrowLeft className="w-4 h-4" />
+								Back
+							</Button>
+						</div>
+						<div className="mt-4 text-sm text-amber-700">
+							<p>If this problem persists, it may be due to:</p>
+							<ul className="list-disc list-inside mt-2 space-y-1">
+								<li>AI service temporarily unavailable</li>
+								<li>Network connectivity issues</li>
+								<li>Content generation taking longer than expected</li>
+							</ul>
+						</div>
 					</div>
 				</div>
 			</div>
-		);
+		)
 	}
 
 	// No lesson state
@@ -70,18 +78,14 @@ export function LessonViewer({
 					<div className="max-w-3xl mx-auto p-6 bg-zinc-50 rounded-lg border border-zinc-200">
 						<h2 className="text-xl font-semibold mb-4">No lesson available</h2>
 						<p className="mb-4">This lesson could not be loaded.</p>
-						<Button
-							onClick={onBack}
-							variant="outline"
-							className="flex items-center gap-2"
-						>
+						<Button onClick={onBack} variant="outline" className="flex items-center gap-2">
 							<ArrowLeft className="w-4 h-4" />
 							Back
 						</Button>
 					</div>
 				</div>
 			</div>
-		);
+		)
 	}
 
 	return (
@@ -90,9 +94,7 @@ export function LessonViewer({
 				<div
 					className={cn(
 						"w-full rounded-xl border shadow-sm flex flex-col my-8",
-						isDarkMode
-							? "bg-zinc-900 border-zinc-800"
-							: "bg-white border-zinc-200",
+						isDarkMode ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200"
 					)}
 				>
 					{/* Header */}
@@ -101,7 +103,7 @@ export function LessonViewer({
 							"border-b p-6",
 							isDarkMode
 								? "border-zinc-800 bg-gradient-to-r from-emerald-900/20 to-teal-900/20"
-								: "border-zinc-200 bg-gradient-to-r from-emerald-50 to-teal-50",
+								: "border-zinc-200 bg-gradient-to-r from-emerald-50 to-teal-50"
 						)}
 					>
 						<div className="flex items-center justify-between mb-4">
@@ -112,7 +114,7 @@ export function LessonViewer({
 									"flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
 									isDarkMode
 										? "bg-emerald-900/30 text-emerald-400 hover:bg-emerald-900/50"
-										: "bg-emerald-100 text-emerald-700 hover:bg-emerald-200",
+										: "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
 								)}
 							>
 								<ArrowLeft className="w-4 h-4" /> Back
@@ -132,11 +134,7 @@ export function LessonViewer({
 								)}
 
 								{onMarkComplete && (
-									<Button
-										onClick={() => onMarkComplete(lesson.id)}
-										size="sm"
-										className="flex items-center gap-1"
-									>
+									<Button onClick={() => onMarkComplete(lesson.id)} size="sm" className="flex items-center gap-1">
 										<CheckCircle className="w-4 h-4" />
 										Complete
 									</Button>
@@ -144,12 +142,7 @@ export function LessonViewer({
 							</div>
 						</div>
 
-						<h1
-							className={cn(
-								"text-3xl font-bold",
-								isDarkMode ? "text-white" : "text-zinc-900",
-							)}
-						>
+						<h1 className={cn("text-3xl font-bold", isDarkMode ? "text-white" : "text-zinc-900")}>
 							{lesson.title || lesson.slug || "Lesson"}
 						</h1>
 					</div>
@@ -158,7 +151,7 @@ export function LessonViewer({
 					<div
 						className={cn(
 							"p-6 md:p-8 prose prose-lg max-w-none",
-							isDarkMode ? "prose-invert prose-emerald" : "prose-emerald",
+							isDarkMode ? "prose-invert prose-emerald" : "prose-emerald"
 						)}
 					>
 						<ContentRenderer content={lesson.md_source || lesson.content} />
@@ -166,5 +159,5 @@ export function LessonViewer({
 				</div>
 			</div>
 		</div>
-	);
+	)
 }

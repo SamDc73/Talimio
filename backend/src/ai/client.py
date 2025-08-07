@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -8,6 +9,10 @@ from uuid import UUID
 
 from litellm import acompletion
 
+from src.ai.constants import (
+    AI_REQUEST_TIMEOUT,
+    MAX_AI_RETRIES,
+)
 from src.ai.prompts import (
     CONTENT_TAGGING_PROMPT,
     LESSON_GENERATION_PROMPT,
@@ -17,10 +22,6 @@ from src.ai.rag.service import RAGService
 from src.config.settings import get_settings
 from src.core.exceptions import DomainError, ValidationError
 from src.database.session import async_session_maker
-
-
-# Constants
-MIN_LESSON_CONTENT_LENGTH = 100
 
 
 class AIError(DomainError):
@@ -126,7 +127,7 @@ class ModelManager:
             user_messages = [msg for msg in messages if msg.get("role") == "user"]
             current_query = user_messages[-1].get("content", "") if user_messages else ""
 
-            # Get memory context
+            # Get memory context from service
             memory_context = await self.memory_wrapper.build_memory_context(user_id, current_query)
 
             # Prepend memory context to system message if available
@@ -178,45 +179,97 @@ Please use this context to personalize your response appropriately."""
         # Get completion using existing method
         return await self.get_completion(messages, format_json=format_json)
 
-    async def get_completion(
+    def _parse_json_content(self, content: str) -> dict[str, Any] | list[Any]:
+        """Parse JSON content from AI response."""
+        content = content.strip()
+        content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.IGNORECASE)
+        content = re.sub(r"\s*```$", "", content, flags=re.IGNORECASE)
+        return json.loads(content.strip())
+
+    def _handle_api_error(self, e: Exception) -> None:
+        """Handle API errors with helpful messages."""
+        self._logger.exception("Error getting completion from AI")
+
+        if "AuthenticationError" in str(e) or "401" in str(e):
+            model_provider = self.model.split("/")[0].upper()
+            msg = (
+                "AI API authentication failed. Please check your API key configuration:\n"
+                f"1. Ensure {model_provider}_API_KEY is set in your .env file\n"
+                "2. Verify the API key is valid and not expired\n"
+                "3. Check your API account has credits/quota available"
+            )
+        elif "RateLimitError" in str(e) or "429" in str(e):
+            msg = "AI API rate limit exceeded. Please wait and try again."
+        elif "InsufficientQuota" in str(e) or "402" in str(e):
+            msg = "AI API quota exceeded. Please check your billing or upgrade your plan."
+        else:
+            msg = f"Failed to generate content: {e!s}"
+        raise AIError(msg) from e
+
+    async def _make_completion_request(self, messages: list[dict[str, str]]) -> str:
+        """Make a single completion request to the AI API."""
+        response = await acompletion(
+            model=self.model,
+            messages=messages,
+            temperature=0.7,
+            timeout=AI_REQUEST_TIMEOUT,
+        )
+        return getattr(response, "choices", [{}])[0].get("message", {}).get("content", "")
+
+    async def get_completion(  # noqa: C901
         self,
         messages: list[dict[str, str]] | Sequence[dict[str, str]],
         *,
         format_json: bool = True,
+        max_retries: int = MAX_AI_RETRIES,
     ) -> str | dict[str, Any] | list[Any]:
-        """Get completion from the specified AI model."""
-        try:
-            response = await acompletion(
-                model=self.model,
-                messages=list(messages),
-                temperature=0.7,
-                max_tokens=4000,
-            )
+        """Get completion from the specified AI model with retry logic for JSON parsing errors."""
+        last_error = None
+        messages_list = list(messages)
 
-            content = getattr(response, "choices", [{}])[0].get("message", {}).get("content", "")
+        for attempt in range(max_retries):
+            try:
+                content = await self._make_completion_request(messages_list)
 
-            if format_json and content:
-                content = content.strip()
-                content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.IGNORECASE)
-                content = re.sub(r"\s*```$", "", content, flags=re.IGNORECASE)
-                return json.loads(content.strip())
+                if format_json and content:
+                    try:
+                        return self._parse_json_content(content)
+                    except json.JSONDecodeError as json_error:
+                        last_error = json_error
+                        if attempt < max_retries - 1:
+                            self._logger.warning(
+                                "JSON parsing failed on attempt %d/%d. Retrying...",
+                                attempt + 1,
+                                max_retries,
+                            )
+                            continue
+                        raise
 
-            return content or "No response from AI model"
+                return content or "No response from AI model"
 
-        except Exception as e:
-            self._logger.exception("Error getting completion from AI")
-            # Provide more helpful error messages for common issues
-            if "AuthenticationError" in str(e) or "401" in str(e):
-                msg = (
-                    "AI API authentication failed. Please check your API key configuration:\n"
-                    f"1. Ensure {self.model.split('/')[0].upper()}_API_KEY is set in your .env file\n"
-                    "2. Verify the API key is valid and not expired\n"
-                    "3. For OpenAI: keys should start with 'sk-' and be ~50 characters\n"
-                    "4. Check your API account has credits/quota available"
-                )
-            else:
-                msg = f"Failed to generate content: {e!s}"
-            raise AIError(msg) from e
+            except json.JSONDecodeError:
+                if attempt == max_retries - 1:
+                    raise
+            except (AttributeError, KeyError) as e:
+                self._logger.exception("Invalid response structure from AI")
+                error_msg = f"AI response has unexpected structure: {e!s}"
+                raise AIError(error_msg) from e
+            except TimeoutError as e:
+                self._logger.exception("AI request timed out")
+                if attempt < max_retries - 1:
+                    self._logger.info("Retrying after timeout (attempt %d/%d)", attempt + 1, max_retries)
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                error_msg = "AI request timed out after multiple attempts"
+                raise AIError(error_msg) from e
+            except Exception as e:
+                self._handle_api_error(e)
+
+        if last_error:
+            msg = f"Failed to parse JSON after {max_retries} attempts: {last_error!s}"
+            raise AIError(msg) from last_error
+
+        return None
 
     def _format_tools_for_api(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Format tools for API compatibility."""
@@ -518,16 +571,106 @@ Please use this context to personalize your response appropriately."""
 
         return validated_nodes
 
+    def _validate_roadmap_params(self, min_core_topics: int, max_core_topics: int, sub_min: int, sub_max: int) -> None:
+        """Validate roadmap generation parameters.
+
+        Args:
+            min_core_topics: Minimum number of core topics
+            max_core_topics: Maximum number of core topics
+            sub_min: Minimum number of subtopics
+            sub_max: Maximum number of subtopics
+
+        Raises
+        ------
+            ValidationError: If parameters are invalid
+        """
+        if min_core_topics > max_core_topics:
+            msg = "min_core_topics cannot be greater than max_core_topics"
+            raise ValidationError(msg)
+        if sub_min > sub_max:
+            msg = "sub_min cannot be greater than sub_max"
+            raise ValidationError(msg)
+
+    async def _get_roadmap_response(self, user_prompt: str, skill_level: str, description: str) -> dict[str, Any] | list[Any]:
+        """Get roadmap response from AI model.
+
+        Args:
+            user_prompt: The user's learning topic/prompt
+            skill_level: The skill level
+            description: Additional context
+
+        Returns
+        -------
+            AI response as dict or list
+
+        Raises
+        ------
+            RoadmapGenerationError: If response is invalid
+        """
+        prompt = ROADMAP_GENERATION_PROMPT.format(
+            user_prompt=user_prompt,
+            skill_level=skill_level,
+            description=description,
+        )
+
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a curriculum design expert. You must always respond with valid JSON only, no other text.",
+            },
+            {"role": "user", "content": prompt},
+        ]
+
+        response = await self.get_completion(messages, format_json=True, max_retries=3)
+
+        if not isinstance(response, (list, dict)):
+            self._logger.error(
+                "Response is not dict/list. Type: %s, Content: %s", type(response), str(response)[:500]
+            )
+            msg = f"Invalid response format from AI model. Expected dict/list but got {type(response).__name__}"
+            raise RoadmapGenerationError(msg)
+
+        return response
+
+    def _process_roadmap_response(self, response: dict[str, Any] | list[Any]) -> dict[str, Any]:
+        """Process AI response into validated roadmap format.
+
+        Args:
+            response: AI response as dict or list
+
+        Returns
+        -------
+            Processed roadmap with title, description, and coreTopics
+        """
+        # Log the response for debugging (use debug level to avoid exposing sensitive data)
+        self._logger.debug("AI Response type: %s", type(response))
+        if isinstance(response, dict):
+            self._logger.debug("AI Response keys: %s", list(response.keys()))
+
+        # Handle both direct list and coreTopics dictionary format
+        if isinstance(response, dict):
+            roadmap_title, roadmap_description, core_topics = self._extract_roadmap_data(response)
+        else:
+            # Fallback for direct list format
+            roadmap_title = ""
+            roadmap_description = ""
+            core_topics = response
+
+        # Validate and process nodes
+        validated_nodes = self._validate_and_process_nodes(core_topics)
+
+        return {"title": roadmap_title, "description": roadmap_description, "coreTopics": validated_nodes}
+
     async def generate_roadmap_content(
         self,
         user_prompt: str,
         skill_level: str,
         description: str = "",
         *,
-        min_core_topics: int = 4,
-        max_core_topics: int = 14,
-        sub_min: int = 3,
-        sub_max: int = 13,
+        min_core_topics: int = 3,  # Let AI decide the optimal number
+        max_core_topics: int = 20,  # More flexible range
+        sub_min: int = 0,  # Some topics don't need subtopics
+        sub_max: int = 15,  # Allow more when needed
         use_tools: bool = False,
     ) -> dict[str, Any]:
         """Generate a detailed hierarchical roadmap as JSON with title and description.
@@ -536,10 +679,10 @@ Please use this context to personalize your response appropriately."""
             user_prompt: The user's learning topic/prompt
             skill_level: The skill level (beginner, intermediate, advanced)
             description: Additional context for the roadmap
-            min_core_topics: Minimum number of core topics (default: 4)
-            max_core_topics: Maximum number of core topics (default: 14)
-            sub_min: Minimum number of subtopics per core topic (default: 3)
-            sub_max: Maximum number of subtopics per core topic (default: 13)
+            min_core_topics: Minimum number of core topics (default: 3, AI will optimize)
+            max_core_topics: Maximum number of core topics (default: 20, flexible)
+            sub_min: Minimum number of subtopics per core topic (default: 0, some topics are atomic)
+            sub_max: Maximum number of subtopics per core topic (default: 15, allows comprehensive coverage)
             use_tools: Enable function calling for content discovery (default: False)
 
         Returns
@@ -549,63 +692,38 @@ Please use this context to personalize your response appropriately."""
         self._logger.info("Generating roadmap for: %s...", user_prompt[:100])
         self._logger.info("Model: %s, Function calling requested: %s", self.model, use_tools)
 
-        if min_core_topics > max_core_topics:
-            msg = "min_core_topics cannot be greater than max_core_topics"
-            raise ValidationError(msg)
-        if sub_min > sub_max:
-            msg = "sub_min cannot be greater than sub_max"
-            raise ValidationError(msg)
+        # Validate parameters
+        self._validate_roadmap_params(min_core_topics, max_core_topics, sub_min, sub_max)
 
-        # If tools enabled, enhance the prompt with discovered content
+        # Enhance description with tools if enabled
         if use_tools and self._supports_function_calling():
             description = await self._enhance_description_with_tools(user_prompt, skill_level, description)
 
-        prompt = ROADMAP_GENERATION_PROMPT.format(
-            user_prompt=user_prompt,
-            skill_level=skill_level,
-            description=description,
-        )
-
-        # Include JSON instruction in the main prompt for better compliance
-        messages = [
-            {
-                "role": "system",
-                "content": "You are a curriculum design expert. You must always respond with valid JSON only, no other text.",
-            },
-            {"role": "user", "content": prompt},
-        ]
-
         try:
-            response = await self.get_completion(messages, format_json=True)
-            if not isinstance(response, (list, dict)):
-                msg = "Invalid response format from AI model"
-                raise RoadmapGenerationError(msg)
+            # Get response from AI
+            response = await self._get_roadmap_response(user_prompt, skill_level, description)
 
-            # Log the response to debug
-            self._logger.info("AI Response type: %s", type(response))
-            self._logger.info(
-                "AI Response keys: %s", list(response.keys()) if isinstance(response, dict) else "Not a dict"
-            )
-            if isinstance(response, dict) and len(str(response)) < 500:
-                self._logger.info("AI Response content: %s", response)
+            # Process and return the response
+            return self._process_roadmap_response(response)
 
-            # Handle both direct list and coreTopics dictionary format
-            if isinstance(response, dict):
-                roadmap_title, roadmap_description, core_topics = self._extract_roadmap_data(response)
-            else:
-                # Fallback for direct list format
-                roadmap_title = ""
-                roadmap_description = ""
-                core_topics = response
-
-            # Validate and process nodes
-            validated_nodes = self._validate_and_process_nodes(core_topics)
-
+        except json.JSONDecodeError as e:
+            self._logger.exception("JSON decode error after retries in roadmap generation")
+            msg = f"AI model returned invalid JSON after 3 attempts. Last error: {e!s}"
+            raise RoadmapGenerationError(msg) from e
+        except ValidationError:
+            # Re-raise validation errors as-is
+            raise
+        except RoadmapGenerationError:
+            # Re-raise our own errors as-is
+            raise
+        except AIError as e:
+            # Wrap AI errors in RoadmapGenerationError
+            self._logger.exception("AI error during roadmap generation")
+            raise RoadmapGenerationError(str(e)) from e
         except Exception as e:
-            self._logger.exception("Error generating roadmap content")
-            raise RoadmapGenerationError from e
-        else:
-            return {"title": roadmap_title, "description": roadmap_description, "coreTopics": validated_nodes}
+            self._logger.exception("Unexpected error generating roadmap content")
+            error_msg = "Failed to generate roadmap content due to unexpected error"
+            raise RoadmapGenerationError(error_msg) from e
 
     def _process_subtopics(self, subtopics: list[Any]) -> list[dict[str, Any]]:
         """Process and validate subtopics for roadmap nodes.
@@ -665,10 +783,18 @@ Please use this context to personalize your response appropriately."""
         ------
             TagGenerationError: If tag generation fails
         """
+        # Validate required parameters
+        if not content_type:
+            msg = "content_type is required"
+            raise ValidationError(msg)
+        if not title or not title.strip():
+            msg = "title is required and cannot be empty"
+            raise ValidationError(msg)
+
         prompt = CONTENT_TAGGING_PROMPT.format(
             content_type=content_type,
             title=title,
-            preview=content_preview[:3000],  # Limit preview length
+            preview=content_preview[:3000] if content_preview else "",  # Limit preview length
         )
 
         messages = [
@@ -1038,8 +1164,10 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
             metadata["roadmap_id"], metadata["node_title"], metadata["node_description"]
         )
 
-        # Prepare initial messages
-        prompt = LESSON_GENERATION_PROMPT.format(content=content_info + rag_context)
+        # Prepare initial messages - use simple string replacement to avoid curly brace conflicts
+        # This is safer than .format() when the content might contain braces
+        combined_content = content_info + rag_context
+        prompt = LESSON_GENERATION_PROMPT.replace("{content}", combined_content)
         messages = [
             {
                 "role": "system",
@@ -1080,10 +1208,10 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
         # Clean up the content
         markdown_content = _clean_markdown_content(markdown_content)
 
-        if not isinstance(markdown_content, str) or len(markdown_content.strip()) < MIN_LESSON_CONTENT_LENGTH:
+        if not isinstance(markdown_content, str) or len(markdown_content.strip()) < 10:
             logging.error(
-                "Invalid or too short lesson content received: %s...",
-                markdown_content[:MIN_LESSON_CONTENT_LENGTH],
+                "Invalid lesson content received: %s...",
+                markdown_content[:100] if markdown_content else "None",
             )
             raise LessonGenerationError
 

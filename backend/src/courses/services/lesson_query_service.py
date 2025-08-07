@@ -1,5 +1,6 @@
 """Lesson query service for read operations on lessons."""
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from uuid import UUID
@@ -79,7 +80,7 @@ class LessonQueryService:
             for lesson in lessons
         ]
 
-    async def get_lesson(
+    async def get_lesson(  # noqa: C901
         self, course_id: UUID, lesson_id: UUID, generate: bool = False, _user_id: UUID | None = None
     ) -> LessonResponse:
         """Get a specific lesson, optionally generating if missing.
@@ -98,6 +99,18 @@ class LessonQueryService:
         ------
             HTTPException: If lesson not found
         """
+        # Validate required parameters
+        if not course_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="course_id is required"
+            )
+        if not lesson_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="lesson_id is required"
+            )
+
         # Verify course exists
         course_query = select(Roadmap).where(Roadmap.id == course_id)
 
@@ -121,27 +134,61 @@ class LessonQueryService:
 
         # Generate content if requested and missing
         if generate and not lesson.content:
-            try:
-                # Build proper context that matches what create_lesson_body expects
-                context = {
-                    "title": lesson.title,  # This is what _extract_lesson_metadata expects
-                    "description": lesson.description or "",
-                    "skill_level": course.skill_level or "beginner",
-                    "roadmap_id": str(course.id) if course.id else None,
-                    "course_title": course.title,
-                    "course_description": course.description,
-                    "original_user_prompt": course.description,  # Use course description as fallback
-                }
+            # Build proper context that matches what create_lesson_body expects
+            context = {
+                "title": lesson.title,  # This is what _extract_lesson_metadata expects
+                "description": lesson.description or "",
+                "skill_level": course.skill_level or "beginner",
+                "roadmap_id": str(course.id) if course.id else None,
+                "course_title": course.title,
+                "course_description": course.description,
+                "original_user_prompt": course.description,  # Use course description as fallback
+            }
 
-                content, citations = await create_lesson_body(context)
-                lesson.content = content
-                # TODO: Store citations if needed
-                lesson.updated_at = datetime.now(UTC)
-                await self.session.commit()
+            # Retry mechanism with exponential backoff
+            max_retries = 3
+            retry_delay = 1.0  # Start with 1 second
+            last_error = None
 
-            except AIError as e:
-                self._logger.exception("Failed to generate lesson content: %s", e)
-                # Continue without content rather than failing
+            for attempt in range(max_retries):
+                try:
+                    self._logger.info("Attempting to generate lesson content (attempt %d/%d)", attempt + 1, max_retries)
+                    content, citations = await create_lesson_body(context)
+
+                    if content and len(content.strip()) > 100:  # Validate content
+                        lesson.content = content
+                        # TODO: Store citations if needed
+                        lesson.updated_at = datetime.now(UTC)
+                        await self.session.commit()
+                        self._logger.info("Successfully generated lesson content on attempt %d", attempt + 1)
+                        break
+                    msg = "Generated content is too short or empty"
+                    raise AIError(msg)
+
+                except AIError as e:
+                    last_error = e
+                    self._logger.warning(
+                        "Failed to generate lesson content (attempt %d/%d): %s", attempt + 1, max_retries, str(e)
+                    )
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay)
+                        retry_delay *= 2
+                        continue
+                    # All retries exhausted
+                    self._logger.exception(
+                        "Failed to generate lesson content after %d attempts: %s", max_retries, str(last_error)
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail=f"Unable to generate lesson content at this time. Please try again later. Error: {last_error!s}",
+                    ) from last_error
+                except Exception as e:
+                    # Catch any other unexpected errors
+                    self._logger.exception("Unexpected error generating lesson content: %s", e)
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="An unexpected error occurred while generating lesson content",
+                    ) from e
 
         return LessonResponse(
             id=lesson.id,

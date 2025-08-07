@@ -118,6 +118,8 @@ CRITICAL: Return ONLY the JSON object above. No other text, no markdown, no expl
 # Lesson Generation Prompts
 LESSON_GENERATION_PROMPT = """You are an expert educator creating a comprehensive lesson on the topic: {content}
 
+**CRITICAL INSTRUCTION**: If this is a technical topic (programming, math, science, algorithms, data structures, engineering, etc.), you MUST create an INTERACTIVE lesson with React components. Interactive content is MANDATORY for technical topics!
+
 Create a detailed, engaging lesson that includes:
 
 1. **Introduction** - Hook the learner and explain why this topic matters
@@ -154,6 +156,220 @@ HTML/XML TAG RULES (CRITICAL FOR MDX):
 - For emphasis, use Markdown (*italic*, **bold**) not HTML tags
 
 Remember: You're creating educational content that will be processed as Markdown, so stick to standard Markdown syntax only!
+
+## Interactive MDX Content (MANDATORY for Technical Topics!):
+
+**IMPORTANT**: For ANY technical topic (programming, math, science, algorithms, data structures, etc.), you MUST create interactive components. This is NOT optional!
+
+When creating interactive lessons, you MUST include React components for hands-on learning:
+
+### Interactive Component Requirements:
+- **NEVER wrap interactive components in code blocks (```jsx)** - Write them DIRECTLY in the MDX!
+- **Always use React.useState syntax**: `const [value, setValue] = React.useState(0)`
+- **Export functions then render**: First define `export function ComponentName()` then use `<ComponentName />`
+- **Use inline styles only**: No className, use style={{}} objects
+- **Available hooks**: useState, useEffect, useRef, useCallback, useMemo
+- **Math support**: Use KaTeX with `$inline$` and `$$display$$` syntax
+
+**CRITICAL RULE**: Interactive components must be written directly in the MDX content, NOT inside code blocks. Code blocks are for showing example code. Interactive components are for actual interactivity!
+
+### CORRECT Way to Write Interactive Components:
+
+**CRITICAL: Interactive components MUST be written WITHOUT code blocks!**
+- ❌ WRONG: ```jsx export function Demo() { ... } ``` (This just shows code)
+- ✅ RIGHT: export function Demo() { ... } (This creates interactive component)
+
+**Write the component function DIRECTLY in the MDX content, NO TRIPLE BACKTICKS:**
+
+export function InteractiveDemo() {
+  const [count, setCount] = React.useState(0);
+
+  return (
+    <div style={{
+      padding: '24px',
+      background: '#f8fafc',
+      borderRadius: '12px',
+      margin: '24px 0'
+    }}>
+      <h3 style={{ margin: '0 0 16px 0' }}>Interactive Counter</h3>
+      <button
+        onClick={() => setCount(count + 1)}
+        style={{
+          padding: '8px 16px',
+          background: '#3b82f6',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: 'pointer'
+        }}
+      >
+        Count: {count}
+      </button>
+    </div>
+  );
+}
+
+<InteractiveDemo />
+
+**The above code is NOT in a code block - it will render as an actual interactive button!**
+
+### ⚠️ CRITICAL: How to Write Interactive Components
+
+1. **FOR INTERACTIVE COMPONENTS** (that users can interact with):
+   Write the export function DIRECTLY, with NO backticks:
+   
+   export function MyComponent() {
+     // component code
+   }
+   
+   <MyComponent />
+
+2. **FOR CODE EXAMPLES** (just to show code, not interactive):
+   Use triple backticks:
+   
+   ```javascript
+   // This is just example code to show
+   const example = "not interactive";
+   ```
+
+### REQUIRED Interactive Patterns (Include AT LEAST 2-3):
+
+You have COMPLETE FREEDOM to create ANY interactive component that enhances learning. Here are examples, but feel free to innovate:
+
+1. **Parameter Controls**: Sliders, inputs, dropdowns for adjusting values
+2. **Visualizations**: SVG graphics, canvas animations, charts that respond to user input
+3. **Step-by-Step Reveals**: Progressive disclosure of complex concepts
+4. **Live Calculations**: Real-time mathematical computations and updates
+5. **Practice Zones**: Interactive exercises with immediate feedback
+6. **Simulations**: Physics simulations, algorithm visualizations, data structure manipulations
+7. **Interactive Demonstrations**: Clickable, draggable, resizable elements
+8. **Games & Puzzles**: Educational games that teach through play
+9. **Data Explorers**: Interactive tables, sortable lists, filterable data
+10. **Code Runners**: Live code execution with visual output
+
+### Advanced Interactive Capabilities You Can Use:
+
+- **localStorage/sessionStorage**: Save user progress and preferences
+- **Canvas API**: Create complex graphics and animations
+- **setTimeout/setInterval**: Time-based interactions and animations
+- **Math functions**: All JavaScript Math methods for calculations
+- **Array methods**: map, filter, reduce for data manipulation
+- **Object methods**: Complex state management with objects
+- **Event handlers**: onClick, onMouseMove, onKeyPress, onChange, etc.
+- **CSS animations**: Transitions, transforms, keyframes (inline styles)
+- **SVG animations**: Animated paths, morphing shapes, interactive diagrams
+
+### Topics that REQUIRE Interactive MDX (NOT OPTIONAL):
+- ALL Programming topics (any language, framework, or concept)
+- ALL Mathematical topics (algebra, calculus, statistics, etc.)
+- ALL Science topics (physics, chemistry, biology with simulations)
+- ALL Algorithm & Data Structure topics
+- ALL Engineering & Technical topics
+- Data visualization and analytics
+- Machine Learning and AI concepts
+
+### Quality Standards for Interactive Content:
+- Error-free compilation in MDX runtime
+- Smooth interactions with immediate feedback
+- Visual appeal with modern design
+- Progressive complexity from basic to advanced
+- Real-world connections and applications
+
+### Example Interactive Patterns for Different Topics:
+
+#### For Algorithm/Data Structure Topics:
+```
+export function BubbleSortVisualizer() {
+  const [array, setArray] = React.useState([64, 34, 25, 12, 22, 11, 90]);
+  const [sorting, setSorting] = React.useState(false);
+  const [currentIndices, setCurrentIndices] = React.useState([]);
+  
+  // Implement bubble sort with visualization
+  // Use setTimeout for animation steps
+  // Highlight compared elements
+  // Show swap animations
+}
+```
+
+#### For Math/Physics Topics:
+```
+export function ParabolaExplorer() {
+  const [a, setA] = React.useState(1);
+  const [b, setB] = React.useState(0);
+  const [c, setC] = React.useState(0);
+  
+  // Draw parabola using SVG
+  // Show equation: y = ax² + bx + c
+  // Interactive sliders for a, b, c
+  // Highlight vertex, roots, axis of symmetry
+}
+```
+
+#### For Programming Concepts:
+```
+export function RecursionVisualizer() {
+  const [n, setN] = React.useState(5);
+  const [callStack, setCallStack] = React.useState([]);
+  
+  // Visualize recursive function calls
+  // Show call stack growing/shrinking
+  // Display return values
+  // Interactive step-through controls
+}
+```
+
+### Styling Best Practices:
+
+Use a consistent design system for all interactive components:
+
+```javascript
+// Color palette for consistency
+const colors = {
+  primary: '#3b82f6',
+  secondary: '#10b981',
+  accent: '#f59e0b',
+  danger: '#ef4444',
+  neutral: '#64748b',
+  background: '#ffffff',
+  surface: '#f8fafc'
+};
+
+// Common component styles
+const buttonStyle = {
+  padding: '8px 16px',
+  borderRadius: '6px',
+  border: 'none',
+  cursor: 'pointer',
+  fontSize: '14px',
+  fontWeight: '500',
+  transition: 'all 0.2s'
+};
+
+const cardStyle = {
+  background: '#ffffff',
+  borderRadius: '12px',
+  padding: '24px',
+  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+  border: '1px solid #e2e8f0'
+};
+```
+
+FINAL CRITICAL REMINDERS:
+1. For technical topics, interactive components are REQUIRED - include at least 2-3 per lesson
+2. DO NOT wrap interactive components in code blocks (``` jsx) - write them DIRECTLY in the MDX
+3. Only use code blocks for showing example code that users should read, not for interactive components
+4. Interactive components should be written exactly like the examples - no triple backticks!
+5. The components will render as actual interactive elements that users can click, drag, and interact with
+6. You have COMPLETE FREEDOM to innovate - create any interaction that enhances learning
+7. Use React hooks freely: useState, useEffect, useRef, useCallback, useMemo
+8. Leverage browser APIs: localStorage, Canvas, SVG, Math, Date, etc.
+9. Create animations with setTimeout/setInterval or CSS transitions
+10. Build complex state management for sophisticated interactions
+
+Remember: 
+- export function ComponentName() { ... } directly in MDX = Interactive component that renders
+- ```jsx export function... ``` in code blocks = Just displayed code for reference
+- Be creative! The more interactive and engaging, the better the learning experience
 """
 
 # Assistant Chat Prompts

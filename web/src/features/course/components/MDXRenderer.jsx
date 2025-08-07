@@ -1,267 +1,191 @@
-import { evaluate } from "@mdx-js/mdx";
-import { MDXProvider } from "@mdx-js/react";
-import { useEffect, useMemo, useState } from "react";
-import * as runtime from "react/jsx-runtime";
-import rehypeKatex from "rehype-katex";
-import rehypePrettyCode from "rehype-pretty-code";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import "katex/dist/katex.min.css";
-import { CodeBlock } from "@/components/code-block";
-import "./LessonViewer.css";
+import { MDXProvider } from "@mdx-js/react"
+import React from "react"
+import { useMDXCompile } from "@/hooks/useMDXCompile"
+import "katex/dist/katex.min.css"
+import "./LessonViewer.css"
 
-// Configure rehype-pretty-code with Catppuccin Latte theme
-const prettyCodeOptions = {
-	theme: "catppuccin-latte",
-	keepBackground: true,
-	defaultLang: "text",
-};
+// Code block component with language display
+const CodeBlock = ({ children, className, ...props }) => {
+	// Extract language from data-language attribute (rehype-pretty-code provides this reliably)
+	const language = props["data-language"] || "text"
+
+	// Only show language badge if it's not plain text
+	const showLanguage = language && language !== "text" && language !== "plaintext"
+
+	return (
+		<div className="relative group mb-4 rounded-lg overflow-hidden border border-gray-700">
+			{/* Language badge */}
+			{showLanguage && <div className="language-badge">{language}</div>}
+
+			<pre
+				className={`overflow-x-auto p-4 rounded-lg bg-gray-900 text-gray-100 text-sm font-mono ${className || ""}`}
+				{...props}
+			>
+				{children}
+			</pre>
+		</div>
+	)
+}
+
+// Static component overrides - defined once outside component
+const MDX_COMPONENTS = {
+	// Provide React and hooks for interactive components
+	React,
+	useState: React.useState,
+	useEffect: React.useEffect,
+	useRef: React.useRef,
+
+	// Style headings
+	h1: (props) => <h1 className="text-3xl font-bold mb-6 mt-8 text-zinc-900" {...props} />,
+	h2: (props) => <h2 className="text-2xl font-semibold mb-4 mt-6 text-zinc-900" {...props} />,
+	h3: (props) => <h3 className="text-xl font-medium mb-3 mt-4 text-zinc-900" {...props} />,
+	h4: (props) => <h4 className="text-lg font-medium mb-2 mt-3 text-zinc-900" {...props} />,
+	h5: (props) => <h5 className="text-base font-medium mb-2 mt-3 text-zinc-900" {...props} />,
+	h6: (props) => <h6 className="text-sm font-medium mb-2 mt-3 text-zinc-900" {...props} />,
+
+	// Style paragraphs and text
+	p: (props) => <p className="mb-4 leading-relaxed text-zinc-700" {...props} />,
+	strong: (props) => <strong className="font-semibold text-zinc-900" {...props} />,
+	em: (props) => <em className="italic" {...props} />,
+
+	// Style lists
+	ul: (props) => <ul className="list-disc pl-6 mb-4 space-y-1" {...props} />,
+	ol: (props) => <ol className="list-decimal pl-6 mb-4 space-y-1" {...props} />,
+	li: (props) => <li className="mb-1 text-zinc-700" {...props} />,
+
+	// Style code blocks
+	code: ({ className, children, ...props }) => {
+		const isInline = !className
+		if (isInline) {
+			return (
+				<code className="px-1.5 py-0.5 rounded bg-gray-100 text-sm font-mono text-zinc-800" {...props}>
+					{children}
+				</code>
+			)
+		}
+		return (
+			<code className={className} {...props}>
+				{children}
+			</code>
+		)
+	},
+	// Handle both figure wrapper and direct pre elements
+	figure: ({ children, ...props }) => {
+		// Check if this is a rehype-pretty-code figure
+		if (props["data-rehype-pretty-code-figure"] !== undefined) {
+			// The pre element is inside this figure
+			return <div {...props}>{children}</div>
+		}
+		return <figure {...props}>{children}</figure>
+	},
+	pre: CodeBlock,
+
+	// Style blockquotes
+	blockquote: (props) => (
+		<blockquote
+			className="border-l-4 border-emerald-300 pl-4 italic my-4 text-zinc-600 bg-emerald-50 py-2"
+			{...props}
+		/>
+	),
+
+	// Style tables
+	table: (props) => (
+		<div className="overflow-x-auto mb-4">
+			<table className="min-w-full divide-y divide-gray-200 border border-gray-200 rounded-lg" {...props} />
+		</div>
+	),
+	thead: (props) => <thead className="bg-gray-50" {...props} />,
+	tbody: (props) => <tbody className="bg-white divide-y divide-gray-200" {...props} />,
+	th: (props) => (
+		<th
+			className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b"
+			{...props}
+		/>
+	),
+	td: (props) => <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-700 border-b" {...props} />,
+
+	// Style links
+	a: (props) => <a className="text-emerald-600 hover:text-emerald-800 underline" {...props} />,
+
+	// Style horizontal rules
+	hr: () => <hr className="my-8 border-gray-200" />,
+
+	// Handle checkboxes in task lists
+	input: (props) => {
+		if (props.type === "checkbox") {
+			return (
+				<input
+					type="checkbox"
+					className="mr-2 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+					disabled
+					{...props}
+				/>
+			)
+		}
+		return <input {...props} />
+	},
+}
 
 /**
- * Component to render MDX/Markdown content using @mdx-js/mdx
- * with custom components to match the styling of the original implementation
+ * MDXRenderer - Simplified MDX renderer for React 19
  *
- * @param {Object} props
- * @param {string} props.content - The content to render
- * @returns {JSX.Element}
+ * Features:
+ * - GitHub Flavored Markdown (tables, task lists, etc.)
+ * - Math rendering with KaTeX
+ * - Syntax highlighting for code blocks
+ * - Emoji support
+ * - Auto-linking headings
+ * - Interactive component support
  */
 export function MDXRenderer({ content }) {
-	const [mdxModule, setMdxModule] = useState(null);
-	const [error, setError] = useState(null);
+	// Use the custom hook for all compilation logic
+	const { Component, error, isLoading } = useMDXCompile(content)
 
-	// Custom components to match the styling of the original implementation
-	// Memoize components to avoid unnecessary re-renders
-	const components = useMemo(
-		() => ({
-			// Headings
-			h1: (props) => (
-				<h1 className="text-3xl font-bold mt-8 mb-4 text-zinc-900" {...props} />
-			),
-			h2: (props) => (
-				<h2
-					className="text-2xl font-semibold mt-6 mb-3 text-zinc-900"
-					{...props}
-				/>
-			),
-			h3: (props) => (
-				<h3
-					className="text-xl font-semibold mt-5 mb-2 text-zinc-900"
-					{...props}
-				/>
-			),
-
-			// Text elements
-			p: (props) => (
-				<p className="mb-4 text-zinc-700 leading-relaxed" {...props} />
-			),
-			a: (props) => (
-				<a
-					className="text-emerald-600 hover:text-emerald-700 underline"
-					target="_blank"
-					rel="noopener noreferrer"
-					{...props}
-				/>
-			),
-			strong: (props) => <strong className="font-semibold" {...props} />,
-			em: (props) => <em className="italic" {...props} />,
-
-			// Lists
-			ul: (props) => (
-				<ul className="list-disc pl-6 mb-4 text-zinc-700" {...props} />
-			),
-			ol: (props) => (
-				<ol className="list-decimal pl-6 mb-4 text-zinc-700" {...props} />
-			),
-			li: (props) => <li className="mb-1" {...props} />,
-
-			// Code
-			code: (props) => {
-				const isInline = !props.className;
-				// For inline code, keep the original styling
-				if (isInline) {
-					return (
-						<code
-							className="bg-zinc-100 px-1.5 py-0.5 rounded text-sm font-mono text-zinc-800"
-							{...props}
-						/>
-					);
-				}
-
-				// For code blocks, use our CodeBlock component
-				const language = props.className
-					? props.className.replace(/language-/, "")
-					: "text";
-				return <CodeBlock code={props.children} language={language} />;
-			},
-
-			// Pre - this will receive the rehype-pretty-code output
-			pre: (props) => {
-				// Extract language from className (e.g., "language-js")
-				const className = props.children?.props?.className || "";
-				const match = className.match(/language-(\w+)/);
-				const language = match ? match[1] : "text";
-
-				// Wrap in our CodeBlock component
-				return (
-					<CodeBlock language={language} className="rehype-code-block">
-						<pre {...props} />
-					</CodeBlock>
-				);
-			},
-
-			// Blockquote
-			blockquote: (props) => (
-				<blockquote
-					className="border-l-4 border-emerald-300 pl-4 italic my-4 text-zinc-600"
-					{...props}
-				/>
-			),
-		}),
-		[],
-	);
-
-	useEffect(() => {
-		if (!content) return;
-
-		// Store the current components reference to use in the async function
-		const currentComponents = components;
-
-		const compileMdx = async () => {
-			try {
-				// Smart LaTeX escaping to prevent MDX parsing issues while keeping LaTeX functional
-				let processedContent = content;
-
-				// List of problematic escape sequences that JavaScript interprets
-				const problemSequences = [
-					"\\t",
-					"\\n",
-					"\\r",
-					"\\f",
-					"\\b",
-					"\\v",
-					"\\0",
-					"\\x",
-					"\\u",
-				];
-
-				// Function to escape only problematic sequences
-				const smartEscape = (mathContent) => {
-					let escaped = mathContent;
-					// Only escape backslashes that are followed by problematic characters
-					problemSequences.forEach((seq) => {
-						const char = seq[1];
-						const regex = new RegExp(`\\\\${char}`, "g");
-						escaped = escaped.replace(regex, `\\\\${char}`);
-					});
-					return escaped;
-				};
-
-				// First, handle display math blocks \[...\]
-				processedContent = processedContent.replace(
-					/\\\[[\s\S]*?\\\]/g,
-					(match) => {
-						return smartEscape(match);
-					},
-				);
-
-				// Handle $$ ... $$ blocks
-				processedContent = processedContent.replace(
-					/\$\$[\s\S]*?\$\$/g,
-					(match) => {
-						return smartEscape(match);
-					},
-				);
-
-				// Handle inline math $ ... $ (more carefully to avoid false matches)
-				processedContent = processedContent.replace(
-					/\$([^$\n]+)\$/g,
-					(match, mathContent) => {
-						// Only process if it looks like actual math (contains backslash)
-						if (mathContent.includes("\\")) {
-							return `$${smartEscape(mathContent)}$`;
-						}
-						return match;
-					},
-				);
-
-				// Evaluate the MDX content with the runtime and rehype plugins
-				const result = await evaluate(processedContent, {
-					...runtime,
-					development: false,
-					useMDXComponents: () => currentComponents,
-					rehypePlugins: [[rehypePrettyCode, prettyCodeOptions], rehypeKatex],
-					remarkPlugins: [remarkMath, remarkGfm],
-				});
-
-				setMdxModule(result);
-				setError(null);
-			} catch (err) {
-				console.error("Error compiling MDX:", err);
-				// Log the content around the error location if possible
-				if (err.message.includes(":")) {
-					const match = err.message.match(/(\d+):(\d+):/);
-					if (match) {
-						const line = parseInt(match[1]);
-						const col = parseInt(match[2]);
-						const lines = processedContent.split("\n");
-						console.error(`Error at line ${line}, column ${col}`);
-						if (lines[line - 1]) {
-							console.error("Problem line:", lines[line - 1]);
-							console.error(
-								"Around:",
-								lines[line - 1].substring(Math.max(0, col - 20), col + 20),
-							);
-						}
-					}
-				}
-				setError(err.message);
-			}
-		};
-
-		compileMdx();
-	}, [content, components]);
-
+	// Render states
 	if (!content) {
-		return <div className="text-gray-500">No content to display</div>;
+		return <div className="text-gray-500 p-4 text-center">No content to display</div>
 	}
 
 	if (error) {
-		console.warn("MDX rendering error:", error);
-		// Simple error display
 		return (
-			<div className="markdown-content">
-				<div className="text-red-500 mb-4">
-					Error rendering content: {error}
+			<div className="p-4">
+				<div className="mb-4 p-4 bg-red-50 border-l-4 border-red-400 rounded-r-lg">
+					<div className="flex">
+						<div className="ml-3">
+							<h3 className="text-sm font-medium text-red-800">Content Error</h3>
+							<div className="mt-2 text-sm text-red-700">
+								<p>{error}</p>
+							</div>
+						</div>
+					</div>
 				</div>
-				<pre className="whitespace-pre-wrap text-zinc-700">{content}</pre>
+
+				<details className="mt-4">
+					<summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800 font-medium">
+						Show raw content for debugging
+					</summary>
+					<pre className="mt-2 p-3 bg-gray-100 rounded-lg overflow-x-auto text-xs text-gray-700 border">{content}</pre>
+				</details>
 			</div>
-		);
+		)
 	}
 
-	if (!mdxModule) {
-		return <div className="text-gray-500">Loading content...</div>;
-	}
-
-	const MDXContent = mdxModule.default;
-
-	try {
+	if (isLoading) {
 		return (
-			<div className="markdown-content">
-				<MDXProvider components={components}>
-					<MDXContent />
-				</MDXProvider>
+			<div className="text-gray-500 p-4 text-center">
+				<div className="animate-pulse">Loading content...</div>
 			</div>
-		);
-	} catch (renderError) {
-		console.error("Error during MDX rendering:", renderError);
-		// Fallback to simple text display when rendering fails
-		return (
-			<div className="markdown-content">
-				<div className="text-red-500 mb-4">
-					Error rendering content. Displaying plain text version:
-				</div>
-				<pre className="whitespace-pre-wrap text-zinc-700">{content}</pre>
-			</div>
-		);
+		)
 	}
+
+	// Render the MDX component
+	return (
+		<div className="markdown-content prose prose-zinc max-w-none">
+			<MDXProvider components={MDX_COMPONENTS}>
+				<Component />
+			</MDXProvider>
+		</div>
+	)
 }
+
+export default MDXRenderer

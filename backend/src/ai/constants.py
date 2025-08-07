@@ -125,6 +125,10 @@ class RAGConfig:
 # Global RAG configuration instance
 rag_config = RAGConfig()
 
+# AI Client Infrastructure Constants (Keep these for reliability)
+AI_REQUEST_TIMEOUT = int(env("AI_REQUEST_TIMEOUT", "60"))
+MAX_AI_RETRIES = int(env("MAX_AI_RETRIES", "3"))
+
 # Tag categories for classification
 TAG_CATEGORIES = {
     "language": ["python", "javascript", "java", "cpp", "go", "rust", "ruby", "php", "swift", "kotlin", "r", "matlab"],
