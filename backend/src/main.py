@@ -242,7 +242,7 @@ def create_app() -> FastAPI:
             "/api/v1/auth/debug",
             "/docs",
             "/redoc",
-            "/openapi.json"
+            "/openapi.json",
         ]
 
         # Also skip any static files
@@ -253,6 +253,7 @@ def create_app() -> FastAPI:
             # Get user ID for protected endpoints
             try:
                 from src.auth.config import get_user_id
+
                 request.state.user_id = await get_user_id(request)
             except Exception as e:
                 # Import auth exceptions

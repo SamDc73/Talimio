@@ -24,6 +24,9 @@ from src.core.exceptions import DomainError, ValidationError
 from src.database.session import async_session_maker
 
 
+logger = logging.getLogger(__name__)
+
+
 class AIError(DomainError):
     """Base exception for AI-related errors."""
 
@@ -57,6 +60,11 @@ class ModelManager:
 
         self.settings = get_settings()
         self.model = env("PRIMARY_LLM_MODEL")
+
+        # Default to a sensible model if not configured
+        if not self.model:
+            self.model = "gpt-4o-mini"
+            logger.warning("PRIMARY_LLM_MODEL not set, defaulting to gpt-4o-mini")
 
         # Set appropriate API key based on model provider
 
@@ -258,7 +266,7 @@ Please use this context to personalize your response appropriately."""
                 self._logger.exception("AI request timed out")
                 if attempt < max_retries - 1:
                     self._logger.info("Retrying after timeout (attempt %d/%d)", attempt + 1, max_retries)
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                     continue
                 error_msg = "AI request timed out after multiple attempts"
                 raise AIError(error_msg) from e
@@ -591,7 +599,9 @@ Please use this context to personalize your response appropriately."""
             msg = "sub_min cannot be greater than sub_max"
             raise ValidationError(msg)
 
-    async def _get_roadmap_response(self, user_prompt: str, skill_level: str, description: str) -> dict[str, Any] | list[Any]:
+    async def _get_roadmap_response(
+        self, user_prompt: str, skill_level: str, description: str
+    ) -> dict[str, Any] | list[Any]:
         """Get roadmap response from AI model.
 
         Args:
@@ -624,9 +634,7 @@ Please use this context to personalize your response appropriately."""
         response = await self.get_completion(messages, format_json=True, max_retries=3)
 
         if not isinstance(response, (list, dict)):
-            self._logger.error(
-                "Response is not dict/list. Type: %s, Content: %s", type(response), str(response)[:500]
-            )
+            self._logger.error("Response is not dict/list. Type: %s, Content: %s", type(response), str(response)[:500])
             msg = f"Invalid response format from AI model. Expected dict/list but got {type(response).__name__}"
             raise RoadmapGenerationError(msg)
 

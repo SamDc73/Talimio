@@ -101,15 +101,9 @@ class LessonQueryService:
         """
         # Validate required parameters
         if not course_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="course_id is required"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="course_id is required")
         if not lesson_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="lesson_id is required"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="lesson_id is required")
 
         # Verify course exists
         course_query = select(Roadmap).where(Roadmap.id == course_id)

@@ -46,9 +46,7 @@ class CourseQueryService:
         effective_user_id = user_id or self.user_id
 
         # Get the roadmap/course with user filtering
-        query = select(Roadmap).where(
-            Roadmap.id == course_id, Roadmap.user_id == effective_user_id
-        )
+        query = select(Roadmap).where(Roadmap.id == course_id, Roadmap.user_id == effective_user_id)
 
         result = await self.session.execute(query)
         roadmap = result.scalar_one_or_none()
@@ -144,9 +142,7 @@ class CourseQueryService:
         effective_user_id = user_id or self.user_id
 
         # Verify course exists and user has access
-        course_query = select(Roadmap).where(
-            Roadmap.id == course_id, Roadmap.user_id == effective_user_id
-        )
+        course_query = select(Roadmap).where(Roadmap.id == course_id, Roadmap.user_id == effective_user_id)
 
         course_result = await self.session.execute(course_query)
         if not course_result.scalar_one_or_none():

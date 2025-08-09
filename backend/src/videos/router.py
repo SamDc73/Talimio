@@ -410,10 +410,7 @@ async def get_video_details(
 
         # Build response
         return VideoDetailResponse(
-            **video.model_dump(),
-            chapters=chapters,
-            transcript_info=transcript_info,
-            progress=progress
+            **video.model_dump(), chapters=chapters, transcript_info=transcript_info, progress=progress
         )
 
     except ValueError as e:

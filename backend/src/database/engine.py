@@ -18,6 +18,7 @@ elif "postgresql" in settings.DATABASE_URL:
         "server_settings": {"jit": "off"},
         "command_timeout": 60,
         "timeout": 10,
+        "statement_cache_size": 0,  # Correct parameter name for asyncpg with pgbouncer
     }
 
 # Create async engine with appropriate settings

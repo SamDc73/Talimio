@@ -44,7 +44,7 @@ class MDXCompiler:
     async def compile(self, mdx_content: str) -> tuple[str, bool]:
         """
         Compile MDX to JavaScript.
-        
+
         Returns
         -------
             Tuple of (compiled_js, is_interactive)
@@ -58,9 +58,7 @@ class MDXCompiler:
 
         # Check if content has interactive components
         is_interactive = (
-            "export function" in mdx_content or
-            "React.useState" in mdx_content or
-            "React.useEffect" in mdx_content
+            "export function" in mdx_content or "React.useState" in mdx_content or "React.useEffect" in mdx_content
         )
 
         try:
@@ -69,12 +67,14 @@ class MDXCompiler:
             logger.info("Compiling MDX on backend (placeholder for now)")
 
             # For testing, just return the original content with a flag
-            compiled_js = json.dumps({
-                "type": "mdx_compiled",
-                "interactive": is_interactive,
-                "source": mdx_content,
-                "compiled": None  # Will be actual compiled JS from Node service
-            })
+            compiled_js = json.dumps(
+                {
+                    "type": "mdx_compiled",
+                    "interactive": is_interactive,
+                    "source": mdx_content,
+                    "compiled": None,  # Will be actual compiled JS from Node service
+                }
+            )
 
             # Save to cache
             await self.save_cache(mdx_content, compiled_js)
@@ -84,12 +84,7 @@ class MDXCompiler:
         except Exception as e:
             logger.error(f"Failed to compile MDX: {e}")
             # Fallback to returning raw MDX
-            return json.dumps({
-                "type": "mdx_raw",
-                "interactive": False,
-                "source": mdx_content,
-                "compiled": None
-            }), False
+            return json.dumps({"type": "mdx_raw", "interactive": False, "source": mdx_content, "compiled": None}), False
 
 
 # Singleton instance
