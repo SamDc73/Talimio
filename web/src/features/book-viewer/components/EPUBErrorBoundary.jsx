@@ -1,11 +1,11 @@
 import { ErrorBoundary } from "react-error-boundary"
 
 /**
- * Error fallback component for PDF viewer
- * Handles PDF.js specific errors and provides retry functionality
+ * Error fallback component for EPUB viewer
+ * Handles EPUB.js specific errors and provides retry functionality
  */
-function PDFErrorFallback({ error, resetErrorBoundary }) {
-	// Don't show error UI for PDF.js StrictMode errors
+function EPUBErrorFallback({ error, resetErrorBoundary }) {
+	// Don't show error UI for EPUB.js StrictMode errors
 	if (
 		error?.message?.includes("can't define property") ||
 		error?.message?.includes("Object is not extensible") ||
@@ -18,10 +18,10 @@ function PDFErrorFallback({ error, resetErrorBoundary }) {
 	}
 
 	return (
-		<div className="pdf-error-boundary p-4 border border-destructive/20 rounded bg-destructive/5">
-			<h3 className="text-lg font-semibold text-destructive mb-2">PDF Loading Error</h3>
+		<div className="epub-error-boundary p-4 border border-destructive/20 rounded bg-destructive/5">
+			<h3 className="text-lg font-semibold text-destructive mb-2">EPUB Loading Error</h3>
 			<p className="text-sm text-muted-foreground mb-3">
-				There was an issue loading the PDF. This might be a temporary problem.
+				There was an issue loading the EPUB. This might be a temporary problem.
 			</p>
 			<button
 				type="button"
@@ -35,15 +35,15 @@ function PDFErrorFallback({ error, resetErrorBoundary }) {
 }
 
 /**
- * PDF Error Boundary wrapper using react-error-boundary
+ * EPUB Error Boundary wrapper using react-error-boundary
  * React 19 compliant - no class components
  */
-function PDFErrorBoundary({ children }) {
+function EPUBErrorBoundary({ children }) {
 	return (
 		<ErrorBoundary
-			FallbackComponent={PDFErrorFallback}
+			FallbackComponent={EPUBErrorFallback}
 			onError={(error, _errorInfo) => {
-				// Only log non-PDF.js StrictMode errors
+				// Only log non-EPUB.js StrictMode errors
 				if (
 					!error?.message?.includes("can't define property") &&
 					!error?.message?.includes("Object is not extensible") &&
@@ -61,4 +61,4 @@ function PDFErrorBoundary({ children }) {
 	)
 }
 
-export default PDFErrorBoundary
+export default EPUBErrorBoundary

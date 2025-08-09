@@ -26,6 +26,22 @@ from src.database.session import async_session_maker
 logger = logging.getLogger(__name__)
 
 
+class QueryBuilder:
+    """Builds database queries with consistent filtering."""
+
+    def apply_user_filter(self, query: select, user_id: UUID) -> select:
+        """Apply user ownership filter to a query."""
+        return query.where(Book.user_id == user_id)
+
+    def validate_user_ownership(self, book: Book, user_id: UUID) -> bool:
+        """Validate if the user owns the book."""
+        return book.user_id == user_id
+
+
+# Create a single instance to use throughout the module
+query_builder = QueryBuilder()
+
+
 def _book_to_response(book: Book) -> BookResponse:
     """Convert Book model to BookResponse with proper tags handling."""
     # Extract all attributes while we have them loaded
@@ -129,7 +145,6 @@ async def get_books(user_id: UUID, page: int = 1, per_page: int = 20) -> BookLis
         async with async_session_maker() as session:
             # Build base query with user filtering
             base_query = select(Book)
-            filtered_query = query_builder.apply_user_filter(base_query, user_id)
 
             # Get total count
             count_query = select(Book)

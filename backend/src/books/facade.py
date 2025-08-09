@@ -49,8 +49,7 @@ class BooksFacade(ContentFacade):
         Coordinates book service and progress service to provide comprehensive data.
         """
         try:
-            # Get book information - need to pass user_id as well
-            # Create a temporary session for the book service call
+            # Get book information
             from src.database.session import async_session_maker
 
             async with async_session_maker() as session:

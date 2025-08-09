@@ -1,133 +1,87 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
-import { BookHeader } from "@/components/header/BookHeader";
-import BookSidebar from "@/components/sidebar/BookSidebar";
-import { booksApi } from "@/services/booksApi";
-import useAppStore from "@/stores/useAppStore";
-import EPUBViewer from "./components/EPUBViewer";
-import PDFErrorBoundary from "./components/PDFErrorBoundary";
-import PDFViewer from "./components/PDFViewer";
-import "./BookViewer.css";
+import { useEffect, useRef, useState } from "react"
+import { useParams } from "react-router-dom"
+import { BookHeader } from "@/components/header/BookHeader"
+import BookSidebar from "@/components/sidebar/BookSidebar"
+import { booksApi } from "@/services/booksApi"
+import useAppStore from "@/stores/useAppStore"
+import EpubErrorBoundary from "./components/EPUBErrorBoundary"
+import EpubViewer from "./components/EPUBViewer"
+import PdfErrorBoundary from "./components/PDFErrorBoundary"
+import PdfViewer from "./components/PDFViewer"
+import "./BookViewer.css"
 
-// Remove render tracking in production
-const trackRender = () => {};
+function BookViewerContent() {
+	const { bookId } = useParams()
+	const [book, setBook] = useState(null)
+	const [loading, setLoading] = useState(true)
+	const [error, setError] = useState(null)
+	const pdfViewerRef = useRef(null)
 
-const BookViewerContent = () => {
-	trackRender("BookViewerContent");
-	const { bookId } = useParams();
-	const [book, setBook] = useState(null);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState(null);
-	const pdfViewerRef = useRef(null);
+	// Debug bookId
+	useEffect(() => {}, [])
 
-	// Temporarily disabled page tracking to test basic PDF rendering
-	// const [currentPage, setCurrentPage] = useState(null);
-	// const currentPageRef = useRef(null);
+	// Get zoom and page from reading state
+	const zoomLevel = useAppStore((state) => state.books?.readingState?.[bookId]?.zoomLevel || 100)
+	const currentPage = useAppStore((state) => state.books?.readingState?.[bookId]?.currentPage || 1)
+	const totalPages = useAppStore((state) => state.books?.readingState?.[bookId]?.totalPages || null)
 
-	// Create a mock bookProgress object to keep the component working
-	const _bookProgress = {
-		progress: { percentage: 0 },
-		updateProgress: () => {},
-	};
+	// Get store actions
+	const setBookZoom = useAppStore((state) => state.setBookZoom)
 
-	// Temporarily disabled store sync to test basic PDF rendering
-	// const updateBookReadingStateRef = useRef();
-	// const setBookZoomRef = useRef();
+	// Sidebar state management - use proper selectors
+	const sidebarOpen = useAppStore((state) => state.preferences?.sidebarOpen ?? true)
+	const toggleSidebar = useAppStore((state) => state.toggleSidebar)
 
-	// useEffect(() => {
-	// 	const state = useAppStore.getState();
-	// 	updateBookReadingStateRef.current = state.updateBookReadingState;
-	// 	setBookZoomRef.current = state.setBookZoom;
-	// }, []);
-
-	// Simple local zoom state - no store sync for now
-	const [zoom, setZoom] = useState(100);
-
-	// Sidebar state management - use refs to avoid re-renders
-	const toggleSidebarRef = useRef();
-	const [sidebarOpen, setSidebarOpen] = useState(() => {
-		// Initialize from store once
-		return useAppStore.getState().preferences?.sidebarOpen ?? true;
-	});
-
-	// Subscribe to sidebar changes only
-	useEffect(() => {
-		const state = useAppStore.getState();
-		toggleSidebarRef.current = state.toggleSidebar;
-
-		// Subscribe to sidebar state changes only
-		const unsubscribe = useAppStore.subscribe((newState, prevState) => {
-			const newSidebarOpen = newState.preferences?.sidebarOpen ?? true;
-			const prevSidebarOpen = prevState?.preferences?.sidebarOpen ?? true;
-
-			if (newSidebarOpen !== prevSidebarOpen) {
-				setSidebarOpen(newSidebarOpen);
-			}
-		});
-
-		return unsubscribe;
-	}, []);
-
-	// Memoize the book URL to prevent react-pdf from re-fetching on every render
-	// Must be before any conditional returns to follow React hooks rules
-	const bookUrl = useMemo(() => `/api/v1/books/${bookId}/file`, [bookId]);
+	// Book URL for PDF/EPUB viewers
+	// Use /content endpoint which proxies through backend to avoid CORS issues
+	const bookUrl = `/api/v1/books/${bookId}/content`
 
 	useEffect(() => {
 		const fetchBook = async () => {
 			try {
-				setLoading(true);
-				const data = await booksApi.getBook(bookId);
-				setBook(data);
-
-				// Page tracking disabled for testing
-				// if (currentPage === null) {
-				// 	// Page setting logic disabled
-				// }
+				setLoading(true)
+				const data = await booksApi.getBook(bookId)
+				setBook(data)
 			} catch (err) {
-				setError(err.message);
+				setError(err.message)
 			} finally {
-				setLoading(false);
+				setLoading(false)
 			}
-		};
-		if (bookId) {
-			fetchBook();
 		}
-	}, [bookId]); // Only depend on bookId
+		if (bookId) {
+			fetchBook()
+		}
+	}, [bookId]) // Only depend on bookId
 
-	// Temporarily disabled page change handling
-	// const pageChangeTimeoutRef = useRef(null);
-	// const handlePageChange = useCallback((page) => {
-	// 	// Page change logic disabled for testing
-	// }, [bookId]);
+	// Zoom handlers
+	const handleZoomIn = () => {
+		const newZoom = Math.min(300, zoomLevel + 25)
+		setBookZoom(bookId, newZoom)
+	}
 
-	// Extract stable values from book object
-	const _totalPages = book?.totalPages || book?.total_pages || 0;
+	const handleZoomOut = () => {
+		const newZoom = Math.max(50, zoomLevel - 25)
+		setBookZoom(bookId, newZoom)
+	}
 
-	// Simple zoom handlers - no store sync for now
-	const handleZoomIn = useCallback(() => {
-		setZoom((currentZoom) => Math.min(300, currentZoom + 25));
-	}, []);
+	const handleFitToScreen = () => {
+		if (pdfViewerRef.current?.fitToScreen) {
+			pdfViewerRef.current.fitToScreen()
+		}
+	}
 
-	const handleZoomOut = useCallback(() => {
-		setZoom((currentZoom) => Math.max(50, currentZoom - 25));
-	}, []);
-
-	// Disabled fit to screen for now
-	const handleFitToScreen = useCallback(() => {
-		// Fit to screen functionality disabled
-	}, []);
-
-	// Disabled chapter click for now
-	const handleChapterClick = useCallback((_pageNumber) => {
-		// Chapter click functionality disabled for testing
-	}, []);
+	const handleChapterClick = (pageNumber) => {
+		if (pdfViewerRef.current?.goToPage) {
+			pdfViewerRef.current.goToPage(pageNumber)
+		}
+	}
 
 	if (loading) {
 		return (
 			<div className="book-viewer-loading">
 				<div className="spinner">Loading book...</div>
 			</div>
-		);
+		)
 	}
 
 	if (error) {
@@ -136,7 +90,7 @@ const BookViewerContent = () => {
 				<h2>Error loading book</h2>
 				<p>{error}</p>
 			</div>
-		);
+		)
 	}
 
 	if (!book) {
@@ -144,19 +98,20 @@ const BookViewerContent = () => {
 			<div className="book-viewer-error">
 				<h2>Book not found</h2>
 			</div>
-		);
+		)
 	}
 
-	const fileType = book.fileType?.toLowerCase();
+	const fileType = book.fileType?.toLowerCase()
 
 	return (
 		<div className="flex h-screen bg-background">
 			<BookHeader
 				book={book}
-				onToggleSidebar={() => toggleSidebarRef.current?.()}
+				bookId={bookId}
+				onToggleSidebar={toggleSidebar}
 				isSidebarOpen={sidebarOpen}
 				showZoomControls={fileType === "pdf"}
-				zoomLevel={zoom}
+				zoomLevel={zoomLevel}
 				onZoomIn={handleZoomIn}
 				onZoomOut={handleZoomOut}
 				onFitToScreen={handleFitToScreen}
@@ -164,23 +119,24 @@ const BookViewerContent = () => {
 
 			{sidebarOpen && (
 				<BookSidebar
-					book={book}
+					book={{ ...book, totalPages: totalPages || book.totalPages }}
+					bookId={bookId}
 					onChapterClick={handleChapterClick}
-					currentPage={1}
-					progressPercentage={0}
+					currentPage={currentPage}
+					progressPercentage={totalPages ? Math.round((currentPage / totalPages) * 100) : 0}
 				/>
 			)}
 
-			<main
-				className={`flex-1 transition-all duration-300 ${sidebarOpen ? "ml-64" : "ml-0"} pt-16`}
-			>
+			<main className={`flex-1 transition-all duration-300 ${sidebarOpen ? "ml-64" : "ml-0"} pt-16`}>
 				<div className="book-viewer-container h-full">
 					{fileType === "pdf" ? (
-						<PDFErrorBoundary>
-							<PDFViewer ref={pdfViewerRef} url={bookUrl} zoom={zoom} />
-						</PDFErrorBoundary>
+						<PdfErrorBoundary>
+							<PdfViewer ref={pdfViewerRef} url={bookUrl} zoom={zoomLevel} bookId={bookId} />
+						</PdfErrorBoundary>
 					) : fileType === "epub" ? (
-						<EPUBViewer url={bookUrl} bookInfo={book} />
+						<EpubErrorBoundary>
+							<EpubViewer url={bookUrl} bookInfo={book} />
+						</EpubErrorBoundary>
 					) : (
 						<div className="book-viewer-error">
 							<h2>Unsupported file format</h2>
@@ -190,7 +146,7 @@ const BookViewerContent = () => {
 				</div>
 			</main>
 		</div>
-	);
-};
+	)
+}
 
-export default BookViewerContent;
+export default BookViewerContent

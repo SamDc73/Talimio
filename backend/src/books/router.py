@@ -1,15 +1,18 @@
 import json
 import logging
+from io import BytesIO
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse, RedirectResponse
+import httpx
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
 from src.auth import UserId
 from src.database.session import DbSession
+from src.middleware.security import books_rate_limit
 from src.storage.factory import get_storage_provider
 
 # Import the facade
@@ -32,7 +35,11 @@ logger = logging.getLogger(__name__)
 # Create facade instance
 books_facade = BooksFacade()
 
-router = APIRouter(prefix="/api/v1/books", tags=["books"])
+router = APIRouter(
+    prefix="/api/v1/books",
+    tags=["books"],
+    dependencies=[Depends(books_rate_limit)]
+)
 
 
 def _build_progress_dict(progress_data: BookProgressUpdate) -> dict:
@@ -197,6 +204,7 @@ async def get_book_endpoint(book_id: UUID, user_id: UserId) -> BookWithProgress:
 
 @router.post("/extract-metadata")
 async def extract_book_metadata(
+    user_id: UserId,
     file: Annotated[UploadFile, File(description="Book file (PDF or EPUB) to extract metadata from")],
 ) -> BookMetadataResponse:
     """Extract metadata from a book file without storing it."""
@@ -459,6 +467,71 @@ async def serve_book_file(book_id: UUID, user_id: UserId, db: DbSession) -> File
     )
 
 
+@router.get("/{book_id}/content", response_model=None)
+async def stream_book_content(book_id: UUID, user_id: UserId, db: DbSession) -> StreamingResponse:
+    """Stream book PDF content through backend to avoid CORS issues.
+
+    This endpoint acts as a proxy, fetching the book from storage and
+    streaming it back to the client. This completely bypasses CORS issues
+    with signed URLs.
+    """
+    # Simple direct database query
+    from sqlalchemy import select
+
+    from src.books.models import Book
+
+    query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
+    result = await db.execute(query)
+    book = result.scalar_one_or_none()
+
+    if not book:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
+
+    if not book.file_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book file not found")
+
+    # Get storage provider and download URL
+    storage = get_storage_provider()
+    url = await storage.get_download_url(book.file_path)
+
+    # If it's a local file, serve it directly
+    if not url.startswith("http"):
+        from fastapi.responses import FileResponse
+
+        media_type = "application/pdf" if book.file_type == "pdf" else "application/epub+zip"
+        return FileResponse(
+            path=url,
+            media_type=media_type,
+            filename=f"{book.title}.{book.file_type}",
+            headers={
+                "Cache-Control": "private, max-age=3600",
+            }
+        )
+
+    # For remote storage, fetch and stream
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(url, follow_redirects=True)
+            response.raise_for_status()
+
+            media_type = "application/pdf" if book.file_type == "pdf" else "application/epub+zip"
+
+            return StreamingResponse(
+                BytesIO(response.content),
+                media_type=media_type,
+                headers={
+                    "Content-Disposition": f'inline; filename="{book.title}.{book.file_type}"',
+                    "Cache-Control": "private, max-age=3600",  # Cache for 1 hour
+                }
+            )
+        except httpx.HTTPError as e:
+            logger.exception("Failed to fetch book content")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve book content"
+            ) from e
+
+
 @router.post("/{book_id}/extract-toc")
 async def extract_table_of_contents(book_id: UUID, user_id: UserId) -> BookResponse:
     """Extract and update table of contents for an existing book."""
@@ -552,7 +625,7 @@ class RAGStatusResponse(BaseModel):
 
 
 @router.get("/{book_id}/rag-status")
-async def get_book_rag_status(book_id: UUID) -> RAGStatusResponse:
+async def get_book_rag_status(book_id: UUID, user_id: UserId) -> RAGStatusResponse:
     """Get the RAG embedding status for a book."""
     from sqlalchemy import select
 
@@ -560,7 +633,9 @@ async def get_book_rag_status(book_id: UUID) -> RAGStatusResponse:
     from src.database.session import async_session_maker
 
     async with async_session_maker() as session:
-        result = await session.execute(select(Book).where(Book.id == book_id))
+        result = await session.execute(
+            select(Book).where(Book.id == book_id, Book.user_id == user_id)
+        )
         book = result.scalar_one_or_none()
 
         if not book:
