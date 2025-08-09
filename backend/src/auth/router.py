@@ -18,24 +18,29 @@ logger = logging.getLogger(__name__)
 def set_auth_cookie(response: Response, token: str) -> None:
     """Set httpOnly auth cookie (secure!)."""
     settings = get_settings()
+    # In development, don't use samesite restrictions for proxy compatibility
+    is_production = settings.ENVIRONMENT == "production"
     response.set_cookie(
         key="access_token",
         value=f"Bearer {token}",
         httponly=True,  # Can't be accessed by JS (XSS protection)
-        secure=settings.ENVIRONMENT == "production",  # HTTPS only in prod
-        samesite="lax",  # CSRF protection
+        secure=is_production,  # HTTPS only in prod
+        samesite="lax" if is_production else None,  # No samesite restriction in dev for proxy
         max_age=24 * 60 * 60,  # 24 hours
+        path="/",  # Ensure cookie is available for all paths
     )
 
 
 def clear_auth_cookie(response: Response) -> None:
     """Clear auth cookie on logout."""
     settings = get_settings()
+    is_production = settings.ENVIRONMENT == "production"
     response.delete_cookie(
         key="access_token",
         httponly=True,
-        secure=settings.ENVIRONMENT == "production",  # Match set_auth_cookie logic
-        samesite="lax",
+        secure=is_production,  # Match set_auth_cookie logic
+        samesite="lax" if is_production else None,
+        path="/",
     )
 
 
@@ -173,13 +178,15 @@ async def login(request: Request, response: Response, data: LoginRequest) -> dic
         set_auth_cookie(response, auth_response.session.access_token)
 
         # Also set refresh token cookie
+        is_production = settings.ENVIRONMENT == "production"
         response.set_cookie(
             key="refresh_token",
             value=auth_response.session.refresh_token,
             httponly=True,
-            secure=settings.ENVIRONMENT == "production",
-            samesite="lax",
+            secure=is_production,
+            samesite="lax" if is_production else None,
             max_age=7 * 24 * 60 * 60,  # 7 days
+            path="/",
         )
 
         return {
@@ -206,11 +213,13 @@ async def logout(_request: Request, response: Response) -> dict[str, str]:
 
     # Clear both httpOnly cookies (this is the real logout)
     clear_auth_cookie(response)
+    is_production = settings.ENVIRONMENT == "production"
     response.delete_cookie(
         key="refresh_token",
         httponly=True,
-        secure=settings.ENVIRONMENT == "production",  # Consistent with other cookies
-        samesite="lax",
+        secure=is_production,  # Consistent with other cookies
+        samesite="lax" if is_production else None,
+        path="/",
     )
 
     with contextlib.suppress(Exception):
@@ -228,11 +237,7 @@ async def get_current_user(request: Request) -> UserResponse:
 
     # In single-user mode, return default user (FIXED: check for "none" not "single_user")
     if settings.AUTH_PROVIDER == "none" or user_id == DEFAULT_USER_ID:
-        return UserResponse(
-            id=str(DEFAULT_USER_ID),
-            email="demo@talimio.com",
-            username="Demo User"
-        )
+        return UserResponse(id=str(DEFAULT_USER_ID), email="demo@talimio.com", username="Demo User")
 
     # In multi-user mode, get user from Supabase
     if supabase:
@@ -257,17 +262,13 @@ async def get_current_user(request: Request) -> UserResponse:
                     return UserResponse(
                         id=str(user.user.id),
                         email=user.user.email,
-                        username=user.user.user_metadata.get("username", user.user.email.split("@")[0])
+                        username=user.user.user_metadata.get("username", user.user.email.split("@")[0]),
                     )
             except Exception:
                 logger.warning("Failed to get user info from token")
 
     # Fallback to default user
-    return UserResponse(
-        id=str(DEFAULT_USER_ID),
-        email="demo@talimio.com",
-        username="Demo User"
-    )
+    return UserResponse(id=str(DEFAULT_USER_ID), email="demo@talimio.com", username="Demo User")
 
 
 @router.post("/refresh")
@@ -297,13 +298,15 @@ async def refresh_token(request: Request, response: Response) -> dict:
         set_auth_cookie(response, auth_response.session.access_token)
 
         # Also update the refresh token cookie with the new one
+        is_production = settings.ENVIRONMENT == "production"
         response.set_cookie(
             key="refresh_token",
             value=auth_response.session.refresh_token,
             httponly=True,
-            secure=settings.ENVIRONMENT == "production",
-            samesite="lax",
+            secure=is_production,
+            samesite="lax" if is_production else None,
             max_age=7 * 24 * 60 * 60,  # 7 days
+            path="/",
         )
 
         return {
@@ -330,10 +333,7 @@ async def reset_password(request: Request, data: PasswordResetRequest) -> dict[s
     """Send password reset email via Supabase Auth."""
     settings = get_settings()
     if settings.AUTH_PROVIDER != "supabase":
-        raise HTTPException(
-            status_code=400,
-            detail="Password reset is only available with Supabase authentication"
-        )
+        raise HTTPException(status_code=400, detail="Password reset is only available with Supabase authentication")
 
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured")
@@ -369,7 +369,7 @@ async def debug_auth(request: Request) -> dict:
                 current_user_info = {
                     "id": str(user.user.id),
                     "email": user.user.email,
-                    "username": user.user.user_metadata.get("username")
+                    "username": user.user.user_metadata.get("username"),
                 }
         except Exception:
             logger.warning("Failed to get debug user info from token")

@@ -1,4 +1,5 @@
 """Ultra-simple auth configuration - ONE place for EVERYTHING."""
+
 import logging
 from typing import Annotated
 from uuid import UUID
@@ -22,10 +23,11 @@ settings = get_settings()
 DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 # Initialize Supabase client ONCE
-supabase = create_client(
-    settings.SUPABASE_URL,
-    settings.SUPABASE_PUBLISHABLE_KEY
-) if settings.AUTH_PROVIDER == "supabase" and settings.SUPABASE_URL else None
+supabase = (
+    create_client(settings.SUPABASE_URL, settings.SUPABASE_PUBLISHABLE_KEY)
+    if settings.AUTH_PROVIDER == "supabase" and settings.SUPABASE_URL
+    else None
+)
 
 
 def _extract_token_from_request(request: Request) -> str | None:
@@ -102,6 +104,7 @@ async def _get_user_id(request: Request) -> UUID:
         return request.state.user_id
     # Otherwise, get it directly
     return await get_user_id(request)
+
 
 # This is the dependency to use in routers
 UserId = Annotated[UUID, Depends(_get_user_id)]

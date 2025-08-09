@@ -1,6 +1,6 @@
-"""security middleware."""
+"""Security middleware."""
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 from fastapi import Request
 from fastapi.responses import Response
@@ -39,3 +39,21 @@ auth_rate_limit = limiter.limit("5/minute")  # Login attempts
 upload_rate_limit = limiter.limit("20/minute")  # File uploads, video creation
 ai_rate_limit = limiter.limit("50/minute")  # AI-powered operations
 api_rate_limit = limiter.limit("100/minute")  # General API calls
+
+# Rate limit dependencies for router-level application
+
+def create_rate_limit_dependency(
+    limit_decorator: Callable[[Callable], Callable],
+) -> Callable[[Request], Awaitable[None]]:
+    """Create rate limit dependencies from decorators.
+
+    This allows applying rate limits at router level without modifying functions.
+    """
+    @limit_decorator
+    async def rate_limited_dependency(request: Request) -> None:
+        """Apply rate limiting to protect router endpoints."""
+    return rate_limited_dependency
+
+# Pre-configured dependencies for common use cases
+books_rate_limit = create_rate_limit_dependency(api_rate_limit)
+upload_route_limit = create_rate_limit_dependency(upload_rate_limit)

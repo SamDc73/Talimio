@@ -71,8 +71,7 @@ class SupabaseConfigError(HTTPException):
 
     def __init__(self) -> None:
         super().__init__(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Supabase not configured for multi-user mode"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Supabase not configured for multi-user mode"
         )
 
 
@@ -80,7 +79,4 @@ class UnknownAuthProviderError(HTTPException):
     """Raised when an unknown auth provider is configured."""
 
     def __init__(self, provider: str) -> None:
-        super().__init__(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unknown AUTH_PROVIDER: {provider}"
-        )
+        super().__init__(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unknown AUTH_PROVIDER: {provider}")
