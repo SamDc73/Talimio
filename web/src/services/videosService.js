@@ -61,7 +61,11 @@ export async function getVideoChapters(videoId) {
 	try {
 		const chapters = await api.get(`/videos/${videoId}/chapters`)
 		return chapters || []
-	} catch (_error) {
+	} catch (error) {
+		// Log authentication errors for debugging
+		if (error.status === 401) {
+		} else if (error.status !== 404) {
+		}
 		// Don't throw - return empty array so the sidebar can still render
 		return []
 	}

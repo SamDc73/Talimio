@@ -1,16 +1,203 @@
-import { useEffect, useRef, useState } from "react"
+// VideoTranscript.jsx
+// 1. React imports
+import { useEffect, useImperativeHandle, useRef, useState } from "react"
 
+// 2. External libraries
+import { ErrorBoundary } from "react-error-boundary"
+import { cn } from "@/lib/utils"
 import { getVideoTranscript } from "@/services/videosService"
-import "./VideoTranscript.css"
+import { useVideoTranscriptSync } from "./hooks/useVideoTranscriptSync"
+// 3. Internal absolute imports
+import "./video-overrides.css" // Only for third-party overrides
 
-const VideoTranscript = ({ videoId, currentTime, onSeek }) => {
-	const [transcript, setTranscript] = useState({ segments: [] })
+// Virtualization config for performance
+const CONFIG = {
+	rowHeight: 42, // Compact height for better density
+	visibleBuffer: 5, // Extra items to render above/below viewport
+}
+
+// Helper function to format time
+const formatTime = (seconds) => {
+	const mins = Math.floor(seconds / 60)
+	const secs = Math.floor(seconds % 60)
+	return `${mins}:${secs.toString().padStart(2, "0")}`
+}
+
+// Internal virtualized transcript component for performance
+function VirtualizedTranscriptList({ segments, activeIndex, onSegmentClick, containerHeight = 400, ref }) {
+	const containerRef = useRef(null)
+	const [visibleRange, setVisibleRange] = useState({ start: 0, end: 50 })
+	const isFirefox = navigator.userAgent.toLowerCase().includes("firefox")
+
+	// Expose scrollToItem method
+	useImperativeHandle(ref, () => ({
+		scrollToItem: (index, align = "center") => {
+			if (!containerRef.current) return
+
+			const container = containerRef.current
+			const itemElement = container.querySelector(`[data-index="${index}"]`)
+
+			if (itemElement) {
+				// Use native smooth scrolling for better Firefox performance
+				const behavior = isFirefox ? "auto" : "smooth"
+
+				if (align === "center") {
+					const elementTop = itemElement.offsetTop
+					const elementHeight = CONFIG.rowHeight
+					const containerHeight = container.clientHeight
+					const scrollTo = elementTop - containerHeight / 2 + elementHeight / 2
+
+					container.scrollTo({
+						top: scrollTo,
+						behavior: behavior,
+					})
+				} else {
+					itemElement.scrollIntoView({
+						behavior: behavior,
+						block: align,
+					})
+				}
+			}
+		},
+	}))
+
+	// Use Intersection Observer for efficient visibility detection
+	useEffect(() => {
+		if (!containerRef.current) return
+
+		const container = containerRef.current
+
+		// Calculate visible range based on scroll position
+		const updateVisibleRange = () => {
+			const scrollTop = container.scrollTop
+			const containerHeight = container.clientHeight
+
+			const start = Math.max(0, Math.floor(scrollTop / CONFIG.rowHeight) - CONFIG.visibleBuffer)
+			const end = Math.min(
+				segments.length,
+				Math.ceil((scrollTop + containerHeight) / CONFIG.rowHeight) + CONFIG.visibleBuffer
+			)
+
+			setVisibleRange({ start, end })
+		}
+
+		// Throttle scroll updates for Firefox
+		let scrollTimeout
+		const handleScroll = () => {
+			if (scrollTimeout) clearTimeout(scrollTimeout)
+			scrollTimeout = setTimeout(updateVisibleRange, isFirefox ? 50 : 16)
+		}
+
+		container.addEventListener("scroll", handleScroll, { passive: true })
+		updateVisibleRange() // Initial calculation
+
+		return () => {
+			container.removeEventListener("scroll", handleScroll)
+			if (scrollTimeout) clearTimeout(scrollTimeout)
+		}
+	}, [segments.length, isFirefox])
+
+	// Calculate total height for scrollbar
+	const totalHeight = segments.length * CONFIG.rowHeight
+
+	// Only render visible segments
+	const visibleSegments = []
+	for (let i = visibleRange.start; i < visibleRange.end && i < segments.length; i++) {
+		const segment = segments[i]
+		const isActive = i === activeIndex
+
+		visibleSegments.push(
+			<button
+				key={`${segment.startTime}-${i}`}
+				data-index={i}
+				type="button"
+				className={cn(
+					"transcript-segment", // Keep for performance optimizations in CSS
+					"flex items-center gap-3 px-6 py-2 pl-6",
+					"border-l-2 border-transparent cursor-pointer border-0 w-full text-left",
+					"transition-all duration-150 ease-in-out",
+					"bg-white select-text",
+					"hover:bg-gray-50",
+					"focus:outline-2 focus:outline-violet-600 focus:-outline-offset-2",
+					"focus-visible:outline-2 focus-visible:outline-violet-600 focus-visible:outline-offset-2",
+					isActive && ["border-l-violet-600 bg-violet-100", "font-medium"]
+				)}
+				style={{
+					position: "absolute",
+					top: i * CONFIG.rowHeight,
+					height: CONFIG.rowHeight,
+					width: "100%",
+				}}
+				onClick={() => onSegmentClick(segment.startTime, i)}
+				onKeyDown={(e) => {
+					if (e.key === "Enter" || e.key === " ") {
+						e.preventDefault()
+						onSegmentClick(segment.startTime, i)
+					}
+				}}
+				aria-label={`Jump to ${formatTime(segment.startTime)}: ${segment.text.slice(0, 50)}${segment.text.length > 50 ? "..." : ""}`}
+			>
+				<span
+					className={cn(
+						"flex-shrink-0 text-[11px] font-semibold tabular-nums",
+						"min-w-[42px] px-1.5 py-0.5 rounded-md text-center",
+						"bg-violet-500/15 text-violet-600",
+						"hover:bg-violet-500/20",
+						"select-none", // Make timestamp non-selectable
+						isActive && "text-violet-600 font-semibold"
+					)}
+				>
+					{formatTime(segment.startTime)}
+				</span>
+				<span
+					className={cn(
+						"flex-1 text-sm leading-normal",
+						"text-foreground/85 break-words",
+						"transition-colors duration-150 select-text",
+						"hover:text-foreground",
+						isActive && "text-foreground font-medium"
+					)}
+				>
+					{segment.text}
+				</span>
+			</button>
+		)
+	}
+
+	return (
+		<div
+			ref={containerRef}
+			className="transcript-virtualized-container relative overflow-auto bg-white"
+			style={{
+				height: containerHeight,
+				// Firefox-specific optimizations
+				willChange: isFirefox ? "scroll-position" : "transform",
+				// Disable smooth scrolling in Firefox for better performance
+				scrollBehavior: isFirefox ? "auto" : "smooth",
+			}}
+		>
+			<div
+				style={{
+					height: totalHeight,
+					position: "relative",
+				}}
+			>
+				{visibleSegments}
+			</div>
+		</div>
+	)
+}
+
+// No default exports - following react_draft.md
+export function VideoTranscript({ videoId, videoElement, youtubePlayerRef, onSeek, isPlaying = false, onTimeUpdate }) {
+	const [transcript, setTranscript] = useState(null)
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState(null)
-	const [transcriptReady, setTranscriptReady] = useState(false)
-
+	const [activeIndex, setActiveIndex] = useState(-1)
+	const [userScrolling, setUserScrolling] = useState(false)
+	const [playerReady, setPlayerReady] = useState(false)
 	const transcriptRef = useRef(null)
-	const activeLineRef = useRef(null)
+	const scrollTimeoutRef = useRef(null)
 
 	// Fetch transcript when component mounts
 	useEffect(() => {
@@ -23,10 +210,8 @@ const VideoTranscript = ({ videoId, currentTime, onSeek }) => {
 			try {
 				const data = await getVideoTranscript(videoId)
 				setTranscript(data)
-				setTranscriptReady(true) // Set ready when transcript loads
 			} catch (_err) {
 				setError("Failed to load transcript")
-				setTranscriptReady(false)
 			} finally {
 				setLoading(false)
 			}
@@ -35,156 +220,144 @@ const VideoTranscript = ({ videoId, currentTime, onSeek }) => {
 		loadTranscript()
 	}, [videoId])
 
-	// Find active segment using a strict time check for better accuracy
-	const findActiveSegment = (time, segments) => {
-		if (!segments || segments.length === 0) return -1
-		if (time < segments[0].startTime) return -1
-
-		// Find the first segment that strictly contains the current time
-		for (let i = 0; i < segments.length; i++) {
-			if (time >= segments[i].startTime && time < segments[i].endTime) {
-				return i
-			}
+	// Check if YouTube player is ready
+	useEffect(() => {
+		if (!youtubePlayerRef) {
+			setPlayerReady(false)
+			return
 		}
 
-		// If no segment is active, return -1
-		return -1
+		const checkReady = () => {
+			if (youtubePlayerRef.current?.isReady?.()) {
+				setPlayerReady(true)
+				return true
+			}
+			return false
+		}
+
+		// Check immediately
+		if (checkReady()) return
+
+		// Poll for ready state
+		const interval = setInterval(() => {
+			if (checkReady()) {
+				clearInterval(interval)
+			}
+		}, 100)
+
+		return () => clearInterval(interval)
+	}, [youtubePlayerRef])
+
+	// Centralized scroll callback for virtualized list
+	const scrollToIndex = (index) => {
+		if (!userScrolling && index >= 0 && index < transcript?.segments?.length) {
+			transcriptRef.current?.scrollToItem(index, "center")
+		}
 	}
 
-	const activeCueIndex = findActiveSegment(currentTime + 0.3, transcript.segments)
+	// High-performance sync engine with virtualized scrolling
+	const syncEngine = useVideoTranscriptSync({
+		videoElement,
+		youtubePlayerRef: playerReady ? youtubePlayerRef : null,
+		segments: transcript?.segments,
+		onActiveIndexChange: (index) => {
+			setActiveIndex(index)
+			// Debounced scroll for virtualized list
+			if (scrollTimeoutRef.current) {
+				clearTimeout(scrollTimeoutRef.current)
+			}
+			scrollTimeoutRef.current = setTimeout(() => scrollToIndex(index), 100)
+		},
+		scrollToIndex: scrollToIndex, // Use centralized scrolling
+		isPlaying, // Pass play/pause state
+		onTimeUpdate, // Forward time updates to parent
+	})
 
-	// Auto-scroll to active line
-	useEffect(() => {
-		if (transcriptReady && activeCueIndex >= 0 && activeLineRef.current && transcriptRef.current) {
-			const container = transcriptRef.current
-			const activeLine = activeLineRef.current
+	// Note: User scrolling detection is handled differently with virtualized list
+	// The VirtualizedTranscript component manages its own scroll behavior
 
-			// Calculate scroll position to center the active line
-			const containerHeight = container.clientHeight
-			const lineTop = activeLine.offsetTop
-			const lineHeight = activeLine.offsetHeight
-			const scrollTo = lineTop - containerHeight / 2 + lineHeight / 2
+	// Handle segment click for seeking
+	const handleSegmentClick = (startTime, _segmentIndex) => {
+		// Reset user scrolling flag when clicking
+		setUserScrolling(false)
 
-			container.scrollTo({
-				top: scrollTo,
-				behavior: "smooth",
-			})
+		// Immediate seek using sync engine
+		if (syncEngine) {
+			syncEngine.seek(startTime)
 		}
-	}, [activeCueIndex, transcriptReady])
-
-	const handleLineClick = (startTime) => {
 		if (onSeek) {
 			onSeek(startTime)
 		}
 	}
 
-	const formatTime = (seconds, includeHours = false) => {
-		const hours = Math.floor(seconds / 3600)
-		const mins = Math.floor((seconds % 3600) / 60)
-		const secs = Math.floor(seconds % 60)
-
-		if (includeHours || hours > 0) {
-			return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
-		}
-		return `${mins}:${secs.toString().padStart(2, "0")}`
-	}
-
 	if (loading) {
 		return (
-			<div className="video-transcript loading">
-				<div className="transcript-loader">Loading transcript...</div>
+			<div className="p-12 text-center bg-transparent">
+				<div className="flex items-center justify-center gap-3 text-sm font-medium text-violet-600">
+					<span className="relative flex h-5 w-5">
+						<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
+						<span className="relative inline-flex rounded-full h-5 w-5 bg-violet-500" />
+					</span>
+					Loading transcript...
+				</div>
 			</div>
 		)
 	}
 
 	if (error) {
 		return (
-			<div className="video-transcript error">
-				<div className="transcript-error">{error}</div>
+			<div className="p-12 text-center bg-transparent">
+				<div className="text-sm font-medium text-red-500">{error}</div>
 			</div>
 		)
 	}
 
-	if (!transcript.segments || transcript.segments.length === 0) {
+	if (!transcript?.segments || transcript.segments.length === 0) {
 		return (
-			<div className="video-transcript empty">
-				<div className="transcript-empty">No transcript available for this video</div>
+			<div className="p-12 text-center bg-transparent">
+				<div className="text-sm italic text-muted-foreground">No transcript available for this video</div>
 			</div>
 		)
 	}
 
 	return (
-		<div className="video-transcript" ref={transcriptRef}>
-			<div className="transcript-header">
-				<h3>Transcript</h3>
-				<div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
-					{/* Time Display - now shows real YouTube player time */}
-					<span
-						style={{
-							fontSize: "18px",
-							fontWeight: "bold",
-							fontFamily: "monospace",
-							color: "hsl(var(--primary))",
-						}}
-					>
-						{formatTime(currentTime, true)}
-					</span>
-					<span className="transcript-count">{transcript.totalSegments} segments</span>
-				</div>
-			</div>
-			<div className="transcript-content">
-				{transcript.segments.map((segment, index) => {
-					const isActive = index === activeCueIndex
-
-					// Style for active segment
-					const activeStyle = {
-						backgroundColor: "rgba(34, 197, 94, 0.15)", // Subtle green background
-						borderLeft: "4px solid rgb(34, 197, 94)", // Green accent border
-						padding: "12px 20px",
-						transition: "all 0.3s ease",
-						transform: "translateX(4px)",
-					}
-
-					const inactiveStyle = {
-						backgroundColor: "transparent",
-						borderLeft: "4px solid transparent",
-						padding: "12px 20px",
-						transform: "translateX(0)",
-						transition: "all 0.3s ease",
-					}
-
-					// Let's wrap in a div to test if button styles are the issue
-					return (
-						<div
-							key={`${segment.startTime}-${segment.endTime}`}
-							ref={isActive ? activeLineRef : null}
-							className="transcript-line-wrapper"
-							style={isActive ? activeStyle : inactiveStyle}
-						>
-							<button
-								className={`transcript-line ${isActive ? "active" : ""}`}
-								onClick={() => handleLineClick(segment.startTime)}
-								type="button"
-								aria-label={`Jump to ${formatTime(segment.startTime)}`}
-								data-active={isActive ? "true" : "false"}
-								style={{
-									width: "100%",
-									textAlign: "left",
-									background: "none",
-									border: "none",
-									cursor: "pointer",
-									padding: "0",
-								}}
-							>
-								<span className="transcript-time">{formatTime(segment.startTime)}</span>
-								<span className="transcript-text">{segment.text}</span>
-							</button>
-						</div>
-					)
-				})}
-			</div>
+		<div className="relative overflow-hidden bg-white">
+			<VirtualizedTranscriptList
+				ref={transcriptRef}
+				segments={transcript.segments}
+				activeIndex={activeIndex}
+				onSegmentClick={handleSegmentClick}
+				containerHeight={450} // Increased height for tab view
+			/>
 		</div>
 	)
 }
 
+// Error fallback component following component-architecture.md patterns
+function TranscriptErrorFallback({ error, resetErrorBoundary }) {
+	return (
+		<div className="p-4 border border-destructive rounded-md">
+			<h2 className="text-lg font-semibold text-destructive">Transcript Error</h2>
+			<pre className="mt-2 text-sm text-muted-foreground">{error.message}</pre>
+			<button
+				onClick={resetErrorBoundary}
+				className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded"
+				type="button"
+			>
+				Retry Loading Transcript
+			</button>
+		</div>
+	)
+}
+
+// Wrap the VideoTranscript with ErrorBoundary for production use
+export function VideoTranscriptWithErrorBoundary(props) {
+	return (
+		<ErrorBoundary FallbackComponent={TranscriptErrorFallback}>
+			<VideoTranscript {...props} />
+		</ErrorBoundary>
+	)
+}
+
+// Export as default for backward compatibility
 export default VideoTranscript

@@ -1,22 +1,21 @@
 import { Loader2 } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { VideoHeader } from "@/components/header/VideoHeader"
 import { VideoSidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
 import { useVideoProgressWithPosition } from "@/hooks/useVideoProgress"
-import { useYouTubeTimeTracking } from "@/hooks/useYouTubeTimeTracking"
 import { getVideo } from "@/services/videosService"
-import useAppStore from "@/stores/useAppStore"
-import { CollapsibleDescription } from "./CollapsibleDescription"
-import VideoTranscript from "./VideoTranscript"
-import "@justinribeiro/lite-youtube"
+import useAppStore, { selectSidebarOpen, selectToggleSidebar } from "@/stores/useAppStore"
+import { useVideoProgressSaving } from "./hooks/useVideoProgressSaving"
+import { VideoContentTabs } from "./VideoContentTabs"
+import { YouTubePlayer } from "./YouTubePlayer"
 
-import "./VideoViewer.css"
+import "./video-overrides.css" // Only for third-party overrides
 import { getVideoProgress } from "@/utils/progressUtils"
 
 /**
- * VideoViewer component following patterns from PDFViewer and LessonViewer
+ * VideoViewer component with high-performance YouTube player and transcript sync
  */
 function VideoViewerContent() {
 	const { videoId } = useParams()
@@ -24,8 +23,8 @@ function VideoViewerContent() {
 	const { toast } = useToast()
 
 	// Zustand store - using stable selectors
-	const isOpen = useAppStore((state) => state.preferences?.sidebarOpen ?? true)
-	const toggleSidebar = useAppStore((state) => state.toggleSidebar)
+	const isOpen = useAppStore(selectSidebarOpen)
+	const toggleSidebar = useAppStore(selectToggleSidebar)
 
 	// Use unified progress hook
 	const { updateVideoProgress: updateProgress } = useVideoProgressWithPosition(videoId)
@@ -36,13 +35,10 @@ function VideoViewerContent() {
 	const [error, setError] = useState(null)
 	const [currentTime, setCurrentTime] = useState(0)
 	const [duration, setDuration] = useState(0)
+	const [isPlaying, setIsPlaying] = useState(false)
 
-	// Use the robust YouTube time tracking hook with postMessage
-	const { playerRef, seekTo } = useYouTubeTimeTracking({
-		video,
-		onTimeUpdate: setCurrentTime,
-		onDurationUpdate: setDuration,
-	})
+	// High-performance YouTube player ref
+	const youtubePlayerRef = useRef(null)
 
 	// Load video on mount
 	useEffect(() => {
@@ -83,72 +79,116 @@ function VideoViewerContent() {
 		if (videoId) {
 			loadVideo()
 		}
-	}, [videoId, toast]) // Only depend on videoId, toast is stable
+	}, [videoId, toast])
 
-	// Save progress periodically using useRef to avoid stale closures
-	const progressDataRef = useRef({ currentTime: 0, duration: 0 })
-	const lastSavedTimeRef = useRef(0)
+	// Handle YouTube player ready - memoized to prevent recreating player
+	const handlePlayerReady = useCallback(() => {
+		// Seek to saved position if available
+		const savedPosition = video?.progress?.lastPosition || video?.lastPosition || 0
+		if (savedPosition > 0 && youtubePlayerRef.current) {
+			youtubePlayerRef.current.seekTo(savedPosition)
+		}
 
-	// Update ref whenever values change
-	useEffect(() => {
-		progressDataRef.current = { currentTime, duration }
-	}, [currentTime, duration])
+		// Get initial duration on player ready
+		if (youtubePlayerRef.current) {
+			const dur = youtubePlayerRef.current.getDuration()
+			if (dur) setDuration(dur)
 
-	useEffect(() => {
-		if (!video || !videoId) return
-
-		const saveProgress = () => {
-			const { currentTime: time, duration: dur } = progressDataRef.current
-			// Only save if position changed by at least 5 seconds
-			if (time > 0 && Math.abs(time - lastSavedTimeRef.current) >= 5) {
-				updateProgress(Math.floor(time), dur)
-				lastSavedTimeRef.current = time
+			// Get initial time position
+			const time = youtubePlayerRef.current.getCurrentTime()
+			if (typeof time === "number" && !Number.isNaN(time)) {
+				setCurrentTime(time)
 			}
 		}
 
-		// Save every 10 seconds (reduced frequency)
-		const saveInterval = setInterval(saveProgress, 10000)
+		// Note: Time updates now come from VideoTranscriptSync through onTimeUpdate
+		// This eliminates competing polling loops and ensures single source of truth
+	}, [video]) // Only depend on video object
 
-		return () => {
-			clearInterval(saveInterval)
-			// Save on unmount
-			saveProgress()
+	// Handle player state changes - memoized to prevent recreating player
+	const handleStateChange = useCallback((event) => {
+		// Polling state changes are handled automatically by YouTubeTimeProvider
+		// This ensures the sync engine gets accurate timing data
+		// 1 = YT.PlayerState.PLAYING
+
+		// Update playing state for transcript sync
+		// Treat both PLAYING (1) and BUFFERING (3) as "playing" so transcript keeps updating
+		setIsPlaying(event.data === 1 || event.data === 3)
+
+		// Update our local state for progress tracking
+		if (youtubePlayerRef.current) {
+			// Always try to get current time on state change
+			const time = youtubePlayerRef.current.getCurrentTime()
+			if (typeof time === "number" && !Number.isNaN(time)) {
+				setCurrentTime(time)
+			}
+
+			// Also get duration if available
+			const dur = youtubePlayerRef.current.getDuration()
+			if (typeof dur === "number" && !Number.isNaN(dur) && dur > 0) {
+				setDuration(dur)
+			}
 		}
-	}, [videoId, video, updateProgress])
+	}, []) // No dependencies - setters are stable
 
-	// Save progress on page unload
+	// Use hook for progress saving
+	useVideoProgressSaving({
+		video,
+		videoId,
+		currentTime,
+		duration,
+		updateProgress,
+	})
+
+	// Clean up polling on unmount
 	useEffect(() => {
-		const handleBeforeUnload = () => {
-			if (currentTime > 0 && video && videoId) {
-				const data = JSON.stringify({
-					progress_percentage: duration > 0 ? Math.round((currentTime / duration) * 100) : 0,
-					metadata: {
-						content_type: "video",
-						lastPosition: Math.floor(currentTime),
-						duration: duration,
-					},
+		const playerRef = youtubePlayerRef.current
+		return () => {
+			// Stop UI polling when component unmounts
+			if (playerRef) {
+				playerRef.stopPolling()
+			}
+		}
+	}, [])
+
+	// Handle chapter/timestamp seeking - memoized
+	const handleSeekToChapter = useCallback(
+		(timestamp) => {
+			if (youtubePlayerRef.current) {
+				youtubePlayerRef.current.seekTo(timestamp, true)
+				setCurrentTime(timestamp) // Update immediately for responsive UI
+			} else {
+				toast({
+					title: "Player not ready",
+					description: "Please wait for the video to load",
+					variant: "default",
 				})
-				navigator.sendBeacon(`/api/v1/progress/${videoId}`, new Blob([data], { type: "application/json" }))
 			}
-		}
+		},
+		[toast]
+	)
 
-		window.addEventListener("beforeunload", handleBeforeUnload)
-		return () => {
-			window.removeEventListener("beforeunload", handleBeforeUnload)
-		}
-	}, [currentTime, duration, video, videoId])
+	// Memoize time update callback
+	const handleTimeUpdate = useCallback((time) => {
+		// Get time updates from sync engine for progress tracking
+		setCurrentTime(time)
+	}, [])
 
-	// Handle chapter/timestamp seeking
-	const handleSeekToChapter = (timestamp) => {
-		const success = seekTo(timestamp)
-		if (!success) {
-			toast({
-				title: "Start video first",
-				description: "Please click play on the video before seeking",
-				variant: "default",
-			})
-		}
-	}
+	// Memoize playerVars to prevent recreation
+	const playerVars = useMemo(
+		() => ({
+			autoplay: 0,
+			modestbranding: 1,
+			rel: 0,
+			iv_load_policy: 3,
+			cc_load_policy: 0,
+			fs: 1,
+			playsinline: 1,
+			disablekb: 0,
+			start: Math.floor(video?.progress?.lastPosition || video?.lastPosition || 0), // Use initial saved position from video data
+		}),
+		[video?.progress?.lastPosition, video?.lastPosition]
+	)
 
 	// Calculate progress percentage
 	const progressPercentage = duration > 0 ? Math.round((currentTime / duration) * 100) : getVideoProgress(video)
@@ -170,12 +210,14 @@ function VideoViewerContent() {
 	// Loading state
 	if (loading) {
 		return (
-			<div className={`h-screen ${isOpen ? "sidebar-open" : ""}`}>
+			<div className="h-screen">
 				<VideoHeader />
-				<div className="content-with-sidebar">
-					<div className="video-loading">
+				<div
+					className={`flex flex-col transition-all duration-300 min-h-[calc(100vh-4rem)] bg-gradient-to-b from-background to-slate-50/50 pt-16 ${isOpen ? "ml-80" : "ml-0"}`}
+				>
+					<div className="flex flex-col items-center justify-center min-h-[30rem] gap-4 text-muted-foreground p-12">
 						<Loader2 className="h-8 w-8 animate-spin" />
-						<p>Loading video...</p>
+						<p className="mt-2 text-sm font-medium opacity-80">Loading video...</p>
 					</div>
 				</div>
 			</div>
@@ -185,12 +227,20 @@ function VideoViewerContent() {
 	// Error state
 	if (error || !video) {
 		return (
-			<div className={`h-screen ${isOpen ? "sidebar-open" : ""}`}>
+			<div className="h-screen">
 				<VideoHeader />
-				<div className="content-with-sidebar">
-					<div className="video-error">
-						<p>{error || "Video not found"}</p>
-						<button type="button" onClick={() => navigate("/")} className="mt-4">
+				<div
+					className={`flex flex-col transition-all duration-300 min-h-[calc(100vh-4rem)] bg-gradient-to-b from-background to-slate-50/50 pt-16 ${isOpen ? "ml-80" : "ml-0"}`}
+				>
+					<div className="flex flex-col items-center justify-center min-h-[30rem] gap-4 p-12 bg-gradient-to-br from-destructive/5 to-transparent rounded-2xl border border-destructive/10">
+						<p className="text-base font-medium text-destructive text-center max-w-[30rem]">
+							{error || "Video not found"}
+						</p>
+						<button
+							type="button"
+							onClick={() => navigate("/")}
+							className="mt-4 px-5 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-medium transition-colors hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-600 focus:ring-offset-2"
+						>
 							Back to Home
 						</button>
 					</div>
@@ -210,49 +260,50 @@ function VideoViewerContent() {
 				progressPercentage={progressPercentage}
 			/>
 			<main className={`flex-1 transition-all duration-300 ${isOpen ? "ml-80" : "ml-0"} pt-16`}>
-				<div className="video-player-section">
-					<div className="video-player">
-						<lite-youtube
-							ref={playerRef}
-							videoid={video.youtubeId}
-							videotitle={video.title}
-							posterquality="hqdefault"
-							params="rel=0&modestbranding=1&enablejsapi=1&iv_load_policy=3&cc_load_policy=0&fs=0&playsinline=1&disablekb=0"
-							autoload
-							nocookie
-							privacy
-						>
-							{video.thumbnailUrl && <img slot="image" src={video.thumbnailUrl} alt={video.title} />}
-						</lite-youtube>
+				<div className="flex-1 flex flex-col overflow-y-auto p-8 max-w-7xl mx-auto w-full scroll-smooth">
+					{/* Video Player Container */}
+					<div className="video-player relative w-full pb-[56.25%] bg-black rounded-xl overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
+						<YouTubePlayer
+							ref={youtubePlayerRef}
+							videoId={video.youtubeId}
+							onReady={handlePlayerReady}
+							onStateChange={handleStateChange}
+							width="100%"
+							height="100%"
+							playerVars={playerVars}
+						/>
 					</div>
 
-					<div className="video-info">
-						<h1 className="video-title">{video.title}</h1>
-						<div className="video-metadata">
-							<span className="video-channel">{video.channel}</span>
-							<span className="video-separator">•</span>
-							<span className="video-duration">{formatDuration(duration || video.duration)}</span>
-							<span className="video-separator">•</span>
-							<span className="video-progress">
+					{/* Video Info */}
+					<div className="mt-6 p-0">
+						<h1 className="text-[1.75rem] font-bold leading-9 tracking-tight mb-3 text-foreground">{video.title}</h1>
+						<div className="flex items-center flex-wrap gap-3 text-sm text-muted-foreground mb-6">
+							<span className="font-semibold text-violet-600">{video.channel}</span>
+							<span className="opacity-30">•</span>
+							<span className="tabular-nums">{formatDuration(duration || video.duration)}</span>
+							<span className="opacity-30">•</span>
+							<span className="text-violet-600 font-semibold tabular-nums">
 								{formatDuration(currentTime)} / {formatDuration(duration || video.duration)} ({progressPercentage}%)
 							</span>
 							{video.publishedAt && (
 								<>
-									<span className="video-separator">•</span>
-									<span className="video-date">{new Date(video.publishedAt).toLocaleDateString()}</span>
+									<span className="opacity-30">•</span>
+									<span className="text-[0.8125rem] opacity-80">
+										{new Date(video.publishedAt).toLocaleDateString()}
+									</span>
 								</>
 							)}
 						</div>
 					</div>
+
+					<VideoContentTabs
+						video={video}
+						youtubePlayerRef={youtubePlayerRef}
+						onSeek={handleSeekToChapter}
+						isPlaying={isPlaying}
+						onTimeUpdate={handleTimeUpdate}
+					/>
 				</div>
-				{/* Video Transcript */}
-				<VideoTranscript
-					key={video.id} // Force re-mount on video change
-					videoId={video.id}
-					currentTime={currentTime}
-					onSeek={handleSeekToChapter}
-				/>
-				{video.description && <CollapsibleDescription description={video.description} />}
 			</main>
 		</div>
 	)
@@ -261,6 +312,6 @@ function VideoViewerContent() {
 /**
  * Main VideoViewer component
  */
-export default function VideoViewer() {
+export function VideoViewer() {
 	return <VideoViewerContent />
 }

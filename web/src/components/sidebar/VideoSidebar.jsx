@@ -17,11 +17,12 @@ import { useToast } from "@/hooks/use-toast"
 import { useVideoProgress } from "@/hooks/useVideoProgress"
 import { extractVideoChapters, getVideoChapters } from "@/services/videosService"
 import CompletionCheckbox from "./CompletionCheckbox"
+import ProgressCircle from "./ProgressCircle"
 import ProgressIndicator from "./ProgressIndicator"
 import SidebarContainer from "./SidebarContainer"
 import SidebarNav from "./SidebarNav"
 
-export function VideoSidebar({ video, currentTime, onSeek }) {
+export function VideoSidebar({ video, currentTime, onSeek, progressPercentage }) {
 	const [chapters, setChapters] = useState([])
 	const [activeChapter, setActiveChapter] = useState(null)
 	const [isLoadingChapters, setIsLoadingChapters] = useState(false)
@@ -30,7 +31,7 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 	const { toast } = useToast()
 
 	// Use the standardized hook
-	const { progress, toggleCompletion, isCompleted, refetch } = useVideoProgress(video?.id)
+	const { progress, toggleCompletion, isCompleted, refetch, metadata } = useVideoProgress(video?.id)
 
 	// Helper function to format seconds to time string - moved outside component to prevent recreating
 	// This function is pure and doesn't need to be inside the component
@@ -57,8 +58,9 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 					setChapters([])
 				}
 			} catch (error) {
-				// Don't log error if it's expected (404 when no chapters exist)
-				if (!error.message?.includes("404")) {
+				// Log authentication errors for debugging
+				if (error.message?.includes("401") || error.message?.includes("Authentication")) {
+				} else if (!error.message?.includes("404")) {
 				}
 				setChapters([])
 			} finally {
@@ -165,46 +167,66 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 
 	if (!video) return null
 
+	// Calculate chapter completion progress for the "Done" pill
+	// Only show "Done" when ALL chapters are completed
+	const completedChapterCount = chapters.filter((chapter) => {
+		const chapterId = chapter.id || chapter.chapter_id
+		return isChapterCompleted(chapterId)
+	}).length
+
+	const _chapterCompletionPercentage =
+		chapters.length > 0 ? Math.round((completedChapterCount / chapters.length) * 100) : 0
+
+	// Determine what to show in the progress indicator
+	// Show "Done" only when all chapters are completed, otherwise show watch percentage
+	const isFullyCompleted = chapters.length > 0 && completedChapterCount === chapters.length
+	const displayProgress = isFullyCompleted ? 100 : progressPercentage || 0
+	const displaySuffix = isFullyCompleted ? "Done" : "Watched"
+
 	return (
 		<SidebarContainer data-testid="video-sidebar">
 			<ProgressIndicator
-				progress={progress.percentage}
+				progress={displayProgress}
 				variant="video"
-				suffix="Watched"
+				suffix={displaySuffix}
 				data-testid="progress-percentage"
-			/>
-
-			{/* Video info */}
-			<div className="px-4 py-3 border-b border-border">
-				<h3 className="text-sm font-semibold text-zinc-800 truncate">{video.title}</h3>
-				<p className="text-xs text-zinc-500 mt-1">{video.channel}</p>
-			</div>
+			>
+				<span className="text-xs text-zinc-500">
+					{chapters.length > 0
+						? `${completedChapterCount} of ${chapters.length} chapters`
+						: `${formatTime(currentTime || 0)} / ${formatTime(video.duration || 0)}`}
+				</span>
+			</ProgressIndicator>
 
 			<SidebarNav>
 				{chapters.length === 0 ? (
-					<div className="text-center text-zinc-500 mt-8">
-						<Clock className="w-12 h-12 mx-auto mb-4 text-zinc-300" />
-						<p className="text-sm">No chapters available</p>
-						{!isLoadingChapters && (
-							<>
-								<p className="text-xs mt-2">This video doesn't have chapter markers</p>
+					<div className="text-center text-muted-foreground py-8 px-4">
+						<Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
+						{isLoadingChapters ? (
+							<div>
+								<p className="text-sm font-medium">Loading chapters...</p>
+								<p className="text-xs mt-2 text-muted-foreground/80">Fetching video chapter data</p>
+							</div>
+						) : (
+							<div>
+								<p className="text-sm font-medium">No chapters available</p>
+								<p className="text-xs mt-2 text-muted-foreground/80">This video doesn't have chapter markers</p>
 
 								{/* Extract chapters button */}
 								<button
 									type="button"
 									onClick={handleExtractChapters}
 									disabled={isExtracting}
-									className="mt-4 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
+									className="mt-4 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 transition-colors"
 								>
 									<Download className="w-4 h-4" />
 									{isExtracting ? "Extracting..." : "Extract Chapters"}
 								</button>
-							</>
+							</div>
 						)}
 					</div>
 				) : (
 					<div className="space-y-2">
-						<h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-2">Chapters</h4>
 						{chapters.map((chapter, index) => {
 							const chapterId = chapter.id || chapter.chapter_id
 							const chapterCompleted = isChapterCompleted(chapterId)
@@ -218,31 +240,52 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 									} shadow-sm overflow-hidden`}
 								>
 									<div className="flex items-center gap-3 px-4 py-3">
+										<ProgressCircle number={index + 1} progress={chapterCompleted ? 100 : 0} variant="video" />
 										<CompletionCheckbox
 											isCompleted={chapterCompleted}
 											onClick={() => toggleChapterCompletion(chapter)}
 											variant="video"
 											data-testid={`chapter-checkbox-${index}`}
+											asDiv={true}
 										/>
 
-										<button type="button" onClick={() => handleChapterClick(chapter)} className="flex-1 text-left">
+										<button
+											type="button"
+											onClick={() => handleChapterClick(chapter)}
+											className="flex-1 text-left group"
+										>
 											<div className="flex items-center gap-2 mb-1">
-												<span className={`text-xs font-mono ${isActive ? "text-violet-600" : "text-zinc-500"}`}>
+												<span
+													className={`text-xs font-mono transition-colors ${
+														isActive
+															? "text-violet-600 font-semibold"
+															: "text-muted-foreground group-hover:text-violet-600"
+													}`}
+												>
 													{chapter.timeStr}
 												</span>
+												{chapterCompleted && (
+													<span className="text-xs font-medium text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full">
+														Done
+													</span>
+												)}
 											</div>
 											<h5
-												className={`text-sm font-medium line-clamp-2 ${
-													chapterCompleted ? "text-violet-700" : isActive ? "text-violet-600" : "text-zinc-700"
+												className={`text-sm font-semibold line-clamp-2 transition-colors ${
+													chapterCompleted
+														? "text-violet-700"
+														: isActive
+															? "text-violet-600"
+															: "text-foreground group-hover:text-violet-600"
 												}`}
 											>
 												{chapter.title}
 											</h5>
 											{isActive && currentTime !== undefined && (
 												<div className="mt-2">
-													<div className="h-1 bg-zinc-200 rounded-full overflow-hidden">
+													<div className="h-1 bg-muted rounded-full overflow-hidden">
 														<div
-															className="h-full bg-violet-600 transition-all duration-300"
+															className="h-full bg-violet-500 transition-all duration-300"
 															style={{
 																width: `${Math.min(
 																	100,
@@ -263,29 +306,8 @@ export function VideoSidebar({ video, currentTime, onSeek }) {
 					</div>
 				)}
 			</SidebarNav>
-
-			{/* Footer with video duration */}
-			<div className="px-4 py-3 border-t border-border bg-muted">
-				<div className="text-xs text-zinc-600">
-					<p>Duration: {formatDuration(video.duration)}</p>
-					{chapters.length > 0 && <p className="text-zinc-500 mt-1">{chapters.length} chapters</p>}
-				</div>
-			</div>
 		</SidebarContainer>
 	)
-}
-
-function formatDuration(seconds) {
-	if (!seconds) return "Unknown"
-
-	const hours = Math.floor(seconds / 3600)
-	const minutes = Math.floor((seconds % 3600) / 60)
-	const secs = Math.floor(seconds % 60)
-
-	if (hours > 0) {
-		return `${hours}h ${minutes}m`
-	}
-	return `${minutes}m ${secs}s`
 }
 
 export default VideoSidebar

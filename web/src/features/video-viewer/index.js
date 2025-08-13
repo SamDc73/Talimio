@@ -1,1 +1,1 @@
-export { default as VideoViewer } from "./VideoViewer"
+export { VideoViewer } from "./VideoViewer"
