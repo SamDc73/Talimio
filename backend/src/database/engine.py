@@ -1,34 +1,35 @@
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.pool import NullPool, QueuePool
 
 from src.config.settings import get_settings
 
 
 settings = get_settings()
 
-# Configure connection args based on database type
-connect_args = {}
-if "sqlite" in settings.DATABASE_URL:
-    # SQLite-specific settings
-    connect_args = {
-        "check_same_thread": False,
-    }
-elif "postgresql" in settings.DATABASE_URL:
-    # PostgreSQL/Neon-specific settings
-    connect_args = {
-        "server_settings": {"jit": "off"},
-        "command_timeout": 60,
-        "timeout": 10,
-        "statement_cache_size": 0,  # Correct parameter name for asyncpg with pgbouncer
-    }
+# Detect PgBouncer (port 6543 = transaction pooler)
+use_pgbouncer = ":6543" in settings.DATABASE_URL
 
-# Create async engine with appropriate settings
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=10,
-    pool_recycle=300,
-    pool_timeout=20,
-    connect_args=connect_args,
-)
+# Clean configuration - no workarounds needed
+if use_pgbouncer:
+    # With PgBouncer, use NullPool (no client-side pooling)
+    # and disable prepared statements for compatibility
+    engine: AsyncEngine = create_async_engine(
+        settings.DATABASE_URL,
+        poolclass=NullPool,
+        pool_pre_ping=True,
+        echo=settings.DEBUG,
+        connect_args={
+            "prepare_threshold": None,  # Disable prepared statements for PgBouncer
+        }
+    )
+else:
+    # Without PgBouncer, use QueuePool with connection pooling
+    engine: AsyncEngine = create_async_engine(
+        settings.DATABASE_URL,
+        poolclass=QueuePool,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=10,
+        pool_recycle=3600,
+        echo=settings.DEBUG,
+    )

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,8 +12,8 @@ BACKEND_DIR = Path(__file__).parent.parent
 ENV_PATH = BACKEND_DIR / ".env"
 load_dotenv(ENV_PATH)
 
-from asyncpg.exceptions import ConnectionDoesNotExistError
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Response
+from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -21,6 +21,7 @@ from pydantic import ValidationError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import DatabaseError, IntegrityError, OperationalError
+from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.sessions import SessionMiddleware
 
 from .ai.rag.router import router as rag_router
@@ -61,7 +62,6 @@ from .courses.models import (  # noqa: F401
     Roadmap,
     RoadmapDocument,
 )
-from .database.base import Base
 from .database.session import engine
 from .flashcards.models import FlashcardCard, FlashcardDeck, FlashcardReview  # noqa: F401
 from .flashcards.router import router as flashcards_router
@@ -107,16 +107,6 @@ class CohereEmbeddingWarningFilter(logging.Filter):
 logging.getLogger().addFilter(CohereEmbeddingWarningFilter())
 
 
-async def create_tables() -> None:
-    """Create database tables."""
-    try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-    except Exception:
-        logger.exception("Failed to create tables")
-        raise
-
-
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events."""
@@ -154,7 +144,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
 
             break  # Success - exit the retry loop
 
-        except ConnectionDoesNotExistError:
+        except OperationalError:
             if attempt == max_retries - 1:  # Last attempt
                 logger.exception("Startup failed after %d attempts", max_retries)
                 raise
@@ -222,7 +212,7 @@ def create_app() -> FastAPI:
 
     # Global auth middleware - Always set user_id, fallback to DEFAULT_USER_ID
     @app.middleware("http")
-    async def inject_user_context(request: Request, call_next: Callable) -> Response:
+    async def inject_user_context(request: Request, call_next: RequestResponseEndpoint) -> Response:
         """Inject user context into every request."""
         # Skip authentication for certain endpoints
         path = request.url.path

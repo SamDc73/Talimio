@@ -9,7 +9,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
-import asyncpg
+import psycopg
 from mem0 import AsyncMemory
 
 from src.config import env
@@ -80,7 +80,7 @@ class Mem0Wrapper:
         """Extract database user from DATABASE_URL."""
         database_url = self.settings.DATABASE_URL
         if "://" in database_url:
-            # Extract from URL format: postgresql+asyncpg://user:pass@host:port/db
+            # Extract from URL format: postgresql+psycopg://user:pass@host:port/db
             auth_part = database_url.split("://")[1].split("@")[0]
             return auth_part.split(":")[0]
         return env("DB_USER", "postgres")
@@ -115,7 +115,7 @@ class Mem0Wrapper:
         """Extract database name from DATABASE_URL."""
         database_url = self.settings.DATABASE_URL
         if "://" in database_url:
-            # Extract from URL format: postgresql+asyncpg://user:pass@host:port/dbname
+            # Extract from URL format: postgresql+psycopg://user:pass@host:port/dbname
             db_part = database_url.split("/")[-1]
             # Remove any query parameters
             return db_part.split("?")[0]
@@ -155,19 +155,19 @@ class Mem0Wrapper:
         self._logger.warning("Using fallback memory client - memory features disabled")
         return FallbackMemory()
 
-    async def _get_db_connection(self) -> asyncpg.Connection:
+    async def _get_db_connection(self) -> psycopg.AsyncConnection:
         """Get database connection for custom instructions."""
         database_url = self.settings.DATABASE_URL
         if database_url:
-            asyncpg_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
-            return await asyncpg.connect(asyncpg_url)
+            psycopg_url = database_url.replace("postgresql+psycopg://", "postgresql://")
+            return await psycopg.AsyncConnection.connect(psycopg_url)
         # Fallback to environment variables
-        return await asyncpg.connect(
+        return await psycopg.AsyncConnection.connect(
             host=self._extract_db_host(),
             port=int(self._extract_db_port()),
             user=self._extract_db_user(),
             password=self._extract_db_password(),
-            database=env("DB_NAME", "neondb"),
+            dbname=env("DB_NAME", "neondb"),
         )
 
     async def add_memory(self, user_id: UUID, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:

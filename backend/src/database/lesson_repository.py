@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
-import asyncpg
+import psycopg
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -14,7 +14,7 @@ class LessonRepository:
         self.session = session
 
     @staticmethod
-    async def get_connection() -> asyncpg.Connection:
+    async def get_connection() -> psycopg.AsyncConnection:
         """Get a database connection from the pool."""
         # Use environment variables for connection
         import logging
@@ -27,9 +27,9 @@ class LessonRepository:
         # Use DATABASE_URL if available, otherwise fallback to individual settings
         connection_string = settings.DATABASE_URL
         if connection_string:
-            # Convert SQLAlchemy-style URL to asyncpg-compatible URL
-            if connection_string.startswith("postgresql+asyncpg://"):
-                connection_string = connection_string.replace("postgresql+asyncpg://", "postgresql://")
+            # Convert SQLAlchemy-style URL to psycopg-compatible URL
+            if connection_string.startswith("postgresql+psycopg://"):
+                connection_string = connection_string.replace("postgresql+psycopg://", "postgresql://")
             logging.info("Connecting to database using DATABASE_URL")
         else:
             # Default to localhost if not specified
@@ -42,17 +42,17 @@ class LessonRepository:
             logging.info(f"Connecting to database at {host}:{port}/{dbname}")
 
         try:
-            return await asyncpg.connect(connection_string)
+            return await psycopg.AsyncConnection.connect(connection_string)
         except Exception as e:
             logging.exception(f"Failed to connect to database: {e!s}")
             raise
 
     @staticmethod
-    def _record_to_dict(record: asyncpg.Record | None) -> dict[str, Any] | None:
-        """Convert an asyncpg record to a dictionary."""
+    def _record_to_dict(record: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Convert a database record to a dictionary."""
         if record is None:
             return None
-        return dict(record)
+        return record
 
     @classmethod
     async def insert(cls, lesson_data: dict[str, Any]) -> dict[str, Any] | None:

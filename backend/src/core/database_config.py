@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-import asyncpg
+import psycopg
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -16,11 +16,11 @@ class DatabaseConfig(BaseSettings):
 
     # Primary database (Supabase)
     supabase_url: str = (
-        "postgresql+asyncpg://postgres:02ML8dXOrCAbSCbz@db.sznfaqmsormdwmafnrrt.supabase.co:5432/postgres"
+        "postgresql+psycopg://postgres:02ML8dXOrCAbSCbz@db.sznfaqmsormdwmafnrrt.supabase.co:5432/postgres"
     )
 
     # Fallback database (local)
-    local_url: str = "postgresql+asyncpg://samdc:1234@192.168.8.188:5432/talimio"
+    local_url: str = "postgresql+psycopg://samdc:1234@192.168.8.188:5432/talimio"
 
     # Connection settings
     connection_timeout: int = 10
@@ -33,15 +33,15 @@ async def test_database_connection(database_url: str, timeout: int = 10) -> bool
     """Test if database connection is working."""
     try:
         # Extract connection details from URL
-        if "postgresql+asyncpg://" in database_url:
-            # Convert SQLAlchemy URL to asyncpg format
-            asyncpg_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
-            asyncpg_url = asyncpg_url.split("?")[0]  # Remove query parameters
+        if "postgresql+psycopg://" in database_url:
+            # Convert SQLAlchemy URL to psycopg format
+            psycopg_url = database_url.replace("postgresql+psycopg://", "postgresql://")
+            psycopg_url = psycopg_url.split("?")[0]  # Remove query parameters
         else:
-            asyncpg_url = database_url
+            psycopg_url = database_url
 
         # Test connection
-        conn = await asyncio.wait_for(asyncpg.connect(asyncpg_url), timeout=timeout)
+        conn = await asyncio.wait_for(psycopg.AsyncConnection.connect(psycopg_url), timeout=timeout)
         await conn.close()
         logger.info(f"Database connection successful: {database_url.split('@')[1].split('/')[0]}")
         return True

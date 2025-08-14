@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
-import asyncpg
+import psycopg
 
 from src.config.settings import get_settings
 
@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 async def create_tables() -> None:
     """Create all tables needed for the application."""
     settings = get_settings()
-    # Convert SQLAlchemy URL to asyncpg format
-    db_url = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
-    # Connect directly using asyncpg for DDL operations
-    conn = await asyncpg.connect(db_url)
+    # Convert SQLAlchemy URL to psycopg format
+    db_url = settings.DATABASE_URL.replace("postgresql+psycopg://", "postgresql://")
+    # Connect directly using psycopg for DDL operations
+    conn = await psycopg.AsyncConnection.connect(db_url)
 
     try:
         # Enable uuid-ossp extension
@@ -125,57 +125,98 @@ async def create_tables() -> None:
         """)
         logger.info("Created roadmaps table")
 
-        # Create nodes table (for roadmap structure)
+        # Create course_prompts table
         await conn.execute("""
-            CREATE TABLE IF NOT EXISTS nodes (
+            CREATE TABLE IF NOT EXISTS course_prompts (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                roadmap_id UUID NOT NULL REFERENCES roadmaps(id) ON DELETE CASCADE,
-                parent_id UUID REFERENCES nodes(id) ON DELETE CASCADE,
+                roadmap_id UUID REFERENCES roadmaps(id) ON DELETE CASCADE,
                 title VARCHAR(500) NOT NULL,
                 description TEXT,
-                type VARCHAR(50),
+                prompt TEXT NOT NULL,
+                preferences JSONB DEFAULT '{}'::jsonb,
+                user_id UUID NOT NULL,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         """)
-        logger.info("Created nodes table")
+        logger.info("Created course_prompts table")
 
-        # Create progress table
+        # Create courses table
         await conn.execute("""
-            CREATE TABLE IF NOT EXISTS progress (
+            CREATE TABLE IF NOT EXISTS courses (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                roadmap_id UUID REFERENCES roadmaps(id) ON DELETE CASCADE,
+                title VARCHAR(500) NOT NULL,
+                description TEXT,
+                modules JSONB DEFAULT '[]'::jsonb,
+                toc_tree JSONB DEFAULT '[]'::jsonb,
+                topic TEXT,
+                difficulty VARCHAR(50),
+                tags JSONB DEFAULT '[]'::jsonb,
+                archived BOOLEAN DEFAULT FALSE,
                 user_id UUID NOT NULL,
-                lesson_id VARCHAR(100) NOT NULL,
-                status VARCHAR(50) NOT NULL,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(user_id, lesson_id)
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         """)
-        logger.info("Created progress table")
+        logger.info("Created courses table")
 
-        # Create video_progress table
+        # Create course_progress table
         await conn.execute("""
-            CREATE TABLE IF NOT EXISTS video_progress (
+            CREATE TABLE IF NOT EXISTS course_progress (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                video_uuid UUID NOT NULL REFERENCES videos(uuid) ON DELETE CASCADE,
+                course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
                 user_id UUID NOT NULL,
-                completion_percentage FLOAT DEFAULT 0,
+                completed_lessons JSONB DEFAULT '[]'::jsonb,
+                quiz_scores JSONB DEFAULT '{}'::jsonb,
+                last_accessed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(video_uuid, user_id)
+                UNIQUE(course_id, user_id)
             );
         """)
-        logger.info("Created video_progress table")
+        logger.info("Created course_progress table")
 
-        # Create indexes for performance
+        # Create users table (minimal structure for now)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                email VARCHAR(255) UNIQUE NOT NULL,
+                username VARCHAR(100) UNIQUE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        logger.info("Created users table")
+
+        # Create ai_custom_instructions table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS ai_custom_instructions (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID NOT NULL,
+                instructions TEXT NOT NULL,
+                context VARCHAR(100) DEFAULT 'global',
+                context_id UUID,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, context, context_id)
+            );
+        """)
+        logger.info("Created ai_custom_instructions table")
+
+        # Create indexes for better query performance
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_user_id ON videos(user_id);")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_flashcard_decks_user_id ON flashcard_decks(user_id);")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_books_user_id ON books(user_id);")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_roadmaps_user_id ON roadmaps(user_id);")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_book_progress_user_id ON book_progress(user_id);")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_progress_user_id ON progress(user_id);")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_video_progress_user_id ON video_progress(user_id);")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_roadmaps_user_id ON roadmaps(user_id);")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_course_prompts_user_id ON course_prompts(user_id);")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_courses_user_id ON courses(user_id);")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_course_progress_user_id ON course_progress(user_id);")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ai_custom_instructions_user_id ON ai_custom_instructions(user_id);"
+        )
         logger.info("Created indexes")
 
         logger.info("All tables created successfully!")
@@ -183,6 +224,7 @@ async def create_tables() -> None:
     except Exception as e:
         logger.exception(f"Error creating tables: {e}")
         raise
+
     finally:
         await conn.close()
 
