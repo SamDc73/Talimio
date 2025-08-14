@@ -10,19 +10,19 @@
  */
 
 import { AlertCircle, CheckCircle2, FileText, Link2, Upload, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Button } from "../../../components/button"
 import { Card } from "../../../components/card"
 import { Input } from "../../../components/input"
 import { Label } from "../../../components/label"
 
-const DocumentUploader = ({
+function DocumentUploader({
 	onDocumentsChange,
 	initialDocuments = [],
 	maxFiles = 10,
 	disabled = false,
 	showPreview = true,
-}) => {
+}) {
 	const [documents, setDocuments] = useState(initialDocuments)
 	const [dragActive, setDragActive] = useState(false)
 	const [urlInput, setUrlInput] = useState("")

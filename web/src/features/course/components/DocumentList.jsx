@@ -23,19 +23,15 @@ import {
 	Search,
 	Trash2,
 } from "lucide-react"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Button } from "../../../components/button"
 import { Card } from "../../../components/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../../components/drop-menu"
 import { Input } from "../../../components/input"
-import DocumentStatusBadge, {
-	DocumentStatusSummary,
-	isDocumentFailed,
-	isDocumentProcessing,
-	isDocumentReady,
-} from "./DocumentStatusBadge"
+import { isDocumentFailed, isDocumentProcessing, isDocumentReady } from "../utils/documentUtils"
+import DocumentStatusBadge, { DocumentStatusSummary } from "./DocumentStatusBadge"
 
-const DocumentList = ({
+function DocumentList({
 	documents = [],
 	onRemoveDocument,
 	onViewDocument,
@@ -47,7 +43,7 @@ const DocumentList = ({
 	showFilter = true,
 	showSorting = true,
 	className = "",
-}) => {
+}) {
 	const [searchTerm, setSearchTerm] = useState("")
 	const [statusFilter, setStatusFilter] = useState("all")
 	const [sortBy, setSortBy] = useState("created_at")

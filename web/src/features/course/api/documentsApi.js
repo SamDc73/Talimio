@@ -8,6 +8,7 @@
  * - Document deletion and metadata retrieval
  */
 
+import { useMemo } from "react"
 import { useApi } from "../../../hooks/useApi"
 
 /**

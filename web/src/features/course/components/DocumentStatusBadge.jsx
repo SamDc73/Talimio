@@ -12,7 +12,7 @@
 
 import { AlertCircle, CheckCircle2, Clock, Loader2 } from "lucide-react"
 
-const DocumentStatusBadge = ({ status, size = "default", showIcon = true, showText = true, className = "" }) => {
+function DocumentStatusBadge({ status, size = "default", showIcon = true, showText = true, className = "" }) {
 	// Status configuration
 	const statusConfig = {
 		pending: {
@@ -92,7 +92,7 @@ const DocumentStatusBadge = ({ status, size = "default", showIcon = true, showTe
 /**
  * DocumentStatusIndicator - Minimalist version for tight spaces
  */
-export const DocumentStatusIndicator = ({ status, className = "" }) => {
+export function DocumentStatusIndicator({ status, className = "" }) {
 	const statusConfig = {
 		pending: "bg-gray-400",
 		processing: "bg-blue-500 animate-pulse",
@@ -108,7 +108,7 @@ export const DocumentStatusIndicator = ({ status, className = "" }) => {
 /**
  * DocumentStatusProgress - Progress bar version for processing states
  */
-export const DocumentStatusProgress = ({ status, progress = null, className = "" }) => {
+export function DocumentStatusProgress({ status, progress = null, className = "" }) {
 	const isProcessing = status === "processing"
 	const progressValue = progress !== null ? progress : isProcessing ? 50 : 0
 
@@ -136,44 +136,9 @@ export const DocumentStatusProgress = ({ status, progress = null, className = ""
 }
 
 /**
- * Utility function to get status display text
- */
-export const getStatusText = (status) => {
-	const statusConfig = {
-		pending: "Pending",
-		processing: "Processing",
-		embedded: "Ready",
-		failed: "Failed",
-	}
-
-	return statusConfig[status] || "Unknown"
-}
-
-/**
- * Utility function to check if document is ready
- */
-export const isDocumentReady = (document) => {
-	return document?.status === "embedded"
-}
-
-/**
- * Utility function to check if document is processing
- */
-export const isDocumentProcessing = (document) => {
-	return document?.status === "processing" || document?.status === "pending"
-}
-
-/**
- * Utility function to check if document failed
- */
-export const isDocumentFailed = (document) => {
-	return document?.status === "failed"
-}
-
-/**
  * DocumentStatusSummary - Shows aggregated status for multiple documents
  */
-export const DocumentStatusSummary = ({ documents, className = "" }) => {
+export function DocumentStatusSummary({ documents, className = "" }) {
 	const counts = documents.reduce((acc, doc) => {
 		acc[doc.status] = (acc[doc.status] || 0) + 1
 		return acc

@@ -10,14 +10,14 @@
  */
 
 import { AlertTriangle, CheckCircle2, X } from "lucide-react"
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { Button } from "../../../components/button"
 import { useToast } from "../../../hooks/use-toast"
 import { useDocumentsService } from "../api/documentsApi"
 import { DocumentStatusProgress } from "./DocumentStatusBadge"
 import DocumentUploader from "./DocumentUploader"
 
-const DocumentUploadModal = ({ isOpen, onClose, courseId, onDocumentsUploaded = null, maxFiles = 5 }) => {
+function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = null, maxFiles = 5 }) {
 	const [documents, setDocuments] = useState([])
 	const [isUploading, setIsUploading] = useState(false)
 	const [uploadResults, setUploadResults] = useState(null)

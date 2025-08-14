@@ -10,7 +10,7 @@
  */
 
 import { CheckCircle2, Plus, RefreshCw, Search } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "../../../components/button"
 import { Card } from "../../../components/card"
 import { useToast } from "../../../hooks/use-toast"
@@ -22,7 +22,7 @@ import DocumentUploadModal from "../components/DocumentUploadModal"
 
 const POLLING_INTERVAL = 5000 // 5 seconds
 
-const DocumentsView = ({ courseId }) => {
+function DocumentsView({ courseId }) {
 	const [documents, setDocuments] = useState([])
 	const [isLoading, setIsLoading] = useState(true)
 	const [isRefreshing, setIsRefreshing] = useState(false)
