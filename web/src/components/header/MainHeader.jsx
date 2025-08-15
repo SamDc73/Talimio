@@ -2,9 +2,11 @@ import { AnimatePresence, motion } from "framer-motion"
 import {
 	BookOpen,
 	Bot,
+	Brain,
 	FileText,
 	GripVertical,
 	Layers,
+	LogOut,
 	Menu,
 	MessageSquare,
 	Mic,
@@ -13,7 +15,9 @@ import {
 	PinOff,
 	Search,
 	Send,
+	Settings,
 	Sparkles,
+	User,
 	X,
 	Youtube,
 } from "lucide-react"
@@ -27,8 +31,19 @@ import { cn } from "../../lib/utils"
 import { useAssistantChat } from "../../services/assistantApi"
 import useAppStore from "../../stores/useAppStore"
 import { Button } from "../button"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuGroup,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "../drop-menu"
 import { Input } from "../input"
+import { PersonalizationDialog } from "../PersonalizationDialog"
 import { Sheet, SheetContent, SheetTrigger } from "../sheet"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../tooltip"
 import { TooltipButton } from "../TooltipButton"
 
 // Chat sidebar context
@@ -52,6 +67,8 @@ export function ChatSidebarProvider({ children }) {
 export const UserAvatarMenu = function UserAvatarMenu() {
 	const { user, logout } = useAuth()
 	const navigate = useNavigate()
+	const [open, setOpen] = useState(false)
+	const [personalizationOpen, setPersonalizationOpen] = useState(false)
 
 	const handleLogout = async () => {
 		await logout()
@@ -71,20 +88,64 @@ export const UserAvatarMenu = function UserAvatarMenu() {
 		return "U"
 	}
 
-	// TEMPORARY: Simple button with click handler for logout
 	return (
-		<button
-			type="button"
-			className="flex items-center rounded-full transition-all hover:bg-muted focus:outline-none h-10 w-10 justify-center"
-			title="Profile - Click to logout"
-			onClick={handleLogout}
-		>
-			<div className="h-8 w-8 rounded-full bg-white flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
-				<div className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500 font-semibold text-sm">
-					{getUserInitials()}
-				</div>
-			</div>
-		</button>
+		<>
+			<DropdownMenu open={open} onOpenChange={setOpen}>
+				<TooltipProvider>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<DropdownMenuTrigger asChild>
+								<button
+									type="button"
+									className="flex items-center rounded-full transition-all hover:bg-muted focus:outline-none h-10 w-10 justify-center"
+								>
+									<div className="h-8 w-8 rounded-full bg-white flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
+										<div className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500 font-semibold text-sm">
+											{getUserInitials()}
+										</div>
+									</div>
+								</button>
+							</DropdownMenuTrigger>
+						</TooltipTrigger>
+						<TooltipContent sideOffset={6}>
+							<p>Profile</p>
+						</TooltipContent>
+					</Tooltip>
+				</TooltipProvider>
+				<DropdownMenuContent className="w-56" align="end" forceMount>
+					<DropdownMenuLabel className="font-normal">
+						<div className="flex flex-col space-y-1">
+							<p className="text-sm font-medium leading-none">
+								{user?.username || user?.email?.split("@")[0] || "User"}
+							</p>
+							<p className="text-xs leading-none text-muted-foreground">
+								{user?.email || "Not logged in"}
+							</p>
+						</div>
+					</DropdownMenuLabel>
+					<DropdownMenuSeparator />
+					<DropdownMenuGroup>
+						<DropdownMenuItem onClick={() => navigate("/settings")}>
+							<Settings className="mr-2 h-4 w-4" />
+							<span>Settings</span>
+						</DropdownMenuItem>
+						<DropdownMenuItem onClick={() => setPersonalizationOpen(true)}>
+							<Sparkles className="mr-2 h-4 w-4" />
+							<span>Personalize AI</span>
+						</DropdownMenuItem>
+					</DropdownMenuGroup>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem onClick={handleLogout}>
+						<LogOut className="mr-2 h-4 w-4" />
+						<span>Log out</span>
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
+			<PersonalizationDialog
+				open={personalizationOpen}
+				onOpenChange={setPersonalizationOpen}
+			/>
+		</>
 	)
 }
 
