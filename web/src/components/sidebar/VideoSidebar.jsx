@@ -31,7 +31,7 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 	const { toast } = useToast()
 
 	// Use the standardized hook
-	const { progress, toggleCompletion, isCompleted, refetch, metadata } = useVideoProgress(video?.id)
+	const { toggleCompletion, isCompleted, refetch } = useVideoProgress(video?.id)
 
 	// Helper function to format seconds to time string - moved outside component to prevent recreating
 	// This function is pure and doesn't need to be inside the component

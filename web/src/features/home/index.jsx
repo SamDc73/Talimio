@@ -5,7 +5,7 @@ import ErrorBoundary from "@/components/ErrorBoundary"
 
 // Radix UI component initialization
 
-import BaseCard from "@/components/cards/BaseCard"
+import ContentCard from "@/components/ContentCard"
 import { MainHeader } from "@/components/header/MainHeader"
 import CelebrationOverlay from "@/features/home/components/CelebrationOverlay"
 import ContentGrid from "@/features/home/components/ContentGrid"
@@ -107,7 +107,7 @@ export default function HomePage() {
 	const visible = filters.showAll ? unpinned : unpinned.slice(0, 3)
 
 	const renderCard = (item, i) => (
-		<BaseCard
+		<ContentCard
 			key={item.id}
 			item={item}
 			index={i}

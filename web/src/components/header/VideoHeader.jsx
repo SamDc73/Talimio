@@ -6,7 +6,7 @@ import { useVideoProgress } from "@/hooks/useVideoProgress"
 import { formatProgressText } from "@/utils/progressUtils"
 import { UserAvatarMenu } from "./MainHeader"
 
-export const VideoHeader = function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
+export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
 	const _navigate = useNavigate()
 	const { toggleChat } = useChatSidebar()
 

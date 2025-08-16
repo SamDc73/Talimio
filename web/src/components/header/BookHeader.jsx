@@ -7,7 +7,7 @@ import useAppStore from "@/stores/useAppStore"
 import { formatProgressText } from "@/utils/progressUtils"
 import { UserAvatarMenu } from "./MainHeader"
 
-export const BookHeader = function BookHeader({
+export function BookHeader({
 	book,
 	bookId, // Always use explicit bookId from parent
 	onToggleSidebar,

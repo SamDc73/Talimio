@@ -54,7 +54,7 @@ function calculateLessonNavigation(modules, currentModuleId, currentLessonId) {
 	}
 }
 
-const CourseNavigation = ({
+function CourseNavigation({
 	courseId,
 	currentModuleId,
 	currentLessonId,
@@ -62,7 +62,7 @@ const CourseNavigation = ({
 	onLessonChange,
 	showProgress = true,
 	className = "",
-}) => {
+}) {
 	const { goToLesson } = useCourseNavigation()
 
 	const navigation = calculateLessonNavigation(modules, currentModuleId, currentLessonId)
@@ -139,14 +139,14 @@ const CourseNavigation = ({
 }
 
 // Compact version for lesson viewer
-export const CompactCourseNavigation = ({
+export function CompactCourseNavigation({
 	courseId,
 	currentModuleId,
 	currentLessonId,
 	modules,
 	onLessonChange,
 	className = "",
-}) => {
+}) {
 	return (
 		<CourseNavigation
 			courseId={courseId}
@@ -161,7 +161,7 @@ export const CompactCourseNavigation = ({
 }
 
 // Module navigation component for sidebar
-export const ModuleNavigation = ({
+export function ModuleNavigation({
 	courseId,
 	modules = [],
 	currentModuleId,
@@ -169,7 +169,7 @@ export const ModuleNavigation = ({
 	onModuleClick,
 	onLessonClick,
 	className = "",
-}) => {
+}) {
 	const { goToModule, goToLesson } = useCourseNavigation()
 
 	const handleModuleClick = (module) => {

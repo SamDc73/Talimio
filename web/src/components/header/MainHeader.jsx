@@ -2,7 +2,6 @@ import { AnimatePresence, motion } from "framer-motion"
 import {
 	BookOpen,
 	Bot,
-	Brain,
 	FileText,
 	GripVertical,
 	Layers,
@@ -17,14 +16,14 @@ import {
 	Send,
 	Settings,
 	Sparkles,
-	User,
 	X,
 	Youtube,
 } from "lucide-react"
-import { createContext, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "@/hooks/useAuth"
 import { useChatSidebar } from "@/hooks/useChatSidebar"
+import { ChatSidebarProvider } from "../../contexts/ChatSidebarContext"
 import { useTheme } from "../../contexts/ThemeContext"
 import { useCurrentContext } from "../../hooks/useCurrentContext"
 import { cn } from "../../lib/utils"
@@ -43,28 +42,14 @@ import {
 import { Input } from "../input"
 import { PersonalizationDialog } from "../PersonalizationDialog"
 import { Sheet, SheetContent, SheetTrigger } from "../sheet"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../tooltip"
 import { TooltipButton } from "../TooltipButton"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../tooltip"
 
-// Chat sidebar context
-export const ChatSidebarContext = createContext(undefined)
-
-export function ChatSidebarProvider({ children }) {
-	const [isChatOpen, setIsChatOpen] = useState(false)
-
-	const toggleChat = () => {
-		setIsChatOpen((prev) => !prev)
-	}
-
-	const closeChatSidebar = () => {
-		setIsChatOpen(false)
-	}
-
-	return <ChatSidebarContext value={{ isChatOpen, toggleChat, closeChatSidebar }}>{children}</ChatSidebarContext>
-}
+// Re-export for convenience
+export { ChatSidebarProvider }
 
 // User Avatar Menu Component
-export const UserAvatarMenu = function UserAvatarMenu() {
+export function UserAvatarMenu() {
 	const { user, logout } = useAuth()
 	const navigate = useNavigate()
 	const [open, setOpen] = useState(false)
@@ -118,9 +103,7 @@ export const UserAvatarMenu = function UserAvatarMenu() {
 							<p className="text-sm font-medium leading-none">
 								{user?.username || user?.email?.split("@")[0] || "User"}
 							</p>
-							<p className="text-xs leading-none text-muted-foreground">
-								{user?.email || "Not logged in"}
-							</p>
+							<p className="text-xs leading-none text-muted-foreground">{user?.email || "Not logged in"}</p>
 						</div>
 					</DropdownMenuLabel>
 					<DropdownMenuSeparator />
@@ -141,10 +124,7 @@ export const UserAvatarMenu = function UserAvatarMenu() {
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
-			<PersonalizationDialog
-				open={personalizationOpen}
-				onOpenChange={setPersonalizationOpen}
-			/>
+			<PersonalizationDialog open={personalizationOpen} onOpenChange={setPersonalizationOpen} />
 		</>
 	)
 }
@@ -211,7 +191,7 @@ export function ChatSidebar() {
 	const [conversations, setConversations] = useState({})
 
 	// Initialize conversation for current context if it doesn't exist
-	const initializeConversation = () => {
+	const initializeConversation = useCallback(() => {
 		setConversations((prev) => {
 			if (!prev[conversationKey]) {
 				const initialMessage = {
@@ -230,7 +210,7 @@ export function ChatSidebar() {
 			}
 			return prev
 		})
-	}
+	}, [conversationKey, currentContext])
 
 	// Initialize conversation when context changes
 	useEffect(() => {
@@ -262,25 +242,28 @@ export function ChatSidebar() {
 		document.body.style.cursor = "col-resize" // Set global cursor
 	}
 
-	const handleResizeMove = (e) => {
-		if (!isResizing) return
-		e.preventDefault()
+	const handleResizeMove = useCallback(
+		(e) => {
+			if (!isResizing) return
+			e.preventDefault()
 
-		// Calculate new width (drag left to make wider, right to make narrower)
-		const deltaX = startX - e.clientX
-		const newWidth = startWidth + deltaX
+			// Calculate new width (drag left to make wider, right to make narrower)
+			const deltaX = startX - e.clientX
+			const newWidth = startWidth + deltaX
 
-		// Apply width with constraints (min: 300px, max: 800px)
-		const clampedWidth = Math.max(300, Math.min(800, newWidth))
-		setAssistantSidebarWidth(clampedWidth)
-	}
+			// Apply width with constraints (min: 300px, max: 800px)
+			const clampedWidth = Math.max(300, Math.min(800, newWidth))
+			setAssistantSidebarWidth(clampedWidth)
+		},
+		[isResizing, startX, startWidth, setAssistantSidebarWidth]
+	)
 
-	const handleResizeEnd = () => {
+	const handleResizeEnd = useCallback(() => {
 		if (!isResizing) return
 		setIsResizing(false)
 		document.body.style.userSelect = "" // Restore text selection
 		document.body.style.cursor = "" // Reset global cursor
-	}
+	}, [isResizing])
 
 	// Keyboard resize handler
 	const handleKeyDown = (e) => {

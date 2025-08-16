@@ -22,15 +22,16 @@ export function SelectionZone({ children, onHighlight, onAskAI }) {
 	// Attach handlers to DOM element for the tooltip to find
 	// This is the ONLY useEffect needed - it's truly syncing with DOM
 	useEffect(() => {
-		if (zoneRef.current) {
+		const currentZone = zoneRef.current
+		if (currentZone) {
 			// Store handlers on the DOM element itself
 			// This allows the tooltip to find them without React context
-			zoneRef.current.__selectionHandlers = { onHighlight, onAskAI }
+			currentZone.__selectionHandlers = { onHighlight, onAskAI }
 		}
 
 		return () => {
-			if (zoneRef.current) {
-				delete zoneRef.current.__selectionHandlers
+			if (currentZone) {
+				delete currentZone.__selectionHandlers
 			}
 		}
 	}, [onHighlight, onAskAI])

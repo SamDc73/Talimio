@@ -162,17 +162,5 @@ export function GlobalTextSelectionTooltip() {
 	)
 }
 
-// For backward compatibility - components using the old provider pattern
-// will just get a no-op provider
-export const TextSelectionProvider = ({ children }) => {
-	return <>{children}</>
-}
-
-// For backward compatibility - returns no-op function
-export const useTextSelection = () => {
-	return {
-		setSelectionHandlers: () => {
-			// No-op for backward compatibility
-		},
-	}
-}
+// Backward compatibility exports moved to separate file
+// Import them directly from './text-selection-utils' if needed

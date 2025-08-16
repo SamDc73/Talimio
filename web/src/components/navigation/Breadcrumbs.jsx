@@ -9,14 +9,14 @@ import { Link } from "react-router-dom"
 
 import { useBreadcrumbNavigation } from "../../utils/navigationUtils"
 
-const Breadcrumbs = ({
+function Breadcrumbs({
 	courseData = null,
 	moduleData = null,
 	lessonData = null,
 	className = "",
 	showHome = true,
 	separator = "chevron", // "chevron" | "slash" | "arrow"
-}) => {
+}) {
 	const { generateBreadcrumbs } = useBreadcrumbNavigation()
 
 	const breadcrumbs = generateBreadcrumbs(courseData, moduleData, lessonData)
@@ -86,7 +86,7 @@ const Breadcrumbs = ({
 }
 
 // Compact version for headers
-export const CompactBreadcrumbs = ({ courseData, moduleData, lessonData, className = "" }) => {
+export function CompactBreadcrumbs({ courseData, moduleData, lessonData, className = "" }) {
 	return (
 		<Breadcrumbs
 			courseData={courseData}
@@ -100,7 +100,7 @@ export const CompactBreadcrumbs = ({ courseData, moduleData, lessonData, classNa
 }
 
 // Full version for page content
-export const FullBreadcrumbs = ({ courseData, moduleData, lessonData, className = "" }) => {
+export function FullBreadcrumbs({ courseData, moduleData, lessonData, className = "" }) {
 	return (
 		<div className={`bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-2 ${className}`}>
 			<Breadcrumbs

@@ -24,7 +24,7 @@ function formatDuration(seconds) {
 	return `${minutes}m`
 }
 
-const BaseCard = ({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpdated, index, onClick }) => {
+function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpdated, index, onClick }) {
 	const [hover, setHover] = useState(false)
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 	const [showTagEditModal, setShowTagEditModal] = useState(false)
@@ -291,4 +291,4 @@ const BaseCard = ({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpdate
 	)
 }
 
-export default BaseCard
+export default ContentCard

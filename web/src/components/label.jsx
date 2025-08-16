@@ -7,10 +7,12 @@ import { cn } from "@/lib/utils"
 
 const labelVariants = cva("text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70")
 
-const Label = ({ className, children, ref, ...props }) => (
-	<LabelPrimitive.Root ref={ref} className={cn(labelVariants(), className)} {...props}>
-		{children}
-	</LabelPrimitive.Root>
-)
+function Label({ className, children, ref, ...props }) {
+	return (
+		<LabelPrimitive.Root ref={ref} className={cn(labelVariants(), className)} {...props}>
+			{children}
+		</LabelPrimitive.Root>
+	)
+}
 
 export { Label }

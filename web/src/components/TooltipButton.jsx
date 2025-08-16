@@ -6,7 +6,7 @@ import { Button } from "./button"
  * TooltipButton - A wrapper component that safely combines Button with Tooltip
  * This avoids the React 19 + Radix UI ref composition issues
  */
-const TooltipButton = ({
+function TooltipButton({
 	children,
 	tooltipContent,
 	tooltipSide = "top",
@@ -14,7 +14,7 @@ const TooltipButton = ({
 	disableTooltip = false,
 	ref,
 	...buttonProps
-}) => {
+}) {
 	// Debug logging for ref issues
 	useEffect(() => {
 		if (ref && typeof ref === "object" && ref.current) {

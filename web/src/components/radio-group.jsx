@@ -5,11 +5,11 @@ import { Circle } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
-const RadioGroup = ({ className, ref, ...props }) => {
+function RadioGroup({ className, ref, ...props }) {
 	return <RadioGroupPrimitive.Root className={cn("grid gap-2", className)} {...props} ref={ref} />
 }
 
-const RadioGroupItem = ({ className, ref, ...props }) => {
+function RadioGroupItem({ className, ref, ...props }) {
 	return (
 		<RadioGroupPrimitive.Item
 			ref={ref}

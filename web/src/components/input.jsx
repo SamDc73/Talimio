@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils"
 
-const Input = ({ className, type, ref, ...props }) => {
+function Input({ className, type, ref, ...props }) {
 	return (
 		<input
 			type={type}

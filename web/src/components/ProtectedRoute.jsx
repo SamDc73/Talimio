@@ -3,7 +3,7 @@ import { Navigate } from "react-router-dom"
 
 import { useAuth } from "@/hooks/useAuth"
 
-const ProtectedRoute = ({ children, strict = false }) => {
+function ProtectedRoute({ children, strict = false }) {
 	const { isAuthenticated, loading, authMode } = useAuth()
 
 	// Show loading spinner while checking auth

@@ -8,7 +8,7 @@ const Tooltip = TooltipPrimitive.Root
 
 const TooltipTrigger = TooltipPrimitive.Trigger
 
-const TooltipContent = (props) => {
+function TooltipContent(props) {
 	const { className, sideOffset = 4, ref, ...restProps } = props
 	return (
 		<TooltipPrimitive.Content
