@@ -2,26 +2,23 @@
  * Personalization Dialog Component for AI customization
  */
 
-import { Brain, ChevronLeft, Eye, RotateCcw, Save, Trash2 } from "lucide-react"
+import { Brain, ChevronLeft, Eye, RotateCcw, Save, Trash2, X } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "../hooks/use-toast"
+import { useAuth } from "../hooks/useAuth"
 import {
 	clearUserMemory,
+	deleteMemory,
 	getUserMemories,
 	getUserSettings,
 	updateCustomInstructions,
 } from "../services/personalizationApi.js"
 import { Button } from "./button"
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogHeader,
-	DialogTitle,
-} from "./dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./dialog"
 import { Label } from "./label"
 
 export function PersonalizationDialog({ open, onOpenChange }) {
+	const { user } = useAuth()
 	const [isLoading, setIsLoading] = useState(false)
 	const [isSaving, setIsSaving] = useState(false)
 	const [isClearing, setIsClearing] = useState(false)
@@ -34,9 +31,11 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 	const [isLoadingMemories, setIsLoadingMemories] = useState(false)
 
 	const loadUserSettings = useCallback(async () => {
+		if (!user?.id) return
+
 		setIsLoading(true)
 		try {
-			const settings = await getUserSettings()
+			const settings = await getUserSettings(user.id)
 			setInstructions(settings.custom_instructions || "")
 			setOriginalInstructions(settings.custom_instructions || "")
 			setMemoryCount(settings.memory_count || 0)
@@ -49,7 +48,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		} finally {
 			setIsLoading(false)
 		}
-	}, [])
+	}, [user])
 
 	// Load user settings when dialog opens
 	useEffect(() => {
@@ -64,9 +63,11 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 	}, [instructions, originalInstructions])
 
 	const handleSave = async () => {
+		if (!user?.id) return
+
 		setIsSaving(true)
 		try {
-			await updateCustomInstructions(instructions)
+			await updateCustomInstructions(user.id, instructions)
 			setOriginalInstructions(instructions)
 			toast({
 				title: "Success",
@@ -84,18 +85,17 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 	}
 
 	const handleClearMemory = async () => {
-		if (
-			!window.confirm(
-				"Are you sure you want to clear all your learning history? This action cannot be undone.",
-			)
-		) {
+		if (!user?.id) return
+
+		if (!window.confirm("Are you sure you want to clear all your learning history? This action cannot be undone.")) {
 			return
 		}
 
 		setIsClearing(true)
 		try {
-			await clearUserMemory()
+			await clearUserMemory(user.id)
 			setMemoryCount(0)
+			setMemories([])
 			toast({
 				title: "Success",
 				description: "Your learning history has been cleared",
@@ -121,9 +121,11 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			return
 		}
 
+		if (!user?.id) return
+
 		setIsLoadingMemories(true)
 		try {
-			const userMemories = await getUserMemories()
+			const userMemories = await getUserMemories(user.id)
 			setMemories(userMemories)
 			setShowMemories(true)
 		} catch (_error) {
@@ -150,6 +152,27 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		}
 	}
 
+	const handleDeleteMemory = async (memoryId) => {
+		if (!user?.id) return
+
+		try {
+			await deleteMemory(user.id, memoryId)
+			// Remove from local state
+			setMemories((prev) => prev.filter((m) => m.id !== memoryId))
+			setMemoryCount((prev) => Math.max(0, prev - 1))
+			toast({
+				title: "Success",
+				description: "Memory deleted successfully",
+			})
+		} catch (_error) {
+			toast({
+				title: "Error",
+				description: "Failed to delete memory",
+				variant: "destructive",
+			})
+		}
+	}
+
 	const characterCount = instructions.length
 	const maxCharacters = 1500
 
@@ -159,12 +182,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2">
 						{showMemories && (
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => setShowMemories(false)}
-								className="p-1 h-8 w-8"
-							>
+							<Button variant="ghost" size="sm" onClick={() => setShowMemories(false)} className="p-1 h-8 w-8">
 								<ChevronLeft className="h-4 w-4" />
 							</Button>
 						)}
@@ -180,61 +198,49 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 
 				{isLoading ? (
 					<div className="flex items-center justify-center py-8">
-						<div className="text-sm text-muted-foreground">
-							Loading settings...
-						</div>
+						<div className="text-sm text-muted-foreground">Loading settings...</div>
 					</div>
 				) : showMemories ? (
 					<div className="space-y-4">
 						{isLoadingMemories ? (
 							<div className="flex items-center justify-center py-8">
-								<div className="text-sm text-muted-foreground">
-									Loading memories...
-								</div>
+								<div className="text-sm text-muted-foreground">Loading memories...</div>
 							</div>
 						) : memories.length === 0 ? (
 							<div className="text-center py-8">
-								<div className="text-sm text-muted-foreground">
-									No memories found
-								</div>
+								<div className="text-sm text-muted-foreground">No memories found</div>
 							</div>
 						) : (
 							<div className="space-y-3 max-h-[400px] overflow-y-auto">
 								{memories.map((memory, index) => (
 									<div
 										key={memory.id || index}
-										className="bg-muted/30 p-3 rounded-lg border-l-2 border-primary/20"
+										className="bg-muted/30 p-3 rounded-lg border-l-2 border-primary/20 relative group"
 									>
-										<p className="text-sm font-medium text-foreground mb-2">
-											{memory.content}
-										</p>
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={() => handleDeleteMemory(memory.id)}
+											className="absolute top-2 right-2 p-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+											title="Delete this memory"
+										>
+											<X className="h-3 w-3" />
+										</Button>
+										<p className="text-sm font-medium text-foreground mb-2 pr-8">{memory.content}</p>
 										<div className="flex items-center justify-between text-xs text-muted-foreground">
 											<span>{formatTimestamp(memory.timestamp)}</span>
-											<span className="bg-muted px-2 py-1 rounded text-xs">
-												{memory.source}
-											</span>
 										</div>
-										{memory.metadata &&
-											Object.keys(memory.metadata).length > 0 && (
-												<div className="mt-2 flex flex-wrap gap-1">
-													{Object.entries(memory.metadata)
-														.filter(
-															([key, value]) =>
-																key !== "timestamp" &&
-																key !== "source" &&
-																value &&
-																value !== "now",
-														)
-														.map(([key, value]) => (
-															<span
-																key={key}
-																className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded"
-															>
-																{key}: {value}
-															</span>
-														))}
-												</div>
-											)}
+										{memory.metadata && Object.keys(memory.metadata).length > 0 && (
+											<div className="mt-2 flex flex-wrap gap-1">
+												{Object.entries(memory.metadata)
+													.filter(([key, value]) => key !== "timestamp" && value && value !== "now")
+													.map(([key, value]) => (
+														<span key={key} className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded">
+															{key}: {value}
+														</span>
+													))}
+											</div>
+										)}
 									</div>
 								))}
 							</div>
@@ -267,14 +273,8 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 									maxLength={maxCharacters}
 								/>
 								<div className="flex justify-between items-center text-xs text-muted-foreground">
-									<span>
-										These instructions will be included in all AI interactions
-									</span>
-									<span
-										className={
-											characterCount > maxCharacters * 0.9 ? "text-warning" : ""
-										}
-									>
+									<span>These instructions will be included in all AI interactions</span>
+									<span className={characterCount > maxCharacters * 0.9 ? "text-warning" : ""}>
 										{characterCount}/{maxCharacters}
 									</span>
 								</div>
@@ -305,12 +305,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 									</div>
 									<div className="flex gap-2">
 										{memoryCount > 0 && (
-											<Button
-												variant="outline"
-												size="sm"
-												onClick={handleViewMemories}
-												disabled={isLoadingMemories}
-											>
+											<Button variant="outline" size="sm" onClick={handleViewMemories} disabled={isLoadingMemories}>
 												<Eye className="h-4 w-4 mr-2" />
 												{isLoadingMemories ? "Loading..." : "View"}
 											</Button>
@@ -332,20 +327,12 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 
 						{/* Action Buttons */}
 						<div className="flex justify-between pt-4">
-							<Button
-								variant="outline"
-								onClick={handleReset}
-								disabled={!hasChanges || isSaving}
-							>
+							<Button variant="outline" onClick={handleReset} disabled={!hasChanges || isSaving}>
 								<RotateCcw className="h-4 w-4 mr-2" />
 								Reset
 							</Button>
 							<div className="flex gap-2">
-								<Button
-									variant="outline"
-									onClick={() => onOpenChange(false)}
-									disabled={isSaving}
-								>
+								<Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
 									Cancel
 								</Button>
 								<Button onClick={handleSave} disabled={!hasChanges || isSaving}>

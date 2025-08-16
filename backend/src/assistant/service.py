@@ -4,14 +4,12 @@ import json
 import logging
 import re
 from collections.abc import AsyncGenerator
-from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import text as sql_text
 
 from src.ai.ai_service import get_ai_service
-from src.ai.memory import get_memory_wrapper
 from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT, RAG_ASSISTANT_PROMPT
 from src.ai.rag.retriever import ContextAwareRetriever
 from src.ai.rag.schemas import SearchResult
@@ -153,8 +151,6 @@ class EnhancedAssistantService:
         4. Course generation detection
         """
         try:
-            memory_wrapper = get_memory_wrapper()
-
             immediate_context = await self._get_immediate_context(request)
 
             semantic_context = await self._get_semantic_context(request)
@@ -168,11 +164,9 @@ class EnhancedAssistantService:
                 roadmap_context,
             )
 
-            response = await self._generate_response(request, messages)
+            response = await self._generate_response(request, messages, immediate_context)
 
             citations = self._collect_citations(semantic_context, roadmap_context, request)
-
-            await self._store_conversation_memory(request, response, memory_wrapper)
 
             return ChatResponse(
                 response=response,
@@ -437,21 +431,38 @@ class EnhancedAssistantService:
         messages.append({"role": "user", "content": user_message})
         return messages
 
-    async def _generate_response(self, request: ChatRequest, messages: list[dict]) -> str:
-        """Generate AI response with course generation detection."""
+    async def _generate_response(
+        self, request: ChatRequest, messages: list[dict], immediate_context: ContextData | None
+    ) -> str:
+        """Generate AI response with course generation detection and enhanced context."""
         # Check for course generation intent
         if detect_course_generation_intent(request.message):
             course_result = await trigger_course_generation(request.message, request.user_id)
             return course_result["message"]
 
         try:
-            # Get standard AI response using AIService
+            # Build context metadata for AI service
+            context_meta = request.context_meta or {}
+            if immediate_context:
+                # Add context-specific metadata
+                if request.context_type == "book" and "page" in context_meta:
+                    context_meta["chapter"] = immediate_context.metadata.get("chapter")
+                elif request.context_type == "video" and "timestamp" in context_meta:
+                    context_meta["title"] = immediate_context.metadata.get("title")
+
+            # Get standard AI response using AIService with rich context
             response = await self._ai_service.process_content(
                 content_type="assistant",
                 action="chat",
                 user_id=request.user_id,
                 message=request.message,
-                context={"messages": messages},
+                context={
+                    "messages": messages,
+                    "context_type": request.context_type,
+                    "context_id": request.context_id,
+                    "context_meta": context_meta,
+                    "interaction_type": "assistant_chat",
+                },
                 history=messages[1:] if len(messages) > 1 else None,  # Skip system message
             )
 
@@ -516,31 +527,6 @@ class EnhancedAssistantService:
 
         return citations
 
-    async def _store_conversation_memory(self, request: ChatRequest, response: str, memory_wrapper: Any) -> None:
-        """Store conversation in memory for future context."""
-        if not request.user_id:
-            return
-
-        try:
-            context_info = ""
-            if request.context_type and request.context_id:
-                context_info = f" (in {request.context_type}: {request.context_id})"
-
-            await memory_wrapper.add_memory(
-                user_id=request.user_id,
-                content=f"User{context_info}: {request.message}\nAssistant: {response}",
-                metadata={
-                    "interaction_type": "enhanced_chat",
-                    "conversation_id": str(uuid4()),
-                    "context_type": request.context_type,
-                    "context_id": str(request.context_id) if request.context_id else None,
-                    "timestamp": "now",
-                },
-            )
-
-        except Exception as e:
-            logger.warning("Failed to store enhanced chat memory for user %s: %s", request.user_id, e)
-
     async def find_book_citations(
         self,
         book_id: UUID,
@@ -589,8 +575,6 @@ class StreamingEnhancedAssistantService(EnhancedAssistantService):
     async def chat_with_assistant_streaming_enhanced(self, request: ChatRequest) -> AsyncGenerator[str, None]:
         """Enhanced streaming chat with context-aware RAG integration."""
         try:
-            memory_wrapper = get_memory_wrapper()
-
             # Check if user wants to generate a course first
             if detect_course_generation_intent(request.message):
                 course_result = await trigger_course_generation(request.message, request.user_id)
@@ -613,14 +597,28 @@ class StreamingEnhancedAssistantService(EnhancedAssistantService):
 
             # Since AIService doesn't support streaming yet, we'll get the full response
             # and simulate streaming by chunking it
-            full_response = ""
             try:
+                # Build context metadata for AI service
+                context_meta = request.context_meta or {}
+                if immediate_context:
+                    # Add context-specific metadata
+                    if request.context_type == "book" and "page" in context_meta:
+                        context_meta["chapter"] = immediate_context.metadata.get("chapter")
+                    elif request.context_type == "video" and "timestamp" in context_meta:
+                        context_meta["title"] = immediate_context.metadata.get("title")
+
                 response = await self._ai_service.process_content(
                     content_type="assistant",
                     action="chat",
                     user_id=request.user_id,
                     message=request.message,
-                    context={"messages": messages},
+                    context={
+                        "messages": messages,
+                        "context_type": request.context_type,
+                        "context_id": request.context_id,
+                        "context_meta": context_meta,
+                        "interaction_type": "assistant_chat",
+                    },
                     history=messages[1:] if len(messages) > 1 else None,
                 )
 
@@ -629,8 +627,6 @@ class StreamingEnhancedAssistantService(EnhancedAssistantService):
                 for i in range(0, len(response), chunk_size):
                     chunk = response[i : i + chunk_size]
                     yield f"data: {json.dumps({'content': chunk, 'done': False})}\n\n"
-
-                full_response = response
 
                 # Send final message indicating completion
                 yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
@@ -661,11 +657,8 @@ class StreamingEnhancedAssistantService(EnhancedAssistantService):
                 # Send fallback as a single chunk
                 yield f"data: {json.dumps({'content': fallback_msg, 'done': False})}\n\n"
                 yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
-                full_response = fallback_msg
 
-            # Store the conversation in memory for future context
-            if request.user_id and full_response:
-                await self._store_conversation_memory(request, full_response, memory_wrapper)
+            # Memory is now automatically integrated in the AI service - no manual storage needed
 
         except Exception as e:
             logger.exception("Error in enhanced streaming chat")

@@ -1,7 +1,6 @@
 """Course creation service for creating new courses."""
 
 import logging
-import os
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -10,7 +9,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.ai_service import AIServiceError, get_ai_service
-from src.ai.memory import Mem0Wrapper
 from src.courses.models import Node, Roadmap
 from src.courses.schemas import CourseCreate, CourseResponse, ModuleResponse
 from src.courses.services.course_response_builder import CourseResponseBuilder
@@ -33,18 +31,6 @@ class CourseCreationService:
 
         # Initialize AI service
         self._ai_service = get_ai_service()
-
-        # Initialize memory service
-        try:
-            # Skip memory service in mock mode
-            if os.getenv("MOCK_AI_SERVICES") == "true":
-                self.memory_service = None
-            else:
-                self.memory_service = Mem0Wrapper() if user_id else None
-            self._logger.info(f"Memory service initialized: {self.memory_service is not None}, user_id: {user_id}")
-        except Exception as e:
-            self._logger.exception(f"Failed to initialize memory service: {e}")
-            self.memory_service = None
 
     async def create_course(self, request: CourseCreate, user_id: UUID) -> CourseResponse:
         """Create a new course using AI generation.
@@ -78,7 +64,7 @@ class CourseCreationService:
         """
 
         try:
-            # Generate course structure using AI service
+            # Generate course structure using AI service with course creation context
             roadmap_response = await self._ai_service.process_content(
                 content_type="course",
                 action="generate",
@@ -87,6 +73,10 @@ class CourseCreationService:
                 skill_level="beginner",
                 description=enhanced_prompt,
                 use_tools=True,  # Enable content discovery
+                context={
+                    "interaction_type": "course_creation",
+                    "request_prompt": request.prompt,
+                },
             )
 
             course_title = roadmap_response["title"]
@@ -130,21 +120,6 @@ class CourseCreationService:
             except Exception as tagging_error:
                 self._logger.warning("Failed to apply automatic tagging to course %s: %s", roadmap.id, tagging_error)
                 # Continue with course creation even if tagging fails
-
-            # Store in memory service if available
-            if self.memory_service:
-                try:
-                    await self.memory_service.store_course_context(
-                        user_id,
-                        {
-                            "course_id": str(roadmap.id),
-                            "title": roadmap.title,
-                            "description": roadmap.description,
-                            "modules": modules_data,
-                        },
-                    )
-                except Exception as e:
-                    self._logger.warning("Failed to store course in memory service: %s", e)
 
             self._logger.info("Successfully created course %s for user %s", roadmap.id, user_id)
 

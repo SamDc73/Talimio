@@ -70,10 +70,11 @@ async def _save_user_preferences(user_id: UUID, preferences: UserPreferences, db
         return False
 
 
-async def create_user(user: UserCreate) -> dict:
+async def create_user(user: UserCreate) -> dict:  # noqa: ARG001
     """Create a new user."""
     # For now, we'll just return a dummy user ID
-    return {"id": UUID(user.id)}
+    from uuid import uuid4
+    return {"id": uuid4()}
 
 
 async def get_user(user_id: UUID) -> dict:
@@ -107,20 +108,23 @@ async def get_user_settings(user_id: UUID, db_session: AsyncSession) -> UserSett
         UserSettingsResponse: User's settings, memory information, and preferences
     """
     try:
-        memory_wrapper = get_memory_wrapper()
+        memory_manager = await get_memory_wrapper()
 
-        # Get custom instructions
-        custom_instructions = await memory_wrapper.get_custom_instructions(user_id)
+        # Get user preferences from database (includes custom instructions)
+        preferences = await _load_user_preferences(user_id, db_session)
 
-        # Get memory count using dedicated method
+        # Get custom instructions from preferences dict
+        custom_instructions = ""
+        if preferences.user_preferences:
+            custom_instructions = preferences.user_preferences.get("custom_instructions", "")
+
+        # Get memory count using async method
         try:
-            memory_count = await memory_wrapper.get_memory_count(user_id)
+            memories = await memory_manager.get_memories(user_id, limit=1000)
+            memory_count = len(memories)
         except Exception as e:
             logger.warning(f"Failed to count memories for user {user_id}: {e}")
             memory_count = 0
-
-        # Get user preferences from database
-        preferences = await _load_user_preferences(user_id, db_session)
 
         return UserSettingsResponse(
             custom_instructions=custom_instructions, memory_count=memory_count, preferences=preferences
@@ -132,29 +136,38 @@ async def get_user_settings(user_id: UUID, db_session: AsyncSession) -> UserSett
         return UserSettingsResponse(custom_instructions="", memory_count=0, preferences=UserPreferences())
 
 
-async def update_custom_instructions(user_id: UUID, instructions: str) -> CustomInstructionsResponse:
+async def update_custom_instructions(user_id: UUID, instructions: str, db_session: AsyncSession) -> CustomInstructionsResponse:
     """
     Update custom instructions for a user.
 
     Args:
         user_id: Unique identifier for the user
         instructions: New custom instructions text
+        db_session: Database session for saving preferences
 
     Returns
     -------
         CustomInstructionsResponse: Updated instructions and success status
     """
     try:
-        memory_wrapper = get_memory_wrapper()
+        # Load current preferences
+        preferences = await _load_user_preferences(user_id, db_session)
 
-        success = await memory_wrapper.update_custom_instructions(user_id, instructions)
+        # Update the custom instructions in user_preferences dict
+        if preferences.user_preferences is None:
+            preferences.user_preferences = {}
+        preferences.user_preferences["custom_instructions"] = instructions
+
+        # Save back to database
+        success = await _save_user_preferences(user_id, preferences, db_session)
 
         if success:
             # Also add a memory entry about the instruction update
             try:
+                memory_wrapper = await get_memory_wrapper()
                 await memory_wrapper.add_memory(
-                    user_id=user_id,
                     content="Updated personal AI instructions",
+                    user_id=user_id,
                     metadata={
                         "interaction_type": "settings_update",
                         "setting_type": "custom_instructions",
@@ -184,25 +197,23 @@ async def get_user_memories(user_id: UUID) -> list[dict]:
         List of memories with content, timestamps, and metadata
     """
     try:
-        memory_wrapper = get_memory_wrapper()
+        memory_manager = await get_memory_wrapper()
 
-        # Search for all memories using empty query with allow_empty=True
-        memories = await memory_wrapper.search_memories(
+        # Get all memories (retrieves all without search)
+        memories = await memory_manager.get_memories(
             user_id=user_id,
-            query="",  # Empty query to get all memories
             limit=1000,  # High limit to get all memories
-            relevance_threshold=0.0,  # Accept all relevance levels
-            allow_empty=True,  # Allow empty query
         )
 
         # Format memories for web app consumption
         formatted_memories = []
         for memory in memories:
+            metadata = memory.get("metadata", {})
             formatted_memory = {
+                "id": memory.get("id", ""),  # Include ID for deletion
                 "content": memory.get("memory", ""),
                 "timestamp": memory.get("created_at", ""),
-                "source": memory.get("source", "unknown"),
-                "metadata": memory.get("metadata", {}),
+                "metadata": metadata,
             }
             formatted_memories.append(formatted_memory)
 
@@ -211,6 +222,26 @@ async def get_user_memories(user_id: UUID) -> list[dict]:
     except Exception as e:
         logger.exception(f"Error getting memories for user {user_id}: {e}")
         return []
+
+
+async def delete_user_memory(user_id: UUID, memory_id: str) -> bool:
+    """
+    Delete a specific memory for a user.
+
+    Args:
+        user_id: Unique identifier for the user
+        memory_id: The ID of the memory to delete
+
+    Returns
+    -------
+        bool: True if deletion was successful, False otherwise
+    """
+    try:
+        memory_manager = await get_memory_wrapper()
+        return await memory_manager.delete_memory(user_id, memory_id)
+    except Exception as e:
+        logger.exception(f"Error deleting memory {memory_id} for user {user_id}: {e}")
+        return False
 
 
 async def update_user_preferences(
@@ -248,16 +279,14 @@ async def clear_user_memory(user_id: UUID) -> ClearMemoryResponse:
         ClearMemoryResponse: Success status and message
     """
     try:
-        memory_wrapper = get_memory_wrapper()
+        memory_manager = await get_memory_wrapper()
 
-        result = await memory_wrapper.delete_all_memories(user_id)
+        # Use the optimized delete_all_memories method
+        success = await memory_manager.delete_all_memories(user_id)
 
-        if isinstance(result, dict) and "message" in result:
-            message = result["message"]
-        else:
-            message = "All memories cleared successfully"
+        message = "Successfully cleared all memories" if success else "Failed to clear memories"
 
-        return ClearMemoryResponse(cleared=True, message=message)
+        return ClearMemoryResponse(cleared=success, message=message)
 
     except Exception as e:
         logger.exception(f"Error clearing memory for user {user_id}: {e}")

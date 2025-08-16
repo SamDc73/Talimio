@@ -1,5 +1,6 @@
 """User-related schemas for API endpoints."""
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr
@@ -80,3 +81,23 @@ class PreferencesUpdateResponse(BaseModel):
 
     preferences: UserPreferences
     updated: bool = True
+
+
+# Add ONLY these schemas for MVP
+class MemoryItem(BaseModel):
+    """Individual memory item."""
+
+    id: str
+    content: str
+    created_at: datetime
+    metadata: dict[str, Any] | None = None
+
+
+class MemoryListResponse(BaseModel):
+    """Response for memory list."""
+
+    memories: list[MemoryItem]
+    total: int
+
+
+# That's it! No search, no toggle - keep it simple

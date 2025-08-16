@@ -4,6 +4,7 @@ import logging
 import os
 import re
 from collections.abc import AsyncGenerator, Sequence
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -55,11 +56,12 @@ class TagGenerationError(AIError):
 class ModelManager:
     """Manage AI model interactions for the learning roadmap platform."""
 
-    def __init__(self, memory_wrapper: Any = None) -> None:
+    def __init__(self, memory_wrapper: Any = None) -> None:  # noqa: ARG002
         from src.config import env
 
         self.settings = get_settings()
         self.model = env("PRIMARY_LLM_MODEL")
+        self._async_memory_manager = None  # Will be lazy-loaded
 
         # Default to a sensible model if not configured
         if not self.model:
@@ -107,70 +109,252 @@ class ModelManager:
             os.environ["OPENAI_API_KEY"] = self.api_key
 
         self._logger = logging.getLogger(__name__)
-        self.memory_wrapper = memory_wrapper
+
+    async def _get_memory_manager(self) -> Any:
+        """Get the async memory manager (lazy-loaded)."""
+        if self._async_memory_manager is None:
+            from src.ai.memory import get_memory_wrapper
+            self._async_memory_manager = await get_memory_wrapper()
+        return self._async_memory_manager
+
+    async def _store_ai_response(
+        self,
+        user_id: UUID,
+        user_query: str,
+        ai_response: str,
+        context_type: str | None = None,
+        context_id: UUID | None = None,
+        context_meta: dict[str, Any] | None = None,
+        interaction_type: str = "ai_query",
+    ) -> None:
+        """Store AI response in memory with rich context.
+
+        Args:
+            user_id: User ID
+            user_query: Original user query
+            ai_response: AI's response
+            context_type: Type of context
+            context_id: Resource ID
+            context_meta: Context metadata
+            interaction_type: Type of interaction
+        """
+        try:
+            # Build conversation summary for storage
+            conversation_summary = f"Q: {user_query[:200]}... A: {ai_response[:300]}..."
+
+            # Build enhanced metadata
+            metadata = {
+                "interaction_type": interaction_type,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "has_context": bool(context_type and context_id),
+                "response_preview": ai_response[:200],
+            }
+
+            if context_type and context_id:
+                metadata.update(
+                    {
+                        "context_type": context_type,
+                        "context_id": str(context_id),
+                    }
+                )
+
+                if context_meta:
+                    # Add relevant context metadata
+                    if context_type == "book":
+                        metadata["page"] = context_meta.get("page")
+                        metadata["chapter"] = context_meta.get("chapter")
+                    elif context_type == "video":
+                        metadata["timestamp_seconds"] = context_meta.get("timestamp")
+                        metadata["video_title"] = context_meta.get("title")
+                    elif context_type == "course":
+                        metadata["lesson_id"] = (
+                            str(context_meta.get("lesson_id")) if "lesson_id" in context_meta else None
+                        )
+                        metadata["module_id"] = (
+                            str(context_meta.get("module_id")) if "module_id" in context_meta else None
+                        )
+
+            # Store the conversation in memory
+            memory_manager = await self._get_memory_manager()
+            await memory_manager.add_memory(
+                user_id=user_id,
+                content=conversation_summary,
+                metadata=metadata,
+            )
+
+            self._logger.debug("Stored AI response in memory for user %s with context %s", user_id, context_type)
+
+        except Exception:
+            self._logger.exception("Failed to store AI response in memory")
+            # Don't fail the main request if memory storage fails
+
+    def _build_context_metadata(
+        self,
+        context_type: str | None,
+        context_id: UUID | None,
+        context_meta: dict[str, Any] | None,
+        interaction_type: str,
+    ) -> dict[str, Any]:
+        """Build enhanced metadata for context tracking."""
+        metadata = {
+            "interaction_type": interaction_type,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "model": self.model,
+            "has_context": bool(context_type and context_id),
+        }
+
+        if not (context_type and context_id):
+            return metadata
+
+        metadata["context_type"] = context_type
+        metadata["context_id"] = str(context_id)
+
+        if not context_meta:
+            return metadata
+
+        # Add type-specific metadata
+        if context_type == "book" and "page" in context_meta:
+            metadata["page"] = context_meta["page"]
+            metadata["chapter"] = context_meta.get("chapter")
+        elif context_type == "video" and "timestamp" in context_meta:
+            metadata["timestamp_seconds"] = context_meta["timestamp"]
+            metadata["video_title"] = context_meta.get("title")
+        elif context_type == "course":
+            if "lesson_id" in context_meta:
+                metadata["lesson_id"] = str(context_meta["lesson_id"])
+            if "module_id" in context_meta:
+                metadata["module_id"] = str(context_meta["module_id"])
+
+        return metadata
+
+    async def _add_context_snippet(
+        self,
+        metadata: dict[str, Any],
+        context_type: str,
+        context_id: UUID,
+        context_meta: dict[str, Any] | None,
+    ) -> None:
+        """Add context snippet to metadata if available."""
+        try:
+            from src.assistant.context import ContextManager
+
+            context_manager = ContextManager()
+            context_data = await context_manager.get_context(
+                context_type,
+                context_id,
+                context_meta,
+                max_tokens=1000,
+            )
+            if context_data:
+                metadata["context_source"] = context_data.source
+                # Store a snippet of context for better memory retrieval
+                context_snippet = (
+                    context_data.content[:200] + "..."
+                    if len(context_data.content) > 200
+                    else context_data.content
+                )
+                metadata["context_snippet"] = context_snippet
+        except Exception:
+            # Context manager not available, continue without snippet
+            self._logger.debug("Context manager not available for snippet extraction")
+
+    def _inject_memory_into_messages(
+        self,
+        messages: list[dict[str, str]],
+        memory_context: str,
+    ) -> list[dict[str, str]]:
+        """Inject memory context into the message list."""
+        if not memory_context:
+            return messages
+
+        messages = list(messages)  # Convert to mutable list
+
+        # Find existing system message or create new one
+        system_message_idx = next((i for i, msg in enumerate(messages) if msg.get("role") == "system"), None)
+
+        memory_prompt = f"""Personal Context:
+{memory_context}
+
+Please use this context to personalize your response appropriately."""
+
+        if system_message_idx is not None:
+            # Append to existing system message
+            messages[system_message_idx]["content"] += f"\n\n{memory_prompt}"
+        else:
+            # Insert new system message at the beginning
+            messages.insert(0, {"role": "system", "content": memory_prompt})
+
+        return messages
 
     async def _integrate_memory_context(
         self,
         messages: list[dict[str, str]] | Sequence[dict[str, str]],
         user_id: UUID | None = None,
         track_interaction: bool = True,
-    ) -> list[dict[str, str]]:
-        """Integrate memory context into messages.
+        context_type: str | None = None,
+        context_id: UUID | None = None,
+        context_meta: dict[str, Any] | None = None,
+        interaction_type: str = "ai_query",
+    ) -> tuple[list[dict[str, str]], str]:
+        """Integrate memory context into messages with rich context awareness.
 
         Args:
             messages: Original messages
             user_id: User ID for memory lookup
             track_interaction: Whether to track this interaction
+            context_type: Type of context ('book', 'video', 'course', etc.)
+            context_id: UUID of the resource
+            context_meta: Context metadata (page, timestamp, lesson_id, etc.)
+            interaction_type: Type of interaction (assistant_chat, course_creation, etc.)
 
         Returns
         -------
-            Modified messages with memory context integrated
+            Tuple of (Modified messages with memory context, AI response for storing)
         """
-        # Return original messages if no user_id or memory_wrapper
-        if not (user_id and self.memory_wrapper):
-            return list(messages)
+        # Return original messages if no user_id
+        if not user_id:
+            return list(messages), ""
 
         try:
             # Extract query from last user message for memory search
             user_messages = [msg for msg in messages if msg.get("role") == "user"]
             current_query = user_messages[-1].get("content", "") if user_messages else ""
 
-            # Get memory context from service
-            memory_context = await self.memory_wrapper.build_memory_context(user_id, current_query)
+            # Get memory context from service with context awareness
+            memory_manager = await self._get_memory_manager()
+            memory_context = await memory_manager.build_memory_context(user_id, current_query)
 
-            # Prepend memory context to system message if available
-            if memory_context:
-                messages = list(messages)  # Convert to mutable list
+            # Build enhanced metadata for tracking
+            enhanced_metadata = self._build_context_metadata(
+                context_type, context_id, context_meta, interaction_type
+            )
 
-                # Find existing system message or create new one
-                system_message_idx = next((i for i, msg in enumerate(messages) if msg.get("role") == "system"), None)
+            # Add context snippet if available
+            if context_type and context_id:
+                await self._add_context_snippet(
+                    enhanced_metadata, context_type, context_id, context_meta
+                )
 
-                memory_prompt = f"""Personal Context:
-{memory_context}
-
-Please use this context to personalize your response appropriately."""
-
-                if system_message_idx is not None:
-                    # Append to existing system message
-                    messages[system_message_idx]["content"] += f"\n\n{memory_prompt}"
-                else:
-                    # Insert new system message at the beginning
-                    messages.insert(0, {"role": "system", "content": memory_prompt})
+            # Inject memory context into messages
+            messages = self._inject_memory_into_messages(list(messages), memory_context)
 
             # Track the interaction if enabled
             if track_interaction and current_query:
-                await self.memory_wrapper.track_learning_interaction(
+                # Track learning interaction
+                interaction_metadata = enhanced_metadata.copy() if enhanced_metadata else {}
+                interaction_metadata["type"] = interaction_type
+                await memory_manager.add_memory(
                     user_id=user_id,
-                    interaction_type="ai_query",
                     content=f"User asked: {current_query}",
-                    metadata={"model": self.model, "timestamp": "now"},
+                    metadata=interaction_metadata,
                 )
+
+            return messages, current_query
 
         except Exception:
             self._logger.exception("Error integrating memory for user %s", user_id)
             # Continue without memory integration on error
-
-        return messages
+            return list(messages), ""
 
     async def get_completion_with_memory(
         self,
@@ -179,13 +363,27 @@ Please use this context to personalize your response appropriately."""
         *,
         format_json: bool = True,
         track_interaction: bool = True,
+        context_type: str | None = None,
+        context_id: UUID | None = None,
+        context_meta: dict[str, Any] | None = None,
+        interaction_type: str = "ai_query",
     ) -> str | dict[str, Any] | list[Any]:
-        """Get completion with memory integration and tracking."""
-        # Integrate memory context
-        messages = await self._integrate_memory_context(messages, user_id, track_interaction)
+        """Use get_completion() directly - memory is now integrated by default.
 
-        # Get completion using existing method
-        return await self.get_completion(messages, format_json=format_json)
+        DEPRECATED: This method is kept for backward compatibility but just calls get_completion.
+        """
+        # Just call get_completion which now handles memory by default
+        return await self.get_completion(
+            messages,
+            format_json=format_json,
+            user_id=user_id,
+            use_memory=track_interaction,  # map track_interaction to use_memory
+            context_type=context_type,
+            context_id=context_id,
+            context_meta=context_meta,
+            interaction_type=interaction_type,
+            store_response=track_interaction,
+        )
 
     def _parse_json_content(self, content: str) -> dict[str, Any] | list[Any]:
         """Parse JSON content from AI response."""
@@ -224,14 +422,51 @@ Please use this context to personalize your response appropriately."""
         )
         return getattr(response, "choices", [{}])[0].get("message", {}).get("content", "")
 
-    async def get_completion(  # noqa: C901
+    async def get_completion(  # noqa: C901, PLR0912
         self,
         messages: list[dict[str, str]] | Sequence[dict[str, str]],
         *,
         format_json: bool = True,
         max_retries: int = MAX_AI_RETRIES,
+        user_id: UUID | None = None,
+        use_memory: bool = True,
+        context_type: str | None = None,
+        context_id: UUID | None = None,
+        context_meta: dict[str, Any] | None = None,
+        interaction_type: str = "ai_query",
+        store_response: bool = True,
     ) -> str | dict[str, Any] | list[Any]:
-        """Get completion from the specified AI model with retry logic for JSON parsing errors."""
+        """Get completion from the specified AI model with retry logic for JSON parsing errors.
+
+        Args:
+            messages: Messages to send to the AI
+            format_json: Whether to parse response as JSON
+            max_retries: Maximum number of retries for API/JSON errors
+            user_id: User ID for memory context (optional)
+            use_memory: Whether to use memory integration (default: True)
+            context_type: Type of context ('book', 'video', 'course', etc.)
+            context_id: UUID of the resource
+            context_meta: Context metadata (page, timestamp, lesson_id, etc.)
+            interaction_type: Type of interaction (assistant_chat, course_creation, etc.)
+            store_response: Whether to store the AI response in memory
+
+        Returns
+        -------
+            AI response as string, dict, or list
+        """
+        # Integrate memory by default unless explicitly disabled
+        user_query = ""
+        if use_memory and user_id:
+            messages, user_query = await self._integrate_memory_context(
+                messages,
+                user_id,
+                track_interaction=True,
+                context_type=context_type,
+                context_id=context_id,
+                context_meta=context_meta,
+                interaction_type=interaction_type,
+            )
+
         last_error = None
         messages_list = list(messages)
 
@@ -241,7 +476,19 @@ Please use this context to personalize your response appropriately."""
 
                 if format_json and content:
                     try:
-                        return self._parse_json_content(content)
+                        result = self._parse_json_content(content)
+                        # Store successful response in memory if enabled
+                        if store_response and user_id and user_query:
+                            await self._store_ai_response(
+                                user_id=user_id,
+                                user_query=user_query,
+                                ai_response=json.dumps(result) if isinstance(result, (dict, list)) else str(result),
+                                context_type=context_type,
+                                context_id=context_id,
+                                context_meta=context_meta,
+                                interaction_type=interaction_type,
+                            )
+                        return result
                     except json.JSONDecodeError as json_error:
                         last_error = json_error
                         if attempt < max_retries - 1:
@@ -252,6 +499,18 @@ Please use this context to personalize your response appropriately."""
                             )
                             continue
                         raise
+
+                # Store successful text response in memory if enabled
+                if store_response and user_id and user_query:
+                    await self._store_ai_response(
+                        user_id=user_id,
+                        user_query=user_query,
+                        ai_response=content or "No response from AI model",
+                        context_type=context_type,
+                        context_id=context_id,
+                        context_meta=context_meta,
+                        interaction_type=interaction_type,
+                    )
 
                 return content or "No response from AI model"
 
@@ -277,7 +536,8 @@ Please use this context to personalize your response appropriately."""
             msg = f"Failed to parse JSON after {max_retries} attempts: {last_error!s}"
             raise AIError(msg) from last_error
 
-        return None
+        msg = "Unexpected error: no response received"
+        raise AIError(msg)
 
     def _format_tools_for_api(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Format tools for API compatibility."""
@@ -343,8 +603,12 @@ Please use this context to personalize your response appropriately."""
         format_json: bool = True,
         track_interaction: bool = True,
         max_function_calls: int = 5,
+        context_type: str | None = None,
+        context_id: UUID | None = None,
+        context_meta: dict[str, Any] | None = None,
+        interaction_type: str = "ai_query",
     ) -> str | dict[str, Any] | list[Any]:
-        """Get completion with function calling support.
+        """Get completion with function calling support and rich context awareness.
 
         Args:
             messages: Conversation messages
@@ -354,13 +618,25 @@ Please use this context to personalize your response appropriately."""
             format_json: Whether to format response as JSON
             track_interaction: Whether to track interaction for memory
             max_function_calls: Maximum number of function calls to prevent loops
+            context_type: Type of context ('book', 'video', 'course', etc.)
+            context_id: UUID of the resource
+            context_meta: Context metadata (page, timestamp, lesson_id, etc.)
+            interaction_type: Type of interaction
 
         Returns
         -------
             AI response content (string or parsed JSON)
         """
-        # Integrate memory context
-        messages = await self._integrate_memory_context(messages, user_id, track_interaction)
+        # Integrate memory context with rich metadata
+        messages, user_query = await self._integrate_memory_context(
+            messages,
+            user_id,
+            track_interaction,
+            context_type=context_type,
+            context_id=context_id,
+            context_meta=context_meta,
+            interaction_type=interaction_type,
+        )
 
         # Convert messages to list for processing
         messages = list(messages)
@@ -392,6 +668,18 @@ Please use this context to personalize your response appropriately."""
 
                 # If no tool calls, return final response
                 if not tool_calls:
+                    # Store the response in memory if enabled
+                    if user_id and track_interaction and user_query:
+                        await self._store_ai_response(
+                            user_id=user_id,
+                            user_query=user_query,
+                            ai_response=content or "No response from AI model",
+                            context_type=context_type,
+                            context_id=context_id,
+                            context_meta=context_meta,
+                            interaction_type=interaction_type,
+                        )
+
                     if format_json and content:
                         return self._parse_json_response(content)
                     return content or "No response from AI model"
@@ -469,14 +757,43 @@ Please use this context to personalize your response appropriately."""
         messages: list[dict[str, str]] | Sequence[dict[str, str]],
         user_id: UUID | None = None,
         track_interaction: bool = True,
+        context_type: str | None = None,
+        context_id: UUID | None = None,
+        context_meta: dict[str, Any] | None = None,
+        interaction_type: str = "ai_query",
     ) -> AsyncGenerator[str, None]:
-        """Get streaming completion with memory integration."""
-        # Integrate memory context
-        messages = await self._integrate_memory_context(messages, user_id, track_interaction)
+        """Get streaming completion with memory integration and context awareness."""
+        # Integrate memory context with rich context metadata
+        messages, user_query = await self._integrate_memory_context(
+            messages,
+            user_id,
+            track_interaction,
+            context_type=context_type,
+            context_id=context_id,
+            context_meta=context_meta,
+            interaction_type=interaction_type,
+        )
+
+        # Collect response for storage
+        full_response = []
 
         # Stream the response
         async for chunk in self.get_streaming_completion(messages):
+            full_response.append(chunk)
             yield chunk
+
+        # Store the complete response in memory
+        if user_id and track_interaction and user_query:
+            complete_response = "".join(full_response)
+            await self._store_ai_response(
+                user_id=user_id,
+                user_query=user_query,
+                ai_response=complete_response,
+                context_type=context_type,
+                context_id=context_id,
+                context_meta=context_meta,
+                interaction_type=interaction_type,
+            )
 
     async def _enhance_description_with_tools(self, user_prompt: str, skill_level: str, description: str) -> str:
         """Enhance description by discovering content with function calling."""
@@ -600,14 +917,15 @@ Please use this context to personalize your response appropriately."""
             raise ValidationError(msg)
 
     async def _get_roadmap_response(
-        self, user_prompt: str, skill_level: str, description: str
+        self, user_prompt: str, skill_level: str, description: str, user_id: UUID | None = None
     ) -> dict[str, Any] | list[Any]:
-        """Get roadmap response from AI model.
+        """Get roadmap response from AI model with memory integration.
 
         Args:
             user_prompt: The user's learning topic/prompt
             skill_level: The skill level
             description: Additional context
+            user_id: User ID for memory context
 
         Returns
         -------
@@ -631,7 +949,8 @@ Please use this context to personalize your response appropriately."""
             {"role": "user", "content": prompt},
         ]
 
-        response = await self.get_completion(messages, format_json=True, max_retries=3)
+        # Memory is now integrated by default when user_id is provided!
+        response = await self.get_completion(messages, format_json=True, max_retries=3, user_id=user_id)
 
         if not isinstance(response, (list, dict)):
             self._logger.error("Response is not dict/list. Type: %s, Content: %s", type(response), str(response)[:500])
@@ -680,6 +999,7 @@ Please use this context to personalize your response appropriately."""
         sub_min: int = 0,  # Some topics don't need subtopics
         sub_max: int = 15,  # Allow more when needed
         use_tools: bool = False,
+        user_id: UUID | None = None,
     ) -> dict[str, Any]:
         """Generate a detailed hierarchical roadmap as JSON with title and description.
 
@@ -708,8 +1028,8 @@ Please use this context to personalize your response appropriately."""
             description = await self._enhance_description_with_tools(user_prompt, skill_level, description)
 
         try:
-            # Get response from AI
-            response = await self._get_roadmap_response(user_prompt, skill_level, description)
+            # Get response from AI - now with memory integration!
+            response = await self._get_roadmap_response(user_prompt, skill_level, description, user_id)
 
             # Process and return the response
             return self._process_roadmap_response(response)
@@ -811,7 +1131,8 @@ Please use this context to personalize your response appropriately."""
         ]
 
         try:
-            result = await self.get_completion(messages)
+            # Tag generation doesn't need memory context - it's content analysis, not personalization
+            result = await self.get_completion(messages, use_memory=False)
             if not isinstance(result, list):
                 msg = "Expected list response from AI model"
                 raise TagGenerationError(msg)
@@ -1062,7 +1383,7 @@ def _format_hackernews_section(hn_items: list[dict[str, Any]]) -> str:
     return section
 
 
-def _format_discovery_results(discovery_result: str | dict[str, Any]) -> str:
+def _format_discovery_results(discovery_result: str | dict[str, Any] | list[Any]) -> str:
     """Format discovery results into a prompt for lesson generation."""
     discovered_content_prompt = "IMPORTANT: Include the following discovered resources in your lesson:\n\n"
 
@@ -1073,6 +1394,9 @@ def _format_discovery_results(discovery_result: str | dict[str, Any]) -> str:
         discovered_content_prompt += _format_videos_section(discovery_result.get("videos", []))
         discovered_content_prompt += _format_articles_section(discovery_result.get("articles", []))
         discovered_content_prompt += _format_hackernews_section(discovery_result.get("hackernews", []))
+    elif isinstance(discovery_result, list):
+        # Handle list responses (might be a list of resources)
+        discovered_content_prompt += str(discovery_result)
 
     discovered_content_prompt += (
         "\n\nIntegrate these resources naturally into the lesson content, providing context and building upon them."

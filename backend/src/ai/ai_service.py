@@ -28,8 +28,10 @@ class AIService:
     """ALL AI operations go through here."""
 
     def __init__(self) -> None:
-        self._model_manager = ModelManager()
+        # ModelManager will get async memory manager when needed
+        self._model_manager = ModelManager(memory_wrapper=None)
         self._rag_service = RAGService()
+        self._async_memory_manager = None  # Will be initialized on first use
 
     async def process_content(self, content_type: str, action: str, user_id: UUID, **kwargs: Any) -> Any:
         """Route AI requests to appropriate handlers.
@@ -243,14 +245,25 @@ class AIService:
         skill_level: str,
         description: str = "",
         use_tools: bool = False,
+        context: dict | None = None,
         **_kwargs: Any,  # Accept additional kwargs like content_type
     ) -> dict:
         """Generate a course roadmap."""
         logger.info("Generating course for user %s: %s", user_id, topic)
 
-        # Use the existing roadmap generation logic
+        # Extract interaction type from context if provided
+        interaction_type = "course_creation"
+        if context:
+            interaction_type = context.get("interaction_type", "course_creation")
+
+        # Use the existing roadmap generation logic - now with memory integration!
+        # The roadmap generation will automatically integrate memory and store the response
         roadmap = await self._model_manager.generate_roadmap_content(
-            user_prompt=topic, skill_level=skill_level, description=description, use_tools=use_tools
+            user_prompt=topic,
+            skill_level=skill_level,
+            description=description,
+            use_tools=use_tools,
+            user_id=user_id,
         )
 
         return roadmap  # noqa: RET504
@@ -357,15 +370,39 @@ class AIService:
         if history:
             messages.extend(history)
 
+        # Extract context metadata from context dict if provided
+        context_type = None
+        context_id = None
+        context_meta = {}
+        interaction_type = "assistant_chat"
+
+        if context:
+            # Extract rich context information
+            context_type = context.get("context_type")
+            context_id = context.get("context_id")
+            context_meta = context.get("context_meta", {})
+            interaction_type = context.get("interaction_type", "assistant_chat")
+
+            # Add any additional context messages if needed
+            if "messages" in context:
+                # Use the provided messages instead of building our own
+                messages = context["messages"]
+            else:
+                # Add context as text to the user message
+                context_str = f"\n\nCurrent context: {context}"
+                message += context_str
+
         messages.append({"role": "user", "content": message})
 
-        # Add context if provided
-        if context:
-            context_str = f"\n\nCurrent context: {context}"
-            messages[-1]["content"] += context_str
-
-        response = await self._model_manager.get_completion_with_memory(
-            messages=messages, user_id=user_id, format_json=False
+        # Use enhanced completion with rich context
+        response = await self._model_manager.get_completion(
+            messages=messages,
+            user_id=user_id,
+            format_json=False,
+            context_type=context_type,
+            context_id=context_id,
+            context_meta=context_meta,
+            interaction_type=interaction_type,
         )
 
         return str(response)
