@@ -139,7 +139,7 @@ async def search_internal_library(topic: str, content_type: str = "all", user_id
         Dictionary with search results from internal library
     """
     try:
-        logger.info("Searching internal library for topic: %s, type: %s", topic, content_type)
+        logger.info("Searching internal library for topic: %s, type: %s, user_id: %s", topic, content_type, user_id)
 
         results = {"courses": [], "books": [], "videos": [], "total_found": 0}
 
