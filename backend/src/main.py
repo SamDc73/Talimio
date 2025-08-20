@@ -70,7 +70,6 @@ from .middleware.security import SimpleSecurityMiddleware, limiter
 from .progress.router import router as progress_router
 from .tagging.models import Tag, TagAssociation  # noqa: F401
 from .tagging.router import router as tagging_router
-from .user.current_user_router import router as current_user_router
 
 # Auth models moved to user.models - import for SQLAlchemy registration
 from .user.models import User, UserPreferences  # noqa: F401
@@ -410,7 +409,6 @@ def create_app() -> FastAPI:
 
     app.include_router(tagging_router)
     app.include_router(user_router)
-    app.include_router(current_user_router)  # Current user endpoints
     app.include_router(videos_router)
     app.include_router(auth_router)
 
