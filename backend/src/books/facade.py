@@ -4,22 +4,25 @@ Single entry point for all book-related operations.
 Coordinates internal book services and provides stable API for other modules.
 """
 
+import json
 import logging
 from typing import Any
 from uuid import UUID
 
-from src.ai.ai_service import get_ai_service
-from src.core.interfaces import ContentFacade
+from sqlalchemy import select
 
-from .service import BookService
+from src.ai.ai_service import get_ai_service
+from src.books.models import Book
+
 from .services.book_content_service import BookContentService
-from .services.book_progress_tracker import BookProgressTracker
+from .services.book_progress_service import BookProgressService
+from .services.book_query_service import BookQueryService
 
 
 logger = logging.getLogger(__name__)
 
 
-class BooksFacade(ContentFacade):
+class BooksFacade:
     """
     Single entry point for all book operations.
 
@@ -29,18 +32,9 @@ class BooksFacade(ContentFacade):
 
     def __init__(self) -> None:
         # Internal services - not exposed to outside modules
-        self._book_service = BookService()
         self._content_service = BookContentService()  # New base service
-        self._progress_service = BookProgressTracker()  # Implements ProgressTracker protocol
+        self._progress_service = BookProgressService()  # Handles reading progress tracking
         self._ai_service = get_ai_service()
-
-    async def get_content_with_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
-        """
-        Get book with progress information.
-
-        Implements ContentFacade interface for consistent cross-module API.
-        """
-        return await self.get_book_with_progress(content_id, user_id)
 
     async def get_book_with_progress(self, book_id: UUID, user_id: UUID) -> dict[str, Any]:
         """
@@ -49,16 +43,16 @@ class BooksFacade(ContentFacade):
         Coordinates book service and progress service to provide comprehensive data.
         """
         try:
-            # Get book information
+            # Get book information with progress using query service
             from src.database.session import async_session_maker
 
             async with async_session_maker() as session:
-                book_response = await self._book_service.get_book(session, str(book_id), user_id)
-                # Convert response to dict
-                book = book_response.model_dump() if book_response else None
+                query_service = BookQueryService(session, user_id)
+                book_with_progress = await query_service.get_book_with_progress(book_id)
+                book = book_with_progress.model_dump() if book_with_progress else None
 
             if not book:
-                return {"error": "Book not found"}
+                return {"error": "Book not found", "success": False}
 
             # Get progress information
             progress = await self._progress_service.get_progress(book_id, user_id)
@@ -76,15 +70,7 @@ class BooksFacade(ContentFacade):
 
         except Exception:
             logger.exception("Error getting book %s for user %s", book_id, user_id)
-            return {"error": "Failed to retrieve book"}
-
-    async def create_content(self, content_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
-        """
-        Create new book content.
-
-        Implements ContentFacade interface.
-        """
-        return await self.create_book(content_data, user_id)
+            return {"error": "Failed to retrieve book", "success": False}
 
     async def create_book(self, book_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
         """
@@ -95,6 +81,13 @@ class BooksFacade(ContentFacade):
         try:
             # Use the new content service which handles tags, progress, and AI processing
             book = await self._content_service.create_content(book_data, user_id)
+
+            # Auto-tag the created book
+            try:
+                if getattr(book, "id", None):
+                    await self._auto_tag_book(book.id, user_id)
+            except Exception as e:
+                logger.warning(f"Automatic tagging failed for book {getattr(book, 'id', None)}: {e}")
 
             return {"book": book, "success": True}
 
@@ -111,38 +104,85 @@ class BooksFacade(ContentFacade):
         Handles file upload, format detection, and metadata extraction.
         """
         try:
-            # Process book file and extract metadata
-            book_data = await self._book_service.process_book_upload(
-                file_path, title, user_id, additional_metadata=metadata or {}
-            )
+            # Build book data combining provided metadata and required fields
+            data: dict[str, Any] = {**(metadata or {})}
+            data["title"] = title or data.get("title")
+            data["file_path"] = file_path
+            # Ensure RAG status set to pending for processing pipeline
+            data.setdefault("rag_status", "pending")
 
-            if not book_data.get("success"):
-                return book_data
+            # Create the book record via content service
+            book = await self._content_service.create_content(data, user_id)
 
-            book_id = book_data["book"]["id"]
+            book_id = getattr(book, "id", None)
+            total_pages = getattr(book, "total_pages", 0)
 
-            # Initialize progress tracking
+            # Auto-tag the created book (align with video flow)
             try:
-                await self._progress_service.initialize_progress(
-                    book_id, user_id, total_pages=book_data["book"].get("total_pages", 0)
-                )
+                if book_id:
+                    await self._auto_tag_book(book_id, user_id)
+            except Exception as e:
+                logger.warning(f"Automatic tagging failed for book {book_id}: {e}")
+
+            # Initialize progress tracking (non-fatal on failure)
+            try:
+                if book_id:
+                    await self._progress_service.initialize_progress(book_id, user_id, total_pages=total_pages)
             except Exception as e:
                 logger.warning(f"Failed to initialize progress tracking: {e}")
-                # Don't fail the upload if progress init fails
 
-            return book_data
+            return {"book": book, "success": True}
 
         except Exception as e:
             logger.exception(f"Error uploading book {title} for user {user_id}: {e}")
             return {"error": f"Failed to upload book: {e!s}", "success": False}
 
-    async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
-        """
-        Update book reading progress.
+    async def _auto_tag_book(self, book_id: UUID, user_id: UUID) -> list[str]:
+        """Generate tags for a book using its content preview and store them.
 
-        Implements ContentFacade interface.
+        This mirrors the video auto-tagging flow: extract a content preview, call TaggingService,
+        then persist generated tags to the Book.tags JSON field. Failures are logged but not raised.
         """
-        return await self.update_book_progress(content_id, user_id, progress_data)
+        try:
+            # Defer imports to avoid circular dependencies and keep facade lightweight
+            from src.books.models import Book
+            from src.database.session import async_session_maker
+            from src.tagging.processors.book_processor import process_book_for_tagging
+            from src.tagging.service import TaggingService
+
+            async with async_session_maker() as session:
+                # Extract content preview for tagging
+                content_data = await process_book_for_tagging(str(book_id), session)
+                if not content_data:
+                    logger.warning(f"Book {book_id} not found or no content data for tagging")
+                    return []
+
+                # Generate tags via TaggingService
+                tagging_service = TaggingService(session)
+                tags = await tagging_service.tag_content(
+                    content_id=book_id,
+                    content_type="book",
+                    user_id=user_id,
+                    title=content_data.get("title", ""),
+                    content_preview=content_data.get("content_preview", ""),
+                )
+
+                # Persist tags onto the Book model for backward compatibility
+                if tags:
+                    db_book = await session.get(Book, book_id)
+                    if db_book:
+                        db_book.tags = json.dumps(tags)
+                        await session.commit()
+                        logger.info(f"Successfully tagged book {book_id} with {len(tags)} tags")
+                else:
+                    # Still commit any flushed tag associations inside TaggingService
+                    await session.commit()
+
+                return tags or []
+
+        except Exception as e:
+            logger.exception(f"Auto-tagging error for book {book_id}: {e}")
+            return []
 
     async def update_book_progress(self, book_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """
@@ -174,14 +214,6 @@ class BooksFacade(ContentFacade):
         except Exception:
             logger.exception("Error updating reading settings for book %s", book_id)
             return {"error": "Failed to update settings", "success": False}
-
-    async def delete_content(self, content_id: UUID, user_id: UUID) -> bool:
-        """
-        Delete book content.
-
-        Implements ContentFacade interface.
-        """
-        return await self.delete_book(content_id, user_id)
 
     async def update_book(self, book_id: UUID, user_id: UUID, update_data: dict[str, Any]) -> dict[str, Any]:
         """
@@ -220,7 +252,11 @@ class BooksFacade(ContentFacade):
         Provides unified search across book content and metadata.
         """
         try:
-            results = await self._book_service.search_books(query, user_id, filters or {})
+            from src.database.session import async_session_maker
+
+            async with async_session_maker() as session:
+                query_service = BookQueryService(session, user_id)
+                results = await query_service.search_books(query, limit=(filters or {}).get("limit", 20))
 
             return {"results": results, "success": True}
 
@@ -235,19 +271,27 @@ class BooksFacade(ContentFacade):
         Optionally includes progress information.
         """
         try:
-            books = await self._book_service.get_user_books(user_id)
+            from src.books.services.book_response_builder import BookResponseBuilder
+            from src.database.session import async_session_maker
 
-            # Convert to dict format for progress addition
-            book_dicts = []
-            for book in books:
-                book_dict = book.model_dump()
+            async with async_session_maker() as session:
+                # Fetch books for this user
+                result = await session.execute(
+                    select(Book).where(Book.user_id == user_id).order_by(Book.created_at.desc())
+                )
+                books = list(result.scalars().all())
 
-                if include_progress:
-                    # Add progress information to each book
-                    progress = await self._progress_service.get_progress(book.id, user_id)
-                    book_dict["progress"] = progress
+                # Convert to response objects for consistent schema
+                book_responses = BookResponseBuilder.build_book_list(books)
 
-                book_dicts.append(book_dict)
+                # Convert to dict format and optionally add progress
+                book_dicts: list[dict[str, Any]] = []
+                for br in book_responses:
+                    bd = br.model_dump()
+                    if include_progress:
+                        progress = await self._progress_service.get_progress(bd["id"], user_id)
+                        bd["progress"] = progress
+                    book_dicts.append(bd)
 
             return {"books": book_dicts, "success": True}
 
@@ -261,20 +305,27 @@ class BooksFacade(ContentFacade):
             # Get database session
             from src.database.session import async_session_maker
 
-            async with async_session_maker() as db:
-                # Get chapters - pass db, book_id, and user_id (following video service pattern)
-                try:
-                    chapters = await self._book_service.get_book_chapters(db, str(book_id), user_id)
-                except ValueError:
-                    # Book not found
+            async with async_session_maker() as session:
+                # Fetch book to read table_of_contents JSON
+                result = await session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
+                book = result.scalar_one_or_none()
+                if not book:
                     logger.info(f"Book {book_id} not found for user {user_id}")
                     return {"error": f"Book {book_id} not found", "success": False}
+
+                chapters: list[dict] = []
+                if getattr(book, "table_of_contents", None):
+                    try:
+                        toc = json.loads(book.table_of_contents)  # type: ignore[arg-type]
+                        if isinstance(toc, list):
+                            chapters = toc
+                    except (json.JSONDecodeError, TypeError):
+                        chapters = []
 
                 # Add progress information for each chapter
                 if chapters:
                     progress = await self._progress_service.get_progress(book_id, user_id)
                     completed_chapters = progress.get("completed_chapters", {})
-
                     for chapter in chapters:
                         chapter["completed"] = completed_chapters.get(chapter.get("id"), False)
 
@@ -298,10 +349,10 @@ class BooksFacade(ContentFacade):
             return {"error": "Failed to mark chapter complete", "success": False}
 
     # AI operations
-    async def ask_book_question(self, book_id: UUID, user_id: UUID, question: str, page: int | None = None) -> str:
+    async def ask_book_question(self, book_id: UUID, user_id: UUID, question: str, page: int | None = None) -> dict[str, Any] | None:
         """Ask a question about the book content."""
         try:
-            await self._ai_service.process_content(
+            return await self._ai_service.process_content(
                 content_type="book",
                 action="question",
                 user_id=user_id,
@@ -313,10 +364,10 @@ class BooksFacade(ContentFacade):
             logger.exception("Error answering question for book %s", book_id)
             raise
 
-    async def summarize_book(self, book_id: UUID, user_id: UUID, page_range: tuple[int, int] | None = None) -> str:
+    async def summarize_book(self, book_id: UUID, user_id: UUID, page_range: tuple[int, int] | None = None) -> dict[str, Any] | None:
         """Generate a summary of the book."""
         try:
-            await self._ai_service.process_content(
+            return await self._ai_service.process_content(
                 content_type="book", action="summarize", user_id=user_id, book_id=str(book_id), page_range=page_range
             )
         except Exception:
@@ -325,10 +376,10 @@ class BooksFacade(ContentFacade):
 
     async def chat_about_book(
         self, book_id: UUID, user_id: UUID, message: str, history: list[dict[str, Any]] | None = None
-    ) -> str:
+    ) -> dict[str, Any] | None:
         """Have a conversation about the book."""
         try:
-            await self._ai_service.process_content(
+            return await self._ai_service.process_content(
                 content_type="book",
                 action="chat",
                 user_id=user_id,
@@ -340,10 +391,10 @@ class BooksFacade(ContentFacade):
             logger.exception("Error in book chat for %s", book_id)
             raise
 
-    async def process_book_for_rag(self, book_id: UUID, user_id: UUID, file_path: str) -> dict[str, Any]:
+    async def process_book_for_rag(self, book_id: UUID, user_id: UUID, file_path: str) -> dict[str, Any] | None:
         """Process book content for RAG indexing."""
         try:
-            await self._ai_service.process_content(
+            return await self._ai_service.process_content(
                 content_type="book", action="process_rag", user_id=user_id, book_id=str(book_id), file_path=file_path
             )
         except Exception:

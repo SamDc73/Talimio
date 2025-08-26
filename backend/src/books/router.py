@@ -1,16 +1,18 @@
+from __future__ import annotations
+
 import json
 import logging
-from io import BytesIO
-from pathlib import Path
+from collections.abc import AsyncGenerator, Callable
 from typing import Annotated
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
 from src.auth import UserId
+from src.books.models import Book
 from src.database.session import DbSession
 from src.middleware.security import books_rate_limit
 from src.storage.factory import get_storage_provider
@@ -73,34 +75,22 @@ def _build_progress_dict(progress_data: BookProgressUpdate) -> dict:
 
 def _convert_to_progress_response(progress: dict, book_id: UUID, user_id: UUID) -> BookProgressResponse:
     """Convert progress dict to response format."""
-    from datetime import UTC, datetime
-
     return BookProgressResponse(
-        id=progress.get("id", UUID("00000000-0000-0000-0000-000000000000")),
+        id=progress.get("id"),  # None if not yet saved to database
         book_id=book_id,
         user_id=user_id,
         current_page=progress.get("page", progress.get("current_page", 1)),
         progress_percentage=progress.get("completion_percentage", 0),
-        zoom_level=progress.get("zoom_level", 100),
-        completed_chapters=progress.get("completed_chapters", {}),
-        total_pages_read=progress.get("page", 1),  # Add this field
+        total_pages_read=progress.get("total_pages_read", progress.get("page", 1)),
+        reading_time_minutes=progress.get("reading_time_minutes", 0),
+        status=progress.get("status", "not_started"),
+        notes=progress.get("notes"),
+        bookmarks=progress.get("bookmarks", []),
+        toc_progress=progress.get("toc_progress", {}),
         last_read_at=progress.get("last_accessed_at", progress.get("last_read_at")),
-        created_at=progress.get("created_at", datetime.now(UTC)),
-        updated_at=progress.get("updated_at", datetime.now(UTC)),
+        created_at=progress.get("created_at"),  # None if not yet saved
+        updated_at=progress.get("updated_at"),  # None if not yet saved
     )
-
-
-class BookMetadataResponse(BaseModel):
-    """Response model for book metadata extraction."""
-
-    title: str | None = None
-    author: str | None = None
-    description: str | None = None
-    language: str | None = None
-    publisher: str | None = None
-    isbn: str | None = None
-    publication_year: int | None = None
-    page_count: int | None = None
 
 
 @router.get("")
@@ -175,22 +165,64 @@ async def get_book_endpoint(book_id: UUID, user_id: UserId) -> BookWithProgress:
         progress = result.get("progress", {})
 
         # Convert to BookWithProgress format
-        from datetime import UTC, datetime
+        # Create a proper BookResponse first
+        book_response = BookResponse(
+            id=book.get("id"),
+            title=book.get("title"),
+            author=book.get("author"),
+            subtitle=book.get("subtitle"),
+            description=book.get("description"),
+            isbn=book.get("isbn"),
+            language=book.get("language"),
+            publication_year=book.get("publication_year"),
+            publisher=book.get("publisher"),
+            tags=book.get("tags", []),
+            file_type=book.get("file_type"),
+            file_path=book.get("file_path"),
+            file_size=book.get("file_size"),
+            total_pages=book.get("total_pages"),
+            table_of_contents=book.get("table_of_contents"),
+            rag_status=book.get("rag_status"),
+            rag_processed_at=book.get("rag_processed_at"),
+            created_at=book.get("created_at"),
+            updated_at=book.get("updated_at"),
+        )
 
         return BookWithProgress(
-            **book,
+            id=book_response.id,
+            title=book_response.title,
+            author=book_response.author,
+            subtitle=book_response.subtitle,
+            description=book_response.description,
+            isbn=book_response.isbn,
+            language=book_response.language,
+            publication_year=book_response.publication_year,
+            publisher=book_response.publisher,
+            tags=book_response.tags,
+            file_type=book_response.file_type,
+            file_path=book_response.file_path,
+            file_size=book_response.file_size,
+            total_pages=book_response.total_pages,
+            table_of_contents=book_response.table_of_contents,
+            rag_status=book_response.rag_status,
+            rag_processed_at=book_response.rag_processed_at,
+            created_at=book_response.created_at,
+            updated_at=book_response.updated_at,
             progress=BookProgressResponse(
-                id=progress.get("id", UUID("00000000-0000-0000-0000-000000000000")),
+                id=progress.get("id"),  # None if not yet saved to database
                 book_id=book_id,
                 user_id=user_id,
                 current_page=progress.get("current_page", 1),
                 progress_percentage=progress.get("completion_percentage", 0),
-                zoom_level=progress.get("zoom_level", 100),
-                completed_chapters=progress.get("completed_chapters", {}),
-                total_pages_read=progress.get("page", 1),  # Add this field
+                total_pages_read=progress.get("total_pages_read", progress.get("page", 1)),
+                reading_time_minutes=progress.get("reading_time_minutes", 0),
+                status=progress.get("status", "not_started"),
+                notes=progress.get("notes"),
+                bookmarks=progress.get("bookmarks", []),
+                toc_progress=progress.get("toc_progress", {}),
                 last_read_at=progress.get("last_read_at"),
-                created_at=progress.get("created_at", datetime.now(UTC)),
-                updated_at=progress.get("updated_at", datetime.now(UTC)),
+                created_at=progress.get("created_at"),  # None if not yet saved
+                updated_at=progress.get("updated_at"),  # None if not yet saved
             )
             if progress
             else None,
@@ -202,55 +234,12 @@ async def get_book_endpoint(book_id: UUID, user_id: UserId) -> BookWithProgress:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
-@router.post("/extract-metadata")
-async def extract_book_metadata(
-    user_id: UserId,
-    file: Annotated[UploadFile, File(description="Book file (PDF or EPUB) to extract metadata from")],
-) -> BookMetadataResponse:
-    """Extract metadata from a book file without storing it."""
-    # Validate file type
-    if not file.filename:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No filename provided",
-        )
-
-    file_extension = (file.filename or "").lower().split(".")[-1]
-    if file_extension not in ["pdf", "epub"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only PDF and EPUB files are supported",
-        )
-
-    # Read file content
-    file_content = await file.read()
-
-    # Extract metadata
-    metadata_service = BookMetadataService()
-    metadata = metadata_service.extract_metadata(file_content, f".{file_extension}")
-
-    # If no title was extracted, use filename without extension
-    if not metadata.title:
-        metadata.title = Path(file.filename).stem
-
-    return BookMetadataResponse(
-        title=metadata.title,
-        author=metadata.author,
-        description=metadata.description,
-        language=metadata.language,
-        publisher=metadata.publisher,
-        isbn=metadata.isbn,
-        publication_year=metadata.publication_year,
-        page_count=metadata.page_count,
-    )
-
-
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_book_endpoint(
     user_id: UserId,
     file: Annotated[UploadFile, File(description="Book file (PDF or EPUB)")],
     title: Annotated[str, Form(description="Book title")],
-    author: Annotated[str, Form(description="Book author")],
+    author: Annotated[str | None, Form(description="Book author")] = None,
     subtitle: Annotated[str | None, Form(description="Book subtitle")] = None,
     description: Annotated[str | None, Form(description="Book description")] = None,
     isbn: Annotated[str | None, Form(description="ISBN")] = None,
@@ -302,32 +291,47 @@ async def create_book_endpoint(
         # Extract metadata if needed
         metadata_service = BookMetadataService()
         metadata = metadata_service.extract_metadata(file_content, f".{file_extension}")
+        logger.info(f"Extracted metadata - title: {metadata.title}, author: {metadata.author}, pages: {metadata.total_pages}")
 
         # Calculate file hash
         import hashlib
 
         file_hash = hashlib.sha256(file_content).hexdigest()
 
+        # Smart metadata priority: use extracted metadata when form data looks like filename hints
+        filename_without_ext = file.filename.rsplit(".", 1)[0] if file.filename else ""
+
+        # Use extracted title if it exists and form title looks like filename
+        final_title = title
+        if metadata.title and (not title or title == filename_without_ext):
+            final_title = metadata.title
+
+        # Use extracted author if it exists and no author provided or author is empty
+        final_author = author
+        if metadata.author and (not author or not author.strip()):
+            final_author = metadata.author
+
         # Build book data combining form data with extracted metadata
         book_metadata = {
-            "title": title,
-            "subtitle": subtitle,
-            "author": author,
-            "description": description,
-            "isbn": isbn,
+            "title": final_title,
+            "subtitle": subtitle or metadata.subtitle,
+            "author": final_author,
+            "description": description or metadata.description,
+            "isbn": isbn or metadata.isbn,
             "language": language or metadata.language,
             "publication_year": publication_year or metadata.publication_year,
             "publisher": publisher or metadata.publisher,
             "tags": tags_list,
             "file_type": file_extension,
             "file_size": len(file_content),
-            "total_pages": metadata.page_count or 0,
+            "total_pages": metadata.total_pages or 0,
             "file_hash": file_hash,
+            "table_of_contents": json.dumps(metadata.table_of_contents) if metadata.table_of_contents else None,
         }
 
         # Upload book through facade
         result = await books_facade.upload_book(
-            file_path=file_path, title=title, user_id=user_id, metadata=book_metadata
+            file_path=file_path, title=final_title, user_id=user_id, metadata=book_metadata
         )
 
         if not result.get("success"):
@@ -467,13 +471,112 @@ async def serve_book_file(book_id: UUID, user_id: UserId, db: DbSession) -> File
     )
 
 
+@router.get("/{book_id}/presigned-url")
+async def get_book_presigned_url(book_id: UUID, user_id: UserId, db: DbSession) -> dict:
+    """Get a presigned URL for direct book download from R2/storage.
+
+    This is useful when you want the browser to directly download from R2
+    without proxying through the backend.
+    """
+    from sqlalchemy import select
+
+    from src.books.models import Book
+
+    query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
+    result = await db.execute(query)
+    book = result.scalar_one_or_none()
+
+    if not book:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
+
+    if not book.file_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book file not found")
+
+    # Get storage provider and presigned URL
+    storage = get_storage_provider()
+    url = await storage.get_download_url(book.file_path, expires_in=3600)  # 1 hour expiry
+
+    return {
+        "url": url,
+        "expires_in": 3600,
+        "content_type": "application/pdf" if book.file_type == "pdf" else "application/epub+zip",
+        "filename": f"{book.title}.{book.file_type}"
+    }
+
+
+def _get_media_type(file_type: str) -> str:
+    """Get the appropriate media type for a file type."""
+    if file_type == "epub":
+        return "application/epub+zip"
+    if file_type == "pdf":
+        return "application/pdf"
+    return "application/octet-stream"
+
+
+async def _handle_local_file(url: str, book: Book) -> FileResponse:
+    """Handle serving local files."""
+    media_type = _get_media_type(book.file_type)
+
+    return FileResponse(
+        path=url,
+        media_type=media_type,
+        filename=f"{book.title}.{book.file_type}",
+        headers={
+            "Cache-Control": "private, max-age=3600",
+            "Accept-Ranges": "bytes",
+            "Content-Type": media_type,
+        }
+    )
+
+
+async def _handle_range_request(
+    url: str,
+    range_header: str,
+    media_type: str,
+    stream_func: Callable[[], AsyncGenerator[bytes, None]]
+) -> StreamingResponse | None:
+    """Handle range requests for partial content."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            head_response = await client.head(url, follow_redirects=True)
+            content_length = head_response.headers.get("content-length")
+
+            import re
+            range_match = re.match(r"bytes=(\d+)-(\d*)", range_header)
+            if range_match and content_length:
+                start = int(range_match.group(1))
+                end = int(range_match.group(2)) if range_match.group(2) else int(content_length) - 1
+
+                headers = {
+                    "Content-Range": f"bytes {start}-{end}/{content_length}",
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": str(end - start + 1),
+                    "Cache-Control": "private, max-age=3600",
+                }
+
+                return StreamingResponse(
+                    stream_func(),
+                    status_code=206,
+                    media_type=media_type,
+                    headers=headers
+                )
+        except Exception as e:
+            logger.warning(f"Range request failed: {e}")
+    return None
+
+
 @router.get("/{book_id}/content", response_model=None)
-async def stream_book_content(book_id: UUID, user_id: UserId, db: DbSession) -> StreamingResponse:
+async def stream_book_content(
+    book_id: UUID,
+    request: Request,
+    user_id: UserId,
+    db: DbSession
+) -> StreamingResponse | FileResponse:
     """Stream book PDF content through backend to avoid CORS issues.
 
     This endpoint acts as a proxy, fetching the book from storage and
     streaming it back to the client. This completely bypasses CORS issues
-    with signed URLs.
+    with signed URLs. Supports range requests for efficient PDF loading.
     """
     # Simple direct database query
     from sqlalchemy import select
@@ -496,60 +599,51 @@ async def stream_book_content(book_id: UUID, user_id: UserId, db: DbSession) -> 
 
     # If it's a local file, serve it directly
     if not url.startswith("http"):
-        from fastapi.responses import FileResponse
+        return await _handle_local_file(url, book)
 
-        media_type = "application/pdf" if book.file_type == "pdf" else "application/epub+zip"
-        return FileResponse(
-            path=url,
-            media_type=media_type,
-            filename=f"{book.title}.{book.file_type}",
-            headers={
-                "Cache-Control": "private, max-age=3600",
-            }
-        )
+    # For remote storage, properly stream with range support
+    media_type = _get_media_type(book.file_type)
 
-    # For remote storage, fetch and stream
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            response = await client.get(url, follow_redirects=True)
-            response.raise_for_status()
+    # Check if this is a range request
+    range_header = request.headers.get("range")
 
-            media_type = "application/pdf" if book.file_type == "pdf" else "application/epub+zip"
+    async def stream_content() -> AsyncGenerator[bytes, None]:
+        """Stream content in chunks to avoid loading entire file in memory."""
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            # Make request with range header if provided
+            headers = {}
+            if range_header:
+                headers["Range"] = range_header
 
-            return StreamingResponse(
-                BytesIO(response.content),
-                media_type=media_type,
-                headers={
-                    "Content-Disposition": f'inline; filename="{book.title}.{book.file_type}"',
-                    "Cache-Control": "private, max-age=3600",  # Cache for 1 hour
-                }
-            )
-        except httpx.HTTPError as e:
-            logger.exception("Failed to fetch book content")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to retrieve book content"
-            ) from e
+            try:
+                async with client.stream("GET", url, headers=headers, follow_redirects=True) as response:
+                    response.raise_for_status()
 
+                    # Stream in chunks
+                    async for chunk in response.aiter_bytes(chunk_size=8192):
+                        yield chunk
 
-@router.post("/{book_id}/extract-toc")
-async def extract_table_of_contents(book_id: UUID, user_id: UserId) -> BookResponse:
-    """Extract and update table of contents for an existing book."""
-    try:
-        # TODO: Implement TOC extraction in facade
-        # For now, just return the book as-is
-        result = await books_facade.get_book_with_progress(book_id, user_id)
+            except httpx.HTTPError as e:
+                logger.exception(f"Failed to stream book content: {e}")
+                # Yield empty to avoid broken pipe
+                yield b""
 
-        if not result.get("success"):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
+    # For range requests, we need to get content-length first
+    if range_header:
+        range_response = await _handle_range_request(url, range_header, media_type, stream_content)
+        if range_response:
+            return range_response
 
-        book = result.get("book", {})
-        return BookResponse.model_validate(book)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"Error extracting ToC for book {book_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+    # Normal streaming response (no range)
+    return StreamingResponse(
+        stream_content(),
+        media_type=media_type,
+        headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "private, max-age=3600",
+            "Content-Disposition": f'inline; filename="{book.title}.{book.file_type}"',
+        }
+    )
 
 
 @router.get("/{book_id}/chapters")
@@ -596,15 +690,17 @@ async def update_book_chapter_status_endpoint(
                 detail=result.get("error", "Failed to update chapter status"),
             )
 
-        # Return a chapter response - for now just return success
+        # Return a chapter response with required fields
         return BookChapterResponse(
             id=chapter_id,
             book_id=book_id,
-            chapter_id=str(chapter_id),
+            chapter_number=1,  # This is just a placeholder since we're using TOC chapter IDs
+            title="Chapter",  # Placeholder title
+            start_page=None,
+            end_page=None,
             status=status_data.status,
-            completed_at=None,
-            created_at=None,
-            updated_at=None,
+            created_at=None,  # Not from database, just a status update response
+            updated_at=None,  # Not from database, just a status update response
         )
     except HTTPException:
         raise

@@ -1,5 +1,6 @@
 """Base service class for all content types with shared behavior."""
 
+import json
 import logging
 from abc import ABC, abstractmethod
 from typing import Any
@@ -81,16 +82,45 @@ class BaseContentService(ABC):
         except Exception as e:
             logger.exception(f"Failed to update progress: {e}")
 
-    async def _process_tags(self, content_id: UUID, user_id: UUID, tags: list[str]) -> None:
-        """Process tags for content."""
+    async def _process_tags(self, content_id: UUID, user_id: UUID, tags: list[str] | str | None) -> None:
+        """Process tags for content.
+
+        Accepts either a list of tags or a JSON-encoded string (e.g. "[]").
+        Normalizes to list before passing to TaggingService.
+        """
         try:
+            # Normalize tags to a Python list[str]
+            normalized: list[str] = []
+            if isinstance(tags, list):
+                normalized = [t for t in tags if isinstance(t, str) and t.strip()]
+            elif isinstance(tags, str):
+                t = tags.strip()
+                if not t or t == "[]":
+                    normalized = []
+                else:
+                    try:
+                        parsed = json.loads(t)
+                        if isinstance(parsed, list):
+                            normalized = [str(x).strip() for x in parsed if str(x).strip()]
+                        else:
+                            # Fallback: treat as comma-separated
+                            normalized = [s.strip() for s in t.split(",") if s.strip()]
+                    except Exception:
+                        # Not JSON, fallback to comma-separated
+                        normalized = [s.strip() for s in t.split(",") if s.strip()]
+            else:
+                normalized = []
+
+            if not normalized:
+                return
+
             from src.database.session import async_session_maker
 
             async with async_session_maker() as session:
                 tagging_service = TaggingService(session)
                 content_type = self._get_content_type()
                 await tagging_service.process_tags(
-                    content_type=content_type, content_id=str(content_id), user_id=user_id, tags=tags
+                    content_type=content_type, content_id=str(content_id), user_id=user_id, tags=normalized
                 )
         except Exception as e:
             logger.exception(f"Failed to process tags: {e}")

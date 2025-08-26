@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book, BookChapter
-from src.books.schemas import BookChapterResponse, BookProgressUpdate
+from src.books.schemas import BookChapterResponse
 from src.books.services.book_response_builder import BookResponseBuilder
 
 
@@ -128,14 +128,19 @@ class ChapterService:
         if progress.toc_progress is None:
             progress.toc_progress = {}
 
-        progress.toc_progress[str(chapter_id)] = chapter_status == "completed"
+        # Ensure toc_progress is a dict before using it
+        if isinstance(progress.toc_progress, dict):
+            progress.toc_progress[str(chapter_id)] = chapter_status == "completed"
+        else:
+            progress.toc_progress = {str(chapter_id): chapter_status == "completed"}
         progress.updated_at = datetime.now(UTC)
 
         # Update the overall book progress
         from src.books.services.book_progress_service import BookProgressService
 
-        progress_service = BookProgressService(self.session, user_id)
-        await progress_service.update_book_progress(book_id, BookProgressUpdate())
+        progress_service = BookProgressService()
+        # Mark chapter as complete/incomplete in the service
+        await progress_service.mark_chapter_complete(book_id, user_id, str(chapter_id), chapter_status == "completed")
 
         await self.session.commit()
         await self.session.refresh(chapter)

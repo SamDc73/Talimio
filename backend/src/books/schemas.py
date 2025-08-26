@@ -74,11 +74,43 @@ class BookResponse(BaseModel):
     publisher: str | None = None
     tags: list[str] = Field(default_factory=list)
     file_type: str = Field(alias="fileType")
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def validate_tags(cls, v: str | list[str] | None) -> list[str]:
+        """Convert tags from JSON string to list."""
+        if v is None:
+            return []
+        if isinstance(v, str):
+            import json
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return []
+        if isinstance(v, list):
+            return v
+        return []
     file_path: str = Field(alias="filePath")
     file_size: int = Field(alias="fileSize")
     total_pages: int | None = Field(None, alias="totalPages")
     table_of_contents: list[TableOfContentsItem] | None = Field(None, alias="tableOfContents")
     rag_status: str = Field(alias="ragStatus")  # pending, processing, completed, failed
+
+    @field_validator("table_of_contents", mode="before")
+    @classmethod
+    def validate_table_of_contents(cls, v: str | list[dict] | None) -> list[dict] | None:
+        """Convert table_of_contents from JSON string to list."""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            import json
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return None
+        if isinstance(v, list):
+            return v
+        return None
     rag_processed_at: datetime | None = Field(None, alias="ragProcessedAt")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
@@ -117,12 +149,12 @@ class BookProgressResponse(BookProgressBase):
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
-    id: UUID
+    id: UUID | None = None  # Optional - might not exist for unsaved progress
     book_id: UUID = Field(alias="bookId")
     user_id: UUID = Field(alias="userId")
     total_pages_read: int = Field(alias="totalPagesRead")
     last_read_at: datetime | None = Field(alias="lastReadAt")
-    created_at: datetime = Field(alias="createdAt")
+    created_at: datetime | None = Field(None, alias="createdAt")  # None if not yet saved
 
     @field_validator("bookmarks", mode="before")
     @classmethod
@@ -141,7 +173,7 @@ class BookProgressResponse(BookProgressBase):
             return v
         return []
 
-    updated_at: datetime = Field(alias="updatedAt")
+    updated_at: datetime | None = Field(None, alias="updatedAt")  # None if not yet saved
 
     @field_validator("toc_progress", mode="before")
     @classmethod
@@ -205,8 +237,8 @@ class BookChapterResponse(BookChapterBase):
 
     id: UUID
     book_id: UUID = Field(alias="bookId")
-    created_at: datetime = Field(alias="createdAt")
-    updated_at: datetime = Field(alias="updatedAt")
+    created_at: datetime | None = Field(None, alias="createdAt")  # None if not from database
+    updated_at: datetime | None = Field(None, alias="updatedAt")  # None if not from database
 
 
 class BookChapterStatusUpdate(BaseModel):

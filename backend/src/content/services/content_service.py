@@ -163,7 +163,7 @@ class ContentService:
         user_id: UUID,
     ) -> None:
         """Delete content by type and ID."""
-        from src.books.services import delete_book
+        from src.books.services.book_content_service import BookContentService
         from src.courses.services.course_service import CourseService
         from src.flashcards.service import delete_deck
         from src.videos.service import video_service
@@ -172,7 +172,8 @@ class ContentService:
         if self._session:
             session = self._session
             if content_type == ContentType.BOOK:
-                await delete_book(UUID(content_id), user_id, session)
+                # Use modular BookContentService instead of legacy delete_book
+                await BookContentService().delete_content(UUID(content_id), user_id)
             elif content_type == ContentType.YOUTUBE:
                 await video_service.delete_video(session, content_id, user_id)
             elif content_type == ContentType.FLASHCARDS:
@@ -187,7 +188,8 @@ class ContentService:
             # Fallback to creating a new session
             async with async_session_maker() as session:
                 if content_type == ContentType.BOOK:
-                    await delete_book(UUID(content_id), user_id, session)
+                    # Use modular BookContentService instead of legacy delete_book
+                    await BookContentService().delete_content(UUID(content_id), user_id)
                 elif content_type == ContentType.YOUTUBE:
                     await video_service.delete_video(session, content_id, user_id)
                 elif content_type == ContentType.FLASHCARDS:

@@ -1,20 +1,18 @@
 """Books services module."""
 
+from .book_content_service import BookContentService
+from .book_metadata_service import BookMetadataService
 from .book_progress_service import BookProgressService
 from .book_query_service import BookQueryService
-from .book_service import BookService, delete_book, get_book, get_books, update_book
+from .chapter_service import ChapterService
 from .highlight_service import HighlightService
-from .interface import IBookService
 
 
 __all__ = [
+    "BookContentService",
+    "BookMetadataService",
     "BookProgressService",
     "BookQueryService",
-    "BookService",
+    "ChapterService",
     "HighlightService",
-    "IBookService",
-    "delete_book",
-    "get_book",
-    "get_books",
-    "update_book",
 ]

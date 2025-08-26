@@ -1,10 +1,9 @@
 """Book metadata extraction utilities."""
 
+import json
 import logging
-from pathlib import Path
 
 import fitz  # PyMuPDF
-from ebooklib import epub
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +22,7 @@ class BookMetadata:
         publisher: str | None = None,
         isbn: str | None = None,
         publication_year: int | None = None,
-        page_count: int | None = None,
+        total_pages: int | None = None,
         table_of_contents: list[dict] | None = None,
         file_type: str | None = None,
     ) -> None:
@@ -35,11 +34,9 @@ class BookMetadata:
         self.publisher = publisher
         self.isbn = isbn
         self.publication_year = publication_year
-        self.page_count = page_count
-        self.total_pages = page_count  # Alias for compatibility
+        self.total_pages = total_pages
         self.table_of_contents = table_of_contents
         self.file_type = file_type
-
 
 class BookMetadataService:
     """Service for extracting metadata from book files."""
@@ -81,17 +78,20 @@ class BookMetadataService:
 
         try:
             pdf_document = fitz.open(stream=file_content, filetype="pdf")
-            metadata.page_count = pdf_document.page_count
             metadata.total_pages = pdf_document.page_count
 
             pdf_metadata = pdf_document.metadata
             if pdf_metadata:
-                self._extract_pdf_basic_fields(metadata, pdf_metadata)
-                self._extract_pdf_publication_year(metadata, pdf_metadata)
+                self._extract_document_basic_fields(metadata, pdf_metadata)
+                self._extract_document_publication_year(metadata, pdf_metadata)
 
-            toc = pdf_document.get_toc()
-            if toc:
-                metadata.table_of_contents = self._process_pdf_toc(toc)
+            # Extract table of contents
+            try:
+                toc = pdf_document.get_toc()  # type: ignore[attr-defined]
+                if toc:
+                    metadata.table_of_contents = self._process_toc(toc)
+            except AttributeError:
+                logger.debug("PDF document does not support get_toc method")
 
             pdf_document.close()
 
@@ -102,7 +102,7 @@ class BookMetadataService:
 
     def _extract_epub_metadata(self, file_content: bytes) -> BookMetadata:
         """
-        Extract metadata from EPUB content.
+        Extract metadata from EPUB content using PyMuPDF.
 
         Args:
             file_content: EPUB file content as bytes
@@ -115,104 +115,67 @@ class BookMetadataService:
         metadata.file_type = "epub"
 
         try:
-            import tempfile
+            # Open EPUB with PyMuPDF
+            epub_document = fitz.open(stream=file_content, filetype="epub")
 
-            with tempfile.NamedTemporaryFile(suffix=".epub", delete=False) as tmp:
-                tmp.write(file_content)
-                tmp_path = tmp.name
+            # Get page count (EPUBs in PyMuPDF are treated as pages)
+            metadata.total_pages = epub_document.page_count
 
+            # Extract metadata (similar to PDF)
+            epub_metadata = epub_document.metadata
+            if epub_metadata:
+                self._extract_document_basic_fields(metadata, epub_metadata)
+                self._extract_document_publication_year(metadata, epub_metadata)
+
+            # Extract table of contents - this works for EPUB too!
             try:
-                book = epub.read_epub(tmp_path)
-                self._extract_epub_basic_fields(metadata, book)
-                self._extract_epub_identifiers(metadata, book)
-                self._extract_epub_publication_date(metadata, book)
-                metadata.page_count = len(book.spine)
-                metadata.total_pages = len(book.spine)
+                toc = epub_document.get_toc()  # type: ignore[attr-defined]
+                if toc:
+                    metadata.table_of_contents = self._process_toc(toc)
+            except AttributeError:
+                logger.debug("EPUB document does not support get_toc method")
 
-            finally:
-                Path(tmp_path).unlink(missing_ok=True)
+            epub_document.close()
 
         except Exception as e:
             logger.warning(f"Failed to extract EPUB metadata: {e}")
 
         return metadata
 
-    def _extract_epub_basic_fields(self, metadata: BookMetadata, book: epub.EpubBook) -> None:
-        """Extract basic metadata fields from EPUB."""
-        title = book.get_metadata("DC", "title")
-        if title:
-            metadata.title = str(title[0][0]).strip()
 
-        creators = book.get_metadata("DC", "creator")
-        if creators:
-            authors = [str(creator[0]).strip() for creator in creators]
-            metadata.author = ", ".join(authors)
+    def _extract_document_basic_fields(self, metadata: BookMetadata, doc_metadata: dict) -> None:
+        """Extract basic fields from document metadata (works for both PDF and EPUB)."""
+        if doc_metadata.get("title"):
+            metadata.title = doc_metadata["title"].strip()
 
-        description = book.get_metadata("DC", "description")
-        if description:
-            metadata.description = str(description[0][0]).strip()
+        if doc_metadata.get("author"):
+            metadata.author = doc_metadata["author"].strip()
+        elif doc_metadata.get("creator"):
+            metadata.author = doc_metadata["creator"].strip()
 
-        language = book.get_metadata("DC", "language")
-        if language:
-            metadata.language = str(language[0][0]).strip()
+        if doc_metadata.get("subject"):
+            metadata.description = doc_metadata["subject"].strip()
 
-        publisher = book.get_metadata("DC", "publisher")
-        if publisher:
-            metadata.publisher = str(publisher[0][0]).strip()
+        # Note: "producer" is the PDF creation software, NOT the book publisher
+        # Publisher info is not available in standard PDF metadata
+        # We should NOT use producer as publisher - it's misleading
 
-    def _extract_epub_identifiers(self, metadata: BookMetadata, book: epub.EpubBook) -> None:
-        """Extract ISBN from EPUB identifiers."""
-        identifiers = book.get_metadata("DC", "identifier")
-        for identifier in identifiers:
-            if identifier[1] and identifier[1].get("id") == "ISBN":
-                metadata.isbn = str(identifier[0]).strip()
-                break
-
-    def _extract_epub_publication_date(self, metadata: BookMetadata, book: epub.EpubBook) -> None:
-        """Extract publication year from EPUB date metadata."""
-        date = book.get_metadata("DC", "date")
-        if not date:
+    def _extract_document_publication_year(self, metadata: BookMetadata, doc_metadata: dict) -> None:
+        """Extract publication year from document metadata (works for both PDF and EPUB)."""
+        if not doc_metadata.get("creationDate"):
             return
 
         try:
-            date_str = str(date[0][0]).strip()
-            year = int(date_str[:4])
-            metadata.publication_year = year
-        except (ValueError, IndexError):
-            pass
-
-    def _extract_pdf_basic_fields(self, metadata: BookMetadata, pdf_metadata: dict) -> None:
-        """Extract basic fields from PDF metadata."""
-        if pdf_metadata.get("title"):
-            metadata.title = pdf_metadata["title"].strip()
-
-        if pdf_metadata.get("author"):
-            metadata.author = pdf_metadata["author"].strip()
-        elif pdf_metadata.get("creator"):
-            metadata.author = pdf_metadata["creator"].strip()
-
-        if pdf_metadata.get("subject"):
-            metadata.description = pdf_metadata["subject"].strip()
-
-        if pdf_metadata.get("producer"):
-            metadata.publisher = pdf_metadata["producer"].strip()
-
-    def _extract_pdf_publication_year(self, metadata: BookMetadata, pdf_metadata: dict) -> None:
-        """Extract publication year from PDF metadata."""
-        if not pdf_metadata.get("creationDate"):
-            return
-
-        try:
-            date_str = pdf_metadata["creationDate"]
+            date_str = doc_metadata["creationDate"]
             if date_str.startswith("D:"):
                 year_str = date_str[2:6]
                 metadata.publication_year = int(year_str)
         except (ValueError, IndexError):
             pass
 
-    def _process_pdf_toc(self, toc: list) -> list[dict]:
+    def _process_toc(self, toc: list) -> list[dict]:
         """
-        Process PyMuPDF table of contents into a structured format.
+        Process PyMuPDF table of contents into a structured format; works for both PDF and EPUB documents.
 
         Args:
             toc: PyMuPDF table of contents list
@@ -250,4 +213,75 @@ class BookMetadataService:
             # Add to stack for potential children
             stack.append(item)
 
+        return result
+
+    @staticmethod
+    def serialize_toc_for_db(table_of_contents: list[dict] | None) -> str | None:
+        """
+        Serialize table of contents for database storage.
+
+        Args:
+            table_of_contents: TOC list from extraction
+
+        Returns
+        -------
+            JSON string for database storage or None
+        """
+        if table_of_contents:
+            return json.dumps(table_of_contents)
+        return None
+
+    @staticmethod
+    def deserialize_toc_from_db(toc_json: str | None) -> list[dict] | None:
+        """
+        Deserialize table of contents from database.
+
+        Args:
+            toc_json: JSON string from database
+
+        Returns
+        -------
+            TOC list or None
+        """
+        if not toc_json:
+            return None
+
+        try:
+            toc_data = json.loads(toc_json)
+            if isinstance(toc_data, list):
+                return toc_data
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Failed to deserialize TOC from database")
+
+        return None
+
+    @staticmethod
+    def convert_toc_to_schema(toc_data: list[dict]) -> list:
+        """
+        Convert table of contents data to schema objects.
+
+        Note: Returns list of dicts for now to avoid circular imports.
+        The schema conversion should be done at the API layer.
+
+        Args:
+            toc_data: List of TOC dictionaries
+
+        Returns
+        -------
+            List of processed TOC items with children
+        """
+        result = []
+        for item in toc_data:
+            children = []
+            if item.get("children"):
+                children = BookMetadataService.convert_toc_to_schema(item["children"])
+
+            toc_item = {
+                "id": item.get("id", ""),
+                "title": item.get("title", ""),
+                "page": item.get("page", 1),
+                "children": children,
+                "level": item.get("level", 0),
+            }
+            result.append(toc_item)
         return result
