@@ -2,8 +2,15 @@ import { useEffect, useRef, useState } from "react"
 import { useParams } from "react-router-dom"
 import { BookHeader } from "@/components/header/BookHeader"
 import BookSidebar from "@/components/sidebar/BookSidebar"
+import {
+	useBookActions,
+	useBookCurrentPage,
+	useBookTotalPages,
+	useBookZoomLevel,
+	useSidebarOpen,
+	useToggleSidebar,
+} from "@/hooks/book-hooks"
 import { booksApi } from "@/services/booksApi"
-import useAppStore from "@/stores/useAppStore"
 import EpubErrorBoundary from "./components/EPUBErrorBoundary"
 import EpubViewer from "./components/EPUBViewer"
 import PdfErrorBoundary from "./components/PDFErrorBoundary"
@@ -20,17 +27,17 @@ function BookViewerContent() {
 	// Debug bookId
 	useEffect(() => {}, [])
 
-	// Get zoom and page from reading state
-	const zoomLevel = useAppStore((state) => state.books?.readingState?.[bookId]?.zoomLevel || 100)
-	const currentPage = useAppStore((state) => state.books?.readingState?.[bookId]?.currentPage || 1)
-	const totalPages = useAppStore((state) => state.books?.readingState?.[bookId]?.totalPages || null)
+	// Get zoom and page from reading state using custom hooks
+	const zoomLevel = useBookZoomLevel(bookId)
+	const currentPage = useBookCurrentPage(bookId)
+	const totalPages = useBookTotalPages(bookId)
 
 	// Get store actions
-	const setBookZoom = useAppStore((state) => state.setBookZoom)
+	const { setBookZoom } = useBookActions()
 
 	// Sidebar state management - use proper selectors
-	const sidebarOpen = useAppStore((state) => state.preferences?.sidebarOpen ?? true)
-	const toggleSidebar = useAppStore((state) => state.toggleSidebar)
+	const sidebarOpen = useSidebarOpen()
+	const toggleSidebar = useToggleSidebar()
 
 	// Book URL for PDF/EPUB viewers
 	// Use /content endpoint which proxies through backend to avoid CORS issues
@@ -103,6 +110,17 @@ function BookViewerContent() {
 
 	const fileType = book.fileType?.toLowerCase()
 
+	// Font size handlers for EPUB
+	const handleFontIncrease = () => {
+		const newSize = Math.min(200, zoomLevel + 25)
+		setBookZoom(bookId, newSize)
+	}
+
+	const handleFontDecrease = () => {
+		const newSize = Math.max(50, zoomLevel - 25)
+		setBookZoom(bookId, newSize)
+	}
+
 	return (
 		<div className="flex h-screen bg-background">
 			<BookHeader
@@ -111,10 +129,14 @@ function BookViewerContent() {
 				onToggleSidebar={toggleSidebar}
 				isSidebarOpen={sidebarOpen}
 				showZoomControls={fileType === "pdf"}
+				showFontControls={fileType === "epub"}
 				zoomLevel={zoomLevel}
+				fontSize={zoomLevel}
 				onZoomIn={handleZoomIn}
 				onZoomOut={handleZoomOut}
 				onFitToScreen={handleFitToScreen}
+				onFontIncrease={handleFontIncrease}
+				onFontDecrease={handleFontDecrease}
 			/>
 
 			{sidebarOpen && (
@@ -135,7 +157,7 @@ function BookViewerContent() {
 						</PdfErrorBoundary>
 					) : fileType === "epub" ? (
 						<EpubErrorBoundary>
-							<EpubViewer url={bookUrl} bookInfo={book} />
+							<EpubViewer url={bookUrl} bookId={bookId} bookInfo={book} />
 						</EpubErrorBoundary>
 					) : (
 						<div className="book-viewer-error">

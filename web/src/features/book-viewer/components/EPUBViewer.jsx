@@ -1,397 +1,373 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useContext, useEffect, useRef, useState } from "react"
 import { ReactReader } from "react-reader"
-import { SelectionZone } from "@/components/ui/SelectionZone"
-import useAppStore from "@/stores/useAppStore"
-import "./EPUBViewer.css"
+import { AuthContext } from "@/contexts/AuthContext"
+import { useBookActions, useBookZoomLevel } from "@/hooks/book-hooks"
 
-// Define handlers for text selection
-const handleHighlight = (_text) => {
-	// Add highlight functionality here in the future
-}
-
-const handleAskAi = (_text) => {
-	// Add AI functionality here in the future
-}
-
-/**
- * Enhanced EPUB Viewer using Zustand for state management
- * Replaces localStorage-based location and settings persistence with unified store
- */
-function EPUBViewerV2({ url, bookInfo, onLocationChange }) {
+function EPUBViewer({ url, bookId, onProgressUpdate }) {
+	const [location, setLocation] = useState(null)
+	const [firstRenderDone, setFirstRenderDone] = useState(false)
 	const renditionRef = useRef(null)
-	const tocRef = useRef(null)
-	const [showToc, setShowToc] = useState(false)
+	const [epubUrl, setEpubUrl] = useState(null)
+	const objectUrlRef = useRef(null)
+	const [loading, setLoading] = useState(true)
+	const [error, setError] = useState(null)
 
-	// Zustand store selectors for EPUB-specific state
-	const epubState = useAppStore((state) => state.books.progress[bookInfo?.id]?.epubState || {})
-	const updateBookProgress = useAppStore((state) => state.updateBookProgress)
-	const preferences = useAppStore((state) => state.preferences)
+	// Auth context for user-scoped persistence
+	const { user, authMode } = useContext(AuthContext)
 
-	// EPUB state with defaults
-	const [location, setLocation] = useState(epubState.location || null)
-	const [fontSize, setFontSize] = useState(epubState.fontSize || preferences.defaultZoomLevel * 100 || 100)
+	// Create a user-scoped localStorage key for EPUB location persistence
+	const createUserScopedKey = useCallback(
+		(bookId) => {
+			const scopeSuffix = user?.id ? user.id : authMode === "none" ? "single" : "anon"
+			return `epub-location-${bookId}-${scopeSuffix}`
+		},
+		[user?.id, authMode]
+	)
 
-	// Note: Text selection handlers are now handled by SelectionZone wrapper
+	// Get font size from store (use zoomLevel as fontSize for EPUBs)
+	const fontSize = useBookZoomLevel(bookId)
 
-	/**
-	 * Extract approximate page number from EPUB CFI location
-	 * This is a simplified approximation
-	 */
-	const extractPageFromLocation = (cfi) => {
-		try {
-			// This is a very basic approximation
-			// In a real implementation, you'd need to use the EPUB.js API
-			// to get accurate page information
-			const matches = cfi.match(/\/(\d+)/g)
-			if (matches && matches.length > 0) {
-				const lastMatch = matches[matches.length - 1]
-				const pageNum = Number.parseInt(lastMatch.replace("/", ""), 10)
-				return Math.max(1, Math.floor(pageNum / 2)) // Rough approximation
+	// Get book actions
+	const { onEpubLocationChange } = useBookActions()
+
+	// Handle location changes - memoized with proper dependencies
+	const locationChanged = useCallback(
+		(epubcifi) => {
+			setLocation(epubcifi)
+
+			// Save location to localStorage for persistence
+			if (firstRenderDone && epubcifi) {
+				const newKey = createUserScopedKey(bookId)
+				localStorage.setItem(newKey, epubcifi)
+				// Cleanup legacy unscoped key after migration
+				const oldKey = `epub-location-${bookId}`
+				if (localStorage.getItem(oldKey)) {
+					localStorage.removeItem(oldKey)
+				}
+
+				// Get progress percentage from rendition if available
+				let displayPercentage
+				if (renditionRef.current) {
+					const { displayed } = renditionRef.current.location.start
+					displayPercentage = displayed?.percentage
+				}
+
+				// Update location and progress in store (all business logic handled in action)
+				onEpubLocationChange(bookId, epubcifi, displayPercentage)
+
+				// Report progress if callback provided (for parent component)
+				// The store now handles progress calculation, we just pass through the calculated value
+				if (onProgressUpdate && displayPercentage !== undefined) {
+					onProgressUpdate(Math.round(displayPercentage * 100))
+				}
 			}
-		} catch (_error) {}
-		return 1 // Default to page 1
-	}
+		},
+		[firstRenderDone, bookId, onProgressUpdate, onEpubLocationChange, createUserScopedKey]
+	)
 
-	/**
-	 * Navigation methods
-	 */
-	const gotoPrevious = () => {
+	// Apply font size changes
+	const applyFontSize = useCallback(() => {
 		if (renditionRef.current) {
-			renditionRef.current.prev()
-		}
-	}
+			// Convert percentage to actual font size
+			const baseFontSize = 18 // Base font size in px
+			const actualFontSize = (baseFontSize * fontSize) / 100
 
-	const gotoNext = () => {
-		if (renditionRef.current) {
-			renditionRef.current.next()
-		}
-	}
-
-	/**
-	 * Handle location changes with store persistence
-	 */
-	const locationChanged = (epubcifi) => {
-		setLocation(epubcifi)
-
-		// Save location to store
-		if (bookInfo?.id) {
-			updateBookProgress(bookInfo.id, {
-				epubState: {
-					...epubState,
-					location: epubcifi,
-					lastUpdated: Date.now(),
+			renditionRef.current.themes.register("custom", {
+				body: {
+					"font-family": "'Open Sans', -apple-system, BlinkMacSystemFont, sans-serif !important",
+					"font-size": `${actualFontSize}px !important`,
+					"line-height": "1.8 !important",
+					padding: "40px 60px !important",
+					"max-width": "100% !important",
+					margin: "0 auto !important",
+				},
+				p: {
+					"margin-bottom": "1.5em !important",
+					"font-size": `${actualFontSize}px !important`,
+				},
+				h1: {
+					"font-size": `${actualFontSize * 1.8}px !important`,
+					margin: "2em 0 1em 0 !important",
+				},
+				h2: {
+					"font-size": `${actualFontSize * 1.5}px !important`,
+					margin: "1.5em 0 0.75em 0 !important",
+				},
+				h3: {
+					"font-size": `${actualFontSize * 1.25}px !important`,
+					margin: "1.25em 0 0.5em 0 !important",
 				},
 			})
-
-			// Call parent callback if provided
-			if (onLocationChange) {
-				onLocationChange({
-					location: epubcifi,
-					// Try to extract page info if available
-					currentPage: extractPageFromLocation(epubcifi),
-				})
-			}
+			renditionRef.current.themes.select("custom")
 		}
-	}
+	}, [fontSize])
 
-	/**
-	 * Initialize rendition with theming and saved state
-	 */
-	const onRendition = (rendition) => {
-		renditionRef.current = rendition
+	// Get TOC when book loads - memoized
+	const getRendition = useCallback(
+		(rendition) => {
+			renditionRef.current = rendition
 
-		// Apply theme based on store preferences
-		const themes = rendition.themes
-		const isDark =
-			preferences.theme === "dark" ||
-			(preferences.theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)
+			// Apply initial font size
+			applyFontSize()
 
-		themes.default({
-			"::selection": {
-				background: "var(--primary)",
-				color: "var(--primary-foreground)",
-			},
-			body: {
-				color: isDark ? "#e5e5e5" : "#1a1a1a",
-				background: isDark ? "#1a1a1a" : "#ffffff",
-				"font-family": "system-ui, -apple-system, sans-serif",
-				"line-height": "1.6",
-				padding: "20px",
-				transition: "background-color 0.3s ease, color 0.3s ease",
-			},
-			p: {
-				margin: "1em 0",
-			},
-			"h1, h2, h3, h4, h5, h6": {
-				color: isDark ? "#f5f5f5" : "#1a1a1a",
-				margin: "1em 0 0.5em",
-			},
-			a: {
-				color: isDark ? "#60a5fa" : "#2563eb",
-				"text-decoration": "underline",
-			},
-			img: {
-				"max-width": "100%",
-				height: "auto",
-			},
-		})
+			// Disable keyboard navigation
+			if (rendition) {
+				// Override navigation methods
+				rendition.prev = () => {} // Disable prev navigation
+				rendition.next = () => {} // Disable next navigation
 
-		// Restore saved location
-		if (epubState.location) {
-			setLocation(epubState.location)
-		}
-
-		// Set font size
-		rendition.themes.fontSize(`${fontSize}%`)
-	}
-
-	/**
-	 * Set up keyboard navigation
-	 */
-	useEffect(() => {
-		if (renditionRef.current) {
-			const handleKeyPress = (e) => {
-				if (e.key === "ArrowLeft" && renditionRef.current) {
-					renditionRef.current.prev()
-				} else if (e.key === "ArrowRight" && renditionRef.current) {
-					renditionRef.current.next()
+				// Remove keyboard event listeners
+				if (rendition.manager?.container) {
+					const container = rendition.manager.container
+					// Remove any existing keyboard listeners
+					container.removeEventListener("keydown", rendition.handleKeyPress)
+					container.removeEventListener("keyup", rendition.handleKeyPress)
 				}
 			}
 
-			document.addEventListener("keydown", handleKeyPress)
-			return () => document.removeEventListener("keydown", handleKeyPress)
+			// Navigation is now hidden via the styles prop in ReactReader
+
+			// Get saved location
+			// Prefer user-scoped key; migrate legacy unscoped if present
+			const scopedKey = createUserScopedKey(bookId)
+			let savedLocation = localStorage.getItem(scopedKey)
+			if (!savedLocation) {
+				const oldKey = `epub-location-${bookId}`
+				const legacyLocation = localStorage.getItem(oldKey)
+				if (legacyLocation) {
+					// Migrate to scoped key and remove legacy
+					localStorage.setItem(scopedKey, legacyLocation)
+					localStorage.removeItem(oldKey)
+					savedLocation = legacyLocation
+				}
+			}
+			if (savedLocation) {
+				setLocation(savedLocation)
+			}
+
+			setFirstRenderDone(true)
+		},
+		[applyFontSize, bookId, createUserScopedKey]
+	)
+
+	// Update font size when it changes
+	useEffect(() => {
+		if (renditionRef.current && firstRenderDone) {
+			applyFontSize()
+		}
+	}, [applyFontSize, firstRenderDone])
+
+	// Hide navigation elements via CSS injection (cleanest workaround for react-reader's hardcoded arrows)
+	useEffect(() => {
+		const style = document.createElement("style")
+		style.textContent = `
+      /* Hide react-reader navigation arrows - optimized selectors */
+      .epub-container button[style*="font-size: 64px"],
+      .epub-container button[style*="margin-top: -32px"] {
+        display: none !important;
+      }
+    `
+		document.head.appendChild(style)
+
+		return () => {
+			if (style.parentNode) {
+				style.parentNode.removeChild(style)
+			}
 		}
 	}, [])
 
-	/**
-	 * Font size controls with store persistence
-	 */
-	const increaseFontSize = () => {
-		const newSize = Math.min(fontSize + 10, 200)
-		setFontSize(newSize)
-
-		if (renditionRef.current) {
-			renditionRef.current.themes.fontSize(`${newSize}%`)
-		}
-
-		// Save to store
-		if (bookInfo?.id) {
-			updateBookProgress(bookInfo.id, {
-				epubState: {
-					...epubState,
-					fontSize: newSize,
-				},
-			})
-		}
-	}
-
-	const decreaseFontSize = () => {
-		const newSize = Math.max(fontSize - 10, 50)
-		setFontSize(newSize)
-
-		if (renditionRef.current) {
-			renditionRef.current.themes.fontSize(`${newSize}%`)
-		}
-
-		// Save to store
-		if (bookInfo?.id) {
-			updateBookProgress(bookInfo.id, {
-				epubState: {
-					...epubState,
-					fontSize: newSize,
-				},
-			})
-		}
-	}
-
-	const resetFontSize = () => {
-		const defaultSize = preferences.defaultZoomLevel * 100 || 100
-		setFontSize(defaultSize)
-
-		if (renditionRef.current) {
-			renditionRef.current.themes.fontSize(`${defaultSize}%`)
-		}
-
-		// Save to store
-		if (bookInfo?.id) {
-			updateBookProgress(bookInfo.id, {
-				epubState: {
-					...epubState,
-					fontSize: defaultSize,
-				},
-			})
-		}
-	}
-
-	/**
-	 * Table of Contents handling
-	 */
-	const getToc = () => {
-		return tocRef.current || []
-	}
-
-	const handleTocSelect = (href) => {
-		if (renditionRef.current) {
-			renditionRef.current.display(href)
-			setShowToc(false)
-		}
-	}
-
-	/**
-	 * Theme change effect
-	 */
+	// Handle window resize
 	useEffect(() => {
-		if (renditionRef.current) {
-			// Re-apply theme when theme preference changes
-			const themes = renditionRef.current.themes
-			const isDark =
-				preferences.theme === "dark" ||
-				(preferences.theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)
-
-			themes.default({
-				"::selection": {
-					background: "var(--primary)",
-					color: "var(--primary-foreground)",
-				},
-				body: {
-					color: isDark ? "#e5e5e5" : "#1a1a1a",
-					background: isDark ? "#1a1a1a" : "#ffffff",
-					"font-family": "system-ui, -apple-system, sans-serif",
-					"line-height": "1.6",
-					padding: "20px",
-					transition: "background-color 0.3s ease, color 0.3s ease",
-				},
-				p: {
-					margin: "1em 0",
-				},
-				"h1, h2, h3, h4, h5, h6": {
-					color: isDark ? "#f5f5f5" : "#1a1a1a",
-					margin: "1em 0 0.5em",
-				},
-				a: {
-					color: isDark ? "#60a5fa" : "#2563eb",
-					"text-decoration": "underline",
-				},
-				img: {
-					"max-width": "100%",
-					height: "auto",
-				},
-			})
+		const handleResize = () => {
+			if (renditionRef.current) {
+				renditionRef.current.resize()
+			}
 		}
-	}, [preferences.theme])
+
+		window.addEventListener("resize", handleResize)
+		return () => window.removeEventListener("resize", handleResize)
+	}, [])
+
+	// Load EPUB file as blob URL
+	useEffect(() => {
+		const loadEpub = async () => {
+			try {
+				setLoading(true)
+				setError(null)
+
+				// Fetch the EPUB file with credentials
+				const response = await fetch(url, {
+					credentials: "include",
+					headers: {
+						accept: "application/epub+zip, application/octet-stream",
+					},
+				})
+
+				if (!response.ok) {
+					throw new Error(`Failed to load EPUB: ${response.statusText}`)
+				}
+
+				// Verify content type (optional)
+				const _contentType = response.headers.get("content-type")
+
+				// Get the blob with correct MIME type
+				const blob = await response.blob()
+
+				// Create a new blob with explicit EPUB MIME type if needed
+				const epubBlob =
+					blob.type === "application/epub+zip" ? blob : new Blob([blob], { type: "application/epub+zip" })
+
+				// Revoke previous URL if it exists
+				if (objectUrlRef.current) {
+					URL.revokeObjectURL(objectUrlRef.current)
+				}
+
+				// Create a blob URL that react-reader can use
+				const blobUrl = URL.createObjectURL(epubBlob)
+				objectUrlRef.current = blobUrl
+				setEpubUrl(blobUrl)
+				setLoading(false)
+			} catch (err) {
+				setError(err.message)
+				setLoading(false)
+			}
+		}
+
+		if (url) {
+			loadEpub()
+		}
+
+		// Cleanup blob URL on unmount or url change
+		return () => {
+			if (objectUrlRef.current) {
+				URL.revokeObjectURL(objectUrlRef.current)
+				objectUrlRef.current = null
+			}
+		}
+	}, [url])
+
+	// Show loading state
+	if (loading) {
+		return (
+			<div className="h-full flex items-center justify-center bg-background">
+				<div className="text-center">
+					<div className="mb-4">
+						<div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"></div>
+					</div>
+					<p className="text-muted-foreground">Loading EPUB...</p>
+				</div>
+			</div>
+		)
+	}
+
+	// Show error state
+	if (error) {
+		return (
+			<div className="h-full flex items-center justify-center bg-background">
+				<div className="text-center max-w-md">
+					<h3 className="text-lg font-semibold text-destructive mb-2">Failed to load EPUB</h3>
+					<p className="text-muted-foreground">{error}</p>
+				</div>
+			</div>
+		)
+	}
+
+	// Show reader when EPUB is loaded
+	if (!epubUrl) {
+		return null
+	}
 
 	return (
-		<SelectionZone onHighlight={handleHighlight} onAskAI={handleAskAi}>
-			<div className="epub-viewer-container">
-				<div className="epub-controls-bar">
-					<div className="epub-controls">
-						<button
-							type="button"
-							onClick={() => setShowToc(!showToc)}
-							className="epub-button"
-							aria-label={showToc ? "Hide table of contents" : "Show table of contents"}
-						>
-							{showToc ? "Hide" : "Show"} ToC
-						</button>
-
-						<div className="font-controls">
-							<button
-								type="button"
-								onClick={decreaseFontSize}
-								className="epub-button"
-								aria-label="Decrease font size"
-								disabled={fontSize <= 50}
-							>
-								A-
-							</button>
-
-							<button
-								type="button"
-								onClick={resetFontSize}
-								className="font-size-display epub-button"
-								title="Reset to default size"
-							>
-								{fontSize}%
-							</button>
-
-							<button
-								type="button"
-								onClick={increaseFontSize}
-								className="epub-button"
-								aria-label="Increase font size"
-								disabled={fontSize >= 200}
-							>
-								A+
-							</button>
-						</div>
-
-						<div className="navigation-controls">
-							<button type="button" onClick={gotoPrevious} className="epub-button" aria-label="Previous page">
-								←
-							</button>
-
-							<button type="button" onClick={gotoNext} className="epub-button" aria-label="Next page">
-								→
-							</button>
-						</div>
-					</div>
-				</div>
-
-				{showToc && (
-					<div className="epub-toc">
-						<div className="epub-toc-header">
-							<h3>Table of Contents</h3>
-							<button
-								type="button"
-								onClick={() => setShowToc(false)}
-								className="epub-button epub-toc-close"
-								aria-label="Close table of contents"
-							>
-								×
-							</button>
-						</div>
-						<ul className="epub-toc-list">
-							{getToc().map((item, index) => (
-								<li key={item.href || index}>
-									<button
-										type="button"
-										onClick={() => handleTocSelect(item.href)}
-										className="toc-item"
-										title={item.label}
-									>
-										{item.label}
-									</button>
-								</li>
-							))}
-						</ul>
-					</div>
-				)}
-
-				<div className="epub-reader-wrapper">
+		<div className="h-full bg-background epub-container">
+			<div className="max-w-4xl mx-auto p-8 h-full">
+				<div className="bg-white rounded-lg shadow-sm h-full">
 					<ReactReader
-						url={url}
+						url={epubUrl}
 						location={location}
 						locationChanged={locationChanged}
-						getRendition={onRendition}
-						tocChanged={(toc) => {
-							tocRef.current = toc
-						}}
+						getRendition={getRendition}
+						showToc={false}
+						swipeable={false}
 						epubOptions={{
-							flow: "paginated",
+							flow: "scrolled",
 							manager: "continuous",
+							spread: "none",
+							restore: false,
+							width: "100%",
+							height: "100%",
+							allowScriptedContent: false,
+							method: "default",
+						}}
+						epubInitOptions={{
+							openAs: "epub",
+							encoding: "base64",
+						}}
+						styles={{
+							container: {
+								height: "100%",
+								width: "100%",
+								backgroundColor: "transparent",
+							},
+							readerArea: {
+								position: "relative",
+								height: "100%",
+								width: "100%",
+								display: "flex",
+								flexDirection: "column",
+								backgroundColor: "transparent",
+								transition: "all 0.3s ease",
+							},
+							reader: {
+								flex: 1,
+								backgroundColor: "transparent",
+								maxWidth: "100%",
+								margin: "0 auto",
+								padding: "2rem",
+							},
+							// Hide navigation arrows completely
+							arrow: {
+								display: "none",
+								visibility: "hidden",
+								opacity: 0,
+								pointerEvents: "none",
+								width: 0,
+								height: 0,
+							},
+							arrowHover: {
+								display: "none",
+								visibility: "hidden",
+								opacity: 0,
+								pointerEvents: "none",
+								width: 0,
+								height: 0,
+							},
+							// Hide TOC UI completely
+							tocBackground: {
+								display: "none",
+								visibility: "hidden",
+							},
+							tocArea: {
+								display: "none",
+								visibility: "hidden",
+							},
+							tocButton: {
+								display: "none",
+								visibility: "hidden",
+								opacity: 0,
+								pointerEvents: "none",
+								width: 0,
+								height: 0,
+							},
+							tocButtonExpanded: {
+								display: "none",
+								visibility: "hidden",
+							},
 						}}
 					/>
 				</div>
-
-				{/* Progress indicator */}
-				{location && (
-					<div className="epub-progress-indicator">
-						<div className="epub-location-info">Location: {location.slice(0, 20)}...</div>
-					</div>
-				)}
 			</div>
-		</SelectionZone>
+		</div>
 	)
 }
 
-export default EPUBViewerV2
+export default EPUBViewer

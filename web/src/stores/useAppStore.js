@@ -251,20 +251,60 @@ const useAppStore = create(
 
 				// ========== EPUB SPECIFIC ACTIONS ==========
 
-				updateEpubLocation: (bookId, location) => {
+				/**
+				 * Calculate EPUB progress percentage from rendition data
+				 * @param {number|undefined} displayPercentage - The percentage from react-reader (0-1)
+				 * @returns {number} Progress percentage (0-100)
+				 */
+				calculateEpubProgress: (displayPercentage) => {
+					if (displayPercentage === undefined || displayPercentage === null) {
+						return 0
+					}
+					// displayPercentage comes as a decimal (0-1), convert to percentage (0-100)
+					return Math.round(displayPercentage * 100)
+				},
+
+				/**
+				 * Handle EPUB location changes with business logic
+				 * Updates location, calculates progress, and syncs to API
+				 */
+				onEpubLocationChange: (bookId, location, displayPercentage) => {
+					const { calculateEpubProgress } = get()
+
 					set((state) => {
+						// Initialize reading state if needed
 						if (!state.books.readingState[bookId]) {
 							state.books.readingState[bookId] = {}
 						}
 						if (!state.books.readingState[bookId].epubState) {
 							state.books.readingState[bookId].epubState = {}
 						}
+
+						// Update location
 						state.books.readingState[bookId].epubState.location = location
 						state.books.readingState[bookId].epubState.lastUpdated = Date.now()
+
+						// Calculate and update progress if percentage is provided
+						if (displayPercentage !== undefined) {
+							const progressPercentage = calculateEpubProgress(displayPercentage)
+							state.books.readingState[bookId].epubState.progress = progressPercentage
+
+							// Update overall book progress
+							if (!state.books.progress[bookId]) {
+								state.books.progress[bookId] = { percentage: 0 }
+							}
+							state.books.progress[bookId].percentage = progressPercentage
+							state.books.progress[bookId].lastUpdated = Date.now()
+						}
 					})
-					// Sync to API
+
+					// Sync to API with both location and progress
+					const progressPercentage =
+						displayPercentage !== undefined ? get().calculateEpubProgress(displayPercentage) : undefined
+
 					syncToAPI("books", bookId, {
 						epubLocation: location,
+						progress: progressPercentage,
 					})
 				},
 

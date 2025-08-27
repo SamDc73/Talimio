@@ -1,4 +1,4 @@
-import { Maximize, MessageSquare, PanelLeft } from "lucide-react"
+import { Maximize, MessageSquare, PanelLeft, Type } from "lucide-react"
 import { useEffect } from "react"
 import { Link } from "react-router-dom"
 import { TooltipButton } from "@/components/TooltipButton"
@@ -17,6 +17,10 @@ export function BookHeader({
 	onFitToScreen = () => {},
 	zoomLevel = 100,
 	showZoomControls = false,
+	showFontControls = false,
+	onFontIncrease = () => {},
+	onFontDecrease = () => {},
+	fontSize = 100,
 }) {
 	const { toggleChat } = useChatSidebar()
 
@@ -104,6 +108,34 @@ export function BookHeader({
 									tooltipContent="Fit to screen"
 								>
 									<Maximize className="h-3 w-3" />
+								</TooltipButton>
+							</div>
+						)}
+
+						{/* Font Size Controls for EPUB */}
+						{showFontControls && (
+							<div className="flex items-center border border-border rounded-full h-8 px-1 bg-muted/50">
+								<TooltipButton
+									variant="ghost"
+									size="icon"
+									className="h-6 w-6 rounded-full"
+									onClick={onFontDecrease}
+									tooltipContent="Decrease font size"
+								>
+									<span className="text-sm font-medium">A-</span>
+								</TooltipButton>
+								<div className="px-2 flex items-center gap-1">
+									<Type className="h-3 w-3 text-slate-600" />
+									<span className="text-xs font-medium text-slate-600 min-w-[2.5rem] text-center">{fontSize}%</span>
+								</div>
+								<TooltipButton
+									variant="ghost"
+									size="icon"
+									className="h-6 w-6 rounded-full"
+									onClick={onFontIncrease}
+									tooltipContent="Increase font size"
+								>
+									<span className="text-sm font-medium">A+</span>
 								</TooltipButton>
 							</div>
 						)}

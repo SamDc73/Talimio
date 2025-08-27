@@ -345,9 +345,7 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 	return (
 		<SidebarContainer>
 			<ProgressIndicator progress={overallProgress} variant="book" suffix="Read">
-				<span className="text-xs text-zinc-500">
-					{currentPage && book.totalPages ? `Page ${currentPage} of ${book.totalPages}` : "Loading..."}
-				</span>
+				<span className="text-xs text-zinc-500">{book.totalPages ? `Page 1 of ${book.totalPages}` : "Page 1"}</span>
 			</ProgressIndicator>
 
 			<SidebarNav>

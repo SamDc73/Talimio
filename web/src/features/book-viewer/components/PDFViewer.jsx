@@ -1,91 +1,299 @@
-import { useEffect, useRef, useState } from "react"
-import { Document, Page, pdfjs } from "react-pdf"
-import "react-pdf/dist/Page/AnnotationLayer.css"
-import "react-pdf/dist/Page/TextLayer.css"
+/**
+ * PDF Highlighter component that adds highlighting functionality on top of PDFViewer.
+ * Manages highlight creation, deletion, and interaction while composing the core PDFViewer.
+ */
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { debounce } from "lodash-es"
+import { Highlighter, Sparkles } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Highlight, PdfHighlighter, PdfLoader } from "react-pdf-highlighter"
 import { supabase } from "@/lib/supabase"
+import { highlightService } from "@/services/highlightService"
+import { useHighlightActions } from "@/stores/highlights"
 import useAppStore from "@/stores/useAppStore"
-import "./PDFViewer.css"
 
-// Configure PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+import "react-pdf-highlighter/dist/style.css"
+import "../styles/highlights.css" // Apply unified highlight overrides
+import "../styles/pdf-viewer.css" // PDF viewer specific styles
 
-const DOCUMENT_OPTIONS = Object.freeze({
-	disableStream: true,
-	disableAutoFetch: true,
-})
-
-const DEBUG_PDF = import.meta.env?.VITE_DEBUG_PDF === "true"
-const dlog = (..._args) => {
-	if (DEBUG_PDF) {
-	}
-}
-
-function LazyPDFViewer({ url, zoom = 100, onTextSelection, bookId }) {
-	const [numPages, setNumPages] = useState(null)
-	const [visiblePages, setVisiblePages] = useState(new Set([1, 2, 3]))
-	const [loadError, setLoadError] = useState(null)
-	const [loading, setLoading] = useState(true)
+/**
+ * PDFViewer - PDF viewer component with highlighting capabilities
+ *
+ * @param {Object} props
+ * @param {string} props.url - URL of the PDF to load
+ * @param {Function} props.onTextSelection - Callback when text is selected for AI
+ * @param {string} props.bookId - ID of the book for state management
+ * @param {Function} props.registerApi - Function to register viewer API (deprecated)
+ */
+function PDFViewer({ url, onTextSelection, bookId, registerApi = null }) {
+	// State for PDF URL resolution
 	const [pdfUrl, setPdfUrl] = useState(null)
-	const [file, setFile] = useState(null)
+	const [loading, setLoading] = useState(true)
+	const [loadError, setLoadError] = useState(null)
 
-	// Get stored reading state - use specific selectors to avoid re-renders
-	const storedPage = useAppStore((state) => state.books.readingState?.[bookId]?.currentPage)
+	// Refs for scroll management
+	const scrollToRef = useRef(null)
+	const pdfDocumentRef = useRef(null)
+	const pdfHighlighterRef = useRef(null)
+	const hasRestoredPageRef = useRef(false)
+
+	// Highlight store actions
+	const { onHighlightClick, onHighlightHover } = useHighlightActions()
+
+	// Reading state from store
 	const updateBookReadingState = useAppStore((state) => state.updateBookReadingState)
+	const getBookReadingState = useAppStore((state) => state.getBookReadingState)
 
-	// Calculate scale from zoom percentage
-	const scale = zoom / 100
+	// Zoom state
+	const [scale, setScale] = useState(1.0)
 
-	// Ref to track the viewer container for scroll position maintenance
-	const viewerContainerRef = useRef(null)
+	// Query client for cache management
+	const queryClient = useQueryClient()
 
-	// Handle text selection for tooltips
-	const handleTextSelection = () => {
-		const selection = window.getSelection()
-		const selectedText = selection.toString().trim()
+	// Fetch highlights from server
+	const { data: highlights = [], isLoading: highlightsLoading } = useQuery({
+		queryKey: ["highlights", "book", bookId],
+		queryFn: async () => {
+			try {
+				const data = await highlightService.getHighlights("book", bookId)
+				return data
+			} catch (error) {
+				// Silently handle auth errors - user might not be logged in
+				if (error?.status === 401 || error?.status === 422) {
+					return []
+				}
+				throw error
+			}
+		},
+		enabled: !!bookId,
+		staleTime: 5 * 60 * 1000, // 5 minutes
+		gcTime: 10 * 60 * 1000, // 10 minutes cache
+		retry: false, // Don't retry on auth errors
+	})
 
-		if (selectedText && onTextSelection) {
-			// Get selection bounds for tooltip positioning
-			const range = selection.getRangeAt(0)
-			const rect = range.getBoundingClientRect()
+	// Create highlight mutation with optimistic updates
+	const createHighlightMutation = useMutation({
+		mutationFn: async ({ position, content, comment }) => {
+			// Validate required data
+			if (!position?.rects || !Array.isArray(position.rects)) {
+				throw new Error("Invalid highlight position data")
+			}
 
-			onTextSelection({
-				text: selectedText,
-				bounds: {
-					x: rect.x,
-					y: rect.y,
-					width: rect.width,
-					height: rect.height,
+			if (!bookId) {
+				throw new Error("Cannot create highlight without book ID")
+			}
+
+			// Transform position data to match backend expectations
+			const transformedRects = position.rects.map((rect) => ({
+				x1: rect.x1,
+				y1: rect.y1,
+				x2: rect.x2,
+				y2: rect.y2,
+				width: rect.width,
+				height: rect.height,
+				pageNumber: rect.pageNumber || position.pageNumber,
+			}))
+
+			// Format data for backend PDF validation
+			const highlightData = {
+				text: content?.text || "",
+				page: position.pageNumber,
+				position: {
+					rects: transformedRects,
+					pageNumber: position.pageNumber,
+					boundingRect: position.boundingRect,
 				},
-			})
+				note: comment?.text || "", // Store comment text as 'note' field
+			}
+			const result = await highlightService.createHighlight("book", bookId, highlightData)
+			return result
+		},
+		onMutate: async ({ position, content, comment }) => {
+			// Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+			await queryClient.cancelQueries({ queryKey: ["highlights", "book", bookId] })
 
-			dlog("📝 Text selected:", `${selectedText.substring(0, 50)}...`)
+			// Snapshot the previous value
+			const previousHighlights = queryClient.getQueryData(["highlights", "book", bookId])
+
+			// Optimistically update to the new value
+			queryClient.setQueryData(["highlights", "book", bookId], (old) => [
+				...(old || []),
+				{
+					id: `temp-${Date.now()}`,
+					position,
+					content,
+					comment,
+					type: "BOOK",
+					entityId: bookId,
+					userId: supabase.auth.user()?.id,
+					createdAt: new Date().toISOString(),
+					updatedAt: new Date().toISOString(),
+				},
+			])
+
+			// Return a context object with the snapshotted value
+			return { previousHighlights }
+		},
+		onError: (_error, _variables, context) => {
+			// Rollback to the previous value on error
+			queryClient.setQueryData(["highlights", "book", bookId], context.previousHighlights)
+		},
+		onSuccess: (_data) => {
+			// Invalidate and refetch
+			queryClient.invalidateQueries({ queryKey: ["highlights", "book", bookId] })
+		},
+	})
+
+	// Map server highlights to PDFHighlighter format
+	const pdfHighlights = useMemo(() => {
+		return highlights.map((h) => ({
+			...h,
+			comment: { text: h.note || "" },
+		}))
+	}, [highlights])
+
+	const handleHighlightAI = (highlight) => {
+		onTextSelection(highlight)
+	}
+
+	// Tip component for text selection
+	function CreateTipContent({ position, content, hideTipAndSelection }) {
+		const handleCreateHighlight = (note) => {
+			const newHighlight = {
+				position,
+				content,
+				comment: { text: note },
+			}
+			createHighlightMutation.mutate(newHighlight)
+			hideTipAndSelection()
+		}
+
+		const handleAIAction = () => {
+			handleHighlightAI({ content, position })
+			hideTipAndSelection()
+		}
+
+		const handleHighlightClick = () => {
+			handleCreateHighlight("")
+		}
+
+		return (
+			<div className="flex flex-col space-y-2 p-2 bg-white rounded-lg shadow-lg border border-gray-200">
+				<button
+					type="button"
+					onClick={handleHighlightClick}
+					className="flex items-center px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded"
+				>
+					<Highlighter className="w-4 h-4 mr-2" />
+					Highlight
+				</button>
+				<button
+					type="button"
+					onClick={handleAIAction}
+					className="flex items-center px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded"
+				>
+					<Sparkles className="w-4 h-4 mr-2" />
+					Ask AI
+				</button>
+			</div>
+		)
+	}
+
+	const zoomIn = useCallback(() => {
+		setScale((prevScale) => {
+			const currentScale = typeof prevScale === "number" ? prevScale : 1.0
+			return Math.min(currentScale + 0.2, 3.0)
+		})
+	}, [])
+
+	const zoomOut = useCallback(() => {
+		setScale((prevScale) => {
+			const currentScale = typeof prevScale === "number" ? prevScale : 1.0
+			return Math.max(currentScale - 0.2, 0.4)
+		})
+	}, [])
+
+	// Create debounced function using useMemo to ensure stable reference
+	const trackCurrentPage = useMemo(
+		() =>
+			debounce((viewer) => {
+				if (!viewer) return
+				const { currentPage } = viewer
+				const readingState = getBookReadingState(bookId)
+				if (readingState?.currentPage !== currentPage) {
+					updateBookReadingState(bookId, { currentPage })
+				}
+			}, 500),
+		[bookId, getBookReadingState, updateBookReadingState]
+	)
+
+	const handlePdfLoad = (pdfDocument) => {
+		pdfDocumentRef.current = pdfDocument
+
+		// Restore last known page
+		const readingState = getBookReadingState(bookId)
+		if (readingState?.currentPage && !hasRestoredPageRef.current) {
+			const tempHighlight = {
+				id: `goto-page-${readingState.currentPage}`,
+				position: { pageNumber: readingState.currentPage },
+			}
+			if (scrollToRef.current) {
+				scrollToRef.current(tempHighlight)
+			}
+			hasRestoredPageRef.current = true
 		}
 	}
 
-	// Handle API redirects to get actual PDF URL
-	const resolvedForUrlRef = useRef(null)
-	const inFlightRunRef = useRef(0)
+	// Register API for parent component
 	useEffect(() => {
+		if (registerApi) {
+			const fitToScreen = () => {
+				setScale("page-width")
+			}
+
+			const goToPage = (pageNumber) => {
+				if (scrollToRef.current) {
+					const tempHighlight = { id: `goto-page-${pageNumber}`, position: { pageNumber } }
+					scrollToRef.current(tempHighlight)
+				}
+			}
+
+			const getCurrentPage = () => {
+				const state = getBookReadingState(bookId)
+				return state?.currentPage || 1
+			}
+
+			const getTotalPages = () => {
+				return pdfDocumentRef.current?.numPages || 0
+			}
+
+			registerApi({
+				goToPage,
+				fitToScreen,
+				getCurrentPage,
+				getTotalPages,
+				zoomIn,
+				zoomOut,
+			})
+		}
+	}, [bookId, registerApi, getBookReadingState, zoomIn, zoomOut])
+
+	// Handle API redirects to get actual PDF URL
+	useEffect(() => {
+		// Reset state when URL changes
+		pdfDocumentRef.current = null
+		hasRestoredPageRef.current = false
+
 		if (!url) {
 			setPdfUrl(null)
 			return
 		}
-
-		dlog("Processing URL")
 		setLoading(true)
 		setLoadError(null)
-		setNumPages(null)
-		setVisiblePages(new Set([1, 2, 3]))
 
 		if (url.startsWith("/api")) {
-			if (resolvedForUrlRef.current === url && pdfUrl) {
-				dlog("Skipping duplicate")
-				setLoading(false)
-				return
-			}
-			dlog("Fetching PDF from API")
-
-			const runId = ++inFlightRunRef.current
+			// Handle API URLs that need authentication
 			supabase.auth
 				.getSession()
 				.then(({ data: { session } }) => {
@@ -101,475 +309,131 @@ function LazyPDFViewer({ url, zoom = 100, onTextSelection, bookId }) {
 					})
 				})
 				.then(async (response) => {
-					// Ignore stale responses from previous runs
-					if (runId !== inFlightRunRef.current) return null
-					dlog("API response:", response.status)
-
 					if (response.ok) {
 						const contentType = response.headers.get("content-type")
 						if (contentType?.includes("application/json")) {
 							const data = await response.json()
-							dlog("Got JSON response")
 							if (data.url && data.type === "presigned") {
-								dlog("Using presigned URL")
-								setPdfUrl((prev) => prev || data.url) // only set once
-								resolvedForUrlRef.current = url
-							} else {
-								throw new Error("Invalid JSON response format")
+								setPdfUrl(data.url)
 							}
 						} else if (contentType?.includes("application/pdf")) {
-							dlog("Got PDF response")
-							setPdfUrl((prev) => prev || url)
-							resolvedForUrlRef.current = url
-						} else {
-							const _text = await response.text()
-							if (DEBUG_PDF) throw new Error("Server returned unexpected content type")
+							setPdfUrl(url)
 						}
-						setLoading(false)
 					} else {
-						let errorMsg = `Failed to fetch PDF: ${response.status} ${response.statusText}`
-						try {
-							const errorData = await response.json()
-							if (errorData.detail) {
-								errorMsg = errorData.detail
-							}
-						} catch {}
-						throw new Error(errorMsg)
+						throw new Error(`Failed to fetch PDF: ${response.status}`)
 					}
+					setLoading(false)
 					return null
 				})
 				.catch((error) => {
-					if (runId !== inFlightRunRef.current) return
 					setLoadError(error.message)
 					setLoading(false)
 				})
 		} else {
-			dlog("Using direct URL")
 			setPdfUrl(url)
+			setLoading(false)
 		}
+	}, [url])
 
-		const currentRunId = inFlightRunRef.current
-		return () => {
-			dlog("Cleanup")
-			if (currentRunId !== undefined) {
-				inFlightRunRef.current = currentRunId + 1
-			}
-		}
-	}, [url, pdfUrl])
-
-	// Create file object from resolved PDF URL
-	// This ensures the file object reference is stable across re-renders
-	useEffect(() => {
-		if (pdfUrl) {
-			const isPresignedUrl =
-				pdfUrl.includes("cloudflarestorage.com") || pdfUrl.includes("X-Amz-") || pdfUrl.includes("amazonaws.com")
-
-			setFile({
-				url: pdfUrl,
-				// NEVER use credentials for presigned URLs (causes CORS errors)
-				// Only use credentials for our local API endpoints
-				withCredentials: pdfUrl.startsWith("/api") && !isPresignedUrl,
-			})
-
-			dlog("PDF file ready")
-		} else {
-			setFile(null)
-		}
-	}, [pdfUrl])
-
-	const onDocumentLoadSuccess = (pdf) => {
-		dlog("PDF details:", { pages: pdf.numPages })
-		setNumPages(pdf.numPages)
-		setLoadError(null)
-		setLoading(false)
-
-		// Immediately update total pages in store for UI
-		if (updateBookReadingState && bookId) {
-			updateBookReadingState(
-				bookId,
-				{
-					totalPages: pdf.numPages,
-					currentPage: storedPage || 1,
-				},
-				true
-			) // Skip API sync for immediate update
-		}
-		if (storedPage && storedPage <= pdf.numPages && storedPage > 0) {
-			const savedPage = storedPage
-			// Set visible pages around the saved page
-			setVisiblePages(new Set([Math.max(1, savedPage - 1), savedPage, Math.min(pdf.numPages, savedPage + 1)]))
-
-			// Scroll to the saved page after a short delay to allow rendering
-			setTimeout(() => {
-				const pageElement = document.querySelector(`[data-page="${savedPage}"]`)
-				if (pageElement) {
-					pageElement.scrollIntoView({ behavior: "instant", block: "start" })
-					// Mark as initialized immediately after scrolling to correct page
-					// This prevents incorrect pages from being saved during initialization
-					setTimeout(() => {
-						isInitializedRef.current = true
-						dlog(`Initialized at page ${savedPage}`)
-					}, 100) // Small delay to ensure scroll completes
-				} else {
-					isInitializedRef.current = true
-				}
-			}, 300) // Reduced delay for faster restoration
-		} else {
-			setTimeout(() => {
-				isInitializedRef.current = true
-				dlog("Initialized at page 1 (no saved page)")
-			}, 300)
-		}
-	}
-
-	const onDocumentLoadError = (error) => {
-		// Only log errors in debug mode
-		dlog("PDF load error:", error.message)
-
-		// Check if it's a CORS error
-		if (error.message?.includes("NetworkError") || error.message?.includes("CORS")) {
-			dlog("CORS error detected")
-			setLoadError("Unable to load PDF due to CORS restrictions. Please contact support.")
-		} else if (error.message?.includes("Error in input stream")) {
-			dlog("Invalid PDF data received")
-			setLoadError(
-				"Invalid PDF data received from server. The file might be corrupted or the server returned an error page."
-			)
-		} else {
-			setLoadError(error.message || "Failed to load PDF")
-		}
-		setLoading(false)
-	}
-
-	const onSourceError = (error) => {
-		dlog("Source error:", error)
-		setLoadError("Failed to fetch PDF from server. Please check your connection and try again.")
-		setLoading(false)
-	}
-
-	// Debounce timer for saving page state
-	const saveTimerRef = useRef(null)
-
-	// Track if PDF has been initialized to prevent saving during initial load
-	const isInitializedRef = useRef(false)
-	// Track the most visible page to avoid incorrect saves
-	const visiblePagesMapRef = useRef(new Map())
-	// Track the current most visible page to avoid redundant updates
-	const currentMostVisiblePageRef = useRef(null)
-	// Store the observer instance globally to share between all pages
-	const pageObserverRef = useRef(null)
-	// Track which nodes are being observed for cleanup
-	const observedNodesRef = useRef(new Set())
-
-	// Track last scale to detect changes
-	const lastScaleRef = useRef(scale)
-
-	// Maintain scroll position during zoom changes
-	useEffect(() => {
-		if (!viewerContainerRef.current || lastScaleRef.current === scale) return
-
-		const container = viewerContainerRef.current
-		const wrapper = container.querySelector(".pdf-viewer-wrapper")
-		if (!wrapper) return
-
-		// Store current viewport center before zoom
-		const viewportHeight = container.clientHeight
-		const scrollTop = container.scrollTop
-		const currentCenter = scrollTop + viewportHeight / 2
-
-		// Calculate the ratio of where we are in the document
-		const oldScrollHeight = wrapper.scrollHeight
-		const scrollRatio = currentCenter / oldScrollHeight
-
-		// Let the DOM update with new scale
-		requestAnimationFrame(() => {
-			// Calculate new position to maintain the same center
-			const newScrollHeight = wrapper.scrollHeight
-			const newCenter = scrollRatio * newScrollHeight
-			const newScrollTop = newCenter - viewportHeight / 2
-
-			// Apply the new scroll position
-			container.scrollTop = Math.max(0, newScrollTop)
-
-			// Update the last scale reference
-			lastScaleRef.current = scale
-		})
-	}, [scale])
-
-	// Create a single IntersectionObserver for all pages
-	// Recreate only when numPages changes (not on every zoom)
-	useEffect(() => {
-		// Save current page to store with debouncing - moved inside useEffect
-		const saveCurrentPage = (pageNum) => {
-			if (!bookId || !numPages || pageNum < 1) return
-
-			// Update store immediately for instant UI updates
-			if (updateBookReadingState) {
-				updateBookReadingState(
-					bookId,
-					{
-						currentPage: pageNum,
-						totalPages: numPages,
-					},
-					true
-				) // Skip API sync for immediate update
-				dlog(`💾 Updated page ${pageNum} (instant)`)
-			}
-
-			// Clear existing timer for API sync
-			if (saveTimerRef.current) {
-				clearTimeout(saveTimerRef.current)
-			}
-
-			// Sync to API after 1 second of no page changes
-			saveTimerRef.current = setTimeout(() => {
-				if (updateBookReadingState) {
-					updateBookReadingState(
-						bookId,
-						{
-							currentPage: pageNum,
-							totalPages: numPages,
-						},
-						false
-					) // Include API sync
-					dlog(`💾 Synced page ${pageNum} to API`)
-				}
-			}, 1000)
-		}
-
-		// Store the observed nodes set in a local variable for cleanup
-		const observedNodes = observedNodesRef.current
-
-		// Create the observer
-		const observer = new IntersectionObserver(
-			(entries) => {
-				entries.forEach((entry) => {
-					// Extract page number from data attribute
-					const pageNum = parseInt(entry.target.dataset.pageNumber)
-					if (Number.isNaN(pageNum)) return
-
-					if (entry.isIntersecting) {
-						// Track visibility ratio of each page
-						visiblePagesMapRef.current.set(pageNum, entry.intersectionRatio)
-
-						// Only update current page after initialization
-						if (isInitializedRef.current) {
-							// Find the most visible page (no threshold needed!)
-							let maxRatio = 0
-							let mostVisiblePage = null
-							visiblePagesMapRef.current.forEach((ratio, num) => {
-								if (ratio > maxRatio) {
-									maxRatio = ratio
-									mostVisiblePage = num
-								}
-							})
-
-							// Only save if the most visible page has changed
-							// This prevents redundant updates on every scroll event
-							if (mostVisiblePage && mostVisiblePage !== currentMostVisiblePageRef.current) {
-								currentMostVisiblePageRef.current = mostVisiblePage
-								saveCurrentPage(mostVisiblePage)
-							}
-						}
-
-						setVisiblePages((prev) => {
-							const newSet = new Set(prev)
-							newSet.add(pageNum)
-							// Pre-load adjacent pages
-							if (pageNum > 1) newSet.add(pageNum - 1)
-							if (pageNum < numPages) newSet.add(pageNum + 1)
-
-							// Remove excessive logging - only log in debug mode for milestones
-							if (DEBUG_PDF && (pageNum === 1 || pageNum % 10 === 0 || pageNum === numPages)) {
-								dlog(`Page ${pageNum} visible`)
-							}
-							return newSet
-						})
-					} else {
-						// Remove from visibility tracking when not intersecting
-						visiblePagesMapRef.current.delete(pageNum)
-					}
-				})
-			},
-			{
-				rootMargin: "500px", // Increased margin for smoother loading
-				threshold: [0, 0.25, 0.5, 0.75, 1.0], // Multiple thresholds for better precision
-			}
-		)
-
-		// Store the observer in ref
-		pageObserverRef.current = observer
-
-		// Re-observe any existing page elements that were rendered before observer was ready
-		setTimeout(() => {
-			const pageElements = document.querySelectorAll("[data-page]")
-			pageElements.forEach((element) => {
-				const pageNum = parseInt(element.dataset.page)
-				if (!Number.isNaN(pageNum) && !observedNodes.has(element)) {
-					element.dataset.pageNumber = pageNum // Add the pageNumber attribute for observer
-					observer.observe(element)
-					observedNodes.add(element)
-				}
-			})
-		}, 100) // Small delay to ensure elements are in DOM
-
-		// Cleanup function
-		return () => {
-			if (observer) {
-				observer.disconnect()
-			}
-			// Use the captured observedNodes variable to avoid stale closure issues
-			if (observedNodes) {
-				observedNodes.clear()
-			}
-			pageObserverRef.current = null
-		}
-	}, [numPages, bookId, updateBookReadingState]) // Recreate observer only when numPages, bookId or updateBookReadingState changes
-
-	// Intersection observer for lazy loading pages
-	const pageRef = (node, pageNum) => {
-		if (!node) {
-			// Node is being unmounted, clean up
-			return
-		}
-
-		// Store page number as data attribute for the observer
-		node.dataset.pageNumber = pageNum
-
-		// Use the shared observer instance
-		if (pageObserverRef.current && !observedNodesRef.current.has(node)) {
-			pageObserverRef.current.observe(node)
-			observedNodesRef.current.add(node)
-		}
-	}
-
-	// The file object is now created in a useEffect hook to avoid re-renders
-	// and to ensure the reference is stable.
-
+	// Error states
 	if (!url) {
 		return (
-			<div className="pdf-error">
-				<p>No PDF URL provided</p>
+			<div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
+				<p className="text-gray-600">No PDF URL provided</p>
 			</div>
 		)
 	}
 
 	if (loading && !pdfUrl) {
 		return (
-			<div className="pdf-loading">
-				<p>Resolving PDF location...</p>
-				<p style={{ fontSize: "12px", color: "#666", marginTop: "8px" }}>Fetching document from server</p>
+			<div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
+				<div className="text-center">
+					<p className="text-gray-600">Resolving PDF location...</p>
+					<p className="text-xs text-gray-500 mt-2">Fetching document from server</p>
+				</div>
 			</div>
 		)
 	}
 
 	if (!pdfUrl && loadError) {
 		return (
-			<div className="pdf-error">
-				<p>Failed to load PDF</p>
-				<p style={{ fontSize: "12px", color: "#d32f2f", marginTop: "8px" }}>{loadError}</p>
+			<div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
+				<div className="text-center">
+					<p className="text-red-600">Failed to load PDF</p>
+					<p className="text-xs text-red-500 mt-2">{loadError}</p>
+				</div>
 			</div>
 		)
 	}
 
+	if (!pdfUrl) {
+		return null
+	}
+
 	return (
-		<div className="pdf-viewer-container" ref={viewerContainerRef} onMouseUp={handleTextSelection} role="document">
-			<div className="pdf-viewer-wrapper">
-				<Document
-					key={pdfUrl || "doc"}
-					file={file}
-					options={DOCUMENT_OPTIONS}
-					onLoadSuccess={onDocumentLoadSuccess}
-					onLoadError={onDocumentLoadError}
-					onSourceError={onSourceError}
-					loading={
-						<div className="pdf-loading">
-							<p>Loading PDF...</p>
-							<p style={{ fontSize: "12px", color: "#666", marginTop: "8px" }}>
-								PDF.js v{pdfjs.version} (Worker bundled locally)
-							</p>
-						</div>
+		<div className="pdf-viewer-wrapper h-full">
+			<PdfLoader
+				url={pdfUrl}
+				beforeLoad={<div className="flex items-center justify-center h-64 text-gray-600">Loading PDF…</div>}
+				onError={(error) => {
+					setLoadError(error.message || "Failed to load PDF")
+				}}
+			>
+				{(pdfDocument) => {
+					// Handle PDF load once
+					if (!pdfDocumentRef.current) {
+						handlePdfLoad(pdfDocument)
 					}
-					error={
-						<div className="pdf-error">
-							<p>Failed to load PDF</p>
-							{loadError && (
-								<>
-									<p
-										style={{
-											fontSize: "12px",
-											color: "#d32f2f",
-											marginTop: "8px",
-										}}
-									>
-										{loadError}
-									</p>
-									{loadError.includes("CORS") && (
-										<p
-											style={{
-												fontSize: "11px",
-												color: "#666",
-												marginTop: "8px",
-											}}
-										>
-											The PDF is hosted on a different domain that doesn't allow direct access.
-										</p>
-									)}
-								</>
+
+					return (
+						<PdfHighlighter
+							ref={pdfHighlighterRef}
+							pdfDocument={pdfDocument}
+							scale={scale}
+							highlights={pdfHighlights}
+							onScrollChange={() => {
+								trackCurrentPage(pdfHighlighterRef.current?.viewer)
+							}}
+							scrollRef={(scrollTo) => {
+								scrollToRef.current = scrollTo
+							}}
+							enableAreaSelection={(event) => event.altKey}
+							onSelectionFinished={(position, content, hideTipAndSelection) => {
+								return (
+									<CreateTipContent position={position} content={content} hideTipAndSelection={hideTipAndSelection} />
+								)
+							}}
+							highlightTransform={(
+								highlight,
+								_index,
+								_setTip,
+								_hideTip,
+								_viewportToScaled,
+								_screenshot,
+								isScrolledTo
+							) => (
+								<Highlight
+									isScrolledTo={isScrolledTo}
+									position={highlight.position}
+									comment={highlight.comment}
+									onClick={() => onHighlightClick(highlight.id)}
+									onMouseOver={() => onHighlightHover(highlight.id)}
+								/>
 							)}
-							<p style={{ fontSize: "11px", color: "#666", marginTop: "8px" }}>
-								Check browser console for technical details
-							</p>
-						</div>
-					}
-				>
-					{numPages &&
-						Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => (
-							<div
-								key={`page-${pageNum}`}
-								className="pdf-page-wrapper"
-								data-page={pageNum}
-								ref={(node) => pageRef(node, pageNum)}
-								style={{
-									minHeight: `${800 * scale}px`,
-									display: "flex",
-									alignItems: "center",
-									justifyContent: "center",
-									marginBottom: "20px",
-								}}
-							>
-								{visiblePages.has(pageNum) ? (
-									<Page
-										pageNumber={pageNum}
-										scale={scale}
-										renderTextLayer={true}
-										renderAnnotationLayer={false}
-										onRenderSuccess={() => dlog(`✅ Page ${pageNum} rendered`)}
-										onRenderError={(_error) => {}}
-									/>
-								) : (
-									<div
-										className="pdf-page-placeholder"
-										style={{
-											width: "100%",
-											height: `${800 * scale}px`,
-											backgroundColor: "#f5f5f5",
-											display: "flex",
-											alignItems: "center",
-											justifyContent: "center",
-											border: "1px solid #e0e0e0",
-											borderRadius: "4px",
-										}}
-									>
-										<div style={{ color: "#666" }}>Page {pageNum}</div>
-									</div>
-								)}
-							</div>
-						))}
-				</Document>
-			</div>
+						>
+							{/* Empty div for PdfHighlighter's internal structure */}
+							<div className="absolute inset-0 pointer-events-none" />
+							{highlightsLoading && (
+								<div className="absolute top-2 left-2 z-10 rounded bg-black/50 text-white text-xs px-2 py-1">
+									Loading highlights...
+								</div>
+							)}
+						</PdfHighlighter>
+					)
+				}}
+			</PdfLoader>
 		</div>
 	)
 }
 
-export default LazyPDFViewer
+export default PDFViewer
