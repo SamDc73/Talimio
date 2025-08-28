@@ -1,5 +1,6 @@
 """Course creation service for creating new courses."""
 
+import json
 import logging
 from datetime import UTC, datetime
 from uuid import UUID
@@ -110,15 +111,34 @@ class CourseCreationService:
             await self.session.commit()
             await self.session.refresh(roadmap)
 
-            # Apply automatic tagging (non-blocking - don't fail course creation if tagging fails)
+            # Apply automatic tagging (following video/book pattern)
             try:
-                from src.tagging.service import apply_automatic_tagging_to_course
+                from src.tagging.processors.course_processor import process_course_for_tagging
+                from src.tagging.service import TaggingService
 
-                await apply_automatic_tagging_to_course(self.session, roadmap, modules_data)
-                await self.session.commit()
-                await self.session.refresh(roadmap)
+                tagging_service = TaggingService(self.session)
+
+                # Get course content for tagging
+                content_data = await process_course_for_tagging(str(roadmap.id), self.session)
+                if content_data:
+                    tags = await tagging_service.tag_content(
+                        content_id=roadmap.id,
+                        content_type="course",
+                        user_id=user_id,
+                        title=content_data["title"],
+                        content_preview=content_data["content_preview"],
+                    )
+
+                    if tags:
+                        roadmap.tags = json.dumps(tags)
+                        await self.session.commit()
+                        await self.session.refresh(roadmap)
+                        self._logger.info("Successfully tagged course %s with tags: %s", roadmap.id, tags)
+                else:
+                    self._logger.warning("Could not extract content for course %s", roadmap.id)
+
             except Exception as tagging_error:
-                self._logger.warning("Failed to apply automatic tagging to course %s: %s", roadmap.id, tagging_error)
+                self._logger.exception("Failed to apply automatic tagging to course %s: %s", roadmap.id, tagging_error)
                 # Continue with course creation even if tagging fails
 
             self._logger.info("Successfully created course %s for user %s", roadmap.id, user_id)

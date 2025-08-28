@@ -40,7 +40,7 @@ async def tag_content(
     content_type: str,
     content_id: UUID,
     background_tasks: BackgroundTasks,
-    _user_context: Annotated[UserContext, Depends(get_user_context)],
+    user_context: Annotated[UserContext, Depends(get_user_context)],
     service: Annotated[TaggingService, Depends(get_tagging_service)],
 ) -> TaggingResponse:
     """Generate and store tags for a specific content item.
@@ -85,6 +85,7 @@ async def tag_content(
             tags = await service.tag_content(
                 content_id=content_id,
                 content_type=content_type,
+                user_id=user_context.user_id,
                 title=content_data["title"],
                 content_preview=content_data["content_preview"],
             )
@@ -106,6 +107,7 @@ async def tag_content(
             tags = await service.tag_content(
                 content_id=content_id,
                 content_type=content_type,
+                user_id=user_context.user_id,
                 title=content_data["title"],
                 content_preview=content_data["content_preview"],
             )
@@ -127,6 +129,7 @@ async def tag_content(
             tags = await service.tag_content(
                 content_id=content_id,
                 content_type=content_type,
+                user_id=user_context.user_id,
                 title=content_data["title"],
                 content_preview=content_data["content_preview"],
             )
@@ -225,7 +228,7 @@ async def list_tags(
 async def get_content_tags(
     content_type: str,
     content_id: UUID,
-    _user_context: Annotated[UserContext, Depends(get_user_context)],
+    user_context: Annotated[UserContext, Depends(get_user_context)],
     service: Annotated[TaggingService, Depends(get_tagging_service)],
 ) -> list[TagSchema]:
     """Get all tags for a specific content item.
@@ -247,7 +250,7 @@ async def get_content_tags(
             detail=f"Invalid content type: {content_type}",
         )
 
-    tags = await service.get_content_tags(content_id, content_type)
+    tags = await service.get_content_tags(content_id, content_type, user_context.user_id)
     return [TagSchema.model_validate(tag) for tag in tags]
 
 
@@ -256,7 +259,7 @@ async def update_content_tags(
     content_type: str,
     content_id: UUID,
     request: ContentTagsUpdate,
-    _user_context: Annotated[UserContext, Depends(get_user_context)],
+    user_context: Annotated[UserContext, Depends(get_user_context)],
     service: Annotated[TaggingService, Depends(get_tagging_service)],
 ) -> TaggingResponse:
     """Update tags for a content item (manual tagging).
@@ -283,6 +286,7 @@ async def update_content_tags(
         await service.update_manual_tags(
             content_id=content_id,
             content_type=content_type,
+            user_id=user_context.user_id,
             tag_names=request.tags,
         )
 
@@ -315,6 +319,7 @@ async def update_content_tags(
 @router.post("/suggest")
 async def suggest_tags(
     request: TagSuggestionRequest,
+    user_context: Annotated[UserContext, Depends(get_user_context)],
     service: Annotated[TaggingService, Depends(get_tagging_service)],
 ) -> list[str]:
     """Suggest tags for content without storing them.
@@ -329,6 +334,7 @@ async def suggest_tags(
     """
     return await service.suggest_tags(
         content_preview=request.content_preview,
+        user_id=user_context.user_id,
         content_type=request.content_type,
         title=request.title,
     )

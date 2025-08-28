@@ -851,6 +851,11 @@ Please use this context to personalize your response appropriately."""
             roadmap_title = response.get("title", "")
             roadmap_description = response.get("description", "")
             core_topics = response["topics"]
+        elif "sections" in response:
+            # Handle sections format (newer AI response format)
+            roadmap_title = response.get("title", "")
+            roadmap_description = response.get("description", "")
+            core_topics = response["sections"]
         elif isinstance(response.get("response"), dict):
             # Handle nested response
             inner_response = response["response"]
@@ -858,11 +863,15 @@ Please use this context to personalize your response appropriately."""
                 roadmap_title = inner_response.get("title", "")
                 roadmap_description = inner_response.get("description", "")
                 core_topics = inner_response["coreTopics"]
+            elif "sections" in inner_response:
+                roadmap_title = inner_response.get("title", "")
+                roadmap_description = inner_response.get("description", "")
+                core_topics = inner_response["sections"]
             else:
-                msg = f"Expected 'coreTopics' key in nested response. Got keys: {list(inner_response.keys())}"
+                msg = f"Expected 'coreTopics' or 'sections' key in nested response. Got keys: {list(inner_response.keys())}"
                 raise RoadmapGenerationError(msg)
         else:
-            msg = f"Expected 'coreTopics' key in response dictionary. Got keys: {list(response.keys())}"
+            msg = f"Expected 'coreTopics' or 'sections' key in response dictionary. Got keys: {list(response.keys())}"
             raise RoadmapGenerationError(msg)
 
         return roadmap_title, roadmap_description, core_topics

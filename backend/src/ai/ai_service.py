@@ -252,9 +252,7 @@ class AIService:
         logger.info("Generating course for user %s: %s", user_id, topic)
 
         # Extract interaction type from context if provided
-        interaction_type = "course_creation"
-        if context:
-            interaction_type = context.get("interaction_type", "course_creation")
+        _ = context  # Context is handled by the roadmap generation function
 
         # Use the existing roadmap generation logic - now with memory integration!
         # The roadmap generation will automatically integrate memory and store the response
@@ -406,6 +404,41 @@ class AIService:
         )
 
         return str(response)
+
+    async def queue_processing(self, content_type: str, content_id: str, user_id: UUID) -> None:
+        """Queue content for background AI processing (RAG indexing, etc.).
+
+        Args:
+            content_type: Type of content (book, video, course, etc.)
+            content_id: Unique identifier for the content
+            user_id: User ID for the request
+        """
+        logger.info("Queuing %s %s for AI processing (user: %s)", content_type, content_id, user_id)
+
+        try:
+            # For now, we'll handle the processing immediately
+            # In the future, this could be sent to a background queue (Celery, RQ, etc.)
+
+            if content_type == "book":
+                # Queue book for RAG processing
+                result = await self._book_process_rag(user_id, content_id, "")
+                logger.info("Book %s queued for RAG processing: %s", content_id, result.get("status"))
+
+            elif content_type == "video":
+                # Queue video for transcript and RAG processing
+                result = await self._video_process_rag(user_id, content_id, "")
+                logger.info("Video %s queued for RAG processing: %s", content_id, result.get("status"))
+
+            elif content_type == "course":
+                # Courses might not need immediate processing, but log for tracking
+                logger.info("Course %s marked for future AI processing", content_id)
+
+            else:
+                logger.info("No specific AI processing defined for content type: %s", content_type)
+
+        except Exception as e:
+            # Don't fail content creation if AI processing fails
+            logger.exception("Failed to queue AI processing for %s %s: %s", content_type, content_id, e)
 
 
 # Singleton instance

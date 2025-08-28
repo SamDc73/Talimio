@@ -13,7 +13,6 @@ ENV_PATH = BACKEND_DIR / ".env"
 load_dotenv(ENV_PATH)
 
 from fastapi import FastAPI, Response
-from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -23,6 +22,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import DatabaseError, IntegrityError, OperationalError
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.requests import Request
 
 from .ai.rag.router import router as rag_router
 from .assistant.router import router as assistant_router
@@ -65,6 +65,8 @@ from .courses.models import (  # noqa: F401
 from .database.session import engine
 from .flashcards.models import FlashcardCard, FlashcardDeck, FlashcardReview  # noqa: F401
 from .flashcards.router import router as flashcards_router
+from .highlights.models import Highlight  # noqa: F401
+from .highlights.router import router as highlights_router
 from .middleware.auth_error_handler import AuthErrorMiddleware
 from .middleware.security import SimpleSecurityMiddleware, limiter
 from .progress.router import router as progress_router
@@ -397,6 +399,7 @@ def create_app() -> FastAPI:
     app.include_router(books_router)
     app.include_router(content_router)
     app.include_router(flashcards_router)
+    app.include_router(highlights_router)  # Highlights for books, videos, courses
     app.include_router(progress_router)  # Unified progress tracking
     app.include_router(rag_router)  # RAG system
 

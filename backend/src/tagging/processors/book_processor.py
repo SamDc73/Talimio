@@ -277,9 +277,12 @@ async def process_book_for_tagging(
         logger.error(f"Book not found: {book_id}")
         return None
 
-    # Construct file path using settings
+    # Construct file path using settings, avoiding duplicate segments
     settings = get_settings()
-    file_path = f"{settings.LOCAL_STORAGE_PATH}/books/{book.file_path}"
+    base = Path(settings.LOCAL_STORAGE_PATH)
+    fp = Path(book.file_path)
+    # If book.file_path is relative, join with base; otherwise use as-is
+    file_path = str((base / fp).resolve()) if not fp.is_absolute() else str(fp)
 
     if not Path(file_path).exists():
         logger.error(f"Book file not found: {file_path}")

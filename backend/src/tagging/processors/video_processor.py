@@ -98,7 +98,7 @@ async def process_video_for_tagging(
     """
     # Get video from database
     result = await session.execute(
-        select(Video).where(Video.uuid == video_id),
+        select(Video).where(Video.id == video_id),
     )
     video = result.scalar_one_or_none()
 

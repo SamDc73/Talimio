@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import and_, select
@@ -13,11 +13,6 @@ from src.ai.constants import TAG_CATEGORIES, TAG_CATEGORY_COLORS
 
 from .models import Tag, TagAssociation
 
-
-if TYPE_CHECKING:
-    from src.books.models import Book
-    from src.books.services.book_metadata_service import BookMetadata
-    from src.courses.models import Course
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +83,9 @@ class TaggingService:
                         auto_generated=True,
                     )
 
-            await self.session.commit()
+            # Don't commit here - let the caller handle transaction boundaries
+            # This allows the calling service to control when changes are persisted
+            await self.session.flush()  # Flush to ensure associations are tracked
 
             return tag_names
 
@@ -243,6 +240,34 @@ class TaggingService:
             )
 
         await self.session.commit()
+
+    async def process_tags(
+        self,
+        content_type: str,
+        content_id: str,
+        user_id: UUID,
+        tags: list[str],
+    ) -> None:
+        """Process tags for content - wrapper for update_manual_tags.
+
+        Args:
+            content_type: Type of content
+            content_id: ID of the content (as string)
+            user_id: User ID for the tags
+            tags: List of tag names to set
+        """
+        # Early return for empty tags list to avoid SQLAlchemy IN() errors
+        if not tags:
+            return
+
+        # Convert string content_id to UUID and delegate to update_manual_tags
+        content_uuid = UUID(content_id)
+        await self.update_manual_tags(
+            content_id=content_uuid,
+            content_type=content_type,
+            user_id=user_id,
+            tag_names=tags,
+        )
 
     async def suggest_tags(
         self,
@@ -442,7 +467,7 @@ async def update_content_tags_json(
         from src.videos.models import Video
 
         await session.execute(
-            update(Video).where(Video.uuid == content_id).values(tags=tags_json),
+            update(Video).where(Video.id == content_id).values(tags=tags_json),
         )
     elif content_type in {"course", "roadmap"}:
         from sqlalchemy import update
@@ -456,75 +481,10 @@ async def update_content_tags_json(
     await session.flush()
 
 
-async def apply_automatic_tagging(session: AsyncSession, book: "Book", metadata: "BookMetadata") -> None:
-    """Apply automatic tagging to the book."""
-    try:
-        tagging_service = TaggingService(session)
-
-        content_preview = _build_content_preview(book, metadata)
-        tags = await tagging_service.tag_content(
-            content_id=book.id,
-            content_type="book",
-            user_id=book.user_id,  # Use the book's user_id
-            title=f"{book.title} {book.subtitle or ''}".strip(),
-            content_preview="\n".join(content_preview),
-        )
-
-        if tags:
-            book.tags = json.dumps(tags)
-            # Don't commit here - let the caller handle it
-
-        logging.info(f"Successfully tagged book {book.id} with tags: {tags}")
-
-    except Exception as e:
-        logging.exception(f"Failed to tag book {book.id}: {e}")
+# Removed apply_automatic_tagging and apply_automatic_tagging_to_course functions
+# These have been replaced with direct TaggingService usage in each service
+# following the video tagging pattern for consistency
 
 
-async def apply_automatic_tagging_to_course(session: AsyncSession, roadmap: "Course", _modules_data: list) -> None:
-    """Apply automatic tagging to the course/roadmap."""
-    # Capture roadmap ID early to avoid session issues in exception handling
-    roadmap_id = roadmap.id
-
-    try:
-        tagging_service = TaggingService(session)
-
-        # Use the CourseProcessor for consistent content extraction
-        from src.tagging.processors.course_processor import process_course_for_tagging
-
-        content_data = await process_course_for_tagging(str(roadmap_id), session)
-        if not content_data:
-            logging.warning(f"Could not extract content for course {roadmap_id}")
-            return
-
-        tags = await tagging_service.tag_content(
-            content_id=roadmap_id,
-            content_type="course",  # Use "course" instead of "roadmap"
-            user_id=roadmap.user_id,  # Use the course's user_id
-            title=content_data["title"],
-            content_preview=content_data["content_preview"],
-        )
-
-        if tags:
-            roadmap.tags = json.dumps(tags)
-            # Don't commit here - let the caller handle it
-
-        logging.info(f"Successfully tagged course {roadmap_id} with tags: {tags}")
-
-    except Exception as e:
-        logging.exception(f"Failed to tag course {roadmap_id}: {e}")
-
-
-def _build_content_preview(book: "Book", metadata: "BookMetadata") -> list[str]:
-    """Build content preview for tagging."""
-    content_preview = []
-    if book.description:
-        content_preview.append(f"Description: {book.description}")
-
-    if metadata.table_of_contents:
-        toc_list = metadata.table_of_contents
-        if toc_list and len(toc_list) > 0:
-            toc_items = [item.get("title", "") for item in toc_list[:10]]
-            if toc_items:
-                content_preview.append(f"Table of Contents: {', '.join(toc_items)}")
-
-    return content_preview
+# _build_content_preview function removed - content preview is now built inline
+# in each service following the consistent pattern

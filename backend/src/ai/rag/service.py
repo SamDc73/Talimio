@@ -153,10 +153,9 @@ class RAGService:
 
             await session.commit()
 
-            # Process document asynchronously
-            import asyncio
-
-            asyncio.create_task(self._process_document_async(doc.id))  # noqa: RUF006
+            # REMOVED: asyncio.create_task() - this was causing infinite loop
+            # Document processing should be handled by the background processors
+            # when needed, not as fire-and-forget tasks
 
             return DocumentResponse.model_validate(doc.__dict__)
 

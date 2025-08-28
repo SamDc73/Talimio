@@ -1,15 +1,18 @@
 """Context retrieval strategies for the assistant."""
 
 import logging
+import os
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-import pymupdf as fitz
+import fitz  # PyMuPDF
 from pydantic import BaseModel
+from sqlalchemy import select
 
-from src.books.services.book_service import get_book
+from src.books.models import Book
+from src.config.settings import get_settings
 from src.courses.services.course_service import CourseService
 from src.database.lesson_repository import LessonRepository
 from src.database.session import async_session_maker
@@ -72,14 +75,34 @@ class BookContextStrategy(ContextRetriever):
 
             current_page = context_meta["page"]
 
-            book = await get_book(resource_id)
+            # Fetch book directly from DB (remove legacy BookService dependency)
+            async with async_session_maker() as session:
+                result = await session.execute(select(Book).where(Book.id == resource_id))
+                book = result.scalar_one_or_none()
 
             if not book or not book.file_path:
                 logging.warning(f"Book not found or no file path: {resource_id}")
                 return None
 
-            # Open PDF and extract text from current page +/- 2 pages
-            doc = fitz.open(book.file_path)
+            # Open PDF to extract context window around current page. Support absolute and storage-relative paths.
+            settings = get_settings()
+            candidate_paths = [book.file_path]
+            if book.file_path and not os.path.isabs(book.file_path):
+                candidate_paths.append(f"{settings.LOCAL_STORAGE_PATH}/books/{book.file_path}")
+
+            doc = None
+            for path in candidate_paths:
+                try:
+                    doc = fitz.open(path)
+                    break
+                except Exception:
+                    continue
+
+            if doc is None:
+                logging.warning(
+                    f"Could not open PDF for book {resource_id}. Tried: {candidate_paths}"
+                )
+                return None
 
             # Calculate page range (current page +/- 2, within document bounds)
             start_page = max(0, current_page - 2)
