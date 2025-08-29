@@ -11,9 +11,18 @@ import { useEffect, useRef } from "react"
  * - Works with Suspense, ErrorBoundaries, concurrent features
  * - Pure declarative React that "just works"
  *
+ * @param {Function} onHighlight - Optional handler for highlight button
+ * @param {Function} onAskAI - Optional handler for Ask AI button
+ *
  * @example
+ * // With both handlers
  * <SelectionZone onHighlight={handleHighlight} onAskAI={handleAskAI}>
  *   <article>Content with selectable text...</article>
+ * </SelectionZone>
+ *
+ * // Only Ask AI (e.g., for PDFs with built-in highlighting)
+ * <SelectionZone onAskAI={handleAskAI}>
+ *   <PDFViewer />
  * </SelectionZone>
  */
 export function SelectionZone({ children, onHighlight, onAskAI }) {

@@ -44,7 +44,7 @@ export function useContentData(filters, _pinning) {
 					}),
 					...(item.type === "book" && {
 						author: item.author,
-						pageCount: item.pageCount,
+						pageCount: item.pageCount || item.page_count || item.totalPages,
 						currentPage: item.currentPage,
 						tocProgress: item.tocProgress || {},
 					}),

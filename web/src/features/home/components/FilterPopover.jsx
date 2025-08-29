@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover"
 import { RadioGroup, RadioGroupItem } from "@/components/radio-group"
 import { Separator } from "@/components/separator"
 
-const FilterPopover = ({
+function FilterPopover({
 	filterOptions,
 	sortOptions,
 	activeFilter,
@@ -20,7 +20,7 @@ const FilterPopover = ({
 	setActiveSort,
 	sortDirection,
 	toggleSortDirection,
-}) => {
+}) {
 	return (
 		<Popover>
 			<PopoverTrigger asChild>

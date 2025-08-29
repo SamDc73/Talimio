@@ -3,7 +3,7 @@ import { X } from "lucide-react"
 /**
  * Reusable Tag component for displaying tags with different variants and interactions
  */
-const Tag = ({
+function Tag({
 	tag,
 	variant = "default", // "default", "removable", "clickable", "selected"
 	size = "medium", // "small", "medium", "large"
@@ -11,7 +11,7 @@ const Tag = ({
 	onClick,
 	className = "",
 	...props
-}) => {
+}) {
 	// Base styles
 	const baseStyles = "inline-flex items-center gap-1 font-medium rounded-full border transition-all duration-200"
 
@@ -89,7 +89,7 @@ const Tag = ({
 /**
  * TagList component for displaying multiple tags
  */
-export const TagList = ({
+export function TagList({
 	tags = [],
 	variant = "default",
 	size = "medium",
@@ -98,7 +98,7 @@ export const TagList = ({
 	maxVisible = null,
 	className = "",
 	...props
-}) => {
+}) {
 	const visibleTags = maxVisible ? tags.slice(0, maxVisible) : tags
 	const hiddenCount = maxVisible ? Math.max(0, tags.length - maxVisible) : 0
 

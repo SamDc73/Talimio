@@ -1,7 +1,7 @@
 import Confetti from "react-confetti"
 import { useWindowSize } from "react-use"
 
-const CelebrationOverlay = ({ active }) => {
+function CelebrationOverlay({ active }) {
 	const { width, height } = useWindowSize()
 
 	if (!active) return null

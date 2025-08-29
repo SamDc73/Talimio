@@ -17,13 +17,13 @@ import { useDocumentsService } from "./api/documentsApi"
 import { DocumentStatusSummary } from "./components/DocumentStatusBadge"
 import DocumentUploader from "./components/DocumentUploader"
 
-const CourseCreationModal = ({
+function CourseCreationModal({
 	isOpen,
 	onClose,
 	onSuccess,
 	defaultPrompt = "",
 	defaultMode = "prompt", // "prompt", "document", or "rag"
-}) => {
+}) {
 	const [_creationMode, _setCreationMode] = useState(defaultMode)
 	const [_prompt, _setPrompt] = useState(defaultPrompt)
 	const [_isGenerating, _setIsGenerating] = useState(false)

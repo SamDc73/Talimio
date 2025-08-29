@@ -5,7 +5,7 @@ import "katex/dist/katex.min.css"
 import "./LessonViewer.css"
 
 // Code block component with language display
-const CodeBlock = ({ children, className, ...props }) => {
+function CodeBlock({ children, className, ...props }) {
 	// Extract language from data-language attribute (rehype-pretty-code provides this reliably)
 	const language = props["data-language"] || "text"
 

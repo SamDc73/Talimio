@@ -1,4 +1,4 @@
-const TagChip = ({ tag, contentType }) => {
+function TagChip({ tag, contentType }) {
 	// Map content types to consistent classes
 	const getTagClasses = (type) => {
 		switch (type) {

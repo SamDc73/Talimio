@@ -10,7 +10,7 @@ import { Label } from "@/components/label"
 import { toast } from "@/hooks/use-toast"
 import { api } from "@/lib/apiClient"
 
-const RoadmapPreviewPage = () => {
+function RoadmapPreviewPage() {
 	const { roadmapId } = useParams()
 	const navigate = useNavigate()
 	const location = useLocation()

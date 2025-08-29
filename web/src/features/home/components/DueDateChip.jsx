@@ -4,7 +4,7 @@ import { Check, Pause } from "lucide-react"
 import { Button } from "@/components/button"
 import { STATES } from "@/features/home/utils/contentConstants"
 
-const DueDateChip = ({ dueDate, isPaused, progress, type, dueCount = 0, overdue = 0, onSnooze }) => {
+function DueDateChip({ dueDate, isPaused, progress, type, dueCount = 0, overdue = 0, onSnooze }) {
 	if (progress === 100 || (type === "flashcards" && dueCount === 0 && overdue === 0))
 		return (
 			<motion.div

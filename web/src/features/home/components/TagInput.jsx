@@ -8,7 +8,7 @@ import Tag, { TagList } from "./Tag"
 /**
  * TagInput component with autocomplete and tag creation
  */
-const TagInput = ({
+function TagInput({
 	selectedTags = [],
 	onTagsChange,
 	placeholder = "Add tags...",
@@ -16,7 +16,7 @@ const TagInput = ({
 	allowCreate = true,
 	className = "",
 	disabled = false,
-}) => {
+}) {
 	const [inputValue, setInputValue] = useState("")
 	const [isOpen, setIsOpen] = useState(false)
 	const [highlightedIndex, setHighlightedIndex] = useState(-1)

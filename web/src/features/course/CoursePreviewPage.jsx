@@ -9,7 +9,7 @@ import { Label } from "@/components/label"
 import { toast } from "@/hooks/use-toast"
 import { api } from "@/lib/apiClient"
 
-const CoursePreviewPage = () => {
+function CoursePreviewPage() {
 	const { courseId } = useParams()
 	const navigate = useNavigate()
 	const location = useLocation()

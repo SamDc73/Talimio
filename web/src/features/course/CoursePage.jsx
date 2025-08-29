@@ -16,7 +16,7 @@ import TrackView from "./views/track"
  * Main container component for the Course feature
  * Handles switching between different views and lesson display
  */
-const CoursePage = ({ roadmapId: propRoadmapId, ref: _ref }) => {
+function CoursePage({ roadmapId: propRoadmapId, ref: _ref }) {
 	const { courseId, lessonId } = useParams()
 	const roadmapId = propRoadmapId || courseId // Support both props and URL params
 

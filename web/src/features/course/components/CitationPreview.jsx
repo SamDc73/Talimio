@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/too
 /**
  * InlineCitation - Small clickable citation number
  */
-export const InlineCitation = ({ citationNumber, document, excerpt, onClick, className = "" }) => {
+export function InlineCitation({ citationNumber, document, excerpt, onClick, className = "" }) {
 	return (
 		<Tooltip delayDuration={300}>
 			<TooltipTrigger asChild>
@@ -60,14 +60,7 @@ export const InlineCitation = ({ citationNumber, document, excerpt, onClick, cla
 /**
  * CitationCard - Expanded citation view for sidebars
  */
-export const CitationCard = ({
-	citation,
-	index,
-	onViewDocument,
-	onViewExcerpt,
-	showActions = true,
-	className = "",
-}) => {
+export function CitationCard({ citation, index, onViewDocument, onViewExcerpt, showActions = true, className = "" }) {
 	const { document, excerpt, similarity_score } = citation
 
 	return (
@@ -137,14 +130,14 @@ export const CitationCard = ({
 /**
  * CitationSidebar - Collapsible sidebar showing all citations
  */
-export const CitationSidebar = ({
+export function CitationSidebar({
 	citations = [],
 	isOpen = false,
 	onToggle,
 	onViewDocument,
 	onViewExcerpt,
 	className = "",
-}) => {
+}) {
 	return (
 		<div
 			className={`
@@ -198,7 +191,7 @@ export const CitationSidebar = ({
 /**
  * CitationModal - Full-screen modal for viewing citation context
  */
-export const CitationModal = ({ citation, isOpen, onClose, onViewDocument }) => {
+export function CitationModal({ citation, isOpen, onClose, onViewDocument }) {
 	const modalRef = useRef(null)
 
 	// Close on escape key

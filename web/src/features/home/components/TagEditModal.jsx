@@ -12,7 +12,7 @@ import TagInput from "./TagInput"
 /**
  * Modal for editing tags on content items
  */
-const TagEditModal = ({ open, onOpenChange, contentType, contentId, contentTitle = "", onTagsUpdated }) => {
+function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle = "", onTagsUpdated }) {
 	const [currentTags, setCurrentTags] = useState([])
 	const [isLoading, setIsLoading] = useState(false)
 	const [isSaving, setIsSaving] = useState(false)

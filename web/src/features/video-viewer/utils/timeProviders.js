@@ -101,8 +101,9 @@ export class YouTubeTimeProvider extends TimeProvider {
 			this.sampleCount = Math.min(this.sampleCount + 1, this.sampleWindow)
 
 			return currentTime
-		} catch (_error) {
+		} catch (error) {
 			// Player not ready yet
+			console.debug("YouTube player not ready:", error)
 			return this.cachedData.time
 		}
 	}
@@ -125,8 +126,9 @@ export class YouTubeTimeProvider extends TimeProvider {
 			const withinGrace = performance.now() - this.lastStateChangeTs < 500
 			derivedIsPlaying = this.isPlaying || playerIsPlaying || (withinGrace && state === 2)
 			this.isPlaying = derivedIsPlaying
-		} catch (_error) {
+		} catch (error) {
 			// Player not ready yet, use cached state
+			console.debug("Could not get player state:", error)
 		}
 
 		// If not actively playing, return the current time directly from player for precision
@@ -134,7 +136,8 @@ export class YouTubeTimeProvider extends TimeProvider {
 			try {
 				const time = player.getCurrentTime() || this.cachedData.time
 				return time
-			} catch (_error) {
+			} catch (error) {
+				console.debug("Could not get current time:", error)
 				return this.cachedData.time
 			}
 		}
@@ -181,7 +184,10 @@ export class YouTubeTimeProvider extends TimeProvider {
 				if (typeof player.getPlayerState === "function") playerState = player.getPlayerState()
 				if (typeof player.getCurrentTime === "function") playerTime = player.getCurrentTime()
 				if (typeof player.getPlaybackRate === "function") playerRate = player.getPlaybackRate()
-			} catch (_e) {}
+			} catch (e) {
+				// Silently ignore errors for debug info
+				console.debug("Debug info collection error:", e)
+			}
 		}
 		const elapsed = (now - this.lastRealTimestamp) / 1000
 		const predicted = this.lastRealTime + elapsed * (this.cachedData.rate || 1)

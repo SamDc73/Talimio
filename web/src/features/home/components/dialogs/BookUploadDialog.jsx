@@ -11,51 +11,20 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 	const [selectedFile, setSelectedFile] = useState(null)
 	const [bookTitle, setBookTitle] = useState("")
 	const [bookAuthor, setBookAuthor] = useState("")
-	const [isExtractingMetadata, setIsExtractingMetadata] = useState(false)
 	const [isUploadingBook, setIsUploadingBook] = useState(false)
 
-	const handleFileChange = async (e) => {
+	const handleFileChange = (e) => {
 		const file = e.target.files?.[0]
 		if (file) {
 			setSelectedFile(file)
-			setIsExtractingMetadata(true)
-
-			// Extract metadata from the file
-			try {
-				const formData = new FormData()
-				formData.append("file", file)
-
-				const response = await fetch("/api/v1/books/extract-metadata", {
-					method: "POST",
-					body: formData,
-				})
-
-				if (!response.ok) {
-					throw new Error(`HTTP error! status: ${response.status}`)
-				}
-
-				const metadata = await response.json()
-
-				if (metadata.title) {
-					setBookTitle(metadata.title)
-				}
-				if (metadata.author) {
-					setBookAuthor(metadata.author)
-				}
-			} catch (_error) {
-				toast({
-					title: "Error extracting metadata",
-					description: "Please enter the book details manually.",
-					variant: "destructive",
-				})
-			} finally {
-				setIsExtractingMetadata(false)
-			}
+			// Extract filename-based hints for title
+			const filename = file.name.replace(/\.(pdf|epub)$/i, "")
+			setBookTitle(filename)
 		}
 	}
 
 	const handleUpload = async () => {
-		if (!selectedFile || !bookTitle.trim() || !bookAuthor.trim()) return
+		if (!selectedFile || !bookTitle.trim()) return
 
 		setIsUploadingBook(true)
 		try {
@@ -135,35 +104,33 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 				)}
 				<SheetHeader>
 					<SheetTitle>Upload a Book</SheetTitle>
-					<SheetDescription>Upload a PDF to start learning from it.</SheetDescription>
+					<SheetDescription>Upload a PDF or EPUB to start learning from it.</SheetDescription>
 				</SheetHeader>
 				<div className="py-4">
 					<div className="grid gap-4">
 						<div className="grid gap-2">
-							<Label for="book-file">Book File</Label>
-							<Input id="book-file" type="file" accept=".pdf" onChange={handleFileChange} />
+							<Label htmlFor="book-file">Book File</Label>
+							<Input id="book-file" type="file" accept=".pdf,.epub" onChange={handleFileChange} />
 						</div>
 						{selectedFile && (
 							<div className="grid gap-2">
-								<Label for="book-title">Title</Label>
+								<Label htmlFor="book-title">Title</Label>
 								<Input
 									id="book-title"
 									value={bookTitle}
 									onChange={(e) => setBookTitle(e.target.value)}
 									placeholder="e.g. The Hitchhiker's Guide to the Galaxy"
-									disabled={isExtractingMetadata}
 								/>
 							</div>
 						)}
 						{selectedFile && (
 							<div className="grid gap-2">
-								<Label for="book-author">Author</Label>
+								<Label htmlFor="book-author">Author</Label>
 								<Input
 									id="book-author"
 									value={bookAuthor}
 									onChange={(e) => setBookAuthor(e.target.value)}
 									placeholder="e.g. Douglas Adams"
-									disabled={isExtractingMetadata}
 								/>
 							</div>
 						)}
@@ -173,7 +140,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 					<Button variant="outline" onClick={handleClose}>
 						Cancel
 					</Button>
-					<Button onClick={handleUpload} disabled={!selectedFile || !bookTitle || !bookAuthor}>
+					<Button onClick={handleUpload} disabled={!selectedFile || !bookTitle}>
 						Upload
 					</Button>
 				</SheetFooter>

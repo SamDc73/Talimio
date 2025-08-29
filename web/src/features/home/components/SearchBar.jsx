@@ -4,7 +4,7 @@ import { Button } from "@/components/button"
 import { Input } from "@/components/input"
 import FilterPopover from "./FilterPopover"
 
-const SearchBar = ({
+function SearchBar({
 	searchQuery,
 	setSearchQuery,
 	isGenerateMode,
@@ -27,7 +27,7 @@ const SearchBar = ({
 	setActiveSort,
 	sortDirection,
 	toggleSortDirection,
-}) => {
+}) {
 	return (
 		<motion.div
 			initial={{ opacity: 0, y: 20 }}

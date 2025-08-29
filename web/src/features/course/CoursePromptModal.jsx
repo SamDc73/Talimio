@@ -11,7 +11,7 @@ import { Button } from "../../components/ui/button"
 import { useCourseNavigation } from "../../utils/navigationUtils"
 import { useCourseService } from "./api/courseApi"
 
-const CoursePromptModal = ({ isOpen, onClose, onSuccess, defaultPrompt = "" }) => {
+function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "" }) {
 	const [prompt, setPrompt] = useState(defaultPrompt)
 	const [isGenerating, setIsGenerating] = useState(false)
 	const [error, setError] = useState("")

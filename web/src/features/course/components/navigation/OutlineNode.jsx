@@ -56,7 +56,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 	const progress = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0
 	const isModuleCompleted = progress === 100 && totalLessons > 0
 
-	const LessonStatusIndicator = ({ isCompleted, indexStr }) => {
+	function LessonStatusIndicator({ isCompleted, indexStr }) {
 		if (isCompleted) {
 			return <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
 		}
@@ -73,7 +73,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 		)
 	}
 
-	const LessonActionButton = ({ isCompleted, onClick }) => {
+	function LessonActionButton({ isCompleted, onClick }) {
 		const buttonStyle = isCompleted
 			? "text-white bg-emerald-500 hover:bg-emerald-600"
 			: "text-emerald-700 bg-emerald-100 hover:bg-emerald-200"
@@ -99,7 +99,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 		)
 	}
 
-	const LessonContent = ({ lesson, isCompleted, currentLessonIndexStr, idx, onLessonClick, moduleId }) => {
+	function LessonContent({ lesson, isCompleted, currentLessonIndexStr, idx, onLessonClick, moduleId }) {
 		return (
 			<div
 				className={cn(
@@ -139,7 +139,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 		)
 	}
 
-	const LessonItem = ({ lesson, idx, depth, parentIndexStr, onLessonClick, moduleId }) => {
+	function LessonItem({ lesson, idx, depth, parentIndexStr, onLessonClick, moduleId }) {
 		const currentLessonIndexStr = parentIndexStr ? `${parentIndexStr}.${idx + 1}` : `${idx + 1}`
 		const isCompleted = isItemCompleted(lesson)
 		const lessonKey = lesson.id ?? `${moduleId}-lesson-${depth}-${idx}`
@@ -170,7 +170,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 		)
 	}
 
-	const LessonList = ({ lessons, depth = 0, parentIndexStr = "", onLessonClick, moduleId }) => {
+	function LessonList({ lessons, depth = 0, parentIndexStr = "", onLessonClick, moduleId }) {
 		return (
 			<>
 				{(lessons || []).map((lesson, idx) => (

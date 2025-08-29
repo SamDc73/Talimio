@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { toast } from "@/hooks/use-toast"
 import { api } from "@/lib/apiClient"
 
-const RoadmapPromptModal = ({ open, onOpenChange, onRoadmapCreated }) => {
+function RoadmapPromptModal({ open, onOpenChange, onRoadmapCreated }) {
 	const [prompt, setPrompt] = useState("")
 	const [isGenerating, setIsGenerating] = useState(false)
 	const navigate = useNavigate()
