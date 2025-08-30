@@ -6,7 +6,9 @@ import { ChatSidebar, ChatSidebarProvider } from "./components/header/MainHeader
 import ProtectedRoute from "./components/ProtectedRoute"
 import { Toaster } from "./components/toaster"
 import { TooltipProvider } from "./components/tooltip"
-import { TextSelectionProvider } from "./components/ui/GlobalTextSelectionTooltip"
+import { GlobalHighlightDeletionTooltip } from "./components/ui/GlobalHighlightDeletionTooltip"
+import { GlobalTextSelectionTooltip } from "./components/ui/GlobalTextSelectionTooltip"
+import { TextSelectionProvider } from "./components/ui/text-selection-utils"
 import { AuthProvider } from "./contexts/AuthContext"
 import { ProgressProvider } from "./contexts/ProgressContext"
 import { ThemeProvider } from "./contexts/ThemeContext"
@@ -179,6 +181,8 @@ function AppContent() {
 						/>
 					</Routes>
 					<Toaster />
+					<GlobalTextSelectionTooltip />
+					<GlobalHighlightDeletionTooltip />
 				</ChatSidebarProvider>
 			</TextSelectionProvider>
 		</TooltipProvider>

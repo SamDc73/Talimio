@@ -1,6 +1,6 @@
 import { useContext } from "react"
 
-import { ChatSidebarContext } from "@/components/header/MainHeader"
+import { ChatSidebarContext } from "@/contexts/ChatSidebarContext"
 
 export function useChatSidebar() {
 	const context = useContext(ChatSidebarContext)

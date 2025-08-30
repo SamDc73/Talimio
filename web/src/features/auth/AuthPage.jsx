@@ -5,7 +5,7 @@ import LoginForm from "./LoginForm"
 import PasswordResetForm from "./PasswordResetForm"
 import SignupForm from "./SignupForm"
 
-const AuthPage = () => {
+function AuthPage() {
 	const [view, setView] = useState("login") // "login", "signup", "reset"
 	const [error, setError] = useState("")
 	const [successMessage, setSuccessMessage] = useState("")

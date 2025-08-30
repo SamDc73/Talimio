@@ -1,13 +1,13 @@
 import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react"
 import React, { useState } from "react"
 
-const LoginForm = ({
+function LoginForm({
 	onSignUp = () => {},
 	onForgotPassword = () => {},
 	onSubmit = async (_email, _password) => {
 		await new Promise((resolve) => setTimeout(resolve, 2000))
 	},
-}) => {
+}) {
 	const [email, setEmail] = useState("")
 	const [password, setPassword] = useState("")
 	const [showPassword, setShowPassword] = useState(false)

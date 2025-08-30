@@ -3,7 +3,7 @@ import { useEffect, useState } from "react"
 
 import { useAuth } from "@/hooks/useAuth"
 
-const PasswordResetForm = ({ onBack }) => {
+function PasswordResetForm({ onBack }) {
 	const [email, setEmail] = useState("")
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState("")

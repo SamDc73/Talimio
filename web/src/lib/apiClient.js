@@ -50,7 +50,8 @@ const refreshToken = async () => {
 
 		// Refresh failed - user needs to login again
 		return false
-	} catch (_error) {
+	} catch (error) {
+		console.error("Failed to refresh token:", error)
 		return false
 	} finally {
 		isRefreshing = false
@@ -63,7 +64,8 @@ const handleResponse = async (response, endpoint, retryRequest) => {
 		let errorData
 		try {
 			errorData = await response.json()
-		} catch (_e) {
+		} catch (e) {
+			console.debug("Failed to parse error response:", e)
 			errorData = { message: response.statusText }
 		}
 

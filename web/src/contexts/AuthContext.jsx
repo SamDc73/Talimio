@@ -6,7 +6,7 @@ import { securityMonitor } from "@/utils/securityConfig"
 
 export const AuthContext = createContext({})
 
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
 	const [user, setUser] = useState(null)
 	const [loading, setLoading] = useState(true)
 	const [isAuthenticated, setIsAuthenticated] = useState(false)

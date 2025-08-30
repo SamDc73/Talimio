@@ -85,7 +85,9 @@ async function request(url, options = {}) {
 	} catch (error) {
 		clearTimeout(timeout)
 		if (error.name === "AbortError") {
-			throw new Error(`Request timeout after ${REQUEST_TIMEOUT}ms`)
+			const timeoutError = new Error(`Request timeout after ${REQUEST_TIMEOUT}ms`)
+			timeoutError.name = "TimeoutError"
+			throw timeoutError
 		}
 		throw error
 	}
@@ -113,11 +115,15 @@ export async function fetchContentData(includeArchived = false) {
 
 		const data = await api.get(url)
 
+		// Debug logging if enabled
 		if (import.meta.env.VITE_DEBUG_MODE === "true") {
+			console.log("Fetched content data:", data)
 		}
 
 		return data.items.map((item) => {
+			// Debug logging for individual items if enabled
 			if (import.meta.env.VITE_DEBUG_MODE === "true") {
+				console.log("Processing item:", item)
 			}
 
 			const mappedItem = {
@@ -140,7 +146,7 @@ export async function fetchContentData(includeArchived = false) {
 				}),
 				...(item.type === "book" && {
 					author: item.author,
-					pageCount: item.pageCount,
+					pageCount: item.pageCount || item.page_count || item.totalPages,
 					currentPage: item.currentPage,
 					tocProgress: item.tocProgress || {},
 				}),
@@ -150,11 +156,14 @@ export async function fetchContentData(includeArchived = false) {
 				}),
 			}
 
+			// Debug logging for mapped item if enabled
 			if (import.meta.env.VITE_DEBUG_MODE === "true") {
+				console.log("Mapped item:", mappedItem)
 			}
 			return mappedItem
 		})
-	} catch (_error) {
+	} catch (error) {
+		console.error("Error fetching content data:", error)
 		return []
 	}
 }

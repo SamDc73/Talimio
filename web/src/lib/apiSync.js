@@ -48,20 +48,6 @@ export async function syncToAPI(resourceType, resourceId, data) {
 	syncTimers.set(syncKey, timer)
 }
 
-/**
- * Immediately sync without debouncing
- */
-export async function syncImmediately(resourceType, resourceId, data) {
-	const syncKey = `${resourceType}:${resourceId}`
-
-	// Cancel any pending debounced sync
-	if (syncTimers.has(syncKey)) {
-		clearTimeout(syncTimers.get(syncKey))
-		syncTimers.delete(syncKey)
-	}
-
-	return performSync(resourceType, resourceId, data)
-}
 
 /**
  * Perform the actual sync operation
@@ -354,77 +340,7 @@ function loadOfflineQueue() {
 	}
 }
 
-/**
- * Clear the offline sync queue (for debugging)
- */
-export function clearSyncQueue() {
-	offlineQueue.length = 0
-	localStorage.removeItem("syncQueue")
-	logger.info("Sync queue cleared")
-}
 
 // Load queue on startup
 loadOfflineQueue()
 
-/**
- * Batch sync multiple updates at once
- */
-export async function batchSync(updates) {
-	if (!isOnline) {
-		for (const { resourceType, resourceId, data } of updates) {
-			queueForOfflineSync(resourceType, resourceId, data)
-		}
-		return
-	}
-
-	try {
-		const response = await fetch("/api/v1/sync/batch", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({ updates }),
-		})
-
-		if (!response.ok) {
-			throw new Error(`Batch sync failed: ${response.statusText}`)
-		}
-
-		logger.info(`Batch synced ${updates.length} items`)
-		return await response.json()
-	} catch (error) {
-		logger.error("Batch sync failed:", error)
-
-		// Fall back to individual syncs
-		for (const update of updates) {
-			await performSync(update.resourceType, update.resourceId, update.data)
-		}
-	}
-}
-
-/**
- * Force sync all pending changes
- */
-export async function forceSyncAll() {
-	// Cancel all pending debounced syncs
-	for (const [key, timer] of syncTimers.entries()) {
-		clearTimeout(timer)
-		const [_resourceType, _resourceId] = key.split(":")
-		// We don't have the data here, so this is more for cleanup
-	}
-	syncTimers.clear()
-
-	// Process offline queue
-	await processOfflineQueue()
-}
-
-/**
- * Get sync status
- */
-export function getSyncStatus() {
-	return {
-		isOnline,
-		pendingSyncs: syncTimers.size,
-		queuedSyncs: offlineQueue.length,
-	}
-}

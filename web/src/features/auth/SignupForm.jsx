@@ -1,12 +1,12 @@
 import { Eye, EyeOff, Loader2, Lock, Mail, User } from "lucide-react"
 import React, { useState } from "react"
 
-const SignupForm = ({
+function SignupForm({
 	onSignIn = () => {},
 	onSubmit = async (_email, _password, _username) => {
 		await new Promise((resolve) => setTimeout(resolve, 2000))
 	},
-}) => {
+}) {
 	const [email, setEmail] = useState("")
 	const [password, setPassword] = useState("")
 	const [username, setUsername] = useState("")
