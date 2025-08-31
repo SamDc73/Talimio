@@ -6,11 +6,8 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-import ebooklib
 import fitz  # PyMuPDF
-from bs4 import BeautifulSoup
 from docx import Document
-from ebooklib import epub
 from goose3 import Goose
 
 from src.ai.constants import rag_config
@@ -105,22 +102,26 @@ class EPUBIngestor(BaseIngestor):
     async def process_epub(self, file_path: str) -> str:
         """Extract text from EPUB and convert to readable format."""
         try:
-            book = epub.read_epub(file_path)
+            # Open EPUB with PyMuPDF
+            doc = fitz.open(file_path)
             text_content = ""
 
-            # Extract title and author info
-            title = book.get_metadata("DC", "title")
-            if title:
-                text_content += f"Title: {title[0][0]}\n\n"
+            # Extract metadata if available
+            metadata = doc.metadata
+            if metadata:
+                if metadata.get("title"):
+                    text_content += f"Title: {metadata['title']}\n\n"
+                if metadata.get("author"):
+                    text_content += f"Author: {metadata['author']}\n\n"
 
-            # Extract text from all chapters
-            for item in book.get_items():
-                if item.get_type() == ebooklib.ITEM_DOCUMENT:
-                    soup = BeautifulSoup(item.get_content(), "html.parser")
-                    chapter_text = soup.get_text().strip()
-                    if chapter_text:
-                        text_content += chapter_text + "\n\n"
+            # Extract text from all pages
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                page_text = page.get_text().strip()
+                if page_text:
+                    text_content += page_text + "\n\n"
 
+            doc.close()
             return text_content
         except Exception as e:
             msg = f"Failed to process EPUB file: {e!s}"

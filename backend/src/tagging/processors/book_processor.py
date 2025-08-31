@@ -4,7 +4,6 @@ import logging
 from pathlib import Path
 
 import fitz  # PyMuPDF
-from ebooklib import epub
 
 from src.books.models import Book
 from src.config.settings import get_settings
@@ -126,12 +125,12 @@ class BookProcessor:
 
         return "\n\n".join(content_parts)
 
-    def _extract_epub_content(self, file_content: bytes, max_chapters: int = 3) -> str:
-        """Extract text from first few chapters of EPUB.
+    def _extract_epub_content(self, file_content: bytes, max_pages: int = 10) -> str:
+        """Extract text from first few pages of EPUB.
 
         Args:
             file_content: EPUB file content as bytes
-            max_chapters: Maximum number of chapters to extract (default: 3)
+            max_pages: Maximum number of pages to extract (default: 10)
 
         Returns
         -------
@@ -140,41 +139,32 @@ class BookProcessor:
         content_parts = []
 
         try:
-            # Create a temporary file to work with ebooklib
-            import tempfile
+            # Open EPUB directly from bytes with PyMuPDF
+            epub_document = fitz.open(stream=file_content, filetype="epub")
 
-            with tempfile.NamedTemporaryFile(suffix=".epub", delete=False) as tmp:
-                tmp.write(file_content)
-                tmp_path = tmp.name
+            if epub_document is None:
+                logger.warning("Failed to open EPUB document")
+                return "\n\n".join(content_parts)
 
-            try:
-                book = epub.read_epub(tmp_path)
+            # Extract metadata
+            metadata = epub_document.metadata
+            if metadata:
+                if metadata.get("title"):
+                    content_parts.append(f"Title: {metadata['title']}")
+                if metadata.get("author"):
+                    content_parts.append(f"Author: {metadata['author']}")
 
-                # Extract text from first few items
-                items_processed = 0
+            # Extract text from first few pages
+            pages_to_read = min(max_pages, epub_document.page_count)
 
-                for item in book.get_items():
-                    if items_processed >= max_chapters:
-                        break
+            for page_num in range(pages_to_read):
+                page = epub_document[page_num]
+                page_text = page.get_text().strip()
+                if page_text:
+                    # Limit text per page for tagging
+                    content_parts.append(page_text[:2000])
 
-                    if item.get_type() == 9:  # Document type
-                        try:
-                            content = item.get_content().decode("utf-8")
-                            # Basic HTML stripping (you might want to use BeautifulSoup for better results)
-                            import re
-
-                            text = re.sub(r"<[^>]+>", "", content)
-                            text = text.strip()
-
-                            if text and len(text) > 100:  # Skip very short sections
-                                content_parts.append(text[:2000])  # Limit each section
-                                items_processed += 1
-                        except Exception as e:
-                            logger.debug(f"Failed to extract text from PDF page: {e}")
-
-            finally:
-                # Clean up temporary file
-                Path(tmp_path).unlink(missing_ok=True)
+            epub_document.close()
 
         except Exception as e:
             logger.warning(f"Failed to extract EPUB content: {e}")
