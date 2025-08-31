@@ -115,15 +115,15 @@ export async function fetchContentData(includeArchived = false) {
 
 		const data = await api.get(url)
 
-		// Debug logging if enabled
-		if (import.meta.env.VITE_DEBUG_MODE === "true") {
-			console.log("Fetched content data:", data)
+		// Debug logging in development
+		if (import.meta.env.DEV) {
+			console.log("[API] Fetched content data:", data)
 		}
 
 		return data.items.map((item) => {
-			// Debug logging for individual items if enabled
-			if (import.meta.env.VITE_DEBUG_MODE === "true") {
-				console.log("Processing item:", item)
+			// Debug logging for individual items in development
+			if (import.meta.env.DEV) {
+				console.log("[API] Processing item:", item)
 			}
 
 			const mappedItem = {
@@ -156,9 +156,9 @@ export async function fetchContentData(includeArchived = false) {
 				}),
 			}
 
-			// Debug logging for mapped item if enabled
-			if (import.meta.env.VITE_DEBUG_MODE === "true") {
-				console.log("Mapped item:", mappedItem)
+			// Debug logging for mapped item in development
+			if (import.meta.env.DEV) {
+				console.log("[API] Mapped item:", mappedItem)
 			}
 			return mappedItem
 		})

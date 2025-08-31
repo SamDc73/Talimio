@@ -35,9 +35,11 @@ const queryClient = new QueryClient({
 	},
 })
 
-// Load auth test utilities in development
-if (import.meta.env.VITE_DEBUG_MODE === "true") {
-	import("./utils/authTest.js")
+// Load debug tools in development using Vite v7 best practices
+if (import.meta.env.DEV) {
+	import("./utils/debug.js").then(({ loadDebugTools }) => {
+		loadDebugTools()
+	})
 }
 
 function RoadmapPageWrapper() {
