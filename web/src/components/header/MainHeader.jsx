@@ -9,6 +9,8 @@ import {
 	Menu,
 	MessageSquare,
 	Mic,
+	Monitor,
+	Moon,
 	Paperclip,
 	Pin,
 	PinOff,
@@ -16,6 +18,7 @@ import {
 	Send,
 	Settings,
 	Sparkles,
+	Sun,
 	X,
 	Youtube,
 } from "lucide-react"
@@ -54,6 +57,7 @@ export function UserAvatarMenu() {
 	const navigate = useNavigate()
 	const [open, setOpen] = useState(false)
 	const [personalizationOpen, setPersonalizationOpen] = useState(false)
+	const { theme, setTheme } = useTheme()
 
 	const handleLogout = async () => {
 		await logout()
@@ -116,6 +120,52 @@ export function UserAvatarMenu() {
 							<Sparkles className="mr-2 h-4 w-4" />
 							<span>Personalize AI</span>
 						</DropdownMenuItem>
+					</DropdownMenuGroup>
+					<DropdownMenuSeparator />
+					<DropdownMenuGroup>
+						<div className="px-2 py-1.5">
+							<div className="flex items-center justify-between">
+								<span className="text-sm">Theme</span>
+								<div className="flex items-center gap-1 rounded-md border bg-muted p-1">
+									<button
+										onClick={() => setTheme("light")}
+										className={cn(
+											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
+											theme === "light"
+												? "bg-background text-foreground shadow-sm"
+												: "text-muted-foreground hover:text-foreground"
+										)}
+										aria-label="Light theme"
+									>
+										<Sun className="h-3 w-3" />
+									</button>
+									<button
+										onClick={() => setTheme("dark")}
+										className={cn(
+											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
+											theme === "dark"
+												? "bg-background text-foreground shadow-sm"
+												: "text-muted-foreground hover:text-foreground"
+										)}
+										aria-label="Dark theme"
+									>
+										<Moon className="h-3 w-3" />
+									</button>
+									<button
+										onClick={() => setTheme("system")}
+										className={cn(
+											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
+											theme === "system"
+												? "bg-background text-foreground shadow-sm"
+												: "text-muted-foreground hover:text-foreground"
+										)}
+										aria-label="System theme"
+									>
+										<Monitor className="h-3 w-3" />
+									</button>
+								</div>
+							</div>
+						</div>
 					</DropdownMenuGroup>
 					<DropdownMenuSeparator />
 					<DropdownMenuItem onClick={handleLogout}>
