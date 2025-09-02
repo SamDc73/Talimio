@@ -15,7 +15,7 @@ export { default as OutlineNode } from "./components/navigation/OutlineNode"
 export { useLessonViewer } from "./hooks/useLessonViewer"
 export { useOutlineData } from "./hooks/useOutlineData"
 export { useRoadmapData } from "./hooks/useRoadmapData"
-export { useRoadmapState } from "./hooks/useRoadmapState"
+export { useCourseData } from "./hooks/useCourseData"
 export { useTrackData } from "./hooks/useTrackData"
 
 // Course Views

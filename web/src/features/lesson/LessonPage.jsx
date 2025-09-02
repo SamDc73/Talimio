@@ -7,7 +7,7 @@ import { useCourseNavigation } from "../../utils/navigationUtils"
 import { fetchLessonById } from "../course/api/lessonsApi"
 import { LessonViewer } from "../course/components/LessonViewer"
 import { useOutlineData } from "../course/hooks/useOutlineData"
-import { useRoadmapState } from "../course/hooks/useRoadmapState"
+import { useCourseData } from "../course/hooks/useCourseData"
 
 /**
  * Standalone lesson page that loads a lesson by ID
@@ -28,10 +28,7 @@ export default function LessonPage() {
 	const courseId = lesson?.roadmap_id || lesson?.course_id
 
 	// Fetch course data and modules using the same hooks as CoursePage
-	const { isLoading: roadmapLoading, roadmap } = useRoadmapState(
-		courseId,
-		() => {} // No error handler needed for now
-	)
+	const { isLoading: roadmapLoading, roadmap } = useCourseData(courseId)
 	const { modules, isLoading: modulesLoading } = useOutlineData(courseId)
 
 	// Calculate loading states

@@ -12,6 +12,9 @@ const BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1"
 let isRefreshing = false
 let refreshSubscribers = []
 
+// In-flight request cache for deduplication
+const inFlightRequests = new Map()
+
 // Subscribe to token refresh completion
 const subscribeTokenRefresh = (callback) => {
 	refreshSubscribers.push(callback)
@@ -102,13 +105,40 @@ const handleResponse = async (response, endpoint, retryRequest) => {
 	return response.json()
 }
 
-// Security-enhanced request wrapper
+// Security-enhanced request wrapper with deduplication
 const secureRequest = async (method, endpoint, data = null, options = {}) => {
 	// Rate limiting check
 	if (!securityMonitor.trackApiRequest(endpoint)) {
 		throw new Error("Rate limit exceeded. Please try again later.")
 	}
 
+	// Create cache key for deduplication (GET requests only)
+	if (method === 'GET') {
+		const cacheKey = `${method}:${endpoint}:${JSON.stringify(options)}`
+		
+		// If request is already in flight, return the existing promise
+		if (inFlightRequests.has(cacheKey)) {
+			console.debug(`Deduplicating GET request: ${endpoint}`)
+			return inFlightRequests.get(cacheKey)
+		}
+		
+		// Create and cache the request promise
+		const requestPromise = executeRequest(method, endpoint, data, options)
+			.finally(() => {
+				// Clean up cache entry when request completes
+				inFlightRequests.delete(cacheKey)
+			})
+		
+		inFlightRequests.set(cacheKey, requestPromise)
+		return requestPromise
+	}
+
+	// For non-GET requests, execute directly
+	return executeRequest(method, endpoint, data, options)
+}
+
+// Extract the actual request execution logic
+const executeRequest = async (method, endpoint, data = null, options = {}) => {
 	const makeRequest = async () => {
 		const requestOptions = {
 			method,

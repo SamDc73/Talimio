@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { useLocation } from "react-router-dom"
 import { fetchLessonById } from "@/features/course/api/lessonsApi"
 import { useOutlineData } from "@/features/course/hooks/useOutlineData"
-import { useRoadmapState } from "@/features/course/hooks/useRoadmapState"
+import { useCourseData } from "@/features/course/hooks/useCourseData"
 
 /**
  * Hook to detect if we're in a course/lesson context and fetch necessary data.
@@ -67,10 +67,7 @@ export function useCourseContext() {
 	const showCourseLayout = courseId !== null
 
 	// Fetch course data - hooks handle null courseId internally
-	const { isLoading: roadmapLoading, roadmap } = useRoadmapState(
-		courseId,
-		() => {} // No error handler needed
-	)
+	const { isLoading: roadmapLoading, roadmap } = useCourseData(courseId)
 	const { modules, isLoading: modulesLoading } = useOutlineData(courseId)
 
 	const isLoading = courseId && (roadmapLoading || modulesLoading)

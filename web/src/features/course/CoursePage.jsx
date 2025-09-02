@@ -6,7 +6,7 @@ import { CourseSidebar } from "@/components/sidebar"
 import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
 import { useCourseNavigation } from "../../utils/navigationUtils"
 import { useOutlineData } from "./hooks/useOutlineData"
-import { useRoadmapState } from "./hooks/useRoadmapState"
+import { useCourseData } from "./hooks/useCourseData"
 import DocumentsView from "./views/DocumentsView"
 import LessonView from "./views/LessonView"
 import OutlineView from "./views/outline"
@@ -20,10 +20,7 @@ function CoursePage({ roadmapId: propRoadmapId, ref: _ref }) {
 	const { courseId, lessonId } = useParams()
 	const roadmapId = propRoadmapId || courseId // Support both props and URL params
 
-	const { isLoading: roadmapLoading, roadmap } = useRoadmapState(
-		roadmapId,
-		() => {} // No error handler needed for now
-	)
+	const { isLoading: roadmapLoading, roadmap } = useCourseData(roadmapId)
 	const { modules, isLoading: modulesLoading } = useOutlineData(roadmapId)
 	const isOpen = useAppStore(selectSidebarOpen)
 	const [mode, setMode] = useState("outline") // Default to outline view

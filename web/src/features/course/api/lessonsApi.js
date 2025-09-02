@@ -1,28 +1,21 @@
-const BASE = import.meta.env.VITE_API_BASE || "/api/v1"
+import { api } from "../../../lib/apiClient.js"
 
 // Removed findModuleIdForLesson as it's no longer needed in the simplified backend
 // where modules ARE lessons
 
 /**
  * Fetch a specific lesson by just lesson ID (optimized lookup)
+ * Uses centralized API client with deduplication for identical requests
  */
 export async function fetchLesson(courseId, lessonId) {
 	if (!courseId || !lessonId) {
 		throw new Error("Course ID and Lesson ID are required")
 	}
 
-	// In the simplified backend, modules ARE lessons, so we use the simplified endpoint
-	// that treats lesson_id as a module/node ID
-	const url = `${BASE}/courses/${courseId}/lessons/${lessonId}?generate=true`
-
-	const res = await fetch(url)
-	if (!res.ok) {
-		throw new Error(`Failed to fetch lesson: ${res.status}`)
-	}
-
-	const data = await res.json()
-
-	return data
+	// Use centralized API client with automatic deduplication
+	// Multiple concurrent calls to the same lesson will share the same promise
+	const endpoint = `/courses/${courseId}/lessons/${lessonId}?generate=true`
+	return api.get(endpoint)
 }
 
 /**
@@ -34,12 +27,8 @@ export async function fetchLessonById(lessonId) {
 		throw new Error("Lesson ID is required")
 	}
 
-	// Use the dedicated endpoint that finds lessons by ID alone
-	const res = await fetch(`${BASE}/content/lessons/${lessonId}?generate=true`)
-	if (!res.ok) {
-		throw new Error(`Failed to fetch lesson: ${res.status}`)
-	}
-	return res.json()
+	// Use centralized API client with deduplication
+	return api.get(`/content/lessons/${lessonId}?generate=true`)
 }
 
 /**
@@ -50,13 +39,10 @@ export async function fetchLessonFull(courseId, moduleId, lessonId) {
 		throw new Error("Course ID, Module ID, and Lesson ID are required")
 	}
 
+	// Use centralized API client with deduplication
 	// The backend endpoint accepts the module_id in the path but actually uses lesson_id
 	// In our simplified system, modules ARE lessons, so lesson_id is what matters
-	const res = await fetch(`${BASE}/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}?generate=true`)
-	if (!res.ok) {
-		throw new Error(`Failed to fetch lesson: ${res.status}`)
-	}
-	return res.json()
+	return api.get(`/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}?generate=true`)
 }
 
 /**
@@ -67,11 +53,8 @@ export async function fetchLessons(courseId, moduleId) {
 		throw new Error("Course ID and Module ID are required")
 	}
 
-	const res = await fetch(`${BASE}/courses/${courseId}/modules/${moduleId}/lessons`)
-	if (!res.ok) {
-		throw new Error(`Failed to fetch lessons: ${res.status}`)
-	}
-	return res.json()
+	// Use centralized API client with deduplication
+	return api.get(`/courses/${courseId}/modules/${moduleId}/lessons`)
 }
 
 /**
@@ -82,12 +65,6 @@ export async function generateLesson(courseId, moduleId) {
 		throw new Error("Course ID and Module ID are required")
 	}
 
-	const res = await fetch(`${BASE}/courses/${courseId}/modules/${moduleId}/lessons`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-	})
-	if (!res.ok) {
-		throw new Error(`Failed to generate lesson: ${res.status}`)
-	}
-	return res.json()
+	// Use centralized API client (POST requests are not deduplicated)
+	return api.post(`/courses/${courseId}/modules/${moduleId}/lessons`)
 }

@@ -6,7 +6,7 @@ import { CourseSidebar } from "@/components/sidebar"
 import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
 import { useCourseNavigation } from "../../../utils/navigationUtils"
 import { useOutlineData } from "../hooks/useOutlineData"
-import { useRoadmapState } from "../hooks/useRoadmapState"
+import { useCourseData } from "../hooks/useCourseData"
 import DocumentsView from "./DocumentsView"
 import LessonView from "./LessonView"
 // import MapView from "./map";  // Temporarily hidden
@@ -21,7 +21,7 @@ const _BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1"
  */
 const RoadmapFlow = forwardRef(({ roadmapId, onError }, _ref) => {
 	const { lessonId } = useParams() // Check if we're viewing a lesson
-	const { isLoading: roadmapLoading, roadmap } = useRoadmapState(roadmapId, onError)
+	const { isLoading: roadmapLoading, roadmap } = useCourseData(roadmapId)
 	const { modules, isLoading: modulesLoading } = useOutlineData(roadmapId)
 	const isOpen = useAppStore(selectSidebarOpen)
 	const [mode, setMode] = useState("outline") // Default to outline view
