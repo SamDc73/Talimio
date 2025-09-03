@@ -83,6 +83,7 @@ class BookResponse(BaseModel):
             return []
         if isinstance(v, str):
             import json
+
             try:
                 return json.loads(v)
             except (json.JSONDecodeError, TypeError):
@@ -90,6 +91,7 @@ class BookResponse(BaseModel):
         if isinstance(v, list):
             return v
         return []
+
     file_path: str = Field(alias="filePath")
     file_size: int = Field(alias="fileSize")
     total_pages: int | None = Field(None, alias="totalPages")
@@ -104,6 +106,7 @@ class BookResponse(BaseModel):
             return None
         if isinstance(v, str):
             import json
+
             try:
                 return json.loads(v)
             except (json.JSONDecodeError, TypeError):
@@ -111,6 +114,7 @@ class BookResponse(BaseModel):
         if isinstance(v, list):
             return v
         return None
+
     rag_processed_at: datetime | None = Field(None, alias="ragProcessedAt")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")

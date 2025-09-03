@@ -42,6 +42,19 @@ class UserPreferences(BaseModel):
     user_preferences: dict[str, Any] | None = None
 
 
+class PartialUserPreferences(BaseModel):
+    """Partial user preferences model for safe partial updates."""
+
+    theme: str | None = None
+    language: str | None = None
+    auto_play_videos: bool | None = None
+    default_zoom_level: float | None = None
+    sidebar_open: bool | None = None
+    sidebar_collapsed: bool | None = None
+    notifications_enabled: bool | None = None
+    user_preferences: dict[str, Any] | None = None
+
+
 class UserSettingsResponse(BaseModel):
     """Response schema for user settings."""
 
@@ -73,7 +86,7 @@ class ClearMemoryResponse(BaseModel):
 class PreferencesUpdateRequest(BaseModel):
     """Request schema for updating user preferences."""
 
-    preferences: UserPreferences
+    preferences: PartialUserPreferences
 
 
 class PreferencesUpdateResponse(BaseModel):

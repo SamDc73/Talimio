@@ -48,6 +48,10 @@ def _extract_token_from_request(request: Request) -> str | None:
 
 def _validate_supabase_token(token: str) -> UUID:
     """Validate Supabase token and return user ID."""
+    if not supabase:
+        logger.error("Supabase client not initialized")
+        raise InvalidTokenError
+
     try:
         # Supabase SDK expects just the token, not "Bearer " + token
         response = supabase.auth.get_user(token)

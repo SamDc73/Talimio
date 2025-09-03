@@ -312,7 +312,9 @@ class BookQueryService:
             "in_progress_books": books_with_progress - completed_books,
             "not_started_books": total_books - books_with_progress,
             "average_progress": round(float(avg_progress), 2) if avg_progress else 0,
-            "completion_rate": round((completed_books / total_books) * 100, 2) if total_books and total_books > 0 else 0,
+            "completion_rate": round((completed_books / total_books) * 100, 2)
+            if total_books and total_books > 0
+            else 0,
         }
 
 

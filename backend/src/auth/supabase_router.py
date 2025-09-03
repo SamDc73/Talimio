@@ -29,7 +29,7 @@ async def get_current_user(request: Request) -> UserResponse:
     """
     user = await supabase_auth.require_user(request)
 
-    return UserResponse(id=str(user.id), email=user.email or "", username=user.name)
+    return UserResponse(id=str(user.id), email=user.email or "", username=user.username)
 
 
 @router.get("/verify")

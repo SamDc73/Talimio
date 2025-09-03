@@ -1,4 +1,4 @@
-"""Book content service extending BaseContentService."""
+"""Book content service for book-specific operations."""
 
 import json
 import logging
@@ -9,7 +9,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book
-from src.core.base_service import BaseContentService
 from src.database.session import async_session_maker
 from src.storage.factory import get_storage_provider
 
@@ -17,18 +16,13 @@ from src.storage.factory import get_storage_provider
 logger = logging.getLogger(__name__)
 
 
-class BookContentService(BaseContentService):
-    """Book service with shared content behavior."""
+class BookContentService:
+    """Book service handling book-specific content operations."""
 
     def __init__(self, session: AsyncSession | None = None) -> None:
-        super().__init__()
         self.session = session
 
-    def _get_content_type(self) -> str:
-        """Return the content type for this service."""
-        return "book"
-
-    async def _do_create(self, data: dict, user_id: UUID) -> Book:
+    async def create_book(self, data: dict, user_id: UUID) -> Book:
         """Create a new book."""
         async with async_session_maker() as session:
             # Convert tags to JSON if present
@@ -45,16 +39,16 @@ class BookContentService(BaseContentService):
             logger.info(f"Created book {book.id} for user {user_id}")
             return book
 
-    async def _do_update(self, content_id: UUID, data: dict, user_id: UUID) -> Book:
+    async def update_book(self, book_id: UUID, data: dict, user_id: UUID) -> Book:
         """Update an existing book."""
         async with async_session_maker() as session:
             # Get the book
-            query = select(Book).where(Book.id == content_id, Book.user_id == user_id)
+            query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
             result = await session.execute(query)
             book = result.scalar_one_or_none()
 
             if not book:
-                msg = f"Book {content_id} not found"
+                msg = f"Book {book_id} not found"
                 raise ValueError(msg)
 
             # Update fields
@@ -72,11 +66,11 @@ class BookContentService(BaseContentService):
             logger.info(f"Updated book {book.id}")
             return book
 
-    async def _do_delete(self, content_id: UUID, user_id: UUID) -> bool:
+    async def delete_book(self, book_id: UUID, user_id: UUID) -> bool:
         """Delete a book."""
         async with async_session_maker() as session:
             # Get the book
-            query = select(Book).where(Book.id == content_id, Book.user_id == user_id)
+            query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
             result = await session.execute(query)
             book = result.scalar_one_or_none()
 
@@ -102,29 +96,7 @@ class BookContentService(BaseContentService):
             except Exception as e:
                 # Log error but don't fail the deletion
                 # The database record is already deleted
-                logger.exception(f"Failed to delete file from storage for book {content_id}: {e}")
+                logger.exception(f"Failed to delete file from storage for book {book_id}: {e}")
 
-            logger.info(f"Deleted book {content_id}")
+            logger.info(f"Deleted book {book_id}")
             return True
-
-    def _needs_ai_processing(self, content: Book) -> bool:
-        """Check if book needs AI processing after creation."""
-        # Books need AI processing for RAG indexing
-        return content.rag_status != "completed"
-
-    def _needs_ai_reprocessing(self, content: Book, updated_data: dict) -> bool:
-        """Check if book needs AI reprocessing after update."""
-        # Reprocess if content changes that affect RAG
-        _ = content
-        significant_fields = {"file_path", "title", "author", "description"}
-        return any(field in updated_data for field in significant_fields)
-
-    async def _update_progress(self, content_id: UUID, user_id: UUID, status: str) -> None:
-        """Update progress tracking for book."""
-        _ = user_id
-        try:
-            # For books, we track reading progress separately
-            # This is just for creation status
-            logger.info(f"Book {content_id} status: {status}")
-        except Exception as e:
-            logger.exception(f"Failed to update book progress: {e}")

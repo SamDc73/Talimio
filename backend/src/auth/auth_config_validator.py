@@ -1,6 +1,7 @@
 """Auth configuration validator to prevent frontend/backend mismatches."""
 
 import logging
+from typing import Any
 
 from src.config.settings import get_settings
 
@@ -16,7 +17,7 @@ class AuthConfigValidator:
     """Validates authentication configuration consistency."""
 
     @staticmethod
-    def validate_backend_config() -> dict[str, any]:  # noqa: C901
+    def validate_backend_config() -> dict[str, Any]:  # noqa: C901
         """Validate backend authentication configuration.
 
         Returns
@@ -133,7 +134,7 @@ class AuthConfigValidator:
             raise
 
     @staticmethod
-    def check_frontend_backend_compatibility() -> dict[str, any]:
+    def check_frontend_backend_compatibility() -> dict[str, Any]:
         """Check for common frontend/backend auth mismatches.
 
         Note: This checks based on typical patterns and environment variables.

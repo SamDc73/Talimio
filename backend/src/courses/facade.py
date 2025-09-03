@@ -11,7 +11,7 @@ from typing import Any
 from uuid import UUID
 
 from src.ai.ai_service import get_ai_service
-from src.core.interfaces import ContentFacade
+from src.progress.protocols import ContentFacade
 
 from .services.course_content_service import CourseContentService
 from .services.course_progress_service import CourseProgressService

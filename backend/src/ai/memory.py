@@ -91,10 +91,14 @@ class MemoryWrapper:
         - Handles connection failures gracefully
         - Sets autocommit=True for Supabase compatibility
         """
-        from src.core.db_connections import get_db_manager
-
-        db_manager = get_db_manager()
-        connection_string = db_manager.get_psycopg_url()
+        # Convert DATABASE_URL to psycopg-compatible format if needed
+        database_url = self.settings.DATABASE_URL
+        if database_url.startswith("postgresql+psycopg://"):
+            connection_string = database_url.replace("postgresql+psycopg://", "postgresql://")
+        elif database_url.startswith("postgresql://"):
+            connection_string = database_url
+        else:
+            raise ValueError(f"Unsupported DATABASE_URL format: {database_url}")
 
         # Create custom pool class for Supabase transaction pooler
         class SupabaseConnectionPool(ConnectionPool):

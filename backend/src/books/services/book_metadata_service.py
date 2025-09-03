@@ -38,6 +38,7 @@ class BookMetadata:
         self.table_of_contents = table_of_contents
         self.file_type = file_type
 
+
 class BookMetadataService:
     """Service for extracting metadata from book files."""
 
@@ -141,7 +142,6 @@ class BookMetadataService:
             logger.warning(f"Failed to extract EPUB metadata: {e}")
 
         return metadata
-
 
     def _extract_document_basic_fields(self, metadata: BookMetadata, doc_metadata: dict) -> None:
         """Extract basic fields from document metadata (works for both PDF and EPUB)."""

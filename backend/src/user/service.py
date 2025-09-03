@@ -11,11 +11,10 @@ from src.user.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
     ClearMemoryResponse,
     CustomInstructionsResponse,
+    PartialUserPreferences,
     PreferencesUpdateResponse,
-    UserCreate,
     UserPreferences,
     UserSettingsResponse,
-    UserUpdate,
 )
 
 
@@ -46,6 +45,18 @@ async def _save_user_preferences(user_id: UUID, preferences: UserPreferences, db
     try:
         user_uuid = user_id
 
+        # CRITICAL: Check user exists first to prevent foreign key violations
+        from src.user.models import User
+
+        user_check = await db_session.execute(
+            select(User).where(User.id == user_uuid)
+        )
+        if not user_check.scalar_one_or_none():
+            logger.error(f"User {user_uuid} not found in database - cannot save preferences")
+            # Don't silently fail - this is a real error
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail=f"User {user_uuid} not found")
+
         # Check if preferences already exist
         stmt = select(UserPreferencesModel).where(UserPreferencesModel.user_id == user_uuid)
         result = await db_session.execute(stmt)
@@ -64,35 +75,22 @@ async def _save_user_preferences(user_id: UUID, preferences: UserPreferences, db
         await db_session.commit()
         return True
 
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        await db_session.rollback()
+        raise
     except Exception as e:
         logger.exception(f"Failed to save preferences for user {user_id}: {e}")
         await db_session.rollback()
+        # Check for foreign key violations
+        if "foreign key violation" in str(e).lower() or "23503" in str(e):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
         return False
 
 
-async def create_user(user: UserCreate) -> dict:  # noqa: ARG001
-    """Create a new user."""
-    # For now, we'll just return a dummy user ID
-    from uuid import uuid4
-    return {"id": uuid4()}
-
-
-async def get_user(user_id: UUID) -> dict:
-    """Get a user by ID."""
-    # For now, we'll just return a dummy user
-    return {"id": user_id, "email": "test@example.com", "name": "Test User"}
-
-
-async def update_user(user_id: UUID, user: UserUpdate) -> dict:
-    """Update a user."""
-    # For now, we'll just return the updated user
-    return {"id": user_id, "email": user.email, "name": user.name}
-
-
-async def delete_user(user_id: UUID) -> None:
-    """Delete a user."""
-    # For now, we'll just log the deletion
-    logger.info(f"User {user_id} deleted.")
+# User CRUD operations removed - Supabase auth handles user management
+# Use auth.users table directly for user operations
 
 
 async def get_user_settings(user_id: UUID, db_session: AsyncSession) -> UserSettingsResponse:
@@ -136,7 +134,9 @@ async def get_user_settings(user_id: UUID, db_session: AsyncSession) -> UserSett
         return UserSettingsResponse(custom_instructions="", memory_count=0, preferences=UserPreferences())
 
 
-async def update_custom_instructions(user_id: UUID, instructions: str, db_session: AsyncSession) -> CustomInstructionsResponse:
+async def update_custom_instructions(
+    user_id: UUID, instructions: str, db_session: AsyncSession
+) -> CustomInstructionsResponse:
     """
     Update custom instructions for a user.
 
@@ -149,6 +149,8 @@ async def update_custom_instructions(user_id: UUID, instructions: str, db_sessio
     -------
         CustomInstructionsResponse: Updated instructions and success status
     """
+    from fastapi import HTTPException
+
     try:
         # Load current preferences
         preferences = await _load_user_preferences(user_id, db_session)
@@ -158,7 +160,7 @@ async def update_custom_instructions(user_id: UUID, instructions: str, db_sessio
             preferences.user_preferences = {}
         preferences.user_preferences["custom_instructions"] = instructions
 
-        # Save back to database
+        # Save back to database - will raise HTTPException if user doesn't exist
         success = await _save_user_preferences(user_id, preferences, db_session)
 
         if success:
@@ -180,6 +182,9 @@ async def update_custom_instructions(user_id: UUID, instructions: str, db_sessio
 
         return CustomInstructionsResponse(instructions=instructions, updated=success)
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (user not found, etc)
+        raise
     except Exception as e:
         logger.exception(f"Error updating custom instructions for {user_id}: {e}")
         return CustomInstructionsResponse(instructions=instructions, updated=False)
@@ -245,26 +250,54 @@ async def delete_user_memory(user_id: UUID, memory_id: str) -> bool:
 
 
 async def update_user_preferences(
-    user_id: UUID, preferences: UserPreferences, db_session: AsyncSession
+    user_id: UUID, partial_preferences: PartialUserPreferences, db_session: AsyncSession
 ) -> PreferencesUpdateResponse:
     """
-    Update user preferences.
+    Update user preferences with partial updates.
 
     Args:
         user_id: Unique identifier for the user
-        preferences: New preferences to save
+        partial_preferences: Partial preferences to update
         db_session: Database session for saving preferences
 
     Returns
     -------
         PreferencesUpdateResponse: Updated preferences and success status
     """
+    from fastapi import HTTPException
+
     try:
-        success = await _save_user_preferences(user_id, preferences, db_session)
-        return PreferencesUpdateResponse(preferences=preferences, updated=success)
+        # Load current preferences
+        current_preferences = await _load_user_preferences(user_id, db_session)
+
+        # Merge partial updates into current preferences
+        updates = partial_preferences.model_dump(exclude_unset=True)
+        merged_dict = current_preferences.model_dump()
+
+        # Deep merge for nested user_preferences dict
+        if "user_preferences" in updates and updates["user_preferences"] is not None:
+            if merged_dict.get("user_preferences") is None:
+                merged_dict["user_preferences"] = {}
+            merged_dict["user_preferences"].update(updates["user_preferences"])
+            del updates["user_preferences"]
+
+        # Update other top-level fields
+        merged_dict.update(updates)
+
+        # Create new preferences object with merged data
+        merged_preferences = UserPreferences(**merged_dict)
+
+        # Save merged preferences - will raise HTTPException if user doesn't exist
+        success = await _save_user_preferences(user_id, merged_preferences, db_session)
+        return PreferencesUpdateResponse(preferences=merged_preferences, updated=success)
+    except HTTPException:
+        # Re-raise HTTP exceptions (user not found, etc)
+        raise
     except Exception as e:
         logger.exception(f"Error updating preferences for user {user_id}: {e}")
-        return PreferencesUpdateResponse(preferences=preferences, updated=False)
+        # Return current preferences on error
+        current_prefs = await _load_user_preferences(user_id, db_session)
+        return PreferencesUpdateResponse(preferences=current_prefs, updated=False)
 
 
 async def clear_user_memory(user_id: UUID) -> ClearMemoryResponse:

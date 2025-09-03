@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID
 
 from src.ai.ai_service import get_ai_service
-from src.core.interfaces import ContentFacade
+from src.progress.protocols import ContentFacade
 
 from .service import VideoService
 from .services.video_content_service import VideoContentService

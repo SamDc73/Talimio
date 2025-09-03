@@ -42,6 +42,7 @@ api_rate_limit = limiter.limit("100/minute")  # General API calls
 
 # Rate limit dependencies for router-level application
 
+
 def create_rate_limit_dependency(
     limit_decorator: Callable[[Callable], Callable],
 ) -> Callable[[Request], Awaitable[None]]:
@@ -49,10 +50,13 @@ def create_rate_limit_dependency(
 
     This allows applying rate limits at router level without modifying functions.
     """
+
     @limit_decorator
     async def rate_limited_dependency(request: Request) -> None:
         """Apply rate limiting to protect router endpoints."""
+
     return rate_limited_dependency
+
 
 # Pre-configured dependencies for common use cases
 books_rate_limit = create_rate_limit_dependency(api_rate_limit)

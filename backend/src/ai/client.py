@@ -21,8 +21,8 @@ from src.ai.prompts import (
 )
 from src.ai.rag.service import RAGService
 from src.config.settings import get_settings
-from src.core.exceptions import DomainError, ValidationError
 from src.database.session import async_session_maker
+from src.exceptions import DomainError, ValidationError
 
 
 logger = logging.getLogger(__name__)

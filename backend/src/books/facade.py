@@ -349,7 +349,9 @@ class BooksFacade:
             return {"error": "Failed to mark chapter complete", "success": False}
 
     # AI operations
-    async def ask_book_question(self, book_id: UUID, user_id: UUID, question: str, page: int | None = None) -> dict[str, Any] | None:
+    async def ask_book_question(
+        self, book_id: UUID, user_id: UUID, question: str, page: int | None = None
+    ) -> dict[str, Any] | None:
         """Ask a question about the book content."""
         try:
             return await self._ai_service.process_content(
@@ -364,7 +366,9 @@ class BooksFacade:
             logger.exception("Error answering question for book %s", book_id)
             raise
 
-    async def summarize_book(self, book_id: UUID, user_id: UUID, page_range: tuple[int, int] | None = None) -> dict[str, Any] | None:
+    async def summarize_book(
+        self, book_id: UUID, user_id: UUID, page_range: tuple[int, int] | None = None
+    ) -> dict[str, Any] | None:
         """Generate a summary of the book."""
         try:
             return await self._ai_service.process_content(

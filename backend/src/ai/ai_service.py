@@ -13,8 +13,8 @@ from src.ai.prompts import (
     ASSISTANT_CHAT_SYSTEM_PROMPT,
 )
 from src.ai.rag.service import RAGService
-from src.core.exceptions import DomainError
 from src.database.session import async_session_maker
+from src.exceptions import DomainError
 
 
 logger = logging.getLogger(__name__)

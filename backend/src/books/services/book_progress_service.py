@@ -332,7 +332,9 @@ class BookProgressService:
             # Get progress from unified service
             progress_service = ProgressService(session)
             progress_data = await progress_service.get_single_progress(user_id, book_id)
-            toc_progress = progress_data.metadata.get("toc_progress", {}) if progress_data and progress_data.metadata else {}
+            toc_progress = (
+                progress_data.metadata.get("toc_progress", {}) if progress_data and progress_data.metadata else {}
+            )
 
             # Calculate section-based progress
             total_sections, completed_sections = self._count_toc_progress(toc, toc_progress)
@@ -465,7 +467,9 @@ class BookProgressService:
 
         return completed_pages
 
-    def _get_chapter_page_range(self, item: dict, siblings: list[dict], index: int, total_pages: int) -> tuple[int, int]:
+    def _get_chapter_page_range(
+        self, item: dict, siblings: list[dict], index: int, total_pages: int
+    ) -> tuple[int, int]:
         """Get the start and end page for a chapter."""
         start_page = int(item.get("page", 0))
 
@@ -487,4 +491,3 @@ class BookProgressService:
             if not (end <= processed_start or start >= processed_end):
                 return True
         return False
-

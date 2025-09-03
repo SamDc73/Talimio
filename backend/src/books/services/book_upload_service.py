@@ -21,9 +21,7 @@ class BookUploadService:
         self, book_data: BookCreate, file: UploadFile, background_tasks: BackgroundTasks, user_id: UUID
     ) -> BookResponse:
         """Deprecate this service path; use BooksFacade.upload_book instead."""
-        logger.warning(
-            "BookUploadService.create_book was called; this path is deprecated. Use BooksFacade.upload_book"
-        )
+        logger.warning("BookUploadService.create_book was called; this path is deprecated. Use BooksFacade.upload_book")
         # Touch arguments to avoid unused-argument lints while keeping the original signature intact
         _ = (book_data, file, background_tasks, user_id)
         raise HTTPException(

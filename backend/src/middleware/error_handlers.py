@@ -11,14 +11,14 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from fastapi import HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from psycopg.errors import (
     CheckViolation as CheckViolationError,
     ForeignKeyViolation as ForeignKeyViolationError,
     NotNullViolation as NotNullViolationError,
     UniqueViolation as UniqueViolationError,
 )
-from fastapi import HTTPException, Request, status
-from fastapi.responses import JSONResponse
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.exc import (
     IntegrityError,

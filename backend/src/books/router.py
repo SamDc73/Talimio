@@ -37,11 +37,7 @@ logger = logging.getLogger(__name__)
 # Create facade instance
 books_facade = BooksFacade()
 
-router = APIRouter(
-    prefix="/api/v1/books",
-    tags=["books"],
-    dependencies=[Depends(books_rate_limit)]
-)
+router = APIRouter(prefix="/api/v1/books", tags=["books"], dependencies=[Depends(books_rate_limit)])
 
 
 def _build_progress_dict(progress_data: BookProgressUpdate) -> dict:
@@ -291,7 +287,9 @@ async def create_book_endpoint(
         # Extract metadata if needed
         metadata_service = BookMetadataService()
         metadata = metadata_service.extract_metadata(file_content, f".{file_extension}")
-        logger.info(f"Extracted metadata - title: {metadata.title}, author: {metadata.author}, pages: {metadata.total_pages}")
+        logger.info(
+            f"Extracted metadata - title: {metadata.title}, author: {metadata.author}, pages: {metadata.total_pages}"
+        )
 
         # Calculate file hash
         import hashlib
@@ -500,7 +498,7 @@ async def get_book_presigned_url(book_id: UUID, user_id: UserId, db: DbSession) 
         "url": url,
         "expires_in": 3600,
         "content_type": "application/pdf" if book.file_type == "pdf" else "application/epub+zip",
-        "filename": f"{book.title}.{book.file_type}"
+        "filename": f"{book.title}.{book.file_type}",
     }
 
 
@@ -525,15 +523,12 @@ async def _handle_local_file(url: str, book: Book) -> FileResponse:
             "Cache-Control": "private, max-age=3600",
             "Accept-Ranges": "bytes",
             "Content-Type": media_type,
-        }
+        },
     )
 
 
 async def _handle_range_request(
-    url: str,
-    range_header: str,
-    media_type: str,
-    stream_func: Callable[[], AsyncGenerator[bytes, None]]
+    url: str, range_header: str, media_type: str, stream_func: Callable[[], AsyncGenerator[bytes, None]]
 ) -> StreamingResponse | None:
     """Handle range requests for partial content."""
     async with httpx.AsyncClient(timeout=10.0) as client:
@@ -542,6 +537,7 @@ async def _handle_range_request(
             content_length = head_response.headers.get("content-length")
 
             import re
+
             range_match = re.match(r"bytes=(\d+)-(\d*)", range_header)
             if range_match and content_length:
                 start = int(range_match.group(1))
@@ -554,12 +550,7 @@ async def _handle_range_request(
                     "Cache-Control": "private, max-age=3600",
                 }
 
-                return StreamingResponse(
-                    stream_func(),
-                    status_code=206,
-                    media_type=media_type,
-                    headers=headers
-                )
+                return StreamingResponse(stream_func(), status_code=206, media_type=media_type, headers=headers)
         except Exception as e:
             logger.warning(f"Range request failed: {e}")
     return None
@@ -567,10 +558,7 @@ async def _handle_range_request(
 
 @router.get("/{book_id}/content", response_model=None)
 async def stream_book_content(
-    book_id: UUID,
-    request: Request,
-    user_id: UserId,
-    db: DbSession
+    book_id: UUID, request: Request, user_id: UserId, db: DbSession
 ) -> StreamingResponse | FileResponse:
     """Stream book PDF content through backend to avoid CORS issues.
 
@@ -642,7 +630,7 @@ async def stream_book_content(
             "Accept-Ranges": "bytes",
             "Cache-Control": "private, max-age=3600",
             "Content-Disposition": f'inline; filename="{book.title}.{book.file_type}"',
-        }
+        },
     )
 
 
@@ -729,9 +717,7 @@ async def get_book_rag_status(book_id: UUID, user_id: UserId) -> RAGStatusRespon
     from src.database.session import async_session_maker
 
     async with async_session_maker() as session:
-        result = await session.execute(
-            select(Book).where(Book.id == book_id, Book.user_id == user_id)
-        )
+        result = await session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
         book = result.scalar_one_or_none()
 
         if not book:

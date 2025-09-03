@@ -7,23 +7,29 @@ eliminating the need to pass user_id in the URL.
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth import UserId
 from src.database.session import get_db_session
+from src.middleware.security import api_rate_limit
 from src.user.schemas import (
     ClearMemoryResponse,
     CustomInstructionsRequest,
     CustomInstructionsResponse,
+    PreferencesUpdateRequest,
+    PreferencesUpdateResponse,
+    UserPreferences,
     UserSettingsResponse,
 )
 from src.user.service import (
+    _load_user_preferences,
     clear_user_memory,
     delete_user_memory,
     get_user_memories,
     get_user_settings,
     update_custom_instructions,
+    update_user_preferences,
 )
 
 
@@ -54,9 +60,7 @@ async def get_current_user_settings(
 
 @router.put("/settings/instructions")
 async def update_current_user_instructions(
-    user_id: UserId,
-    request: CustomInstructionsRequest,
-    db: Annotated[AsyncSession, Depends(get_db_session)]
+    user_id: UserId, request: CustomInstructionsRequest, db: Annotated[AsyncSession, Depends(get_db_session)]
 ) -> CustomInstructionsResponse:
     """
     Update custom instructions for AI personalization for current user.
@@ -75,7 +79,6 @@ async def update_current_user_instructions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update instructions: {e}"
         ) from e
-
 
 
 @router.delete("/memory")
@@ -138,4 +141,57 @@ async def delete_current_user_memory(user_id: UserId, memory_id: str) -> dict[st
         logger.exception(f"Error in delete_current_user_memory for user {user_id}, memory {memory_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete memory: {e}"
+        ) from e
+
+
+@router.put("/preferences")
+@api_rate_limit
+async def update_current_user_preferences(
+    request: Request,  # Required for rate limiting decorator
+    user_id: UserId,
+    preferences_request: PreferencesUpdateRequest,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> PreferencesUpdateResponse:
+    """
+    Update preferences for the current user with partial updates.
+
+    Accepts partial preference updates - only specified fields will be changed.
+    Unspecified fields will retain their current values.
+
+    Args:
+        preferences_request: Partial preferences to update
+
+    Returns
+    -------
+        PreferencesUpdateResponse: Updated complete preferences and success status
+    """
+    try:
+        return await update_user_preferences(user_id, preferences_request.preferences, db)
+    except Exception as e:
+        logger.exception(f"Error in update_current_user_preferences for user {user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update preferences: {e}"
+        ) from e
+
+
+@router.get("/preferences")
+@api_rate_limit
+async def get_current_user_preferences(
+    request: Request,  # Required for rate limiting decorator
+    user_id: UserId,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> UserPreferences:
+    """
+    Get current user preferences.
+
+    Returns
+    -------
+        UserPreferences: Current user preferences
+    """
+    try:
+        return await _load_user_preferences(user_id, db)
+    except Exception as e:
+        logger.exception(f"Error in get_current_user_preferences for user {user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get preferences: {e}"
         ) from e

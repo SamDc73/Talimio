@@ -1,4 +1,4 @@
-"""Course content service extending BaseContentService."""
+"""Course content service for course-specific operations."""
 
 import json
 import logging
@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.base_service import BaseContentService
+from src.ai.ai_service import AIService
 from src.courses.models import Course
 from src.database.session import async_session_maker
 
@@ -16,19 +16,14 @@ from src.database.session import async_session_maker
 logger = logging.getLogger(__name__)
 
 
-class CourseContentService(BaseContentService):
-    """Course service with shared content behavior."""
+class CourseContentService:
+    """Course service handling course-specific content operations."""
 
     def __init__(self, session: AsyncSession | None = None) -> None:
-        super().__init__()
         self.session = session
-        # AI service is already initialized in BaseContentService
+        self.ai_service = AIService()
 
-    def _get_content_type(self) -> str:
-        """Return the content type for this service."""
-        return "course"
-
-    async def _do_create(self, data: dict, user_id: UUID) -> Course:
+    async def create_course(self, data: dict, user_id: UUID) -> Course:
         """Create a new course."""
         async with async_session_maker() as session:
             # Process AI prompt if present
@@ -60,16 +55,16 @@ class CourseContentService(BaseContentService):
 
             return course
 
-    async def _do_update(self, content_id: UUID, data: dict, user_id: UUID) -> Course:
+    async def update_course(self, course_id: UUID, data: dict, user_id: UUID) -> Course:
         """Update an existing course."""
         async with async_session_maker() as session:
             # Get the course
-            query = select(Course).where(Course.id == content_id, Course.user_id == user_id)
+            query = select(Course).where(Course.id == course_id, Course.user_id == user_id)
             result = await session.execute(query)
             course = result.scalar_one_or_none()
 
             if not course:
-                error_msg = f"Course {content_id} not found"
+                error_msg = f"Course {course_id} not found"
                 raise ValueError(error_msg)
 
             # Update fields
@@ -87,11 +82,11 @@ class CourseContentService(BaseContentService):
             logger.info(f"Updated course {course.id}")
             return course
 
-    async def _do_delete(self, content_id: UUID, user_id: UUID) -> bool:
+    async def delete_course(self, course_id: UUID, user_id: UUID) -> bool:
         """Delete a course."""
         async with async_session_maker() as session:
             # Get the course
-            query = select(Course).where(Course.id == content_id, Course.user_id == user_id)
+            query = select(Course).where(Course.id == course_id, Course.user_id == user_id)
             result = await session.execute(query)
             course = result.scalar_one_or_none()
 
@@ -102,27 +97,8 @@ class CourseContentService(BaseContentService):
             await session.delete(course)
             await session.commit()
 
-            logger.info(f"Deleted course {content_id}")
+            logger.info(f"Deleted course {course_id}")
             return True
-
-    def _needs_ai_processing(self, content: Course) -> bool:
-        """Check if course needs AI processing after creation."""
-        # Courses need AI processing for content generation and RAG indexing
-        return content.rag_enabled
-
-    def _needs_ai_reprocessing(self, _content: Course, updated_data: dict) -> bool:
-        """Check if course needs AI reprocessing after update."""
-        # Reprocess if content structure changes
-        return any(field in updated_data for field in ("description",))
-
-    async def _update_progress(self, content_id: UUID, _user_id: UUID, status: str) -> None:
-        """Update progress tracking for course."""
-        try:
-            # For courses, we track lesson progress separately
-            # This is just for creation status
-            logger.info(f"Course {content_id} status: {status}")
-        except Exception as e:
-            logger.exception(f"Failed to update course progress: {e}")
 
     async def _auto_tag_course(self, session: AsyncSession, course: Course, user_id: UUID) -> list[str]:
         """Generate tags for a course using its content preview and store them."""

@@ -12,10 +12,10 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from src.core.interfaces import ProgressTracker
 from src.courses.models import Course, Lesson
 from src.database.session import async_session_maker
 from src.progress.models import ProgressUpdate
+from src.progress.protocols import ProgressTracker
 from src.progress.service import ProgressService
 
 

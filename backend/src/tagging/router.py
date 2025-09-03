@@ -8,7 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # AI imports removed - using facades instead
-from src.core.user_context import UserContext, get_user_context
+from src.auth.user_context import UserContext, get_user_context
 from src.database.session import get_db_session
 
 from .schemas import (

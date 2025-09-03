@@ -39,7 +39,21 @@ from .books.models import Book, BookProgress  # noqa: F401
 from .books.router import router as books_router
 from .config.settings import get_settings
 from .content.router import router as content_router
-from .core.error_handlers import (
+from .courses.models import (  # noqa: F401
+    Lesson,
+    LessonProgress as Progress,
+    Node,
+    Roadmap,
+    RoadmapDocument,
+)
+from .database.session import engine
+from .exceptions import ResourceNotFoundError, ValidationError as CustomValidationError
+from .flashcards.models import FlashcardCard, FlashcardDeck, FlashcardReview  # noqa: F401
+from .flashcards.router import router as flashcards_router
+from .highlights.models import Highlight  # noqa: F401
+from .highlights.router import router as highlights_router
+from .middleware.auth_error_handler import AuthErrorMiddleware
+from .middleware.error_handlers import (
     AuthorizationError,
     ErrorCategory,
     ErrorCode,
@@ -54,20 +68,6 @@ from .core.error_handlers import (
     handle_validation_errors,
     log_error_context,
 )
-from .core.exceptions import ResourceNotFoundError, ValidationError as CustomValidationError
-from .courses.models import (  # noqa: F401
-    Lesson,
-    LessonProgress as Progress,
-    Node,
-    Roadmap,
-    RoadmapDocument,
-)
-from .database.session import engine
-from .flashcards.models import FlashcardCard, FlashcardDeck, FlashcardReview  # noqa: F401
-from .flashcards.router import router as flashcards_router
-from .highlights.models import Highlight  # noqa: F401
-from .highlights.router import router as highlights_router
-from .middleware.auth_error_handler import AuthErrorMiddleware
 from .middleware.security import SimpleSecurityMiddleware, limiter
 from .progress.router import router as progress_router
 from .tagging.models import Tag, TagAssociation  # noqa: F401
@@ -124,7 +124,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Validate authentication configuration
     try:
-        from src.core.auth_config_validator import validate_auth_on_startup
+        from src.auth.auth_config_validator import validate_auth_on_startup
 
         validate_auth_on_startup()
     except Exception as e:
@@ -256,7 +256,7 @@ def create_app() -> FastAPI:
                     MissingTokenError,
                     TokenExpiredError,
                 )
-                from src.core.error_handlers import handle_authentication_errors
+                from src.middleware.error_handlers import handle_authentication_errors
 
                 # Log the error for debugging
                 logger.error(f"Auth error in middleware for {path}: {type(e).__name__}: {e}")

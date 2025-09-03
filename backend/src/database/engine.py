@@ -20,7 +20,7 @@ if use_pgbouncer:
         echo=settings.DEBUG,
         connect_args={
             "prepare_threshold": None,  # Disable prepared statements for PgBouncer
-        }
+        },
     )
 else:
     # Without PgBouncer, use QueuePool with connection pooling
