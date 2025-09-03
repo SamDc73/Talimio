@@ -43,7 +43,6 @@ class CourseBase(BaseModel):
 
     title: str = Field(..., description="Course title")
     description: str = Field("", description="Course description")
-    skill_level: str = Field("beginner", description="Course skill level")
     tags: str = Field("[]", description="Course tags as JSON string")
     archived: bool = Field(default=False, description="Whether the course is archived")
     rag_enabled: bool = Field(default=False, description="Whether RAG is enabled for this course")
@@ -60,7 +59,6 @@ class CourseUpdate(BaseModel):
 
     title: str | None = Field(None, description="Course title")
     description: str | None = Field(None, description="Course description")
-    skill_level: str | None = Field(None, description="Course skill level")
     tags: str | None = Field(None, description="Course tags as JSON string")
     archived: bool | None = Field(None, description="Whether the course is archived")
     rag_enabled: bool | None = Field(None, description="Whether RAG is enabled for this course")

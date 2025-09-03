@@ -11,8 +11,3 @@ export const MODULE_STATUS = {
 	COMPLETED: "completed",
 }
 
-export const SKILL_LEVELS = {
-	BEGINNER: "beginner",
-	INTERMEDIATE: "intermediate",
-	ADVANCED: "advanced",
-}

@@ -40,7 +40,6 @@ Create a comprehensive, expertly-structured learning roadmap that will guide lea
 
 # Input Parameters
 User's Learning Topic: {user_prompt}
-Skill Level: {skill_level}
 Additional Context: {description}
 
 # Requirements
@@ -109,7 +108,7 @@ CRITICAL: Return ONLY the JSON object above. No other text, no markdown, no expl
 # Quality Standards
 - Topics should be specific and actionable (not vague concepts)
 - Descriptions must clearly state learning outcomes
-- Time estimates should be realistic for the target skill level
+- Time estimates should be realistic for learners
 - Subtopics should comprehensively cover the parent topic
 - Each subtopic MUST be an object with title, description, and estimatedHours fields
 """

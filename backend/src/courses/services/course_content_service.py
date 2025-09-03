@@ -113,7 +113,7 @@ class CourseContentService(BaseContentService):
     def _needs_ai_reprocessing(self, _content: Course, updated_data: dict) -> bool:
         """Check if course needs AI reprocessing after update."""
         # Reprocess if content structure changes
-        return any(field in updated_data for field in ("description", "skill_level"))
+        return any(field in updated_data for field in ("description",))
 
     async def _update_progress(self, content_id: UUID, _user_id: UUID, status: str) -> None:
         """Update progress tracking for course."""
@@ -184,7 +184,6 @@ class CourseContentService(BaseContentService):
             return {
                 "title": course_data.get("title", f"Course: {prompt[:50]}..."),
                 "description": course_data.get("description", f"A course about {prompt}"),
-                "skill_level": course_data.get("skill_level", "beginner"),
                 "tags": course_data.get("tags", []),
                 "rag_enabled": False,  # Default to false for new courses
                 "archived": False,
@@ -199,7 +198,6 @@ class CourseContentService(BaseContentService):
         return {
             "title": f"Course: {prompt[:50]}..." if len(prompt) > 50 else f"Course: {prompt}",
             "description": f"A course about {prompt}",
-            "skill_level": "beginner",
             "tags": [],
             "rag_enabled": False,
             "archived": False,

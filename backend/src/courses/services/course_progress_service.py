@@ -63,7 +63,7 @@ class CourseProgressService(ProgressTracker):
                     "total_lessons": total_lessons,
                     "quiz_scores": {},
                     "learning_patterns": {},
-                    "difficulty_preference": course.skill_level or "beginner",
+                    "difficulty_preference": "beginner",
                     "pacing_preference": "normal",
                     "last_accessed_at": None,
                     "created_at": None,
@@ -92,7 +92,7 @@ class CourseProgressService(ProgressTracker):
                 "total_lessons": total_lessons,
                 "quiz_scores": metadata.get("quiz_scores", {}),
                 "learning_patterns": metadata.get("learning_patterns", {}),
-                "difficulty_preference": metadata.get("difficulty_preference", course.skill_level or "beginner"),
+                "difficulty_preference": metadata.get("difficulty_preference", "beginner"),
                 "pacing_preference": metadata.get("pacing_preference", "normal"),
                 "last_accessed_at": progress_data.updated_at,
                 "created_at": progress_data.created_at,
@@ -228,7 +228,7 @@ class CourseProgressService(ProgressTracker):
             "total_lessons": total_lessons,
             "quiz_scores": metadata.get("quiz_scores", {}),
             "learning_patterns": metadata.get("learning_patterns", {}),
-            "difficulty_preference": metadata.get("difficulty_preference", course.skill_level or "beginner"),
+            "difficulty_preference": metadata.get("difficulty_preference", "beginner"),
             "pacing_preference": metadata.get("pacing_preference", "normal"),
             "last_accessed_at": updated.updated_at,
             "created_at": updated.created_at,
@@ -371,7 +371,7 @@ class CourseProgressService(ProgressTracker):
                 "quiz_average_score": quiz_average_score,
                 "time_spent_minutes": total_time_spent // 60,  # Convert seconds to minutes
                 "learning_velocity": learning_velocity,
-                "difficulty_preference": metadata.get("difficulty_preference", course.skill_level or "beginner"),
+                "difficulty_preference": metadata.get("difficulty_preference", "beginner"),
                 "pacing_preference": metadata.get("pacing_preference", "normal"),
             }
 

@@ -120,7 +120,6 @@ class CoursesFacade(ContentFacade):
             # Build course data combining provided preferences and required fields
             data: dict[str, Any] = {**(preferences or {})}
             data["topic"] = topic
-            data.setdefault("skill_level", "beginner")
             # Ensure course is marked as AI-generated
             data.setdefault("is_ai_generated", True)
 

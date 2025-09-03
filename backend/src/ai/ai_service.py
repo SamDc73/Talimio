@@ -242,7 +242,6 @@ class AIService:
         self,
         user_id: UUID,
         topic: str,
-        skill_level: str,
         description: str = "",
         use_tools: bool = False,
         context: dict | None = None,
@@ -258,7 +257,6 @@ class AIService:
         # The roadmap generation will automatically integrate memory and store the response
         roadmap = await self._model_manager.generate_roadmap_content(
             user_prompt=topic,
-            skill_level=skill_level,
             description=description,
             use_tools=use_tools,
             user_id=user_id,

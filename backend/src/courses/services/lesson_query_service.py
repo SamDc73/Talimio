@@ -149,7 +149,6 @@ class LessonQueryService:
             context = {
                 "title": lesson.title,  # This is what _extract_lesson_metadata expects
                 "description": lesson.description or "",
-                "skill_level": course.skill_level or "beginner",
                 "roadmap_id": str(course.id) if course.id else None,
                 "course_title": course.title,
                 "course_description": course.description,

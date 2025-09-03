@@ -340,7 +340,6 @@ class CourseContextStrategy(ContextRetriever):
             "course_id": str(resource_id),
             "course_title": course.title,
             "course_description": course.description,
-            "skill_level": course.skill_level,
             "rag_enabled": course.rag_enabled,
         }
 
@@ -349,7 +348,6 @@ class CourseContextStrategy(ContextRetriever):
         content_parts = []
         content_parts.append(f"=== COURSE: {course.title} ===")
         content_parts.append(f"Description: {course.description}")
-        content_parts.append(f"Skill Level: {course.skill_level}")
         content_parts.append("")
         return content_parts
 

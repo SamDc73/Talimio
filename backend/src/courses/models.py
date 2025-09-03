@@ -11,7 +11,6 @@ from sqlalchemy import (
     TIMESTAMP,
     Boolean,
     DateTime,
-    Enum,
     Float,
     ForeignKey,
     Integer,
@@ -34,10 +33,6 @@ class Course(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False)
-    skill_level: Mapped[str] = mapped_column(
-        Enum("beginner", "intermediate", "advanced", name="skill_level_enum"),
-        nullable=False,
-    )
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of tags
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     rag_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # RAG integration flag

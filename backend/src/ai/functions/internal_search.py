@@ -41,7 +41,6 @@ async def _search_roadmaps(session: Any, topic: str, user_id: UUID | None = None
             "id": str(roadmap.id),
             "title": roadmap.title,
             "description": roadmap.description,
-            "skill_level": roadmap.skill_level,
             "created_at": roadmap.created_at.isoformat() if roadmap.created_at else None,
             "node_count": len(roadmap.nodes) if roadmap.nodes else 0,
             "type": "course",

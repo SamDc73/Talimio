@@ -789,7 +789,7 @@ Please use this context to personalize your response appropriately."""
                 interaction_type=interaction_type,
             )
 
-    async def _enhance_description_with_tools(self, user_prompt: str, skill_level: str, description: str) -> str:
+    async def _enhance_description_with_tools(self, user_prompt: str, description: str) -> str:
         """Enhance description by discovering content with function calling."""
         self._logger.info("Using function calling to discover content for roadmap generation")
         from src.ai.functions import get_roadmap_functions
@@ -805,7 +805,7 @@ Please use this context to personalize your response appropriately."""
             },
             {
                 "role": "user",
-                "content": f"Create a comprehensive learning roadmap for '{user_prompt}' at {skill_level} level. Search for existing courses, YouTube videos, articles, and other resources to inform your curriculum design.",
+                "content": f"Create a comprehensive learning roadmap for '{user_prompt}'. Search for existing courses, YouTube videos, articles, and other resources to inform your curriculum design.",
             },
         ]
 
@@ -920,13 +920,12 @@ Please use this context to personalize your response appropriately."""
             raise ValidationError(msg)
 
     async def _get_roadmap_response(
-        self, user_prompt: str, skill_level: str, description: str, user_id: UUID | None = None
+        self, user_prompt: str, description: str, user_id: UUID | None = None
     ) -> dict[str, Any] | list[Any]:
         """Get roadmap response from AI model with memory integration.
 
         Args:
             user_prompt: The user's learning topic/prompt
-            skill_level: The skill level
             description: Additional context
             user_id: User ID for memory context
 
@@ -940,7 +939,6 @@ Please use this context to personalize your response appropriately."""
         """
         prompt = ROADMAP_GENERATION_PROMPT.format(
             user_prompt=user_prompt,
-            skill_level=skill_level,
             description=description,
         )
 
@@ -994,7 +992,6 @@ Please use this context to personalize your response appropriately."""
     async def generate_roadmap_content(
         self,
         user_prompt: str,
-        skill_level: str,
         description: str = "",
         *,
         min_core_topics: int = 3,  # Let AI decide the optimal number
@@ -1008,7 +1005,6 @@ Please use this context to personalize your response appropriately."""
 
         Args:
             user_prompt: The user's learning topic/prompt
-            skill_level: The skill level (beginner, intermediate, advanced)
             description: Additional context for the roadmap
             min_core_topics: Minimum number of core topics (default: 3, AI will optimize)
             max_core_topics: Maximum number of core topics (default: 20, flexible)
@@ -1028,11 +1024,11 @@ Please use this context to personalize your response appropriately."""
 
         # Enhance description with tools if enabled
         if use_tools and self._supports_function_calling():
-            description = await self._enhance_description_with_tools(user_prompt, skill_level, description)
+            description = await self._enhance_description_with_tools(user_prompt, description)
 
         try:
             # Get response from AI - now with memory integration!
-            response = await self._get_roadmap_response(user_prompt, skill_level, description, user_id)
+            response = await self._get_roadmap_response(user_prompt, description, user_id)
 
             # Process and return the response
             return self._process_roadmap_response(response)
@@ -1167,7 +1163,6 @@ def _extract_lesson_metadata(node_meta: dict[str, Any]) -> dict[str, Any]:
     return {
         "node_title": node_meta.get("title", ""),
         "node_description": node_meta.get("description", ""),
-        "skill_level": node_meta.get("skill_level", "beginner"),
         "roadmap_id": node_meta.get("roadmap_id"),
         "course_outline": node_meta.get("course_outline", []),
         "current_module_index": node_meta.get("current_module_index", -1),
@@ -1178,7 +1173,7 @@ def _extract_lesson_metadata(node_meta: dict[str, Any]) -> dict[str, Any]:
 
 def _build_course_context(metadata: dict[str, Any]) -> str:
     """Build course context string from metadata."""
-    content_info = f"{metadata['node_title']} - {metadata['node_description']} (Skill Level: {metadata['skill_level']})"
+    content_info = f"{metadata['node_title']} - {metadata['node_description']}"
 
     # Add original user preferences if available
     if metadata["original_user_prompt"]:
@@ -1516,9 +1511,7 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
             {"role": "user", "content": prompt},
         ]
 
-        logging.info(
-            "Generating lesson for '%s' with skill level '%s'", metadata["node_title"], metadata["skill_level"]
-        )
+        logging.info("Generating lesson for '%s'", metadata["node_title"])
 
         # Analyze content preferences
         content_preferences = _analyze_content_preferences(

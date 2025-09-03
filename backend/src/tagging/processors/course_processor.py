@@ -102,9 +102,6 @@ class CourseProcessor:
         if course.description:
             parts.append(f"Description: {course.description}")
 
-        if course.skill_level:
-            parts.append(f"Skill Level: {course.skill_level}")
-
         self._add_existing_tags(course, parts)
 
     def _add_existing_tags(self, course: Course, parts: list[str]) -> None:
