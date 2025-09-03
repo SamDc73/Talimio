@@ -14,8 +14,8 @@ from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT, RAG_ASSISTANT_PROMPT
 from src.ai.rag.retriever import ContextAwareRetriever
 from src.ai.rag.schemas import SearchResult
 from src.ai.rag.service import RAGService
+from src.courses.facade import CoursesFacade
 from src.courses.schemas import CourseCreate
-from src.courses.services.course_service import CourseService
 from src.database.session import async_session_maker
 
 from .context import ContextData, ContextManager
@@ -114,8 +114,13 @@ async def trigger_course_generation(message: str, user_id: UUID | None = None) -
             if user_id is None:
                 raise ValueError("user_id is required for course generation")
 
-            course_service = CourseService(session, user_id)
-            course = await course_service.create_course(course_request)
+            course_service = CoursesFacade()
+            result = await course_service.create_course(course_request.model_dump(), user_id)
+
+            if not result.get("success"):
+                raise Exception(result.get("error", "Failed to create course"))
+
+            course = result["course"]
 
             return {
                 "action": "course_generated",

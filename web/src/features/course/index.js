@@ -11,11 +11,11 @@ export { ContentRenderer } from "./components/ContentRenderer"
 export { LessonViewer } from "./components/LessonViewer"
 export { MDXRenderer } from "./components/MDXRenderer"
 export { default as OutlineNode } from "./components/navigation/OutlineNode"
+export { useCourseData } from "./hooks/useCourseData"
 // Course hooks
 export { useLessonViewer } from "./hooks/useLessonViewer"
 export { useOutlineData } from "./hooks/useOutlineData"
 export { useRoadmapData } from "./hooks/useRoadmapData"
-export { useCourseData } from "./hooks/useCourseData"
 export { useTrackData } from "./hooks/useTrackData"
 
 // Course Views

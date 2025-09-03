@@ -5,6 +5,7 @@ Single entry point for all course/roadmap-related operations.
 Coordinates internal course services and provides stable API for other modules.
 """
 
+import json
 import logging
 from typing import Any
 from uuid import UUID
@@ -13,19 +14,8 @@ from src.ai.ai_service import get_ai_service
 from src.core.interfaces import ContentFacade
 
 from .services.course_content_service import CourseContentService
-from .services.course_creation_service import CourseCreationService
-from .services.course_management_service import CourseManagementService
-from .services.course_orchestrator_service import CourseOrchestratorService
 from .services.course_progress_service import CourseProgressService
 from .services.course_query_service import CourseQueryService
-from .services.course_response_builder import CourseResponseBuilder
-from .services.course_service import CourseService
-from .services.course_update_service import CourseUpdateService
-from .services.lesson_creation_service import LessonCreationService
-from .services.lesson_deletion_service import LessonDeletionService
-from .services.lesson_query_service import LessonQueryService
-from .services.lesson_update_service import LessonUpdateService
-from .services.progress_tracking_service import ProgressTrackingService
 
 
 logger = logging.getLogger(__name__)
@@ -35,31 +25,15 @@ class CoursesFacade(ContentFacade):
     """
     Single entry point for all course/roadmap operations.
 
-    Coordinates complex course services, manages course lifecycle,
-    and provides stable API that won't break when internal implementation changes.
+    Coordinates internal course services, publishes events, and provides
+    stable API that won't break when internal implementation changes.
     """
 
     def __init__(self) -> None:
-        # Internal services - not exposed to outside modules
-        self._course_service = CourseService()
+        # Don't initialize with sessions - create on-demand
         self._content_service = CourseContentService()  # New base service
-        self._creation_service = CourseCreationService()
-        self._management_service = CourseManagementService()
-        self._orchestrator_service = CourseOrchestratorService()
-        self._progress_service = CourseProgressService()
-        self._query_service = CourseQueryService()
-        self._response_builder = CourseResponseBuilder()
-        self._update_service = CourseUpdateService()
+        self._progress_service = CourseProgressService()  # Handles lesson progress tracking
         self._ai_service = get_ai_service()
-
-        # Lesson services
-        self._lesson_creation_service = LessonCreationService()
-        self._lesson_deletion_service = LessonDeletionService()
-        self._lesson_query_service = LessonQueryService()
-        self._lesson_update_service = LessonUpdateService()
-
-        # Progress tracking
-        self._progress_tracking_service = ProgressTrackingService()
 
     async def get_content_with_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
         """
@@ -73,27 +47,40 @@ class CoursesFacade(ContentFacade):
         """
         Get complete course information with progress.
 
-        Coordinates multiple services to provide comprehensive course data.
+        Coordinates course service and progress service to provide comprehensive data.
         """
         try:
-            # Get core course data
-            course = await self._course_service.get_course(course_id)
+            # Get course information using query service
+            from src.database.session import async_session_maker
+
+            async with async_session_maker() as session:
+                query_service = CourseQueryService(session, user_id)
+                course_response = await query_service.get_course(course_id, user_id)
+                course = course_response.model_dump() if course_response else None
+
             if not course:
-                return {"error": "Course not found"}
+                return {"error": "Course not found", "success": False}
 
-            # Get lessons and progress concurrently
-            lessons = await self._lesson_query_service.get_course_lessons(course_id)
+            # Get progress data from progress service
             progress = await self._progress_service.get_progress(course_id, user_id)
-            overall_progress = await self._progress_tracking_service.calculate_course_progress(course_id, user_id)
+            completion_percentage = progress.get("completion_percentage", 0)
+            completed_lessons = progress.get("completed_lessons", {})
+            current_lesson = progress.get("current_lesson", "")
+            total_lessons = progress.get("total_lessons", 0)
 
-            # Build comprehensive response
-            return await self._response_builder.build_course_response(
-                course=course, lessons=lessons, progress=progress, overall_progress=overall_progress, user_id=user_id
-            )
+            return {
+                "course": course,
+                "progress": progress,
+                "completion_percentage": completion_percentage,
+                "current_lesson": current_lesson,
+                "total_lessons": total_lessons,
+                "completed_lessons": completed_lessons,
+                "success": True,
+            }
 
-        except Exception as e:
-            logger.exception(f"Error getting course {course_id} for user {user_id}: {e}")
-            return {"error": "Failed to retrieve course"}
+        except Exception:
+            logger.exception("Error getting course %s for user %s", course_id, user_id)
+            return {"error": "Failed to retrieve course", "success": False}
 
     async def create_content(self, content_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
         """
@@ -105,43 +92,46 @@ class CoursesFacade(ContentFacade):
 
     async def create_course(self, course_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
         """
-        Create new course/roadmap.
+        Create new course entry.
 
-        Handles course creation through the content service.
+        Handles course creation and coordinates all related operations.
         """
         try:
-            # Use the new content service which handles tags, progress, and AI processing
+            # Use the content service which handles tags, progress, and AI processing
             course = await self._content_service.create_content(course_data, user_id)
 
             return {"course": course, "success": True}
 
-        except Exception as e:
-            logger.exception(f"Error creating course for user {user_id}: {e}")
+        except Exception:
+            logger.exception("Error creating course for user %s", user_id)
             return {"error": "Failed to create course", "success": False}
+
+
+    # NOTE: Auto-tagging removed - now handled by CourseContentService via BaseContentService pipeline
+    # Tagging happens automatically during course creation/updates, no manual intervention needed
 
     async def generate_ai_course(self, topic: str, preferences: dict[str, Any], user_id: UUID) -> dict[str, Any]:
         """
-        Generate AI-powered course/roadmap.
+        Generate AI-powered course from topic.
 
-        Handles AI course generation through creation service.
+        Handles AI course generation and coordinates related operations.
         """
         try:
-            # Generate course using AI
-            generation_result = await self._creation_service.generate_ai_course(topic, preferences, user_id)
+            # Build course data combining provided preferences and required fields
+            data: dict[str, Any] = {**(preferences or {})}
+            data["topic"] = topic
+            data.setdefault("skill_level", "beginner")
+            # Ensure course is marked as AI-generated
+            data.setdefault("is_ai_generated", True)
 
-            if not generation_result.get("success"):
-                return generation_result
+            # Use the content service which handles tags, progress, and AI processing automatically
+            course = await self._content_service.create_content(data, user_id)
 
-            course_id = generation_result["course"]["id"]
-
-            # Initialize progress tracking
-            await self._progress_service.initialize_progress(course_id, user_id)
-
-            return generation_result
+            return {"course": course, "success": True}
 
         except Exception as e:
-            logger.exception(f"Error generating AI course for user {user_id}: {e}")
-            return {"error": "Failed to generate course", "success": False}
+            logger.exception(f"Error generating AI course {topic} for user {user_id}: {e}")
+            return {"error": f"Failed to generate course: {e!s}", "success": False}
 
     async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """
@@ -157,23 +147,32 @@ class CoursesFacade(ContentFacade):
         """
         Update course progress.
 
-        Handles progress updates and milestone tracking for courses.
+        Handles progress updates, lesson tracking, and completion detection.
         """
         try:
-            # Update progress through tracking service ONLY
-            # This service already handles all progress updates including unified progress
-            updated_progress = await self._progress_tracking_service.update_course_progress(
-                course_id, user_id, progress_data
-            )
-
-            # REMOVED duplicate call to self._progress_service.update_progress()
-            # The progress_tracking_service already handles this
-
+            updated_progress = await self._progress_service.update_progress(course_id, user_id, progress_data)
             return {"progress": updated_progress, "success": True}
 
         except Exception as e:
             logger.exception(f"Error updating progress for course {course_id}: {e}")
-            return {"error": "Failed to update progress", "success": False}
+            return {"error": f"Failed to update progress: {e!s}", "success": False}
+
+
+    async def update_course(self, course_id: UUID, user_id: UUID, update_data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Update course metadata.
+
+        Updates course information and coordinates any needed reprocessing.
+        """
+        try:
+            # Update through content service which handles tags and reprocessing
+            course = await self._content_service.update_content(course_id, user_id, update_data)
+
+            return {"course": course, "success": True}
+
+        except Exception:
+            logger.exception("Error updating course %s", course_id)
+            return {"error": "Failed to update course", "success": False}
 
     async def delete_content(self, content_id: UUID, user_id: UUID) -> bool:
         """
@@ -193,23 +192,28 @@ class CoursesFacade(ContentFacade):
             # Use content service which handles cleanup of tags and associated data
             return await self._content_service.delete_content(course_id, user_id)
 
-        except Exception as e:
-            logger.exception(f"Error deleting course {course_id}: {e}")
+        except Exception:
+            logger.exception("Error deleting course %s", course_id)
             return False
 
     async def search_courses(self, query: str, user_id: UUID, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Search user's courses.
 
-        Provides unified search across course content.
+        Provides unified search across course content and metadata.
         """
         try:
-            results = await self._query_service.search_courses(query, user_id, filters or {})
+            from src.database.session import async_session_maker
+
+            async with async_session_maker() as session:
+                query_service = CourseQueryService(session, user_id)
+                limit = (filters or {}).get("limit", 20)
+                results, total = await query_service.list_courses(per_page=limit, search=query)
 
             return {"results": results, "success": True}
 
-        except Exception as e:
-            logger.exception(f"Error searching courses for user {user_id}: {e}")
+        except Exception:
+            logger.exception("Error searching courses for user %s", user_id)
             return {"error": "Search failed", "success": False}
 
     async def get_user_courses(self, user_id: UUID, include_progress: bool = True) -> dict[str, Any]:
@@ -219,181 +223,119 @@ class CoursesFacade(ContentFacade):
         Optionally includes progress information.
         """
         try:
-            courses = await self._course_service.get_user_courses(user_id)
+            from src.courses.services.course_response_builder import CourseResponseBuilder
+            from src.database.session import async_session_maker
 
-            if include_progress:
-                # Add progress information to each course
-                for course in courses:
-                    progress = await self._progress_service.get_progress(course.id, user_id)
-                    course.progress = progress
+            async with async_session_maker() as session:
+                # Fetch courses for this user
+                from sqlalchemy import select
 
-            return {"courses": courses, "success": True}
+                from src.courses.models import Course
+
+                result = await session.execute(
+                    select(Course).where(Course.user_id == user_id).order_by(Course.created_at.desc())
+                )
+                courses = list(result.scalars().all())
+
+                # Convert to response objects for consistent schema
+                course_responses = CourseResponseBuilder.build_course_list(courses)
+
+                # Convert to dict format and optionally add progress
+                course_dicts: list[dict[str, Any]] = []
+                for cr in course_responses:
+                    cd = cr.model_dump()
+                    if include_progress:
+                        try:
+                            # Get actual progress data from progress service
+                            progress = await self._progress_service.get_progress(cr.id, user_id)
+                            cd["progress"] = progress
+                        except Exception as e:
+                            logger.warning(f"Failed to get progress for course {cr.id}: {e}")
+                            cd["progress"] = {"completion_percentage": 0, "completed_lessons": {}}
+                    course_dicts.append(cd)
+
+            return {"courses": course_dicts, "success": True}
 
         except Exception as e:
             logger.exception(f"Error getting courses for user {user_id}: {e}")
-            return {"error": "Failed to get courses", "success": False}
+            return {"error": f"Failed to get courses: {e!s}", "success": False}
 
-    # Lesson management
-    async def create_lesson(self, course_id: UUID, lesson_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
-        """Create new lesson in course."""
+    async def get_course_lessons(self, course_id: UUID, user_id: UUID) -> dict[str, Any]:
+        """Get course lessons/outline if available."""
         try:
-            lesson = await self._lesson_creation_service.create_lesson(course_id, lesson_data, user_id)
+            # Get database session
+            from src.database.session import async_session_maker
 
-            return {"lesson": lesson, "success": True}
+            async with async_session_maker() as session:
+                # Fetch course to read lessons structure
+                from sqlalchemy import select
 
-        except Exception as e:
-            logger.exception(f"Error creating lesson in course {course_id}: {e}")
-            return {"error": "Failed to create lesson", "success": False}
+                from src.courses.models import Course
 
-    async def update_lesson(self, lesson_id: UUID, lesson_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
-        """Update existing lesson."""
+                result = await session.execute(select(Course).where(Course.id == course_id, Course.user_id == user_id))
+                course = result.scalar_one_or_none()
+                if not course:
+                    logger.info(f"Course {course_id} not found for user {user_id}")
+                    return {"error": f"Course {course_id} not found", "success": False}
+
+                lessons: list[dict] = []
+                if getattr(course, "lessons_outline", None):
+                    try:
+                        outline = json.loads(course.lessons_outline)  # type: ignore[arg-type]
+                        if isinstance(outline, list):
+                            lessons = outline
+                    except (json.JSONDecodeError, TypeError):
+                        lessons = []
+
+                # Add progress information for each lesson
+                if lessons:
+                    try:
+                        # Get progress data to check lesson completion
+                        progress = await self._progress_service.get_progress(course_id, user_id)
+                        completed_lessons = progress.get("completed_lessons", {})
+
+                        # Mark lessons as completed or not based on actual progress
+                        for lesson in lessons:
+                            lesson_id = lesson.get("id", "")
+                            lesson["completed"] = completed_lessons.get(str(lesson_id), False)
+                    except Exception as e:
+                        logger.warning(f"Failed to get lesson progress for course {course_id}: {e}")
+                        # Fallback: mark all as not completed
+                        for lesson in lessons:
+                            lesson["completed"] = False
+
+                return {"lessons": lessons or [], "success": True}
+
+        except Exception:
+            logger.exception("Error getting lessons for course %s", course_id)
+            return {"error": "Failed to get lessons", "success": False}
+
+
+
+
+
+
+
+
+    # Lesson-specific operations for router compatibility
+    async def get_lesson_simplified(
+        self, course_id: UUID, lesson_id: UUID, generate: bool = False, user_id: UUID | None = None
+    ) -> Any:
+        """Get a specific lesson by course and lesson ID.
+
+        Passes user_id through to ensure authenticated generation and user isolation.
+        """
         try:
-            lesson = await self._lesson_update_service.update_lesson(lesson_id, lesson_data, user_id)
+            from src.courses.services.lesson_query_service import LessonQueryService
+            from src.database.session import async_session_maker
 
-            return {"lesson": lesson, "success": True}
+            async with async_session_maker() as session:
+                lesson_service = LessonQueryService(session, user_id)
+                return await lesson_service.get_lesson_simplified(course_id, lesson_id, generate, user_id)
 
-        except Exception as e:
-            logger.exception(f"Error updating lesson {lesson_id}: {e}")
-            return {"error": "Failed to update lesson", "success": False}
-
-    async def delete_lesson(self, lesson_id: UUID, user_id: UUID) -> dict[str, Any]:
-        """Delete lesson from course."""
-        try:
-            success = await self._lesson_deletion_service.delete_lesson(lesson_id, user_id)
-
-            return {"success": success}
-
-        except Exception as e:
-            logger.exception(f"Error deleting lesson {lesson_id}: {e}")
-            return {"error": "Failed to delete lesson", "success": False}
-
-    async def get_lesson(self, lesson_id: UUID, user_id: UUID) -> dict[str, Any]:
-        """Get individual lesson with progress."""
-        try:
-            lesson = await self._lesson_query_service.get_lesson(lesson_id)
-
-            if not lesson:
-                return {"error": "Lesson not found"}
-
-            # Get lesson progress
-            progress = await self._progress_tracking_service.get_lesson_progress(lesson_id, user_id)
-
-            return {"lesson": lesson, "progress": progress, "success": True}
-
-        except Exception as e:
-            logger.exception(f"Error getting lesson {lesson_id}: {e}")
-            return {"error": "Failed to get lesson", "success": False}
-
-    async def mark_lesson_complete(self, lesson_id: UUID, user_id: UUID) -> dict[str, Any]:
-        """Mark lesson as completed."""
-        try:
-            result = await self._progress_tracking_service.mark_lesson_complete(lesson_id, user_id)
-
-            return {"result": result, "success": True}
-
-        except Exception as e:
-            logger.exception(f"Error marking lesson {lesson_id} complete: {e}")
-            return {"error": "Failed to mark lesson complete", "success": False}
-
-    # Course management
-    async def update_course(self, course_id: UUID, course_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
-        """Update course information."""
-        try:
-            course = await self._update_service.update_course(course_id, course_data, user_id)
-
-            return {"course": course, "success": True}
-
-        except Exception as e:
-            logger.exception(f"Error updating course {course_id}: {e}")
-            return {"error": "Failed to update course", "success": False}
-
-    async def reorder_lessons(self, course_id: UUID, lesson_order: list[UUID], user_id: UUID) -> dict[str, Any]:
-        """Reorder lessons in course."""
-        try:
-            result = await self._management_service.reorder_lessons(course_id, lesson_order, user_id)
-
-            return {"result": result, "success": True}
-
-        except Exception as e:
-            logger.exception(f"Error reordering lessons in course {course_id}: {e}")
-            return {"error": "Failed to reorder lessons", "success": False}
-
-    async def duplicate_course(self, course_id: UUID, user_id: UUID, new_title: str | None = None) -> dict[str, Any]:
-        """Duplicate existing course."""
-        try:
-            duplicate = await self._management_service.duplicate_course(course_id, user_id, new_title)
-
-            # Initialize progress for duplicated course
-            await self._progress_service.initialize_progress(duplicate.id, user_id)
-
-            return {"course": duplicate, "success": True}
-
-        except Exception as e:
-            logger.exception(f"Error duplicating course {course_id}: {e}")
-            return {"error": "Failed to duplicate course", "success": False}
-
-    # AI operations
-    async def generate_course(
-        self, user_id: UUID, topic: str, skill_level: str, description: str = "", use_tools: bool = False
-    ) -> dict[str, Any]:
-        """Generate a new AI-powered course."""
-        try:
-            return await self._ai_service.process_content(
-                content_type="course",
-                action="generate",
-                user_id=user_id,
-                topic=topic,
-                skill_level=skill_level,
-                description=description,
-                use_tools=use_tools,
-            )
-        except Exception as e:
-            logger.exception(f"Error generating course for user {user_id}: {e}")
+        except Exception:
+            logger.exception("Error getting lesson %s for course %s", lesson_id, course_id)
             raise
 
-    async def generate_lesson_content(
-        self, course_id: UUID, user_id: UUID, lesson_meta: dict[str, Any]
-    ) -> tuple[str, list[dict]]:
-        """Generate AI content for a lesson."""
-        try:
-            # Add course ID to lesson meta
-            lesson_meta["course_id"] = str(course_id)
 
-            content, citations = await self._ai_service.process_content(
-                content_type="course",
-                action="lesson",
-                user_id=user_id,
-                course_id=str(course_id),
-                lesson_meta=lesson_meta,
-            )
-            return content, citations
-        except Exception as e:
-            logger.exception(f"Error generating lesson for course {course_id}: {e}")
-            raise
 
-    async def update_course_with_ai(self, course_id: UUID, user_id: UUID, updates: dict[str, Any]) -> dict[str, Any]:
-        """Update course content using AI."""
-        try:
-            return await self._ai_service.process_content(
-                content_type="course", action="update", user_id=user_id, course_id=str(course_id), updates=updates
-            )
-        except Exception as e:
-            logger.exception(f"Error updating course {course_id} with AI: {e}")
-            raise
-
-    async def chat_about_course(
-        self, course_id: UUID, user_id: UUID, message: str, history: list[dict[str, Any]] | None = None
-    ) -> str:
-        """Have a conversation about the course."""
-        try:
-            return await self._ai_service.process_content(
-                content_type="course",
-                action="chat",
-                user_id=user_id,
-                course_id=str(course_id),
-                message=message,
-                history=history,
-            )
-        except Exception as e:
-            logger.exception(f"Error in course chat for {course_id}: {e}")
-            raise

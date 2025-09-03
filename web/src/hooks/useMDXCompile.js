@@ -83,6 +83,57 @@ const runtimeGlobals = {
 }
 
 /**
+ * Preprocess MDX content to fix common issues
+ * @param {string} content - Raw MDX content
+ * @returns {string} - Cleaned MDX content
+ */
+function preprocessMDXContent(content) {
+	let processed = content
+
+	// Remove JSX comments {/* ... */}
+	processed = processed.replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+
+	// Fix self-closing tags that might have issues
+	// Match tags like <br/> and ensure they have proper spacing
+	processed = processed.replace(/<(\w+)([^>]*?)\/>/g, (match, tag, attrs) => {
+		// Ensure there's a space before the closing slash
+		const cleanAttrs = attrs.trim()
+		if (cleanAttrs) {
+			return `<${tag} ${cleanAttrs} />`
+		}
+		return `<${tag} />`
+	})
+
+	// Remove HTML comments <!-- ... -->
+	processed = processed.replace(/<!--[\s\S]*?-->/g, "")
+
+	// Fix common MDX syntax issues
+	// Remove any standalone curly braces that aren't in code blocks
+	const codeBlockRegex = /```[\s\S]*?```/g
+	const codeBlocks = []
+	let codeBlockIndex = 0
+
+	// Temporarily replace code blocks to protect them
+	processed = processed.replace(codeBlockRegex, (match) => {
+		const placeholder = `__CODE_BLOCK_${codeBlockIndex}__`
+		codeBlocks[codeBlockIndex] = match
+		codeBlockIndex++
+		return placeholder
+	})
+
+	// Fix problematic patterns outside of code blocks
+	// Remove double slashes that might cause issues (but preserve URLs)
+	processed = processed.replace(/([^:])\/\/(?!\s)/g, "$1/ /")
+
+	// Restore code blocks
+	codeBlocks.forEach((block, index) => {
+		processed = processed.replace(`__CODE_BLOCK_${index}__`, block)
+	})
+
+	return processed
+}
+
+/**
  * Custom hook for compiling and running MDX content
  * @param {string} content - MDX content to compile
  * @returns {Object} - { Component, error, isLoading }
@@ -111,9 +162,12 @@ export function useMDXCompile(content) {
 			return
 		}
 
-		// Check cache first
-		if (mdxCache.has(content)) {
-			const cachedComponent = mdxCache.get(content)
+		// Preprocess the content to fix common issues
+		const processedContent = preprocessMDXContent(content)
+
+		// Check cache first (use processed content as key)
+		if (mdxCache.has(processedContent)) {
+			const cachedComponent = mdxCache.get(processedContent)
 			setComponent(() => cachedComponent)
 			setError(null)
 			setIsLoading(false)
@@ -121,8 +175,8 @@ export function useMDXCompile(content) {
 		}
 
 		// Check if already compiling
-		if (mdxCache.isCompiling(content)) {
-			const compilingPromise = mdxCache.getCompiling(content)
+		if (mdxCache.isCompiling(processedContent)) {
+			const compilingPromise = mdxCache.getCompiling(processedContent)
 			compilingPromise
 				.then((result) => {
 					if (!cancelled) {

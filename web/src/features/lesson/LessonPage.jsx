@@ -1,82 +1,39 @@
-import { useEffect, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useState } from "react"
+import { useParams } from "react-router-dom"
 import RoadmapHeader from "@/components/header/RoadmapHeader"
 import { CourseSidebar } from "@/components/sidebar"
 import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
-import { useCourseNavigation } from "../../utils/navigationUtils"
-import { fetchLessonById } from "../course/api/lessonsApi"
 import { LessonViewer } from "../course/components/LessonViewer"
-import { useOutlineData } from "../course/hooks/useOutlineData"
-import { useCourseData } from "../course/hooks/useCourseData"
+import { useLessonPage } from "./hooks/useLessonPage"
 
 /**
- * Standalone lesson page that loads a lesson by ID
- * Fetches course data separately to provide consistent header and sidebar experience
- * Uses the same data fetching pattern as CoursePage for consistency
+ * Lesson page component
+ * Following state management guide: "Components are dumb" - all business logic in hooks
+ * Uses combined useLessonPage hook for all data and actions
  */
 export default function LessonPage() {
 	const { lessonId } = useParams()
-	const navigate = useNavigate()
-	const [lesson, setLesson] = useState(null)
-	const [loading, setLoading] = useState(true)
-	const [error, setError] = useState(null)
 	const [mode, setMode] = useState("outline")
 	const isOpen = useAppStore(selectSidebarOpen)
-	const { goToLesson } = useCourseNavigation()
 
-	// Get course ID from lesson data
-	const courseId = lesson?.roadmap_id || lesson?.course_id
+	// Combined hook provides all data and actions
+	// Following state management guide: "Combine stores via custom hooks"
+	const {
+		lesson,
+		courseId,
+		modules,
+		isLoading,
+		error,
+		hasError,
+		errorMessage,
+		courseName,
+		handleBack,
+		handleLessonClick,
+		handleMarkComplete,
+		handleRegenerate,
+	} = useLessonPage(lessonId)
 
-	// Fetch course data and modules using the same hooks as CoursePage
-	const { isLoading: roadmapLoading, roadmap } = useCourseData(courseId)
-	const { modules, isLoading: modulesLoading } = useOutlineData(courseId)
-
-	// Calculate loading states
-	const isDataLoading = loading || roadmapLoading || modulesLoading
-	const courseName = roadmap?.title || "Course"
-
-	useEffect(() => {
-		if (!lessonId) return
-
-		const fetchLessonData = async () => {
-			setLoading(true)
-			setError(null)
-
-			try {
-				// Fetch lesson by ID only (no courseId needed)
-				const lessonData = await fetchLessonById(lessonId)
-				setLesson(lessonData)
-			} catch (err) {
-				setError(err.message || "Failed to load lesson")
-			} finally {
-				setLoading(false)
-			}
-		}
-
-		fetchLessonData()
-	}, [lessonId])
-
-	const handleBack = () => {
-		if (courseId) {
-			// Navigate to the course page if we have a course ID
-			navigate(`/course/${courseId}`)
-		} else {
-			// Otherwise go back in history
-			window.history.back()
-		}
-	}
-
-	const handleLessonClick = (clickedLessonId) => {
-		// Use the same navigation logic as CoursePage
-		if (courseId) {
-			goToLesson(courseId, clickedLessonId)
-		} else {
-			// Fallback to direct lesson navigation
-			navigate(`/lesson/${clickedLessonId}`)
-		}
-	}
-
-	if (isDataLoading) {
+	if (isLoading) {
 		return (
 			<div className="flex items-center justify-center h-screen">
 				<div className="text-lg">Loading lesson...</div>
@@ -84,15 +41,15 @@ export default function LessonPage() {
 		)
 	}
 
-	if (error) {
+	if (hasError) {
 		return (
 			<div className="flex items-center justify-center h-screen">
 				<div className="text-center">
 					<h2 className="text-xl font-semibold mb-2 text-red-600">Error Loading Lesson</h2>
-					<p className="text-gray-600 mb-4">{error}</p>
+					<p className="text-gray-600 mb-4">{errorMessage}</p>
 					<button
 						type="button"
-						onClick={() => window.history.back()}
+						onClick={handleBack}
 						className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
 					>
 						Go Back
@@ -110,7 +67,7 @@ export default function LessonPage() {
 					<p className="text-gray-600 mb-4">The lesson you're looking for could not be found.</p>
 					<button
 						type="button"
-						onClick={() => window.history.back()}
+						onClick={handleBack}
 						className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
 					>
 						Go Back
@@ -131,7 +88,7 @@ export default function LessonPage() {
 			<div className="flex h-screen">
 				{/* Always show sidebar with modules data - same as CoursePage */}
 				<CourseSidebar
-					modules={modules || []}
+					modules={modules}
 					onLessonClick={handleLessonClick}
 					courseId={courseId}
 					currentLessonId={lessonId}
@@ -139,7 +96,14 @@ export default function LessonPage() {
 
 				{/* Main lesson content */}
 				<div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
-					<LessonViewer lesson={lesson} onBack={handleBack} isLoading={loading} error={error} />
+					<LessonViewer
+						lesson={lesson}
+						onBack={handleBack}
+						isLoading={isLoading}
+						error={error}
+						onMarkComplete={handleMarkComplete}
+						onRegenerate={handleRegenerate}
+					/>
 				</div>
 			</div>
 		</div>

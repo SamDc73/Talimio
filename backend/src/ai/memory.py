@@ -66,7 +66,8 @@ class MemoryWrapper:
             "embedder": {
                 "provider": "openai",
                 "config": {
-                    "model": env("MEMORY_EMBEDDING_MODEL", "openai/text-embedding-3-small"),
+                    # Strip provider prefix for OpenAI (expects just model name)
+                    "model": env("MEMORY_EMBEDDING_MODEL", "openai/text-embedding-3-small").split("/")[-1],
                     "embedding_dims": int(env("MEMORY_EMBEDDING_OUTPUT_DIM", "1536")),
                 },
             },
@@ -108,17 +109,15 @@ class MemoryWrapper:
         # Regular connection pool (not async) - mem0 handles async internally
         pool = SupabaseConnectionPool(
             connection_string,
-            min_size=5,        # Minimum connections to maintain
-            max_size=20,       # Maximum connections (handles 10k users)
-            timeout=30,        # Connection timeout in seconds
-            max_idle=600,      # Recycle idle connections after 10 minutes
-            max_lifetime=3600, # Force reconnect after 1 hour
-            open=True,         # Open pool immediately
+            min_size=5,  # Minimum connections to maintain
+            max_size=20,  # Maximum connections (handles 10k users)
+            timeout=30,  # Connection timeout in seconds
+            max_idle=600,  # Recycle idle connections after 10 minutes
+            max_lifetime=3600,  # Force reconnect after 1 hour
+            open=True,  # Open pool immediately
         )
 
-        self._logger.info(
-            "✅ Created connection pool (min=5, max=20) for production scale"
-        )
+        self._logger.info("✅ Created connection pool (min=5, max=20) for production scale")
         return pool
 
     def _get_effective_user_id(self, user_id: UUID) -> UUID:
@@ -140,9 +139,7 @@ class MemoryWrapper:
                 raise
         return self._memory_client
 
-    async def add_memory(
-        self, user_id: UUID, content: str, metadata: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    async def add_memory(self, user_id: UUID, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Add memory asynchronously.
 
@@ -165,9 +162,7 @@ class MemoryWrapper:
 
             memory_client = await self.get_memory_client()
             result = await memory_client.add(
-                messages=[{"role": "user", "content": content}],
-                user_id=str(effective_id),
-                metadata=metadata
+                messages=[{"role": "user", "content": content}], user_id=str(effective_id), metadata=metadata
             )
 
             self._logger.debug(f"Added memory for user {effective_id}: {content[:100]}...")
@@ -191,10 +186,7 @@ class MemoryWrapper:
 
         try:
             memory_client = await self.get_memory_client()
-            results = await memory_client.get_all(
-                user_id=str(effective_id),
-                limit=limit
-            )
+            results = await memory_client.get_all(user_id=str(effective_id), limit=limit)
 
             if isinstance(results, dict) and "results" in results:
                 return results["results"]
@@ -210,9 +202,7 @@ class MemoryWrapper:
                 self._memory_client = None
             return []
 
-    async def search_memories(
-        self, user_id: UUID, query: str, limit: int = 5
-    ) -> list[dict[str, Any]]:
+    async def search_memories(self, user_id: UUID, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """
         Search memories asynchronously.
 
@@ -222,11 +212,7 @@ class MemoryWrapper:
 
         try:
             memory_client = await self.get_memory_client()
-            results = await memory_client.search(
-                query=query,
-                user_id=str(effective_id),
-                limit=limit
-            )
+            results = await memory_client.search(query=query, user_id=str(effective_id), limit=limit)
 
             if isinstance(results, dict) and "results" in results:
                 return results["results"]
@@ -261,18 +247,13 @@ class MemoryWrapper:
                 self._memory_client = None
             return False
 
-    async def update_memory(
-        self, user_id: UUID, memory_id: str, content: str
-    ) -> dict[str, Any]:
+    async def update_memory(self, user_id: UUID, memory_id: str, content: str) -> dict[str, Any]:
         """Update an existing memory asynchronously."""
         effective_id = self._get_effective_user_id(user_id)
 
         try:
             memory_client = await self.get_memory_client()
-            result = await memory_client.update(
-                memory_id=memory_id,
-                data=content
-            )
+            result = await memory_client.update(memory_id=memory_id, data=content)
 
             self._logger.info(f"Updated memory {memory_id} for user {effective_id}")
             return result
@@ -354,10 +335,7 @@ class MemoryWrapper:
         """
         import asyncio
 
-        tasks = [
-            self.add_memory(user_id, content, metadata)
-            for content in contents
-        ]
+        tasks = [self.add_memory(user_id, content, metadata) for content in contents]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -381,10 +359,7 @@ class MemoryWrapper:
         """
         import asyncio
 
-        tasks = [
-            self.search_memories(user_id, query, limit)
-            for query in queries
-        ]
+        tasks = [self.search_memories(user_id, query, limit) for query in queries]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 

@@ -249,9 +249,7 @@ class ModelManager:
                 metadata["context_source"] = context_data.source
                 # Store a snippet of context for better memory retrieval
                 context_snippet = (
-                    context_data.content[:200] + "..."
-                    if len(context_data.content) > 200
-                    else context_data.content
+                    context_data.content[:200] + "..." if len(context_data.content) > 200 else context_data.content
                 )
                 metadata["context_snippet"] = context_snippet
         except Exception:
@@ -325,15 +323,11 @@ Please use this context to personalize your response appropriately."""
             memory_context = await memory_manager.build_memory_context(user_id, current_query)
 
             # Build enhanced metadata for tracking
-            enhanced_metadata = self._build_context_metadata(
-                context_type, context_id, context_meta, interaction_type
-            )
+            enhanced_metadata = self._build_context_metadata(context_type, context_id, context_meta, interaction_type)
 
             # Add context snippet if available
             if context_type and context_id:
-                await self._add_context_snippet(
-                    enhanced_metadata, context_type, context_id, context_meta
-                )
+                await self._add_context_snippet(enhanced_metadata, context_type, context_id, context_meta)
 
             # Inject memory context into messages
             messages = self._inject_memory_into_messages(list(messages), memory_context)
@@ -1480,10 +1474,13 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
     """Generate a comprehensive lesson in Markdown format based on node metadata.
 
     Includes RAG context from roadmap documents if roadmap_id is provided.
+    Optionally includes adaptive context based on user quiz performance.
+    Validates MDX content and retries with AI fixes if needed.
 
     Args:
         node_meta: Dictionary containing metadata about the node, including title,
-                  description, roadmap_id (optional) and any other relevant information.
+                  description, roadmap_id (optional), user_id (optional for adaptive),
+                  course_id (optional for adaptive), and any other relevant information.
 
     Returns
     -------
@@ -1491,8 +1488,10 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
 
     Raises
     ------
-        LessonGenerationError: If lesson generation fails.
+        LessonGenerationError: If lesson generation fails after all retries.
     """
+    MAX_VALIDATION_RETRIES = 3
+
     try:
         # Extract metadata
         metadata = _extract_lesson_metadata(node_meta)
@@ -1512,7 +1511,7 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
         messages = [
             {
                 "role": "system",
-                "content": "You are an expert educator creating high-quality, comprehensive learning materials. Your lessons are detailed, well-structured, and include practical examples and exercises. When reference materials are provided, incorporate them naturally into your lesson content and cite sources appropriately. Pay attention to the course context - consider what students have already learned and what they will learn next to ensure proper knowledge progression and avoid redundancy.\n\nIMPORTANT: You are generating content for a specific lesson that already has a title and description. DO NOT regenerate or modify the lesson title or description - focus only on creating the lesson content that matches the given title and description.",
+                "content": "You are an expert educator creating high-quality, comprehensive learning materials. Your lessons are detailed, well-structured, and include practical examples and exercises. When reference materials are provided, incorporate them naturally into your lesson content and cite sources appropriately. Pay attention to the course context - consider what students have already learned and what they will learn next to ensure proper knowledge progression and avoid redundancy.\n\nCRITICAL: You are generating content for a lesson that ALREADY HAS A TITLE. The UI displays the title separately. DO NOT start with a # heading that repeats the lesson title. However, you SHOULD use headings (##, ###) to structure your lesson content appropriately. Just don't repeat the main lesson title as the first heading.",
             },
             {"role": "user", "content": prompt},
         ]
@@ -1532,31 +1531,88 @@ async def create_lesson_body(node_meta: dict[str, Any]) -> tuple[str, list[dict]
                 metadata["node_title"], metadata["node_description"], content_preferences, messages
             )
 
-        # Generate lesson content
+        # Import MDX validation utilities (unified MDX service)
+        from src.courses.services.mdx_service import mdx_service
+
+        # Generate and validate content with retries
+        validation_attempts = 0
+        markdown_content = None
+        last_error = None
+
         from src.config import env
 
-        response = await acompletion(
-            model=env("PRIMARY_LLM_MODEL"),
-            messages=messages,
-            temperature=0.7,
-            max_tokens=8000,
-        )
+        while validation_attempts < MAX_VALIDATION_RETRIES:
+            validation_attempts += 1
 
-        markdown_content = str(getattr(response, "choices", [{}])[0].get("message", {}).get("content", ""))
-        if markdown_content is None:
-            raise LessonGenerationError
+            # Generate or regenerate content
+            if validation_attempts == 1:
+                # First attempt - normal generation
+                response = await acompletion(
+                    model=env("PRIMARY_LLM_MODEL"),
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=8000,
+                )
+            else:
+                # Retry attempt - add error context
+                retry_messages = messages + [
+                    {
+                        "role": "system",
+                        "content": f"The previously generated content had MDX syntax errors. {last_error}",
+                    },
+                    {
+                        "role": "user",
+                        "content": "Please regenerate the lesson content, fixing ALL the MDX syntax errors mentioned above. Pay special attention to closing all tags, ensuring valid JavaScript in expressions, and NOT using template variables.",
+                    },
+                ]
 
-        # Clean up the content
-        markdown_content = _clean_markdown_content(markdown_content)
+                logging.info(f"Retrying lesson generation (attempt {validation_attempts}/{MAX_VALIDATION_RETRIES})")
 
-        if not isinstance(markdown_content, str) or len(markdown_content.strip()) < 10:
-            logging.error(
-                "Invalid lesson content received: %s...",
-                markdown_content[:100] if markdown_content else "None",
+                response = await acompletion(
+                    model=env("PRIMARY_LLM_MODEL"),
+                    messages=retry_messages,
+                    temperature=0.6,  # Lower temperature for fixes
+                    max_tokens=8000,
+                )
+
+            markdown_content = str(getattr(response, "choices", [{}])[0].get("message", {}).get("content", ""))
+            if markdown_content is None:
+                raise LessonGenerationError
+
+            # Clean up the content
+            markdown_content = _clean_markdown_content(markdown_content)
+
+            if not isinstance(markdown_content, str) or len(markdown_content.strip()) < 10:
+                logging.error(
+                    "Invalid lesson content received: %s...",
+                    markdown_content[:100] if markdown_content else "None",
+                )
+                raise LessonGenerationError
+
+            # Validate MDX content
+            is_valid, error_msg = mdx_service.validate_mdx(markdown_content)
+
+            if is_valid:
+                logging.info(f"MDX validation passed on attempt {validation_attempts}")
+                break  # Content is valid, exit retry loop
+            logging.warning(
+                f"MDX validation failed on attempt {validation_attempts}: {error_msg[:200] if error_msg else 'Unknown error'}..."
             )
-            raise LessonGenerationError
+            last_error = error_msg
 
-        logging.info("Successfully generated lesson content (%s characters)", len(markdown_content))
+            if validation_attempts >= MAX_VALIDATION_RETRIES:
+                # Max retries reached, log but don't fail completely
+                logging.error(
+                    f"Could not generate valid MDX after {MAX_VALIDATION_RETRIES} attempts. "
+                    "Returning content with potential issues."
+                )
+                # Add a warning comment that won't show in rendered MDX
+                markdown_content = (
+                    f"<!-- MDX validation warning: Content may have syntax issues -->\n{markdown_content}"
+                )
+                break
+
+        logging.info(f"Successfully generated lesson content ({len(markdown_content)} characters)")
         return markdown_content.strip(), citations_info
 
     except Exception as e:

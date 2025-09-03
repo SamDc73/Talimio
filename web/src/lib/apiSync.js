@@ -48,7 +48,6 @@ export async function syncToAPI(resourceType, resourceId, data) {
 	syncTimers.set(syncKey, timer)
 }
 
-
 /**
  * Perform the actual sync operation
  */
@@ -340,7 +339,5 @@ function loadOfflineQueue() {
 	}
 }
 
-
 // Load queue on startup
 loadOfflineQueue()
-

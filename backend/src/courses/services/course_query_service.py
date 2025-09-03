@@ -8,7 +8,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.courses.models import Node, Roadmap
-from src.courses.schemas import CourseResponse, ModuleResponse
+from src.courses.schemas import CourseResponse
 from src.courses.services.course_response_builder import CourseResponseBuilder
 
 
@@ -123,42 +123,3 @@ class CourseQueryService:
 
         return courses, total
 
-    async def list_modules(self, course_id: UUID, user_id: UUID | None = None) -> list[ModuleResponse]:
-        """List all modules for a course.
-
-        Args:
-            course_id: Course ID
-            user_id: User ID (optional override)
-
-        Returns
-        -------
-            List of module responses
-
-        Raises
-        ------
-            HTTPException: If course not found
-        """
-        # Get effective user_id
-        effective_user_id = user_id or self.user_id
-
-        # Verify course exists and user has access
-        course_query = select(Roadmap).where(Roadmap.id == course_id, Roadmap.user_id == effective_user_id)
-
-        course_result = await self.session.execute(course_query)
-        if not course_result.scalar_one_or_none():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
-
-        # Get modules
-        modules_query = (
-            select(Node)
-            .where(
-                Node.roadmap_id == course_id,
-                Node.parent_id.is_(None),  # Modules have no parent
-            )
-            .order_by(Node.order)
-        )
-
-        modules_result = await self.session.execute(modules_query)
-        modules = modules_result.scalars().all()
-
-        return [self.response_builder.build_module_response_simple(module, course_id) for module in modules]

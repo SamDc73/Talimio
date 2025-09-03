@@ -17,10 +17,9 @@ export default function CourseLayout() {
 	// Course context is only loaded when this layout is rendered
 	const { courseId, lessonId, mode, setMode, courseName, modules, isLoading } = useCourseContext()
 
-	const handleLessonClick = (clickedLessonId) => {
-		if (courseId) {
-			goToLesson(courseId, clickedLessonId)
-		}
+	const handleLessonClick = (moduleId, lessonId) => {
+		// The sidebar passes (moduleId, lessonId) but we only need lessonId for navigation
+		goToLesson(courseId, lessonId)
 	}
 
 	if (isLoading) {
@@ -42,7 +41,7 @@ export default function CourseLayout() {
 					modules={modules || []}
 					onLessonClick={handleLessonClick}
 					courseId={courseId}
-					currentLessonId={lessonId}
+					activeLessonId={lessonId}
 				/>
 				<div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
 					{/* Render CourseView directly with proper props */}

@@ -7,9 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from src.auth import UserId
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_service import ContentService
+from src.courses.facade import CoursesFacade
 from src.courses.schemas import LessonResponse
-from src.courses.services.course_service import CourseService
-from src.database.session import DbSession, get_db_session
+from src.database.session import DbSession
 
 
 logger = logging.getLogger(__name__)
@@ -19,11 +19,11 @@ router = APIRouter(prefix="/api/v1/content", tags=["content"])
 
 
 def get_course_service(
-    user_id: UserId,
-    session: DbSession,
-) -> CourseService:
-    """Get course service instance."""
-    return CourseService(session, user_id)
+    _user_id: UserId,
+    _session: DbSession,
+) -> CoursesFacade:
+    """Get course orchestrator service instance."""
+    return CoursesFacade()
 
 
 @router.get("")
@@ -111,9 +111,9 @@ async def test_books_endpoint(
 @router.get("/lessons/{lesson_id}")
 async def get_lesson_by_id(
     lesson_id: UUID,
-    course_service: Annotated[CourseService, Depends(get_course_service)],
+    course_service: Annotated[CoursesFacade, Depends(get_course_service)],
     _user_id: UserId,
-    session: Annotated[object, Depends(get_db_session)],
+    db: DbSession,
     generate: Annotated[bool, Query(description="Auto-generate if lesson doesn't exist")] = False,
 ) -> LessonResponse:
     """
@@ -134,7 +134,7 @@ async def get_lesson_by_id(
             LIMIT 1
         """)
 
-        result = await session.execute(query, {"lesson_id": lesson_id})
+        result = await db.execute(query, {"lesson_id": lesson_id})
 
         row = result.fetchone()
         if not row:
@@ -143,8 +143,12 @@ async def get_lesson_by_id(
         course_id = row[0]
 
         # Now fetch the lesson using the existing simplified endpoint
-        return await course_service.get_lesson_simplified(course_id, lesson_id, generate)
+        return await course_service.get_lesson_simplified(course_id, lesson_id, generate, _user_id)
 
+    except HTTPException as e:
+        logger.exception(f"Error fetching lesson {lesson_id}: {e}")
+        # Re-raise HTTP exceptions (e.g., 401/404) instead of masking as 500
+        raise
     except Exception as e:
         logger.exception(f"Error fetching lesson {lesson_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch lesson") from e

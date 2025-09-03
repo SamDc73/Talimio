@@ -39,7 +39,6 @@ export interface SortOption {
 	icon: "Clock" | "CalendarDays" | "ArrowUpDown" | "FileText"
 }
 
-
 export function processContentData(data: ContentItem[]) {
 	// Generate filter options based on content types
 	const filterOptions: FilterOption[] = [

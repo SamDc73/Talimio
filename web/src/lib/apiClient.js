@@ -113,22 +113,21 @@ const secureRequest = async (method, endpoint, data = null, options = {}) => {
 	}
 
 	// Create cache key for deduplication (GET requests only)
-	if (method === 'GET') {
+	if (method === "GET") {
 		const cacheKey = `${method}:${endpoint}:${JSON.stringify(options)}`
-		
+
 		// If request is already in flight, return the existing promise
 		if (inFlightRequests.has(cacheKey)) {
 			console.debug(`Deduplicating GET request: ${endpoint}`)
 			return inFlightRequests.get(cacheKey)
 		}
-		
+
 		// Create and cache the request promise
-		const requestPromise = executeRequest(method, endpoint, data, options)
-			.finally(() => {
-				// Clean up cache entry when request completes
-				inFlightRequests.delete(cacheKey)
-			})
-		
+		const requestPromise = executeRequest(method, endpoint, data, options).finally(() => {
+			// Clean up cache entry when request completes
+			inFlightRequests.delete(cacheKey)
+		})
+
 		inFlightRequests.set(cacheKey, requestPromise)
 		return requestPromise
 	}

@@ -1,5 +1,6 @@
 import { MDXProvider } from "@mdx-js/react"
 import React from "react"
+import { FillInTheBlank, FreeForm, MultipleChoice } from "@/components/quiz/index.js"
 import { useMDXCompile } from "@/hooks/useMDXCompile"
 import "katex/dist/katex.min.css"
 import "./LessonViewer.css"
@@ -34,6 +35,11 @@ const MDX_COMPONENTS = {
 	useState: React.useState,
 	useEffect: React.useEffect,
 	useRef: React.useRef,
+
+	// Quiz components
+	MultipleChoice,
+	FillInTheBlank,
+	FreeForm,
 
 	// Style headings
 	h1: (props) => <h1 className="text-3xl font-bold mb-6 mt-8 text-zinc-900" {...props} />,
@@ -182,7 +188,7 @@ export function MDXRenderer({ content }) {
 	return (
 		<div className="markdown-content prose prose-zinc max-w-none">
 			<MDXProvider components={MDX_COMPONENTS}>
-				<Component />
+				<Component components={MDX_COMPONENTS} />
 			</MDXProvider>
 		</div>
 	)

@@ -1,5 +1,6 @@
 """Course response builder service for constructing course responses."""
 
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -42,8 +43,7 @@ class CourseResponseBuilder:
                 module_id=lesson.parent_id,
                 title=lesson.title,
                 description=lesson.description,
-                slug=lesson.title.lower().replace(" ", "-") if lesson.title else f"lesson-{lesson.id}",
-                md_source=lesson.content or "",
+                content=lesson.content,  # None for placeholder lessons, content when generated
                 created_at=lesson.created_at,
                 updated_at=lesson.updated_at,
             )
@@ -92,49 +92,30 @@ class CourseResponseBuilder:
             updated_at=roadmap.updated_at,
         )
 
-    def build_lesson_response(self, lesson: Node) -> LessonResponse:
-        """Build a lesson response from a node.
+    @staticmethod
+    def build_course_list(courses: Any) -> list[CourseResponse]:
+        """Build a list of course responses from course models.
 
         Args:
-            lesson: Lesson node
+            courses: List of Course/Roadmap model instances
 
         Returns
         -------
-            Lesson response
+            List of course responses
         """
-        return LessonResponse(
-            id=lesson.id,
-            course_id=lesson.roadmap_id,
-            module_id=lesson.parent_id,
-            title=lesson.title,
-            description=lesson.description,
-            slug=lesson.title.lower().replace(" ", "-") if lesson.title else f"lesson-{lesson.id}",
-            md_source=lesson.content or "",
-            created_at=lesson.created_at,
-            updated_at=lesson.updated_at,
-        )
-
-    def build_module_response_simple(self, module: Node, course_id: UUID) -> ModuleResponse:
-        """Build a module response without lessons.
-
-        Args:
-            module: Module node
-            course_id: Course ID
-
-        Returns
-        -------
-            Module response without lessons
-        """
-        return ModuleResponse(
-            id=module.id,
-            course_id=course_id,
-            title=module.title,
-            description=module.description,
-            content=module.content,
-            order=module.order,
-            status=module.status,
-            completion_percentage=module.completion_percentage,
-            parent_id=module.parent_id,
-            created_at=module.created_at,
-            updated_at=module.updated_at,
-        )
+        course_responses = []
+        for course in courses:
+            course_response = CourseResponse(
+                id=course.id,
+                title=course.title,
+                description=course.description,
+                skill_level=course.skill_level,
+                tags=course.tags or "[]",
+                archived=course.archived,
+                rag_enabled=course.rag_enabled,
+                modules=[],  # Empty modules for list view
+                created_at=course.created_at,
+                updated_at=course.updated_at,
+            )
+            course_responses.append(course_response)
+        return course_responses

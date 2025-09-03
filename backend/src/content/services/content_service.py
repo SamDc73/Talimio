@@ -164,7 +164,7 @@ class ContentService:
     ) -> None:
         """Delete content by type and ID."""
         from src.books.services.book_content_service import BookContentService
-        from src.courses.services.course_service import CourseService
+        from src.courses.facade import CoursesFacade
         from src.flashcards.service import delete_deck
         from src.videos.service import video_service
 
@@ -179,8 +179,8 @@ class ContentService:
             elif content_type == ContentType.FLASHCARDS:
                 await delete_deck(UUID(content_id))
             elif content_type == ContentType.COURSE:
-                course_service = CourseService(session, user_id)
-                await course_service.delete_course(UUID(content_id))
+                course_service = CoursesFacade()
+                await course_service.delete_course(UUID(content_id), user_id)
             else:
                 error_msg = f"Unsupported content type: {content_type}"
                 raise ValueError(error_msg)
@@ -195,8 +195,8 @@ class ContentService:
                 elif content_type == ContentType.FLASHCARDS:
                     await delete_deck(UUID(content_id))
                 elif content_type == ContentType.COURSE:
-                    course_service = CourseService(session, user_id)
-                    await course_service.delete_course(UUID(content_id))
+                    course_service = CoursesFacade()
+                    await course_service.delete_course(UUID(content_id), user_id)
                 else:
                     error_msg = f"Unsupported content type: {content_type}"
                     raise ValueError(error_msg)

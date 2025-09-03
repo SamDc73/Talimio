@@ -1,41 +1,20 @@
 """Pydantic schemas for the unified courses API."""
 
 from datetime import datetime
-from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class LessonStatus(str, Enum):
-    """Enum for lesson status values."""
-
-    NOT_STARTED = "not_started"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-
-
 class LessonBase(BaseModel):
     """Base schema for lessons."""
 
-    slug: str = Field(..., description="Lesson slug")
-    md_source: str = Field(..., description="Lesson content in Markdown")
     html_cache: str | None = Field(None, description="Cached HTML content")
 
-
-class LessonCreate(BaseModel):
-    """Schema for creating a new lesson."""
-
-    slug: str = Field(..., description="Lesson slug")
-    node_meta: dict = Field(..., description="Node metadata for lesson generation")
-
-
-class LessonUpdate(BaseModel):
-    """Schema for updating a lesson."""
-
-    slug: str | None = Field(None, description="Lesson slug")
-    md_source: str | None = Field(None, description="Lesson content in Markdown")
-    html_cache: str | None = Field(None, description="Cached HTML content")
+    # Additional fields for web app compatibility
+    title: str | None = Field(None, description="Lesson title extracted from content")
+    description: str | None = Field(None, description="Lesson description")
+    model_config = ConfigDict(from_attributes=True)
 
 
 class LessonCitation(BaseModel):
@@ -52,16 +31,11 @@ class LessonResponse(LessonBase):
     id: UUID = Field(..., description="Lesson ID")
     course_id: UUID = Field(..., description="Course ID")
     module_id: UUID = Field(..., description="Module ID")
+    content: str | None = Field(None, description="Lesson content (MDX format)")
     citations: list[LessonCitation] = Field(default_factory=list, description="Lesson citations")
     created_at: datetime = Field(..., description="Lesson creation timestamp")
     updated_at: datetime = Field(..., description="Lesson last update timestamp")
 
-    # Additional fields for web app compatibility
-    title: str | None = Field(None, description="Lesson title extracted from content")
-    description: str | None = Field(None, description="Lesson description")
-    content: str | None = Field(None, description="Lesson content as HTML")
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class CourseBase(BaseModel):
@@ -78,7 +52,7 @@ class CourseBase(BaseModel):
 class CourseCreate(BaseModel):
     """Schema for creating a new course."""
 
-    prompt: str = Field(..., description="AI prompt for course generation")
+    prompt: str = Field(..., min_length=1, description="AI prompt for course generation")
 
 
 class CourseUpdate(BaseModel):
@@ -96,7 +70,6 @@ class CourseResponse(CourseBase):
     """Schema for course responses."""
 
     id: UUID = Field(..., description="Course ID")
-    archived_at: datetime | None = Field(None, description="Course archive timestamp")
     created_at: datetime = Field(..., description="Course creation timestamp")
     updated_at: datetime = Field(..., description="Course last update timestamp")
     modules: list["ModuleResponse"] = Field(default_factory=list, description="Course modules")
@@ -113,35 +86,8 @@ class CourseListResponse(BaseModel):
     per_page: int = Field(..., description="Number of courses per page")
 
 
-class CourseProgressResponse(BaseModel):
-    """Schema for course progress responses."""
-
-    course_id: UUID = Field(..., description="Course ID")
-    total_modules: int = Field(..., description="Total number of modules")
-    completed_modules: int = Field(..., description="Number of completed modules")
-    in_progress_modules: int = Field(..., description="Number of modules in progress")
-    completion_percentage: float = Field(..., description="Overall course completion percentage")
-    total_lessons: int = Field(..., description="Total number of lessons")
-    completed_lessons: int = Field(..., description="Number of completed lessons")
 
 
-class LessonStatusUpdate(BaseModel):
-    """Schema for updating lesson status."""
-
-    status: LessonStatus = Field(..., description="Lesson status: not_started, in_progress, completed")
-
-
-class LessonStatusResponse(BaseModel):
-    """Schema for lesson status responses."""
-
-    lesson_id: UUID = Field(..., description="Lesson ID")
-    module_id: UUID = Field(..., description="Module ID")
-    course_id: UUID = Field(..., description="Course ID")
-    status: LessonStatus = Field(..., description="Lesson status")
-    created_at: datetime = Field(..., description="Status creation timestamp")
-    updated_at: datetime = Field(..., description="Status last update timestamp")
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class ModuleResponse(BaseModel):
@@ -161,3 +107,21 @@ class ModuleResponse(BaseModel):
     lessons: list["LessonResponse"] = Field(default_factory=list, description="Module lessons")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class MDXValidateRequest(BaseModel):
+    """Request schema for MDX validation."""
+
+    content: str = Field(..., description="MDX content to validate")
+
+
+class MDXValidateResponse(BaseModel):
+    """Response schema for MDX validation."""
+
+    valid: bool = Field(..., description="Whether the MDX content is valid")
+    error: str | None = Field(None, description="Error message if validation failed")
+    metadata: dict | None = Field(None, description="Additional metadata from validation")
+
+
+# NOTE: Quiz schemas removed - quizzes are embedded in lesson content (MDX)
+# Quiz results are handled through lesson progress updates, not separate submissions

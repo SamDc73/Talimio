@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from src.books.models import Book
 from src.config.settings import get_settings
-from src.courses.services.course_service import CourseService
+from src.courses.facade import CoursesFacade
 from src.database.lesson_repository import LessonRepository
 from src.database.session import async_session_maker
 from src.videos.service import VideoService
@@ -99,9 +99,7 @@ class BookContextStrategy(ContextRetriever):
                     continue
 
             if doc is None:
-                logging.warning(
-                    f"Could not open PDF for book {resource_id}. Tried: {candidate_paths}"
-                )
+                logging.warning(f"Could not open PDF for book {resource_id}. Tried: {candidate_paths}")
                 return None
 
             # Calculate page range (current page +/- 2, within document bounds)
@@ -276,12 +274,14 @@ class CourseContextStrategy(ContextRetriever):
             user_id = context_meta.get("user_id")
 
             async with async_session_maker() as session:
-                course_service = CourseService(session, user_id)
-                course = await course_service.get_course(resource_id, user_id)
+                course_service = CoursesFacade()
+                result = await course_service.get_course_with_progress(resource_id, user_id)
 
-                if not course:
+                if not result.get("success") or not result.get("course"):
                     logging.warning(f"Course not found: {resource_id}")
                     return None
+
+                course = result["course"]
 
                 # Initialize base metadata and content
                 metadata = self._create_base_metadata(resource_id, course)

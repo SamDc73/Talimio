@@ -18,7 +18,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as SA_UUID
+from sqlalchemy.dialects.postgresql import UUID as SA_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.base import Base
@@ -40,7 +40,6 @@ class Course(Base):
     )
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of tags
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rag_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # RAG integration flag
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
@@ -52,12 +51,10 @@ class Course(Base):
         onupdate=lambda: datetime.now(UTC),
     )
 
-    documents: Mapped[list["CourseDocument"]] = relationship(
-        "CourseDocument", back_populates="roadmap", cascade="all, delete-orphan"
-    )
-    nodes: Mapped[list["CourseModule"]] = relationship(
-        "CourseModule", back_populates="roadmap", cascade="all, delete-orphan"
-    )
+    # Relationships
+    nodes: Mapped[list["CourseModule"]] = relationship("CourseModule", back_populates="roadmap")
+    documents: Mapped[list["CourseDocument"]] = relationship("CourseDocument", back_populates="roadmap")
+
 
 
 # Course Module Model (formerly Node) - matches actual database schema
@@ -75,7 +72,6 @@ class CourseModule(Base):
     status: Mapped[str] = mapped_column(String(50), default="not_started")
     completion_percentage: Mapped[float] = mapped_column(Float, default=0.0)
     parent_id: Mapped[uuid.UUID | None] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("nodes.id"), nullable=True)
-    label_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
@@ -100,7 +96,6 @@ class Lesson(Base):
     roadmap_id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("roadmaps.id"))
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    quiz_questions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     order: Mapped[int] = mapped_column(Integer, default=0)  # Keep consistent naming
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
@@ -143,18 +138,8 @@ class CourseDocument(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     roadmap_id: Mapped[uuid.UUID] = mapped_column(SA_UUID, ForeignKey("roadmaps.id", ondelete="CASCADE"))
-    document_type: Mapped[str] = mapped_column(String(20))  # 'pdf', 'url'
     title: Mapped[str] = mapped_column(String(255))
-    file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    crawl_date: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
-    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    parsed_content: Mapped[str | None] = mapped_column(Text, nullable=True)
-    doc_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=lambda: datetime.now(UTC))
-    processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
-    embedded_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # 'pending', 'processing', 'embedded', 'failed'
 
     # Relationships
