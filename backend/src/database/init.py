@@ -8,7 +8,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 # Import all models to register them with Base metadata
-from src.auth.models import *  # noqa: F403
 from src.books.models import *  # noqa: F403
 from src.courses.models import *  # noqa: F403
 from src.flashcards.models import *  # noqa: F403

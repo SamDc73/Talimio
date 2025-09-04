@@ -160,7 +160,10 @@ def format_error_response(
 
 async def handle_authentication_errors(request: Request, exc: Exception) -> JSONResponse:
     """Handle authentication-related errors."""
-    logger.warning(
+    # Use debug level for expected token issues, warning for unexpected auth errors
+    log_level = logging.DEBUG if isinstance(exc, (InvalidTokenError, TokenExpiredError)) else logging.WARNING
+    logger.log(
+        log_level,
         f"Authentication error on {request.method} {request.url.path}: {exc}",
         extra={
             "client_host": request.client.host if request.client else "unknown",

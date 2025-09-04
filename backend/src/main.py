@@ -124,7 +124,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Validate authentication configuration
     try:
-        from src.auth.auth_config_validator import validate_auth_on_startup
+        from src.auth.validation import validate_auth_on_startup
 
         validate_auth_on_startup()
     except Exception as e:
