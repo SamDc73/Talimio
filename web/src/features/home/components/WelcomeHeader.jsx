@@ -11,7 +11,7 @@ export default function WelcomeHeader() {
 			<h1 className="text-4xl md:text-5xl font-display font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 mb-4 tracking-tight">
 				Welcome Back!
 			</h1>
-			<p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+			<p className="text-lg text-gray-100-foreground max-w-2xl mx-auto">
 				Ready to continue your journey? Pick up where you left off or explore something new today.
 			</p>
 		</motion.div>

@@ -13,7 +13,7 @@ function TagChip({ tag, contentType }) {
 			case "flashcards":
 				return "bg-amber-50 text-amber-600"
 			default:
-				return "bg-muted text-muted-foreground"
+				return "bg-gray-100 text-gray-100-foreground"
 		}
 	}
 

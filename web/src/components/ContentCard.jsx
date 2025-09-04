@@ -123,14 +123,14 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 				whileHover={{ y: -5, transition: { duration: 0.2 } }}
 				className={`bg-white rounded-2xl overflow-hidden relative flex flex-col h-full cursor-pointer ${
 					pinned
-						? "shadow-md border-2 border-primary/10 bg-primary/5"
-						: "shadow-sm hover:shadow-md border border-border"
+						? "shadow-md border-2 border-green-500/10 bg-green-500/5"
+						: "shadow-sm hover:shadow-md border border-gray-200"
 				}`}
 				onMouseEnter={() => setHover(true)}
 				onMouseLeave={() => setHover(false)}
 				onClick={onClick}
 			>
-				{pinned && <div className="absolute top-0 left-6 w-6 h-1 bg-primary rounded-b-full" />}
+				{pinned && <div className="absolute top-0 left-6 w-6 h-1 bg-green-500 rounded-b-full" />}
 				<div className="p-6 flex flex-col justify-between h-full">
 					<div className="flex justify-between items-start mb-4">
 						<div className={`${V.badge} text-xs font-medium px-3 py-1 rounded-full flex items-center gap-2`}>
@@ -138,27 +138,27 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 							<span>{V.label}</span>
 						</div>
 					</div>
-					<h3 className="text-xl font-display font-bold text-foreground hover:underline line-clamp-2 mb-1">
+					<h3 className="text-xl font-display font-bold text-gray-900 hover:underline line-clamp-2 mb-1">
 						{item.title}
 					</h3>
 
 					{/* Video metadata */}
 					{item.type === "video" && (
-						<p className="text-muted-foreground text-sm mb-4">
+						<p className="text-gray-100-foreground text-sm mb-4">
 							by {item.channel || "Unknown Channel"} • {formatDuration(item.duration)}
 						</p>
 					)}
 
 					{/* Book metadata */}
 					{item.type === "book" && (
-						<p className="text-muted-foreground text-sm mb-4">
+						<p className="text-gray-100-foreground text-sm mb-4">
 							by {item.author || "Unknown Author"} • {item.pageCount || "Unknown"} pages
 						</p>
 					)}
 
 					{/* Description for other types */}
 					{item.type !== "video" && item.type !== "book" && item.description && (
-						<p className="text-muted-foreground text-sm line-clamp-2 mb-4">{item.description}</p>
+						<p className="text-gray-100-foreground text-sm line-clamp-2 mb-4">{item.description}</p>
 					)}
 
 					<div className="flex flex-wrap items-center gap-2 mb-3">
@@ -166,7 +166,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 							<TagChip key={t} tag={t} contentType={item.type} />
 						))}
 						{item.tags?.length > 2 && (
-							<span className="inline-flex text-xs font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded">
+							<span className="inline-flex text-xs font-medium bg-gray-100 text-gray-100-foreground px-2 py-0.5 rounded">
 								+{item.tags.length - 2}
 							</span>
 						)}
@@ -185,12 +185,12 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 					</div>
 					<div>
 						{isFlashcard && (
-							<div className="flex justify-between text-xs text-muted-foreground mb-2">
+							<div className="flex justify-between text-xs text-gray-100-foreground mb-2">
 								<span>
 									{item.overdue > 0 && (
 										<>
 											<span className="text-overdue-text font-medium">{item.overdue} overdue</span>
-											<span className="text-muted-foreground mx-1">•</span>
+											<span className="text-gray-100-foreground mx-1">•</span>
 										</>
 									)}
 									<span>{item.totalCards || item.cardCount || 0} cards</span>
@@ -199,10 +199,10 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 						)}
 						{!isFlashcard && (
 							<>
-								<div className="flex justify-between text-xs text-muted-foreground mb-2">
+								<div className="flex justify-between text-xs text-gray-100-foreground mb-2">
 									<span>{Math.round(progressValue)}%</span>
 								</div>
-								<div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+								<div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
 									<div
 										style={{ width: `${progressValue}%` }}
 										className={`h-full bg-gradient-to-r ${V.grad} rounded-full transition-all duration-500`}

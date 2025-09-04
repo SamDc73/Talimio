@@ -117,13 +117,11 @@ export async function fetchContentData(includeArchived = false) {
 
 		// Debug logging in development
 		if (import.meta.env.DEV) {
-			console.log("[API] Fetched content data:", data)
 		}
 
 		return data.items.map((item) => {
 			// Debug logging for individual items in development
 			if (import.meta.env.DEV) {
-				console.log("[API] Processing item:", item)
 			}
 
 			const mappedItem = {
@@ -158,12 +156,10 @@ export async function fetchContentData(includeArchived = false) {
 
 			// Debug logging for mapped item in development
 			if (import.meta.env.DEV) {
-				console.log("[API] Mapped item:", mappedItem)
 			}
 			return mappedItem
 		})
-	} catch (error) {
-		console.error("Error fetching content data:", error)
+	} catch (_error) {
 		return []
 	}
 }

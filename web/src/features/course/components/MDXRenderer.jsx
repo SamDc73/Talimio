@@ -2,8 +2,6 @@ import { MDXProvider } from "@mdx-js/react"
 import React from "react"
 import { FillInTheBlank, FreeForm, MultipleChoice } from "@/components/quiz/index.js"
 import { useMDXCompile } from "@/hooks/useMDXCompile"
-import "katex/dist/katex.min.css"
-import "./LessonViewer.css"
 
 // Code block component with language display
 function CodeBlock({ children, className, ...props }) {
@@ -14,14 +12,15 @@ function CodeBlock({ children, className, ...props }) {
 	const showLanguage = language && language !== "text" && language !== "plaintext"
 
 	return (
-		<div className="relative group mb-4 rounded-lg overflow-hidden border border-gray-700">
+		<div className="relative group mb-4 rounded-lg overflow-hidden bg-gray-900">
 			{/* Language badge */}
-			{showLanguage && <div className="language-badge">{language}</div>}
+			{showLanguage && (
+				<div className="absolute top-0 right-0 px-2 py-1 text-xs font-mono text-gray-400 bg-gray-800 rounded-bl-md z-10">
+					{language}
+				</div>
+			)}
 
-			<pre
-				className={`overflow-x-auto p-4 rounded-lg bg-gray-900 text-gray-100 text-sm font-mono ${className || ""}`}
-				{...props}
-			>
+			<pre className={`overflow-x-auto p-4 text-gray-100 text-sm font-mono ${className || ""}`} {...props}>
 				{children}
 			</pre>
 		</div>
@@ -31,15 +30,15 @@ function CodeBlock({ children, className, ...props }) {
 // Static component overrides - defined once outside component
 const MDX_COMPONENTS = {
 	// Provide React and hooks for interactive components
-	React,
+	React: React,
 	useState: React.useState,
 	useEffect: React.useEffect,
 	useRef: React.useRef,
 
 	// Quiz components
-	MultipleChoice,
-	FillInTheBlank,
-	FreeForm,
+	MultipleChoice: MultipleChoice,
+	FillInTheBlank: FillInTheBlank,
+	FreeForm: FreeForm,
 
 	// Style headings
 	h1: (props) => <h1 className="text-3xl font-bold mb-6 mt-8 text-zinc-900" {...props} />,

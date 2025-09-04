@@ -17,7 +17,7 @@ export default function CourseLayout() {
 	// Course context is only loaded when this layout is rendered
 	const { courseId, lessonId, mode, setMode, courseName, modules, isLoading } = useCourseContext()
 
-	const handleLessonClick = (moduleId, lessonId) => {
+	const handleLessonClick = (_moduleId, lessonId) => {
 		// The sidebar passes (moduleId, lessonId) but we only need lessonId for navigation
 		goToLesson(courseId, lessonId)
 	}

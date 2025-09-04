@@ -95,7 +95,7 @@ function preprocessMDXContent(content) {
 
 	// Fix self-closing tags that might have issues
 	// Match tags like <br/> and ensure they have proper spacing
-	processed = processed.replace(/<(\w+)([^>]*?)\/>/g, (match, tag, attrs) => {
+	processed = processed.replace(/<(\w+)([^>]*?)\/>/g, (_match, tag, attrs) => {
 		// Ensure there's a space before the closing slash
 		const cleanAttrs = attrs.trim()
 		if (cleanAttrs) {

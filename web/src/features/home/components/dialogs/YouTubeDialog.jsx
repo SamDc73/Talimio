@@ -72,7 +72,7 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 		<Sheet open={open} onOpenChange={handleClose}>
 			<SheetContent side="bottom" className="sm:max-w-lg mx-auto">
 				{isAddingVideo && (
-					<div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg">
+					<div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg">
 						<div className="flex flex-col items-center gap-4">
 							<div className="animate-spin rounded-full h-10 w-10 border-b-2 border-video" />
 							<p className="text-lg font-medium">Adding your video...</p>

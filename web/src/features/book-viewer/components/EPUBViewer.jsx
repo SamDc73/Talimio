@@ -74,7 +74,7 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 
 			renditionRef.current.themes.register("custom", {
 				body: {
-					"font-family": "'Open Sans', -apple-system, BlinkMacSystemFont, sans-serif !important",
+					"font-family": "'Roboto', -apple-system, BlinkMacSystemFont, sans-serif !important",
 					"font-size": `${actualFontSize}px !important`,
 					"line-height": "1.8 !important",
 					padding: "40px 60px !important",
@@ -249,12 +249,12 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 	// Show loading state
 	if (loading) {
 		return (
-			<div className="h-full flex items-center justify-center bg-background">
+			<div className="h-full flex items-center justify-center bg-white">
 				<div className="text-center">
 					<div className="mb-4">
 						<div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"></div>
 					</div>
-					<p className="text-muted-foreground">Loading EPUB...</p>
+					<p className="text-gray-100-foreground">Loading EPUB...</p>
 				</div>
 			</div>
 		)
@@ -263,10 +263,10 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 	// Show error state
 	if (error) {
 		return (
-			<div className="h-full flex items-center justify-center bg-background">
+			<div className="h-full flex items-center justify-center bg-white">
 				<div className="text-center max-w-md">
-					<h3 className="text-lg font-semibold text-destructive mb-2">Failed to load EPUB</h3>
-					<p className="text-muted-foreground">{error}</p>
+					<h3 className="text-lg font-semibold text-red-500 mb-2">Failed to load EPUB</h3>
+					<p className="text-gray-100-foreground">{error}</p>
 				</div>
 			</div>
 		)
@@ -278,7 +278,7 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 	}
 
 	return (
-		<div className="h-full bg-background epub-container">
+		<div className="h-full bg-white epub-container">
 			<div className="max-w-4xl mx-auto p-8 h-full">
 				<div className="bg-white rounded-lg shadow-sm h-full">
 					<ReactReader

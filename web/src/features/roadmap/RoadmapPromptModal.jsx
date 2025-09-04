@@ -79,7 +79,7 @@ function RoadmapPromptModal({ open, onOpenChange, onRoadmapCreated }) {
 						</div>
 						Generate Learning Course
 					</DialogTitle>
-					<DialogDescription className="text-muted-foreground text-sm">
+					<DialogDescription className="text-gray-100-foreground text-sm">
 						Tell us what you want to learn, and AI will create a personalized course for you
 					</DialogDescription>
 				</DialogHeader>
@@ -92,16 +92,16 @@ function RoadmapPromptModal({ open, onOpenChange, onRoadmapCreated }) {
 								placeholder="What would you like to learn? (e.g., 'Learn React and build modern web apps', 'Master Python for data science', 'Get started with machine learning'...)"
 								value={prompt}
 								onChange={(e) => setPrompt(e.target.value)}
-								className="w-full min-h-[120px] px-4 py-3 text-sm border border-input bg-background rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring transition-all resize-none placeholder:text-muted-foreground/60"
+								className="w-full min-h-[120px] px-4 py-3 text-sm border border-gray-300 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-ring transition-all resize-none placeholder:text-gray-100-foreground/60"
 								disabled={isGenerating}
 								maxLength={500}
 							/>
-							<div className="absolute bottom-3 right-3 text-xs text-muted-foreground">{prompt.length}/500</div>
+							<div className="absolute bottom-3 right-3 text-xs text-gray-100-foreground">{prompt.length}/500</div>
 						</div>
 
 						{/* Example prompts */}
 						<div className="space-y-2">
-							<p className="text-xs text-muted-foreground font-medium">💡 Example prompts:</p>
+							<p className="text-xs text-gray-100-foreground font-medium">💡 Example prompts:</p>
 							<div className="flex flex-wrap gap-2">
 								{[
 									"Learn React and build modern web apps",
@@ -114,7 +114,7 @@ function RoadmapPromptModal({ open, onOpenChange, onRoadmapCreated }) {
 										type="button"
 										onClick={() => setPrompt(example)}
 										disabled={isGenerating}
-										className="text-xs px-3 py-1 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all"
+										className="text-xs px-3 py-1 rounded-full bg-gray-100 hover:bg-gray-100/80 text-gray-100-foreground hover:text-gray-900 transition-all"
 									>
 										{example}
 									</button>
@@ -156,7 +156,7 @@ function RoadmapPromptModal({ open, onOpenChange, onRoadmapCreated }) {
 					</div>
 
 					{/* Info note */}
-					<div className="text-xs text-muted-foreground text-center p-3 bg-muted/50 rounded-lg">
+					<div className="text-xs text-gray-100-foreground text-center p-3 bg-gray-100/50 rounded-lg">
 						<Sparkles className="h-3 w-3 inline mr-1" />
 						AI will generate a title, tags, and learning path. You'll be able to edit everything on the next page.
 					</div>

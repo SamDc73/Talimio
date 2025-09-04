@@ -60,12 +60,8 @@ export function useQuizSubmission() {
 					description: `Score: ${data.performance_summary?.accuracy?.toFixed(1)}%`,
 				})
 			}
-
-			// Log performance summary for debugging
-			console.log("Quiz Performance Summary:", data.performance_summary)
 		},
 		onError: (error) => {
-			console.error("Quiz submission error:", error)
 			toast.error("Failed to submit quiz", {
 				description: error.response?.data?.detail || "Please try again",
 			})

@@ -213,9 +213,9 @@ function VideoViewerContent() {
 			<div className="h-screen">
 				<VideoHeader />
 				<div
-					className={`flex flex-col transition-all duration-300 min-h-[calc(100vh-4rem)] bg-gradient-to-b from-background to-slate-50/50 pt-16 ${isOpen ? "ml-80" : "ml-0"}`}
+					className={`flex flex-col transition-all duration-300 min-h-[calc(100vh-4rem)] bg-gradient-to-b from-white to-slate-50/50 pt-16 ${isOpen ? "ml-80" : "ml-0"}`}
 				>
-					<div className="flex flex-col items-center justify-center min-h-[30rem] gap-4 text-muted-foreground p-12">
+					<div className="flex flex-col items-center justify-center min-h-[30rem] gap-4 text-gray-100-foreground p-12">
 						<Loader2 className="h-8 w-8 animate-spin" />
 						<p className="mt-2 text-sm font-medium opacity-80">Loading video...</p>
 					</div>
@@ -230,12 +230,10 @@ function VideoViewerContent() {
 			<div className="h-screen">
 				<VideoHeader />
 				<div
-					className={`flex flex-col transition-all duration-300 min-h-[calc(100vh-4rem)] bg-gradient-to-b from-background to-slate-50/50 pt-16 ${isOpen ? "ml-80" : "ml-0"}`}
+					className={`flex flex-col transition-all duration-300 min-h-[calc(100vh-4rem)] bg-gradient-to-b from-white to-slate-50/50 pt-16 ${isOpen ? "ml-80" : "ml-0"}`}
 				>
-					<div className="flex flex-col items-center justify-center min-h-[30rem] gap-4 p-12 bg-gradient-to-br from-destructive/5 to-transparent rounded-2xl border border-destructive/10">
-						<p className="text-base font-medium text-destructive text-center max-w-[30rem]">
-							{error || "Video not found"}
-						</p>
+					<div className="flex flex-col items-center justify-center min-h-[30rem] gap-4 p-12 bg-gradient-to-br from-red-500/5 to-transparent rounded-2xl border border-red-500/10">
+						<p className="text-base font-medium text-red-500 text-center max-w-[30rem]">{error || "Video not found"}</p>
 						<button
 							type="button"
 							onClick={() => navigate("/")}
@@ -251,7 +249,7 @@ function VideoViewerContent() {
 
 	// Main render
 	return (
-		<div className="flex h-screen bg-background">
+		<div className="flex h-screen bg-white">
 			<VideoHeader video={video} onToggleSidebar={toggleSidebar} isSidebarOpen={isOpen} />
 			<VideoSidebar
 				video={video}
@@ -276,8 +274,8 @@ function VideoViewerContent() {
 
 					{/* Video Info */}
 					<div className="mt-6 p-0">
-						<h1 className="text-[1.75rem] font-bold leading-9 tracking-tight mb-3 text-foreground">{video.title}</h1>
-						<div className="flex items-center flex-wrap gap-3 text-sm text-muted-foreground mb-6">
+						<h1 className="text-[1.75rem] font-bold leading-9 tracking-tight mb-3 text-gray-900">{video.title}</h1>
+						<div className="flex items-center flex-wrap gap-3 text-sm text-gray-100-foreground mb-6">
 							<span className="font-semibold text-violet-600">{video.channel}</span>
 							<span className="opacity-30">•</span>
 							<span className="tabular-nums">{formatDuration(duration || video.duration)}</span>

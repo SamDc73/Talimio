@@ -19,14 +19,14 @@ export function Option1_MinimalistPill({ handlers, selectedText, onClose, toolti
 			}}
 			className="animate-in fade-in zoom-in-95 duration-200"
 		>
-			<div className="flex items-center gap-1 p-1 bg-background border border-border rounded-full shadow-md">
+			<div className="flex items-center gap-1 p-1 bg-white border border-gray-200 rounded-full shadow-md">
 				<button
 					type="button"
 					onClick={() => {
 						handlers?.onHighlight?.(selectedText)
 						onClose()
 					}}
-					className="group flex items-center justify-center h-7 w-7 rounded-full transition-colors hover:bg-accent text-foreground hover:text-foreground"
+					className="group flex items-center justify-center h-7 w-7 rounded-full transition-colors hover:bg-gray-100 text-gray-900 hover:text-gray-900"
 					title="Highlight"
 				>
 					<Highlighter className="h-3.5 w-3.5 transition-transform group-hover:scale-110 group-active:scale-95" />
@@ -40,7 +40,7 @@ export function Option1_MinimalistPill({ handlers, selectedText, onClose, toolti
 						handlers?.onAskAI?.(selectedText)
 						onClose()
 					}}
-					className="group flex items-center justify-center h-7 w-7 rounded-full transition-colors hover:bg-accent text-primary hover:text-primary"
+					className="group flex items-center justify-center h-7 w-7 rounded-full transition-colors hover:bg-gray-100 text-green-500 hover:text-green-500"
 					title="Ask AI"
 				>
 					<Sparkles className="h-3.5 w-3.5 transition-transform group-hover:scale-110 group-active:scale-95" />
@@ -75,10 +75,10 @@ export function Option2_FloatingButtons({ handlers, selectedText, onClose, toolt
 						handlers?.onHighlight?.(selectedText)
 						onClose()
 					}}
-					className="group flex items-center justify-center h-10 w-10 bg-background border border-border rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 active:scale-95"
+					className="group flex items-center justify-center h-10 w-10 bg-white border border-gray-200 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 active:scale-95"
 					title="Highlight"
 				>
-					<Highlighter className="h-4 w-4 text-foreground transition-transform group-hover:rotate-12" />
+					<Highlighter className="h-4 w-4 text-gray-900 transition-transform group-hover:rotate-12" />
 				</button>
 
 				<button
@@ -87,7 +87,7 @@ export function Option2_FloatingButtons({ handlers, selectedText, onClose, toolt
 						handlers?.onAskAI?.(selectedText)
 						onClose()
 					}}
-					className="group flex items-center justify-center h-10 w-10 bg-primary text-primary-foreground rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 active:scale-95"
+					className="group flex items-center justify-center h-10 w-10 bg-green-500 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 active:scale-95"
 					title="Ask AI"
 				>
 					<Sparkles className="h-4 w-4 transition-transform group-hover:rotate-12 group-hover:scale-110" />
@@ -115,7 +115,7 @@ export function Option3_GlassCard({ handlers, selectedText, onClose, tooltipX, t
 			}}
 			className="animate-in fade-in zoom-in-95 duration-200"
 		>
-			<div className="bg-background/80 backdrop-blur-sm border border-border rounded-lg shadow-xl p-2">
+			<div className="bg-white/80 backdrop-blur-sm border border-gray-200 rounded-lg shadow-xl p-2">
 				<div className="flex items-center gap-1">
 					<button
 						type="button"
@@ -123,11 +123,11 @@ export function Option3_GlassCard({ handlers, selectedText, onClose, tooltipX, t
 							handlers?.onHighlight?.(selectedText)
 							onClose()
 						}}
-						className="group flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent transition-colors duration-200"
+						className="group flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors duration-200"
 						title="Highlight"
 					>
-						<Highlighter className="h-4 w-4 text-foreground transition-transform group-hover:scale-110" />
-						<span className="text-sm font-medium text-foreground">Highlight</span>
+						<Highlighter className="h-4 w-4 text-gray-900 transition-transform group-hover:scale-110" />
+						<span className="text-sm font-medium text-gray-900">Highlight</span>
 					</button>
 
 					<div className="w-px h-6 bg-border/50" />
@@ -138,11 +138,11 @@ export function Option3_GlassCard({ handlers, selectedText, onClose, tooltipX, t
 							handlers?.onAskAI?.(selectedText)
 							onClose()
 						}}
-						className="group flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent transition-colors duration-200"
+						className="group flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors duration-200"
 						title="Ask AI"
 					>
-						<Sparkles className="h-4 w-4 text-primary transition-transform group-hover:scale-110 group-hover:rotate-12" />
-						<span className="text-sm font-medium bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
+						<Sparkles className="h-4 w-4 text-green-500 transition-transform group-hover:scale-110 group-hover:rotate-12" />
+						<span className="text-sm font-medium bg-gradient-to-r from-green-500 to-green-500/80 bg-clip-text text-transparent">
 							Ask AI
 						</span>
 					</button>
@@ -172,9 +172,9 @@ export function Option4_BubbleStyle({ handlers, selectedText, onClose, tooltipX,
 		>
 			<div className="relative">
 				{/* Bubble tail */}
-				<div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-background border-l border-b border-border rotate-45" />
+				<div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-white border-l border-b border-gray-200 rotate-45" />
 
-				<div className="bg-background border border-border rounded-2xl shadow-lg p-2">
+				<div className="bg-white border border-gray-200 rounded-2xl shadow-lg p-2">
 					<div className="flex items-center gap-2">
 						<button
 							type="button"
@@ -239,8 +239,8 @@ export function TooltipOptionsDemo() {
 						onClick={() => setSelectedOption(option.id)}
 						className={`px-4 py-2 rounded-lg border transition-colors ${
 							selectedOption === option.id
-								? "bg-primary text-primary-foreground border-primary"
-								: "bg-background text-foreground border-border hover:bg-accent"
+								? "bg-green-500 text-white border-green-500"
+								: "bg-white text-gray-900 border-gray-200 hover:bg-gray-100"
 						}`}
 					>
 						{option.name}
@@ -249,7 +249,7 @@ export function TooltipOptionsDemo() {
 			</div>
 
 			{/* Demo Area */}
-			<div className="relative border border-border rounded-lg p-8 min-h-[300px] bg-muted/30">
+			<div className="relative border border-gray-200 rounded-lg p-8 min-h-[300px] bg-gray-100/30">
 				<p className="text-lg leading-relaxed">
 					Select some text in this paragraph to see the tooltip in action. The tooltip will appear above your selection
 					with different styling based on the option you've chosen above. Try selecting different parts of this text to
@@ -269,16 +269,16 @@ export function TooltipOptionsDemo() {
 
 				<button
 					onClick={() => setShowTooltip(!showTooltip)}
-					className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg"
+					className="mt-4 px-4 py-2 bg-green-500 text-white rounded-lg"
 				>
 					{showTooltip ? "Hide" : "Show"} Preview
 				</button>
 			</div>
 
 			{/* Description */}
-			<div className="bg-background border border-border rounded-lg p-4">
+			<div className="bg-white border border-gray-200 rounded-lg p-4">
 				<h3 className="font-semibold mb-2">Current Option: {options.find((opt) => opt.id === selectedOption)?.name}</h3>
-				<div className="text-sm text-muted-foreground space-y-1">
+				<div className="text-sm text-gray-100-foreground space-y-1">
 					{selectedOption === 1 && (
 						<>
 							<p>• Clean, minimal design with rounded pill container</p>

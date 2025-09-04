@@ -13,7 +13,6 @@ import { highlightService } from "@/services/highlightService"
 import { useHighlightActions } from "@/stores/highlights"
 import useAppStore from "@/stores/useAppStore"
 
-import "react-pdf-highlighter/dist/style.css"
 import "../styles/highlights.css" // Apply unified highlight overrides
 import "../styles/pdf-viewer.css" // PDF viewer specific styles
 
@@ -371,7 +370,7 @@ function PDFViewer({ url, onTextSelection, bookId, registerApi = null }) {
 	}
 
 	return (
-		<div className="pdf-viewer-wrapper h-full">
+		<div className="h-full overflow-auto scroll-smooth py-8 bg-gray-100 dark:bg-gray-800 relative flex flex-col">
 			<PdfLoader
 				url={pdfUrl}
 				beforeLoad={<div className="flex items-center justify-center h-64 text-gray-600">Loading PDF…</div>}
@@ -386,49 +385,59 @@ function PDFViewer({ url, onTextSelection, bookId, registerApi = null }) {
 					}
 
 					return (
-						<PdfHighlighter
-							ref={pdfHighlighterRef}
-							pdfDocument={pdfDocument}
-							scale={scale}
-							highlights={pdfHighlights}
-							onScrollChange={() => {
-								trackCurrentPage(pdfHighlighterRef.current?.viewer)
-							}}
-							scrollRef={(scrollTo) => {
-								scrollToRef.current = scrollTo
-							}}
-							enableAreaSelection={(event) => event.altKey}
-							onSelectionFinished={(position, content, hideTipAndSelection) => {
-								return (
-									<CreateTipContent position={position} content={content} hideTipAndSelection={hideTipAndSelection} />
-								)
-							}}
-							highlightTransform={(
-								highlight,
-								_index,
-								_setTip,
-								_hideTip,
-								_viewportToScaled,
-								_screenshot,
-								isScrolledTo
-							) => (
-								<Highlight
-									isScrolledTo={isScrolledTo}
-									position={highlight.position}
-									comment={highlight.comment}
-									onClick={() => onHighlightClick(highlight.id)}
-									onMouseOver={() => onHighlightHover(highlight.id)}
-								/>
-							)}
-						>
-							{/* Empty div for PdfHighlighter's internal structure */}
-							<div className="absolute inset-0 pointer-events-none" />
-							{highlightsLoading && (
-								<div className="absolute top-2 left-2 z-10 rounded bg-black/50 text-white text-xs px-2 py-1">
-									Loading highlights...
+						<div className="h-full flex justify-center items-start min-h-full">
+							<div className="h-full w-full">
+								<div className="mx-auto relative shadow-md bg-white">
+									<PdfHighlighter
+										ref={pdfHighlighterRef}
+										pdfDocument={pdfDocument}
+										scale={scale}
+										highlights={pdfHighlights}
+										onScrollChange={() => {
+											trackCurrentPage(pdfHighlighterRef.current?.viewer)
+										}}
+										scrollRef={(scrollTo) => {
+											scrollToRef.current = scrollTo
+										}}
+										enableAreaSelection={(event) => event.altKey}
+										onSelectionFinished={(position, content, hideTipAndSelection) => {
+											return (
+												<CreateTipContent
+													position={position}
+													content={content}
+													hideTipAndSelection={hideTipAndSelection}
+												/>
+											)
+										}}
+										highlightTransform={(
+											highlight,
+											_index,
+											_setTip,
+											_hideTip,
+											_viewportToScaled,
+											_screenshot,
+											isScrolledTo
+										) => (
+											<Highlight
+												isScrolledTo={isScrolledTo}
+												position={highlight.position}
+												comment={highlight.comment}
+												onClick={() => onHighlightClick(highlight.id)}
+												onMouseOver={() => onHighlightHover(highlight.id)}
+											/>
+										)}
+									>
+										{/* Empty div for PdfHighlighter's internal structure */}
+										<div className="absolute inset-0 pointer-events-none" />
+										{highlightsLoading && (
+											<div className="absolute top-2 left-2 z-10 rounded bg-black/50 text-white text-xs px-2 py-1">
+												Loading highlights...
+											</div>
+										)}
+									</PdfHighlighter>
 								</div>
-							)}
-						</PdfHighlighter>
+							</div>
+						</div>
 					)
 				}}
 			</PdfLoader>

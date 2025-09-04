@@ -1,20 +1,20 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import tailwindcss from "@tailwindcss/vite"
+import react from "@vitejs/plugin-react"
+import { defineConfig, loadEnv } from "vite"
 
-import react from "@vitejs/plugin-react";
-import { defineConfig, loadEnv } from "vite";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const Dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig(({ mode }) => {
 	// Load env file based on `mode` in the current working directory.
-	const env = loadEnv(mode, process.cwd(), "");
+	const env = loadEnv(mode, process.cwd(), "")
 
 	return {
-		plugins: [react()],
+		plugins: [tailwindcss(), react()],
 		resolve: {
 			alias: {
-				"@": path.resolve(__dirname, "./src"),
+				"@": path.resolve(Dirname, "./src"),
 			},
 		},
 		optimizeDeps: {
@@ -38,26 +38,26 @@ export default defineConfig(({ mode }) => {
 					secure: false,
 					ws: true,
 					configure: (proxy, _options) => {
-						proxy.on('error', (err, _req, _res) => {
-							console.log('proxy error', err);
-						});
-						proxy.on('proxyReq', (proxyReq, req, _res) => {
+						proxy.on("error", (err, _req, _res) => {
+							console.log("proxy error", err)
+						})
+						proxy.on("proxyReq", (proxyReq, req, _res) => {
 							// Forward cookies from the original request
 							if (req.headers.cookie) {
-								proxyReq.setHeader('Cookie', req.headers.cookie);
+								proxyReq.setHeader("Cookie", req.headers.cookie)
 							}
-							console.log('Proxying:', req.method, req.url, 'with cookies:', req.headers.cookie?.substring(0, 50));
-						});
-						proxy.on('proxyRes', (proxyRes, req, _res) => {
-							console.log('Proxy response:', proxyRes.statusCode, req.url);
+							console.log("Proxying:", req.method, req.url, "with cookies:", req.headers.cookie?.substring(0, 50))
+						})
+						proxy.on("proxyRes", (proxyRes, req, _res) => {
+							console.log("Proxy response:", proxyRes.statusCode, req.url)
 							// Log set-cookie headers if present
-							if (proxyRes.headers['set-cookie']) {
-								console.log('Setting cookies:', proxyRes.headers['set-cookie']);
+							if (proxyRes.headers["set-cookie"]) {
+								console.log("Setting cookies:", proxyRes.headers["set-cookie"])
 							}
-						});
+						})
 					},
 				},
 			},
 		},
-	};
-});
+	}
+})

@@ -3,7 +3,6 @@ import { Button } from "@/components/button"
 import { useTextSelectionTooltip } from "@/hooks/useTextSelectionTooltip"
 import { cn } from "@/lib/utils"
 import { ContentRenderer } from "./ContentRenderer"
-import "./LessonViewer.css"
 
 /**
  * Simplified lesson viewer component

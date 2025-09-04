@@ -35,7 +35,7 @@ function SearchBar({
 			transition={{ duration: 0.5, delay: 0.1 }}
 			className="max-w-2xl mx-auto mb-6"
 		>
-			<div className="bg-white rounded-2xl shadow-sm p-2 border border-border transition-all hover:shadow-md">
+			<div className="bg-white rounded-2xl shadow-sm p-2 border border-gray-200 transition-all hover:shadow-md">
 				<div className="flex items-center">
 					<div
 						className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${
@@ -47,7 +47,7 @@ function SearchBar({
 						) : isYoutubeMode ? (
 							<Youtube className="text-video" size={20} />
 						) : (
-							<Search className="text-muted-foreground" size={20} />
+							<Search className="text-gray-100-foreground" size={20} />
 						)}
 						<Input
 							type="text"
@@ -73,7 +73,7 @@ function SearchBar({
 						{isGenerateMode ? (
 							<>
 								<div className="h-8 w-px bg-border" />
-								<Button variant="ghost" size="sm" onClick={() => onSetMode(null)} className="text-muted-foreground">
+								<Button variant="ghost" size="sm" onClick={() => onSetMode(null)} className="text-gray-100-foreground">
 									Cancel
 								</Button>
 								<Button
@@ -88,7 +88,7 @@ function SearchBar({
 						) : isYoutubeMode ? (
 							<>
 								<div className="h-8 w-px bg-border" />
-								<Button variant="ghost" size="sm" onClick={() => onSetMode(null)} className="text-muted-foreground">
+								<Button variant="ghost" size="sm" onClick={() => onSetMode(null)} className="text-gray-100-foreground">
 									Cancel
 								</Button>
 								<Button

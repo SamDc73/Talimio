@@ -42,7 +42,7 @@ export function BookHeader({
 	}, [bookId])
 
 	return (
-		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-border shadow-sm">
+		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
 			<div className="container mx-auto px-4">
 				<div className="flex h-16 items-center">
 					{/* Logo Section */}
@@ -80,7 +80,7 @@ export function BookHeader({
 					<div className="flex items-center gap-2">
 						{/* Zoom Controls for PDF */}
 						{showZoomControls && (
-							<div className="flex items-center border border-border rounded-full h-8 px-1 bg-muted/50">
+							<div className="flex items-center border border-gray-200 rounded-full h-8 px-1 bg-gray-100/50">
 								<TooltipButton
 									variant="ghost"
 									size="icon"
@@ -114,7 +114,7 @@ export function BookHeader({
 
 						{/* Font Size Controls for EPUB */}
 						{showFontControls && (
-							<div className="flex items-center border border-border rounded-full h-8 px-1 bg-muted/50">
+							<div className="flex items-center border border-gray-200 rounded-full h-8 px-1 bg-gray-100/50">
 								<TooltipButton
 									variant="ghost"
 									size="icon"

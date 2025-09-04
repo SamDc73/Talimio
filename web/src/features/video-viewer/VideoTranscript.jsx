@@ -154,10 +154,10 @@ function VirtualizedTranscriptList({ segments, activeIndex, onSegmentClick, cont
 				<span
 					className={cn(
 						"flex-1 text-sm leading-normal",
-						"text-foreground/85 break-words",
+						"text-gray-900/85 break-words",
 						"transition-colors duration-150 select-text",
-						"hover:text-foreground",
-						isActive && "text-foreground font-medium"
+						"hover:text-gray-900",
+						isActive && "text-gray-900 font-medium"
 					)}
 				>
 					{segment.text}
@@ -218,8 +218,7 @@ export function VideoTranscript({ videoId, videoElement, youtubePlayerRef, onSee
 			try {
 				const data = await getVideoTranscript(videoId)
 				setTranscript(data)
-			} catch (err) {
-				console.error("Failed to load transcript:", err)
+			} catch (_err) {
 				setError("Failed to load transcript")
 			} finally {
 				setLoading(false)
@@ -324,7 +323,7 @@ export function VideoTranscript({ videoId, videoElement, youtubePlayerRef, onSee
 	if (!transcript?.segments || transcript.segments.length === 0) {
 		return (
 			<div className="p-12 text-center bg-transparent">
-				<div className="text-sm italic text-muted-foreground">No transcript available for this video</div>
+				<div className="text-sm italic text-gray-100-foreground">No transcript available for this video</div>
 			</div>
 		)
 	}
@@ -347,14 +346,10 @@ export function VideoTranscript({ videoId, videoElement, youtubePlayerRef, onSee
 // Error fallback component following component-architecture.md patterns
 function TranscriptErrorFallback({ error, resetErrorBoundary }) {
 	return (
-		<div className="p-4 border border-destructive rounded-md">
-			<h2 className="text-lg font-semibold text-destructive">Transcript Error</h2>
-			<pre className="mt-2 text-sm text-muted-foreground">{error.message}</pre>
-			<button
-				onClick={resetErrorBoundary}
-				className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded"
-				type="button"
-			>
+		<div className="p-4 border border-red-500 rounded-md">
+			<h2 className="text-lg font-semibold text-red-500">Transcript Error</h2>
+			<pre className="mt-2 text-sm text-gray-100-foreground">{error.message}</pre>
+			<button onClick={resetErrorBoundary} className="mt-4 px-4 py-2 bg-green-500 text-white rounded" type="button">
 				Retry Loading Transcript
 			</button>
 		</div>

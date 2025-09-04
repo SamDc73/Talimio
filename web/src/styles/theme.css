@@ -1,174 +1,66 @@
-@layer base {
-	:root {
-		--background: 0 0% 100%;
-		--foreground: 222.2 84% 4.9%;
+/* Dark mode overrides for Tailwind v4 color variables */
+.dark {
+	/* Core Colors - Dark mode OKLCH values */
+	--color-background: oklch(0.17 0.05 249); /* dark background */
+	--color-foreground: oklch(0.98 0.01 210); /* light text */
 
-		--card: 0 0% 100%;
-		--card-foreground: 222.2 84% 4.9%;
+	--color-card: oklch(0.17 0.05 249);
+	--color-card-foreground: oklch(0.98 0.01 210);
 
-		--popover: 0 0% 100%;
-		--popover-foreground: 222.2 84% 4.9%;
+	--color-popover: oklch(0.17 0.05 249);
+	--color-popover-foreground: oklch(0.98 0.01 210);
 
-		--primary: 142.1 76.2% 36.3%;
-		--primary-foreground: 355.7 100% 97.3%;
+	--color-primary: oklch(0.62 0.13 142); /* lighter green for dark mode */
+	--color-primary-foreground: oklch(0.23 0.05 145);
 
-		--secondary: 210 40% 96.1%;
-		--secondary-foreground: 222.2 47.4% 11.2%;
+	--color-secondary: oklch(0.28 0.04 249);
+	--color-secondary-foreground: oklch(0.98 0.01 210);
 
-		--muted: 210 40% 96.1%;
-		--muted-foreground: 215.4 16.3% 46.9%;
+	--color-muted: oklch(0.28 0.04 249);
+	--color-muted-foreground: oklch(0.65 0.02 218);
 
-		--accent: 210 40% 96.1%;
-		--accent-foreground: 222.2 47.4% 11.2%;
+	--color-accent: oklch(0.28 0.04 249);
+	--color-accent-foreground: oklch(0.98 0.01 210);
 
-		--destructive: 0 84.2% 60.2%;
-		--destructive-foreground: 210 40% 98%;
+	--color-destructive: oklch(0.45 0.15 25);
+	--color-destructive-foreground: oklch(0.98 0.01 210);
 
-		--border: 214.3 31.8% 91.4%;
-		--input: 214.3 31.8% 91.4%;
-		--ring: 142.1 76.2% 36.3%;
+	--color-border: oklch(0.28 0.04 249);
+	--color-input: oklch(0.28 0.04 249);
+	--color-ring: oklch(0.55 0.15 142);
 
-		--radius: 0.5rem;
+	/* Content Type Colors - Lighter versions for dark mode */
+	--color-course: oklch(0.65 0.15 187);
+	--color-course-text: oklch(0.65 0.15 187);
+	--color-course-accent: oklch(0.77 0.14 186);
 
-		/* Typography */
-		--font-sans:
-			"Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-		--font-display: "Comfortaa", var(--font-sans);
+	--color-book: oklch(0.79 0.18 255);
+	--color-book-text: oklch(0.79 0.18 255);
+	--color-book-accent: oklch(0.87 0.15 255);
 
-		/* Chart Colors */
-		--chart-1: 12 76% 61%;
-		--chart-2: 173 58% 39%;
-		--chart-3: 197 37% 24%;
-		--chart-4: 43 74% 66%;
-		--chart-5: 27 87% 67%;
+	--color-video: oklch(0.86 0.15 287);
+	--color-video-text: oklch(0.86 0.15 287);
+	--color-video-accent: oklch(0.92 0.12 287);
 
-		/* Catppuccin Latte Colors */
-		--ctp-latte-green: 142.1 76.2% 36.3%; /* #40a02b */
-		--ctp-latte-teal: 183.3 74.3% 35.1%; /* #179299 */
-		--ctp-latte-blue: 220.3 91.3% 54.1%; /* #1e66f5 */
-		--ctp-latte-mauve: 267 83.5% 58%; /* #8839ef */
-		--ctp-latte-yellow: 35.5 77.4% 49.4%; /* #df8e1d */
-		--ctp-latte-peach: 22.5 99.4% 51.8%; /* #fe640b */
-		--ctp-latte-red: 347.3 87.1% 44.3%; /* #d20f39 */
+	--color-flashcard: oklch(0.63 0.17 122);
+	--color-flashcard-text: oklch(0.63 0.17 122);
+	--color-flashcard-accent: oklch(0.75 0.15 122);
 
-		/* Content Type Colors - Based on your palette */
-		/* Courses: cyan-50 (#ecfeff) bg, cyan-600 (#0891b2) text */
-		--course-bg: 187 85% 53%; /* cyan-600 #0891b2 */
-		--course-text: 187 85% 53%; /* cyan-600 #0891b2 */
-		--course-accent: 186 77% 64%; /* cyan-500 #06b6d4 */
+	/* Status Colors - Dark mode versions */
+	--color-overdue: oklch(0.71 0.17 25);
+	--color-overdue-text: oklch(0.91 0.14 25);
 
-		/* Books: blue-50 (#eff6ff) bg, blue-600 (#2563eb) text */
-		--book-bg: 221 83% 53%; /* blue-600 #2563eb */
-		--book-text: 221 83% 53%; /* blue-600 #2563eb */
-		--book-accent: 221 91% 69%; /* blue-500 #3b82f6 */
+	--color-due-today: oklch(0.74 0.14 82);
+	--color-due-today-text: oklch(0.94 0.11 82);
 
-		/* Videos: violet-50 (#f5f3ff) bg, violet-600 (#7c3aed) text */
-		--video-bg: 258 90% 66%; /* violet-600 #7c3aed */
-		--video-text: 258 90% 66%; /* violet-600 #7c3aed */
-		--video-accent: 258 90% 77%; /* violet-500 #8b5cf6 */
+	--color-upcoming: oklch(0.71 0.17 255);
+	--color-upcoming-text: oklch(0.91 0.14 255);
 
-		/* Flashcards: lime-100 (#ecfdf5) bg, lime-700 (#365314) text */
-		--flashcard-bg: 84 81% 20%; /* lime-700 #365314 */
-		--flashcard-text: 84 81% 20%; /* lime-700 #365314 */
-		--flashcard-accent: 84 81% 44%; /* lime-600 #65a30d */
+	--color-completed: oklch(0.68 0.1 145);
+	--color-completed-text: oklch(0.88 0.08 145);
 
-		/* Status Colors - Based on your palette */
-		/* Overdue: orange-50 (#fed7aa) bg, orange-700 (#c2410c) text */
-		--overdue-bg: 20 90% 48%; /* orange-600 #ea580c */
-		--overdue-text: 17 88% 40%; /* orange-700 #c2410c */
-
-		/* Due Today: amber-50 (#fef3c7) bg, amber-700 (#a16207) text */
-		--due-today-bg: 45 93% 47%; /* amber-600 #d97706 */
-		--due-today-text: 32 95% 44%; /* amber-700 #a16207 */
-
-		/* Upcoming: blue-50 (#dbeafe) bg, blue-700 (#1d4ed8) text */
-		--upcoming-bg: 221 83% 53%; /* blue-600 #2563eb */
-		--upcoming-text: 229 84% 51%; /* blue-700 #1d4ed8 */
-
-		/* Completed: emerald-50 (#dcfce7) bg, emerald-700 (#166534) text */
-		--completed-bg: 142 76% 36%; /* emerald-600 #059669 */
-		--completed-text: 140 100% 27%; /* emerald-700 #047857 */
-
-		/* Paused: slate-100 (#f1f5f9) bg, slate-600 (#475569) text */
-		--paused-bg: 215 20% 65%; /* slate-500 #64748b */
-		--paused-text: 215 19% 35%; /* slate-600 #475569 */
-	}
-
-	.dark {
-		--background: 222.2 84% 4.9%;
-		--foreground: 210 40% 98%;
-
-		--card: 222.2 84% 4.9%;
-		--card-foreground: 210 40% 98%;
-
-		--popover: 222.2 84% 4.9%;
-		--popover-foreground: 210 40% 98%;
-
-		--primary: 142.1 70.6% 45.3%;
-		--primary-foreground: 144.9 80.4% 10%;
-
-		--secondary: 217.2 32.6% 17.5%;
-		--secondary-foreground: 210 40% 98%;
-
-		--muted: 217.2 32.6% 17.5%;
-		--muted-foreground: 215 20.2% 65.1%;
-
-		--accent: 217.2 32.6% 17.5%;
-		--accent-foreground: 210 40% 98%;
-
-		--destructive: 0 62.8% 30.6%;
-		--destructive-foreground: 210 40% 98%;
-
-		--border: 217.2 32.6% 17.5%;
-		--input: 217.2 32.6% 17.5%;
-		--ring: 142.1 76.2% 36.3%;
-
-		/* Catppuccin Frappé Colors */
-		--ctp-frappe-green: 95.9 44% 68.4%; /* #a6d189 */
-		--ctp-frappe-teal: 171.6 47% 69%; /* #81c8be */
-		--ctp-frappe-blue: 218.2 66% 71.4%; /* #8caaee */
-		--ctp-frappe-mauve: 275.8 59.3% 79.8%; /* #ca9ee6 */
-		--ctp-frappe-yellow: 41.5 56.4% 74.1%; /* #e5c890 */
-		--ctp-frappe-peach: 22.3 82.5% 70.4%; /* #ef9f76 */
-		--ctp-frappe-red: 359.4 67.6% 71.4%; /* #e78284 */
-
-		/* Content Type Colors (Dark) - Lighter versions for dark mode */
-		/* Courses: lighter cyan for dark backgrounds */
-		--course-bg: 187 85% 65%; /* cyan-400 #22d3ee */
-		--course-text: 187 85% 65%; /* cyan-400 #22d3ee */
-		--course-accent: 186 77% 77%; /* cyan-300 #67e8f9 */
-
-		/* Books: lighter blue for dark backgrounds */
-		--book-bg: 221 91% 79%; /* blue-400 #60a5fa */
-		--book-text: 221 91% 79%; /* blue-400 #60a5fa */
-		--book-accent: 221 91% 87%; /* blue-300 #93c5fd */
-
-		/* Videos: lighter violet for dark backgrounds */
-		--video-bg: 258 90% 86%; /* violet-400 #a78bfa */
-		--video-text: 258 90% 86%; /* violet-400 #a78bfa */
-		--video-accent: 258 90% 92%; /* violet-300 #c4b5fd */
-
-		/* Flashcards: lighter lime for dark backgrounds */
-		--flashcard-bg: 84 81% 63%; /* lime-500 #84cc16 */
-		--flashcard-text: 84 81% 63%; /* lime-500 #84cc16 */
-		--flashcard-accent: 84 81% 75%; /* lime-400 #a3e635 */
-
-		/* Status Colors (Dark) */
-		--overdue-bg: 359.4 67.6% 71.4%; /* Red */
-		--overdue-text: 359.4 67.6% 91.4%; /* Lighter Red */
-
-		--due-today-bg: 41.5 56.4% 74.1%; /* Yellow */
-		--due-today-text: 41.5 56.4% 94.1%; /* Lighter Yellow */
-
-		--upcoming-bg: 218.2 66% 71.4%; /* Blue */
-		--upcoming-text: 218.2 66% 91.4%; /* Lighter Blue */
-
-		--completed-bg: 95.9 44% 68.4%; /* Green */
-		--completed-text: 95.9 44% 88.4%; /* Lighter Green */
-
-		--paused-bg: 215 20.2% 65.1%; /* Slate */
-		--paused-text: 215 20.2% 85.1%; /* Lighter Slate */
-	}
+	--color-paused: oklch(0.65 0.02 218);
+	--color-paused-text: oklch(0.85 0.02 218);
 }
 
 /* Dark mode support */

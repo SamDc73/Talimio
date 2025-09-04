@@ -19,7 +19,7 @@ export function CourseHeader({
 	const [_showFullTitle, _setShowFullTitle] = useState(false)
 
 	return (
-		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-border shadow-sm">
+		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
 			<div className="container mx-auto px-4">
 				<div className="flex h-16 items-center">
 					{/* Logo Section */}
@@ -34,24 +34,24 @@ export function CourseHeader({
 
 					{/* Course Info Section */}
 					<div className="flex-1 min-w-0">
-						<h1 className="text-base font-semibold text-foreground truncate">{courseName}</h1>
+						<h1 className="text-base font-semibold text-gray-900 truncate">{courseName}</h1>
 						<div className="flex items-center mt-1">
-							<div className="w-32 md:w-48 bg-muted rounded-full h-1.5 overflow-hidden">
+							<div className="w-32 md:w-48 bg-gray-100 rounded-full h-1.5 overflow-hidden">
 								<div
 									className="h-full bg-gradient-to-r from-course to-course-accent rounded-full"
 									style={{ width: `${progress}%` }}
 								/>
 							</div>
-							<span className="ml-2 text-xs font-medium text-muted-foreground">{progress}%</span>
+							<span className="ml-2 text-xs font-medium text-gray-100-foreground">{progress}%</span>
 						</div>
 					</div>
 
 					{/* View Toggle Section */}
-					<div className="hidden md:flex items-center border border-border rounded-full h-8 px-1 mx-4 bg-slate-50/50">
+					<div className="hidden md:flex items-center border border-gray-200 rounded-full h-8 px-1 mx-4 bg-slate-50/50">
 						<button
 							className={cn(
 								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
-								mode === "outline" ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-slate-700"
+								mode === "outline" ? "bg-white text-gray-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
 							)}
 							type="button"
 							onClick={() => mode !== "outline" && onModeChange("outline")}
@@ -63,7 +63,7 @@ export function CourseHeader({
 						<button
 							className={cn(
 								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
-								mode === "track" ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-slate-700"
+								mode === "track" ? "bg-white text-gray-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
 							)}
 							type="button"
 							onClick={() => mode !== "track" && onModeChange("track")}
@@ -75,7 +75,7 @@ export function CourseHeader({
 						<button
 							className={cn(
 								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
-								mode === "documents" ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-slate-700"
+								mode === "documents" ? "bg-white text-gray-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
 							)}
 							type="button"
 							onClick={() => mode !== "documents" && onModeChange("documents")}

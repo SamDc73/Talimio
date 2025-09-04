@@ -362,7 +362,7 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 							<div
 								key={`chapter_${chapterIndex}_${chapter.id}`}
 								className={`rounded-2xl border ${
-									isActive ? "border-blue-200 bg-blue-50/50" : "border-border bg-white"
+									isActive ? "border-blue-200 bg-blue-50/50" : "border-gray-200 bg-white"
 								} shadow-sm overflow-hidden`}
 							>
 								<div className="flex items-center gap-3 px-4 py-3">
@@ -396,7 +396,7 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 						<div
 							key={`chapter_${chapterIndex}_${chapter.id}`}
 							className={`rounded-2xl border ${
-								isActive ? "border-blue-200 bg-blue-50/50" : "border-border bg-white"
+								isActive ? "border-blue-200 bg-blue-50/50" : "border-gray-200 bg-white"
 							} shadow-sm overflow-hidden`}
 						>
 							<div className="flex items-center gap-3 px-4 py-3">
@@ -425,7 +425,7 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 								</button>
 							</div>
 							{isExpanded && (
-								<div className="px-4 py-2 space-y-2 border-t border-border">
+								<div className="px-4 py-2 space-y-2 border-t border-gray-200">
 									<ol>
 										{chapter.children.map((section, sectionIndex) => {
 											const isSectionCompleted = isChapterCompleted(section.id)

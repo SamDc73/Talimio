@@ -53,8 +53,7 @@ const refreshToken = async () => {
 
 		// Refresh failed - user needs to login again
 		return false
-	} catch (error) {
-		console.error("Failed to refresh token:", error)
+	} catch (_error) {
 		return false
 	} finally {
 		isRefreshing = false
@@ -67,8 +66,7 @@ const handleResponse = async (response, endpoint, retryRequest) => {
 		let errorData
 		try {
 			errorData = await response.json()
-		} catch (e) {
-			console.debug("Failed to parse error response:", e)
+		} catch (_e) {
 			errorData = { message: response.statusText }
 		}
 
@@ -118,7 +116,6 @@ const secureRequest = async (method, endpoint, data = null, options = {}) => {
 
 		// If request is already in flight, return the existing promise
 		if (inFlightRequests.has(cacheKey)) {
-			console.debug(`Deduplicating GET request: ${endpoint}`)
 			return inFlightRequests.get(cacheKey)
 		}
 

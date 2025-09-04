@@ -70,8 +70,8 @@ function SignupForm({
 			<div className="w-full max-w-md bg-white rounded-2xl shadow-2xl shadow-emerald-100/50 border border-emerald-100 overflow-hidden transform transition-all duration-500 hover:shadow-xl hover:shadow-emerald-200/30 animate-slideUp">
 				{/* Header */}
 				<div className="px-8 pt-8 pb-6 text-center">
-					<h1 className="text-2xl font-bold text-foreground mb-2">Create Account</h1>
-					<p className="text-muted-foreground text-sm">Sign up to start learning</p>
+					<h1 className="text-2xl font-bold text-gray-900 mb-2">Create Account</h1>
+					<p className="text-gray-100-foreground text-sm">Sign up to start learning</p>
 				</div>
 
 				{/* Form */}
@@ -79,12 +79,12 @@ function SignupForm({
 					<form onSubmit={handleSubmit} className="space-y-6">
 						{/* Username Field */}
 						<div className="space-y-2">
-							<label htmlFor="username" className="block text-sm font-medium text-foreground">
+							<label htmlFor="username" className="block text-sm font-medium text-gray-900">
 								Username
 							</label>
 							<div className="relative">
 								<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-									<User className="h-5 w-5 text-muted-foreground" />
+									<User className="h-5 w-5 text-gray-100-foreground" />
 								</div>
 								<input
 									id="username"
@@ -94,25 +94,25 @@ function SignupForm({
 										setUsername(e.target.value)
 										if (errors.username) setErrors((prev) => ({ ...prev, username: undefined }))
 									}}
-									className={`block w-full pl-10 pr-3 py-3 border rounded-xl text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
+									className={`block w-full pl-10 pr-3 py-3 border rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
 										errors.username
-											? "border-destructive/50 focus:ring-destructive bg-destructive/5"
-											: "border-border focus:ring-primary hover:border-border/80"
+											? "border-red-500/50 focus:ring-red-500 bg-red-500/5"
+											: "border-gray-200 focus:ring-green-500 hover:border-gray-200/80"
 									}`}
 									placeholder="Choose a username"
 								/>
 							</div>
-							{errors.username && <p className="text-destructive text-xs mt-1 animate-fadeIn">{errors.username}</p>}
+							{errors.username && <p className="text-red-500 text-xs mt-1 animate-fadeIn">{errors.username}</p>}
 						</div>
 
 						{/* Email Field */}
 						<div className="space-y-2">
-							<label htmlFor="email" className="block text-sm font-medium text-foreground">
+							<label htmlFor="email" className="block text-sm font-medium text-gray-900">
 								Email Address
 							</label>
 							<div className="relative">
 								<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-									<Mail className="h-5 w-5 text-muted-foreground" />
+									<Mail className="h-5 w-5 text-gray-100-foreground" />
 								</div>
 								<input
 									id="email"
@@ -122,25 +122,25 @@ function SignupForm({
 										setEmail(e.target.value)
 										if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }))
 									}}
-									className={`block w-full pl-10 pr-3 py-3 border rounded-xl text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
+									className={`block w-full pl-10 pr-3 py-3 border rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
 										errors.email
-											? "border-destructive/50 focus:ring-destructive bg-destructive/5"
-											: "border-border focus:ring-primary hover:border-border/80"
+											? "border-red-500/50 focus:ring-red-500 bg-red-500/5"
+											: "border-gray-200 focus:ring-green-500 hover:border-gray-200/80"
 									}`}
 									placeholder="Enter your email"
 								/>
 							</div>
-							{errors.email && <p className="text-destructive text-xs mt-1 animate-fadeIn">{errors.email}</p>}
+							{errors.email && <p className="text-red-500 text-xs mt-1 animate-fadeIn">{errors.email}</p>}
 						</div>
 
 						{/* Password Field */}
 						<div className="space-y-2">
-							<label htmlFor="password" className="block text-sm font-medium text-foreground">
+							<label htmlFor="password" className="block text-sm font-medium text-gray-900">
 								Password
 							</label>
 							<div className="relative">
 								<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-									<Lock className="h-5 w-5 text-muted-foreground" />
+									<Lock className="h-5 w-5 text-gray-100-foreground" />
 								</div>
 								<input
 									id="password"
@@ -150,29 +150,29 @@ function SignupForm({
 										setPassword(e.target.value)
 										if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }))
 									}}
-									className={`block w-full pl-10 pr-12 py-3 border rounded-xl text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
+									className={`block w-full pl-10 pr-12 py-3 border rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
 										errors.password
-											? "border-destructive/50 focus:ring-destructive bg-destructive/5"
-											: "border-border focus:ring-primary hover:border-border/80"
+											? "border-red-500/50 focus:ring-red-500 bg-red-500/5"
+											: "border-gray-200 focus:ring-green-500 hover:border-gray-200/80"
 									}`}
 									placeholder="Create a password"
 								/>
 								<button
 									type="button"
 									onClick={() => setShowPassword(!showPassword)}
-									className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+									className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-100-foreground hover:text-gray-900 transition-colors"
 								>
 									{showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
 								</button>
 							</div>
-							{errors.password && <p className="text-destructive text-xs mt-1 animate-fadeIn">{errors.password}</p>}
+							{errors.password && <p className="text-red-500 text-xs mt-1 animate-fadeIn">{errors.password}</p>}
 						</div>
 
 						{/* Submit Button */}
 						<button
 							type="submit"
 							disabled={isLoading}
-							className="w-full bg-gradient-to-r from-primary to-primary/90 text-primary-foreground font-semibold py-3 px-4 rounded-xl shadow-lg shadow-primary/20 hover:from-primary/90 hover:to-primary/80 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transform transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+							className="w-full bg-gradient-to-r from-green-500 to-green-500/90 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-green-500/20 hover:from-green-500/90 hover:to-green-500/80 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transform transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
 						>
 							{isLoading ? (
 								<div className="flex items-center justify-center">
@@ -186,15 +186,15 @@ function SignupForm({
 
 						{/* Divider */}
 						<div className="relative flex items-center py-2">
-							<div className="flex-grow border-t border-border"></div>
-							<span className="flex-shrink mx-4 text-sm text-muted-foreground">or</span>
-							<div className="flex-grow border-t border-border"></div>
+							<div className="flex-grow border-t border-gray-200"></div>
+							<span className="flex-shrink mx-4 text-sm text-gray-100-foreground">or</span>
+							<div className="flex-grow border-t border-gray-200"></div>
 						</div>
 
 						{/* Social Login */}
 						<button
 							type="button"
-							className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-border rounded-xl text-foreground font-medium hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all duration-200"
+							className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-gray-200 rounded-xl text-gray-900 font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-200"
 						>
 							<svg className="w-5 h-5" viewBox="0 0 24 24" role="img" aria-label="Google logo">
 								<path
@@ -219,12 +219,12 @@ function SignupForm({
 
 						{/* Sign In Link */}
 						<div className="text-center pt-4">
-							<p className="text-sm text-muted-foreground">
+							<p className="text-sm text-gray-100-foreground">
 								Already have an account?{" "}
 								<button
 									type="button"
 									onClick={onSignIn}
-									className="text-primary hover:text-primary/80 font-medium transition-colors"
+									className="text-green-500 hover:text-green-500/80 font-medium transition-colors"
 								>
 									Sign in
 								</button>

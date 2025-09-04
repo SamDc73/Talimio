@@ -2,7 +2,11 @@ import { cn } from "@/lib/utils"
 
 function Card({ className, ref, ...props }) {
 	return (
-		<div ref={ref} className={cn("rounded-lg border bg-card text-card-foreground shadow-sm", className)} {...props} />
+		<div
+			ref={ref}
+			className={cn("rounded-lg border border-gray-200 bg-white text-gray-900 shadow-sm", className)}
+			{...props}
+		/>
 	)
 }
 
@@ -21,7 +25,7 @@ function CardTitle({ className, ref, ...props }) {
 }
 
 function CardDescription({ className, ref, ...props }) {
-	return <p ref={ref} className={cn("text-sm text-muted-foreground", className)} {...props} />
+	return <p ref={ref} className={cn("text-sm text-gray-600", className)} {...props} />
 }
 
 function CardContent({ className, ref, ...props }) {

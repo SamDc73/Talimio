@@ -186,7 +186,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 								<ChevronLeft className="h-4 w-4" />
 							</Button>
 						)}
-						<Brain className="h-5 w-5 text-primary" />
+						<Brain className="h-5 w-5 text-green-500" />
 						{showMemories ? "Your Learning Memories" : "Personalize Talimio"}
 					</DialogTitle>
 					<DialogDescription>
@@ -198,24 +198,24 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 
 				{isLoading ? (
 					<div className="flex items-center justify-center py-8">
-						<div className="text-sm text-muted-foreground">Loading settings...</div>
+						<div className="text-sm text-gray-100-foreground">Loading settings...</div>
 					</div>
 				) : showMemories ? (
 					<div className="space-y-4">
 						{isLoadingMemories ? (
 							<div className="flex items-center justify-center py-8">
-								<div className="text-sm text-muted-foreground">Loading memories...</div>
+								<div className="text-sm text-gray-100-foreground">Loading memories...</div>
 							</div>
 						) : memories.length === 0 ? (
 							<div className="text-center py-8">
-								<div className="text-sm text-muted-foreground">No memories found</div>
+								<div className="text-sm text-gray-100-foreground">No memories found</div>
 							</div>
 						) : (
 							<div className="space-y-3 max-h-[400px] overflow-y-auto">
 								{memories.map((memory, index) => (
 									<div
 										key={memory.id || index}
-										className="bg-muted/30 p-3 rounded-lg border-l-2 border-primary/20 relative group"
+										className="bg-gray-100/30 p-3 rounded-lg border-l-2 border-green-500/20 relative group"
 									>
 										<Button
 											variant="ghost"
@@ -226,8 +226,8 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 										>
 											<X className="h-3 w-3" />
 										</Button>
-										<p className="text-sm font-medium text-foreground mb-2 pr-8">{memory.content}</p>
-										<div className="flex items-center justify-between text-xs text-muted-foreground">
+										<p className="text-sm font-medium text-gray-900 mb-2 pr-8">{memory.content}</p>
+										<div className="flex items-center justify-between text-xs text-gray-100-foreground">
 											<span>{formatTimestamp(memory.timestamp)}</span>
 										</div>
 										{memory.metadata && Object.keys(memory.metadata).length > 0 && (
@@ -235,7 +235,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 												{Object.entries(memory.metadata)
 													.filter(([key, value]) => key !== "timestamp" && value && value !== "now")
 													.map(([key, value]) => (
-														<span key={key} className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded">
+														<span key={key} className="bg-green-500/10 text-green-500 text-xs px-2 py-0.5 rounded">
 															{key}: {value}
 														</span>
 													))}
@@ -269,10 +269,10 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 									value={instructions}
 									onChange={(e) => setInstructions(e.target.value)}
 									placeholder="Tell the AI how you'd like it to respond. For example: 'I prefer concise explanations with practical examples' or 'I'm a visual learner who likes diagrams and step-by-step guides.'"
-									className="w-full min-h-[120px] p-3 text-sm border border-input bg-background rounded-md resize-y focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+									className="w-full min-h-[120px] p-3 text-sm border border-gray-300 bg-white rounded-md resize-y focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
 									maxLength={maxCharacters}
 								/>
-								<div className="flex justify-between items-center text-xs text-muted-foreground">
+								<div className="flex justify-between items-center text-xs text-gray-100-foreground">
 									<span>These instructions will be included in all AI interactions</span>
 									<span className={characterCount > maxCharacters * 0.9 ? "text-warning" : ""}>
 										{characterCount}/{maxCharacters}
@@ -284,7 +284,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 						{/* Memory Statistics */}
 						<div className="space-y-3">
 							<Label className="text-sm font-medium">Learning History</Label>
-							<div className="bg-muted/50 p-4 rounded-lg">
+							<div className="bg-gray-100/50 p-4 rounded-lg">
 								<div className="flex items-center justify-between">
 									<div className="flex-1">
 										<button
@@ -293,10 +293,10 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 											disabled={memoryCount === 0 || isLoadingMemories}
 											className="text-left group disabled:cursor-not-allowed"
 										>
-											<p className="text-sm font-medium group-hover:text-primary group-disabled:text-muted-foreground transition-colors">
+											<p className="text-sm font-medium group-hover:text-green-500 group-disabled:text-gray-100-foreground transition-colors">
 												{memoryCount} memories stored
 											</p>
-											<p className="text-xs text-muted-foreground">
+											<p className="text-xs text-gray-100-foreground">
 												{memoryCount > 0
 													? "Click to view your stored learning interactions"
 													: "AI learns from your interactions to provide personalized responses"}
@@ -315,7 +315,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 											size="sm"
 											onClick={handleClearMemory}
 											disabled={isClearing || memoryCount === 0}
-											className="text-destructive hover:text-destructive"
+											className="text-red-500 hover:text-red-500"
 										>
 											<Trash2 className="h-4 w-4 mr-2" />
 											{isClearing ? "Clearing..." : "Clear All"}

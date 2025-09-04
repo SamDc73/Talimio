@@ -36,7 +36,7 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onFilterChange("all")}
-						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className="h-4 w-4 p-0 ml-1 text-gray-100-foreground hover:text-gray-100-foreground"
 					>
 						<X className="h-3 w-3" />
 						<span className="sr-only">Remove filter</span>
@@ -51,7 +51,7 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onArchiveFilterChange("active")}
-						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className="h-4 w-4 p-0 ml-1 text-gray-100-foreground hover:text-gray-100-foreground"
 					>
 						<X className="h-3 w-3" />
 						<span className="sr-only">Reset archive filter</span>
@@ -66,7 +66,7 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onSortChange("last-accessed")}
-						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className="h-4 w-4 p-0 ml-1 text-gray-100-foreground hover:text-gray-100-foreground"
 					>
 						<X className="h-3 w-3" />
 						<span className="sr-only">Remove sort</span>
@@ -81,7 +81,7 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onSortDirectionChange("desc")}
-						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className="h-4 w-4 p-0 ml-1 text-gray-100-foreground hover:text-gray-100-foreground"
 					>
 						<X className="h-3 w-3" />
 						<span className="sr-only">Remove sort direction</span>
@@ -96,7 +96,7 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onTagFilterChange("")}
-						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className="h-4 w-4 p-0 ml-1 text-gray-100-foreground hover:text-gray-100-foreground"
 					>
 						<X className="h-3 w-3" />
 						<span className="sr-only">Remove tag filter</span>
@@ -109,7 +109,7 @@ export default function FilterBadges({
 					variant="ghost"
 					size="sm"
 					onClick={onResetAll}
-					className="text-xs text-muted-foreground h-7 px-2 ml-auto"
+					className="text-xs text-gray-100-foreground h-7 px-2 ml-auto"
 				>
 					Reset All
 				</Button>

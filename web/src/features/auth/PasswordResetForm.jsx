@@ -47,22 +47,22 @@ function PasswordResetForm({ onBack }) {
 	}
 
 	return (
-		<div className="min-h-screen bg-background flex items-center justify-center p-4">
+		<div className="min-h-screen bg-white flex items-center justify-center p-4">
 			<div className="w-full max-w-md">
-				<div className="bg-card border border-border rounded-lg shadow-sm p-6 space-y-6">
+				<div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 space-y-6">
 					{/* Header */}
 					<div className="text-center space-y-2">
 						<h1 className="text-2xl font-bold">Reset Password</h1>
-						<p className="text-muted-foreground">
+						<p className="text-gray-100-foreground">
 							Enter your email address and we'll send you instructions to reset your password
 						</p>
 					</div>
 
 					{/* Error/Success Messages */}
-					{error && <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-md text-sm">{error}</div>}
+					{error && <div className="bg-red-500/10 text-red-500 px-4 py-2 rounded-md text-sm">{error}</div>}
 
 					{successMessage && (
-						<div className="bg-primary/10 text-primary px-4 py-2 rounded-md text-sm">{successMessage}</div>
+						<div className="bg-green-500/10 text-green-500 px-4 py-2 rounded-md text-sm">{successMessage}</div>
 					)}
 
 					{/* Form */}
@@ -72,13 +72,13 @@ function PasswordResetForm({ onBack }) {
 								Email
 							</label>
 							<div className="relative">
-								<Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+								<Mail className="absolute left-3 top-3 h-4 w-4 text-gray-100-foreground" />
 								<input
 									type="email"
 									id="email"
 									value={email}
 									onChange={(e) => setEmail(e.target.value)}
-									className="w-full pl-10 pr-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+									className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
 									placeholder="you@example.com"
 									required
 									disabled={loading}
@@ -89,7 +89,7 @@ function PasswordResetForm({ onBack }) {
 						<button
 							type="submit"
 							disabled={loading}
-							className="w-full bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+							className="w-full bg-green-500 text-white py-2 rounded-md hover:bg-green-500/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 						>
 							{loading ? "Sending..." : "Send Reset Instructions"}
 						</button>
@@ -100,7 +100,7 @@ function PasswordResetForm({ onBack }) {
 						<button
 							type="button"
 							onClick={onBack}
-							className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+							className="inline-flex items-center text-sm text-gray-100-foreground hover:text-gray-900 transition-colors"
 						>
 							<ChevronLeft className="h-4 w-4 mr-1" />
 							Back to login

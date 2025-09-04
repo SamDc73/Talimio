@@ -36,17 +36,17 @@ export default function ContentGrid({
 			</div>
 
 			{!isLoading && unpinned.length > 3 && (
-				<div className="mt-6 text-center">
-					<Button variant="outline" onClick={onShowMoreToggle} className="h-10 min-w-[120px] flex items-center gap-2">
+				<div className="mt-8">
+					<Button variant="outline" onClick={onShowMoreToggle} className="text-sm font-medium px-4 py-2 gap-1">
 						{showAll ? (
 							<>
-								<ChevronUp className="h-4 w-4" />
-								Show Less
+								<ChevronUp className="h-4 w-4 -mt-[1px]" />
+								<span>Show Less</span>
 							</>
 						) : (
 							<>
-								<ChevronDown className="h-4 w-4" />
-								See {unpinned.length - 3} More
+								<ChevronDown className="h-4 w-4 -mt-[1px]" />
+								<span>See {unpinned.length - 3} More</span>
 							</>
 						)}
 					</Button>
@@ -59,7 +59,7 @@ export default function ContentGrid({
 						<Check className="h-8 w-8 text-emerald-600" />
 					</div>
 					<h3 className="text-xl font-display font-bold text-emerald-700 mb-2">All Caught Up!</h3>
-					<p className="text-muted-foreground">You've completed all your learning tasks. Great job!</p>
+					<p className="text-gray-100-foreground">You've completed all your learning tasks. Great job!</p>
 				</div>
 			)}
 		</>

@@ -46,7 +46,6 @@ import { Input } from "../input"
 import { PersonalizationDialog } from "../PersonalizationDialog"
 import { Sheet, SheetContent, SheetTrigger } from "../sheet"
 import { TooltipButton } from "../TooltipButton"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../tooltip"
 
 // Re-export for convenience
 export { ChatSidebarProvider }
@@ -80,34 +79,31 @@ export function UserAvatarMenu() {
 	return (
 		<>
 			<DropdownMenu open={open} onOpenChange={setOpen}>
-				<TooltipProvider>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<DropdownMenuTrigger asChild>
-								<button
-									type="button"
-									className="flex items-center rounded-full transition-all hover:bg-muted focus:outline-none h-10 w-10 justify-center"
-								>
-									<div className="h-8 w-8 rounded-full bg-white flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
-										<div className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500 font-semibold text-sm">
-											{getUserInitials()}
-										</div>
-									</div>
-								</button>
-							</DropdownMenuTrigger>
-						</TooltipTrigger>
-						<TooltipContent sideOffset={6}>
-							<p>Profile</p>
-						</TooltipContent>
-					</Tooltip>
-				</TooltipProvider>
-				<DropdownMenuContent className="w-56" align="end" forceMount>
+				<DropdownMenuTrigger asChild>
+					<TooltipButton
+						variant="ghost"
+						size="icon"
+						className="h-10 w-10 rounded-full hover:bg-gray-100 transition-all p-0"
+						tooltipContent="Profile"
+						tooltipSide="bottom"
+						asChild
+					>
+						<button type="button" className="flex items-center justify-center">
+							<div className="h-8 w-8 rounded-full bg-white flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
+								<div className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500 font-semibold text-sm">
+									{getUserInitials()}
+								</div>
+							</div>
+						</button>
+					</TooltipButton>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent className="w-56 border-gray-200" align="end" forceMount>
 					<DropdownMenuLabel className="font-normal">
 						<div className="flex flex-col space-y-1">
 							<p className="text-sm font-medium leading-none">
 								{user?.username || user?.email?.split("@")[0] || "User"}
 							</p>
-							<p className="text-xs leading-none text-muted-foreground">{user?.email || "Not logged in"}</p>
+							<p className="text-xs leading-none text-gray-100-foreground">{user?.email || "Not logged in"}</p>
 						</div>
 					</DropdownMenuLabel>
 					<DropdownMenuSeparator />
@@ -126,14 +122,14 @@ export function UserAvatarMenu() {
 						<div className="px-2 py-1.5">
 							<div className="flex items-center justify-between">
 								<span className="text-sm">Theme</span>
-								<div className="flex items-center gap-1 rounded-md border bg-muted p-1">
+								<div className="flex items-center gap-1 rounded-md border bg-gray-100 p-1">
 									<button
 										onClick={() => setTheme("light")}
 										className={cn(
 											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
 											theme === "light"
-												? "bg-background text-foreground shadow-sm"
-												: "text-muted-foreground hover:text-foreground"
+												? "bg-white text-gray-900 shadow-sm"
+												: "text-gray-100-foreground hover:text-gray-900"
 										)}
 										aria-label="Light theme"
 									>
@@ -144,8 +140,8 @@ export function UserAvatarMenu() {
 										className={cn(
 											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
 											theme === "dark"
-												? "bg-background text-foreground shadow-sm"
-												: "text-muted-foreground hover:text-foreground"
+												? "bg-white text-gray-900 shadow-sm"
+												: "text-gray-100-foreground hover:text-gray-900"
 										)}
 										aria-label="Dark theme"
 									>
@@ -156,8 +152,8 @@ export function UserAvatarMenu() {
 										className={cn(
 											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
 											theme === "system"
-												? "bg-background text-foreground shadow-sm"
-												: "text-muted-foreground hover:text-foreground"
+												? "bg-white text-gray-900 shadow-sm"
+												: "text-gray-100-foreground hover:text-gray-900"
 										)}
 										aria-label="System theme"
 									>
@@ -200,7 +196,7 @@ export function Logo({ className, size = "md", href = "/" }) {
 			</div>
 			<span
 				className={cn(
-					"font-bold tracking-tight text-foreground dark:text-white",
+					"font-bold tracking-tight text-gray-900 dark:text-white",
 					size === "sm" ? "text-lg" : size === "md" ? "text-xl" : "text-2xl"
 				)}
 			>
@@ -458,7 +454,7 @@ export function ChatSidebar() {
 			<motion.div
 				className={cn(
 					"fixed top-0 right-0 z-50 h-screen shadow-xl relative",
-					isDarkMode ? "bg-zinc-900 text-white" : "bg-white text-foreground",
+					isDarkMode ? "bg-zinc-900 text-white" : "bg-white text-gray-900",
 					"border-l",
 					isDarkMode ? "border-zinc-800" : "border-slate-200"
 				)}
@@ -525,7 +521,7 @@ export function ChatSidebar() {
 							size="icon"
 							onClick={toggleAssistantSidebarPin}
 							className={cn(
-								isDarkMode ? "text-zinc-400 hover:text-white" : "text-muted-foreground hover:text-foreground"
+								isDarkMode ? "text-zinc-400 hover:text-white" : "text-gray-100-foreground hover:text-gray-900"
 							)}
 						>
 							{assistantSidebarPinned ? <PinOff className="h-5 w-5" /> : <Pin className="h-5 w-5" />}
@@ -536,7 +532,7 @@ export function ChatSidebar() {
 							size="icon"
 							onClick={toggleChat}
 							className={cn(
-								isDarkMode ? "text-zinc-400 hover:text-white" : "text-muted-foreground hover:text-foreground"
+								isDarkMode ? "text-zinc-400 hover:text-white" : "text-gray-100-foreground hover:text-gray-900"
 							)}
 						>
 							<X className="h-5 w-5" />
@@ -553,7 +549,7 @@ export function ChatSidebar() {
 							className={cn(
 								"mb-4 max-w-[85%] rounded-lg p-3",
 								message.role === "user"
-									? "ml-auto bg-primary text-primary-foreground"
+									? "ml-auto bg-green-500 text-white"
 									: isDarkMode
 										? "bg-zinc-800"
 										: "bg-slate-100"
@@ -592,7 +588,7 @@ export function ChatSidebar() {
 						isDarkMode ? "border-zinc-800" : "border-slate-200"
 					)}
 				>
-					<div className="relative w-full rounded-lg border bg-background shadow-sm">
+					<div className="relative w-full rounded-lg border bg-white shadow-sm">
 						<Input
 							value={inputValue}
 							onChange={(e) => setInputValue(e.target.value)}
@@ -682,7 +678,7 @@ export function MainHeader({ transparent = false, className }) {
 								<button
 									type="button"
 									onClick={() => setSearchOpen(false)}
-									className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground"
+									className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-100-foreground hover:text-gray-100-foreground"
 								>
 									<X className="h-4 w-4" />
 								</button>
@@ -699,7 +695,7 @@ export function MainHeader({ transparent = false, className }) {
 									variant="ghost"
 									size="icon"
 									onClick={() => setSearchOpen(true)}
-									className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted transition-all"
+									className="h-10 w-10 rounded-full text-gray-100-foreground hover:bg-gray-100 transition-all"
 									tooltipContent="Search"
 								>
 									<Search className="h-5 w-5" />
@@ -710,7 +706,7 @@ export function MainHeader({ transparent = false, className }) {
 								variant="ghost"
 								size="icon"
 								onClick={toggleChat}
-								className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted transition-all"
+								className="h-10 w-10 rounded-full text-gray-100-foreground hover:bg-gray-100 transition-all"
 								tooltipContent="Chat with AI"
 								tooltipSide="bottom"
 							>
@@ -727,7 +723,7 @@ export function MainHeader({ transparent = false, className }) {
 								<Button
 									variant="ghost"
 									size="icon"
-									className="md:hidden h-10 w-10 rounded-full text-muted-foreground hover:bg-muted ml-1"
+									className="md:hidden h-10 w-10 rounded-full text-gray-100-foreground hover:bg-gray-100 ml-1"
 								>
 									<Menu className="h-5 w-5" />
 									<span className="sr-only">Toggle menu</span>
@@ -741,28 +737,28 @@ export function MainHeader({ transparent = false, className }) {
 									<nav className="flex flex-col space-y-4">
 										<Link
 											to="/courses"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
+											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-gray-100 transition-colors"
 										>
 											<BookOpen className="h-5 w-5 text-course" />
 											<span className="font-medium">Courses</span>
 										</Link>
 										<Link
 											to="/books"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
+											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-gray-100 transition-colors"
 										>
 											<FileText className="h-5 w-5 text-book" />
 											<span className="font-medium">Books</span>
 										</Link>
 										<Link
 											to="/videos"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
+											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-gray-100 transition-colors"
 										>
 											<Youtube className="h-5 w-5 text-video" />
 											<span className="font-medium">Videos</span>
 										</Link>
 										<Link
 											to="/flashcards"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
+											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-gray-100 transition-colors"
 										>
 											<Layers className="h-5 w-5 text-flashcard" />
 											<span className="font-medium">Flashcards</span>

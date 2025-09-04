@@ -123,7 +123,7 @@ export function HighlightToolbar({ highlights = [], onDelete, className }) {
 			role="toolbar"
 			aria-label="Highlight actions"
 			className={cn(
-				"highlight-toolbar fixed z-50 bg-popover border rounded-lg shadow-lg p-2 flex gap-1",
+				"highlight-toolbar fixed z-50 bg-white border rounded-lg shadow-lg p-2 flex gap-1",
 				"transition-all duration-200",
 				className
 			)}
@@ -137,7 +137,7 @@ export function HighlightToolbar({ highlights = [], onDelete, className }) {
 		>
 			{/* Show preview text if available */}
 			{highlightText && highlightText !== "Highlight text not found" && (
-				<div className="text-xs text-muted-foreground px-2 py-1 max-w-48 truncate border-r">
+				<div className="text-xs text-gray-100-foreground px-2 py-1 max-w-48 truncate border-r">
 					"{highlightText.substring(0, 40)}
 					{highlightText.length > 40 ? "..." : ""}"
 				</div>
@@ -163,7 +163,7 @@ export function HighlightToolbar({ highlights = [], onDelete, className }) {
 				variant="ghost"
 				onClick={handleDelete}
 				title="Delete highlight"
-				className="text-destructive hover:text-destructive"
+				className="text-red-500 hover:text-red-500"
 			>
 				<Trash2 className="h-4 w-4" />
 			</Button>

@@ -15,7 +15,8 @@ import EpubErrorBoundary from "./components/EPUBErrorBoundary"
 import EpubViewer from "./components/EPUBViewer"
 import PdfErrorBoundary from "./components/PDFErrorBoundary"
 import PdfViewer from "./components/PDFViewer"
-import "./BookViewer.css"
+
+// CSS removed - using Tailwind classes
 
 function BookViewerContent() {
 	const { bookId } = useParams()
@@ -85,25 +86,25 @@ function BookViewerContent() {
 
 	if (loading) {
 		return (
-			<div className="book-viewer-loading">
-				<div className="spinner">Loading book...</div>
+			<div className="w-full h-screen flex items-center justify-center bg-white">
+				<div className="text-xl text-gray-500">Loading book...</div>
 			</div>
 		)
 	}
 
 	if (error) {
 		return (
-			<div className="book-viewer-error">
-				<h2>Error loading book</h2>
-				<p>{error}</p>
+			<div className="w-full h-screen flex flex-col items-center justify-center bg-white text-gray-900 px-8 text-center">
+				<h2 className="text-2xl mb-4 text-red-500">Error loading book</h2>
+				<p className="text-gray-500">{error}</p>
 			</div>
 		)
 	}
 
 	if (!book) {
 		return (
-			<div className="book-viewer-error">
-				<h2>Book not found</h2>
+			<div className="w-full h-screen flex flex-col items-center justify-center bg-white text-gray-900 px-8 text-center">
+				<h2 className="text-2xl mb-4 text-red-500">Book not found</h2>
 			</div>
 		)
 	}
@@ -122,7 +123,7 @@ function BookViewerContent() {
 	}
 
 	return (
-		<div className="flex h-screen bg-background">
+		<div className="flex h-screen bg-white">
 			<BookHeader
 				book={book}
 				bookId={bookId}
@@ -150,7 +151,7 @@ function BookViewerContent() {
 			)}
 
 			<main className={`flex-1 transition-all duration-300 ${sidebarOpen ? "ml-64" : "ml-0"} pt-16`}>
-				<div className="book-viewer-container h-full">
+				<div className="h-full overflow-hidden">
 					{fileType === "pdf" ? (
 						<PdfErrorBoundary>
 							<PdfViewer ref={pdfViewerRef} url={bookUrl} zoom={zoomLevel} bookId={bookId} />
@@ -160,8 +161,8 @@ function BookViewerContent() {
 							<EpubViewer url={bookUrl} bookId={bookId} bookInfo={book} />
 						</EpubErrorBoundary>
 					) : (
-						<div className="book-viewer-error">
-							<h2>Unsupported file format</h2>
+						<div className="w-full h-screen flex flex-col items-center justify-center bg-white text-gray-900 px-8 text-center">
+							<h2 className="text-2xl mb-4 text-red-500">Unsupported file format</h2>
 							<p>Only PDF and EPUB files are supported.</p>
 						</div>
 					)}

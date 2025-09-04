@@ -140,10 +140,10 @@ function RoadmapPreviewPage() {
 	// Loading state
 	if (isLoading) {
 		return (
-			<div className="min-h-screen bg-background flex items-center justify-center">
+			<div className="min-h-screen bg-white flex items-center justify-center">
 				<div className="text-center">
 					<div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-					<p className="text-muted-foreground">Loading roadmap...</p>
+					<p className="text-gray-100-foreground">Loading roadmap...</p>
 				</div>
 			</div>
 		)
@@ -159,7 +159,7 @@ function RoadmapPreviewPage() {
 						</div>
 						{isNew ? "Review Your Roadmap" : "Edit Roadmap"}
 					</DialogTitle>
-					<DialogDescription className="text-muted-foreground text-sm">
+					<DialogDescription className="text-gray-100-foreground text-sm">
 						{isNew
 							? "Review and customize your AI-generated learning roadmap before getting started"
 							: "Update your roadmap details and settings"}
@@ -192,7 +192,7 @@ function RoadmapPreviewPage() {
 								onChange={(e) => setFormData({ ...formData, description: e.target.value })}
 								placeholder="Describe what this roadmap covers"
 								rows={3}
-								className="w-full px-4 py-3 text-sm border border-input bg-background rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring transition-all resize-none placeholder:text-muted-foreground/60"
+								className="w-full px-4 py-3 text-sm border border-gray-300 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-ring transition-all resize-none placeholder:text-gray-100-foreground/60"
 							/>
 						</div>
 					</div>
@@ -204,7 +204,7 @@ function RoadmapPreviewPage() {
 								<Target className="h-4 w-4 text-cyan-500" />
 								Learning Path Overview ({roadmap.modules.length} modules)
 							</div>
-							<div className="bg-muted/30 rounded-lg p-4 space-y-2 max-h-48 overflow-y-auto">
+							<div className="bg-gray-100/30 rounded-lg p-4 space-y-2 max-h-48 overflow-y-auto">
 								{roadmap.modules.map((module, index) => (
 									<div key={module.id} className="flex items-start gap-3 text-sm">
 										<div className="flex-shrink-0 w-6 h-6 bg-cyan-100 text-cyan-700 rounded-full flex items-center justify-center text-xs font-medium mt-0.5">
@@ -212,7 +212,7 @@ function RoadmapPreviewPage() {
 										</div>
 										<div className="space-y-1">
 											<div className="font-medium">{module.title}</div>
-											<div className="text-muted-foreground text-xs leading-relaxed">{module.description}</div>
+											<div className="text-gray-100-foreground text-xs leading-relaxed">{module.description}</div>
 										</div>
 									</div>
 								))}

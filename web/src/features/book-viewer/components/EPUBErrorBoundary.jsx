@@ -18,15 +18,15 @@ function EPUBErrorFallback({ error, resetErrorBoundary }) {
 	}
 
 	return (
-		<div className="epub-error-boundary p-4 border border-destructive/20 rounded bg-destructive/5">
-			<h3 className="text-lg font-semibold text-destructive mb-2">EPUB Loading Error</h3>
-			<p className="text-sm text-muted-foreground mb-3">
+		<div className="epub-error-boundary p-4 border border-red-500/20 rounded bg-red-500/5">
+			<h3 className="text-lg font-semibold text-red-500 mb-2">EPUB Loading Error</h3>
+			<p className="text-sm text-gray-100-foreground mb-3">
 				There was an issue loading the EPUB. This might be a temporary problem.
 			</p>
 			<button
 				type="button"
 				onClick={resetErrorBoundary}
-				className="px-3 py-1 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90"
+				className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-500/90"
 			>
 				Try Again
 			</button>

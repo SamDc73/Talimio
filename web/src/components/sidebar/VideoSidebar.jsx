@@ -200,17 +200,17 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 
 			<SidebarNav>
 				{chapters.length === 0 ? (
-					<div className="text-center text-muted-foreground py-8 px-4">
+					<div className="text-center text-gray-100-foreground py-8 px-4">
 						<Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
 						{isLoadingChapters ? (
 							<div>
 								<p className="text-sm font-medium">Loading chapters...</p>
-								<p className="text-xs mt-2 text-muted-foreground/80">Fetching video chapter data</p>
+								<p className="text-xs mt-2 text-gray-100-foreground/80">Fetching video chapter data</p>
 							</div>
 						) : (
 							<div>
 								<p className="text-sm font-medium">No chapters available</p>
-								<p className="text-xs mt-2 text-muted-foreground/80">This video doesn't have chapter markers</p>
+								<p className="text-xs mt-2 text-gray-100-foreground/80">This video doesn't have chapter markers</p>
 
 								{/* Extract chapters button */}
 								<button
@@ -236,7 +236,7 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 								<div
 									key={chapter.id}
 									className={`rounded-2xl border ${
-										isActive ? "border-violet-200 bg-violet-50/50" : "border-border bg-white"
+										isActive ? "border-violet-200 bg-violet-50/50" : "border-gray-200 bg-white"
 									} shadow-sm overflow-hidden`}
 								>
 									<div className="flex items-center gap-3 px-4 py-3">
@@ -259,7 +259,7 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 													className={`text-xs font-mono transition-colors ${
 														isActive
 															? "text-violet-600 font-semibold"
-															: "text-muted-foreground group-hover:text-violet-600"
+															: "text-gray-100-foreground group-hover:text-violet-600"
 													}`}
 												>
 													{chapter.timeStr}
@@ -276,14 +276,14 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 														? "text-violet-700"
 														: isActive
 															? "text-violet-600"
-															: "text-foreground group-hover:text-violet-600"
+															: "text-gray-900 group-hover:text-violet-600"
 												}`}
 											>
 												{chapter.title}
 											</h5>
 											{isActive && currentTime !== undefined && (
 												<div className="mt-2">
-													<div className="h-1 bg-muted rounded-full overflow-hidden">
+													<div className="h-1 bg-gray-100 rounded-full overflow-hidden">
 														<div
 															className="h-full bg-violet-500 transition-all duration-300"
 															style={{

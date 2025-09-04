@@ -6,8 +6,7 @@ import App from "./App"
 import ErrorBoundary from "./components/ErrorBoundary"
 import { checkRadixComponents, checkReactVersion } from "./utils/version-check"
 
-import "./features/navigation/reset.css"
-import "./index.css"
+import "./app.css"
 
 const init = async () => {
 	try {

@@ -241,7 +241,7 @@ export default function HomePage() {
 											type="button"
 											onClick={() => setPage(Math.max(0, page - 1))}
 											disabled={page === 0}
-											className="px-4 py-2 rounded-md bg-muted hover:bg-muted/80 disabled:opacity-50"
+											className="px-4 py-2 rounded-md bg-gray-100 hover:bg-gray-100/80 disabled:opacity-50"
 										>
 											Previous
 										</button>
@@ -252,7 +252,7 @@ export default function HomePage() {
 											type="button"
 											onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
 											disabled={page >= totalPages - 1}
-											className="px-4 py-2 rounded-md bg-muted hover:bg-muted/80 disabled:opacity-50"
+											className="px-4 py-2 rounded-md bg-gray-100 hover:bg-gray-100/80 disabled:opacity-50"
 										>
 											Next
 										</button>
