@@ -29,7 +29,7 @@ class AIService:
 
     def __init__(self) -> None:
         # ModelManager will get async memory manager when needed
-        self._model_manager = ModelManager(memory_wrapper=None)
+        self._model_manager = ModelManager()  # memory_wrapper parameter is deprecated
         self._rag_service = RAGService()
         self._async_memory_manager = None  # Will be initialized on first use
 
@@ -270,13 +270,14 @@ class AIService:
         """Generate a lesson for a course."""
         logger.info("Generating lesson for course %s", course_id)
 
-        # Import create_lesson_body here to avoid circular imports
-        from src.ai.client import create_lesson_body
+        # Import ModelManager here to avoid circular imports
+        from src.ai.client import ModelManager
 
         # Add user_id to lesson meta for personalization
         lesson_meta["user_id"] = user_id
 
-        return await create_lesson_body(lesson_meta)
+        model_manager = ModelManager()
+        return await model_manager.create_lesson_body(lesson_meta)
 
     async def _course_update(self, user_id: UUID, course_id: str, _updates: dict, **_kwargs: Any) -> dict:
         """Update course content based on feedback."""

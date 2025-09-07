@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 
 from src.ai.constants import rag_config
 from src.auth import UserId
@@ -14,7 +14,7 @@ from .schemas import (
     CitationRequest,
     CitationResponse,
 )
-from .service import enhanced_assistant_service, get_available_models, streaming_enhanced_assistant_service
+from .service import assistant_service, get_available_models
 
 
 # Temporary implementation until reprocess_books module is available
@@ -49,24 +49,23 @@ async def debug_config() -> dict:
 async def chat_endpoint(
     request: ChatRequest,
     current_user_id: UserId,
-) -> StreamingResponse | JSONResponse:
-    """Send a message to the AI assistant with enhanced RAG capabilities."""
+) -> StreamingResponse:
+    """Send a message to the AI assistant with enhanced RAG capabilities (always streaming)."""
     # Override the user_id from the request with the authenticated user_id
     if current_user_id:
         request.user_id = current_user_id
 
-    if request.stream:
-        return StreamingResponse(
-            streaming_enhanced_assistant_service.chat_with_assistant_streaming_enhanced(request),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "*",
-            },
-        )
-    return await enhanced_assistant_service.chat_with_assistant_enhanced(request)
+    # Always use streaming
+    return StreamingResponse(
+        assistant_service.chat_with_assistant(request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
 
 
 @router.post("/reprocess-book/{book_id}")
@@ -88,10 +87,10 @@ async def find_citations(request: CitationRequest) -> CitationResponse:
     """Find text locations in a book for citation highlighting."""
     try:
         # Get citation service
-        citations = await enhanced_assistant_service.find_book_citations(
+        citations = await assistant_service.find_book_citations(
             book_id=request.book_id,
-            response_text=request.response_text,
-            similarity_threshold=request.similarity_threshold,
+            _response_text=request.response_text,
+            _similarity_threshold=request.similarity_threshold,
         )
 
         return CitationResponse(citations=citations)
@@ -112,10 +111,10 @@ async def find_batch_citations(request: BatchCitationRequest) -> BatchCitationRe
         all_citations = []
 
         for response_text in request.response_texts:
-            citations = await enhanced_assistant_service.find_book_citations(
+            citations = await assistant_service.find_book_citations(
                 book_id=request.book_id,
-                response_text=response_text,
-                similarity_threshold=request.similarity_threshold,
+                _response_text=response_text,
+                _similarity_threshold=request.similarity_threshold,
             )
             all_citations.append(citations)
 

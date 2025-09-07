@@ -2,11 +2,32 @@
 
 import uuid
 from datetime import datetime
+from typing import Any
 
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class DocumentUpload(BaseModel):
+class CustomBaseModel(BaseModel):
+    """Custom base model following best practices."""
+
+    model_config = ConfigDict(
+        from_attributes=True,  # Support ORM models
+        use_enum_values=True,
+        validate_assignment=True,
+        populate_by_name=True,
+        json_encoders={
+            datetime: lambda v: v.isoformat() if v else None,
+            uuid.UUID: lambda v: str(v),
+        },
+    )
+
+    def serializable_dict(self, **kwargs: Any) -> dict[str, Any]:
+        """Return dict with only serializable fields."""
+        return jsonable_encoder(self.model_dump(**kwargs))
+
+
+class DocumentUpload(CustomBaseModel):
     """Schema for document upload request."""
 
     document_type: str = Field(..., description="Type of document: 'pdf' or 'url'")
@@ -14,13 +35,11 @@ class DocumentUpload(BaseModel):
     url: str | None = Field(None, description="URL for URL-type documents")
 
 
-class DocumentResponse(BaseModel):
+class DocumentResponse(CustomBaseModel):
     """Schema for document response."""
 
-    model_config = ConfigDict(from_attributes=True)
-
     id: int
-    roadmap_id: uuid.UUID
+    course_id: uuid.UUID = Field(..., alias="roadmap_id")  # Maps to roadmap_id in DB
     document_type: str
     title: str
     file_path: str | None = None
@@ -35,7 +54,7 @@ class DocumentResponse(BaseModel):
     status: str
 
 
-class DocumentList(BaseModel):
+class DocumentList(CustomBaseModel):
     """Schema for paginated document list response."""
 
     documents: list[DocumentResponse]
@@ -47,25 +66,32 @@ class DocumentList(BaseModel):
 # Removed unused DocumentChunkResponse class
 
 
-class SearchRequest(BaseModel):
+class SearchRequest(CustomBaseModel):
     """Schema for RAG search request."""
 
     query: str = Field(..., description="Search query")
     top_k: int = Field(default=5, description="Number of results to return")
 
 
-class SearchResult(BaseModel):
+class SearchResult(CustomBaseModel):
     """Schema for RAG search result."""
 
-    document_id: int | uuid.UUID | str
-    document_title: str
-    chunk_content: str
-    similarity_score: float
-    doc_metadata: dict | None = Field(alias="metadata", default=None)
+    chunk_id: str = Field(..., description="Unique chunk identifier")
+    content: str = Field(..., description="Chunk text content")
+    similarity_score: float = Field(..., description="Similarity score (0-1)")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Chunk metadata")
 
 
-class SearchResponse(BaseModel):
+class SearchResponse(CustomBaseModel):
     """Schema for RAG search response."""
 
     results: list[SearchResult]
     total: int
+
+
+class DefaultResponse(CustomBaseModel):
+    """Standard response following best practices."""
+
+    status: bool
+    message: str
+    details: dict[str, Any] = Field(default_factory=dict)

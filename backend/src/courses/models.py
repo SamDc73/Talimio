@@ -8,6 +8,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     TIMESTAMP,
     Boolean,
     DateTime,
@@ -49,7 +50,6 @@ class Course(Base):
     # Relationships
     nodes: Mapped[list["CourseModule"]] = relationship("CourseModule", back_populates="roadmap")
     documents: Mapped[list["CourseDocument"]] = relationship("CourseDocument", back_populates="roadmap")
-
 
 
 # Course Module Model (formerly Node) - matches actual database schema
@@ -129,16 +129,38 @@ class LessonProgress(Base):
 class CourseDocument(Base):
     """Model for course documents (formerly RoadmapDocument)."""
 
-    __tablename__ = "roadmap_documents"
+    __tablename__ = "roadmap_documents"  # Actual database table name
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    roadmap_id: Mapped[uuid.UUID] = mapped_column(SA_UUID, ForeignKey("roadmaps.id", ondelete="CASCADE"))
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        SA_UUID, ForeignKey("roadmaps.id", ondelete="CASCADE"), name="roadmap_id"
+    )  # Maps to roadmap_id column
+    document_type: Mapped[str | None] = mapped_column(String(50))
     title: Mapped[str] = mapped_column(String(255))
+    file_path: Mapped[str | None] = mapped_column(String(500))
+    url: Mapped[str | None] = mapped_column(String(500))
+    source_url: Mapped[str | None] = mapped_column(String(500))
+    crawl_date: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    content_hash: Mapped[str | None] = mapped_column(String(64))
+    parsed_content: Mapped[str | None] = mapped_column(Text)
+    doc_metadata: Mapped[dict | None] = mapped_column(
+        JSON, name="metadata"
+    )  # Use name parameter to map to database column
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=lambda: datetime.now(UTC))
+    processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    embedded_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     status: Mapped[str] = mapped_column(String(20), default="pending")  # 'pending', 'processing', 'embedded', 'failed'
 
     # Relationships
-    roadmap: Mapped["Course"] = relationship("Course", back_populates="documents")
+    roadmap: Mapped["Course"] = relationship(
+        "Course", back_populates="documents", foreign_keys="CourseDocument.course_id"
+    )
+
+    # Alias property for new naming convention
+    @property
+    def course(self) -> "Course":
+        """Alias for roadmap to support course naming."""
+        return self.roadmap
 
 
 # Create aliases for backward compatibility

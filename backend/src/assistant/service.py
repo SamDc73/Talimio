@@ -4,25 +4,28 @@ import json
 import logging
 import re
 from collections.abc import AsyncGenerator
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import text as sql_text
 
 from src.ai.ai_service import get_ai_service
 from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT, RAG_ASSISTANT_PROMPT
-from src.ai.rag.retriever import ContextAwareRetriever
 from src.ai.rag.schemas import SearchResult
-from src.ai.rag.service import RAGService
 from src.courses.facade import CoursesFacade
 from src.courses.schemas import CourseCreate
 from src.database.session import async_session_maker
 
 from .context import ContextData, ContextManager
-from .schemas import ChatRequest, ChatResponse, Citation
+from .schemas import ChatRequest, Citation, CitationMatch
 
 
 logger = logging.getLogger(__name__)
+
+
+class CourseGenerationError(Exception):
+    """Raised when course generation fails."""
+
 
 
 async def get_available_models() -> dict:
@@ -109,16 +112,17 @@ async def trigger_course_generation(message: str, user_id: UUID | None = None) -
         # Create course request
         course_request = CourseCreate(prompt=course_topic)
 
-        async with async_session_maker() as session:
+        async with async_session_maker():
             # user_id is now required - no auth checks in services
             if user_id is None:
-                raise ValueError("user_id is required for course generation")
+                msg = "user_id is required for course generation"
+                raise ValueError(msg)
 
             course_service = CoursesFacade()
             result = await course_service.create_course(course_request.model_dump(), user_id)
 
             if not result.get("success"):
-                raise Exception(result.get("error", "Failed to create course"))
+                raise CourseGenerationError(result.get("error", "Failed to create course"))
 
             course = result["course"]
 
@@ -137,57 +141,12 @@ async def trigger_course_generation(message: str, user_id: UUID | None = None) -
         }
 
 
-class EnhancedAssistantService:
-    """Enhanced assistant service with context-aware RAG integration."""
+class AssistantService:
+    """Assistant service with streaming support and context-aware RAG integration."""
 
     def __init__(self) -> None:
-        self.context_retriever = ContextAwareRetriever()
         self.context_manager = ContextManager()
         self._ai_service = get_ai_service()
-
-    async def chat_with_assistant_enhanced(self, request: ChatRequest) -> ChatResponse:
-        """
-        Enhanced chat with context-aware RAG integration.
-
-        This service combines:
-        1. context-aware content (current page/timestamp context)
-        2. RAG system (semantic document chunks)
-        3. Memory integration
-        4. Course generation detection
-        """
-        try:
-            immediate_context = await self._get_immediate_context(request)
-
-            semantic_context = await self._get_semantic_context(request)
-
-            roadmap_context = await self._get_roadmap_context(request)
-
-            messages = await self._build_enhanced_messages(
-                request,
-                immediate_context,
-                semantic_context,
-                roadmap_context,
-            )
-
-            response = await self._generate_response(request, messages, immediate_context)
-
-            citations = self._collect_citations(semantic_context, roadmap_context, request)
-
-            return ChatResponse(
-                response=response,
-                conversation_id=uuid4(),
-                citations=citations,
-                context_source=immediate_context.source if immediate_context else None,
-            )
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.exception("Error in enhanced chat with assistant")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Enhanced chat failed: {e!s}",
-            ) from e
 
     async def _get_immediate_context(self, request: ChatRequest) -> ContextData | None:
         """Get immediate context from current page/timestamp."""
@@ -195,10 +154,15 @@ class EnhancedAssistantService:
             return None
 
         try:
+            # Ensure user_id is included in context_meta for course context
+            context_meta = request.context_meta or {}
+            if request.user_id:
+                context_meta["user_id"] = request.user_id
+
             context_data = await self.context_manager.get_context(
                 context_type=request.context_type,
                 resource_id=request.context_id,
-                context_meta=request.context_meta,
+                context_meta=context_meta,
             )
 
             if context_data:
@@ -211,27 +175,19 @@ class EnhancedAssistantService:
             return None
 
     async def _get_semantic_context(self, request: ChatRequest) -> list[SearchResult]:
-        """Get semantic context from the RAG system."""
+        """Get semantic context from the RAG system using VectorRAG."""
         logger.info("Getting semantic context for request: %s", request)
 
-        # Try different search strategies and return the first successful result
-        search_strategies = [
-            self._try_contextual_search,
-            self._try_global_search,
-            self._try_text_fallback_search,
-        ]
-
-        for strategy in search_strategies:
+        # Only use VectorRAG for course context
+        if request.context_type == "course" and request.context_id:
             try:
-                results = await strategy(request)
+                results = await self._try_contextual_search(request)
                 if results:
-                    logger.info("Search strategy succeeded with %d results", len(results))
+                    logger.info("VectorRAG search succeeded with %d results", len(results))
                     return results
             except Exception as e:
-                logger.debug("Search strategy failed: %s", e)
-                continue
+                logger.warning("VectorRAG search failed: %s", e)
 
-        logger.warning("All search strategies failed, returning empty results")
         return []
 
     async def _try_contextual_search(self, request: ChatRequest) -> list[SearchResult]:
@@ -239,158 +195,41 @@ class EnhancedAssistantService:
         if not (request.context_type and request.context_id):
             return []  # Skip if no context available
 
-        logger.info("Retrieving context with context_retriever: %s", self.context_retriever)
-        results = await self.context_retriever.retrieve_context(
-            query=request.message,
-            context_type=request.context_type,
-            context_id=request.context_id,
-            context_meta=request.context_meta,
-            max_chunks=5,
-            relevance_threshold=0.4,  # Lower threshold for better recall
-        )
-        logger.info("Retrieved %d semantic chunks for context", len(results))
-        return results
+        # Use VectorRAG for course context (with embeddings!)
+        if request.context_type == "course":
+            try:
+                from uuid import UUID
 
-    async def _try_global_search(self, request: ChatRequest) -> list[SearchResult]:
-        """Try global search when no specific context is available."""
-        if request.context_type and request.context_id:
-            return []  # Skip if context is available (should use contextual search)
+                from src.ai.rag.embeddings import VectorRAG
+                from src.database.session import async_session_maker
 
-        logger.info("No context_type or context_id in request, performing global search.")
-        results = await self.context_retriever.global_retrieve(
-            query=request.message,
-            user_id=request.user_id,
-            max_chunks=5,
-            relevance_threshold=0.4,
-        )
-        logger.info("Global search returned %d results", len(results))
-        return results
-
-    async def _try_text_fallback_search(self, request: ChatRequest) -> list[SearchResult]:
-        """Try text-based fallback search as last resort."""
-        logger.info("Trying text-based fallback search")
-        results = await self._text_based_fallback_search(request)
-        logger.info("Text-based fallback returned %d results", len(results))
-        return results
-
-    async def _text_based_fallback_search(self, request: ChatRequest) -> list[SearchResult]:
-        """Text-based fallback search when vector search fails."""
-        try:
-            async with async_session_maker() as session:
-                # Search for chunks containing relevant keywords from the query
-                query_lower = request.message.lower()
-
-                # Extract key terms - be more general
-                search_terms = []
-
-                # Common book-related queries
-                if any(word in query_lower for word in ["about", "book", "what"]):
-                    # For general "what is this book about" queries
-                    search_terms.extend(["AI", "engineering", "foundation", "model", "application", "build"])
-
-                # Add any specific terms from the query
-                stop_words = {"the", "is", "this", "what", "book", "about", "it", "a", "an", "of", "in"}
-                words = query_lower.split()
-                specific_terms = [word for word in words if len(word) > 3 and word not in stop_words]
-                search_terms.extend(specific_terms)
-
-                # Build ILIKE conditions with placeholders
-                conditions = " OR ".join([f"content ILIKE :term_{i}" for i in range(len(search_terms))])
-                params = {f"term_{i}": f"%{term}%" for i, term in enumerate(search_terms)}
-
-                if not conditions:
-                    # Generic search - get any chunks with common AI/book terms
-                    conditions = "content ILIKE :term_ai OR content ILIKE :term_eng OR content ILIKE :term_book"
-                    params = {
-                        "term_ai": "%AI%",
-                        "term_eng": "%engineering%",
-                        "term_book": "%book%",
-                    }
-
-                # Add doc_id and doc_type to params
-                params["doc_id"] = str(request.context_id)
-                params["doc_type"] = request.context_type
-
-                query = f"""
-                    SELECT id, doc_id, doc_type, chunk_index, content, metadata
-                    FROM rag_document_chunks
-                    WHERE doc_id = :doc_id
-                    AND doc_type = :doc_type
-                    AND ({conditions})
-                    LIMIT 5
-                """
-
-                logger.error("Fallback query: %s", query)
-                logger.error("Search params: %s", params)
-
-                result = await session.execute(sql_text(query), params)
-
-                rows = result.fetchall()
-
-                return [
-                    SearchResult(
-                        document_id=row.id,
-                        document_title=f"Book chunk {row.chunk_index}",  # Fallback title
-                        chunk_content=row.content,
-                        similarity_score=0.8,  # Fake score for text match
-                        doc_metadata=row.metadata or {},
+                vector_rag = VectorRAG()
+                async with async_session_maker() as session:
+                    # Convert context_id to UUID if it's a string
+                    course_id = request.context_id if isinstance(request.context_id, UUID) else UUID(str(request.context_id))
+                    results = await vector_rag.search_course_documents_vector(
+                        session=session,
+                        course_id=course_id,
+                        query=request.message,
+                        limit=5
                     )
-                    for row in rows
-                ]
+                    logger.info("Retrieved %d chunks using VectorRAG for course", len(results))
+                    return results
+            except Exception:
+                logger.exception("VectorRAG search failed")
+                return []  # Return empty results on failure
 
-        except Exception:
-            logger.exception("Text-based fallback search failed:")
-            return []
+        # Book and video context search can be added when their RAG pipelines are ready
+        logger.info("Context type %s not yet supported for RAG search", request.context_type)
+        return []
 
-    async def _get_roadmap_context(self, request: ChatRequest) -> tuple[str, list[Citation]]:
-        """Get legacy roadmap context for backward compatibility."""
-        if not request.roadmap_id:
-            return "", []
 
-        try:
-            rag_service = RAGService()
-            citations = []
-
-            async with async_session_maker() as session:
-                search_results = await rag_service.search_documents(
-                    session=session,
-                    roadmap_id=UUID(request.roadmap_id),
-                    query=request.message,
-                    top_k=3,
-                )
-
-                if search_results:
-                    context_parts = [
-                        f"[Source: {result.document_title}]\n{result.chunk_content}\n" for result in search_results
-                    ]
-
-                    citations.extend(
-                        [
-                            Citation(
-                                document_id=result.document_id,
-                                document_title=result.document_title,
-                                similarity_score=result.similarity_score,
-                            )
-                            for result in search_results
-                        ],
-                    )
-
-                    context = "\n\nRelevant roadmap materials:\n" + "\n".join(context_parts)
-                    logger.info("Retrieved roadmap context with %d citations", len(citations))
-                    return context, citations
-
-            return "", []
-
-        except Exception as e:
-            logger.warning("Failed to get roadmap context: %s", e)
-            return "", []
 
     async def _build_enhanced_messages(
         self,
         request: ChatRequest,
         immediate_context: ContextData | None,
         semantic_context: list[SearchResult],
-        roadmap_context: tuple[str, list[Citation]],
     ) -> list[dict]:
         """Build enhanced message list with all context types."""
         messages = []
@@ -402,9 +241,6 @@ class EnhancedAssistantService:
             system_content = ASSISTANT_CHAT_SYSTEM_PROMPT
 
             # Add context descriptions to system prompt
-            if roadmap_context[0]:
-                system_content += "\n\nYou have access to relevant course materials. Use them to provide more specific and accurate answers. When referencing materials, cite the source documents appropriately."
-
             if immediate_context:
                 system_content += f"\n\nYou have access to the user's current context in the {request.context_type}. Use this context to provide relevant assistance related to what they're currently viewing."
 
@@ -424,19 +260,17 @@ class EnhancedAssistantService:
         if semantic_context:
             semantic_parts = []
             for i, result in enumerate(semantic_context[:3]):  # Limit to top 3
+                # Use content property
+                content = result.content
                 semantic_parts.append(
-                    f"[Relevant content {i + 1} - Score: {result.similarity_score:.2f}]\n{result.chunk_content}",
+                    f"[Relevant content {i + 1} - Score: {result.similarity_score:.2f}]\n{content}",
                 )
             user_message += "\n\nSemantically related content:\n" + "\n\n".join(semantic_parts)
-
-        # Add roadmap context (legacy)
-        if roadmap_context[0]:
-            user_message += roadmap_context[0]
 
         messages.append({"role": "user", "content": user_message})
         return messages
 
-    async def _generate_response(
+    async def _generate_response(  # noqa: C901 - Complex due to multiple response scenarios
         self, request: ChatRequest, messages: list[dict], immediate_context: ContextData | None
     ) -> str:
         """Generate AI response with course generation detection and enhanced context."""
@@ -509,7 +343,6 @@ class EnhancedAssistantService:
     def _collect_citations(
         self,
         semantic_context: list[SearchResult],
-        roadmap_context: tuple[str, list[Citation]],
         _request: ChatRequest,
     ) -> list[Citation]:
         """Collect citations from all context sources."""
@@ -519,16 +352,13 @@ class EnhancedAssistantService:
         citations.extend(
             [
                 Citation(
-                    document_id=result.document_id,
-                    document_title=result.document_title,
+                    document_id=result.chunk_id,
+                    document_title=result.metadata.get("title", "Document"),
                     similarity_score=result.similarity_score,
                 )
                 for result in semantic_context
             ],
         )
-
-        # Add roadmap citations
-        citations.extend(roadmap_context[1])
 
         return citations
 
@@ -537,13 +367,13 @@ class EnhancedAssistantService:
         book_id: UUID,
         _response_text: str,
         _similarity_threshold: float = 0.75,
-    ) -> list[dict]:
+    ) -> list[CitationMatch]:
         """Find text locations in a book for citation highlighting.
 
         Args:
             book_id: UUID of the book
-            response_text: Text to find citations for
-            similarity_threshold: Minimum similarity score for matches
+            _response_text: Text to find citations for (not yet implemented)
+            _similarity_threshold: Minimum similarity score for matches (not yet implemented)
 
         Returns
         -------
@@ -569,15 +399,11 @@ class EnhancedAssistantService:
                 msg = f"Book has not been processed for RAG. Current status: {book.rag_status}"
                 raise ValueError(msg)
 
-        # TODO: Implement find_text_locations in RAGService
-        # For now, return empty citations
+        # Citation highlighting feature pending implementation
         return []
 
 
-class StreamingEnhancedAssistantService(EnhancedAssistantService):
-    """Streaming version of enhanced assistant service."""
-
-    async def chat_with_assistant_streaming_enhanced(self, request: ChatRequest) -> AsyncGenerator[str, None]:
+    async def chat_with_assistant(self, request: ChatRequest) -> AsyncGenerator[str, None]:  # noqa: C901
         """Enhanced streaming chat with context-aware RAG integration."""
         try:
             # Check if user wants to generate a course first
@@ -590,14 +416,12 @@ class StreamingEnhancedAssistantService(EnhancedAssistantService):
             # Get all context types (same as non-streaming)
             immediate_context = await self._get_immediate_context(request)
             semantic_context = await self._get_semantic_context(request)
-            roadmap_context = await self._get_roadmap_context(request)
 
             # Build enhanced messages
             messages = await self._build_enhanced_messages(
                 request,
                 immediate_context,
                 semantic_context,
-                roadmap_context,
             )
 
             # Since AIService doesn't support streaming yet, we'll get the full response
@@ -672,17 +496,7 @@ class StreamingEnhancedAssistantService(EnhancedAssistantService):
 
 
 # Service instances
-enhanced_assistant_service = EnhancedAssistantService()
-streaming_enhanced_assistant_service = StreamingEnhancedAssistantService()
+# Single assistant service instance
+assistant_service = AssistantService()
 
 
-# Legacy compatibility functions (can be removed if router is updated)
-async def chat_with_assistant(request: ChatRequest) -> ChatResponse:
-    """Legacy function - redirects to enhanced service."""
-    return await enhanced_assistant_service.chat_with_assistant_enhanced(request)
-
-
-async def chat_with_assistant_streaming(request: ChatRequest) -> AsyncGenerator[str, None]:
-    """Legacy function - redirects to enhanced streaming service."""
-    async for chunk in streaming_enhanced_assistant_service.chat_with_assistant_streaming_enhanced(request):
-        yield chunk

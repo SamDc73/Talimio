@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.client import AIError, create_lesson_body
+from src.ai.client import AIError, ModelManager
 from src.courses.models import Node, Roadmap
 from src.courses.schemas import LessonResponse
 
@@ -149,7 +149,7 @@ class LessonQueryService:
             context = {
                 "title": lesson.title,  # This is what _extract_lesson_metadata expects
                 "description": lesson.description or "",
-                "roadmap_id": str(course.id) if course.id else None,
+                "course_id": str(course.id) if course.id else None,
                 "course_title": course.title,
                 "course_description": course.description,
                 "original_user_prompt": course.description,  # Use course description as fallback
@@ -181,7 +181,8 @@ class LessonQueryService:
             for attempt in range(max_retries):
                 try:
                     self._logger.info("Attempting to generate lesson content (attempt %d/%d)", attempt + 1, max_retries)
-                    content, _ = await create_lesson_body(context)
+                    model_manager = ModelManager()
+                    content, _ = await model_manager.create_lesson_body(context)
 
                     if content and len(content.strip()) > 100:  # Validate content
                         # Use conditional update to prevent double-write

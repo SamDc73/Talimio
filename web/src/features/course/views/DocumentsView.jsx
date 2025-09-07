@@ -78,8 +78,8 @@ function DocumentsView({ courseId }) {
 	const { startPolling, stopPolling } = usePolling(() => loadDocuments(true), POLLING_INTERVAL, [loadDocuments])
 
 	const documentsProcessing = useMemo(() => {
-		return documents.some((doc) => documentsService.isDocumentProcessing(doc))
-	}, [documents, documentsService])
+		return documents.some((doc) => doc?.status === "processing" || doc?.status === "pending")
+	}, [documents])
 
 	useEffect(() => {
 		if (courseId) {

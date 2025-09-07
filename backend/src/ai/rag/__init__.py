@@ -1,21 +1,19 @@
-"""RAG system for per-roadmap document processing and retrieval."""
+"""RAG system using txtai framework."""
 
-# Only export what's actually used outside this module
-# Other components are imported directly from their submodules when needed
-
-from .chunker import ChunkerFactory
-from .ingest import DocumentProcessor
-from .retriever import ContextAwareRetriever
-from .schemas import SearchResult
-from .service import RAGService
-from .vector_store import VectorStore
+from src.ai.rag.chunker import ChunkerFactory
+from src.ai.rag.config import rag_config
+from src.ai.rag.parser import DocumentProcessor
+from src.ai.rag.schemas import DocumentResponse, DocumentUpload, SearchRequest, SearchResult
+from src.ai.rag.service import RAGService
 
 
 __all__ = [
     "ChunkerFactory",
-    "ContextAwareRetriever",
     "DocumentProcessor",
+    "DocumentResponse",
+    "DocumentUpload",
     "RAGService",
+    "SearchRequest",
     "SearchResult",
-    "VectorStore",
+    "rag_config",
 ]

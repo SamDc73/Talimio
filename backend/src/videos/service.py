@@ -14,8 +14,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # AI imports removed - using facades instead
-from src.ai.rag.background_processor import process_video_rag_background as _process_video_rag_background
-
 # UserContext removed - using UUID directly
 from src.database.pagination import Paginator
 from src.database.session import async_session_maker
@@ -371,8 +369,8 @@ class VideoService:
         # Ensure video object is refreshed before validation
         await db.refresh(video)
 
-        # Trigger background RAG processing
-        background_tasks.add_task(_process_video_rag_background, video.id)
+        # TODO: Trigger background RAG processing when implemented
+        # background_tasks.add_task(_process_video_rag_background, video.id)
 
         # Trigger background chapter extraction
         background_tasks.add_task(_extract_chapters_background, str(video.id), user_id)

@@ -17,11 +17,11 @@ import { useApi } from "../../../hooks/useApi"
  */
 export function useDocumentsService(courseId = null) {
 	// Document endpoints
-	const uploadDocument = useApi("/roadmaps/{roadmapId}/documents", {
+	const uploadDocument = useApi("/courses/{courseId}/documents", {
 		method: "POST",
 	})
-	const getDocuments = useApi("/roadmaps/{roadmapId}/documents")
-	const searchDocuments = useApi("/roadmaps/{roadmapId}/search", {
+	const getDocuments = useApi("/courses/{courseId}/documents")
+	const searchDocuments = useApi("/courses/{courseId}/search", {
 		method: "POST",
 	})
 	const getDocument = useApi("/documents/{documentId}")
@@ -48,7 +48,7 @@ export function useDocumentsService(courseId = null) {
 				formData.append("title", title)
 
 				// Use fetch directly for better upload progress tracking
-				const response = await fetch(`/api/v1/roadmaps/${courseId}/documents`, {
+				const response = await fetch(`/api/v1/courses/${courseId}/documents`, {
 					method: "POST",
 					body: formData,
 				})
@@ -74,7 +74,7 @@ export function useDocumentsService(courseId = null) {
 				formData.append("document_type", "url")
 				formData.append("title", title)
 
-				const response = await fetch(`/api/v1/roadmaps/${courseId}/documents`, {
+				const response = await fetch(`/api/v1/courses/${courseId}/documents`, {
 					method: "POST",
 					body: formData,
 				})
@@ -137,7 +137,7 @@ export function useDocumentsService(courseId = null) {
 				const queryParams = { skip, limit }
 
 				return await getDocuments.execute(null, {
-					pathParams: { roadmapId: courseId },
+					pathParams: { courseId: courseId },
 					queryParams,
 				})
 			},
@@ -210,7 +210,7 @@ export function useDocumentsService(courseId = null) {
 				}
 
 				return await searchDocuments.execute(searchData, {
-					pathParams: { roadmapId: courseId },
+					pathParams: { courseId: courseId },
 				})
 			},
 
@@ -327,7 +327,7 @@ export function useDocumentsService(courseId = null) {
 				)
 			},
 		}),
-		[courseId, uploadDocument, getDocuments, searchDocuments, getDocument, deleteDocument]
+		[courseId] // Only courseId affects the service methods
 	)
 }
 

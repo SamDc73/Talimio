@@ -1,4 +1,4 @@
-"""RAG system API router - FIXED VERSION."""
+"""RAG system API router with dependency injection."""
 
 import logging
 import uuid
@@ -8,14 +8,15 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.rag.ingest import URLIngestor
 from src.ai.rag.schemas import (
+    DefaultResponse,
     DocumentList,
     DocumentResponse,
     SearchRequest,
     SearchResponse,
 )
 from src.ai.rag.service import RAGService
+from src.auth import UserId
 from src.database.session import get_db_session
 
 
@@ -26,11 +27,10 @@ router = APIRouter(prefix="/api/v1", tags=["rag"])
 
 # DO NOT create services at module level!
 _rag_service: RAGService | None = None
-_url_ingestor: URLIngestor | None = None
 
 
-def get_rag_service() -> RAGService:
-    """Get or create RAG service instance - truly lazy."""
+async def get_rag_service() -> RAGService:
+    """Dependency to get RAG service instance."""
     global _rag_service  # noqa: PLW0603
     if _rag_service is None:
         try:
@@ -42,34 +42,42 @@ def get_rag_service() -> RAGService:
     return _rag_service
 
 
-def get_url_ingestor() -> URLIngestor:
-    """Get or create URLIngestor instance."""
-    global _url_ingestor  # noqa: PLW0603
-    if _url_ingestor is None:
-        try:
-            _url_ingestor = URLIngestor()
-        except Exception:
-            logger.exception("Failed to initialize URL ingestor")
-            # Return None and handle in endpoint
-    return _url_ingestor
+async def validate_course_access(
+    course_id: uuid.UUID,
+    user_id: UserId,
+    session: AsyncSession = Depends(get_db_session),
+) -> None:
+    """Validate user has access to course."""
+    # Check if course exists and user owns it
+    result = await session.execute(
+        text("SELECT id FROM roadmaps WHERE id = :course_id AND user_id = :user_id"),
+        {"course_id": str(course_id), "user_id": str(user_id)},
+    )
+    if not result.fetchone():
+        raise HTTPException(status_code=404, detail="Course not found or access denied")
 
 
-@router.post("/roadmaps/{roadmap_id}/documents")
+@router.post("/courses/{course_id}/documents")
 async def upload_document(
-    roadmap_id: uuid.UUID,
+    course_id: uuid.UUID,
     document_type: Annotated[str, Form()],
     title: Annotated[str, Form()],
+    user_id: UserId,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    rag_service: Annotated[RAGService, Depends(get_rag_service)],
     url: Annotated[str | None, Form()] = None,
     file: Annotated[UploadFile | None, File()] = None,
-    session: Annotated[AsyncSession, Depends(get_db_session)] = None,
 ) -> DocumentResponse:
-    """Upload a document to a roadmap."""
-    # For file uploads, document_type might be generic "file" or specific like "pdf"
-    if document_type != "url" and not file:
-        raise HTTPException(status_code=400, detail="File required for file uploads")
+    """Upload a document to a course."""
+    # Validate course access first
+    await validate_course_access(course_id, user_id, session)
 
-    if document_type == "url" and not url:
-        raise HTTPException(status_code=400, detail="URL required for URL documents")
+    # Only file uploads supported in MVP (no URL crawling)
+    if not file:
+        raise HTTPException(status_code=400, detail="File upload required")
+
+    if document_type == "url":
+        raise HTTPException(status_code=400, detail="URL documents not supported in MVP. Please upload a file.")
 
     file_content = None
     filename = None
@@ -78,10 +86,10 @@ async def upload_document(
         filename = file.filename
 
     try:
-        rag_service = get_rag_service()
         return await rag_service.upload_document(
             session=session,
-            roadmap_id=roadmap_id,
+            user_id=user_id,  # Pass user_id to service
+            course_id=course_id,
             document_type=document_type,
             title=title,
             file_content=file_content,
@@ -99,48 +107,51 @@ async def upload_document(
         raise HTTPException(status_code=500, detail="Failed to upload document") from e
 
 
-@router.get("/roadmaps/{roadmap_id}/documents")
+@router.get("/courses/{course_id}/documents")
 async def list_documents(
-    roadmap_id: uuid.UUID,
+    course_id: uuid.UUID,
+    user_id: UserId,
+    rag_service: Annotated[RAGService, Depends(get_rag_service)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     skip: int = 0,
     limit: int = 20,
-    session: Annotated[AsyncSession, Depends(get_db_session)] = None,
 ) -> DocumentList:
-    """List documents for a roadmap - with proper error handling."""
-    try:
-        rag_service = get_rag_service()
-        if not rag_service:
-            # Return empty list if service failed to initialize
-            logger.error("RAG service not available")
-            return DocumentList(documents=[], total=0, page=1, size=limit)
+    """List documents for a course - with proper error handling."""
+    # Validate course access first
+    await validate_course_access(course_id, user_id, session)
 
-        documents = await rag_service.get_documents(session=session, roadmap_id=roadmap_id, skip=skip, limit=limit)
+    try:
+        documents = await rag_service.get_documents(
+            session=session, user_id=user_id, course_id=course_id, skip=skip, limit=limit
+        )
 
         # Get total count
-        total = await rag_service.count_documents(session=session, roadmap_id=roadmap_id)
+        total = await rag_service.count_documents(session=session, user_id=user_id, course_id=course_id)
 
         return DocumentList(documents=documents, total=total, page=skip // limit + 1, size=limit)
 
     except Exception:
         # Log but don't crash - return empty list
-        logger.exception("Error listing documents for roadmap %s", roadmap_id)
+        logger.exception("Error listing documents for course %s", course_id)
         return DocumentList(documents=[], total=0, page=1, size=limit)
 
 
-@router.post("/roadmaps/{roadmap_id}/search")
+@router.post("/courses/{course_id}/search")
 async def search_documents(
-    roadmap_id: uuid.UUID,
+    course_id: uuid.UUID,
     search_request: SearchRequest,
-    session: Annotated[AsyncSession, Depends(get_db_session)] = None,
+    user_id: UserId,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    rag_service: Annotated[RAGService, Depends(get_rag_service)],
 ) -> SearchResponse:
-    """Search documents within a roadmap using RAG."""
-    try:
-        rag_service = get_rag_service()
-        if not rag_service:
-            return SearchResponse(results=[], total=0)
+    """Search documents within a course using RAG."""
+    # Validate course access first
+    await validate_course_access(course_id, user_id, session)
 
+    try:
         results = await rag_service.search_documents(
-            session=session, roadmap_id=roadmap_id, query=search_request.query, top_k=search_request.top_k
+            session=session, user_id=user_id, course_id=course_id,
+            query=search_request.query, top_k=search_request.top_k
         )
 
         return SearchResponse(results=results, total=len(results))
@@ -153,13 +164,18 @@ async def search_documents(
 @router.delete("/documents/{document_id}")
 async def delete_document(
     document_id: int,
-    session: Annotated[AsyncSession, Depends(get_db_session)] = None,
-) -> dict:
+    user_id: UserId,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    rag_service: Annotated[RAGService, Depends(get_rag_service)],
+) -> DefaultResponse:
     """Delete a document."""
     try:
-        rag_service = get_rag_service()
-        await rag_service.delete_document(session, document_id)
-        return {"message": "Document deleted successfully"}
+        # Validate user owns the document and delete it
+        await rag_service.delete_document(session, user_id, document_id)
+        return DefaultResponse(
+            status=True,
+            message="Document deleted successfully",
+        )
 
     except Exception as e:
         logger.exception("Error deleting document")
@@ -169,17 +185,24 @@ async def delete_document(
 @router.get("/documents/{document_id}")
 async def get_document(
     document_id: int,
-    session: Annotated[AsyncSession, Depends(get_db_session)] = None,
+    user_id: UserId,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> DocumentResponse:
     """Get document details."""
     try:
+        # Get document and verify user owns it via course
         result = await session.execute(
-            text("SELECT * FROM roadmap_documents WHERE id = :doc_id"), {"doc_id": document_id}
+            text("""
+                SELECT rd.* FROM roadmap_documents rd
+                JOIN roadmaps r ON rd.roadmap_id = r.id
+                WHERE rd.id = :doc_id AND r.user_id = :user_id
+            """),
+            {"doc_id": document_id, "user_id": str(user_id)}
         )
         row = result.fetchone()
 
         if not row:
-            raise HTTPException(status_code=404, detail="Document not found")
+            raise HTTPException(status_code=404, detail="Document not found or access denied")
 
         return DocumentResponse.model_validate(row._asdict())
 
@@ -190,16 +213,4 @@ async def get_document(
         raise HTTPException(status_code=500, detail="Failed to get document") from e
 
 
-@router.post("/extract-title")
-async def extract_title_from_url(url: Annotated[str, Form()]) -> dict:
-    """Extract title from a given URL."""
-    try:
-        url_ingestor = get_url_ingestor()
-        if not url_ingestor:
-            return {"title": "Untitled Document", "error": "URL ingestor not available"}
-
-        title = url_ingestor.extract_title_from_url(url)
-        return {"title": title}
-    except Exception as e:
-        logger.exception("Error extracting title")
-        return {"title": "Untitled Document", "error": str(e)}
+# URL extraction endpoint removed - MVP only supports file uploads
