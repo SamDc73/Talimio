@@ -45,7 +45,6 @@ class CourseProgressService(ProgressTracker):
                     "total_lessons": 0,
                     "quiz_scores": {},
                     "learning_patterns": {},
-                    "difficulty_preference": "beginner",
                     "pacing_preference": "normal",
                 }
 
@@ -63,7 +62,6 @@ class CourseProgressService(ProgressTracker):
                     "total_lessons": total_lessons,
                     "quiz_scores": {},
                     "learning_patterns": {},
-                    "difficulty_preference": "beginner",
                     "pacing_preference": "normal",
                     "last_accessed_at": None,
                     "created_at": None,
@@ -78,9 +76,7 @@ class CourseProgressService(ProgressTracker):
             progress_percentage = progress_data.progress_percentage or 0
             if total_lessons > 0 and completed_lessons and progress_percentage == 0:
                 try:
-                    progress_percentage = self._calculate_lesson_progress_percentage(
-                        completed_lessons, total_lessons
-                    )
+                    progress_percentage = self._calculate_lesson_progress_percentage(completed_lessons, total_lessons)
                 except Exception as e:
                     logger.warning(f"Failed to calculate course progress percentage: {e}")
                     progress_percentage = 0
@@ -92,7 +88,6 @@ class CourseProgressService(ProgressTracker):
                 "total_lessons": total_lessons,
                 "quiz_scores": metadata.get("quiz_scores", {}),
                 "learning_patterns": metadata.get("learning_patterns", {}),
-                "difficulty_preference": metadata.get("difficulty_preference", "beginner"),
                 "pacing_preference": metadata.get("pacing_preference", "normal"),
                 "last_accessed_at": progress_data.updated_at,
                 "created_at": progress_data.created_at,
@@ -137,7 +132,9 @@ class CourseProgressService(ProgressTracker):
             # Return updated progress in expected format
             return self._format_progress_response(updated, metadata, total_lessons, course)
 
-    async def _get_progress_context(self, session: Any, progress_service: Any, user_id: UUID, content_id: UUID) -> tuple[Any, Any, int]:
+    async def _get_progress_context(
+        self, session: Any, progress_service: Any, user_id: UUID, content_id: UUID
+    ) -> tuple[Any, Any, int]:
         """Get current progress, course, and lesson count."""
         current_progress = await progress_service.get_single_progress(user_id, content_id)
 
@@ -201,10 +198,7 @@ class CourseProgressService(ProgressTracker):
             # Update learning patterns based on quiz performance
             self._update_learning_patterns(metadata, lesson_id, quiz_results)
 
-            # Determine performance level and update preferences
-            performance_level = progress_data.get("performance_level")
-            if performance_level:
-                self._adjust_difficulty_preference(metadata, performance_level)
+            # Performance tracking removed - no difficulty adjustments
 
     def _process_settings_updates(self, metadata: dict, progress_data: dict) -> None:
         """Process settings and preference updates."""
@@ -213,13 +207,10 @@ class CourseProgressService(ProgressTracker):
             metadata["current_lesson"] = progress_data["current_lesson"]
 
         # Update course settings/preferences
-        if "difficulty_preference" in progress_data:
-            metadata["difficulty_preference"] = progress_data["difficulty_preference"]
-
         if "pacing_preference" in progress_data:
             metadata["pacing_preference"] = progress_data["pacing_preference"]
 
-    def _format_progress_response(self, updated: Any, metadata: dict, total_lessons: int, course: Any) -> dict:
+    def _format_progress_response(self, updated: Any, metadata: dict, total_lessons: int, _course: Any) -> dict:
         """Format the progress response."""
         return {
             "completion_percentage": updated.progress_percentage,
@@ -265,17 +256,13 @@ class CourseProgressService(ProgressTracker):
                 metadata["total_lessons"] = total_lessons
 
             # Recalculate completion percentage
-            completion_percentage = self._calculate_lesson_progress_percentage(
-                completed_lessons, total_lessons
-            )
+            completion_percentage = self._calculate_lesson_progress_percentage(completed_lessons, total_lessons)
 
             # Update progress
             progress_update = ProgressUpdate(progress_percentage=completion_percentage, metadata=metadata)
             await progress_service.update_progress(user_id, content_id, "course", progress_update)
 
-    async def update_course_settings(
-        self, content_id: UUID, user_id: UUID, settings: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def update_course_settings(self, content_id: UUID, user_id: UUID, settings: dict[str, Any]) -> dict[str, Any]:
         """Update course-specific settings and preferences."""
         async with async_session_maker() as session:
             progress_service = ProgressService(session)
@@ -285,12 +272,7 @@ class CourseProgressService(ProgressTracker):
                 metadata = current_progress.metadata.copy() if current_progress.metadata else {}
 
                 # Update supported settings
-                supported_settings = [
-                    "difficulty_preference",
-                    "pacing_preference",
-                    "current_lesson",
-                    "learning_patterns"
-                ]
+                supported_settings = ["pacing_preference", "current_lesson", "learning_patterns"]
 
                 for setting in supported_settings:
                     if setting in settings:
@@ -371,7 +353,6 @@ class CourseProgressService(ProgressTracker):
                 "quiz_average_score": quiz_average_score,
                 "time_spent_minutes": total_time_spent // 60,  # Convert seconds to minutes
                 "learning_velocity": learning_velocity,
-                "difficulty_preference": metadata.get("difficulty_preference", "beginner"),
                 "pacing_preference": metadata.get("pacing_preference", "normal"),
             }
 
@@ -405,8 +386,8 @@ class CourseProgressService(ProgressTracker):
             if len(learning_patterns[concept]["scores"]) > 5:
                 learning_patterns[concept]["scores"] = learning_patterns[concept]["scores"][-5:]
 
-            learning_patterns[concept]["avg_score"] = (
-                sum(learning_patterns[concept]["scores"]) / len(learning_patterns[concept]["scores"])
+            learning_patterns[concept]["avg_score"] = sum(learning_patterns[concept]["scores"]) / len(
+                learning_patterns[concept]["scores"]
             )
 
         # Track overall performance trends
@@ -424,20 +405,6 @@ class CourseProgressService(ProgressTracker):
                 learning_patterns["overall_performance"][key] = learning_patterns["overall_performance"][key][-10:]
 
         metadata["learning_patterns"] = learning_patterns
-
-    def _adjust_difficulty_preference(self, metadata: dict, performance_level: str) -> None:
-        """Adjust difficulty preference based on performance."""
-        current_difficulty = metadata.get("difficulty_preference", "beginner")
-
-        # Adaptive difficulty adjustment logic
-        if performance_level == "advanced" and current_difficulty == "beginner":
-            metadata["difficulty_preference"] = "intermediate"
-        elif performance_level == "advanced" and current_difficulty == "intermediate":
-            metadata["difficulty_preference"] = "advanced"
-        elif performance_level == "struggling" and current_difficulty == "advanced":
-            metadata["difficulty_preference"] = "intermediate"
-        elif performance_level == "struggling" and current_difficulty == "intermediate":
-            metadata["difficulty_preference"] = "beginner"
 
     def _calculate_learning_velocity(
         self, completed_lessons: int, total_lessons: int, avg_quiz_score: float, _time_spent_seconds: int

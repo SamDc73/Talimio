@@ -48,8 +48,8 @@ class Course(Base):
     )
 
     # Relationships
-    nodes: Mapped[list["CourseModule"]] = relationship("CourseModule", back_populates="roadmap")
-    documents: Mapped[list["CourseDocument"]] = relationship("CourseDocument", back_populates="roadmap")
+    nodes: Mapped[list["CourseModule"]] = relationship("CourseModule", back_populates="roadmap", cascade="all, delete-orphan")
+    documents: Mapped[list["CourseDocument"]] = relationship("CourseDocument", back_populates="roadmap", cascade="all, delete-orphan")
 
 
 # Course Module Model (formerly Node) - matches actual database schema
@@ -66,7 +66,7 @@ class CourseModule(Base):
     order: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(50), default="not_started")
     completion_percentage: Mapped[float] = mapped_column(Float, default=0.0)
-    parent_id: Mapped[uuid.UUID | None] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("nodes.id"), nullable=True)
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("nodes.id", ondelete="CASCADE"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )

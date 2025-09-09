@@ -2,19 +2,34 @@
 
 import json
 import logging
+import os
 from typing import Any
 from uuid import UUID
 
+import instructor
+import litellm
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.ai_service import AIServiceError, get_ai_service
 from src.ai.constants import TAG_CATEGORIES, TAG_CATEGORY_COLORS
+from src.ai.prompts import CONTENT_TAGGING_PROMPT
 
 from .models import Tag, TagAssociation
+from .schemas import TagWithConfidence
 
 
 logger = logging.getLogger(__name__)
+
+
+class TaggedContent(BaseModel):
+    """Response model for Instructor - ensures valid structured output."""
+
+    tags: list[TagWithConfidence] = Field(
+        description="List of tags with confidence scores",
+        min_items=1,
+        max_items=10,
+    )
 
 
 class TaggingService:
@@ -27,7 +42,48 @@ class TaggingService:
             session: Database session
         """
         self.session = session
-        self._ai_service = get_ai_service()
+
+    async def _generate_tags_llm(self, title: str, content_preview: str) -> list[dict]:
+        """Generate tags using Instructor + LiteLLM.
+
+        Instructor handles:
+        - Automatic retries on validation failures
+        - JSON parsing and validation
+        - Structured output guarantee
+        - Error recovery
+        """
+        # Check if model is configured
+        model = os.getenv("TAGGING_LLM_MODEL")
+        if not model:
+            logger.warning("TAGGING_LLM_MODEL not set in environment, skipping tag generation")
+            return []
+        try:
+            # Create instructor client with litellm's async completion function
+            client = instructor.from_litellm(litellm.acompletion)
+        except Exception as e:
+            logger.exception(f"Failed to create instructor client: {e}")
+            return []
+
+        try:
+            # Use the client with proper method
+            result = await client.chat.completions.create(
+                model=model,
+                response_model=TaggedContent,  # Instructor validates this
+                messages=[
+                    {"role": "system", "content": CONTENT_TAGGING_PROMPT},
+                    {"role": "user", "content": f"Title: {title}\n\nContent: {content_preview}"},
+                ],
+                temperature=0,
+                max_retries=3,  # Instructor retries on validation failure
+            )
+
+            # Instructor guarantees result.tags is valid List[TagWithConfidence]
+            # No need for try/except on JSON parsing or validation
+            return [{"tag": tag.tag, "confidence": tag.confidence} for tag in result.tags]
+        except Exception as e:
+            # Catch all exceptions
+            logger.exception(f"Error generating tags: {e}")
+            return []
 
     async def tag_content(
         self,
@@ -51,15 +107,8 @@ class TaggingService:
             List of generated tag names
         """
         try:
-            # Generate tags with confidence using AI
-            # For tagging, we use the actual content type as the routing key
-            tags_with_confidence = await self._ai_service.process_content(
-                content_type,  # The actual content type (book, video, etc.)
-                "tag",  # This is the action
-                user_id,  # Use the actual user_id for personalized tags
-                title=title,
-                preview=content_preview,
-            )
+            # Generate tags with confidence using Instructor + LiteLLM
+            tags_with_confidence = await self._generate_tags_llm(title, content_preview)
 
             # Extract tag names
             tag_names = [item["tag"] for item in tags_with_confidence]
@@ -89,13 +138,10 @@ class TaggingService:
 
             return tag_names
 
-        except AIServiceError:
-            logger.exception(f"Failed to generate tags for {content_type} {content_id}")
-            return []
         except Exception as e:
             logger.exception(f"Error tagging content {content_id}: {e}")
             await self.session.rollback()
-            raise
+            return []
 
     async def batch_tag_content(
         self,
@@ -241,47 +287,19 @@ class TaggingService:
 
         await self.session.commit()
 
-    async def process_tags(
-        self,
-        content_type: str,
-        content_id: str,
-        user_id: UUID,
-        tags: list[str],
-    ) -> None:
-        """Process tags for content - wrapper for update_manual_tags.
-
-        Args:
-            content_type: Type of content
-            content_id: ID of the content (as string)
-            user_id: User ID for the tags
-            tags: List of tag names to set
-        """
-        # Early return for empty tags list to avoid SQLAlchemy IN() errors
-        if not tags:
-            return
-
-        # Convert string content_id to UUID and delegate to update_manual_tags
-        content_uuid = UUID(content_id)
-        await self.update_manual_tags(
-            content_id=content_uuid,
-            content_type=content_type,
-            user_id=user_id,
-            tag_names=tags,
-        )
-
     async def suggest_tags(
         self,
         content_preview: str,
-        user_id: UUID,
-        content_type: str = "general",
+        _user_id: UUID,
+        _content_type: str = "general",
         title: str = "",
     ) -> list[str]:
         """Suggest tags for content without storing them.
 
         Args:
             content_preview: Preview text for tag generation
-            user_id: User ID for personalized tag suggestions
-            content_type: Type of content
+            _user_id: User ID for personalized tag suggestions (reserved for future use)
+            _content_type: Type of content (reserved for future use)
             title: Optional title
 
         Returns
@@ -289,17 +307,11 @@ class TaggingService:
             List of suggested tag names
         """
         try:
-            tags_with_confidence = await self._ai_service.process_content(
-                content_type,  # The actual content type (book, video, etc.)
-                "tag",  # This is the action
-                user_id,  # Use the actual user_id for personalized tags
-                title=title,
-                preview=content_preview,
-            )
+            tags_with_confidence = await self._generate_tags_llm(title, content_preview)
             # Return just the tag names for backward compatibility
             return [item["tag"] for item in tags_with_confidence]
-        except AIServiceError:
-            logger.exception("Failed to generate tag suggestions")
+        except Exception as e:
+            logger.exception(f"Failed to generate tag suggestions: {e}")
             return []
 
     async def get_all_tags(

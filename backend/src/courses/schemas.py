@@ -37,7 +37,6 @@ class LessonResponse(LessonBase):
     updated_at: datetime = Field(..., description="Lesson last update timestamp")
 
 
-
 class CourseBase(BaseModel):
     """Base schema for courses (formerly roadmaps)."""
 
@@ -82,10 +81,6 @@ class CourseListResponse(BaseModel):
     total: int = Field(..., description="Total number of courses")
     page: int = Field(..., description="Current page number")
     per_page: int = Field(..., description="Number of courses per page")
-
-
-
-
 
 
 class ModuleResponse(BaseModel):

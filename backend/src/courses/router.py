@@ -61,6 +61,7 @@ async def create_course(
     result = await facade.create_course(request.model_dump(), user_id)
     if not result.get("success"):
         from fastapi import HTTPException
+
         raise HTTPException(status_code=400, detail=result.get("error", "Failed to create course"))
 
     return result["course"]
@@ -79,6 +80,7 @@ async def list_courses(
 
     if not result.get("success"):
         from fastapi import HTTPException
+
         raise HTTPException(status_code=400, detail=result.get("error", "Failed to get courses"))
 
     courses = result["courses"]
@@ -109,6 +111,7 @@ async def get_course(
 
     if not result.get("success"):
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404, detail=result.get("error", "Course not found"))
 
     return result["course"]
@@ -122,10 +125,12 @@ async def update_course(
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CourseResponse:
     """Update a course."""
-    result = await facade.update_course(course_id, user_id, request.model_dump())
+    # Exclude None fields to avoid overwriting NOT NULL columns with NULL
+    result = await facade.update_course(course_id, user_id, request.model_dump(exclude_none=True))
 
     if not result.get("success"):
         from fastapi import HTTPException
+
         raise HTTPException(status_code=400, detail=result.get("error", "Failed to update course"))
 
     return result["course"]
@@ -142,6 +147,7 @@ async def delete_course(
 
     if not success:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=400, detail="Failed to delete course")
 
 
@@ -161,8 +167,6 @@ async def get_lesson_full_path(
     return await facade.get_lesson_simplified(course_id, lesson_id, generate, user_id)
 
 
-
-
 # Main lesson access endpoint with single query and user isolation
 @router.get("/{course_id}/lessons/{lesson_id}")
 async def get_lesson(
@@ -173,16 +177,6 @@ async def get_lesson(
 ) -> LessonResponse:
     """Get a specific lesson by course and lesson ID."""
     return await lesson_service.get_lesson(course_id, lesson_id, generate)
-
-
-
-
-
-
-
-
-
-
 
 
 # NOTE: Quiz submission removed - quizzes are part of lesson content and handled via lesson progress updates

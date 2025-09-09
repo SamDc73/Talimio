@@ -122,4 +122,3 @@ class CourseQueryService:
         ]
 
         return courses, total
-

@@ -47,9 +47,7 @@ class AdaptiveContextService:
             for concept in weak_concepts[:limit]
         ]
 
-    async def _process_quiz_performance(
-        self, adaptive_context: dict[str, Any], user_id: UUID, course_id: UUID
-    ) -> None:
+    async def _process_quiz_performance(self, adaptive_context: dict[str, Any], user_id: UUID, course_id: UUID) -> None:
         """Process quiz performance and update adaptive context.
 
         Fetches recent quiz patterns from mem0 memory to provide context for lesson generation.
@@ -118,7 +116,7 @@ class AdaptiveContextService:
             # Log but don't fail - lessons should work even without quiz data
             self._logger.debug(
                 "Could not fetch quiz performance from memory",
-                extra={"user_id": str(user_id), "course_id": str(course_id), "error": str(e)}
+                extra={"user_id": str(user_id), "course_id": str(course_id), "error": str(e)},
             )
             # Continue without adaptive context - better than failing
 

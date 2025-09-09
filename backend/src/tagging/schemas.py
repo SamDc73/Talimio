@@ -14,17 +14,6 @@ class TagBase(BaseModel):
     color: str | None = Field(None, pattern="^#[0-9A-Fa-f]{6}$")  # Hex color validation
 
 
-class TagCreate(TagBase):
-    """Schema for creating a tag."""
-
-
-class TagUpdate(BaseModel):
-    """Schema for updating a tag."""
-
-    category: str | None = Field(None, max_length=50)
-    color: str | None = Field(None, pattern="^#[0-9A-Fa-f]{6}$")
-
-
 class TagSchema(TagBase):
     """Schema for tag responses."""
 
@@ -41,30 +30,6 @@ class TagWithConfidence(BaseModel):
 
     tag: str
     confidence: float = Field(..., ge=0.0, le=1.0)
-
-
-class TagAssociationBase(BaseModel):
-    """Base schema for tag associations."""
-
-    tag_id: UUID
-    content_id: UUID
-    content_type: str = Field(..., pattern="^(book|video|roadmap)$")
-    confidence_score: float = Field(1.0, ge=0.0, le=1.0)
-    auto_generated: bool = True
-
-
-class TagAssociationCreate(TagAssociationBase):
-    """Schema for creating a tag association."""
-
-
-class TagAssociationSchema(TagAssociationBase):
-    """Schema for tag association responses."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    created_at: datetime
-    tag: TagSchema | None = None
 
 
 class ContentTagsUpdate(BaseModel):

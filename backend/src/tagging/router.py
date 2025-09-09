@@ -1,6 +1,7 @@
 """API endpoints for tagging operations."""
 
 import logging
+from collections.abc import Callable
 from typing import Annotated
 from uuid import UUID
 
@@ -35,6 +36,54 @@ async def get_tagging_service(
     return TaggingService(session)
 
 
+# Content type validation dependency
+VALID_CONTENT_TYPES = ["book", "video", "course"]
+
+
+def validate_content_type(content_type: str) -> str:
+    """Validate content type parameter.
+
+    Args:
+        content_type: Type of content to validate
+
+    Returns
+    -------
+        The validated content type
+
+    Raises
+    ------
+        HTTPException: If content type is invalid
+    """
+    if content_type not in VALID_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid content type: {content_type}. Must be one of: {', '.join(VALID_CONTENT_TYPES)}",
+        )
+    return content_type
+
+
+# Content processor mapping
+async def get_content_processor(content_type: str) -> Callable:
+    """Get the appropriate content processor for the given type.
+
+    Args:
+        content_type: Type of content to process
+
+    Returns
+    -------
+        The processor function for the content type
+    """
+    processors = {
+        "book": ("book_processor", "process_book_for_tagging"),
+        "video": ("video_processor", "process_video_for_tagging"),
+        "course": ("course_processor", "process_course_for_tagging"),
+    }
+
+    module_name, func_name = processors[content_type]
+    module = __import__(f"src.tagging.processors.{module_name}", fromlist=[func_name])
+    return getattr(module, func_name)
+
+
 @router.post("/process/{content_type}/{content_id}")
 async def tag_content(
     content_type: str,
@@ -49,7 +98,7 @@ async def tag_content(
         content_type: Type of content (book, video, course)
         content_id: UUID of the content
         background_tasks: FastAPI background tasks
-        current_user: Current authenticated user
+        user_id: Current authenticated user
         service: Tagging service instance
 
     Returns
@@ -57,84 +106,33 @@ async def tag_content(
         TaggingResponse with generated tags
     """
     # Validate content type
-    if content_type not in ["book", "video", "course"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid content type: {content_type}",
-        )
+    content_type = validate_content_type(content_type)
 
     try:
-        # Initialize tags variable
-        tags: list[str] = []
+        # Get the appropriate processor dynamically
+        process_content = await get_content_processor(content_type)
 
-        # Process content based on type
-        if content_type == "book":
-            from .processors.book_processor import process_book_for_tagging
+        # Process content to extract data for tagging
+        # Convert content_id to string for book and course processors
+        processor_id = str(content_id) if content_type in ["book", "course"] else content_id
+        content_data = await process_content(processor_id, service.session)
 
-            content_data = await process_book_for_tagging(
-                str(content_id),
-                service.session,
+        if not content_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"{content_type.capitalize()} {content_id} not found",
             )
 
-            if not content_data:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Book {content_id} not found",
-                )
+        # Generate and store tags
+        tags = await service.tag_content(
+            content_id=content_id,
+            content_type=content_type,
+            user_id=user_id,
+            title=content_data["title"],
+            content_preview=content_data["content_preview"],
+        )
 
-            tags = await service.tag_content(
-                content_id=content_id,
-                content_type=content_type,
-                user_id=user_id,
-                title=content_data["title"],
-                content_preview=content_data["content_preview"],
-            )
-
-        elif content_type == "video":
-            from .processors.video_processor import process_video_for_tagging
-
-            content_data = await process_video_for_tagging(
-                content_id,
-                service.session,
-            )
-
-            if not content_data:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Video {content_id} not found",
-                )
-
-            tags = await service.tag_content(
-                content_id=content_id,
-                content_type=content_type,
-                user_id=user_id,
-                title=content_data["title"],
-                content_preview=content_data["content_preview"],
-            )
-
-        elif content_type == "course":
-            from .processors.course_processor import process_course_for_tagging
-
-            content_data = await process_course_for_tagging(
-                str(content_id),
-                service.session,
-            )
-
-            if not content_data:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Course {content_id} not found",
-                )
-
-            tags = await service.tag_content(
-                content_id=content_id,
-                content_type=content_type,
-                user_id=user_id,
-                title=content_data["title"],
-                content_preview=content_data["content_preview"],
-            )
-
-        # Update content's tags field
+        # Update content's tags field in background
         from .service import update_content_tags_json
 
         background_tasks.add_task(
@@ -236,7 +234,7 @@ async def get_content_tags(
     Args:
         content_type: Type of content (book, video, course)
         content_id: UUID of the content
-        current_user: Current authenticated user
+        user_id: Current authenticated user
         service: Tagging service instance
 
     Returns
@@ -244,11 +242,7 @@ async def get_content_tags(
         List of tags for the content
     """
     # Validate content type
-    if content_type not in ["book", "video", "course"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid content type: {content_type}",
-        )
+    content_type = validate_content_type(content_type)
 
     tags = await service.get_content_tags(content_id, content_type, user_id)
     return [TagSchema.model_validate(tag) for tag in tags]
@@ -268,7 +262,7 @@ async def update_content_tags(
         content_type: Type of content (book, video, course)
         content_id: UUID of the content
         request: Update request with new tags
-        current_user: Current authenticated user
+        user_id: Current authenticated user
         service: Tagging service instance
 
     Returns
@@ -276,11 +270,7 @@ async def update_content_tags(
         TaggingResponse with updated tags
     """
     # Validate content type
-    if content_type not in ["book", "video", "course"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid content type: {content_type}",
-        )
+    content_type = validate_content_type(content_type)
 
     try:
         await service.update_manual_tags(
@@ -334,7 +324,7 @@ async def suggest_tags(
     """
     return await service.suggest_tags(
         content_preview=request.content_preview,
-        user_id=user_id,
-        content_type=request.content_type,
+        _user_id=user_id,
+        _content_type=request.content_type,
         title=request.title,
     )

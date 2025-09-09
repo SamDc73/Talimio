@@ -73,12 +73,6 @@ class AIService:
             ("flashcard", "generate"): self._flashcard_generate,
             ("flashcard", "hint"): self._flashcard_hint,
             ("flashcard", "explain"): self._flashcard_explain,
-            # Tagging operations (all content types use the same handler)
-            ("book", "tag"): self._content_tag,
-            ("video", "tag"): self._content_tag,
-            ("course", "tag"): self._content_tag,
-            ("flashcard", "tag"): self._content_tag,
-            ("content", "tag"): self._content_tag,  # Keep for backward compatibility
             # General operations
             ("assistant", "chat"): self._assistant_chat,
         }.get((content_type, action))
@@ -86,10 +80,6 @@ class AIService:
         if not handler:
             error_msg = f"Unknown operation: {content_type}/{action}"
             raise AIServiceError(error_msg)
-
-        # Special handling for _content_tag which requires content_type as keyword argument
-        if handler == self._content_tag:
-            return await handler(user_id, content_type=content_type, **kwargs)
 
         # Call the handler with all kwargs
         return await handler(user_id, **kwargs)
@@ -342,14 +332,6 @@ class AIService:
         return str(response)
 
     # General operations
-    async def _content_tag(self, _user_id: UUID, *, content_type: str, title: str, preview: str) -> list[dict]:
-        """Generate tags for any content type."""
-        logger.info("Generating tags for %s content", content_type)
-
-        return await self._model_manager.generate_content_tags(
-            content_type=content_type, title=title, content_preview=preview
-        )
-
     async def _assistant_chat(
         self,
         user_id: UUID,

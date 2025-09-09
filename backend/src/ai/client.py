@@ -8,14 +8,16 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+import instructor
+import litellm
 from litellm import acompletion
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.ai.constants import (
     AI_REQUEST_TIMEOUT,
     MAX_AI_RETRIES,
 )
 from src.ai.prompts import (
-    CONTENT_TAGGING_PROMPT,
     LESSON_GENERATION_PROMPT,
     ROADMAP_GENERATION_PROMPT,
 )
@@ -50,10 +52,32 @@ class TagGenerationError(AIError):
         super().__init__(msg)
 
 
+# Pydantic models for structured output
+class Topic(BaseModel):
+    """Model for course topics and subtopics."""
+
+    title: str
+    description: str
+    estimatedHours: int = Field(..., ge=0)
+    subtopics: list["Topic"] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CourseStructure(BaseModel):
+    """Model for the course/roadmap structure returned by AI."""
+
+    title: str
+    description: str
+    coreTopics: list[Topic] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ModelManager:
     """Manage AI model interactions for the learning roadmap platform."""
 
-    def __init__(self) -> None:  # noqa: C901
+    def __init__(self) -> None:
         """Initialize ModelManager.
 
         Justification for C901: This initialization method requires handling multiple
@@ -62,7 +86,6 @@ class ModelManager:
         supporting diverse model providers. Further reduction would require breaking
         the single responsibility principle or creating unnecessary abstraction layers.
         """
-
         from src.config import env
 
         self.settings = get_settings()
@@ -385,13 +408,23 @@ Please use this context to personalize your response appropriately."""
             msg = f"Failed to generate content: {e!s}"
         raise AIError(msg) from e
 
-    async def _make_completion_request(self, messages: list[dict[str, str]]) -> str:
+    async def _make_completion_request(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        response_format: dict[str, str] | None = None,
+        max_tokens: int = 4000,
+        temperature: float = 0.7,
+        timeout: int = AI_REQUEST_TIMEOUT,  # noqa: ASYNC109 - litellm requires timeout param
+    ) -> str:
         """Make a single completion request to the AI API."""
         response = await acompletion(
             model=self.model,
             messages=messages,
-            temperature=0.7,
-            timeout=AI_REQUEST_TIMEOUT,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout,
+            **({"response_format": response_format} if response_format else {}),
         )
         return getattr(response, "choices", [{}])[0].get("message", {}).get("content", "")
 
@@ -488,7 +521,7 @@ Please use this context to personalize your response appropriately."""
         self._handle_api_error(error)
         return False
 
-    async def get_completion(  # noqa: C901
+    async def get_completion(  # noqa: C901, PLR0912
         # Justification for C901/PLR0912: This method orchestrates multiple complex concerns:
         # 1. Memory integration with user context
         # 2. Function calling support with tool execution
@@ -552,6 +585,8 @@ Please use this context to personalize your response appropriately."""
 
         messages_list = list(messages)
 
+        # Track whether to force JSON mode for the next attempt
+        use_json_mode = format_json
         # Step 2: Handle function calling if tools are provided
         if tools and self._supports_function_calling():
             return await self._handle_function_calling(
@@ -565,25 +600,47 @@ Please use this context to personalize your response appropriately."""
         for attempt in range(max_retries):
             try:
                 # Make the API request
-                content = await self._make_completion_request(messages_list)
+                content = await self._make_completion_request(
+                    messages_list,
+                    response_format={"type": "json_object"} if use_json_mode else None,
+                    max_tokens=3000,
+                    temperature=0.7,
+                    timeout=AI_REQUEST_TIMEOUT,
+                )
 
-                # Handle response based on format
-                if format_json and content:
-                    try:
-                        return await self._handle_json_response(
-                            content, user_id, user_query, store_response,
-                            context_type, context_id, context_meta, interaction_type
+                # Handle response based on expected format
+                if format_json:
+                    if content:
+                        try:
+                            return await self._handle_json_response(
+                                content, user_id, user_query, store_response,
+                                context_type, context_id, context_meta, interaction_type
+                            )
+                        except json.JSONDecodeError as json_error:
+                            # Parsing failed; retry after disabling forced JSON mode
+                            last_json_error = json_error
+                            use_json_mode = False
+                            should_retry = await self._handle_completion_error(
+                                json_error, attempt, max_retries
+                            )
+                            if should_retry:
+                                continue
+                            raise
+                    else:
+                        # Empty content when JSON was expected - retry without forcing JSON mode
+                        self._logger.warning(
+                            "Empty AI response on attempt %d/%d while expecting JSON; retrying without JSON mode",
+                            attempt + 1,
+                            max_retries,
                         )
-                    except json.JSONDecodeError as json_error:
-                        last_json_error = json_error
-                        should_retry = await self._handle_completion_error(
-                            json_error, attempt, max_retries
-                        )
-                        if should_retry:
+                        use_json_mode = False
+                        if attempt < max_retries - 1:
                             continue
-                        raise
+                        # Final attempt produced no content; treat as error
+                        error_msg = "AI model returned empty response"
+                        raise AIError(error_msg)
 
-                # Return text response
+                # Non-JSON mode: return text response
                 return await self._handle_text_response(
                     content, user_id, user_query, store_response,
                     context_type, context_id, context_meta, interaction_type
@@ -855,337 +912,97 @@ Please use this context to personalize your response appropriately."""
             self._logger.info("Continuing without function calling due to error")
             return description
 
-    def _extract_roadmap_data(self, response: dict[str, Any]) -> tuple[str, str, list[dict[str, Any]]]:
-        """Extract title, description, and core topics from AI response."""
-        roadmap_title = ""
-        roadmap_description = ""
-        core_topics = []
 
-        if "coreTopics" in response:
-            # Extract title and description from the response
-            roadmap_title = response.get("title", "")
-            roadmap_description = response.get("description", "")
-            core_topics = response["coreTopics"]
-        elif "core_topics" in response:
-            # Handle snake_case variant
-            roadmap_title = response.get("title", "")
-            roadmap_description = response.get("description", "")
-            core_topics = response["core_topics"]
-        elif "topics" in response:
-            # Handle simplified variant
-            roadmap_title = response.get("title", "")
-            roadmap_description = response.get("description", "")
-            core_topics = response["topics"]
-        elif "sections" in response:
-            # Handle sections format (newer AI response format)
-            roadmap_title = response.get("title", "")
-            roadmap_description = response.get("description", "")
-            core_topics = response["sections"]
-        elif isinstance(response.get("response"), dict):
-            # Handle nested response
-            inner_response = response["response"]
-            if "coreTopics" in inner_response:
-                roadmap_title = inner_response.get("title", "")
-                roadmap_description = inner_response.get("description", "")
-                core_topics = inner_response["coreTopics"]
-            elif "sections" in inner_response:
-                roadmap_title = inner_response.get("title", "")
-                roadmap_description = inner_response.get("description", "")
-                core_topics = inner_response["sections"]
-            else:
-                msg = f"Expected 'coreTopics' or 'sections' key in nested response. Got keys: {list(inner_response.keys())}"
-                raise RoadmapGenerationError(msg)
-        else:
-            msg = f"Expected 'coreTopics' or 'sections' key in response dictionary. Got keys: {list(response.keys())}"
-            raise RoadmapGenerationError(msg)
 
-        return roadmap_title, roadmap_description, core_topics
 
-    def _validate_and_process_nodes(self, core_topics: list[Any]) -> list[dict[str, Any]]:
-        """Validate and process roadmap nodes."""
-        if not isinstance(core_topics, list):
-            msg = "Expected list for coreTopics"
-            raise RoadmapGenerationError(msg)
 
-        validated_nodes = []
-        for i, node in enumerate(core_topics):
-            if not isinstance(node, dict):
-                msg = "Expected dict node from AI model"
-                raise RoadmapGenerationError(msg)
-
-            # Process subtopics using helper method
-            subtopics = node.get("subtopics", node.get("children", []))
-            processed_children = self._process_subtopics(subtopics)
-
-            validated_nodes.append(
-                {
-                    "title": str(node.get("title", f"Topic {i + 1}")),
-                    "description": str(node.get("description", "")),
-                    "content": str(node.get("content", "")),
-                    "order": i,
-                    "prerequisite_ids": [],  # Start with no prerequisites
-                    "children": processed_children,
-                },
-            )
-
-        return validated_nodes
-
-    def _validate_roadmap_params(self, min_core_topics: int, max_core_topics: int, sub_min: int, sub_max: int) -> None:
-        """Validate roadmap generation parameters.
-
-        Args:
-            min_core_topics: Minimum number of core topics
-            max_core_topics: Maximum number of core topics
-            sub_min: Minimum number of subtopics
-            sub_max: Maximum number of subtopics
-
-        Raises
-        ------
-            ValidationError: If parameters are invalid
-        """
-        if min_core_topics > max_core_topics:
-            msg = "min_core_topics cannot be greater than max_core_topics"
-            raise ValidationError(msg)
-        if sub_min > sub_max:
-            msg = "sub_min cannot be greater than sub_max"
-            raise ValidationError(msg)
-
-    async def _get_roadmap_response(
-        self, user_prompt: str, description: str, user_id: UUID | None = None
-    ) -> dict[str, Any] | list[Any]:
-        """Get roadmap response from AI model with memory integration.
-
-        Args:
-            user_prompt: The user's learning topic/prompt
-            description: Additional context
-            user_id: User ID for memory context
-
-        Returns
-        -------
-            AI response as dict or list
-
-        Raises
-        ------
-            RoadmapGenerationError: If response is invalid
-        """
-        prompt = ROADMAP_GENERATION_PROMPT.format(
-            user_prompt=user_prompt,
-            description=description,
-        )
-
-        messages = [
-            {
-                "role": "system",
-                "content": "You are a curriculum design expert. You must always respond with valid JSON only, no other text.",
-            },
-            {"role": "user", "content": prompt},
-        ]
-
-        response = await self.get_completion(messages, format_json=True, max_retries=3, user_id=user_id)
-
-        if not isinstance(response, (list, dict)):
-            self._logger.error("Response is not dict/list. Type: %s, Content: %s", type(response), str(response)[:500])
-            msg = f"Invalid response format from AI model. Expected dict/list but got {type(response).__name__}"
-            raise RoadmapGenerationError(msg)
-
-        return response
-
-    def _process_roadmap_response(self, response: dict[str, Any] | list[Any]) -> dict[str, Any]:
-        """Process AI response into validated roadmap format.
-
-        Args:
-            response: AI response as dict or list
-
-        Returns
-        -------
-            Processed roadmap with title, description, and coreTopics
-        """
-        # Log the response for debugging (use debug level to avoid exposing sensitive data)
-        self._logger.debug("AI Response type: %s", type(response))
-        if isinstance(response, dict):
-            self._logger.debug("AI Response keys: %s", list(response.keys()))
-
-        # Handle both direct list and coreTopics dictionary format
-        if isinstance(response, dict):
-            roadmap_title, roadmap_description, core_topics = self._extract_roadmap_data(response)
-        else:
-            # Fallback for direct list format
-            roadmap_title = ""
-            roadmap_description = ""
-            core_topics = response
-
-        # Validate and process nodes
-        validated_nodes = self._validate_and_process_nodes(core_topics)
-
-        return {"title": roadmap_title, "description": roadmap_description, "coreTopics": validated_nodes}
 
     async def generate_roadmap_content(
         self,
         user_prompt: str,
         description: str = "",
         *,
-        min_core_topics: int = 3,  # Let AI decide the optimal number
-        max_core_topics: int = 20,  # More flexible range
-        sub_min: int = 0,  # Some topics don't need subtopics
-        sub_max: int = 15,  # Allow more when needed
         use_tools: bool = False,
         user_id: UUID | None = None,
     ) -> dict[str, Any]:
-        """Generate a detailed hierarchical roadmap as JSON with title and description.
+        """Generate a detailed hierarchical roadmap using Instructor.
 
         Args:
             user_prompt: The user's learning topic/prompt
             description: Additional context for the roadmap
-            min_core_topics: Minimum number of core topics (default: 3, AI will optimize)
-            max_core_topics: Maximum number of core topics (default: 20, flexible)
-            sub_min: Minimum number of subtopics per core topic (default: 0, some topics are atomic)
-            sub_max: Maximum number of subtopics per core topic (default: 15, allows comprehensive coverage)
             use_tools: Enable function calling for content discovery (default: False)
+            user_id: User ID for memory integration
 
         Returns
         -------
-            Dict containing title, description, and coreTopics array
+            Dict containing title, description, and modules array
         """
         self._logger.info("Generating roadmap for: %s...", user_prompt[:100])
         self._logger.info("Model: %s, Function calling requested: %s", self.model, use_tools)
-
-        # Validate parameters
-        self._validate_roadmap_params(min_core_topics, max_core_topics, sub_min, sub_max)
 
         # Enhance description with tools if enabled
         if use_tools and self._supports_function_calling():
             description = await self._enhance_description_with_tools(user_prompt, description)
 
         try:
-            # Get response from AI with memory integration
-            response = await self._get_roadmap_response(user_prompt, description, user_id)
+            # Get response from AI using Instructor
+            prompt = ROADMAP_GENERATION_PROMPT.format(
+                user_prompt=user_prompt,
+                description=description,
+            )
 
-            # Process and return the response
-            return self._process_roadmap_response(response)
+            base_messages = [
+                {
+                    "role": "system",
+                    "content": "You are a curriculum design expert creating comprehensive learning materials.",
+                },
+                {"role": "user", "content": prompt},
+            ]
 
-        except json.JSONDecodeError as e:
-            self._logger.exception("JSON decode error after retries in roadmap generation")
-            msg = f"AI model returned invalid JSON after 3 attempts. Last error: {e!s}"
-            raise RoadmapGenerationError(msg) from e
-        except ValidationError:
-            # Re-raise validation errors as-is
-            raise
-        except RoadmapGenerationError:
-            # Re-raise our own errors as-is
-            raise
-        except AIError as e:
-            # Wrap AI errors in RoadmapGenerationError
-            self._logger.exception("AI error during roadmap generation")
-            raise RoadmapGenerationError(str(e)) from e
+            # Integrate memory context if user_id provided
+            messages, user_query = await self._integrate_memory_context(
+                base_messages,
+                user_id=user_id,
+                track_interaction=True,
+                context_type="course",
+                context_id=None,
+                context_meta=None,
+                interaction_type="course_creation",
+            )
+
+            # Use Instructor for structured output
+            client = instructor.from_litellm(litellm.acompletion)
+
+            result: CourseStructure = await client.chat.completions.create(
+                model=self.model,
+                response_model=CourseStructure,
+                messages=messages,
+                temperature=0.7,
+                max_retries=MAX_AI_RETRIES,
+            )
+
+            result_dict = result.model_dump()
+
+            # Store successful response in memory for analytics/personalization
+            if user_id and user_query:
+                await self._store_ai_response(
+                    user_id=user_id,
+                    user_query=user_query,
+                    ai_response=json.dumps(result_dict),
+                    context_type="course",
+                    context_id=None,
+                    context_meta=None,
+                    interaction_type="course_creation",
+                )
+
+            return result_dict
+
         except Exception as e:
-            self._logger.exception("Unexpected error generating roadmap content")
-            error_msg = "Failed to generate roadmap content due to unexpected error"
+            self._logger.exception("Error generating roadmap content")
+            error_msg = f"Failed to generate roadmap content: {e!s}"
             raise RoadmapGenerationError(error_msg) from e
 
-    def _process_subtopics(self, subtopics: list[Any]) -> list[dict[str, Any]]:
-        """Process and validate subtopics for roadmap nodes.
 
-        Args:
-            subtopics: List of subtopic data from AI response
-
-        Returns
-        -------
-            List of validated subtopic dictionaries
-        """
-        processed_children = []
-        for j, subtopic in enumerate(subtopics):
-            if isinstance(subtopic, dict):
-                processed_children.append(
-                    {
-                        "title": str(subtopic.get("title", f"Lesson {j + 1}")),
-                        "description": str(subtopic.get("description", "")),
-                        "content": str(subtopic.get("content", "")),
-                        "order": j,
-                        "prerequisite_ids": [],
-                        "children": [],  # Lessons don't have children in this implementation
-                    }
-                )
-            elif isinstance(subtopic, str):
-                # Handle simple string subtopics
-                processed_children.append(
-                    {
-                        "title": str(subtopic),
-                        "description": "",
-                        "content": "",
-                        "order": j,
-                        "prerequisite_ids": [],
-                        "children": [],
-                    }
-                )
-        return processed_children
-
-    async def generate_content_tags(
-        self,
-        content_type: str,
-        title: str,
-        content_preview: str,
-    ) -> list[dict[str, Any]]:
-        """Generate subject-based tags with confidence scores for content.
-
-        Args:
-            content_type: Type of content (book, video, roadmap)
-            title: Title of the content
-            content_preview: Preview or excerpt of the content
-
-        Returns
-        -------
-            List of dicts with 'tag' and 'confidence' keys
-
-        Raises
-        ------
-            TagGenerationError: If tag generation fails
-        """
-        # Validate required parameters
-        if not content_type:
-            msg = "content_type is required"
-            raise ValidationError(msg)
-        if not title or not title.strip():
-            msg = "title is required and cannot be empty"
-            raise ValidationError(msg)
-
-        prompt = CONTENT_TAGGING_PROMPT.format(
-            content_type=content_type,
-            title=title,
-            preview=content_preview[:3000] if content_preview else "",  # Limit preview length
-        )
-
-        messages = [
-            {"role": "system", "content": "You are an expert at categorizing educational content."},
-            {"role": "user", "content": prompt},
-        ]
-
-        try:
-            # Tag generation doesn't need memory context - it's content analysis, not personalization
-            result = await self.get_completion(messages, use_memory=False)
-            if not isinstance(result, list):
-                msg = "Expected list response from AI model"
-                raise TagGenerationError(msg)
-
-            # Process and normalize results
-            processed_tags = []
-            for item in result:
-                if isinstance(item, dict) and "tag" in item:
-                    tag = str(item["tag"]).lower().strip().replace(" ", "-")
-                    tag = re.sub(r"[^a-z0-9-]", "", tag)
-                    confidence = float(item.get("confidence", 0.8))
-                    if tag:
-                        processed_tags.append(
-                            {
-                                "tag": tag,
-                                "confidence": min(max(confidence, 0.0), 1.0),
-                            },
-                        )
-
-            return processed_tags[:3]  # Limit to max 7 tags
-
-        except Exception as e:
-            self._logger.exception("Error generating content tags")
-            raise TagGenerationError from e
 
     def _extract_lesson_metadata(self, node_meta: dict[str, Any]) -> dict[str, Any]:
         """Extract and organize lesson metadata from node_meta."""
@@ -1215,17 +1032,17 @@ Please use this context to personalize your response appropriately."""
 
             if current_index > 0:
                 content_info += "\n\nPrevious topics covered:"
-            for i in range(max(0, current_index - 2), current_index):
-                content_info += (
-                    f"\n- {metadata['course_outline'][i]['title']}: {metadata['course_outline'][i]['description']}"
-                )
+                for i in range(max(0, current_index - 2), current_index):
+                    content_info += (
+                        f"\n- {metadata['course_outline'][i]['title']}: {metadata['course_outline'][i]['description']}"
+                    )
 
-        if current_index < len(metadata["course_outline"]) - 1:
-            content_info += "\n\nUpcoming topics:"
-            for i in range(current_index + 1, min(len(metadata["course_outline"]), current_index + 3)):
-                content_info += (
-                    f"\n- {metadata['course_outline'][i]['title']}: {metadata['course_outline'][i]['description']}"
-                )
+            if current_index < len(metadata["course_outline"]) - 1:
+                content_info += "\n\nUpcoming topics:"
+                for i in range(current_index + 1, min(len(metadata["course_outline"]), current_index + 3)):
+                    content_info += (
+                        f"\n- {metadata['course_outline'][i]['title']}: {metadata['course_outline'][i]['description']}"
+                    )
 
         return content_info
 
@@ -1283,7 +1100,7 @@ Please use this context to personalize your response appropriately."""
 
 
     def _analyze_content_preferences(self,
-        original_user_prompt: str, course_title: str, course_id: str | None
+        original_user_prompt: str, course_title: str, _course_id: str | None
 ) -> dict[str, bool]:
         """Analyze user prompt and course title to determine content preferences."""
         preferences = {

@@ -11,7 +11,6 @@ from typing import Any
 from uuid import UUID
 
 from src.ai.ai_service import get_ai_service
-from src.progress.protocols import ContentFacade
 
 from .services.course_content_service import CourseContentService
 from .services.course_progress_service import CourseProgressService
@@ -21,7 +20,7 @@ from .services.course_query_service import CourseQueryService
 logger = logging.getLogger(__name__)
 
 
-class CoursesFacade(ContentFacade):
+class CoursesFacade:
     """
     Single entry point for all course/roadmap operations.
 
@@ -82,14 +81,6 @@ class CoursesFacade(ContentFacade):
             logger.exception("Error getting course %s for user %s", course_id, user_id)
             return {"error": "Failed to retrieve course", "success": False}
 
-    async def create_content(self, content_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
-        """
-        Create new course content.
-
-        Implements ContentFacade interface.
-        """
-        return await self.create_course(content_data, user_id)
-
     async def create_course(self, course_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
         """
         Create new course entry.
@@ -98,14 +89,13 @@ class CoursesFacade(ContentFacade):
         """
         try:
             # Use the content service which handles tags, progress, and AI processing
-            course = await self._content_service.create_content(course_data, user_id)
+            course = await self._content_service.create_course(course_data, user_id)
 
             return {"course": course, "success": True}
 
         except Exception:
             logger.exception("Error creating course for user %s", user_id)
             return {"error": "Failed to create course", "success": False}
-
 
     # NOTE: Auto-tagging removed - now handled by CourseContentService via BaseContentService pipeline
     # Tagging happens automatically during course creation/updates, no manual intervention needed
@@ -124,7 +114,7 @@ class CoursesFacade(ContentFacade):
             data.setdefault("is_ai_generated", True)
 
             # Use the content service which handles tags, progress, and AI processing automatically
-            course = await self._content_service.create_content(data, user_id)
+            course = await self._content_service.create_course(data, user_id)
 
             return {"course": course, "success": True}
 
@@ -156,7 +146,6 @@ class CoursesFacade(ContentFacade):
             logger.exception(f"Error updating progress for course {course_id}: {e}")
             return {"error": f"Failed to update progress: {e!s}", "success": False}
 
-
     async def update_course(self, course_id: UUID, user_id: UUID, update_data: dict[str, Any]) -> dict[str, Any]:
         """
         Update course metadata.
@@ -165,21 +154,13 @@ class CoursesFacade(ContentFacade):
         """
         try:
             # Update through content service which handles tags and reprocessing
-            course = await self._content_service.update_content(course_id, user_id, update_data)
+            course = await self._content_service.update_course(course_id, update_data, user_id)
 
             return {"course": course, "success": True}
 
         except Exception:
             logger.exception("Error updating course %s", course_id)
             return {"error": "Failed to update course", "success": False}
-
-    async def delete_content(self, content_id: UUID, user_id: UUID) -> bool:
-        """
-        Delete course content.
-
-        Implements ContentFacade interface.
-        """
-        return await self.delete_course(content_id, user_id)
 
     async def delete_course(self, course_id: UUID, user_id: UUID) -> bool:
         """
@@ -189,7 +170,7 @@ class CoursesFacade(ContentFacade):
         """
         try:
             # Use content service which handles cleanup of tags and associated data
-            return await self._content_service.delete_content(course_id, user_id)
+            return await self._content_service.delete_course(course_id, user_id)
 
         except Exception:
             logger.exception("Error deleting course %s", course_id)
@@ -309,13 +290,6 @@ class CoursesFacade(ContentFacade):
             logger.exception("Error getting lessons for course %s", course_id)
             return {"error": "Failed to get lessons", "success": False}
 
-
-
-
-
-
-
-
     # Lesson-specific operations for router compatibility
     async def get_lesson_simplified(
         self, course_id: UUID, lesson_id: UUID, generate: bool = False, user_id: UUID | None = None
@@ -335,6 +309,3 @@ class CoursesFacade(ContentFacade):
         except Exception:
             logger.exception("Error getting lesson %s for course %s", lesson_id, course_id)
             raise
-
-
-
