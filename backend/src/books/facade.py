@@ -112,7 +112,7 @@ class BooksFacade:
             data.setdefault("rag_status", "pending")
 
             # Create the book record via content service
-            book = await self._content_service.create_content(data, user_id)
+            book = await self._content_service.create_book(data, user_id)
 
             book_id = getattr(book, "id", None)
             total_pages = getattr(book, "total_pages", 0)
@@ -231,19 +231,25 @@ class BooksFacade:
             logger.exception("Error updating book %s", book_id)
             return {"error": "Failed to update book", "success": False}
 
-    async def delete_book(self, book_id: UUID, user_id: UUID) -> bool:
+    async def delete_book(self, session: Any, book_id: UUID, user_id: UUID) -> None:
         """
         Delete book and all related data.
 
         Coordinates deletion across all book services.
         """
-        try:
-            # Use content service which handles cleanup of tags and associated data
-            return await self._content_service.delete_content(book_id, user_id)
+        from sqlalchemy import select
 
-        except Exception:
-            logger.exception("Error deleting book %s", book_id)
-            return False
+        # Get book with user validation
+        result = await session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
+        book = result.scalar_one_or_none()
+
+        if not book:
+            msg = f"Book {book_id} not found"
+            raise ValueError(msg)
+
+        # Delete the book (cascade handles related records)
+        await session.delete(book)
+        await session.commit()
 
     async def search_books(self, query: str, user_id: UUID, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         """

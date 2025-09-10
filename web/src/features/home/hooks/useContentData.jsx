@@ -1,15 +1,17 @@
-import { ArrowUpDown, BookOpen, CalendarDays, Clock, FileText, Layers, Search, Youtube } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 
 import { useToast } from "@/hooks/use-toast"
 import { processContentData } from "@/lib/api"
 import { api } from "@/lib/apiClient"
+import { useContentActions, useContentItems } from "@/stores/useContentStore"
 export function useContentData(filters, _pinning) {
-	const [contentItems, setContentItems] = useState([])
+	// Use store items directly instead of local state for instant updates
+	const storeItems = useContentItems()
 	const [filterOptions, setFilterOptions] = useState([])
 	const [sortOptions, setSortOptions] = useState([])
 	const [isLoading, setIsLoading] = useState(true)
 	const { toast } = useToast()
+	const { setItems } = useContentActions()
 
 	// Load content data function - memoized to prevent infinite loops
 	const loadContentData = useCallback(async () => {
@@ -66,72 +68,20 @@ export function useContentData(filters, _pinning) {
 			const transformedContent = content.map((item) => ({
 				...item,
 				// Tags are already included from backend response
-				// Add mock due dates and states for demonstration
-				dueDate:
-					Math.random() > 0.7
-						? new Date(Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000).toISOString()
-						: null,
-				isPaused: Math.random() > 0.9,
 				// For flashcards, map the existing fields
 				totalCards: item.cardCount,
-				due: item.dueCount || Math.floor(Math.random() * 10),
-				overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
+				due: item.dueCount || 0,
+				overdue: item.overdueCount || 0,
 			}))
 
-			// Set content items without fetching progress (React Query will handle it)
-			setContentItems(transformedContent)
+			// Set content items in store only (we use store items directly now)
+			setItems(transformedContent)
 
-			// Map the filter options with their icons
-			setFilterOptions(
-				options.map((option) => {
-					const getIcon = () => {
-						switch (option.icon) {
-							case "Search":
-								return <Search className="h-4 w-4 mr-2" />
-							case "BookOpen":
-								return <BookOpen className="h-4 w-4 mr-2" />
-							case "FileText":
-								return <FileText className="h-4 w-4 mr-2" />
-							case "Youtube":
-								return <Youtube className="h-4 w-4 mr-2" />
-							case "Layers":
-								return <Layers className="h-4 w-4 mr-2" />
-							default:
-								return <Search className="h-4 w-4 mr-2" />
-						}
-					}
+			// Set filter options with icon names (not React elements)
+			setFilterOptions(options)
 
-					return {
-						...option,
-						icon: getIcon(),
-					}
-				})
-			)
-
-			// Map the sort options with their icons
-			setSortOptions(
-				sortOpts.map((option) => {
-					const getIcon = () => {
-						switch (option.icon) {
-							case "Clock":
-								return <Clock className="h-4 w-4 mr-2" />
-							case "CalendarDays":
-								return <CalendarDays className="h-4 w-4 mr-2" />
-							case "ArrowUpDown":
-								return <ArrowUpDown className="h-4 w-4 mr-2" />
-							case "FileText":
-								return <FileText className="h-4 w-4 mr-2" />
-							default:
-								return <Clock className="h-4 w-4 mr-2" />
-						}
-					}
-
-					return {
-						...option,
-						icon: getIcon(),
-					}
-				})
-			)
+			// Set sort options with icon names (not React elements)
+			setSortOptions(sortOpts)
 
 			// Don't initialize pins here - it causes re-renders
 			// Pins should be initialized elsewhere
@@ -144,19 +94,32 @@ export function useContentData(filters, _pinning) {
 		} finally {
 			setIsLoading(false)
 		}
-	}, [filters.archiveFilter, toast]) // Only depend on archiveFilter to prevent loops
+	}, [filters.archiveFilter, toast, setItems]) // Include setItems in dependencies
 
 	// Fetch content data on component mount and when archive filter changes
 	useEffect(() => {
 		loadContentData()
 	}, [loadContentData]) // Now properly memoized with correct dependencies
 
-	// Removed event listeners that caused race condition
-	// These events are now handled by useContentProgressSync hook
+	// Listen for content events - only reload when necessary
+	useEffect(() => {
+		const handleReload = () => loadContentData()
+		// Don't reload for delete/archive - store handles these optimistically
+		// Only reload for unarchive since we need to fetch the item data
+		const handleContentUnarchived = () => loadContentData()
+
+		window.addEventListener("reloadContent", handleReload)
+		window.addEventListener("contentUnarchived", handleContentUnarchived)
+
+		return () => {
+			window.removeEventListener("reloadContent", handleReload)
+			window.removeEventListener("contentUnarchived", handleContentUnarchived)
+		}
+	}, [loadContentData])
 
 	return {
-		contentItems,
-		setContentItems,
+		contentItems: storeItems, // Use store items directly for instant updates
+		setContentItems: setItems, // Map to store setter for compatibility
 		filterOptions,
 		setFilterOptions,
 		sortOptions,

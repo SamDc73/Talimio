@@ -10,6 +10,7 @@ from src.content.services.content_service import ContentService
 from src.courses.facade import CoursesFacade
 from src.courses.schemas import LessonResponse
 from src.database.session import DbSession
+from src.middleware.security import api_rate_limit
 
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ async def get_all_content(
     """
     logger.info(f"🔍 Getting content for authenticated user: {user_id}")
     content_service = ContentService(session=db)
-    content = await content_service.list_content_fast(
+    result = await content_service.list_content_fast(
         user_id=user_id,
         search=search,
         content_type=content_type,
@@ -55,15 +56,61 @@ async def get_all_content(
         page_size=page_size,
         include_archived=include_archived,
     )
+    # Add short-lived caching for content metadata
+    response.headers["Cache-Control"] = "private, max-age=30"
+    return result
 
-    # Add caching headers - content metadata doesn't change frequently
-    response.headers["Cache-Control"] = "private, max-age=30"  # 30 seconds cache
 
-    return content
+@router.patch("/{content_type}/{content_id}/archive", status_code=204)
+@api_rate_limit
+async def archive_content_endpoint(
+    request: Request,  # noqa: ARG001
+    content_type: ContentType,
+    content_id: UUID,
+    user_id: UserId,
+    db: DbSession,
+) -> None:
+    """
+    Archive a content item by type and ID.
+
+    Supports: youtube (videos), flashcards, book, roadmap (courses)
+    Requires authentication when Supabase auth is configured.
+    """
+    from src.content.services.content_archive_service import ContentArchiveService
+
+    try:
+        await ContentArchiveService.archive_content(db, content_type, content_id, user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.patch("/{content_type}/{content_id}/unarchive", status_code=204)
+@api_rate_limit
+async def unarchive_content_endpoint(
+    request: Request,  # noqa: ARG001
+    content_type: ContentType,
+    content_id: UUID,
+    user_id: UserId,
+    db: DbSession,
+) -> None:
+    """
+    Unarchive a content item by type and ID.
+
+    Supports: youtube (videos), flashcards, book, roadmap (courses)
+    Requires authentication when Supabase auth is configured.
+    """
+    from src.content.services.content_archive_service import ContentArchiveService
+
+    try:
+        await ContentArchiveService.unarchive_content(db, content_type, content_id, user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.delete("/{content_type}/{content_id}", status_code=204)
+@api_rate_limit
 async def delete_content(
+    request: Request,  # noqa: ARG001
     content_type: ContentType,
     content_id: str,
     user_id: UserId,
@@ -76,11 +123,14 @@ async def delete_content(
     Requires authentication when Supabase auth is configured.
     """
     content_service = ContentService(session=db)
-    await content_service.delete_content(
-        content_type=content_type,
-        content_id=content_id,
-        user_id=user_id,
-    )
+    try:
+        await content_service.delete_content(
+            content_type=content_type,
+            content_id=content_id,
+            user_id=user_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("/test-books")

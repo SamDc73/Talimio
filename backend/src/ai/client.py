@@ -53,13 +53,21 @@ class TagGenerationError(AIError):
 
 
 # Pydantic models for structured output
-class Topic(BaseModel):
-    """Model for course topics and subtopics."""
+class Lesson(BaseModel):
+    """Model for lessons within a module."""
 
     title: str
     description: str
-    estimatedHours: int = Field(..., ge=0)
-    subtopics: list["Topic"] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class Module(BaseModel):
+    """Model for modules in a course."""
+
+    title: str
+    description: str
+    lessons: list[Lesson] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -69,7 +77,7 @@ class CourseStructure(BaseModel):
 
     title: str
     description: str
-    coreTopics: list[Topic] = Field(default_factory=list)
+    modules: list[Module] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -144,6 +152,7 @@ class ModelManager:
         """Get the async memory manager (lazy-loaded)."""
         if self._async_memory_manager is None:
             from src.ai.memory import get_memory_wrapper
+
             self._async_memory_manager = await get_memory_wrapper()
         return self._async_memory_manager
 
@@ -224,7 +233,7 @@ class ModelManager:
         context_id: UUID | None,
         context_meta: dict[str, Any] | None,
         interaction_type: str,
-        ) -> dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build enhanced metadata for context tracking."""
         metadata = {
             "interaction_type": interaction_type,
@@ -290,7 +299,7 @@ class ModelManager:
         self,
         messages: list[dict[str, str]],
         memory_context: str,
-        ) -> list[dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """Inject memory context into the message list."""
         if not memory_context:
             return messages
@@ -379,7 +388,6 @@ Please use this context to personalize your response appropriately."""
             self._logger.exception("Error integrating memory for user %s", user_id)
             # Continue without memory integration on error
             return list(messages), ""
-
 
     def _parse_json_content(self, content: str) -> dict[str, Any] | list[Any]:
         """Parse JSON content from AI response."""
@@ -590,9 +598,18 @@ Please use this context to personalize your response appropriately."""
         # Step 2: Handle function calling if tools are provided
         if tools and self._supports_function_calling():
             return await self._handle_function_calling(
-                messages_list, tools, tool_choice, max_function_calls,
-                user_id, user_query, store_response, format_json,
-                context_type, context_id, context_meta, interaction_type
+                messages_list,
+                tools,
+                tool_choice,
+                max_function_calls,
+                user_id,
+                user_query,
+                store_response,
+                format_json,
+                context_type,
+                context_id,
+                context_meta,
+                interaction_type,
             )
 
         # Step 3: Regular completion without tools
@@ -613,16 +630,20 @@ Please use this context to personalize your response appropriately."""
                     if content:
                         try:
                             return await self._handle_json_response(
-                                content, user_id, user_query, store_response,
-                                context_type, context_id, context_meta, interaction_type
+                                content,
+                                user_id,
+                                user_query,
+                                store_response,
+                                context_type,
+                                context_id,
+                                context_meta,
+                                interaction_type,
                             )
                         except json.JSONDecodeError as json_error:
                             # Parsing failed; retry after disabling forced JSON mode
                             last_json_error = json_error
                             use_json_mode = False
-                            should_retry = await self._handle_completion_error(
-                                json_error, attempt, max_retries
-                            )
+                            should_retry = await self._handle_completion_error(json_error, attempt, max_retries)
                             if should_retry:
                                 continue
                             raise
@@ -642,8 +663,14 @@ Please use this context to personalize your response appropriately."""
 
                 # Non-JSON mode: return text response
                 return await self._handle_text_response(
-                    content, user_id, user_query, store_response,
-                    context_type, context_id, context_meta, interaction_type
+                    content,
+                    user_id,
+                    user_query,
+                    store_response,
+                    context_type,
+                    context_id,
+                    context_meta,
+                    interaction_type,
                 )
 
             except json.JSONDecodeError:
@@ -912,11 +939,6 @@ Please use this context to personalize your response appropriately."""
             self._logger.info("Continuing without function calling due to error")
             return description
 
-
-
-
-
-
     async def generate_roadmap_content(
         self,
         user_prompt: str,
@@ -1002,8 +1024,6 @@ Please use this context to personalize your response appropriately."""
             error_msg = f"Failed to generate roadmap content: {e!s}"
             raise RoadmapGenerationError(error_msg) from e
 
-
-
     def _extract_lesson_metadata(self, node_meta: dict[str, Any]) -> dict[str, Any]:
         """Extract and organize lesson metadata from node_meta."""
         return {
@@ -1015,7 +1035,6 @@ Please use this context to personalize your response appropriately."""
             "course_title": node_meta.get("course_title", ""),
             "original_user_prompt": node_meta.get("original_user_prompt", ""),
         }
-
 
     def _build_course_context(self, metadata: dict[str, Any]) -> str:
         """Build course context string from metadata."""
@@ -1046,8 +1065,9 @@ Please use this context to personalize your response appropriately."""
 
         return content_info
 
-
-    async def _get_rag_context(self, course_id: str | None, user_id: str | None, node_title: str, node_description: str) -> tuple[str, list[dict]]:
+    async def _get_rag_context(
+        self, course_id: str | None, user_id: str | None, node_title: str, node_description: str
+    ) -> tuple[str, list[dict]]:
         """Get RAG context and citations for a lesson."""
         if not course_id or not user_id:
             return "", []
@@ -1058,11 +1078,7 @@ Please use this context to personalize your response appropriately."""
 
             async with async_session_maker() as session:
                 search_results = await rag_service.search_documents(
-                    session=session,
-                    user_id=UUID(user_id),
-                    course_id=UUID(course_id),
-                    query=lesson_query,
-                    top_k=5
+                    session=session, user_id=UUID(user_id), course_id=UUID(course_id), query=lesson_query, top_k=5
                 )
 
                 if not search_results:
@@ -1098,17 +1114,16 @@ Please use this context to personalize your response appropriately."""
             self._logger.warning("Failed to get RAG context for lesson generation: %s", e)
             return "", []
 
-
-    def _analyze_content_preferences(self,
-        original_user_prompt: str, course_title: str, _course_id: str | None
-) -> dict[str, bool]:
+    def _analyze_content_preferences(
+        self, original_user_prompt: str, course_title: str, _course_id: str | None
+    ) -> dict[str, bool]:
         """Analyze user prompt and course title to determine content preferences."""
         preferences = {
-        "videos": False,
-        "articles": False,
-        "hackernews": False,
-        "existing_content": False,
-        "all_content": False,
+            "videos": False,
+            "articles": False,
+            "hackernews": False,
+            "existing_content": False,
+            "all_content": False,
         }
 
         if original_user_prompt:
@@ -1166,14 +1181,12 @@ Please use this context to personalize your response appropriately."""
             if not preferences["articles"]:
                 preferences["articles"] = any(keyword in title_lower for keyword in ["guide", "documentation"])
 
-
         # If no specific preference, enable article discovery by default
         if not any(preferences.values()):
             preferences["articles"] = True
             self._logger.info("No specific content preference found, defaulting to article discovery")
 
         return preferences
-
 
     def _build_discovery_prompts(self, preferences: dict[str, bool], search_query: str) -> str:
         """Build discovery prompt based on content preferences."""
@@ -1195,7 +1208,6 @@ Please use this context to personalize your response appropriately."""
 
         return " AND ".join(discovery_prompts) if discovery_prompts else f"Find learning resources about {search_query}"
 
-
     def _format_videos_section(self, videos: list[dict[str, Any]]) -> str:
         """Format video resources for discovery prompt."""
         if not videos:
@@ -1205,7 +1217,6 @@ Please use this context to personalize your response appropriately."""
         for v in videos[:5]:
             section += f"- {v.get('title', 'Untitled')} by {v.get('channel', 'Unknown')}\n"
         return section
-
 
     def _format_articles_section(self, articles: list[dict[str, Any]]) -> str:
         """Format article resources for discovery prompt."""
@@ -1217,7 +1228,6 @@ Please use this context to personalize your response appropriately."""
             section += f"- {a.get('title', 'Untitled')} - {a.get('url', '')}\n"
         return section
 
-
     def _format_hackernews_section(self, hn_items: list[dict[str, Any]]) -> str:
         """Format HackerNews discussions for discovery prompt."""
         if not hn_items:
@@ -1227,7 +1237,6 @@ Please use this context to personalize your response appropriately."""
         for item in hn_items[:3]:
             section += f"- {item.get('title', 'Untitled')} ({item.get('points', 0)} points)\n"
         return section
-
 
     def _format_discovery_results(self, discovery_result: str | dict[str, Any] | list[Any]) -> str:
         """Format discovery results into a prompt for lesson generation."""
@@ -1248,7 +1257,6 @@ Please use this context to personalize your response appropriately."""
             "\n\nIntegrate these resources naturally into the lesson content, providing context and building upon them."
         )
         return discovered_content_prompt
-
 
     def _clean_markdown_content(self, markdown_content: str) -> str:
         """Clean up markdown content by removing code fences and quotes."""
@@ -1272,15 +1280,14 @@ Please use this context to personalize your response appropriately."""
 
         return markdown_content
 
-
-    async def _discover_content_with_tools(self,
-        node_title: str, node_description: str, preferences: dict[str, bool], messages: list[dict[str, str]]
-) -> None:
+    async def _discover_content_with_tools(
+        self, node_title: str, node_description: str, preferences: dict[str, bool], messages: list[dict[str, str]]
+    ) -> None:
         """Discover content using function calling and add to messages."""
         self._logger.info(
-        "Using function calling for lesson '%s' with preferences: %s",
-        node_title,
-        [k for k, v in preferences.items() if v],
+            "Using function calling for lesson '%s' with preferences: %s",
+            node_title,
+            [k for k, v in preferences.items() if v],
         )
 
         from src.ai.functions import get_lesson_functions
@@ -1291,11 +1298,11 @@ Please use this context to personalize your response appropriately."""
         full_discovery_prompt = self._build_discovery_prompts(preferences, search_query)
 
         discovery_messages = [
-        {
-            "role": "system",
-            "content": "You are helping discover educational content for a lesson. Use all available tools to find relevant resources.",
-        },
-        {"role": "user", "content": full_discovery_prompt},
+            {
+                "role": "system",
+                "content": "You are helping discover educational content for a lesson. Use all available tools to find relevant resources.",
+            },
+            {"role": "user", "content": full_discovery_prompt},
         ]
 
         try:
@@ -1310,7 +1317,6 @@ Please use this context to personalize your response appropriately."""
 
         except Exception as e:
             self._logger.warning("Content discovery failed for lesson '%s': %s", node_title, e)
-
 
     async def create_lesson_body(self, node_meta: dict[str, Any]) -> tuple[str, list[dict]]:
         """Generate a comprehensive lesson in Markdown format based on node metadata.
@@ -1343,10 +1349,7 @@ Please use this context to personalize your response appropriately."""
 
             # Get RAG context and citations
             rag_context, citations_info = await self._get_rag_context(
-                metadata["course_id"],
-                metadata.get("user_id"),
-                metadata["node_title"],
-                metadata["node_description"]
+                metadata["course_id"], metadata.get("user_id"), metadata["node_title"], metadata["node_description"]
             )
 
             # Prepare initial messages - use simple string replacement to avoid curly brace conflicts
@@ -1410,7 +1413,9 @@ Please use this context to personalize your response appropriately."""
                         },
                     ]
 
-                    self._logger.info(f"Retrying lesson generation (attempt {validation_attempts}/{max_validation_retries})")
+                    self._logger.info(
+                        f"Retrying lesson generation (attempt {validation_attempts}/{max_validation_retries})"
+                    )
 
                     response = await acompletion(
                         model=env("PRIMARY_LLM_MODEL"),

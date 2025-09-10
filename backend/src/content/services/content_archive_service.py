@@ -5,11 +5,11 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_transform_service import ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
-from src.database.session import async_session_maker
 
 
 logger = logging.getLogger(__name__)
@@ -19,8 +19,8 @@ class ContentArchiveService:
     """Service for archiving and unarchiving content."""
 
     @staticmethod
-    async def archive_content(content_type: ContentType, content_id: str) -> None:
-        """Archive content by type and ID."""
+    async def archive_content(db: AsyncSession, content_type: ContentType, content_id: UUID, user_id: UUID) -> None:
+        """Archive content by type and ID with user validation."""
         table_map = {
             ContentType.BOOK: "books",
             ContentType.YOUTUBE: "videos",
@@ -36,33 +36,36 @@ class ContentArchiveService:
 
         logger.info(f"🗃️ Archiving {content_type} {content_id} in table {table_name}")
 
-        async with async_session_maker() as session:
-            # Handle different ID column names
-            id_column = "uuid" if content_type == ContentType.YOUTUBE else "id"
+        # Handle different ID column names
+        id_column = "uuid" if content_type == ContentType.YOUTUBE else "id"
 
-            query = f"""
-                UPDATE {table_name}
-                SET archived = true, archived_at = :archived_at
-                WHERE {id_column} = :content_id
-            """
+        # Update with user validation
+        query = f"""
+            UPDATE {table_name}
+            SET archived = true, archived_at = :archived_at
+            WHERE {id_column} = :content_id AND user_id = :user_id
+        """
 
-            logger.info(f"🔍 Executing query: {query}")
-            logger.info(f"🔍 With params: content_id={content_id}, archived_at={datetime.now(UTC)}")
+        logger.info(f"🔍 Executing query: {query}")
+        logger.info(f"🔍 With params: content_id={content_id}, user_id={user_id}")
 
-            result = await session.execute(text(query), {"content_id": content_id, "archived_at": datetime.now(UTC)})
-            affected_rows = result.rowcount
-            await session.commit()
+        result = await db.execute(
+            text(query), {"content_id": content_id, "user_id": user_id, "archived_at": datetime.now(UTC)}
+        )
+        affected_rows = result.rowcount
+        await db.commit()
 
-            logger.info(f"📊 Archive operation affected {affected_rows} rows")
+        logger.info(f"📊 Archive operation affected {affected_rows} rows")
 
-            if affected_rows == 0:
-                logger.warning(f"⚠️ No rows were updated - content {content_id} may not exist")
-            else:
-                logger.info(f"✅ Successfully archived {content_id}")
+        if affected_rows == 0:
+            msg = f"Content {content_id} not found or access denied"
+            logger.warning(f"⚠️ {msg}")
+            raise ValueError(msg)
+        logger.info(f"✅ Successfully archived {content_id}")
 
     @staticmethod
-    async def unarchive_content(content_type: ContentType, content_id: str) -> None:
-        """Unarchive content by type and ID."""
+    async def unarchive_content(db: AsyncSession, content_type: ContentType, content_id: UUID, user_id: UUID) -> None:
+        """Unarchive content by type and ID with user validation."""
         table_map = {
             ContentType.BOOK: "books",
             ContentType.YOUTUBE: "videos",
@@ -78,37 +81,30 @@ class ContentArchiveService:
 
         logger.info(f"📤 Unarchiving {content_type} {content_id} in table {table_name}")
 
-        async with async_session_maker() as session:
-            try:
-                # Handle different ID column names
-                id_column = "uuid" if content_type == ContentType.YOUTUBE else "id"
+        # Handle different ID column names
+        id_column = "uuid" if content_type == ContentType.YOUTUBE else "id"
 
-                query = f"""
-                    UPDATE {table_name}
-                    SET archived = false, archived_at = NULL
-                    WHERE {id_column} = :content_id
-                """
+        # Update with user validation
+        query = f"""
+            UPDATE {table_name}
+            SET archived = false, archived_at = NULL
+            WHERE {id_column} = :content_id AND user_id = :user_id
+        """
 
-                logger.info(f"🔍 Executing unarchive query: {query}")
-                logger.info(f"🔍 With params: content_id={content_id}")
+        logger.info(f"🔍 Executing unarchive query: {query}")
+        logger.info(f"🔍 With params: content_id={content_id}, user_id={user_id}")
 
-                result = await session.execute(text(query), {"content_id": content_id})
-                affected_rows = result.rowcount
-                await session.commit()
+        result = await db.execute(text(query), {"content_id": content_id, "user_id": user_id})
+        affected_rows = result.rowcount
+        await db.commit()
 
-                logger.info(f"📊 Unarchive operation affected {affected_rows} rows")
+        logger.info(f"📊 Unarchive operation affected {affected_rows} rows")
 
-                if affected_rows == 0:
-                    logger.warning(f"⚠️ No rows were updated - content {content_id} may not exist")
-                else:
-                    logger.info(f"✅ Successfully unarchived {content_id}")
-
-            except Exception:
-                logger.exception(
-                    "💥 Database error in unarchive_content. Query: %s, Params: content_id=%s", query, content_id
-                )
-                await session.rollback()
-                raise
+        if affected_rows == 0:
+            msg = f"Content {content_id} not found or access denied"
+            logger.warning(f"⚠️ {msg}")
+            raise ValueError(msg)
+        logger.info(f"✅ Successfully unarchived {content_id}")
 
     @staticmethod
     async def list_archived_content(
@@ -124,6 +120,7 @@ class ContentArchiveService:
         Similar to list_content_fast but filters for archived = true.
         """
         from src.content.services.content_service import ContentService
+        from src.database.session import async_session_maker
 
         offset = (page - 1) * page_size
         search_term = f"%{search}%" if search else None
@@ -166,7 +163,8 @@ class ContentArchiveService:
         async with async_session_maker() as session:
             # Get total count and paginated results
             total = await QueryBuilderService.get_total_count(session, combined_query, search_term, effective_user_id)
-            rows = await ContentService.get_paginated_results(
+            service = ContentService()
+            rows = await service.get_paginated_results(
                 session, combined_query, search_term, page_size, offset, effective_user_id
             )
 
@@ -177,5 +175,5 @@ class ContentArchiveService:
             items=items,
             total=total,
             page=page,
-            pageSize=page_size,
+            per_page=page_size,
         )

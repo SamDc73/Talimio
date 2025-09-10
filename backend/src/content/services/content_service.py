@@ -162,41 +162,37 @@ class ContentService:
         content_id: str,
         user_id: UUID,
     ) -> None:
-        """Delete content by type and ID."""
-        from src.books.services.book_content_service import BookContentService
+        """Delete content by type and ID using unified service pattern."""
+        from src.books.facade import BooksFacade
         from src.courses.facade import CoursesFacade
         from src.flashcards.service import delete_deck
-        from src.videos.service import video_service
+        from src.videos.service import VideoService
 
         # Use provided session or create a new one
         if self._session:
             session = self._session
+            own_session = False
+        else:
+            session = await async_session_maker().__aenter__()
+            own_session = True
+
+        try:
             if content_type == ContentType.BOOK:
-                # Use modular BookContentService instead of legacy delete_book
-                await BookContentService().delete_content(UUID(content_id), user_id)
+                books_facade = BooksFacade()
+                await books_facade.delete_book(session, UUID(content_id), user_id)
             elif content_type == ContentType.YOUTUBE:
+                video_service = VideoService()
                 await video_service.delete_video(session, content_id, user_id)
             elif content_type == ContentType.FLASHCARDS:
-                await delete_deck(UUID(content_id))
+                # Note: Flashcards still uses old pattern, needs user_id validation
+                await delete_deck(UUID(content_id), user_id)
             elif content_type == ContentType.COURSE:
-                course_service = CoursesFacade()
-                await course_service.delete_course(UUID(content_id), user_id)
+                courses_facade = CoursesFacade()
+                await courses_facade.delete_course(session, UUID(content_id), user_id)
             else:
                 error_msg = f"Unsupported content type: {content_type}"
                 raise ValueError(error_msg)
-        else:
-            # Fallback to creating a new session
-            async with async_session_maker() as session:
-                if content_type == ContentType.BOOK:
-                    # Use modular BookContentService instead of legacy delete_book
-                    await BookContentService().delete_content(UUID(content_id), user_id)
-                elif content_type == ContentType.YOUTUBE:
-                    await video_service.delete_video(session, content_id, user_id)
-                elif content_type == ContentType.FLASHCARDS:
-                    await delete_deck(UUID(content_id))
-                elif content_type == ContentType.COURSE:
-                    course_service = CoursesFacade()
-                    await course_service.delete_course(UUID(content_id), user_id)
-                else:
-                    error_msg = f"Unsupported content type: {content_type}"
-                    raise ValueError(error_msg)
+        finally:
+            # Close session if we created it
+            if own_session:
+                await session.__aexit__(None, None, None)

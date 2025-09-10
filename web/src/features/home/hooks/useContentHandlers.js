@@ -84,60 +84,14 @@ export function useContentHandlers({
 		// Remove from pins if it was pinned
 		pinning.removePinById(itemId)
 
-		// Show success toast with item type
-		const typeLabel =
-			itemType === "video"
-				? "Video"
-				: itemType === "book"
-					? "Book"
-					: itemType === "course" || itemType === "roadmap"
-						? "Course"
-						: itemType === "flashcards"
-							? "Flashcard Deck"
-							: "Item"
-
-		toast({
-			title: `${typeLabel} Deleted`,
-			description: "Successfully removed from your library.",
-		})
+		// The ContentCard component handles the actual deletion via store
+		// This handler just updates local state for immediate UI feedback
 	}
 
 	const handleArchiveItem = async (_itemId, _contentType, _newArchivedState) => {
-		try {
-			// Include archived content if we're showing archived or all content
-			const includeArchived = filters.archiveFilter === "archived" || filters.archiveFilter === "all"
-
-			const data = await fetchContentData(includeArchived)
-
-			const { content, filterOptions: options, sortOptions: sortOpts } = processContentData(data)
-
-			// Transform content to match expected format
-			const transformedContent = content.map((item) => ({
-				...item,
-				tags: item.tags || [],
-				dueDate:
-					Math.random() > 0.7
-						? new Date(Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000).toISOString()
-						: null,
-				isPaused: Math.random() > 0.9,
-				totalCards: item.cardCount,
-				due: item.dueCount || Math.floor(Math.random() * 10),
-				overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
-			}))
-
-			setContentItems(transformedContent)
-			setFilterOptions(options)
-			setSortOptions(sortOpts)
-
-			// Update pins state with refreshed content
-			pinning.initializePins(transformedContent)
-		} catch (_error) {
-			toast({
-				title: "Error",
-				description: "Failed to refresh content. Please try again.",
-				variant: "destructive",
-			})
-		}
+		// The ContentCard component handles the actual archiving via store
+		// Just refresh the content list to update the view
+		await loadContentData()
 	}
 
 	const handleTagsUpdated = async (itemId, _contentType, newTags) => {

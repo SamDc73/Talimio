@@ -170,7 +170,7 @@ function RoadmapPreviewPage() {
 					{/* Roadmap Details Form */}
 					<div className="space-y-4">
 						<div className="space-y-2">
-							<Label for="title" className="text-sm font-medium">
+							<Label htmlFor="title" className="text-sm font-medium">
 								Roadmap Title
 							</Label>
 							<Input
@@ -183,7 +183,7 @@ function RoadmapPreviewPage() {
 						</div>
 
 						<div className="space-y-2">
-							<Label for="description" className="text-sm font-medium">
+							<Label htmlFor="description" className="text-sm font-medium">
 								Description
 							</Label>
 							<textarea

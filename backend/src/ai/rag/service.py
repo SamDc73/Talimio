@@ -20,8 +20,6 @@ from src.courses.models import CourseDocument
 logger = logging.getLogger(__name__)
 
 
-
-
 class RAGService:
     """RAG service orchestrator using txtai and related libraries."""
 
@@ -66,10 +64,12 @@ class RAGService:
 
             # Create a minimal txtai instance if needed for compatibility
             # But the actual work is done by VectorRAG
-            self._embeddings = Embeddings({
-                "content": True,  # In-memory only
-                "backend": "numpy"  # Simple backend
-            })
+            self._embeddings = Embeddings(
+                {
+                    "content": True,  # In-memory only
+                    "backend": "numpy",  # Simple backend
+                }
+            )
 
         return self._embeddings
 
@@ -157,7 +157,6 @@ class RAGService:
             await session.rollback()
             logger.exception("Failed to upload document")
             raise HTTPException(status_code=500, detail=str(e)) from e
-
 
     async def process_document(self, session: AsyncSession, document_id: int) -> None:
         """Process a document (parse, chunk, embed, index)."""
@@ -298,6 +297,7 @@ class RAGService:
             # Get VectorRAG instance
             if not hasattr(self, "_vector_rag"):
                 from src.ai.rag.embeddings import VectorRAG
+
                 self._vector_rag = VectorRAG()
 
             # Use VectorRAG's existing method to store chunks with embeddings
@@ -306,7 +306,7 @@ class RAGService:
                 document_id=document_id,
                 course_id=doc_info.course_id,
                 title=doc_info.title,
-                chunks=chunks
+                chunks=chunks,
             )
 
             logger.info("Successfully stored %s chunks for document %s in pgvector", len(chunks), document_id)
@@ -337,16 +337,13 @@ class RAGService:
             # Get VectorRAG instance
             if not hasattr(self, "_vector_rag"):
                 from src.ai.rag.embeddings import VectorRAG
+
                 self._vector_rag = VectorRAG()
 
             # Use VectorRAG's existing search method
             return await self._vector_rag.search_course_documents_vector(
-                session=session,
-                course_id=course_id,
-                query=query,
-                limit=top_k
+                session=session, course_id=course_id, query=query, limit=top_k
             )
-
 
         except Exception:
             logger.exception("Failed to search documents")
@@ -446,7 +443,15 @@ class RAGService:
                     logger.warning("Failed to delete file %s: %s", doc.file_path, e)
 
             # Old document_chunks table has been removed - chunks are now in rag_document_chunks
-            # and are handled by the new system
+            # Delete from rag_document_chunks using the doc_uuid scheme
+            doc_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"document_{document_id}")
+            chunks_result = await session.execute(
+                text("DELETE FROM rag_document_chunks WHERE doc_id = :doc_uuid AND doc_type = 'course'"),
+                {"doc_uuid": str(doc_uuid)},
+            )
+            chunks_deleted = chunks_result.rowcount
+            if chunks_deleted > 0:
+                logger.info(f"Deleted {chunks_deleted} RAG chunks for document {document_id}")
 
             # Delete document
             await session.execute(text("DELETE FROM roadmap_documents WHERE id = :doc_id"), {"doc_id": document_id})
@@ -472,3 +477,99 @@ class RAGService:
         )
         if not result.fetchone():
             raise HTTPException(status_code=404, detail="Course not found or access denied")
+
+    @staticmethod
+    async def delete_chunks_by_doc_id(
+        session: AsyncSession,
+        document_id: str,
+        doc_type: str = "course",
+    ) -> int:
+        """
+        Delete all RAG chunks for a specific document.
+
+        For courses: Uses uuid5(NAMESPACE_DNS, f"document_{document_id}")
+        For books: Uses the book_id directly as doc_id when RAG storage is enabled
+
+        Returns the number of chunks deleted.
+        """
+        import time
+
+        start_time = time.time()
+
+        try:
+            if doc_type == "book":
+                # For books, doc_id is the book_id directly
+                result = await session.execute(
+                    text("DELETE FROM rag_document_chunks WHERE doc_id = :doc_id AND doc_type = :doc_type"),
+                    {"doc_id": document_id, "doc_type": doc_type},
+                )
+            else:
+                # For courses, compute the UUID
+                doc_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"document_{document_id}")
+                result = await session.execute(
+                    text("DELETE FROM rag_document_chunks WHERE doc_id = :doc_uuid AND doc_type = :doc_type"),
+                    {"doc_uuid": str(doc_uuid), "doc_type": doc_type},
+                )
+
+            await session.commit()
+            rowcount = result.rowcount
+
+            elapsed_time = time.time() - start_time
+            logger.info(
+                "Deleted %s RAG chunks for %s document %s in %.2f seconds",
+                rowcount,
+                doc_type,
+                document_id,
+                elapsed_time,
+            )
+
+            return rowcount
+
+        except Exception:
+            logger.exception("Error deleting RAG chunks for document %s", document_id)
+            await session.rollback()
+            # Don't raise - this is best-effort cleanup
+            return 0
+
+    @staticmethod
+    async def delete_chunks_by_course_id(
+        session: AsyncSession,
+        course_id: str,
+    ) -> int:
+        """
+        Delete all RAG chunks for a specific course using metadata.
+
+        Deletes from rag_document_chunks WHERE metadata->>'course_id' = :course_id
+
+        Returns the number of chunks deleted.
+        """
+        import time
+
+        start_time = time.time()
+
+        try:
+            result = await session.execute(
+                text(
+                    "DELETE FROM rag_document_chunks WHERE metadata->>'course_id' = :course_id AND doc_type = 'course'"
+                ),
+                {"course_id": course_id},
+            )
+
+            await session.commit()
+            rowcount = result.rowcount
+
+            elapsed_time = time.time() - start_time
+            logger.info(
+                "Deleted %s RAG chunks for course %s in %.2f seconds",
+                rowcount,
+                course_id,
+                elapsed_time,
+            )
+
+            return rowcount
+
+        except Exception:
+            logger.exception("Error deleting RAG chunks for course %s", course_id)
+            await session.rollback()
+            # Don't raise - this is best-effort cleanup
+            return 0

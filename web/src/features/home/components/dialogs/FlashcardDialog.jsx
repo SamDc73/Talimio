@@ -79,7 +79,7 @@ export function FlashcardDialog({ open, onOpenChange, onDeckCreated }) {
 				<div className="py-4">
 					<div className="grid gap-4">
 						<div className="grid gap-2">
-							<Label for="deck-title">Deck Title</Label>
+							<Label htmlFor="deck-title">Deck Title</Label>
 							<Input
 								id="deck-title"
 								value={newDeckTitle}
@@ -88,7 +88,7 @@ export function FlashcardDialog({ open, onOpenChange, onDeckCreated }) {
 							/>
 						</div>
 						<div className="grid gap-2">
-							<Label for="deck-description">Description</Label>
+							<Label htmlFor="deck-description">Description</Label>
 							<Input
 								id="deck-description"
 								value={newDeckDescription}
@@ -97,7 +97,7 @@ export function FlashcardDialog({ open, onOpenChange, onDeckCreated }) {
 							/>
 						</div>
 						<div className="grid gap-2">
-							<Label for="new-cards">Cards (Front | Back)</Label>
+							<Label htmlFor="new-cards">Cards (Front | Back)</Label>
 							<textarea
 								id="new-cards"
 								value={newCards}

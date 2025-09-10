@@ -9,17 +9,15 @@ from typing import Any
 from uuid import UUID
 
 from src.ai.ai_service import get_ai_service
-from src.progress.protocols import ContentFacade
 
 from .service import VideoService
-from .services.video_content_service import VideoContentService
 from .services.video_progress_tracker import VideoProgressTracker
 
 
 logger = logging.getLogger(__name__)
 
 
-class VideosFacade(ContentFacade):
+class VideosFacade:
     """
     Single entry point for all video operations.
 
@@ -30,7 +28,6 @@ class VideosFacade(ContentFacade):
     def __init__(self) -> None:
         # Internal services - not exposed to outside modules
         self._video_service = VideoService()
-        self._content_service = VideoContentService()  # New base service
         self._progress_service = VideoProgressTracker()  # Implements ProgressTracker protocol
         self._ai_service = get_ai_service()
 
@@ -79,29 +76,7 @@ class VideosFacade(ContentFacade):
             logger.exception(f"Error getting video {video_id} for user {user_id}: {e}")
             return {"error": "Failed to retrieve video"}
 
-    async def create_content(self, content_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
-        """
-        Create new video content.
-
-        Implements ContentFacade interface.
-        """
-        return await self.create_video(content_data, user_id)
-
-    async def create_video(self, video_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
-        """
-        Create new video entry.
-
-        Handles video creation and coordinates all related operations.
-        """
-        try:
-            # Use the new content service which handles tags, progress, and AI processing
-            video = await self._content_service.create_content(video_data, user_id)
-
-            return {"video": video, "success": True}
-
-        except Exception as e:
-            logger.exception(f"Error creating video for user {user_id}: {e}")
-            return {"error": "Failed to create video", "success": False}
+    # NOTE: create_content and create_video methods removed - router uses service directly
 
     async def add_youtube_video(
         self, youtube_url: str, user_id: UUID, metadata: dict[str, Any] | None = None
@@ -174,28 +149,6 @@ class VideosFacade(ContentFacade):
             logger.exception(f"Error updating playback settings for video {video_id}: {e}")
             return {"error": "Failed to update settings", "success": False}
 
-    async def delete_content(self, content_id: UUID, user_id: UUID) -> bool:
-        """
-        Delete video content.
-
-        Implements ContentFacade interface.
-        """
-        return await self.delete_video(content_id, user_id)
-
-    async def delete_video(self, video_id: UUID, user_id: UUID) -> bool:
-        """
-        Delete video and all related data.
-
-        Coordinates deletion across all video services.
-        """
-        try:
-            # Use content service which handles cleanup of tags and associated data
-            return await self._content_service.delete_content(video_id, user_id)
-
-        except Exception as e:
-            logger.exception(f"Error deleting video {video_id}: {e}")
-            return False
-
     async def search_videos(self, query: str, user_id: UUID, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Search user's videos.
@@ -239,7 +192,7 @@ class VideosFacade(ContentFacade):
             from src.database.session import async_session_maker
 
             async with async_session_maker() as session:
-                chapters = await self._video_service.get_video_chapters(session, str(video_id))
+                chapters = await self._video_service.get_video_chapters(session, str(video_id), user_id)
 
             # Add progress information for each chapter
             if chapters:

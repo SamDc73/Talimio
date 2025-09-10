@@ -139,16 +139,21 @@ async def update_course(
 @router.delete("/{course_id}")
 async def delete_course(
     course_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
     user_id: UserId,
-    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> None:
     """Delete a course."""
-    success = await facade.delete_course(course_id, user_id)
-
-    if not success:
+    try:
+        facade = CoursesFacade()
+        await facade.delete_course(db=db, course_id=course_id, user_id=user_id)
+    except ValueError as e:
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=400, detail="Failed to delete course")
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # Full lesson access (with module_id for web app compatibility)

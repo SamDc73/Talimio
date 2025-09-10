@@ -85,7 +85,7 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 				</SheetHeader>
 				<div className="py-4">
 					<div className="grid gap-2">
-						<Label for="youtube-url">YouTube URL</Label>
+						<Label htmlFor="youtube-url">YouTube URL</Label>
 						<Input
 							id="youtube-url"
 							value={youtubeUrl}

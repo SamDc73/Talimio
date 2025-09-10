@@ -109,9 +109,7 @@ class CoursesFacade:
         try:
             # Build course data combining provided preferences and required fields
             data: dict[str, Any] = {**(preferences or {})}
-            data["topic"] = topic
-            # Ensure course is marked as AI-generated
-            data.setdefault("is_ai_generated", True)
+            data["prompt"] = topic  # Use prompt field for AI generation
 
             # Use the content service which handles tags, progress, and AI processing automatically
             course = await self._content_service.create_course(data, user_id)
@@ -161,20 +159,6 @@ class CoursesFacade:
         except Exception:
             logger.exception("Error updating course %s", course_id)
             return {"error": "Failed to update course", "success": False}
-
-    async def delete_course(self, course_id: UUID, user_id: UUID) -> bool:
-        """
-        Delete course and all related data.
-
-        Coordinates deletion across all course services.
-        """
-        try:
-            # Use content service which handles cleanup of tags and associated data
-            return await self._content_service.delete_course(course_id, user_id)
-
-        except Exception:
-            logger.exception("Error deleting course %s", course_id)
-            return False
 
     async def search_courses(self, query: str, user_id: UUID, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         """
@@ -239,6 +223,49 @@ class CoursesFacade:
         except Exception as e:
             logger.exception(f"Error getting courses for user {user_id}: {e}")
             return {"error": f"Failed to get courses: {e!s}", "success": False}
+
+    async def delete_course(self, db: Any, course_id: UUID, user_id: UUID) -> None:
+        """
+        Delete a course.
+
+        Args:
+            db: Database session
+            course_id: Course ID to delete
+            user_id: User ID for ownership validation
+
+        Raises
+        ------
+            ValueError: If course not found or user doesn't own it
+        """
+        from sqlalchemy import select
+
+        from src.courses.models import Course
+
+        # Get course with user validation
+        query = select(Course).where(Course.id == course_id, Course.user_id == user_id)
+        result = await db.execute(query)
+        course = result.scalar_one_or_none()
+
+        if not course:
+            msg = f"Course {course_id} not found"
+            raise ValueError(msg)
+
+        # Delete the course (cascade handles related records)
+        await db.delete(course)
+        await db.commit()
+
+        # Delete RAG chunks (best-effort, after commit)
+        try:
+            from src.ai.rag.service import RAGService
+
+            chunks_deleted = await RAGService.delete_chunks_by_course_id(db, str(course_id))
+            if chunks_deleted > 0:
+                logger.info(f"Deleted {chunks_deleted} RAG chunks for course {course_id}")
+        except Exception as e:
+            # Log but don't fail - this is best-effort cleanup
+            logger.warning(f"Could not delete RAG chunks for course {course_id}: {e}")
+
+        logger.info(f"Deleted course {course_id}")
 
     async def get_course_lessons(self, course_id: UUID, user_id: UUID) -> dict[str, Any]:
         """Get course lessons/outline if available."""

@@ -50,23 +50,20 @@ Additional Context: {description}
 4. **Practical Focus**: Emphasize real-world applications and hands-on learning
 
 # Output Format
-Generate ONLY a JSON object with this EXACT structure:
+Generate a JSON object with this structure:
 
 ```json
 {{
-  "title": "Clear roadmap title here",
-  "description": "Brief description of what learners will achieve",
-  "coreTopics": [
+  "title": "Clear course title",
+  "description": "What learners will achieve",
+  "modules": [
     {{
-      "title": "Topic name",
-      "description": "What will be learned in this topic",
-      "estimatedHours": 10,
-      "subtopics": [
+      "title": "Module name",
+      "description": "What will be learned",
+      "lessons": [
         {{
-          "title": "Subtopic name",
-          "description": "What will be learned",
-          "estimatedHours": 3,
-          "subtopics": []
+          "title": "Lesson name",
+          "description": "Lesson content"
         }}
       ]
     }}
@@ -74,30 +71,23 @@ Generate ONLY a JSON object with this EXACT structure:
 }}
 ```
 
-CRITICAL: Return ONLY the JSON object above. No other text, no markdown, no explanations.
-
-# Example Structure:
+# Example:
 ```json
 {{
   "title": "Python Programming Mastery",
-  "description": "Master Python programming from basics to advanced concepts. Build real-world applications and develop professional coding skills.",
-  "coreTopics": [
+  "description": "Master Python from basics to advanced concepts",
+  "modules": [
     {{
       "title": "Introduction to Python",
-      "description": "Learn Python basics including syntax, data types, and control flow. Build a strong foundation for programming.",
-      "estimatedHours": 20,
-      "subtopics": [
+      "description": "Learn Python basics including syntax and control flow",
+      "lessons": [
         {{
           "title": "Python Syntax and Variables",
-          "description": "Master Python syntax rules and variable declaration.",
-          "estimatedHours": 3,
-          "subtopics": []
+          "description": "Master Python syntax rules and variable declaration"
         }},
         {{
           "title": "Data Types and Structures",
-          "description": "Understand lists, dictionaries, tuples, and sets.",
-          "estimatedHours": 5,
-          "subtopics": []
+          "description": "Understand lists, dictionaries, tuples, and sets"
         }}
       ]
     }}
@@ -105,12 +95,10 @@ CRITICAL: Return ONLY the JSON object above. No other text, no markdown, no expl
 }}
 ```
 
-# Quality Standards
-- Topics should be specific and actionable (not vague concepts)
-- Descriptions must clearly state learning outcomes
-- Time estimates should be realistic for learners
-- Subtopics should comprehensively cover the parent topic
-- Each subtopic MUST be an object with title, description, and estimatedHours fields
+# Requirements
+- Create 3-5 modules with 3-7 lessons each
+- Titles should be clear and specific
+- Descriptions should state learning outcomes
 """
 
 
@@ -134,7 +122,7 @@ Create a detailed, engaging lesson that naturally flows through the material:
 **THIS IS A LESSON, NOT A CHAT**:
 - NEVER offer to "produce additional materials" or "generate worksheets"
 - NEVER ask "Which would you prefer?" or "Ready for the next step?"
-- NEVER say "If you want, I can now..." 
+- NEVER say "If you want, I can now..."
 - NO "recommended reading" or "additional resources" lists
 - Questions should be rhetorical (to make learners think) or in quiz components (where they CAN answer)
 - End naturally - state what was learned or what to practice, don't ask what they want next

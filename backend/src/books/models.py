@@ -64,7 +64,7 @@ class BookProgress(Base):
     id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True, default=uuid4)
     book_id: Mapped[UUID] = mapped_column(
         PostgresUUID(as_uuid=True),
-        ForeignKey("books.id"),
+        ForeignKey("books.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

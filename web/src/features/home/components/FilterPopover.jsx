@@ -6,6 +6,7 @@ import { Label } from "@/components/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover"
 import { RadioGroup, RadioGroupItem } from "@/components/radio-group"
 import { Separator } from "@/components/separator"
+import { renderIcon } from "@/features/home/utils/iconMapping.jsx"
 
 function FilterPopover({
 	filterOptions,
@@ -37,8 +38,8 @@ function FilterPopover({
 							{filterOptions.map((option) => (
 								<div key={option.id} className="flex items-center space-x-2">
 									<RadioGroupItem value={option.id} id={`filter-${option.id}`} />
-									<Label for={`filter-${option.id}`} className="flex items-center cursor-pointer">
-										{option.icon}
+									<Label htmlFor={`filter-${option.id}`} className="flex items-center cursor-pointer">
+										{renderIcon(option.icon)}
 										{option.label}
 									</Label>
 								</div>
@@ -53,19 +54,19 @@ function FilterPopover({
 						<RadioGroup value={archiveFilter} onValueChange={setArchiveFilter} className="flex flex-col gap-2">
 							<div className="flex items-center space-x-2">
 								<RadioGroupItem value="active" id="archive-active" />
-								<Label for="archive-active" className="cursor-pointer">
+								<Label htmlFor="archive-active" className="cursor-pointer">
 									Active Content
 								</Label>
 							</div>
 							<div className="flex items-center space-x-2">
 								<RadioGroupItem value="archived" id="archive-archived" />
-								<Label for="archive-archived" className="cursor-pointer">
+								<Label htmlFor="archive-archived" className="cursor-pointer">
 									Archived Content
 								</Label>
 							</div>
 							<div className="flex items-center space-x-2">
 								<RadioGroupItem value="all" id="archive-all" />
-								<Label for="archive-all" className="cursor-pointer">
+								<Label htmlFor="archive-all" className="cursor-pointer">
 									All Content
 								</Label>
 							</div>
@@ -97,8 +98,8 @@ function FilterPopover({
 							{sortOptions.map((option) => (
 								<div key={option.id} className="flex items-center space-x-2">
 									<RadioGroupItem value={option.id} id={`sort-${option.id}`} />
-									<Label for={`sort-${option.id}`} className="flex items-center cursor-pointer">
-										{option.icon}
+									<Label htmlFor={`sort-${option.id}`} className="flex items-center cursor-pointer">
+										{renderIcon(option.icon)}
 										{option.label}
 									</Label>
 								</div>

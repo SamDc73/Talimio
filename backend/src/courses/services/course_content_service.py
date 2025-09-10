@@ -112,24 +112,6 @@ class CourseContentService:
             logger.info(f"Updated course {course.id}")
             return course
 
-    async def delete_course(self, course_id: UUID, user_id: UUID) -> bool:
-        """Delete a course."""
-        async with async_session_maker() as session:
-            # Get the course
-            query = select(Course).where(Course.id == course_id, Course.user_id == user_id)
-            result = await session.execute(query)
-            course = result.scalar_one_or_none()
-
-            if not course:
-                return False
-
-            # Delete the course (cascade will handle related records)
-            await session.delete(course)
-            await session.commit()
-
-            logger.info(f"Deleted course {course_id}")
-            return True
-
     async def _auto_tag_course(self, session: AsyncSession, course: Course, user_id: UUID) -> list[str]:
         """Generate tags for a course using its content preview and store them."""
         try:

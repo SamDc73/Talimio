@@ -1,17 +1,14 @@
 import { motion } from "framer-motion"
-import { Archive, MoreHorizontal, Pause, Pin, Tag, X } from "lucide-react"
+import { Archive, MoreHorizontal, Pin, Tag, X } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/button"
 import { ConfirmationDialog } from "@/components/ConfirmationDialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover"
 import { Separator } from "@/components/separator"
-import DueDateChip from "@/features/home/components/DueDateChip"
 import TagChip from "@/features/home/components/TagChip"
 import TagEditModal from "@/features/home/components/TagEditModal"
 import { VARIANTS } from "@/features/home/utils/contentConstants"
-import { useToast } from "@/hooks/use-toast"
-import { archiveContent, unarchiveContent } from "@/services/contentService"
-import { deleteApi } from "@/services/deleteApi"
+import { useContentActions } from "@/stores/useContentStore"
 
 function formatDuration(seconds) {
 	if (!seconds) return "Unknown duration"
@@ -29,7 +26,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 	const [showTagEditModal, setShowTagEditModal] = useState(false)
 	const [isArchiving, setIsArchiving] = useState(false)
-	const { toast } = useToast()
+	const { deleteItem, archiveItem, unarchiveItem } = useContentActions()
 
 	const V = VARIANTS[item.type]
 	const isFlashcard = item.type === "flashcards"
@@ -50,24 +47,12 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 		// Close dialog immediately for instant feedback
 		setShowDeleteConfirm(false)
 
-		// Optimistically update UI by calling parent handler
+		// Use store action (handles everything: optimistic update, backend call, notifications)
+		await deleteItem(item.id || item.uuid, item.type)
+
+		// Notify parent if needed (for legacy compatibility)
 		if (onDelete) {
 			onDelete(item.id || item.uuid, item.type)
-		}
-
-		try {
-			// Delete from backend in the background
-			await deleteApi.deleteItem(item.type, item.id || item.uuid)
-		} catch (error) {
-			// Show error toast
-			toast({
-				title: "Delete Failed",
-				description: error.message || "Failed to delete item. Please try again.",
-				variant: "destructive",
-			})
-
-			// TODO: Rollback the optimistic update by reloading content
-			// This would be handled by the parent component
 		}
 	}
 
@@ -75,34 +60,19 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 		if (isArchiving) return
 
 		setIsArchiving(true)
-		const contentType = item.type === "flashcards" ? "flashcards" : item.type
-		const isArchived = item.archived || false
 
 		try {
-			if (isArchived) {
-				await unarchiveContent(contentType, item.id || item.uuid)
-				toast({
-					title: "Content Unarchived",
-					description: `${item.title} has been unarchived successfully.`,
-				})
+			// Use store action (handles everything)
+			if (item.archived) {
+				await unarchiveItem(item)
 			} else {
-				await archiveContent(contentType, item.id || item.uuid)
-				toast({
-					title: "Content Archived",
-					description: `${item.title} has been archived successfully.`,
-				})
+				await archiveItem(item)
 			}
 
-			// Notify parent component to refresh content
+			// Notify parent if needed (for legacy compatibility)
 			if (onArchive) {
-				onArchive(item.id || item.uuid, contentType, !isArchived)
+				onArchive(item.id || item.uuid, item.type, !item.archived)
 			}
-		} catch (_error) {
-			toast({
-				title: "Error",
-				description: `Failed to ${item.archived ? "unarchive" : "archive"} content. Please try again.`,
-				variant: "destructive",
-			})
 		} finally {
 			setIsArchiving(false)
 		}
@@ -170,18 +140,6 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 								+{item.tags.length - 2}
 							</span>
 						)}
-						<DueDateChip
-							dueDate={item.dueDate}
-							isPaused={item.isPaused}
-							progress={progressValue}
-							type={item.type}
-							dueCount={item.due || item.dueCount}
-							overdue={item.overdue}
-							onSnooze={(e) => {
-								e.stopPropagation()
-								alert(`Rescheduled: ${item.title}`)
-							}}
-						/>
 					</div>
 					<div>
 						{isFlashcard && (
@@ -222,7 +180,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 							</PopoverTrigger>
 							<PopoverContent align="end" className="w-40 p-0">
 								<div className="flex flex-col text-sm">
-									{["Pin", "Edit Tags", "Archive", "sep", "Pause", "Delete"].map((action) =>
+									{["Pin", "Edit Tags", "Archive", "sep", "Delete"].map((action) =>
 										action === "sep" ? (
 											<Separator key="separator" />
 										) : (
@@ -238,8 +196,6 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 													if (action === "Pin") onTogglePin()
 													else if (action === "Delete") handleDeleteClick()
 													else if (action === "Archive") handleArchive()
-													else if (action === "Pause") {
-													} // TODO: Implement pause functionality
 													else if (action === "Edit Tags") handleEditTags()
 												}}
 												disabled={action === "Archive" && isArchiving}
@@ -247,7 +203,6 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 												{action === "Pin" && <Pin className="h-4 w-4" />}
 												{action === "Edit Tags" && <Tag className="h-4 w-4" />}
 												{action === "Archive" && <Archive className="h-4 w-4" />}
-												{action === "Pause" && <Pause className="h-4 w-4" />}
 												{action === "Delete" && <X className="h-4 w-4" />}
 												{action === "Pin"
 													? pinned
