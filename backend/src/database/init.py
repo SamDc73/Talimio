@@ -2,10 +2,11 @@
 
 import asyncio
 import logging
-from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+
+from src.auth.config import DEFAULT_USER_ID
 
 # Import all models to register them with Base metadata
 from src.books.models import *  # noqa: F403
@@ -26,6 +27,10 @@ logger = logging.getLogger(__name__)
 async def init_database(db_engine: AsyncEngine) -> None:
     """Initialize database with required extensions and create all tables."""
     async with db_engine.begin() as conn:
+        # Clean any stale prepared statements before metadata operations
+        # This prevents "prepared statement already exists" errors during startup
+        await conn.exec_driver_sql("DEALLOCATE ALL")
+
         # 1. Enable required extensions
         logger.info("Enabling required PostgreSQL extensions...")
 
@@ -52,7 +57,7 @@ async def init_database(db_engine: AsyncEngine) -> None:
         await conn.run_sync(Base.metadata.create_all)
         logger.info("All tables created successfully")
 
-        # 3. Create default user if needed
+        # 3. Create default user if needed (for self-hosters with AUTH_PROVIDER=none)
         logger.info("Ensuring default user exists...")
         await _ensure_default_user(conn)
 
@@ -60,9 +65,9 @@ async def init_database(db_engine: AsyncEngine) -> None:
 
 
 async def _ensure_default_user(conn: AsyncConnection) -> None:
-    """Create default user if it doesn't exist."""
+    """Create default user for self-hosters (AUTH_PROVIDER=none)."""
     try:
-        # Check if users table exists and has any users
+        # Check if users table exists
         result = await conn.execute(
             text("""
             SELECT EXISTS (
@@ -75,27 +80,30 @@ async def _ensure_default_user(conn: AsyncConnection) -> None:
         table_exists = result.scalar()
 
         if table_exists:
-            # Check if default user exists
-            result = await conn.execute(text("SELECT COUNT(*) FROM users"))
-            user_count = result.scalar()
+            # Check if default user already exists
+            result = await conn.execute(
+                text("SELECT COUNT(*) FROM users WHERE id = :id"),
+                {"id": str(DEFAULT_USER_ID)}
+            )
+            user_exists = result.scalar() > 0
 
-            if user_count == 0:
-                # Create default user
-                default_user_id = str(uuid4())
+            if not user_exists:
+                # Create default user for self-hosters
                 await conn.execute(
                     text("""
-                    INSERT INTO users (id, email, name, created_at, updated_at)
-                    VALUES (:id, 'default@talimio.com', 'Default User', NOW(), NOW())
+                    INSERT INTO users (id, username, email, password_hash, role, is_active, created_at, updated_at)
+                    VALUES (:id, 'default', 'user@localhost', 'not_used_in_single_user_mode', 'user', true, NOW(), NOW())
+                    ON CONFLICT (id) DO NOTHING
                 """),
-                    {"id": default_user_id},
+                    {"id": str(DEFAULT_USER_ID)},
                 )
-                logger.info(f"Created default user with ID: {default_user_id}")
+                logger.info(f"Created default user for self-hosters with ID: {DEFAULT_USER_ID}")
             else:
-                logger.info(f"Found {user_count} existing users, skipping default user creation")
+                logger.info("Default user already exists")
         else:
-            logger.info("Users table doesn't exist yet, skipping default user creation")
+            logger.info("Users table doesn't exist yet, will be created by SQLAlchemy")
     except Exception as e:
-        logger.warning(f"Could not create default user (this may be normal): {e}")
+        logger.warning(f"Could not create default user (non-critical for single-user mode): {e}")
 
 
 async def main() -> None:
