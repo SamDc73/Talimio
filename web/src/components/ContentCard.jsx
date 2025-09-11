@@ -8,7 +8,7 @@ import { Separator } from "@/components/separator"
 import TagChip from "@/features/home/components/TagChip"
 import TagEditModal from "@/features/home/components/TagEditModal"
 import { VARIANTS } from "@/features/home/utils/contentConstants"
-import { useContentActions } from "@/stores/useContentStore"
+import { useDeleteContent, useArchiveContent } from "@/hooks/useContentQueries"
 
 function formatDuration(seconds) {
 	if (!seconds) return "Unknown duration"
@@ -25,8 +25,10 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 	const [hover, setHover] = useState(false)
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 	const [showTagEditModal, setShowTagEditModal] = useState(false)
-	const [isArchiving, setIsArchiving] = useState(false)
-	const { deleteItem, archiveItem, unarchiveItem } = useContentActions()
+	
+	// Use React Query mutations
+	const deleteContentMutation = useDeleteContent()
+	const archiveContentMutation = useArchiveContent()
 
 	const V = VARIANTS[item.type]
 	const isFlashcard = item.type === "flashcards"
@@ -43,12 +45,15 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 		setShowDeleteConfirm(true)
 	}
 
-	const handleConfirmDelete = async () => {
+	const handleConfirmDelete = () => {
 		// Close dialog immediately for instant feedback
 		setShowDeleteConfirm(false)
 
-		// Use store action (handles everything: optimistic update, backend call, notifications)
-		await deleteItem(item.id || item.uuid, item.type)
+		// Use React Query mutation (handles optimistic update, backend call, notifications)
+		deleteContentMutation.mutate({
+			itemId: item.id || item.uuid,
+			itemType: item.type,
+		})
 
 		// Notify parent if needed (for legacy compatibility)
 		if (onDelete) {
@@ -56,25 +61,19 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 		}
 	}
 
-	const handleArchive = async () => {
-		if (isArchiving) return
+	const handleArchive = () => {
+		// Prevent multiple clicks
+		if (archiveContentMutation.isPending) return
 
-		setIsArchiving(true)
+		// Use React Query mutation
+		archiveContentMutation.mutate({
+			item,
+			archive: !item.archived,
+		})
 
-		try {
-			// Use store action (handles everything)
-			if (item.archived) {
-				await unarchiveItem(item)
-			} else {
-				await archiveItem(item)
-			}
-
-			// Notify parent if needed (for legacy compatibility)
-			if (onArchive) {
-				onArchive(item.id || item.uuid, item.type, !item.archived)
-			}
-		} finally {
-			setIsArchiving(false)
+		// Notify parent if needed (for legacy compatibility)
+		if (onArchive) {
+			onArchive(item.id || item.uuid, item.type, !item.archived)
 		}
 	}
 
@@ -198,7 +197,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 													else if (action === "Archive") handleArchive()
 													else if (action === "Edit Tags") handleEditTags()
 												}}
-												disabled={action === "Archive" && isArchiving}
+												disabled={action === "Archive" && archiveContentMutation.isPending}
 											>
 												{action === "Pin" && <Pin className="h-4 w-4" />}
 												{action === "Edit Tags" && <Tag className="h-4 w-4" />}
@@ -209,7 +208,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 														? "Unpin"
 														: "Pin"
 													: action === "Archive"
-														? isArchiving
+														? archiveContentMutation.isPending
 															? "Processing..."
 															: item.archived
 																? "Unarchive"

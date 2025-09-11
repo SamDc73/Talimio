@@ -14,7 +14,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth import UserId
+from src.auth import CurrentAuth
 from src.courses.facade import CoursesFacade
 from src.courses.schemas import (
     CourseCreate,
@@ -43,22 +43,22 @@ def get_courses_facade() -> CoursesFacade:
 
 
 def get_lesson_service(
-    user_id: UserId,
+    auth: CurrentAuth,
     session: AsyncSession = Depends(get_db_session),
 ) -> LessonService:
     """Get lesson service instance with user_id injection."""
-    return LessonService(session, user_id)
+    return LessonService(session, auth.user_id)
 
 
 # Course operations
 @router.post("/")
 async def create_course(
     request: CourseCreate,
-    user_id: UserId,
+    auth: CurrentAuth,
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CourseResponse:
     """Create a new course using AI generation."""
-    result = await facade.create_course(request.model_dump(), user_id)
+    result = await facade.create_course(request.model_dump(), auth.user_id)
     if not result.get("success"):
         from fastapi import HTTPException
 
@@ -69,14 +69,14 @@ async def create_course(
 
 @router.get("/")
 async def list_courses(
-    user_id: UserId,
+    auth: CurrentAuth,
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     per_page: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
     search: Annotated[str | None, Query(description="Search query")] = None,
 ) -> CourseListResponse:
     """List courses with pagination and optional search."""
-    result = await facade.get_user_courses(user_id, include_progress=True)
+    result = await facade.get_user_courses(auth.user_id, include_progress=True)
 
     if not result.get("success"):
         from fastapi import HTTPException
@@ -87,7 +87,7 @@ async def list_courses(
 
     # Apply search filter if provided
     if search:
-        search_result = await facade.search_courses(search, user_id, {"limit": per_page})
+        search_result = await facade.search_courses(search, auth.user_id, {"limit": per_page})
         if search_result.get("success"):
             courses = search_result["results"]
 
@@ -103,11 +103,11 @@ async def list_courses(
 @router.get("/{course_id}")
 async def get_course(
     course_id: UUID,
-    user_id: UserId,
+    auth: CurrentAuth,
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CourseResponse:
     """Get a specific course by ID."""
-    result = await facade.get_course_with_progress(course_id, user_id)
+    result = await facade.get_course_with_progress(course_id, auth.user_id)
 
     if not result.get("success"):
         from fastapi import HTTPException
@@ -121,12 +121,12 @@ async def get_course(
 async def update_course(
     course_id: UUID,
     request: CourseUpdate,
-    user_id: UserId,
+    auth: CurrentAuth,
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CourseResponse:
     """Update a course."""
     # Exclude None fields to avoid overwriting NOT NULL columns with NULL
-    result = await facade.update_course(course_id, user_id, request.model_dump(exclude_none=True))
+    result = await facade.update_course(course_id, auth.user_id, request.model_dump(exclude_none=True))
 
     if not result.get("success"):
         from fastapi import HTTPException
@@ -140,12 +140,13 @@ async def update_course(
 async def delete_course(
     course_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> None:
     """Delete a course."""
     try:
         facade = CoursesFacade()
-        await facade.delete_course(db=db, course_id=course_id, user_id=user_id)
+        await facade.delete_course(db=db, course_id=course_id, user_id=auth.user_id)
+        await db.commit()
     except ValueError as e:
         from fastapi import HTTPException
 
@@ -162,14 +163,14 @@ async def get_lesson_full_path(
     course_id: UUID,
     module_id: UUID,
     lesson_id: UUID,
-    user_id: UserId,
+    auth: CurrentAuth,
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
     generate: Annotated[bool, Query(description="Auto-generate if lesson doesn't exist")] = False,
 ) -> LessonResponse:
     """Get a specific lesson by course, module, and lesson ID (full hierarchical route)."""
     # Delegate to the existing lesson service - module_id is just for routing (unused)
     _ = module_id  # Explicitly ignore unused parameter
-    return await facade.get_lesson_simplified(course_id, lesson_id, generate, user_id)
+    return await facade.get_lesson_simplified(course_id, lesson_id, generate, auth.user_id)
 
 
 # Main lesson access endpoint with single query and user isolation

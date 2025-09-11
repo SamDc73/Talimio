@@ -11,12 +11,12 @@ from src.database.base import Base
 
 class UserProgress(Base):
     """User progress tracking for all content types."""
-    
+
     __tablename__ = "user_progress"
     __table_args__ = (
         UniqueConstraint("user_id", "content_id", name="uq_user_content"),
     )
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     content_id = Column(UUID(as_uuid=True), nullable=False, index=True)

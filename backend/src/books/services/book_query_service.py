@@ -8,7 +8,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.auth.config import DEFAULT_USER_ID
 from src.books.models import Book, BookProgress
 from src.books.schemas import BookListResponse, BookResponse, BookWithProgress
 from src.books.services.book_response_builder import BookResponseBuilder
@@ -20,7 +19,7 @@ logger = logging.getLogger(__name__)
 class BookQueryService:
     """Service for complex book database queries and operations."""
 
-    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID) -> None:
         """Initialize the book query service.
 
         Args:
@@ -28,7 +27,7 @@ class BookQueryService:
             user_id: User ID for user-specific operations
         """
         self.session = session
-        self.user_id = user_id or DEFAULT_USER_ID
+        self.user_id = user_id
 
     async def get_books_paginated(
         self,
@@ -109,7 +108,10 @@ class BookQueryService:
         -------
             BookWithProgress: Book data with progress or None if not found
         """
-        query = select(Book).options(selectinload(Book.progress_records)).where(Book.id == book_id)
+        query = select(Book).options(selectinload(Book.progress_records)).where(
+            Book.id == book_id,
+            Book.user_id == self.user_id  # Add ownership check
+        )
         result = await self.session.execute(query)
         book = result.scalar_one_or_none()
 
@@ -277,8 +279,8 @@ class BookQueryService:
         -------
             Dictionary with various book statistics
         """
-        # Total books
-        total_query = select(func.count(Book.id))
+        # Total books for this user
+        total_query = select(func.count(Book.id)).where(Book.user_id == self.user_id)
         total_result = await self.session.execute(total_query)
         total_books = total_result.scalar() or 0
 

@@ -1,7 +1,16 @@
-"""Authentication module for Talimio."""
+"""Authentication module exports."""
 
-from src.auth.config import DEFAULT_USER_ID
-from src.auth.dependencies import UserId
+from src.auth.context import (
+    AUTH_SKIP_PATHS,
+    AuthContext,
+    CurrentAuth,
+    UserContext,
+)
 
 
-__all__ = ["DEFAULT_USER_ID", "UserId"]
+__all__ = [
+    "AUTH_SKIP_PATHS",
+    "AuthContext",
+    "CurrentAuth",
+    "UserContext",
+]

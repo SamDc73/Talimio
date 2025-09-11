@@ -67,7 +67,6 @@ class VideoProgressResponse(BaseModel):
 
     id: UUID
     video_id: UUID = Field(alias="videoId")
-    user_id: UUID = Field(alias="userId")
     last_position: float = Field(alias="lastPosition")
     completion_percentage: float = Field(alias="completionPercentage")
     last_watched_at: datetime | None = Field(None, alias="lastWatchedAt")

@@ -60,4 +60,3 @@ def create_rate_limit_dependency(
 
 # Pre-configured dependencies for common use cases
 books_rate_limit = create_rate_limit_dependency(api_rate_limit)
-upload_route_limit = create_rate_limit_dependency(upload_rate_limit)

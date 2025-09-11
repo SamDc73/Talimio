@@ -14,7 +14,8 @@ from src.ai.rag.chunker import ChunkerFactory
 from src.ai.rag.config import rag_config
 from src.ai.rag.parser import DocumentProcessor
 from src.ai.rag.schemas import DocumentResponse, SearchResult
-from src.courses.models import CourseDocument
+from src.auth import AuthContext
+from src.courses.models import CourseDocument, Roadmap
 
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,6 @@ class RAGService:
                     "backend": "numpy",  # Simple backend
                 }
             )
-
         return self._embeddings
 
     @property
@@ -89,8 +89,7 @@ class RAGService:
 
     async def upload_document(
         self,
-        session: AsyncSession,
-        user_id: uuid.UUID,
+        auth: AuthContext,
         course_id: uuid.UUID,
         document_type: str,
         title: str,
@@ -98,21 +97,21 @@ class RAGService:
         url: str | None = None,
         filename: str | None = None,
     ) -> DocumentResponse:
-        """Upload a document to a course."""
+        """Upload a document to a course, ensuring user ownership."""
         # Validate user owns the course
-        await self.validate_course_ownership(session, course_id, user_id)
+        await auth.get_or_404(Roadmap, course_id, "course")
 
         try:
             # Create document record
             doc = CourseDocument(
-                course_id=course_id,
+                roadmap_id=course_id,
                 title=title,
                 source_url=url,
                 document_type=document_type or "unknown",
                 status="pending",  # Start as pending for processing
             )
-            session.add(doc)
-            await session.flush()
+            auth.session.add(doc)
+            await auth.session.flush()
 
             # Store file if provided
             if file_content and filename:
@@ -125,36 +124,22 @@ class RAGService:
                 file_path = upload_dir / f"{doc.id}_{filename}"
                 file_path.write_bytes(file_content)
 
-                doc.file_path = str(file_path)  # type: ignore[assignment]
+                doc.file_path = str(file_path)
 
-            await session.commit()
+            await auth.session.commit()
+            await auth.session.refresh(doc)
 
             # Process the document immediately after upload
             try:
-                await self.process_document(session, doc.id)
+                await self.process_document(auth.session, doc.id)
             except Exception:
                 logger.exception("Failed to process document %s", doc.id)
                 # Don't fail the upload if processing fails - it can be retried later
 
-            return DocumentResponse(
-                id=doc.id,
-                course_id=doc.course_id,
-                document_type=doc.document_type or "unknown",
-                title=doc.title,
-                file_path=doc.file_path,
-                url=doc.url,
-                source_url=doc.source_url,
-                crawl_date=doc.crawl_date,
-                content_hash=doc.content_hash,
-                doc_metadata=doc.doc_metadata,
-                created_at=doc.created_at,
-                processed_at=doc.processed_at,
-                embedded_at=doc.embedded_at,
-                status=doc.status,
-            )
+            return DocumentResponse.model_validate(doc)
 
         except Exception as e:
-            await session.rollback()
+            await auth.session.rollback()
             logger.exception("Failed to upload document")
             raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -316,12 +301,11 @@ class RAGService:
             raise
 
     async def search_documents(
-        self, session: AsyncSession, user_id: uuid.UUID, course_id: uuid.UUID, query: str, top_k: int | None = None
+        self, auth: AuthContext, course_id: uuid.UUID, query: str, top_k: int | None = None
     ) -> list[SearchResult]:
-        """Search documents in a course."""
-        # Validate user owns the course
-        await self.validate_course_ownership(session, course_id, user_id)
-        return await self._search_roadmap_documents(session, course_id, query, top_k)
+        """Search documents using AuthContext, ensuring user ownership."""
+        await auth.get_or_404(Roadmap, course_id, "course")
+        return await self._search_roadmap_documents(auth.session, course_id, query, top_k)
 
     async def _search_roadmap_documents(
         self, session: AsyncSession, course_id: uuid.UUID, query: str, top_k: int | None = None
@@ -350,88 +334,69 @@ class RAGService:
             return []
 
     async def get_documents(
-        self, session: AsyncSession, user_id: uuid.UUID, course_id: uuid.UUID, skip: int = 0, limit: int = 20
+        self, auth: AuthContext, course_id: uuid.UUID, skip: int = 0, limit: int = 20
     ) -> list[DocumentResponse]:
-        """Get documents for a course."""
-        # Validate user owns the course
-        await self.validate_course_ownership(session, course_id, user_id)
+        """Get documents for a course, ensuring user ownership."""
+        # Verify user owns the course - this will throw 404 if not found or not owned
+        await auth.get_or_404(Roadmap, course_id, "course")
 
         try:
-            result = await session.execute(
+            # Now we know the user owns the course, we can query its documents directly
+            # No need to join with roadmaps again since ownership is already verified
+            result = await auth.session.execute(
                 text("""
-                    SELECT rd.* FROM roadmap_documents rd
-                    JOIN roadmaps r ON rd.roadmap_id = r.id
-                    WHERE rd.roadmap_id = :course_id AND r.user_id = :user_id
-                    ORDER BY rd.created_at DESC
+                    SELECT * FROM roadmap_documents
+                    WHERE roadmap_id = :course_id
+                    ORDER BY created_at DESC
                     LIMIT :limit OFFSET :skip
                 """),
-                {"course_id": str(course_id), "user_id": str(user_id), "limit": limit, "skip": skip},
+                {"course_id": str(course_id), "limit": limit, "skip": skip},
             )
 
-            docs = []
-            for row in result.fetchall():
-                row_dict = row._asdict()
-                docs.append(
-                    DocumentResponse(
-                        id=row_dict["id"],
-                        course_id=row_dict["roadmap_id"],  # Maps to course_id field
-                        title=row_dict["title"],
-                        source_url=row_dict.get("source_url"),
-                        document_type=row_dict["document_type"],
-                        file_path=row_dict.get("file_path"),
-                        url=row_dict.get("url"),
-                        crawl_date=row_dict.get("crawl_date"),
-                        content_hash=row_dict.get("content_hash"),
-                        doc_metadata=row_dict.get("metadata"),
-                        status=row_dict["status"],
-                        created_at=row_dict["created_at"],
-                        processed_at=row_dict.get("processed_at"),
-                        embedded_at=row_dict.get("embedded_at"),
-                    )
-                )
-            return docs
+            return [DocumentResponse.model_validate(row._asdict()) for row in result.fetchall()]
         except Exception:
             logger.exception("Failed to get documents")
             # Return empty list instead of crashing
             return []
 
-    async def count_documents(self, session: AsyncSession, user_id: uuid.UUID, course_id: uuid.UUID) -> int:
-        """Count documents for a course."""
-        # Validate user owns the course
-        await self.validate_course_ownership(session, course_id, user_id)
+    async def count_documents(self, auth: AuthContext, course_id: uuid.UUID) -> int:
+        """Count documents for a course, ensuring user ownership."""
+        # Verify user owns the course - this will throw 404 if not found or not owned
+        await auth.get_or_404(Roadmap, course_id, "course")
 
         try:
-            result = await session.execute(
+            # Now we know the user owns the course, we can count its documents directly
+            result = await auth.session.execute(
                 text("""
-                    SELECT COUNT(*) FROM roadmap_documents rd
-                    JOIN roadmaps r ON rd.roadmap_id = r.id
-                    WHERE rd.roadmap_id = :course_id AND r.user_id = :user_id
+                    SELECT COUNT(*) FROM roadmap_documents
+                    WHERE roadmap_id = :course_id
                 """),
-                {"course_id": str(course_id), "user_id": str(user_id)},
+                {"course_id": str(course_id)},
             )
             return result.scalar_one_or_none() or 0
         except Exception:
             logger.exception("Failed to count documents")
             return 0
 
-    async def delete_document(self, session: AsyncSession, user_id: uuid.UUID, document_id: int) -> None:
-        """Delete a document and its chunks."""
+    async def delete_document(self, auth: AuthContext, document_id: int) -> None:
+        """Delete a document and its chunks, ensuring user ownership."""
         try:
-            # First check if document exists and user owns it
-            result = await session.execute(
+            # First get the document to find its roadmap_id
+            result = await auth.session.execute(
                 text("""
-                    SELECT rd.id, rd.file_path, rd.roadmap_id
-                    FROM roadmap_documents rd
-                    JOIN roadmaps r ON rd.roadmap_id = r.id
-                    WHERE rd.id = :doc_id AND r.user_id = :user_id
+                    SELECT id, file_path, roadmap_id
+                    FROM roadmap_documents
+                    WHERE id = :doc_id
                 """),
-                {"doc_id": document_id, "user_id": str(user_id)},
+                {"doc_id": document_id},
             )
             doc = result.fetchone()
 
             if not doc:
-                msg = f"Document {document_id} not found"
-                raise ValueError(msg)
+                raise HTTPException(status_code=404, detail="Document not found")
+
+            # Verify user owns the course/roadmap that contains this document
+            await auth.get_or_404(Roadmap, doc.roadmap_id, "course")
 
             # Delete file from filesystem if it exists
             if doc.file_path:
@@ -445,7 +410,7 @@ class RAGService:
             # Old document_chunks table has been removed - chunks are now in rag_document_chunks
             # Delete from rag_document_chunks using the doc_uuid scheme
             doc_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"document_{document_id}")
-            chunks_result = await session.execute(
+            chunks_result = await auth.session.execute(
                 text("DELETE FROM rag_document_chunks WHERE doc_id = :doc_uuid AND doc_type = 'course'"),
                 {"doc_uuid": str(doc_uuid)},
             )
@@ -454,29 +419,41 @@ class RAGService:
                 logger.info(f"Deleted {chunks_deleted} RAG chunks for document {document_id}")
 
             # Delete document
-            await session.execute(text("DELETE FROM roadmap_documents WHERE id = :doc_id"), {"doc_id": document_id})
+            await auth.session.execute(text("DELETE FROM roadmap_documents WHERE id = :doc_id"), {"doc_id": document_id})
 
-            await session.commit()
+            await auth.session.commit()
             logger.info("Successfully deleted document %s", document_id)
 
         except Exception:
-            await session.rollback()
+            await auth.session.rollback()
             logger.exception("Failed to delete document %s", document_id)
             raise
 
-    @staticmethod
-    async def validate_course_ownership(
-        session: AsyncSession,
-        course_id: uuid.UUID,
-        user_id: uuid.UUID,
-    ) -> None:
-        """Validate that the user owns the course."""
-        result = await session.execute(
-            text("SELECT id FROM roadmaps WHERE id = :course_id AND user_id = :user_id"),
-            {"course_id": str(course_id), "user_id": str(user_id)},
-        )
-        if not result.fetchone():
-            raise HTTPException(status_code=404, detail="Course not found or access denied")
+    async def get_document(self, auth: AuthContext, document_id: int) -> DocumentResponse:
+        """Get a single document, ensuring user ownership."""
+        try:
+            # First get the document
+            result = await auth.session.execute(
+                text("""
+                    SELECT * FROM roadmap_documents
+                    WHERE id = :doc_id
+                """),
+                {"doc_id": document_id},
+            )
+            row = result.fetchone()
+
+            if not row:
+                raise HTTPException(status_code=404, detail="Document not found")
+
+            # Verify user owns the course/roadmap that contains this document
+            await auth.get_or_404(Roadmap, row.roadmap_id, "course")
+
+            return DocumentResponse.model_validate(row._asdict())
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception("Error getting document %s", document_id)
+            raise HTTPException(status_code=500, detail="Failed to get document") from e
 
     @staticmethod
     async def delete_chunks_by_doc_id(

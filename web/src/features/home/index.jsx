@@ -80,8 +80,6 @@ export default function HomePage() {
 		filters,
 		pinning,
 		setContentItems,
-		setFilterOptions,
-		setSortOptions,
 		loadContentData,
 		setIsGenerating,
 	})

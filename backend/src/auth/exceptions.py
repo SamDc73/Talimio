@@ -59,3 +59,14 @@ class UnknownAuthProviderError(HTTPException):
 
     def __init__(self, provider: str) -> None:
         super().__init__(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unknown AUTH_PROVIDER: {provider}")
+
+
+class NotFoundError(HTTPException):
+    """Standard 404 error for missing or unauthorized resources.
+
+    Use this for ownership-guarded lookups where the resource either
+    doesn't exist or isn't accessible to the current user.
+    """
+
+    def __init__(self, detail: str = "Resource not found") -> None:
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)

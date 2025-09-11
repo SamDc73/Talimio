@@ -143,6 +143,9 @@ const executeRequest = async (method, endpoint, data = null, options = {}) => {
 				...options.headers,
 			},
 			credentials: "include", // Include httpOnly cookies
+			// Bypass browser cache for GET requests to ensure fresh data
+			// Especially important for content that can be modified/deleted
+			cache: method === "GET" ? "no-store" : undefined,
 			...options,
 		}
 

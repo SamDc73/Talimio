@@ -231,16 +231,23 @@ class BooksFacade:
             logger.exception("Error updating book %s", book_id)
             return {"error": "Failed to update book", "success": False}
 
-    async def delete_book(self, session: Any, book_id: UUID, user_id: UUID) -> None:
+    async def delete_book(self, db: Any, book_id: UUID, user_id: UUID) -> None:
         """
         Delete book and all related data.
 
-        Coordinates deletion across all book services.
+        Args:
+            db: Database session
+            book_id: Book ID to delete
+            user_id: User ID for ownership validation
+
+        Raises
+        ------
+            ValueError: If book not found or user doesn't own it
         """
         from sqlalchemy import select
 
         # Get book with user validation
-        result = await session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
+        result = await db.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
         book = result.scalar_one_or_none()
 
         if not book:
@@ -248,8 +255,8 @@ class BooksFacade:
             raise ValueError(msg)
 
         # Delete the book (cascade handles related records)
-        await session.delete(book)
-        await session.commit()
+        await db.delete(book)
+        # Note: Commit is handled by the caller (content_service)
 
     async def search_books(self, query: str, user_id: UUID, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         """

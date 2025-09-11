@@ -123,9 +123,6 @@ class ContentTransformService:
             file_type="pdf",  # Default for now, could be extracted from file
         )
 
-        # Log the raw progress value from database
-        logger.info(f"📚 Transform: Book {row.id} has row.progress = {row.progress}")
-
         # Progress will be calculated later by the progress service
         progress = _create_progress_data(percentage=row.progress or 0, completed_items=0, total_items=0)
 

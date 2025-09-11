@@ -123,25 +123,28 @@ class ProgressService:
         await self.session.commit()
         return result.rowcount > 0
 
-    async def get_content_type(self, content_id: UUID) -> ContentType | None:
-        """Determine content type by checking which table contains the content."""
+    async def get_content_type(self, content_id: UUID, user_id: UUID) -> ContentType | None:
+        """Determine content type by checking which table contains the content AND user owns it."""
         # Check books (uses id column which is UUID)
         result = await self.session.execute(
-            text("SELECT 1 FROM books WHERE id = :content_id"), {"content_id": str(content_id)}
+            text("SELECT 1 FROM books WHERE id = :content_id AND user_id = :user_id"),
+            {"content_id": str(content_id), "user_id": str(user_id)}
         )
         if result.first():
             return "book"
 
         # Check videos (uses id column which is UUID)
         result = await self.session.execute(
-            text("SELECT 1 FROM videos WHERE id = :content_id"), {"content_id": str(content_id)}
+            text("SELECT 1 FROM videos WHERE id = :content_id AND user_id = :user_id"),
+            {"content_id": str(content_id), "user_id": str(user_id)}
         )
         if result.first():
             return "video"
 
         # Check courses/roadmaps (uses id column which is UUID)
         result = await self.session.execute(
-            text("SELECT 1 FROM roadmaps WHERE id = :content_id"), {"content_id": str(content_id)}
+            text("SELECT 1 FROM roadmaps WHERE id = :content_id AND user_id = :user_id"),
+            {"content_id": str(content_id), "user_id": str(user_id)}
         )
         if result.first():
             return "course"

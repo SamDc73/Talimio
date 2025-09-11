@@ -7,10 +7,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth import UserId
-from src.database.session import get_db_session
+from src.auth import CurrentAuth
 from src.middleware.security import api_rate_limit
 
 from .models import Highlight
@@ -25,15 +23,14 @@ router = APIRouter(tags=["highlights"], dependencies=[Depends(api_rate_limit)])
 @router.get("/api/v1/books/{book_id}/highlights", response_model=list[HighlightResponse])
 async def get_book_highlights(
     book_id: UUID,
-    user_id: UserId,
-    db: AsyncSession = Depends(get_db_session),
+    auth: CurrentAuth,
 ) -> list[HighlightResponse]:
     """Get all highlights for a specific book."""
     try:
-        result = await db.execute(
+        result = await auth.session.execute(
             select(Highlight).where(
                 and_(
-                    Highlight.user_id == user_id,
+                    Highlight.user_id == auth.user_id,
                     Highlight.content_type == "book",
                     Highlight.content_id == book_id,
                 )
@@ -64,22 +61,21 @@ async def get_book_highlights(
 async def create_book_highlight(
     book_id: UUID,
     highlight_create: HighlightCreate,
-    user_id: UserId,
-    db: AsyncSession = Depends(get_db_session),
+    auth: CurrentAuth,
 ) -> HighlightResponse:
     """Create a new highlight for a book."""
     try:
         # Create the highlight
         highlight = Highlight(
-            user_id=user_id,
+            user_id=auth.user_id,
             content_type="book",
             content_id=book_id,
             highlight_data=highlight_create.source_data,
         )
 
-        db.add(highlight)
-        await db.commit()
-        await db.refresh(highlight)
+        auth.session.add(highlight)
+        await auth.session.commit()
+        await auth.session.refresh(highlight)
 
         return HighlightResponse(
             id=highlight.id,
@@ -92,24 +88,23 @@ async def create_book_highlight(
         )
     except Exception as e:
         logger.error(f"Error creating highlight for book {book_id}: {e}")
-        await db.rollback()
+        await auth.session.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create highlight")
 
 
 @router.delete("/api/v1/highlights/{highlight_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_highlight(
     highlight_id: UUID,
-    user_id: UserId,
-    db: AsyncSession = Depends(get_db_session),
+    auth: CurrentAuth,
 ) -> None:
     """Delete a highlight by ID."""
     try:
         # Find the highlight
-        result = await db.execute(
+        result = await auth.session.execute(
             select(Highlight).where(
                 and_(
                     Highlight.id == highlight_id,
-                    Highlight.user_id == user_id,
+                    Highlight.user_id == auth.user_id,
                 )
             )
         )
@@ -118,14 +113,14 @@ async def delete_highlight(
         if not highlight:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Highlight not found")
 
-        await db.delete(highlight)
-        await db.commit()
+        await auth.session.delete(highlight)
+        await auth.session.commit()
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error deleting highlight {highlight_id}: {e}")
-        await db.rollback()
+        await auth.session.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete highlight")
 
 
@@ -133,17 +128,16 @@ async def delete_highlight(
 async def update_highlight(
     highlight_id: UUID,
     highlight_update: HighlightCreate,
-    user_id: UserId,
-    db: AsyncSession = Depends(get_db_session),
+    auth: CurrentAuth,
 ) -> HighlightResponse:
     """Update a highlight by ID."""
     try:
         # Find the highlight
-        result = await db.execute(
+        result = await auth.session.execute(
             select(Highlight).where(
                 and_(
                     Highlight.id == highlight_id,
-                    Highlight.user_id == user_id,
+                    Highlight.user_id == auth.user_id,
                 )
             )
         )
@@ -155,8 +149,8 @@ async def update_highlight(
         # Update the highlight data
         highlight.highlight_data = highlight_update.source_data
 
-        await db.commit()
-        await db.refresh(highlight)
+        await auth.session.commit()
+        await auth.session.refresh(highlight)
 
         return HighlightResponse(
             id=highlight.id,
@@ -171,5 +165,5 @@ async def update_highlight(
         raise
     except Exception as e:
         logger.error(f"Error updating highlight {highlight_id}: {e}")
-        await db.rollback()
+        await auth.session.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update highlight")

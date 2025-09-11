@@ -2,11 +2,9 @@ import logging
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 
-from src.auth import UserId
-from src.database.session import get_db_session
+from src.auth import CurrentAuth
 from src.videos.schemas import (
     VideoChapterProgressSync,
     VideoChapterResponse,
@@ -33,14 +31,13 @@ router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
 # @upload_rate_limit  # TODO: Enable rate limiting with request parameter
 async def create_video(
     video_data: VideoCreate,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
     background_tasks: BackgroundTasks,
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> VideoResponse:
     """Add a YouTube video to the library."""
     try:
         return await video_service.create_video(
-            db=db, video_data=video_data, background_tasks=background_tasks, user_id=user_id
+            db=auth.session, video_data=video_data, background_tasks=background_tasks, user_id=auth.user_id
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -52,8 +49,7 @@ async def create_video(
 @router.get("")
 # @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def list_videos(
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: UserId,
+    auth: CurrentAuth,
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     limit: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
     channel: Annotated[str | None, Query(description="Filter by channel name")] = None,
@@ -63,7 +59,7 @@ async def list_videos(
     """List all YouTube videos in library with optional filtering."""
     try:
         return await video_service.get_videos(
-            db=db, user_id=user_id, page=page, size=limit, channel=channel, search=search, tags=tags
+            db=auth.session, user_id=auth.user_id, page=page, size=limit, channel=channel, search=search, tags=tags
         )
     except Exception as e:
         logger.exception(f"Error listing videos: {e}")
@@ -74,12 +70,11 @@ async def list_videos(
 # @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video(
     video_id: str,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> VideoResponse:
     """Get a specific video by ID."""
     try:
-        return await video_service.get_video(db=db, video_id=video_id, user_id=user_id)
+        return await video_service.get_video(db=auth.session, video_id=video_id, user_id=auth.user_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
@@ -92,12 +87,13 @@ async def get_video(
 async def update_video(
     video_id: str,
     update_data: VideoUpdate,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> VideoResponse:
     """Update video metadata."""
     try:
-        return await video_service.update_video(db=db, video_id=video_id, update_data=update_data, user_id=user_id)
+        return await video_service.update_video(
+            db=auth.session, video_id=video_id, update_data=update_data, user_id=auth.user_id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
@@ -109,12 +105,12 @@ async def update_video(
 # @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def delete_video(
     video_id: str,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> None:
     """Delete a video."""
     try:
-        return await video_service.delete_video(db=db, video_id=video_id, user_id=user_id)
+        await video_service.delete_video(db=auth.session, video_id=video_id, user_id=auth.user_id)
+        await auth.session.commit()
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
@@ -127,8 +123,7 @@ async def delete_video(
 async def update_video_progress(
     video_id: str,
     progress_data: VideoProgressUpdate,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> VideoProgressResponse:
     """Update video watch progress.
 
@@ -160,7 +155,7 @@ async def update_video_progress(
             metadata["completed_chapters"] = progress_data.completed_chapters
 
         # Use unified progress service
-        service = ProgressService(db)
+        service = ProgressService(auth.session)
 
         # Create progress update
         progress_update = ProgressUpdate(
@@ -168,13 +163,13 @@ async def update_video_progress(
         )
 
         # Update via unified service
-        result = await service.update_progress(user_id, video_id_uuid, "video", progress_update)
+        result = await service.update_progress(auth.user_id, video_id_uuid, "video", progress_update)
 
         # Convert to legacy response format for backward compatibility
         return VideoProgressResponse(
             id=result.id,
             video_id=video_id_uuid,
-            user_id=user_id,
+            user_id=auth.user_id,
             last_position=metadata.get("last_position", 0),
             completion_percentage=result.progress_percentage,
             last_watched_at=result.updated_at,
@@ -192,8 +187,7 @@ async def update_video_progress(
 # @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video_progress(
     video_id: str,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> VideoProgressResponse | None:
     """Get video watch progress.
 
@@ -212,15 +206,15 @@ async def get_video_progress(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid video ID format") from None
 
         # Use unified progress service
-        service = ProgressService(db)
-        progress = await service.get_single_progress(user_id, video_id_uuid)
+        service = ProgressService(auth.session)
+        progress = await service.get_single_progress(auth.user_id, video_id_uuid)
 
         if not progress:
             # Return default response
             return VideoProgressResponse(
                 id=UUID("00000000-0000-0000-0000-000000000000"),
                 video_id=video_id_uuid,
-                user_id=user_id,
+                user_id=auth.user_id,
                 last_position=0,
                 completion_percentage=0,
                 last_watched_at=None,
@@ -233,7 +227,7 @@ async def get_video_progress(
         return VideoProgressResponse(
             id=progress.id,
             video_id=video_id_uuid,
-            user_id=user_id,
+            user_id=auth.user_id,
             last_position=metadata.get("last_position", 0),
             completion_percentage=progress.progress_percentage,
             last_watched_at=metadata.get("last_watched_at", progress.updated_at),
@@ -252,8 +246,7 @@ async def get_video_progress(
 async def update_video_progress_post(
     video_id: str,
     progress_data: VideoProgressUpdate,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> VideoProgressResponse:
     """Update video watch progress (POST version for sendBeacon compatibility).
 
@@ -261,19 +254,18 @@ async def update_video_progress_post(
     It delegates to the unified progress system.
     """
     # Delegate to the PATCH endpoint handler
-    return await update_video_progress(video_id, progress_data, db, user_id)
+    return await update_video_progress(video_id, progress_data, auth)
 
 
 @router.get("/{video_id}/chapters")
 # @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video_chapters(
     video_id: str,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> list[VideoChapterResponse]:
     """Get all chapters for a video."""
     try:
-        return await video_service.get_video_chapters(db, video_id, user_id)
+        return await video_service.get_video_chapters(auth.session, video_id, auth.user_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
@@ -286,12 +278,11 @@ async def get_video_chapters(
 async def get_video_chapter(
     video_id: str,
     chapter_id: str,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> VideoChapterResponse:
     """Get a specific chapter for a video."""
     try:
-        return await video_service.get_video_chapter(db, video_id, chapter_id, user_id)
+        return await video_service.get_video_chapter(auth.session, video_id, chapter_id, auth.user_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
@@ -305,12 +296,13 @@ async def update_video_chapter_status(
     video_id: str,
     chapter_id: str,
     status_data: VideoChapterStatusUpdate,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> VideoChapterResponse:
     """Update the status of a video chapter."""
     try:
-        return await video_service.update_video_chapter_status(db, video_id, chapter_id, status_data.status, user_id)
+        return await video_service.update_video_chapter_status(
+            auth.session, video_id, chapter_id, status_data.status, auth.user_id
+        )
     except ValueError as e:
         if "Invalid status" in str(e):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -324,12 +316,11 @@ async def update_video_chapter_status(
 # @ai_rate_limit  # TODO: Enable rate limiting with request parameter
 async def extract_video_chapters(
     video_id: str,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> dict[str, Any]:
     """Extract chapters from YouTube video."""
     try:
-        chapters = await video_service.extract_and_create_video_chapters(db, video_id, user_id)
+        chapters = await video_service.extract_and_create_video_chapters(auth.session, video_id, auth.user_id)
         return {"count": len(chapters), "chapters": chapters}
     except ValueError as e:
         if "not found" in str(e):
@@ -345,17 +336,16 @@ async def extract_video_chapters(
 async def sync_video_chapter_progress(
     video_id: str,
     progress_data: VideoChapterProgressSync,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> VideoResponse:
     """Sync chapter progress from web app to update video completion percentage."""
     try:
         return await video_service.sync_chapter_progress(
-            db,
+            auth.session,
             video_id,
             progress_data.completed_chapter_ids,
             progress_data.total_chapters,
-            user_id=user_id,
+            user_id=auth.user_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -368,12 +358,11 @@ async def sync_video_chapter_progress(
 # @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video_transcript(
     video_id: str,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    _user_id: UserId,
+    auth: CurrentAuth,
 ) -> VideoTranscriptResponse:
     """Get transcript segments with timestamps for a video."""
     try:
-        return await video_service.get_video_transcript_segments(db, video_id)
+        return await video_service.get_video_transcript_segments(auth.session, video_id, auth.user_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
@@ -385,26 +374,25 @@ async def get_video_transcript(
 # @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video_details(
     video_id: str,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> VideoDetailResponse:
     """Get video with chapters and transcript info in a single optimized request."""
     try:
         # Get video
-        video = await video_service.get_video(db, video_id, user_id)
+        video = await video_service.get_video(auth.session, video_id, auth.user_id)
 
         # Get chapters
         try:
-            chapters = await video_service.get_video_chapters(db, video_id, user_id)
+            chapters = await video_service.get_video_chapters(auth.session, video_id, auth.user_id)
         except Exception:
             chapters = []
 
         # Get transcript info (not the full segments, just metadata)
-        transcript_info = await video_service.get_transcript_info(db, video_id)
+        transcript_info = await video_service.get_transcript_info(auth.session, video_id)
 
         # Get progress
         try:
-            progress = await video_service.get_video_progress(db, video_id, user_id)
+            progress = await video_service.get_video_progress(auth.session, video_id, auth.user_id)
         except Exception:
             progress = None
 

@@ -252,9 +252,9 @@ class CoursesFacade:
 
         # Delete the course (cascade handles related records)
         await db.delete(course)
-        await db.commit()
+        # Note: Commit is handled by the caller (content_service)
 
-        # Delete RAG chunks (best-effort, after commit)
+        # Delete RAG chunks (best-effort, will be done after caller commits)
         try:
             from src.ai.rag.service import RAGService
 

@@ -496,7 +496,7 @@ class VideoService:
         video = await self._get_user_video(db, video_id, user_id)
 
         await db.delete(video)
-        await db.commit()
+        # Note: Commit is handled by the caller (content_service)
 
     async def fetch_video_info(self, url: str) -> dict[str, Any]:
         """Fetch video information using yt-dlp."""
@@ -809,15 +809,16 @@ class VideoService:
             "processed_at": row.transcript_data.get("processed_at"),
         }
 
-    async def get_video_transcript_segments(self, db: AsyncSession, video_id: str) -> VideoTranscriptResponse:
+    async def get_video_transcript_segments(self, db: AsyncSession, video_id: str, user_id: UUID | None = None) -> VideoTranscriptResponse:
         """Get transcript segments with timestamps for a video."""
         # Convert string UUID to UUID object
         video_id_obj = parse_video_id(video_id)
 
         # Get video to ensure it exists - ONLY load necessary fields
-        result = await db.execute(
-            select(Video.id, Video.url, Video.transcript_data).where(Video.id == video_id_obj),
-        )
+        query = select(Video.id, Video.url, Video.transcript_data).where(Video.id == video_id_obj)
+        if user_id:
+            query = query.where(Video.user_id == user_id)
+        result = await db.execute(query)
         video_data = result.first()
 
         if not video_data:

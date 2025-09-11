@@ -16,7 +16,6 @@ from uuid import UUID
 from mem0 import AsyncMemory
 from psycopg_pool import ConnectionPool
 
-from src.auth.config import DEFAULT_USER_ID
 from src.config import env
 from src.config.settings import get_settings
 
@@ -125,9 +124,11 @@ class MemoryWrapper:
         return pool
 
     def _get_effective_user_id(self, user_id: UUID) -> UUID:
-        """Get the effective user ID based on auth mode."""
-        if self.settings.AUTH_PROVIDER == "none":
-            return DEFAULT_USER_ID
+        """Return the user_id provided by upstream auth.
+
+        Auth middleware/dependencies ensure correct resolution for single-user mode,
+        so this layer should not apply additional fallbacks.
+        """
         return user_id
 
     async def get_memory_client(self) -> AsyncMemory:

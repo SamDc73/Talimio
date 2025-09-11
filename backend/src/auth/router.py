@@ -9,10 +9,10 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, EmailStr
 
-from src.auth.config import DEFAULT_USER_ID, supabase
-from src.auth.dependencies import UserId
+from src.auth.config import supabase
+from src.auth.context import CurrentAuth
 from src.config.settings import get_settings
-from src.middleware.security import api_rate_limit, auth_rate_limit
+from src.middleware.security import auth_rate_limit
 
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -22,14 +22,6 @@ logger = logging.getLogger(__name__)
 # Maps token prefix to a lock to prevent concurrent refreshes
 refresh_locks: dict[str, asyncio.Lock] = {}
 
-
-async def cleanup_refresh_locks() -> None:
-    """Periodically clean up old locks to prevent memory leaks."""
-    # Keep only the last 100 locks (most recent refresh attempts)
-    if len(refresh_locks) > 100:
-        # Clear all locks - they're short-lived anyway
-        refresh_locks.clear()
-        logger.info("Cleared refresh locks cache")
 
 
 def set_auth_cookie(response: Response, token: str) -> None:
@@ -56,6 +48,19 @@ def clear_auth_cookie(response: Response) -> None:
         key="access_token",
         httponly=True,
         secure=is_production,  # Match set_auth_cookie logic
+        samesite="lax" if is_production else None,
+        path="/",
+    )
+
+
+def clear_refresh_cookie(response: Response) -> None:
+    """Clear refresh token cookie."""
+    settings = get_settings()
+    is_production = settings.ENVIRONMENT == "production"
+    response.delete_cookie(
+        key="refresh_token",
+        httponly=True,
+        secure=is_production,
         samesite="lax" if is_production else None,
         path="/",
     )
@@ -265,12 +270,13 @@ async def logout(_request: Request, response: Response) -> LogoutResponse:
 
 
 @router.get("/me")
-@api_rate_limit  # Add rate limiting to prevent abuse
-async def get_current_user(request: Request, user_id: UserId) -> UserResponse:
+async def get_current_user(request: Request, auth: CurrentAuth) -> UserResponse:
     """Get the current user using centralized authentication."""
-    # Single-user mode - return default user info
-    if user_id == DEFAULT_USER_ID:
-        return UserResponse(id=str(DEFAULT_USER_ID), email="demo@talimio.com", username="Demo User")
+    # In single-user mode, auth.user_id will be the DEFAULT_USER_ID internally
+    # Check if we're in single-user mode by checking settings
+    settings = get_settings()
+    if settings.AUTH_PROVIDER == "none":
+        return UserResponse(id=str(auth.user_id), email="demo@talimio.com", username="Demo User")
 
     # Multi-user mode - get user details from Supabase
     if not supabase:
@@ -290,7 +296,7 @@ async def get_current_user(request: Request, user_id: UserId) -> UserResponse:
     if not token:
         # We have user_id from centralized auth, but need token for details
         # This shouldn't happen if auth is working correctly
-        logger.warning(f"Have user_id {user_id} but no token for details")
+        logger.warning(f"Have user_id {auth.user_id} but no token for details")
         raise HTTPException(status_code=401, detail="Token required for user details")
 
     try:
@@ -303,17 +309,15 @@ async def get_current_user(request: Request, user_id: UserId) -> UserResponse:
                 username=user.user.user_metadata.get("username", user.user.email.split("@")[0]),
             )
         # This shouldn't happen if centralized auth is working
-        logger.error(f"Centralized auth passed but can't get user details for {user_id}")
+        logger.error(f"Centralized auth passed but can't get user details for {auth.user_id}")
         raise HTTPException(status_code=500, detail="Failed to get user details")
     except Exception as e:
-        logger.exception(f"Failed to get user details for {user_id}: {e}")
+        logger.exception(f"Failed to get user details for {auth.user_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to get user details") from e
 
 
-@router.post("/refresh")
-@auth_rate_limit  # Use stricter rate limit (5/min) to prevent refresh token abuse
-async def refresh_token(request: Request, response: Response) -> RefreshResponse:
-    """Refresh the access token using the refresh_token cookie."""
+async def _validate_refresh_prerequisites(request: Request, response: Response) -> str:
+    """Validate prerequisites for token refresh and return the refresh token."""
     settings = get_settings()
     if settings.AUTH_PROVIDER != "supabase":
         raise HTTPException(status_code=400, detail="Token refresh is only available with Supabase authentication")
@@ -328,6 +332,95 @@ async def refresh_token(request: Request, response: Response) -> RefreshResponse
         clear_auth_cookie(response)
         raise HTTPException(status_code=401, detail="No refresh token provided")
 
+    return refresh_token_value
+
+
+async def _perform_token_refresh(refresh_token_value: str, response: Response) -> RefreshResponse:
+    """Perform the actual token refresh with Supabase."""
+    settings = get_settings()
+
+    # Use the refresh token to get a new session (run in thread pool)
+    auth_response = await run_in_threadpool(
+        supabase.auth.refresh_session,
+        refresh_token_value
+    )
+
+    if not auth_response or not auth_response.session:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    # Update both access and refresh tokens in cookies
+    set_auth_cookie(response, auth_response.session.access_token)
+
+    # Also update the refresh token cookie with the new one
+    is_production = settings.ENVIRONMENT == "production"
+    response.set_cookie(
+        key="refresh_token",
+        value=auth_response.session.refresh_token,
+        httponly=True,
+        secure=is_production,
+        samesite="lax" if is_production else None,
+        max_age=7 * 24 * 60 * 60,  # 7 days
+        path="/",
+    )
+
+    return RefreshResponse(
+        message="Token refreshed successfully",
+        user=UserResponse(
+            id=str(auth_response.user.id),
+            email=auth_response.user.email,
+            username=auth_response.user.user_metadata.get("username"),
+        ),
+    )
+
+
+def _handle_refresh_error(error: Exception, response: Response) -> None:
+    """Handle specific refresh token errors."""
+    error_message = str(error)
+
+    # Clear the invalid refresh token cookie in all error cases
+    clear_refresh_cookie(response)
+
+    # Handle specific refresh token errors
+    if "Already Used" in error_message:
+        # This is expected when multiple refresh attempts happen
+        logger.debug("Refresh token already used - client should re-authenticate")
+        raise HTTPException(
+            status_code=401,
+            detail="Session expired. Please login again.",
+            headers={"X-Auth-Error": "token-already-used"}
+        ) from error
+    if "Refresh Token Not Found" in error_message or "Invalid Refresh Token" in error_message:
+        # Token doesn't exist or has expired
+        logger.debug("Refresh token not found or invalid - client should re-authenticate")
+        raise HTTPException(
+            status_code=401,
+            detail="Session expired. Please login again.",
+            headers={"X-Auth-Error": "token-not-found"}
+        ) from error
+    if "expired" in error_message.lower():
+        # Token has expired
+        logger.debug("Refresh token expired - client should re-authenticate")
+        raise HTTPException(
+            status_code=401,
+            detail="Session expired. Please login again.",
+            headers={"X-Auth-Error": "token-expired"}
+        ) from error
+    # For other unexpected errors, log with full traceback
+    logger.exception("Unexpected error during token refresh")
+    raise HTTPException(
+        status_code=401,
+        detail="Authentication failed. Please login again.",
+        headers={"X-Auth-Error": "refresh-failed"}
+    ) from error
+
+
+@router.post("/refresh")
+@auth_rate_limit  # Use stricter rate limit (5/min) to prevent refresh token abuse
+async def refresh_token(request: Request, response: Response) -> RefreshResponse:
+    """Refresh the access token using the refresh_token cookie."""
+    # Validate prerequisites and get the refresh token
+    refresh_token_value = await _validate_refresh_prerequisites(request, response)
+
     # Create a secure lock key using SHA256 hash (prevents collisions and protects token privacy)
     lock_key = hashlib.sha256(refresh_token_value.encode()).hexdigest()[:16]
 
@@ -341,41 +434,14 @@ async def refresh_token(request: Request, response: Response) -> RefreshResponse
     try:
         async with asyncio.timeout(2):  # 2 second timeout
             async with lock:
-                # Use the refresh token to get a new session (run in thread pool)
-                auth_response = await run_in_threadpool(
-                    supabase.auth.refresh_session,
-                    refresh_token_value
-                )
-
-                if not auth_response or not auth_response.session:
-                    raise HTTPException(status_code=401, detail="Invalid refresh token")
-
-                # Update both access and refresh tokens in cookies
-                set_auth_cookie(response, auth_response.session.access_token)
-
-                # Also update the refresh token cookie with the new one
-                is_production = settings.ENVIRONMENT == "production"
-                response.set_cookie(
-                    key="refresh_token",
-                    value=auth_response.session.refresh_token,
-                    httponly=True,
-                    secure=is_production,
-                    samesite="lax" if is_production else None,
-                    max_age=7 * 24 * 60 * 60,  # 7 days
-                    path="/",
-                )
+                result = await _perform_token_refresh(refresh_token_value, response)
 
                 # Clean up locks occasionally
-                await cleanup_refresh_locks()
+                if len(refresh_locks) > 100:
+                    refresh_locks.clear()
+                    logger.info("Cleared refresh locks cache")
 
-                return RefreshResponse(
-                    message="Token refreshed successfully",
-                    user=UserResponse(
-                        id=str(auth_response.user.id),
-                        email=auth_response.user.email,
-                        username=auth_response.user.user_metadata.get("username"),
-                    ),
-                )
+                return result
 
     except TimeoutError as timeout_err:
         # Another request is already refreshing this token
@@ -387,26 +453,7 @@ async def refresh_token(request: Request, response: Response) -> RefreshResponse
         ) from timeout_err
 
     except Exception as e:
-        # Check if it's a "refresh token already used" error
-        error_message = str(e)
-        if "Already Used" in error_message:
-            # This is expected when multiple refresh attempts happen
-            logger.debug("Refresh token already used - client should re-authenticate")
-            # Clear the stale refresh token cookie
-            response.delete_cookie("refresh_token")
-            raise HTTPException(
-                status_code=401,
-                detail="Session expired. Please login again.",
-                headers={"X-Auth-Error": "token-already-used"}
-            ) from e
-
-        # For other errors, log and return generic message
-        logger.exception("Token refresh failed")
-        response.delete_cookie("refresh_token")  # Clear invalid token
-        raise HTTPException(
-            status_code=401,
-            detail="Authentication failed. Please login again."
-        ) from e
+        _handle_refresh_error(e, response)
 
 
 @router.post("/reset-password")

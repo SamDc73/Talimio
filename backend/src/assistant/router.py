@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from src.ai.constants import rag_config
-from src.auth import UserId
+from src.auth import CurrentAuth
 from src.config import env
 
 from .schemas import (
@@ -48,12 +48,12 @@ async def debug_config() -> dict:
 @router.post("/chat", response_model=None)
 async def chat_endpoint(
     request: ChatRequest,
-    current_user_id: UserId,
+    auth: CurrentAuth,
 ) -> StreamingResponse:
     """Send a message to the AI assistant with enhanced RAG capabilities (always streaming)."""
     # Override the user_id from the request with the authenticated user_id
-    if current_user_id:
-        request.user_id = current_user_id
+    if auth and getattr(auth, "user_id", None):
+        request.user_id = auth.user_id
 
     # Always use streaming
     return StreamingResponse(
@@ -69,9 +69,10 @@ async def chat_endpoint(
 
 
 @router.post("/reprocess-book/{book_id}")
-async def reprocess_book_endpoint(book_id: UUID) -> dict:
+async def reprocess_book_endpoint(book_id: UUID, auth: CurrentAuth) -> dict:
     """Reprocess a book's chunks with updated metadata."""
     try:
+        # TODO: Verify book ownership before reprocessing
         result = await reprocess_book(book_id)
 
         if result["status"] == "error":
@@ -83,9 +84,10 @@ async def reprocess_book_endpoint(book_id: UUID) -> dict:
 
 
 @router.post("/citations")
-async def find_citations(request: CitationRequest) -> CitationResponse:
+async def find_citations(request: CitationRequest, auth: CurrentAuth) -> CitationResponse:
     """Find text locations in a book for citation highlighting."""
     try:
+        # TODO: Verify book ownership
         # Get citation service
         citations = await assistant_service.find_book_citations(
             book_id=request.book_id,
@@ -105,9 +107,10 @@ async def find_citations(request: CitationRequest) -> CitationResponse:
 
 
 @router.post("/citations/batch")
-async def find_batch_citations(request: BatchCitationRequest) -> BatchCitationResponse:
+async def find_batch_citations(request: BatchCitationRequest, auth: CurrentAuth) -> BatchCitationResponse:
     """Find text locations for multiple response texts in batch."""
     try:
+        # TODO: Verify book ownership
         all_citations = []
 
         for response_text in request.response_texts:

@@ -73,10 +73,14 @@ class BookContextStrategy(ContextRetriever):
                 return None
 
             current_page = context_meta["page"]
+            user_id = context_meta.get("user_id")  # Get user_id from context_meta
 
-            # Fetch book directly from DB (remove legacy BookService dependency)
+            # Fetch book directly from DB with ownership check
             async with async_session_maker() as session:
-                result = await session.execute(select(Book).where(Book.id == resource_id))
+                query = select(Book).where(Book.id == resource_id)
+                if user_id:
+                    query = query.where(Book.user_id == user_id)
+                result = await session.execute(query)
                 book = result.scalar_one_or_none()
 
             if not book or not book.file_path:
@@ -169,10 +173,11 @@ class VideoContextStrategy(ContextRetriever):
 
             current_timestamp = context_meta["timestamp"]
             context_window = 60  # seconds
+            user_id = context_meta.get("user_id")  # Get user_id from context_meta
 
             async with async_session_maker() as session:
                 video_service = VideoService()
-                video = await video_service.get_video(session, str(resource_id), self.user_id)
+                video = await video_service.get_video(session, str(resource_id), user_id)
 
                 if not video:
                     logging.warning(f"Video not found: {resource_id}")

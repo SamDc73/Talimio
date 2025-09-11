@@ -12,7 +12,7 @@ BACKEND_DIR = Path(__file__).parent.parent
 ENV_PATH = BACKEND_DIR / ".env"
 load_dotenv(ENV_PATH)
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -20,7 +20,6 @@ from pydantic import ValidationError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import DatabaseError, IntegrityError, OperationalError
-from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 
@@ -32,6 +31,7 @@ from .auth.exceptions import (
     InvalidTokenError,
     TokenExpiredError,
 )
+from .auth.middleware import AuthErrorMiddleware, AuthInjectionMiddleware
 from .auth.router import router as auth_router
 
 # Import models to register them with SQLAlchemy - MUST be after database.base import
@@ -48,11 +48,8 @@ from .courses.models import (  # noqa: F401
 )
 from .database.session import engine
 from .exceptions import ResourceNotFoundError, ValidationError as CustomValidationError
-from .flashcards.models import FlashcardCard, FlashcardDeck, FlashcardReview  # noqa: F401
-from .flashcards.router import router as flashcards_router
 from .highlights.models import Highlight  # noqa: F401
 from .highlights.router import router as highlights_router
-from .middleware.auth_error_handler import AuthErrorMiddleware
 from .middleware.error_handlers import (
     AuthorizationError,
     ErrorCategory,
@@ -213,62 +210,8 @@ def create_app() -> FastAPI:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-    # Global auth middleware - Always set user_id, fallback to DEFAULT_USER_ID
-    @app.middleware("http")
-    async def inject_user_context(request: Request, call_next: RequestResponseEndpoint) -> Response:
-        """Inject user context into every request."""
-        # Skip authentication for certain endpoints
-        path = request.url.path
-        auth_skip_paths = [
-            "/health",
-            "/health/db",
-            "/health/auth",
-            "/api/v1/auth/login",
-            "/api/v1/auth/signup",
-            "/api/v1/auth/refresh",
-            "/api/v1/auth/logout",
-            "/api/v1/auth/callback",
-            "/api/v1/auth/verify",
-            "/api/v1/auth/request-password-reset",
-            "/api/v1/auth/reset-password",
-            "/api/v1/auth/me",  # This endpoint handles its own auth
-            "/api/v1/auth/debug",
-            "/docs",
-            "/redoc",
-            "/openapi.json",
-        ]
-
-        # Also skip any static files
-        if any(path.startswith(skip_path) for skip_path in auth_skip_paths) or path.startswith("/static"):
-            # For auth endpoints, don't try to get user_id
-            request.state.user_id = None
-        else:
-            # Get user ID for protected endpoints
-            try:
-                from src.auth.config import get_user_id
-
-                request.state.user_id = await get_user_id(request)
-            except Exception as e:
-                # Import auth exceptions
-                from src.auth.exceptions import (
-                    AuthenticationError,
-                    InvalidTokenError,
-                    MissingTokenError,
-                    TokenExpiredError,
-                )
-                from src.middleware.error_handlers import handle_authentication_errors
-
-                # Log the error for debugging
-                logger.error(f"Auth error in middleware for {path}: {type(e).__name__}: {e}")
-
-                # Handle auth errors directly in middleware since exception handlers don't catch middleware errors
-                if isinstance(e, (AuthenticationError, InvalidTokenError, MissingTokenError, TokenExpiredError)):
-                    return await handle_authentication_errors(request, e)
-
-                # For other errors, let them propagate
-                raise
-
-        return await call_next(request)
+    # Auth middleware registration (moved to src.auth.middleware)
+    app.add_middleware(AuthInjectionMiddleware)
 
     # Add exception handlers
     @app.exception_handler(ResourceNotFoundError)
@@ -400,7 +343,7 @@ def create_app() -> FastAPI:
     app.include_router(assistant_router)
     app.include_router(books_router)
     app.include_router(content_router)
-    app.include_router(flashcards_router)
+    # app.include_router(flashcards_router)  # Discarding flashcards module
     app.include_router(highlights_router)  # Highlights for books, videos, courses
     app.include_router(progress_router)  # Unified progress tracking
     app.include_router(rag_router)  # RAG system

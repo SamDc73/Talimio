@@ -1,14 +1,11 @@
 """Progress tracking API endpoints."""
 
 import logging
-from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException, Response, status
 
-from src.auth import UserId
-from src.database.session import get_db_session
+from src.auth import CurrentAuth
 from src.middleware.security import limiter
 
 from .models import (
@@ -36,8 +33,7 @@ progress_rate_limit = limiter.limit("10/minute")
 async def get_batch_progress(
     request: BatchProgressRequest,
     response: Response,
-    user_id: UserId,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    auth: CurrentAuth,
 ) -> BatchProgressResponse:
     """Get progress for multiple content items in one request."""
     if len(request.content_ids) > MAX_BATCH_SIZE:
@@ -46,8 +42,8 @@ async def get_batch_progress(
             detail=f"Batch size exceeds maximum of {MAX_BATCH_SIZE}",
         )
 
-    service = ProgressService(session)
-    progress_data = await service.get_batch_progress(user_id, request.content_ids)
+    service = ProgressService(auth.session)
+    progress_data = await service.get_batch_progress(auth.user_id, request.content_ids)
 
     # Convert to ProgressData objects
     progress_map = {
@@ -55,29 +51,32 @@ async def get_batch_progress(
         for content_id, data in progress_data.items()
     }
 
-    # Add cache control header (30 seconds)
-    response.headers["Cache-Control"] = "private, max-age=30"
-
     return BatchProgressResponse(progress=progress_map)
 
 
 @router.get("/{content_id}")
 async def get_single_progress(
     content_id: UUID,
-    user_id: UserId,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    auth: CurrentAuth,
 ) -> ProgressResponse:
     """Get progress for a single content item."""
-    service = ProgressService(session)
-    progress = await service.get_single_progress(user_id, content_id)
+    service = ProgressService(auth.session)
+    progress = await service.get_single_progress(auth.user_id, content_id)
 
     if not progress:
-        # Return default progress if none exists
+        # Check if content exists and get its type
+        content_type = await service.get_content_type(content_id, auth.user_id)
+        if not content_type:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Content {content_id} not found or access denied",
+            )
+
+        # Return virtual progress (no DB write)
         return ProgressResponse(
             id=UUID("00000000-0000-0000-0000-000000000000"),
-            user_id=user_id,
             content_id=content_id,
-            content_type="book",  # Default, will be updated on first save
+            content_type=content_type,  # Use actual type, not default "book"
             progress_percentage=0.0,
             metadata={},
             created_at=None,
@@ -92,24 +91,25 @@ async def get_single_progress(
 async def update_progress(
     content_id: UUID,
     progress: ProgressUpdate,
-    user_id: UserId,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    auth: CurrentAuth,
 ) -> ProgressResponse:
     """Update progress for a content item."""
-    service = ProgressService(session)
+    service = ProgressService(auth.session)
 
-    # Determine content type
-    content_type = await service.get_content_type(content_id)
+    # Determine content type - now validates ownership
+    content_type = await service.get_content_type(content_id, auth.user_id)
     if not content_type:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Content {content_id} not found",
+            detail=f"Content {content_id} not found or access denied",
         )
 
     # Update progress
-    result = await service.update_progress(user_id, content_id, content_type, progress)
+    result = await service.update_progress(auth.user_id, content_id, content_type, progress)
 
-    logger.info(f"Updated progress for user {user_id}, content {content_id}: {progress.progress_percentage}%")
+    logger.info(
+        f"Updated progress for user {auth.user_id}, content {content_id}: {progress.progress_percentage}%"
+    )
 
     return result
 
@@ -117,12 +117,11 @@ async def update_progress(
 @router.delete("/{content_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_progress(
     content_id: UUID,
-    user_id: UserId,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    auth: CurrentAuth,
 ) -> None:
     """Delete progress for a content item."""
-    service = ProgressService(session)
-    deleted = await service.delete_progress(user_id, content_id)
+    service = ProgressService(auth.session)
+    deleted = await service.delete_progress(auth.user_id, content_id)
 
     if not deleted:
         raise HTTPException(
@@ -130,4 +129,4 @@ async def delete_progress(
             detail=f"Progress for content {content_id} not found",
         )
 
-    logger.info(f"Deleted progress for user {user_id}, content {content_id}")
+    logger.info(f"Deleted progress for user {auth.user_id}, content {content_id}")

@@ -192,6 +192,9 @@ class ContentService:
             else:
                 error_msg = f"Unsupported content type: {content_type}"
                 raise ValueError(error_msg)
+
+            # Always commit the deletion to persist changes
+            await session.commit()
         finally:
             # Close session if we created it
             if own_session:

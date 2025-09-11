@@ -26,6 +26,7 @@ class ChapterService:
 
     async def get_book_chapters(self, book_id: UUID) -> list[BookChapterResponse]:
         """Get all chapters for a book."""
+        # Note: This service is not currently used - facade handles chapters directly
         # Verify book exists
         book_query = select(Book).where(Book.id == book_id)
         book_result = await self.session.execute(book_query)

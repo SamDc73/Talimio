@@ -5,10 +5,9 @@ The core authentication logic remains in config.py, while this module wraps it
 for use as FastAPI dependencies.
 """
 
-from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, Request
+from fastapi import Request
 
 from src.auth.config import get_user_id
 
@@ -33,7 +32,3 @@ async def _get_user_id(request: Request) -> UUID:
     # Otherwise, get it directly
     return await get_user_id(request)
 
-
-# This is the dependency to use in routers
-# Usage: async def my_route(user_id: UserId) -> Response:
-UserId = Annotated[UUID, Depends(_get_user_id)]

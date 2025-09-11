@@ -1,18 +1,17 @@
 import { useNavigate } from "react-router-dom"
-
 import { useToast } from "@/hooks/use-toast"
-import { fetchContentData, processContentData } from "@/lib/api"
 import { api } from "@/lib/apiClient"
 
-export function useContentHandlers({
-	filters,
-	pinning,
-	setContentItems,
-	setFilterOptions,
-	setSortOptions,
-	loadContentData,
-	setIsGenerating,
-}) {
+/**
+ * Content Handlers Hook:
+ * - Event handlers for user interactions
+ * - No business logic - just triggers events
+ * - Business logic lives in stores/mutations
+ * - Uses immutable patterns (no mutations)
+ * - Server data handled by React Query (loadContentData)
+ * - UI state updates are optimistic
+ */
+export function useContentHandlers({ filters, pinning, setContentItems, loadContentData, setIsGenerating }) {
 	const navigate = useNavigate()
 	const { toast } = useToast()
 
@@ -46,21 +45,11 @@ export function useContentHandlers({
 		}
 	}
 
+	// Event handler: user created roadmap
 	const handleRoadmapCreated = async (_newRoadmap) => {
-		try {
-			// Refresh content list to include the new roadmap
-			await loadContentData()
-			toast({
-				title: "Course Created!",
-				description: "Your new course has been created successfully.",
-			})
-		} catch (_error) {
-			toast({
-				title: "Error",
-				description: "Failed to refresh content.",
-				variant: "destructive",
-			})
-		}
+		// Just trigger data refresh - let React Query handle the fetching
+		await loadContentData()
+		// Toast moved to store action or mutation onSuccess
 	}
 
 	const handleCardClick = (item) => {
@@ -77,44 +66,33 @@ export function useContentHandlers({
 		}
 	}
 
-	const handleDeleteItem = (itemId, itemType) => {
-		// Immediately remove the item from content state (optimistic update)
-		setContentItems((prevContent) => prevContent.filter((item) => item.id !== itemId && item.uuid !== itemId))
-
+	// Event handler: user requested delete
+	const handleDeleteItem = (itemId) => {
 		// Remove from pins if it was pinned
 		pinning.removePinById(itemId)
 
-		// The ContentCard component handles the actual deletion via store
-		// This handler just updates local state for immediate UI feedback
+		// Store handles:
+		// - Optimistic update
+		// - Backend call
+		// - Rollback on failure
+		// - Notifications
 	}
 
-	const handleArchiveItem = async (_itemId, _contentType, _newArchivedState) => {
-		// The ContentCard component handles the actual archiving via store
-		// Just refresh the content list to update the view
+	// Event handler: user requested archive
+	const handleArchiveItem = async () => {
+		// Store handles archiving
+		// Trigger data refresh for React Query
 		await loadContentData()
 	}
 
+	// Event handler: user updated tags
 	const handleTagsUpdated = async (itemId, _contentType, newTags) => {
-		// Update the specific item's tags in the content list
-		setContentItems((prevItems) => {
-			return prevItems.map((item) => {
-				if (item.id === itemId || item.uuid === itemId) {
-					return {
-						...item,
-						tags: newTags,
-					}
-				}
-				return item
-			})
-		})
+		// Optimistic update using immutable pattern
+		setContentItems((prevItems) =>
+			prevItems.map((item) => (item.id === itemId || item.uuid === itemId ? { ...item, tags: newTags } : item))
+		)
 
-		// Show success toast
-		toast({
-			title: "Tags Updated",
-			description: "Content tags have been updated successfully.",
-		})
-
-		// Refresh filters if needed
+		// Refresh data via React Query
 		await loadContentData()
 	}
 
@@ -123,6 +101,7 @@ export function useContentHandlers({
 		navigate(`/books/${newBook.id}`)
 	}
 
+	// Event handler: user added video
 	const handleVideoAdded = async (response) => {
 		filters.setSearchQuery("")
 		filters.setIsYoutubeMode(false)
@@ -130,41 +109,15 @@ export function useContentHandlers({
 		// Navigate to the video page
 		navigate(`/videos/${response.id}`)
 
-		// Refresh content list
-		const data = await fetchContentData()
-		const { content } = processContentData(data)
-		setContentItems(
-			content.map((item) => ({
-				...item,
-				dueDate:
-					Math.random() > 0.7
-						? new Date(Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000).toISOString()
-						: null,
-				isPaused: Math.random() > 0.9,
-				totalCards: item.cardCount,
-				due: item.dueCount || Math.floor(Math.random() * 10),
-				overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
-			}))
-		)
+		// Refresh via React Query - no mutations
+		await loadContentData()
 	}
 
+	// Event handler: user created deck
 	const handleDeckCreated = async () => {
-		// Refresh content list
-		const data = await fetchContentData()
-		const { content } = processContentData(data)
-		setContentItems(
-			content.map((item) => ({
-				...item,
-				dueDate:
-					Math.random() > 0.7
-						? new Date(Date.now() + (Math.random() * 7 - 2) * 24 * 60 * 60 * 1000).toISOString()
-						: null,
-				isPaused: Math.random() > 0.9,
-				totalCards: item.cardCount,
-				due: item.dueCount || Math.floor(Math.random() * 10),
-				overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
-			}))
-		)
+		// Refresh via React Query
+		await loadContentData()
+		// Toast should be in mutation onSuccess
 		toast({
 			title: "Deck Created!",
 			description: "Your new flashcard deck is ready to use.",

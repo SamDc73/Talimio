@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
-from src.auth import UserId
+from src.auth import CurrentAuth
 from src.books.models import Book
 from src.database.session import DbSession
 from src.middleware.security import books_rate_limit
@@ -69,12 +69,11 @@ def _build_progress_dict(progress_data: BookProgressUpdate) -> dict:
     return progress_dict
 
 
-def _convert_to_progress_response(progress: dict, book_id: UUID, user_id: UUID) -> BookProgressResponse:
+def _convert_to_progress_response(progress: dict, book_id: UUID) -> BookProgressResponse:
     """Convert progress dict to response format."""
     return BookProgressResponse(
         id=progress.get("id"),  # None if not yet saved to database
         book_id=book_id,
-        user_id=user_id,
         current_page=progress.get("page", progress.get("current_page", 1)),
         progress_percentage=progress.get("completion_percentage", 0),
         total_pages_read=progress.get("total_pages_read", progress.get("page", 1)),
@@ -91,7 +90,7 @@ def _convert_to_progress_response(progress: dict, book_id: UUID, user_id: UUID) 
 
 @router.get("")
 async def list_books(
-    user_id: UserId,
+    auth: CurrentAuth,
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     limit: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
     search: Annotated[str | None, Query(description="Search in title, author, or description")] = None,
@@ -100,7 +99,7 @@ async def list_books(
     """List all books with pagination and optional filtering."""
     try:
         # Get books through facade
-        result = await books_facade.get_user_books(user_id, include_progress=True)
+        result = await books_facade.get_user_books(auth.user_id, include_progress=True)
 
         if not result.get("success"):
             raise HTTPException(
@@ -145,10 +144,10 @@ async def list_books(
 
 
 @router.get("/{book_id}")
-async def get_book_endpoint(book_id: UUID, user_id: UserId) -> BookWithProgress:
+async def get_book_endpoint(book_id: UUID, auth: CurrentAuth) -> BookWithProgress:
     """Get book details with progress information."""
     try:
-        result = await books_facade.get_book_with_progress(book_id, user_id)
+        result = await books_facade.get_book_with_progress(book_id, auth.user_id)
 
         if not result.get("success"):
             if "not found" in result.get("error", "").lower():
@@ -207,7 +206,6 @@ async def get_book_endpoint(book_id: UUID, user_id: UserId) -> BookWithProgress:
             progress=BookProgressResponse(
                 id=progress.get("id"),  # None if not yet saved to database
                 book_id=book_id,
-                user_id=user_id,
                 current_page=progress.get("current_page", 1),
                 progress_percentage=progress.get("completion_percentage", 0),
                 total_pages_read=progress.get("total_pages_read", progress.get("page", 1)),
@@ -232,7 +230,7 @@ async def get_book_endpoint(book_id: UUID, user_id: UserId) -> BookWithProgress:
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_book_endpoint(
-    user_id: UserId,
+    auth: CurrentAuth,
     file: Annotated[UploadFile, File(description="Book file (PDF or EPUB)")],
     title: Annotated[str, Form(description="Book title")],
     author: Annotated[str | None, Form(description="Book author")] = None,
@@ -274,7 +272,7 @@ async def create_book_endpoint(
         file_content = await file.read()
 
         # Generate the storage key
-        storage_key = f"books/{user_id}/{file.filename}"
+        storage_key = f"books/{auth.user_id!s}/{file.filename}"
         logger.info(f"Uploading file to storage: {storage_key}")
 
         # Upload the file (returns None, we use the key as the path)
@@ -329,7 +327,7 @@ async def create_book_endpoint(
 
         # Upload book through facade
         result = await books_facade.upload_book(
-            file_path=file_path, title=final_title, user_id=user_id, metadata=book_metadata
+            file_path=file_path, title=final_title, user_id=auth.user_id, metadata=book_metadata
         )
 
         if not result.get("success"):
@@ -353,13 +351,13 @@ async def create_book_endpoint(
 
 
 @router.patch("/{book_id}")
-async def update_book_endpoint(book_id: UUID, book_data: BookUpdate, user_id: UserId) -> BookResponse:
+async def update_book_endpoint(book_id: UUID, book_data: BookUpdate, auth: CurrentAuth) -> BookResponse:
     """Update book details."""
     try:
         # Convert Pydantic model to dict
         update_dict = book_data.model_dump(exclude_unset=True)
 
-        result = await books_facade.update_book(book_id, user_id, update_dict)
+        result = await books_facade.update_book(book_id, auth.user_id, update_dict)
 
         if not result.get("success"):
             raise HTTPException(
@@ -376,14 +374,14 @@ async def update_book_endpoint(book_id: UUID, book_data: BookUpdate, user_id: Us
 
 
 @router.delete("/{book_id}")
-async def delete_book_endpoint(book_id: UUID, user_id: UserId) -> None:
+async def delete_book_endpoint(book_id: UUID, auth: CurrentAuth, db: DbSession) -> None:
     """Delete a book."""
     try:
-        success = await books_facade.delete_book(book_id, user_id)
-        if not success:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
-    except HTTPException:
-        raise
+        await books_facade.delete_book(db, book_id, auth.user_id)
+        await db.commit()
+    except ValueError as e:
+        # Book not found
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
         logger.exception(f"Error deleting book {book_id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
@@ -393,7 +391,7 @@ async def delete_book_endpoint(book_id: UUID, user_id: UserId) -> None:
 async def update_book_progress_endpoint(
     book_id: UUID,
     progress_data: BookProgressUpdate,
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> BookProgressResponse:
     """Update reading progress for a book.
 
@@ -405,7 +403,7 @@ async def update_book_progress_endpoint(
         # Convert progress data to dict for facade
         progress_dict = _build_progress_dict(progress_data)
 
-        result = await books_facade.update_book_progress(book_id, user_id, progress_dict)
+        result = await books_facade.update_book_progress(book_id, auth.user_id, progress_dict)
 
         if not result.get("success"):
             raise HTTPException(
@@ -414,7 +412,7 @@ async def update_book_progress_endpoint(
             )
 
         progress = result.get("progress", {})
-        return _convert_to_progress_response(progress, book_id, user_id)
+        return _convert_to_progress_response(progress, book_id)
     except HTTPException:
         raise
     except Exception as e:
@@ -426,22 +424,22 @@ async def update_book_progress_endpoint(
 async def update_book_progress_post_endpoint(
     book_id: UUID,
     progress_data: BookProgressUpdate,
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> BookProgressResponse:
     """Update reading progress for a book (POST version for sendBeacon compatibility)."""
     # Delegate to the PUT endpoint handler
-    return await update_book_progress_endpoint(book_id, progress_data, user_id)
+    return await update_book_progress_endpoint(book_id, progress_data, auth)
 
 
 @router.get("/{book_id}/file", response_model=None)
-async def serve_book_file(book_id: UUID, user_id: UserId, db: DbSession) -> FileResponse | RedirectResponse:
+async def serve_book_file(book_id: UUID, auth: CurrentAuth, db: DbSession) -> FileResponse | RedirectResponse:
     """Serve the actual book file for viewing."""
     # Simple direct database query
     from sqlalchemy import select
 
     from src.books.models import Book
 
-    query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
+    query = select(Book).where(Book.id == book_id, Book.user_id == auth.user_id)
     result = await db.execute(query)
     book = result.scalar_one_or_none()
 
@@ -470,7 +468,7 @@ async def serve_book_file(book_id: UUID, user_id: UserId, db: DbSession) -> File
 
 
 @router.get("/{book_id}/presigned-url")
-async def get_book_presigned_url(book_id: UUID, user_id: UserId, db: DbSession) -> dict:
+async def get_book_presigned_url(book_id: UUID, auth: CurrentAuth, db: DbSession) -> dict:
     """Get a presigned URL for direct book download from R2/storage.
 
     This is useful when you want the browser to directly download from R2
@@ -480,7 +478,7 @@ async def get_book_presigned_url(book_id: UUID, user_id: UserId, db: DbSession) 
 
     from src.books.models import Book
 
-    query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
+    query = select(Book).where(Book.id == book_id, Book.user_id == auth.user_id)
     result = await db.execute(query)
     book = result.scalar_one_or_none()
 
@@ -558,7 +556,7 @@ async def _handle_range_request(
 
 @router.get("/{book_id}/content", response_model=None)
 async def stream_book_content(
-    book_id: UUID, request: Request, user_id: UserId, db: DbSession
+    book_id: UUID, request: Request, auth: CurrentAuth, db: DbSession
 ) -> StreamingResponse | FileResponse:
     """Stream book PDF content through backend to avoid CORS issues.
 
@@ -571,7 +569,7 @@ async def stream_book_content(
 
     from src.books.models import Book
 
-    query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
+    query = select(Book).where(Book.id == book_id, Book.user_id == auth.user_id)
     result = await db.execute(query)
     book = result.scalar_one_or_none()
 
@@ -635,13 +633,13 @@ async def stream_book_content(
 
 
 @router.get("/{book_id}/chapters")
-async def get_book_chapters_endpoint(book_id: UUID, user_id: UserId) -> list[dict]:
+async def get_book_chapters_endpoint(book_id: UUID, auth: CurrentAuth) -> list[dict]:
     """Get all chapters/table of contents for a book.
 
     Returns the table of contents structure, not database chapter records.
     """
     try:
-        result = await books_facade.get_book_chapters(book_id, user_id)
+        result = await books_facade.get_book_chapters(book_id, auth.user_id)
 
         if not result.get("success"):
             # Check if it's a "not found" error
@@ -664,13 +662,13 @@ async def update_book_chapter_status_endpoint(
     book_id: UUID,
     chapter_id: UUID,
     status_data: BookChapterStatusUpdate,
-    user_id: UserId,
+    auth: CurrentAuth,
 ) -> BookChapterResponse:
     """Update the status of a book chapter."""
     try:
         # Use mark_chapter_complete on the facade
         completed = status_data.status == "completed"
-        result = await books_facade.mark_chapter_complete(book_id, user_id, str(chapter_id), completed)
+        result = await books_facade.mark_chapter_complete(book_id, auth.user_id, str(chapter_id), completed)
 
         if not result.get("success"):
             raise HTTPException(
@@ -709,7 +707,7 @@ class RAGStatusResponse(BaseModel):
 
 
 @router.get("/{book_id}/rag-status")
-async def get_book_rag_status(book_id: UUID, user_id: UserId) -> RAGStatusResponse:
+async def get_book_rag_status(book_id: UUID, auth: CurrentAuth) -> RAGStatusResponse:
     """Get the RAG embedding status for a book."""
     from sqlalchemy import select
 
@@ -717,7 +715,7 @@ async def get_book_rag_status(book_id: UUID, user_id: UserId) -> RAGStatusRespon
     from src.database.session import async_session_maker
 
     async with async_session_maker() as session:
-        result = await session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
+        result = await session.execute(select(Book).where(Book.id == book_id, Book.user_id == auth.user_id))
         book = result.scalar_one_or_none()
 
         if not book:

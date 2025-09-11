@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
-from src.auth import UserId
+from src.auth import CurrentAuth
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_service import ContentService
 from src.courses.facade import CoursesFacade
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/v1/content", tags=["content"])
 
 
 def get_course_service(
-    _user_id: UserId,
+    _auth: CurrentAuth,
     _session: DbSession,
 ) -> CoursesFacade:
     """Get course orchestrator service instance."""
@@ -30,8 +30,8 @@ def get_course_service(
 @router.get("")
 async def get_all_content(
     _request: Request,
-    response: Response,
-    user_id: UserId,
+    _response: Response,
+    auth: CurrentAuth,
     db: DbSession,
     search: Annotated[str | None, Query(description="Search term for filtering content")] = None,
     content_type: Annotated[ContentType | None, Query(description="Filter by content type")] = None,
@@ -46,19 +46,16 @@ async def get_all_content(
     Uses ultra-optimized single query with database-level sorting and pagination.
     Requires authentication when Supabase auth is configured.
     """
-    logger.info(f"🔍 Getting content for authenticated user: {user_id}")
+    logger.info(f"🔍 Getting content for authenticated user: {auth.user_id}")
     content_service = ContentService(session=db)
-    result = await content_service.list_content_fast(
-        user_id=user_id,
+    return await content_service.list_content_fast(
+        user_id=auth.user_id,
         search=search,
         content_type=content_type,
         page=page,
         page_size=page_size,
         include_archived=include_archived,
     )
-    # Add short-lived caching for content metadata
-    response.headers["Cache-Control"] = "private, max-age=30"
-    return result
 
 
 @router.patch("/{content_type}/{content_id}/archive", status_code=204)
@@ -67,7 +64,7 @@ async def archive_content_endpoint(
     request: Request,  # noqa: ARG001
     content_type: ContentType,
     content_id: UUID,
-    user_id: UserId,
+    auth: CurrentAuth,
     db: DbSession,
 ) -> None:
     """
@@ -79,7 +76,7 @@ async def archive_content_endpoint(
     from src.content.services.content_archive_service import ContentArchiveService
 
     try:
-        await ContentArchiveService.archive_content(db, content_type, content_id, user_id)
+        await ContentArchiveService.archive_content(db, content_type, content_id, auth.user_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
@@ -90,7 +87,7 @@ async def unarchive_content_endpoint(
     request: Request,  # noqa: ARG001
     content_type: ContentType,
     content_id: UUID,
-    user_id: UserId,
+    auth: CurrentAuth,
     db: DbSession,
 ) -> None:
     """
@@ -102,7 +99,7 @@ async def unarchive_content_endpoint(
     from src.content.services.content_archive_service import ContentArchiveService
 
     try:
-        await ContentArchiveService.unarchive_content(db, content_type, content_id, user_id)
+        await ContentArchiveService.unarchive_content(db, content_type, content_id, auth.user_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
@@ -113,7 +110,7 @@ async def delete_content(
     request: Request,  # noqa: ARG001
     content_type: ContentType,
     content_id: str,
-    user_id: UserId,
+    auth: CurrentAuth,
     db: DbSession,
 ) -> None:
     """
@@ -127,7 +124,7 @@ async def delete_content(
         await content_service.delete_content(
             content_type=content_type,
             content_id=content_id,
-            user_id=user_id,
+            user_id=auth.user_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -135,7 +132,7 @@ async def delete_content(
 
 @router.get("/test-books")
 async def test_books_endpoint(
-    user_id: UserId,
+    auth: CurrentAuth,
     db: DbSession,
 ) -> dict:
     """Test endpoint to debug book progress fetching."""
@@ -152,7 +149,7 @@ async def test_books_endpoint(
         LIMIT 5
     """
 
-    result = await db.execute(text(query), {"user_id": user_id})
+    result = await db.execute(text(query), {"user_id": str(auth.user_id)})
     books = [{"id": row[0], "title": row[1], "progress": row[2]} for row in result]
 
     return {"books": books}
@@ -162,7 +159,7 @@ async def test_books_endpoint(
 async def get_lesson_by_id(
     lesson_id: UUID,
     course_service: Annotated[CoursesFacade, Depends(get_course_service)],
-    _user_id: UserId,
+    auth: CurrentAuth,
     db: DbSession,
     generate: Annotated[bool, Query(description="Auto-generate if lesson doesn't exist")] = False,
 ) -> LessonResponse:
@@ -193,7 +190,7 @@ async def get_lesson_by_id(
         course_id = row[0]
 
         # Now fetch the lesson using the existing simplified endpoint
-        return await course_service.get_lesson_simplified(course_id, lesson_id, generate, _user_id)
+        return await course_service.get_lesson_simplified(course_id, lesson_id, generate, auth.user_id)
 
     except HTTPException as e:
         logger.exception(f"Error fetching lesson {lesson_id}: {e}")

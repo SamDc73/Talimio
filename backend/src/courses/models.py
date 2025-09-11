@@ -57,6 +57,9 @@ class CourseModule(Base):
     """Model for course modules (formerly nodes)."""
 
     __tablename__ = "nodes"
+    __mapper_args__ = {
+        "confirm_deleted_rows": False  # Suppress warnings for hierarchical deletes
+    }
 
     id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     roadmap_id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("roadmaps.id"))

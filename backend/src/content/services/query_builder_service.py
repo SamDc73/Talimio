@@ -127,7 +127,7 @@ class QueryBuilderService:
                 '' as extra1,
                 '' as extra2,
                 0 as progress,
-                (SELECT COUNT(*) FROM flashcard_cards WHERE deck_id = flashcard_decks.id) as count1,
+                COALESCE(card_count, 0) as count1,
                 0 as count2,
                 COALESCE(archived, false) as archived,
                 NULL::text as toc_progress,

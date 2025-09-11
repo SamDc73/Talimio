@@ -245,8 +245,10 @@ async def handle_validation_errors(request: Request, exc: Exception) -> JSONResp
 
 async def handle_database_errors(request: Request, exc: Exception) -> JSONResponse:
     """Handle database-related errors."""
-    logger.error(
-        f"Database error on {request.method} {request.url.path}: {exc}", extra={"error_type": type(exc).__name__}
+    logger.exception(
+        f"Database error on {request.method} {request.url.path}: {exc}",
+        extra={"error_type": type(exc).__name__},
+        exc_info=(type(exc), exc, exc.__traceback__),
     )
 
     # Map specific database errors to user-friendly messages

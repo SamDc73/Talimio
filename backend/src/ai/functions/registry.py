@@ -111,20 +111,13 @@ async def execute_function(name: str, args: dict[str, Any]) -> dict[str, Any]:
     func = function_entry["function"]
 
     try:
-        # Fix user_id if it's "guest" string (AI model sometimes passes this incorrectly)
+        # Normalize user_id when provided as a string; do not apply any default fallbacks here
         if "user_id" in args and isinstance(args["user_id"], str):
-            if args["user_id"].lower() == "guest":
-                from src.auth.config import DEFAULT_USER_ID
-
-                args["user_id"] = DEFAULT_USER_ID
-                logger.info(f"Converted 'guest' string to DEFAULT_USER_ID: {DEFAULT_USER_ID}")
-            else:
-                # Try to convert string UUID to UUID object
-                try:
-                    args["user_id"] = UUID(args["user_id"])
-                except ValueError:
-                    logger.warning(f"Invalid user_id format: {args['user_id']}, setting to None")
-                    args["user_id"] = None
+            try:
+                args["user_id"] = UUID(args["user_id"])
+            except ValueError:
+                logger.warning(f"Invalid user_id format: {args['user_id']}, setting to None (no fallback)")
+                args["user_id"] = None
 
         logger.info(f"Executing function: {name} with args: {json.dumps(args, default=str, indent=2)}")
 

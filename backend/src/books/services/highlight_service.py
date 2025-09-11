@@ -9,7 +9,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.config import DEFAULT_USER_ID
 from src.books.models import Book
 
 
@@ -19,10 +18,10 @@ logger = logging.getLogger(__name__)
 class HighlightService:
     """Service for managing book highlights and annotations."""
 
-    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID) -> None:
         """Initialize the highlight service."""
         self.session = session
-        self.user_id = user_id or DEFAULT_USER_ID
+        self.user_id = user_id
 
     async def create_highlight(
         self,
