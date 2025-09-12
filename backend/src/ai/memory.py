@@ -3,10 +3,9 @@ Production-ready async memory manager using mem0's AsyncMemory.
 
 This implementation:
 - Uses mem0's AsyncMemory with proper patterns
-- Leverages psycopg_pool.ConnectionPool (NOT AsyncConnectionPool)
-- Handles 10k+ users efficiently with Supabase transaction pooler
-- Sets autocommit=True for Supabase compatibility
-- Properly aligns with mem0's internal asyncio.to_thread architecture
+- Uses simplest DB connection: pass a single PostgreSQL connection string and let mem0 manage pooling (psycopg3)
+- Targets Supabase Session Pooler with pgvector; no autocommit changes required
+- Proper connection handling via mem0-managed pooling; aligns with mem0's internal asyncio.to_thread architecture
 """
 
 import logging
@@ -14,13 +13,9 @@ from typing import Any
 from uuid import UUID
 
 from mem0 import AsyncMemory
-from psycopg_pool import ConnectionPool
 
 from src.config import env
 from src.config.settings import get_settings
-
-
-logger = logging.getLogger(__name__)
 
 
 class MemoryWrapper:
@@ -29,8 +24,8 @@ class MemoryWrapper:
 
     Features:
     - Non-blocking I/O operations
-    - Proper connection pooling with psycopg3
-    - Concurrent vector and graph operations
+    - Mem0-managed connection pooling
+    - Concurrent vector operations; graph optional (disabled unless configured)
     - Native FastAPI integration
     - Automatic retry and error recovery
     """
@@ -41,18 +36,28 @@ class MemoryWrapper:
         self._logger = logging.getLogger(__name__)
         self._memory_client: AsyncMemory | None = None
 
-        # Create async connection pool
-        self._connection_pool = self._create_connection_pool()
+        # Build a simple PostgreSQL connection string for psycopg3
+        database_url = self.settings.DATABASE_URL
+        if database_url.startswith("postgresql+psycopg://"):
+            connection_string = database_url.replace("postgresql+psycopg://", "postgresql://")
+        elif database_url.startswith("postgresql://"):
+            connection_string = database_url
+        else:
+            msg = f"Unsupported DATABASE_URL format: {database_url}"
+            raise ValueError(msg)
 
-        # Configure mem0 with async support
+        # Configure mem0 with async support (let mem0 manage pooling)
+        # Derived embedder configuration (keep dims in one place)
+        embedding_dims = int(env("MEMORY_EMBEDDING_OUTPUT_DIM", "1536"))
+        embed_model = env("MEMORY_EMBEDDING_MODEL", "openai/text-embedding-3-small").split("/")[-1]
         self.config = {
             "vector_store": {
                 "provider": "pgvector",
                 "config": {
-                    "connection_pool": self._connection_pool,
+                    "connection_string": connection_string,
                     "collection_name": "learning_memories",
-                    "embedding_model_dims": int(env("MEMORY_EMBEDDING_OUTPUT_DIM", "1536")),
-                    "hnsw": True,  # Enable HNSW for better performance
+                    "embedding_model_dims": embedding_dims,
+                    "hnsw": True,
                 },
             },
             "llm": {
@@ -66,78 +71,22 @@ class MemoryWrapper:
                 "provider": "openai",
                 "config": {
                     # Strip provider prefix for OpenAI (expects just model name)
-                    "model": env("MEMORY_EMBEDDING_MODEL", "openai/text-embedding-3-small").split("/")[-1],
-                    "embedding_dims": int(env("MEMORY_EMBEDDING_OUTPUT_DIM", "1536")),
+                    "model": embed_model,
+                    "embedding_dims": embedding_dims,
                 },
             },
         }
 
         self._logger.info("✨ MemoryWrapper initialized for production scale!")
 
-    def _create_connection_pool(self) -> ConnectionPool:
-        """
-        Create production-ready connection pool using psycopg3.
-
-        IMPORTANT: Uses regular ConnectionPool (not AsyncConnectionPool)
-        because mem0 internally uses asyncio.to_thread for async operations.
-
-        CRITICAL: Supabase transaction pooler requires autocommit=True
-
-        This pool:
-        - Maintains 5-20 connections for 10k users
-        - Recycles idle connections after 10 minutes
-        - Forces reconnection after 1 hour
-        - Handles connection failures gracefully
-        - Sets autocommit=True for Supabase compatibility
-        """
-        # Convert DATABASE_URL to psycopg-compatible format if needed
-        database_url = self.settings.DATABASE_URL
-        if database_url.startswith("postgresql+psycopg://"):
-            connection_string = database_url.replace("postgresql+psycopg://", "postgresql://")
-        elif database_url.startswith("postgresql://"):
-            connection_string = database_url
-        else:
-            raise ValueError(f"Unsupported DATABASE_URL format: {database_url}")
-
-        # Create custom pool class for Supabase transaction pooler
-        class SupabaseConnectionPool(ConnectionPool):
-            """ConnectionPool wrapper that ensures autocommit for Supabase."""
-
-            def getconn(self, *args: Any, **kwargs: Any) -> Any:
-                conn = super().getconn(*args, **kwargs)
-                # CRITICAL: Set autocommit for Supabase transaction pooler
-                conn.autocommit = True
-                return conn
-
-        # Regular connection pool (not async) - mem0 handles async internally
-        pool = SupabaseConnectionPool(
-            connection_string,
-            min_size=5,  # Minimum connections to maintain
-            max_size=20,  # Maximum connections (handles 10k users)
-            timeout=30,  # Connection timeout in seconds
-            max_idle=600,  # Recycle idle connections after 10 minutes
-            max_lifetime=3600,  # Force reconnect after 1 hour
-            open=True,  # Open pool immediately
-        )
-
-        self._logger.info("✅ Created connection pool (min=5, max=20) for production scale")
-        return pool
-
-    def _get_effective_user_id(self, user_id: UUID) -> UUID:
-        """Return the user_id provided by upstream auth.
-
-        Auth middleware/dependencies ensure correct resolution for single-user mode,
-        so this layer should not apply additional fallbacks.
-        """
-        return user_id
-
     async def get_memory_client(self) -> AsyncMemory:
         """Get or create async mem0 client."""
         if self._memory_client is None:
             try:
-                # Create AsyncMemory instance with our config
-                # This uses from_config class method correctly
-                self._memory_client = await AsyncMemory.from_config(self.config)
+                # Build a Mem0 MemoryConfig and create AsyncMemory directly
+                from mem0.configs.base import MemoryConfig  # type: ignore[reportMissingImports]
+                mem0_config = MemoryConfig(**self.config)
+                self._memory_client = AsyncMemory(mem0_config)
                 self._logger.info("✅ AsyncMemory client initialized")
             except Exception as e:
                 self._logger.exception(f"Failed to initialize AsyncMemory: {e}")
@@ -152,34 +101,33 @@ class MemoryWrapper:
         """
         from datetime import UTC, datetime
 
-        effective_id = self._get_effective_user_id(user_id)
-
         try:
             if metadata is None:
                 metadata = {}
 
             metadata.update(
                 {
-                    "user_id": str(effective_id),
+                    "user_id": str(user_id),
                     "timestamp": datetime.now(UTC).isoformat(),
                 }
             )
 
             memory_client = await self.get_memory_client()
             result = await memory_client.add(
-                messages=[{"role": "user", "content": content}], user_id=str(effective_id), metadata=metadata
+                messages=[{"role": "user", "content": content}], user_id=str(user_id), metadata=metadata
             )
 
-            self._logger.debug(f"Added memory for user {effective_id}: {content[:100]}...")
-            return result
+            self._logger.debug(f"Added memory for user {user_id}")
+            return result or {}
 
         except Exception as e:
-            self._logger.exception(f"Error adding memory for user {effective_id}: {e}")
+            self._logger.exception(f"Error adding memory for user {user_id}: {e}")
 
             # Reset client on connection errors
             if "connection" in str(e).lower():
                 self._memory_client = None
-            raise
+            # Return empty dict instead of raising to prevent breaking chat flow
+            return {}
 
     async def get_memories(self, user_id: UUID, limit: int = 100) -> list[dict[str, Any]]:
         """
@@ -187,46 +135,51 @@ class MemoryWrapper:
 
         Retrieves all memories for a user without blocking.
         """
-        effective_id = self._get_effective_user_id(user_id)
-
         try:
             memory_client = await self.get_memory_client()
-            results = await memory_client.get_all(user_id=str(effective_id), limit=limit)
+            results = await memory_client.get_all(user_id=str(user_id), limit=limit)
 
-            if isinstance(results, dict) and "results" in results:
-                return results["results"]
-            if isinstance(results, list):
-                return results
-            return []
+            # mem0 returns a dict with 'results' key
+            if isinstance(results, dict):
+                return results.get("results", [])
+
+            # Fallback for list or other format
+            return results if results else []
 
         except Exception as e:
-            self._logger.exception(f"Error getting memories for user {effective_id}: {e}")
+            self._logger.exception(f"Error getting memories for user {user_id}: {e}")
 
             # Reset client on connection errors
             if "connection" in str(e).lower():
                 self._memory_client = None
             return []
 
-    async def search_memories(self, user_id: UUID, query: str, limit: int = 5) -> list[dict[str, Any]]:
+    async def search_memories(
+        self, user_id: UUID, query: str, limit: int = 5, threshold: float | None = None
+    ) -> list[dict[str, Any]]:
         """
         Search memories asynchronously.
 
         Vector similarity search without blocking the event loop.
         """
-        effective_id = self._get_effective_user_id(user_id)
-
         try:
             memory_client = await self.get_memory_client()
-            results = await memory_client.search(query=query, user_id=str(effective_id), limit=limit)
+            results = await memory_client.search(
+                query=query,
+                user_id=str(user_id),
+                limit=limit,
+                threshold=threshold,
+            )
 
-            if isinstance(results, dict) and "results" in results:
-                return results["results"]
-            if isinstance(results, list):
-                return results
-            return []
+            # mem0 returns a dict with 'results' key
+            if isinstance(results, dict):
+                return results.get("results", [])
+
+            # Fallback for list or other format
+            return results if results else []
 
         except Exception as e:
-            self._logger.exception(f"Error searching memories for user {effective_id}: {e}")
+            self._logger.exception(f"Error searching memories for user {user_id}: {e}")
 
             # Reset client on connection errors
             if "connection" in str(e).lower():
@@ -235,13 +188,10 @@ class MemoryWrapper:
 
     async def delete_memory(self, user_id: UUID, memory_id: str) -> bool:
         """Delete a specific memory asynchronously."""
-        effective_id = self._get_effective_user_id(user_id)
-
         try:
             memory_client = await self.get_memory_client()
             await memory_client.delete(memory_id)
-
-            self._logger.info(f"Deleted memory {memory_id} for user {effective_id}")
+            self._logger.info(f"Deleted memory {memory_id} for user {user_id}")
             return True
 
         except Exception as e:
@@ -252,43 +202,25 @@ class MemoryWrapper:
                 self._memory_client = None
             return False
 
-    async def update_memory(self, user_id: UUID, memory_id: str, content: str) -> dict[str, Any]:
-        """Update an existing memory asynchronously."""
-        effective_id = self._get_effective_user_id(user_id)
-
-        try:
-            memory_client = await self.get_memory_client()
-            result = await memory_client.update(memory_id=memory_id, data=content)
-
-            self._logger.info(f"Updated memory {memory_id} for user {effective_id}")
-            return result
-
-        except Exception as e:
-            self._logger.exception(f"Error updating memory {memory_id}: {e}")
-
-            # Reset client on connection errors
-            if "connection" in str(e).lower():
-                self._memory_client = None
-            raise
-
-    async def build_memory_context(self, user_id: UUID, query: str) -> str:
+    async def build_memory_context(self, user_id: UUID, query: str, *, limit: int = 5, threshold: float | None = 0.3) -> str:
         """
         Build context from memories for AI responses.
 
         Searches relevant memories and formats them for LLM context.
         """
         try:
-            memories = await self.search_memories(user_id, query, limit=5)
+            memories = await self.search_memories(user_id, query, limit=limit, threshold=threshold)
 
             if not memories:
                 return ""
 
+            # Trust mem0 to return properly filtered results
             context_parts = []
             for memory in memories:
                 if isinstance(memory, dict):
+                    # mem0 should handle the field naming consistently
                     content = memory.get("memory", memory.get("content", ""))
-                    score = memory.get("score", 0.5)
-                    if content and score > 0.3:
+                    if content:
                         context_parts.append(f"• {content}")
 
             return "\n".join(context_parts)
@@ -297,96 +229,6 @@ class MemoryWrapper:
             self._logger.warning(f"Error building memory context: {e}")
             return ""
 
-    async def delete_all_memories(self, user_id: UUID) -> bool:
-        """Delete all memories for a user."""
-        effective_id = self._get_effective_user_id(user_id)
-
-        try:
-            memory_client = await self.get_memory_client()
-            await memory_client.delete_all(user_id=str(effective_id))
-
-            self._logger.info(f"Deleted all memories for user {effective_id}")
-            return True
-
-        except Exception as e:
-            self._logger.exception(f"Error deleting all memories: {e}")
-
-            # Reset client on connection errors
-            if "connection" in str(e).lower() or "transaction" in str(e).lower():
-                self._memory_client = None
-            return False
-
-    async def get_memory_history(self, memory_id: str) -> list[dict[str, Any]]:
-        """Get the history of changes for a specific memory."""
-        try:
-            memory_client = await self.get_memory_client()
-            history = await memory_client.history(memory_id=memory_id)
-
-            if isinstance(history, list):
-                return history
-            return []
-
-        except Exception as e:
-            self._logger.exception(f"Error getting memory history: {e}")
-            return []
-
-    async def batch_add_memories(
-        self, user_id: UUID, contents: list[str], metadata: dict[str, Any] | None = None
-    ) -> list[dict[str, Any]]:
-        """
-        Add multiple memories concurrently.
-
-        Leverages AsyncMemory's concurrent capabilities for bulk operations.
-        """
-        import asyncio
-
-        tasks = [self.add_memory(user_id, content, metadata) for content in contents]
-
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Filter out exceptions and log them
-        successful = []
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                self._logger.error(f"Failed to add memory {i}: {result}")
-            else:
-                successful.append(result)
-
-        return successful
-
-    async def batch_search_memories(
-        self, user_id: UUID, queries: list[str], limit: int = 5
-    ) -> dict[str, list[dict[str, Any]]]:
-        """
-        Search memories for multiple queries in parallel.
-
-        Returns a dictionary mapping queries to their results.
-        """
-        import asyncio
-
-        tasks = [self.search_memories(user_id, query, limit) for query in queries]
-
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Map queries to results
-        search_results = {}
-        for query, result in zip(queries, results, strict=False):
-            if isinstance(result, Exception):
-                self._logger.error(f"Failed to search for '{query}': {result}")
-                search_results[query] = []
-            else:
-                search_results[query] = result
-
-        return search_results
-
-    async def close(self) -> None:
-        """Clean up resources on shutdown."""
-        try:
-            if self._connection_pool:
-                self._connection_pool.close()
-                self._logger.info("Connection pool closed")
-        except Exception as e:
-            self._logger.warning(f"Error closing connection pool: {e}")
 
 
 class _MemorySingleton:

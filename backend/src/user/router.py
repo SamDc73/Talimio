@@ -14,7 +14,6 @@ from src.auth import CurrentAuth
 from src.database.session import get_db_session
 from src.middleware.security import api_rate_limit
 from src.user.schemas import (
-    ClearMemoryResponse,
     CustomInstructionsRequest,
     CustomInstructionsResponse,
     PreferencesUpdateRequest,
@@ -24,7 +23,6 @@ from src.user.schemas import (
 )
 from src.user.service import (
     _load_user_preferences,
-    clear_user_memory,
     delete_user_memory,
     get_user_memories,
     get_user_settings,
@@ -78,24 +76,6 @@ async def update_current_user_instructions(
         logger.exception(f"Error in update_current_user_instructions for user {auth.user_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update instructions: {e}"
-        ) from e
-
-
-@router.delete("/memory")
-async def clear_current_user_memory(auth: CurrentAuth) -> ClearMemoryResponse:
-    """
-    Clear all stored memories for the current user.
-
-    Returns
-    -------
-        ClearMemoryResponse: Success status and message
-    """
-    try:
-        return await clear_user_memory(auth.user_id)
-    except Exception as e:
-        logger.exception(f"Error in clear_current_user_memory for user {auth.user_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to clear memory: {e}"
         ) from e
 
 

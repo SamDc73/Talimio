@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.ai.memory import get_memory_wrapper
 from src.user.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
-    ClearMemoryResponse,
     CustomInstructionsResponse,
     PartialUserPreferences,
     PreferencesUpdateResponse,
@@ -85,7 +84,7 @@ async def _save_user_preferences(user_id: UUID, preferences: UserPreferences, db
         # Check for foreign key violations
         if "foreign key violation" in str(e).lower() or "23503" in str(e):
             from fastapi import HTTPException
-            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+            raise HTTPException(status_code=404, detail=f"User {user_id} not found") from e
         return False
 
 
@@ -300,27 +299,3 @@ async def update_user_preferences(
         return PreferencesUpdateResponse(preferences=current_prefs, updated=False)
 
 
-async def clear_user_memory(user_id: UUID) -> ClearMemoryResponse:
-    """
-    Clear all memories for a user.
-
-    Args:
-        user_id: Unique identifier for the user
-
-    Returns
-    -------
-        ClearMemoryResponse: Success status and message
-    """
-    try:
-        memory_manager = await get_memory_wrapper()
-
-        # Use the optimized delete_all_memories method
-        success = await memory_manager.delete_all_memories(user_id)
-
-        message = "Successfully cleared all memories" if success else "Failed to clear memories"
-
-        return ClearMemoryResponse(cleared=success, message=message)
-
-    except Exception as e:
-        logger.exception(f"Error clearing memory for user {user_id}: {e}")
-        return ClearMemoryResponse(cleared=False, message=f"Failed to clear memories: {e}")

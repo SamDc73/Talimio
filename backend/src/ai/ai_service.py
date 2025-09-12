@@ -116,7 +116,7 @@ class AIService:
         ]
 
         # Get response
-        response = await self._model_manager.get_completion_with_memory(
+        response = await self._model_manager.get_completion(
             messages=messages, user_id=user_id, format_json=False
         )
 
@@ -134,7 +134,7 @@ class AIService:
             {"role": "user", "content": "Please summarize the key points from this book section."},
         ]
 
-        response = await self._model_manager.get_completion_with_memory(
+        response = await self._model_manager.get_completion(
             messages=messages, user_id=user_id, format_json=False
         )
 
@@ -157,7 +157,7 @@ class AIService:
         messages = history or []
         messages.append({"role": "user", "content": message})
 
-        response = await self._model_manager.get_completion_with_memory(
+        response = await self._model_manager.get_completion(
             messages=messages, user_id=user_id, format_json=False
         )
 
@@ -191,7 +191,7 @@ class AIService:
             {"role": "user", "content": f"Please summarize this video transcript:\n\n{transcript[:3000]}"},
         ]
 
-        response = await self._model_manager.get_completion_with_memory(
+        response = await self._model_manager.get_completion(
             messages=messages, user_id=user_id, format_json=False
         )
 
@@ -209,7 +209,7 @@ class AIService:
             {"role": "user", "content": question},
         ]
 
-        response = await self._model_manager.get_completion_with_memory(
+        response = await self._model_manager.get_completion(
             messages=messages, user_id=user_id, format_json=False
         )
 
@@ -295,7 +295,7 @@ class AIService:
             {"role": "user", "content": f"Create flashcards from this content:\n\n{content[:2000]}"},
         ]
 
-        response = await self._model_manager.get_completion_with_memory(
+        response = await self._model_manager.get_completion(
             messages=messages, user_id=user_id, format_json=True
         )
 
@@ -310,7 +310,7 @@ class AIService:
             {"role": "user", "content": f"Front: {front}\nBack: {back}\n\nGenerate a hint:"},
         ]
 
-        response = await self._model_manager.get_completion_with_memory(
+        response = await self._model_manager.get_completion(
             messages=messages, user_id=user_id, format_json=False
         )
 
@@ -325,7 +325,7 @@ class AIService:
             {"role": "user", "content": f"Front: {front}\nBack: {back}\n\nExplain this concept:"},
         ]
 
-        response = await self._model_manager.get_completion_with_memory(
+        response = await self._model_manager.get_completion(
             messages=messages, user_id=user_id, format_json=False
         )
 
