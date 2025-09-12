@@ -3,8 +3,6 @@
  * Handles debounced syncing, offline queue, and retry logic
  */
 
-import logger from "@/utils/logger"
-
 // Debounce timers for different data types
 const syncTimers = new Map()
 const SYNC_DELAY = 2000 // 2 seconds - matches documentation
@@ -63,7 +61,7 @@ async function performSync(resourceType, resourceId, data, retryCount = 0) {
 
 		// If no endpoint is available for this data type, skip sync
 		if (!endpoint) {
-			logger.info(`No sync endpoint for ${resourceType}:${resourceId} with data:`, data)
+			logger.info(`No sync endpoint for ${resourceType}:${resourceId}`, { data })
 			return { skipped: true }
 		}
 
@@ -131,7 +129,7 @@ async function performSync(resourceType, resourceId, data, retryCount = 0) {
 		logger.info(`Synced ${resourceType}:${resourceId}`)
 		return await response.json()
 	} catch (error) {
-		logger.error(`Sync failed for ${resourceType}:${resourceId}:`, error)
+		logger.error(`Sync failed for ${resourceType}:${resourceId}`, error)
 
 		// Retry logic
 		if (retryCount < MAX_RETRIES) {
@@ -165,7 +163,7 @@ function buildEndpoint(resourceType, resourceId, data) {
 				const chapterId = data.chapterStatus.chapterId
 				if (chapterId?.startsWith("toc_")) {
 					// This is a ToC section ID, not a chapter UUID - skip sync
-					logger.debug(`Skipping chapter status sync for ToC section: ${chapterId}`)
+					logger.info(`Skipping chapter status sync for ToC section: ${chapterId}`)
 					return null
 				}
 				return `${baseUrl}/books/${resourceId}/chapters/${chapterId}/status`
@@ -183,7 +181,7 @@ function buildEndpoint(resourceType, resourceId, data) {
 				const chapterId = data.chapterStatus.chapterId
 				if (chapterId && (chapterId.startsWith("chapter-") || chapterId.startsWith("toc_"))) {
 					// This is a description-based chapter ID, not a UUID - skip sync
-					logger.debug(`Skipping chapter status sync for description-based chapter: ${chapterId}`)
+					logger.info(`Skipping chapter status sync for description-based chapter: ${chapterId}`)
 					return null
 				}
 				return `${baseUrl}/videos/${resourceId}/chapters/${chapterId}/status`
@@ -215,7 +213,7 @@ function buildEndpoint(resourceType, resourceId, data) {
 
 		default:
 			// Don't throw error for unknown types, just skip sync
-			logger.debug(`No sync handler for resource type: ${resourceType}`)
+			logger.info(`No sync handler for resource type: ${resourceType}`)
 			return null
 	}
 }
@@ -291,7 +289,7 @@ async function processOfflineQueue() {
 		try {
 			await performSync(item.resourceType, item.resourceId, item.data)
 		} catch (error) {
-			logger.error("Failed to sync queued item:", item, error)
+			logger.error("Failed to sync queued item", error, { item })
 			// Re-queue failed items
 			queueForOfflineSync(item.resourceType, item.resourceId, item.data)
 		}
@@ -333,7 +331,7 @@ function loadOfflineQueue() {
 			}
 		}
 	} catch (error) {
-		logger.error("Failed to load offline queue:", error)
+		logger.error("Failed to load offline queue", error)
 		// Clear corrupted queue
 		localStorage.removeItem("syncQueue")
 	}

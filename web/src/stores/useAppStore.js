@@ -657,7 +657,6 @@ const useAppStore = create(
 					autoPlayVideos: true,
 					defaultZoomLevel: 1,
 					sidebarCollapsed: false,
-					notificationsEnabled: true,
 					// User preferences
 					userPreferences: null,
 					// UI preferences

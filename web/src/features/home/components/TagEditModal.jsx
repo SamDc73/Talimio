@@ -3,7 +3,6 @@ import { useEffect, useState } from "react"
 
 import { Button } from "../../../components/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../components/dialog"
-import { useToast } from "../../../hooks/use-toast"
 import useTagStore from "../../../stores/useTagStore"
 
 import { TagList } from "./Tag"
@@ -19,19 +18,13 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 
 	const { fetchContentTags, updateContentTags, fetchUserTags, getContentTagObjects } = useTagStore()
 
-	const { toast } = useToast()
-
 	const loadContentTags = async () => {
 		setIsLoading(true)
 		try {
 			const tags = await fetchContentTags(contentType, contentId)
 			setCurrentTags(tags)
 		} catch (_error) {
-			toast({
-				title: "Error",
-				description: "Failed to load tags. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Error")
 		} finally {
 			setIsLoading(false)
 		}
@@ -52,10 +45,7 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 			const tagNames = currentTags.map((tag) => tag.name)
 			await updateContentTags(contentType, contentId, tagNames)
 
-			toast({
-				title: "Tags Updated",
-				description: `Tags for "${contentTitle}" have been updated successfully.`,
-			})
+			console.log("Action completed")
 
 			// Notify parent component that tags were updated
 			if (onTagsUpdated) {
@@ -64,11 +54,7 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 
 			onOpenChange(false)
 		} catch (_error) {
-			toast({
-				title: "Error",
-				description: "Failed to save tags. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Error")
 		} finally {
 			setIsSaving(false)
 		}

@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useState } from "react"
-import { useToast } from "@/hooks/use-toast"
 import { fetchContentData, processContentData } from "@/lib/api"
 
 export function useContent() {
 	const [contentItems, setContentItems] = useState([])
 	const [isLoading, setIsLoading] = useState(false)
-	const { toast } = useToast()
 
 	const loadContent = useCallback(
 		async (includeArchived = false) => {
@@ -28,15 +26,11 @@ export function useContent() {
 					}))
 				)
 			} catch (_error) {
-				toast({
-					title: "Error",
-					description: "Failed to load content. Please try again.",
-					variant: "destructive",
-				})
+				console.log("Error")
 			}
 			setIsLoading(false)
 		},
-		[toast]
+		[]
 	)
 
 	useEffect(() => {

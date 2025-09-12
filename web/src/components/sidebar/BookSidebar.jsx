@@ -1,6 +1,5 @@
 import { ChevronRight, FileText } from "lucide-react"
 import { useEffect, useState } from "react"
-import { useToast } from "@/hooks/use-toast"
 import { useBookProgress } from "@/hooks/useBookProgress"
 import { extractBookChapters, getBookChapters } from "@/services/booksService"
 import CompletionCheckbox from "./CompletionCheckbox"
@@ -35,7 +34,6 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 	const [IsExtracting, SetIsExtracting] = useState(false)
 	const [IsLoadingChapters, SetIsLoadingChapters] = useState(false)
 	const [optimisticCompletions, setOptimisticCompletions] = useState({})
-	const { toast } = useToast()
 
 	// Use the standardized hook with bookId prop
 	const { progress, toggleCompletion, isCompleted, batchUpdate, refetch } = useBookProgress(bookId)
@@ -129,10 +127,9 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 					allIds.forEach((id) => delete newState[id])
 					return newState
 				})
-				toast({
-					title: "Error",
-					description: "Failed to update chapter progress",
-					variant: "destructive",
+				logger.error("Failed to toggle multiple chapter completions", error, { 
+					chapterIds: allIds, 
+					bookId: book?.id 
 				})
 			}
 		} else {
@@ -153,17 +150,16 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 					delete newState[chapterId]
 					return newState
 				})
-			} catch (_error) {
+			} catch (error) {
 				// Revert optimistic update on error
 				setOptimisticCompletions((prev) => {
 					const newState = { ...prev }
 					delete newState[chapterId]
 					return newState
 				})
-				toast({
-					title: "Error",
-					description: "Failed to update chapter progress",
-					variant: "destructive",
+				logger.error("Failed to toggle chapter completion", error, { 
+					chapterId, 
+					bookId: book?.id 
 				})
 			}
 		}
@@ -220,9 +216,9 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 		SetIsExtracting(true)
 		try {
 			const result = await extractBookChapters(bookId)
-			toast({
-				title: "Chapters extracted",
-				description: `Successfully extracted ${result.count || 0} chapters`,
+			logger.track("book_chapters_extracted", { 
+				bookId, 
+				chapterCount: result?.length || 0 
 			})
 
 			// Refresh chapters
@@ -231,12 +227,8 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 
 			// Refresh progress data
 			await refetch()
-		} catch (_error) {
-			toast({
-				title: "Error",
-				description: "Failed to extract chapters",
-				variant: "destructive",
-			})
+		} catch (error) {
+			logger.error("Failed to extract book chapters", error, { bookId })
 		} finally {
 			SetIsExtracting(false)
 		}

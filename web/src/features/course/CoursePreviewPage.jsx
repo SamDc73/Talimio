@@ -6,7 +6,6 @@ import { Button } from "@/components/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/dialog"
 import { Input } from "@/components/input"
 import { Label } from "@/components/label"
-import { toast } from "@/hooks/use-toast"
 import { api } from "@/lib/apiClient"
 
 function CoursePreviewPage() {
@@ -51,11 +50,7 @@ function CoursePreviewPage() {
 					tags: tags,
 				})
 			} catch (_error) {
-				toast({
-					title: "Error",
-					description: "Failed to load course.",
-					variant: "destructive",
-				})
+				console.log("Error")
 			} finally {
 				setIsLoading(false)
 			}
@@ -68,11 +63,7 @@ function CoursePreviewPage() {
 
 	const handleSave = async () => {
 		if (!formData.title.trim()) {
-			toast({
-				title: "Title Required",
-				description: "Please enter a title for your course.",
-				variant: "destructive",
-			})
+			console.log("Title Required")
 			return
 		}
 
@@ -84,19 +75,12 @@ function CoursePreviewPage() {
 				description: formData.description,
 			})
 
-			toast({
-				title: "Course Updated!",
-				description: "Your course has been saved successfully.",
-			})
+			console.log("Course Updated!")
 
 			// Navigate to the course view
 			navigate(`/course/${courseId}`)
 		} catch (_error) {
-			toast({
-				title: "Save Failed",
-				description: "Failed to save course. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Save Failed")
 		} finally {
 			setIsSaving(false)
 		}
@@ -112,10 +96,7 @@ function CoursePreviewPage() {
 				userPrompt: originalPrompt,
 			})
 
-			toast({
-				title: "Course Regenerated!",
-				description: "A new course has been generated.",
-			})
+			console.log("Course Regenerated!")
 
 			// Navigate to new course preview
 			navigate(`/course/preview/${response.id}`, {
@@ -126,11 +107,7 @@ function CoursePreviewPage() {
 				replace: true,
 			})
 		} catch (_error) {
-			toast({
-				title: "Regeneration Failed",
-				description: "Failed to regenerate course. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Regeneration Failed")
 		} finally {
 			setIsRegenerating(false)
 		}

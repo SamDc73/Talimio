@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useState } from "react"
 
-import { useToast } from "@/hooks/use-toast"
 import useAppStore from "@/stores/useAppStore"
 
 export const useAppState = () => {
 	const [currentRoadmapId, setCurrentRoadmapId] = useState(null)
 	const [isLoading, _setIsLoading] = useState(false)
-
-	const { toast } = useToast()
 
 	// Zustand store selectors and actions
 	const activeRoadmapId = useAppStore((state) => state.preferences?.userPreferences?.roadmapId || null)
@@ -32,11 +29,8 @@ export const useAppState = () => {
 		updatePreference("userPreferences", null)
 		setCurrentRoadmapId(null)
 
-		toast({
-			title: "Reset Complete",
-			description: "Starting fresh with a new roadmap.",
-		})
-	}, [setActiveRoadmap, updatePreference, toast])
+		console.log("Reset Complete")
+	}, [setActiveRoadmap, updatePreference])
 
 	// Check for existing roadmap on mount
 	useEffect(() => {

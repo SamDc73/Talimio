@@ -1,6 +1,5 @@
 import { useRef, useState } from "react"
 
-import { useToast } from "@/hooks/use-toast"
 
 const BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1"
 
@@ -65,7 +64,6 @@ export function useApi(endpoint, options = {}) {
 	const [data, setData] = useState(null)
 	const [isLoading, setIsLoading] = useState(false)
 	const [error, setError] = useState(null)
-	const { toast } = useToast()
 	const abortControllerRef = useRef(null)
 
 	const execute = async (body = null, callOptions = {}) => {
@@ -99,11 +97,7 @@ export function useApi(endpoint, options = {}) {
 				return // Don't set error state for aborted requests
 			}
 			setError(err)
-			toast({
-				title: "API Error",
-				description: err.message || "An unexpected error occurred.",
-				variant: "destructive",
-			})
+			console.log("API Error")
 			// Re-throw the error if the caller needs to handle it further
 			throw err
 		} finally {

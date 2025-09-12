@@ -6,7 +6,6 @@
 import { Copy, MessageSquare, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/button"
-import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 
 export function HighlightToolbar({ highlights = [], onDelete, className }) {
@@ -15,7 +14,6 @@ export function HighlightToolbar({ highlights = [], onDelete, className }) {
 	const [isVisible, setIsVisible] = useState(false)
 	const toolbarRef = useRef(null)
 	const hideTimeoutRef = useRef(null)
-	const { toast } = useToast()
 
 	// Find the hovered highlight data
 	const hoveredHighlight = highlights.find((h) => h.id === hoveredHighlightId)
@@ -97,10 +95,7 @@ export function HighlightToolbar({ highlights = [], onDelete, className }) {
 		if (hoveredHighlight) {
 			const text = hoveredHighlight.highlight_data?.text || hoveredHighlight.text || ""
 			navigator.clipboard.writeText(text)
-			toast({
-				title: "Copied to clipboard",
-				description: `"${text.substring(0, 50)}${text.length > 50 ? "..." : ""}"`,
-			})
+			console.log("Action completed")
 			setIsVisible(false)
 		}
 	}

@@ -57,25 +57,19 @@ export function calculateProgressFromItems(items) {
 }
 
 /**
- * Show error toast with consistent formatting
- * @param {Function} toast - Toast function from useToast hook
+ * Log error with consistent formatting
  * @param {string} title - Error title
  * @param {string} description - Error description
  */
-export function showErrorToast(toast, title, description) {
-	toast({
-		title,
-		description,
-		variant: "destructive",
-	})
+export function logError(title, description) {
+	console.error(`${title}: ${description}`)
 }
 
 /**
- * Show sync error toast with consistent messaging
- * @param {Function} toast - Toast function from useToast hook
+ * Log sync error with consistent messaging
  */
-export function showSyncErrorToast(toast) {
-	showErrorToast(toast, "Sync Error", "Progress saved locally but failed to sync to server")
+export function logSyncError() {
+	logError("Sync Error", "Progress saved locally but failed to sync to server")
 }
 
 /**

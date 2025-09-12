@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/dialog"
-import { toast } from "@/hooks/use-toast"
 import { api } from "@/lib/apiClient"
 
 function RoadmapPromptModal({ open, onOpenChange, onRoadmapCreated }) {
@@ -17,11 +16,7 @@ function RoadmapPromptModal({ open, onOpenChange, onRoadmapCreated }) {
 		e.preventDefault()
 
 		if (!prompt.trim()) {
-			toast({
-				title: "Prompt Required",
-				description: "Please describe what you want to learn.",
-				variant: "destructive",
-			})
+			console.log("Prompt Required")
 			return
 		}
 
@@ -33,10 +28,7 @@ function RoadmapPromptModal({ open, onOpenChange, onRoadmapCreated }) {
 				prompt: prompt.trim(),
 			})
 
-			toast({
-				title: "Course Generated!",
-				description: "Review and customize your learning course.",
-			})
+			console.log("Course Generated!")
 
 			// Navigate to course preview page for editing
 			navigate(`/course/preview/${response.id}`, {
@@ -52,11 +44,7 @@ function RoadmapPromptModal({ open, onOpenChange, onRoadmapCreated }) {
 			onOpenChange(false)
 			setPrompt("")
 		} catch (_error) {
-			toast({
-				title: "Generation Failed",
-				description: "Failed to generate course. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Generation Failed")
 		} finally {
 			setIsGenerating(false)
 		}

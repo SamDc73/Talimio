@@ -4,7 +4,6 @@
 
 import { Brain, ChevronLeft, Eye, RotateCcw, Save, Trash2, X } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
-import { toast } from "../hooks/use-toast"
 import { useAuth } from "../hooks/useAuth"
 import {
 	clearUserMemory,
@@ -40,11 +39,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			setOriginalInstructions(settings.custom_instructions || "")
 			setMemoryCount(settings.memory_count || 0)
 		} catch (_error) {
-			toast({
-				title: "Error",
-				description: "Failed to load personalization settings",
-				variant: "destructive",
-			})
+			console.log("Error")
 		} finally {
 			setIsLoading(false)
 		}
@@ -69,16 +64,9 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		try {
 			await updateCustomInstructions(user.id, instructions)
 			setOriginalInstructions(instructions)
-			toast({
-				title: "Success",
-				description: "Your AI personalization has been saved",
-			})
+			console.log("Success")
 		} catch (_error) {
-			toast({
-				title: "Error",
-				description: "Failed to save personalization settings",
-				variant: "destructive",
-			})
+			console.log("Error")
 		} finally {
 			setIsSaving(false)
 		}
@@ -96,16 +84,9 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			await clearUserMemory(user.id)
 			setMemoryCount(0)
 			setMemories([])
-			toast({
-				title: "Success",
-				description: "Your learning history has been cleared",
-			})
+			console.log("Success")
 		} catch (_error) {
-			toast({
-				title: "Error",
-				description: "Failed to clear learning history",
-				variant: "destructive",
-			})
+			console.log("Error")
 		} finally {
 			setIsClearing(false)
 		}
@@ -129,11 +110,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			setMemories(userMemories)
 			setShowMemories(true)
 		} catch (_error) {
-			toast({
-				title: "Error",
-				description: "Failed to load memories",
-				variant: "destructive",
-			})
+			console.log("Error")
 		} finally {
 			setIsLoadingMemories(false)
 		}
@@ -160,16 +137,9 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			// Remove from local state
 			setMemories((prev) => prev.filter((m) => m.id !== memoryId))
 			setMemoryCount((prev) => Math.max(0, prev - 1))
-			toast({
-				title: "Success",
-				description: "Memory deleted successfully",
-			})
+			console.log("Success")
 		} catch (_error) {
-			toast({
-				title: "Error",
-				description: "Failed to delete memory",
-				variant: "destructive",
-			})
+			console.log("Error")
 		}
 	}
 

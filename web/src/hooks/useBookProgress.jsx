@@ -2,7 +2,6 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { updateBookChapterStatus } from "../services/bookProgressService"
 import { booksApi } from "../services/booksApi"
 import useAppStore from "../stores/useAppStore"
-import { useToast } from "./use-toast"
 
 const BookProgressContext = createContext(null)
 
@@ -15,7 +14,6 @@ export function BookProgressProvider({ children, bookId }) {
 	})
 	const [isLoading, setIsLoading] = useState(false)
 	const [error, setError] = useState(null)
-	const { toast } = useToast()
 
 	const fetchAllProgressData = useCallback(
 		async (currentBookId) => {
@@ -72,16 +70,12 @@ export function BookProgressProvider({ children, bookId }) {
 				})
 			} catch (err) {
 				setError(err)
-				toast({
-					title: "Error",
-					description: err.message || "Failed to fetch progress data",
-					variant: "destructive",
-				})
+				console.log("Error")
 			} finally {
 				setIsLoading(false)
 			}
 		},
-		[toast]
+		[]
 	)
 
 	useEffect(() => {
@@ -122,24 +116,15 @@ export function BookProgressProvider({ children, bookId }) {
 				updatePromise.catch((_err) => {
 					setChapterStatuses(originalChapterStatuses)
 					setBookProgress(originalBookProgress)
-					toast({
-						title: "Error updating chapter",
-						description: "Failed to update chapter status. Your progress has been reverted.",
-						variant: "destructive",
-					})
+					console.log("Error updating chapter")
 				})
 			} catch (err) {
 				setChapterStatuses(originalChapterStatuses)
 				setBookProgress(originalBookProgress)
-				toast({
-					title: "Error updating chapter",
-					description:
-						err.message || "Failed to update chapter status. Your progress has been reverted to the last saved state.",
-					variant: "destructive",
-				})
+				console.log("Error updating chapter")
 			}
 		},
-		[bookId, chapterStatuses, bookProgress, toast]
+		[bookId, chapterStatuses, bookProgress]
 	)
 
 	const isChapterCompleted = useCallback(

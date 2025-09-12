@@ -4,7 +4,6 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom"
 import CourseLayout from "./components/CourseLayout"
 import { ChatSidebar, ChatSidebarProvider } from "./components/header/MainHeader"
 import ProtectedRoute from "./components/ProtectedRoute"
-import { Toaster } from "./components/toaster"
 import { TooltipProvider } from "./components/tooltip"
 import { GlobalHighlightDeletionTooltip } from "./components/ui/GlobalHighlightDeletionTooltip"
 import { GlobalTextSelectionTooltip } from "./components/ui/GlobalTextSelectionTooltip"
@@ -34,13 +33,6 @@ const queryClient = new QueryClient({
 		},
 	},
 })
-
-// Load debug tools in development using Vite v7 best practices
-if (import.meta.env.DEV) {
-	import("./utils/debug.js").then(({ loadDebugTools }) => {
-		loadDebugTools()
-	})
-}
 
 function RoadmapPageWrapper() {
 	const { roadmapId } = useParams()
@@ -182,7 +174,6 @@ function AppContent() {
 							}
 						/>
 					</Routes>
-					<Toaster />
 					<GlobalTextSelectionTooltip />
 					<GlobalHighlightDeletionTooltip />
 				</ChatSidebarProvider>

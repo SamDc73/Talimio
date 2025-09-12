@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useToast } from "@/hooks/use-toast"
 import { processContentData } from "@/lib/api"
 import { api } from "@/lib/apiClient"
 import { archiveContent, unarchiveContent } from "@/services/contentService"
@@ -83,7 +82,6 @@ export function useContentList(filters = {}) {
  */
 export function useDeleteContent() {
 	const queryClient = useQueryClient()
-	const { toast } = useToast()
 
 	return useMutation({
 		mutationFn: async ({ itemId, itemType }) => {
@@ -122,11 +120,7 @@ export function useDeleteContent() {
 				})
 			}
 
-			toast({
-				title: "Delete Failed",
-				description: err.message || "Failed to delete item. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Delete Failed")
 		},
 
 		// Success notification
@@ -139,10 +133,7 @@ export function useDeleteContent() {
 				return "Item"
 			}
 
-			toast({
-				title: "Deleted",
-				description: `${getTypeLabel(data.itemType)} deleted successfully`,
-			})
+			console.log("Action completed")
 
 			// Emit event for other components
 			window.dispatchEvent(
@@ -169,7 +160,6 @@ export function useDeleteContent() {
  */
 export function useArchiveContent() {
 	const queryClient = useQueryClient()
-	const { toast } = useToast()
 
 	return useMutation({
 		mutationFn: async ({ item, archive = true }) => {
@@ -209,19 +199,12 @@ export function useArchiveContent() {
 				})
 			}
 
-			toast({
-				title: variables.archive ? "Archive Failed" : "Restore Failed",
-				description: err.message || "Operation failed. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Action completed")
 		},
 
 		// Success notification
 		onSuccess: ({ item, archive }) => {
-			toast({
-				title: archive ? "Archived" : "Restored",
-				description: `${item.title} has been ${archive ? "archived" : "restored"}`,
-			})
+			console.log("Action completed")
 
 			// Emit event
 			window.dispatchEvent(
@@ -258,7 +241,6 @@ export function useArchiveContent() {
  */
 export function useUpdateContentTags() {
 	const queryClient = useQueryClient()
-	const { toast } = useToast()
 
 	return useMutation({
 		mutationFn: async ({ itemId, contentType, tags }) => {
@@ -295,19 +277,12 @@ export function useUpdateContentTags() {
 				})
 			}
 
-			toast({
-				title: "Update Failed",
-				description: "Failed to update tags. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Update Failed")
 		},
 
 		// Success notification
 		onSuccess: () => {
-			toast({
-				title: "Tags Updated",
-				description: "Content tags have been updated successfully.",
-			})
+			console.log("Tags Updated")
 		},
 	})
 }

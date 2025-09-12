@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { VideoHeader } from "@/components/header/VideoHeader"
 import { VideoSidebar } from "@/components/sidebar"
-import { useToast } from "@/hooks/use-toast"
 import { useVideoProgressWithPosition } from "@/hooks/useVideoProgress"
 import { getVideo } from "@/services/videosService"
 import useAppStore, { selectSidebarOpen, selectToggleSidebar } from "@/stores/useAppStore"
@@ -20,7 +19,6 @@ import { getVideoProgress } from "@/utils/progressUtils"
 function VideoViewerContent() {
 	const { videoId } = useParams()
 	const navigate = useNavigate()
-	const { toast } = useToast()
 
 	// Zustand store - using stable selectors
 	const isOpen = useAppStore(selectSidebarOpen)
@@ -66,11 +64,7 @@ function VideoViewerContent() {
 				setCurrentTime(savedProgress)
 			} catch (err) {
 				setError(err.message || "Failed to load video")
-				toast({
-					title: "Error",
-					description: err.message || "Failed to load video. Please try again.",
-					variant: "destructive",
-				})
+				console.log("Error")
 			} finally {
 				setLoading(false)
 			}
@@ -79,7 +73,7 @@ function VideoViewerContent() {
 		if (videoId) {
 			loadVideo()
 		}
-	}, [videoId, toast])
+	}, [videoId])
 
 	// Handle YouTube player ready - memoized to prevent recreating player
 	const handlePlayerReady = useCallback(() => {
@@ -158,14 +152,10 @@ function VideoViewerContent() {
 				youtubePlayerRef.current.seekTo(timestamp, true)
 				setCurrentTime(timestamp) // Update immediately for responsive UI
 			} else {
-				toast({
-					title: "Player not ready",
-					description: "Please wait for the video to load",
-					variant: "default",
-				})
+				console.log("Player not ready")
 			}
 		},
-		[toast]
+		[]
 	)
 
 	// Memoize time update callback

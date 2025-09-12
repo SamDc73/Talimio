@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { useToast } from "@/hooks/use-toast"
 import { fetchLesson } from "../api/lessonsApi"
 
 /**
@@ -9,7 +8,6 @@ export function useLessonViewer(courseId) {
 	const [lesson, setLesson] = useState(null)
 	const [isLoading, setIsLoading] = useState(false)
 	const [error, setError] = useState(null)
-	const { toast } = useToast()
 
 	/**
 	 * Load a lesson by ID, generate if needed
@@ -32,11 +30,7 @@ export function useLessonViewer(courseId) {
 					setError(
 						"Lesson content is not available. The system is attempting to generate it. Please try again in a moment."
 					)
-					toast({
-						title: "Content Generation in Progress",
-						description: "The lesson content is being generated. Please refresh the page in a few seconds.",
-						variant: "default",
-					})
+					console.log("Content Generation in Progress")
 				} else {
 					setLesson(lessonData)
 				}
@@ -53,28 +47,20 @@ export function useLessonViewer(courseId) {
 				}
 
 				setError(errorMessage)
-				toast({
-					title: "Error Loading Lesson",
-					description: errorMessage,
-					variant: "destructive",
-				})
+				console.log("Error Loading Lesson")
 			} finally {
 				setIsLoading(false)
 			}
 		},
-		[courseId, toast]
+		[courseId]
 	)
 
 	/**
 	 * Generate a new lesson (requires moduleId, so disabled for now)
 	 */
 	const createLesson = useCallback(async () => {
-		toast({
-			title: "Feature not available",
-			description: "Lesson generation requires module selection",
-			variant: "destructive",
-		})
-	}, [toast])
+		console.log("Feature not available")
+	}, [])
 
 	/**
 	 * Clear the current lesson

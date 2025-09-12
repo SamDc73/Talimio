@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { useToast } from "@/hooks/use-toast"
 import { api } from "@/lib/apiClient"
 
 // Maximum batch size for progress fetching
@@ -132,7 +131,6 @@ export function useProgress(contentIds) {
  */
 export function useUpdateProgress() {
 	const queryClient = useQueryClient()
-	const { toast } = useToast()
 
 	return useMutation({
 		mutationFn: ({ contentId, progress, metadata }) =>
@@ -181,11 +179,7 @@ export function useUpdateProgress() {
 			if (context?.previousProgress) {
 				queryClient.setQueriesData({ queryKey: ["progress"], exact: false }, context.previousProgress)
 			}
-			toast({
-				title: "Error",
-				description: "Failed to update progress. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Error")
 		},
 		onSettled: (_data, _error, variables) => {
 			// Always refetch after mutation

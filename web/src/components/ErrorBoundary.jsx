@@ -15,6 +15,11 @@ class ErrorBoundary extends React.Component {
 			error: error,
 			errorInfo: errorInfo,
 		})
+		
+		logger.error("React Error Boundary caught error", error, {
+			componentStack: errorInfo.componentStack,
+			props: this.props,
+		})
 	}
 
 	render() {

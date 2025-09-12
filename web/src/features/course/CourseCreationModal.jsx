@@ -10,7 +10,6 @@
 import { AlertCircle, BookOpen, FileText, Sparkles, Upload, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Button } from "../../components/button"
-import { useToast } from "../../hooks/use-toast"
 import { useCourseNavigation } from "../../utils/navigationUtils"
 import { useCourseService } from "./api/courseApi"
 import { useDocumentsService } from "./api/documentsApi"
@@ -46,7 +45,6 @@ function CourseCreationModal({
 	const courseService = useCourseService()
 	const documentsService = useDocumentsService(newCourseData?.id)
 	const { goToCoursePreview } = useCourseNavigation()
-	const { toast } = useToast()
 
 	useEffect(() => {
 		if (!newCourseData) return
@@ -58,16 +56,9 @@ function CourseCreationModal({
 				)
 
 				if (uploadResults.errors.length > 0) {
-					toast({
-						title: "Some documents failed to upload",
-						description: `${uploadResults.results.length} documents uploaded successfully, ${uploadResults.errors.length} failed.`,
-						variant: "destructive",
-					})
+			console.log("Action completed")
 				} else {
-					toast({
-						title: "Course Created with Documents!",
-						description: `"${ragCourseTitle}" has been created with ${ragDocuments.length} document(s).`,
-					})
+			console.log("Action completed")
 				}
 
 				if (onSuccess) onSuccess(newCourseData)
@@ -84,16 +75,13 @@ function CourseCreationModal({
 			uploadAndFinish()
 		} else {
 			// No documents to upload, just finish
-			toast({
-				title: "Course Created!",
-				description: `"${ragCourseTitle}" has been created.`,
-			})
+			console.log("Action completed")
 			if (onSuccess) onSuccess(newCourseData)
 			goToCoursePreview(newCourseData.id)
 			onClose()
 			setIsUploadingDocuments(false)
 		}
-	}, [newCourseData, documentsService, goToCoursePreview, onClose, onSuccess, ragDocuments, ragCourseTitle, toast])
+	}, [newCourseData, documentsService, goToCoursePreview, onClose, onSuccess, ragDocuments, ragCourseTitle])
 
 	// Handle file selection and metadata extraction
 	const _handleFileChange = async (e) => {
@@ -123,20 +111,13 @@ function CourseCreationModal({
 				setCourseDescription(metadata.description || metadata.summary)
 			}
 
-			toast({
-				title: "Document Analyzed",
-				description: "Course information has been extracted. You can edit if needed.",
-			})
+			console.log("Document Analyzed")
 		} catch (_error) {
 			// If extraction fails, use filename as title
 			const titleFromFilename = file.name.replace(/\.[^/.]+$/, "")
 			setCourseTitle(titleFromFilename)
 
-			toast({
-				title: "Metadata extraction failed",
-				description: "Using filename as title. Please add description manually.",
-				variant: "destructive",
-			})
+			console.log("Metadata extraction failed")
 		} finally {
 			setIsExtractingMetadata(false)
 		}
@@ -235,10 +216,7 @@ function CourseCreationModal({
 
 			const courseData = await courseService.createCourseFromDocument(formData)
 
-			toast({
-				title: "Course Created!",
-				description: `"${courseTitle}" has been created from your document.`,
-			})
+			console.log("Action completed")
 
 			if (onSuccess) onSuccess(courseData)
 			goToCoursePreview(courseData.id)
@@ -246,11 +224,7 @@ function CourseCreationModal({
 		} catch (err) {
 			// Handle specific error cases
 			if (err.message?.includes("already exists")) {
-				toast({
-					title: "Duplicate Course",
-					description: "A course with this content already exists.",
-					variant: "destructive",
-				})
+				console.log("Duplicate Course")
 			} else {
 				setError(err.message || "Failed to create course from document. Please try again.")
 			}

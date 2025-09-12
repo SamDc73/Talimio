@@ -13,7 +13,6 @@ import { CheckCircle2, Plus, RefreshCw, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "../../../components/button"
 import { Card } from "../../../components/card"
-import { useToast } from "../../../hooks/use-toast"
 import { usePolling } from "../../../hooks/usePolling"
 import { useDocumentsService } from "../api/documentsApi"
 import DocumentList from "../components/DocumentList"
@@ -30,17 +29,14 @@ function DocumentsView({ courseId }) {
 	const [_selectedDocument, setSelectedDocument] = useState(null)
 
 	const documentsService = useDocumentsService(courseId)
-	const { toast } = useToast()
 
 	// Use refs to maintain stable references
 	const documentsServiceRef = useRef(documentsService)
-	const toastRef = useRef(toast)
 
 	// Update refs when dependencies change
 	useEffect(() => {
 		documentsServiceRef.current = documentsService
-		toastRef.current = toast
-	}, [documentsService, toast])
+	}, [documentsService])
 
 	// Stable loadDocuments function that won't cause re-renders
 	const loadDocuments = useCallback(
@@ -62,11 +58,7 @@ function DocumentsView({ courseId }) {
 					setDocuments([])
 				}
 			} catch (error) {
-				toastRef.current({
-					title: "Failed to load documents",
-					description: error.message || "Unable to fetch course documents. Please try again.",
-					variant: "destructive",
-				})
+				logger.error('Failed to load documents', error, { courseId })
 			} finally {
 				setIsLoading(false)
 				setIsRefreshing(false)
@@ -102,13 +94,13 @@ function DocumentsView({ courseId }) {
 	const handleDocumentsUploaded = useCallback(
 		async (uploadedDocuments) => {
 			setDocuments((prev) => [...uploadedDocuments, ...prev])
-			toastRef.current({
-				title: "Documents uploaded!",
-				description: `${uploadedDocuments.length} document(s) added to the course.`,
+			logger.track('documents_uploaded', { 
+				courseId, 
+				count: uploadedDocuments.length 
 			})
 			startPolling()
 		},
-		[startPolling]
+		[startPolling, courseId]
 	)
 
 	const handleRemoveDocument = useCallback(async (document) => {
@@ -119,32 +111,31 @@ function DocumentsView({ courseId }) {
 		try {
 			await documentsServiceRef.current.deleteDocument(document.id)
 			setDocuments((prev) => prev.filter((doc) => doc.id !== document.id))
-			toastRef.current({
-				title: "Document removed",
-				description: `"${document.title}" has been removed from the course.`,
+			logger.track('document_deleted', { 
+				documentId: document.id, 
+				title: document.title 
 			})
 		} catch (error) {
-			toastRef.current({
-				title: "Failed to remove document",
-				description: error.message || "Unable to remove document. Please try again.",
-				variant: "destructive",
+			logger.error('Failed to remove document', error, { 
+				documentId: document.id 
 			})
+			// Could show an error modal or alert here if needed
 		}
 	}, [])
 
 	const handleViewDocument = useCallback((document) => {
 		setSelectedDocument(document)
-		toastRef.current({
-			title: "Document view",
-			description: "Document preview will be available in a future update.",
+		logger.track('document_view_attempted', { 
+			documentId: document.id 
 		})
+		// Feature not implemented yet - could show a modal explaining this
 	}, [])
 
-	const handleDownloadDocument = useCallback((_document) => {
-		toastRef.current({
-			title: "Download requested",
-			description: "Document download will be available in a future update.",
+	const handleDownloadDocument = useCallback((document) => {
+		logger.track('document_download_attempted', { 
+			documentId: document.id 
 		})
+		// Feature not implemented yet - could show a modal explaining this
 	}, [])
 
 	const ragStatus = useMemo(() => {

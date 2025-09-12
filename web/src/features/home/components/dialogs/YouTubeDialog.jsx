@@ -4,21 +4,15 @@ import { Button } from "@/components/button"
 import { Input } from "@/components/input"
 import { Label } from "@/components/label"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/sheet"
-import { useToast } from "@/hooks/use-toast"
 import { createVideo } from "@/services/videosService"
 
 export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
-	const { toast } = useToast()
 	const [youtubeUrl, setYoutubeUrl] = useState("")
 	const [isAddingVideo, setIsAddingVideo] = useState(false)
 
 	const handleYoutubeAdd = async () => {
 		if (!youtubeUrl.trim() || (!youtubeUrl.includes("youtube.com") && !youtubeUrl.includes("youtu.be"))) {
-			toast({
-				title: "Invalid URL",
-				description: "Please enter a valid YouTube URL",
-				variant: "destructive",
-			})
+			console.log("Invalid URL")
 			return
 		}
 
@@ -28,12 +22,7 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 		try {
 			const response = await createVideo(youtubeUrl)
 
-			toast({
-				title: response.alreadyExists ? "Video Found!" : "Video Added!",
-				description: response.alreadyExists
-					? `"${response.title}" was already in your library.`
-					: `"${response.title}" has been added to your library.`,
-			})
+			console.log("Action completed")
 
 			// Reset form and close dialog
 			setYoutubeUrl("")
@@ -51,11 +40,7 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 				errorMessage = "The URL you entered is not a valid YouTube video URL."
 			}
 
-			toast({
-				title: "Error",
-				description: errorMessage,
-				variant: "destructive",
-			})
+			console.log("Error")
 		} finally {
 			setIsAddingVideo(false)
 		}

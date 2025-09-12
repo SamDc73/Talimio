@@ -4,7 +4,6 @@ import { updateLessonStatus } from "../services/progressService"
 import useAppStore from "../stores/useAppStore"
 import { getCourseWithModules } from "../utils/courseDetection"
 
-import { useToast } from "./use-toast"
 
 const ProgressContext = createContext(null)
 
@@ -18,7 +17,6 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 	const [isLoading, setIsLoading] = useState(false)
 	const [error, setError] = useState(null)
 	const [_detectedCourseMode, setDetectedCourseMode] = useState(null)
-	const { toast } = useToast()
 
 	// Note: We use getCourseWithModules for consistent course data fetching
 
@@ -99,11 +97,7 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 			setCourseProgress(progressResponse)
 		} catch (err) {
 			setError(err)
-			toast({
-				title: "Error",
-				description: err.message || "Failed to fetch progress data",
-				variant: "destructive",
-			})
+			console.log("Error")
 		} finally {
 			setIsLoading(false)
 		}
@@ -151,21 +145,12 @@ export function ProgressProvider({ children, courseId, isCourseMode = false }) {
 				// Revert on error
 				setLessonStatuses(originalLessonStatuses)
 				setCourseProgress(originalCourseProgress)
-				toast({
-					title: "Error updating lesson",
-					description: "Failed to update lesson status. Your progress has been reverted.",
-					variant: "destructive",
-				})
+				console.log("Error updating lesson")
 			})
 		} catch (err) {
 			setLessonStatuses(originalLessonStatuses)
 			setCourseProgress(originalCourseProgress)
-			toast({
-				title: "Error updating lesson",
-				description:
-					err.message || "Failed to update lesson status. Your progress has been reverted to the last saved state.",
-				variant: "destructive",
-			})
+			console.log("Error updating lesson")
 		}
 	}
 

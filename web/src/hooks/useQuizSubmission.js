@@ -1,6 +1,5 @@
 import { useMutation } from "@tanstack/react-query"
 import { useState } from "react"
-import { toast } from "sonner"
 import { api } from "@/lib/api"
 
 /**
@@ -51,20 +50,15 @@ export function useQuizSubmission() {
 
 			// Show feedback to user
 			if (data.next_lesson_adapted) {
-				toast.success("Quiz submitted! Future lessons will be adapted based on your performance.", {
-					description: `Focus areas: ${data.performance_summary?.weak_concepts?.join(", ") || "none identified"}`,
-					duration: 5000,
-				})
+				console.log("Quiz submitted! Future lessons will be adapted based on your performance.")
+				console.log(`Focus areas: ${data.performance_summary?.weak_concepts?.join(", ") || "none identified"}`)
 			} else {
-				toast.success("Quiz submitted successfully!", {
-					description: `Score: ${data.performance_summary?.accuracy?.toFixed(1)}%`,
-				})
+				console.log("Quiz submitted successfully!")
+				console.log(`Score: ${data.performance_summary?.accuracy?.toFixed(1)}%`)
 			}
 		},
 		onError: (error) => {
-			toast.error("Failed to submit quiz", {
-				description: error.response?.data?.detail || "Please try again",
-			})
+			console.error("Failed to submit quiz:", error.response?.data?.detail || "Please try again")
 		},
 	})
 

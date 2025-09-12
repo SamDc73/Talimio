@@ -10,7 +10,6 @@ import { createContext, useContext, useEffect, useState } from "react"
 
 import { useCourseProgressService } from "../features/course"
 
-import { useToast } from "./use-toast"
 
 const CourseProgressContext = createContext(null)
 
@@ -34,7 +33,6 @@ export function CourseProgressProvider({ children, courseId }) {
 	})
 	const [isLoading, setIsLoading] = useState(false)
 	const [error, setError] = useState(null)
-	const { toast } = useToast()
 
 	// Get progress service for this course
 	const progressService = useCourseProgressService(courseId)
@@ -112,11 +110,7 @@ export function CourseProgressProvider({ children, courseId }) {
 			setCourseProgress(progressData)
 		} catch (err) {
 			setError(err)
-			toast({
-				title: "Error",
-				description: err.message || "Failed to fetch progress data",
-				variant: "destructive",
-			})
+			console.log("Error")
 		} finally {
 			setIsLoading(false)
 		}
@@ -192,11 +186,7 @@ export function CourseProgressProvider({ children, courseId }) {
 			setCourseProgress(originalCourseProgress)
 			setModuleProgress(originalModuleProgress)
 
-			toast({
-				title: "Error updating lesson",
-				description: "Failed to update lesson status. Your progress has been reverted.",
-				variant: "destructive",
-			})
+			console.log("Error updating lesson")
 		}
 	}
 
@@ -223,11 +213,7 @@ export function CourseProgressProvider({ children, courseId }) {
 			await fetchAllProgressData(courseId)
 		} catch (_err) {
 			setLessonStatuses(originalLessonStatuses)
-			toast({
-				title: "Error",
-				description: "Failed to mark lesson as completed",
-				variant: "destructive",
-			})
+			console.log("Error")
 		}
 	}
 
@@ -251,11 +237,7 @@ export function CourseProgressProvider({ children, courseId }) {
 			await progressService.markLessonInProgress(moduleId, lessonId)
 		} catch (_err) {
 			setLessonStatuses(originalLessonStatuses)
-			toast({
-				title: "Error",
-				description: "Failed to update lesson status",
-				variant: "destructive",
-			})
+			console.log("Error")
 		}
 	}
 

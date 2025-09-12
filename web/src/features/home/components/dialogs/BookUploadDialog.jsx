@@ -4,10 +4,8 @@ import { Button } from "@/components/button"
 import { Input } from "@/components/input"
 import { Label } from "@/components/label"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/sheet"
-import { useToast } from "@/hooks/use-toast"
 
 export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
-	const { toast } = useToast()
 	const [selectedFile, setSelectedFile] = useState(null)
 	const [bookTitle, setBookTitle] = useState("")
 	const [bookAuthor, setBookAuthor] = useState("")
@@ -43,11 +41,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 				const errorData = await response.json()
 				if (response.status === 409) {
 					// Duplicate file error
-					toast({
-						title: "Book Already Exists",
-						description: errorData.detail || "This book is already in your library.",
-						variant: "destructive",
-					})
+					console.log("Book Already Exists")
 				} else {
 					throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
 				}
@@ -56,10 +50,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 
 			const newBook = await response.json()
 
-			toast({
-				title: "Book Added!",
-				description: `"${newBook.title}" has been added to your library.`,
-			})
+			console.log("Action completed")
 
 			// Reset form
 			setSelectedFile(null)
@@ -72,11 +63,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 				onBookUploaded(newBook)
 			}
 		} catch (error) {
-			toast({
-				title: "Upload Failed",
-				description: error.message || "Something went wrong. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Upload Failed")
 		} finally {
 			setIsUploadingBook(false)
 		}

@@ -7,7 +7,6 @@ import { Button } from "@/components/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/dialog"
 import { Input } from "@/components/input"
 import { Label } from "@/components/label"
-import { toast } from "@/hooks/use-toast"
 import { api } from "@/lib/apiClient"
 
 function RoadmapPreviewPage() {
@@ -52,11 +51,7 @@ function RoadmapPreviewPage() {
 					tags: tags,
 				})
 			} catch (_error) {
-				toast({
-					title: "Error",
-					description: "Failed to load roadmap.",
-					variant: "destructive",
-				})
+				console.log("Error")
 			} finally {
 				setIsLoading(false)
 			}
@@ -69,11 +64,7 @@ function RoadmapPreviewPage() {
 
 	const handleSave = async () => {
 		if (!formData.title.trim()) {
-			toast({
-				title: "Title Required",
-				description: "Please enter a title for your roadmap.",
-				variant: "destructive",
-			})
+			console.log("Title Required")
 			return
 		}
 
@@ -85,19 +76,12 @@ function RoadmapPreviewPage() {
 				description: formData.description,
 			})
 
-			toast({
-				title: "Roadmap Updated!",
-				description: "Your roadmap has been saved successfully.",
-			})
+			console.log("Roadmap Updated!")
 
 			// Navigate to the course view
 			navigate(`/course/${roadmapId}`)
 		} catch (_error) {
-			toast({
-				title: "Save Failed",
-				description: "Failed to save roadmap. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Save Failed")
 		} finally {
 			setIsSaving(false)
 		}
@@ -113,10 +97,7 @@ function RoadmapPreviewPage() {
 				userPrompt: originalPrompt,
 			})
 
-			toast({
-				title: "Roadmap Regenerated!",
-				description: "A new roadmap has been generated.",
-			})
+			console.log("Roadmap Regenerated!")
 
 			// Navigate to new course preview
 			navigate(`/course/preview/${response.id}`, {
@@ -127,11 +108,7 @@ function RoadmapPreviewPage() {
 				replace: true,
 			})
 		} catch (_error) {
-			toast({
-				title: "Regeneration Failed",
-				description: "Failed to regenerate roadmap. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Regeneration Failed")
 		} finally {
 			setIsRegenerating(false)
 		}

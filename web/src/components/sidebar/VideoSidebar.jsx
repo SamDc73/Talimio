@@ -13,7 +13,6 @@ const formatTime = (seconds) => {
 }
 
 import { useEffect, useState } from "react"
-import { useToast } from "@/hooks/use-toast"
 import { useVideoProgress } from "@/hooks/useVideoProgress"
 import { extractVideoChapters, getVideoChapters } from "@/services/videosService"
 import CompletionCheckbox from "./CompletionCheckbox"
@@ -28,7 +27,6 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 	const [isLoadingChapters, setIsLoadingChapters] = useState(false)
 	const [isExtracting, setIsExtracting] = useState(false)
 	const [optimisticCompletions, setOptimisticCompletions] = useState({})
-	const { toast } = useToast()
 
 	// Use the standardized hook
 	const { toggleCompletion, isCompleted, refetch } = useVideoProgress(video?.id)
@@ -105,18 +103,14 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 				delete newState[chapterId]
 				return newState
 			})
-		} catch (_error) {
+		} catch (error) {
 			// On error, revert optimistic update
 			setOptimisticCompletions((prev) => {
 				const newState = { ...prev }
 				delete newState[chapterId]
 				return newState
 			})
-			toast({
-				title: "Error",
-				description: "Failed to update chapter progress",
-				variant: "destructive",
-			})
+			logger.error("Failed to toggle chapter completion", error, { chapterId, videoId: video?.id })
 		}
 	}
 
@@ -134,10 +128,7 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 		setIsExtracting(true)
 		try {
 			const result = await extractVideoChapters(video.id)
-			toast({
-				title: "Chapters extracted",
-				description: `Successfully extracted ${result.count || 0} chapters`,
-			})
+			logger.track("video_chapters_extracted", { videoId: video.id, chapterCount: result?.length || 0 })
 
 			// Refresh chapters
 			const updatedChapters = await getVideoChapters(video.id)
@@ -154,12 +145,8 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 
 			// Refresh progress data
 			await refetch()
-		} catch (_error) {
-			toast({
-				title: "Error",
-				description: "Failed to extract chapters",
-				variant: "destructive",
-			})
+		} catch (error) {
+			logger.error("Failed to extract video chapters", error, { videoId: video?.id })
 		} finally {
 			setIsExtracting(false)
 		}

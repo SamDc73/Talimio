@@ -1,5 +1,4 @@
 import { useNavigate } from "react-router-dom"
-import { useToast } from "@/hooks/use-toast"
 import { api } from "@/lib/apiClient"
 
 /**
@@ -13,7 +12,6 @@ import { api } from "@/lib/apiClient"
  */
 export function useContentHandlers({ filters, pinning, setContentItems, loadContentData, setIsGenerating }) {
 	const navigate = useNavigate()
-	const { toast } = useToast()
 
 	const handleGenerateCourse = async () => {
 		if (!filters.searchQuery.trim()) return
@@ -27,19 +25,12 @@ export function useContentHandlers({ filters, pinning, setContentItems, loadCont
 			})
 
 			// Generate course using search query
-			toast({
-				title: "Generating Course",
-				description: `Creating a personalized course on "${filters.searchQuery}"...`,
-			})
+			console.log("Action completed")
 
 			// Clear search after generating
 			filters.setSearchQuery("")
 		} catch (_error) {
-			toast({
-				title: "Error",
-				description: "Failed to generate course. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Error")
 		} finally {
 			setIsGenerating(false)
 		}
@@ -118,10 +109,7 @@ export function useContentHandlers({ filters, pinning, setContentItems, loadCont
 		// Refresh via React Query
 		await loadContentData()
 		// Toast should be in mutation onSuccess
-		toast({
-			title: "Deck Created!",
-			description: "Your new flashcard deck is ready to use.",
-		})
+		console.log("Deck Created!")
 	}
 
 	return {

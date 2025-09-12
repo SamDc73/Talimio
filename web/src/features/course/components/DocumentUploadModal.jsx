@@ -12,7 +12,6 @@
 import { AlertTriangle, CheckCircle2, X } from "lucide-react"
 import { useCallback, useState } from "react"
 import { Button } from "../../../components/button"
-import { useToast } from "../../../hooks/use-toast"
 import { useDocumentsService } from "../api/documentsApi"
 import { DocumentStatusProgress } from "./DocumentStatusBadge"
 import DocumentUploader from "./DocumentUploader"
@@ -24,7 +23,6 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 	const [_uploadProgress, setUploadProgress] = useState({})
 
 	const documentsService = useDocumentsService(courseId)
-	const { toast } = useToast()
 
 	// Handle document changes from uploader
 	const handleDocumentsChange = useCallback((newDocuments) => {
@@ -35,11 +33,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 	// Handle upload process
 	const handleUpload = async () => {
 		if (documents.length === 0) {
-			toast({
-				title: "No documents to upload",
-				description: "Please add at least one document.",
-				variant: "destructive",
-			})
+			console.log("No documents to upload")
 			return
 		}
 
@@ -76,27 +70,16 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 
 			// Show success/error toast
 			if (results.errors.length === 0) {
-				toast({
-					title: "Documents uploaded successfully!",
-					description: `${results.results.length} document(s) have been added to the course.`,
-				})
+			console.log("Action completed")
 
 				// Auto-close modal after successful upload
 				setTimeout(() => {
 					handleClose()
 				}, 2000)
 			} else if (results.results.length === 0) {
-				toast({
-					title: "All uploads failed",
-					description: "Please check the documents and try again.",
-					variant: "destructive",
-				})
+				console.log("All uploads failed")
 			} else {
-				toast({
-					title: "Partial upload success",
-					description: `${results.results.length} uploaded, ${results.errors.length} failed.`,
-					variant: "destructive",
-				})
+			console.log("Action completed")
 			}
 
 			// Notify parent component
@@ -112,11 +95,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 			}))
 			setDocuments(failedDocs)
 
-			toast({
-				title: "Upload failed",
-				description: error.message || "Failed to upload documents. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Upload failed")
 		} finally {
 			setIsUploading(false)
 		}

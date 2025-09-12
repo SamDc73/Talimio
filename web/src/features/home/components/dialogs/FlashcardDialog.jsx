@@ -4,11 +4,9 @@ import { Button } from "@/components/button"
 import { Input } from "@/components/input"
 import { Label } from "@/components/label"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/sheet"
-import { useToast } from "@/hooks/use-toast"
 import { api } from "@/lib/apiClient"
 
 export function FlashcardDialog({ open, onOpenChange, onDeckCreated }) {
-	const { toast } = useToast()
 	const [newDeckTitle, setNewDeckTitle] = useState("")
 	const [newDeckDescription, setNewDeckDescription] = useState("")
 	const [newCards, setNewCards] = useState("")
@@ -38,10 +36,7 @@ export function FlashcardDialog({ open, onOpenChange, onDeckCreated }) {
 				}
 			}
 
-			toast({
-				title: "Deck Created!",
-				description: `"${deckResponse.title}" has been created successfully.`,
-			})
+			console.log("Action completed")
 
 			// Reset form
 			setNewDeckTitle("")
@@ -54,11 +49,7 @@ export function FlashcardDialog({ open, onOpenChange, onDeckCreated }) {
 				onDeckCreated(deckResponse)
 			}
 		} catch (_error) {
-			toast({
-				title: "Error",
-				description: "Failed to create flashcard deck. Please try again.",
-				variant: "destructive",
-			})
+			console.log("Error")
 		}
 	}
 
