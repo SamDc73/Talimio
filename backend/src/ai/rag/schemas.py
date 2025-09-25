@@ -47,7 +47,7 @@ class DocumentResponse(CustomBaseModel):
     source_url: str | None = None
     crawl_date: datetime | None = None
     content_hash: str | None = None
-    doc_metadata: dict | None = Field(alias="metadata", default=None)
+    # Removed doc_metadata - not used for course documents, only for books
     created_at: datetime
     processed_at: datetime | None = None
     embedded_at: datetime | None = None

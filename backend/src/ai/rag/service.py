@@ -15,7 +15,7 @@ from src.ai.rag.config import rag_config
 from src.ai.rag.parser import DocumentProcessor
 from src.ai.rag.schemas import DocumentResponse, SearchResult
 from src.auth import AuthContext
-from src.courses.models import CourseDocument, Roadmap
+from src.courses.models import CourseDocument
 
 
 logger = logging.getLogger(__name__)
@@ -99,12 +99,12 @@ class RAGService:
     ) -> DocumentResponse:
         """Upload a document to a course, ensuring user ownership."""
         # Validate user owns the course
-        await auth.get_or_404(Roadmap, course_id, "course")
+        await auth.validate_resource("course", course_id)
 
         try:
             # Create document record
             doc = CourseDocument(
-                roadmap_id=course_id,
+                course_id=course_id,
                 title=title,
                 source_url=url,
                 document_type=document_type or "unknown",
@@ -118,16 +118,24 @@ class RAGService:
                 from src.config.settings import get_settings
 
                 settings = get_settings()
-                upload_dir = Path(settings.LOCAL_STORAGE_PATH) / "documents" / str(course_id)
-                upload_dir.mkdir(parents=True, exist_ok=True)
+                # NOTE: RAG documents are stored separately from main user files (books)
+                # This is intentional - RAG documents are course-specific reference materials
+                # while books are user-owned files with different access patterns
+                rag_document_dir = Path(settings.LOCAL_STORAGE_PATH) / "rag_documents" / str(course_id)
+                rag_document_dir.mkdir(parents=True, exist_ok=True)
 
-                file_path = upload_dir / f"{doc.id}_{filename}"
+                # Security fix: Use only UUID + validated extension, no user-provided filename in path
+                # This prevents path traversal attacks while preserving file type handling
+                ext = Path(filename).suffix.lower() if filename else ""
+                allowed_extensions = {".pdf", ".txt", ".md", ".epub"}
+                safe_ext = ext if ext in allowed_extensions else ""
+
+                file_path = rag_document_dir / f"{doc.id}{safe_ext}"
                 file_path.write_bytes(file_content)
 
                 doc.file_path = str(file_path)
 
             await auth.session.commit()
-            await auth.session.refresh(doc)
 
             # Process the document immediately after upload
             try:
@@ -136,7 +144,15 @@ class RAGService:
                 logger.exception("Failed to process document %s", doc.id)
                 # Don't fail the upload if processing fails - it can be retried later
 
-            return DocumentResponse.model_validate(doc)
+            # Re-query to get a Row object that works with model_validate
+            # This matches the pattern used in get_document() and get_documents()
+            result = await auth.session.execute(
+                text("SELECT * FROM roadmap_documents WHERE id = :doc_id"),
+                {"doc_id": doc.id}
+            )
+            row = result.fetchone()
+
+            return DocumentResponse.model_validate(row._asdict())
 
         except Exception as e:
             await auth.session.rollback()
@@ -304,10 +320,10 @@ class RAGService:
         self, auth: AuthContext, course_id: uuid.UUID, query: str, top_k: int | None = None
     ) -> list[SearchResult]:
         """Search documents using AuthContext, ensuring user ownership."""
-        await auth.get_or_404(Roadmap, course_id, "course")
-        return await self._search_roadmap_documents(auth.session, course_id, query, top_k)
+        await auth.validate_resource("course", course_id)
+        return await self.search_roadmap_documents(auth.session, course_id, query, top_k)
 
-    async def _search_roadmap_documents(
+    async def search_roadmap_documents(
         self, session: AsyncSession, course_id: uuid.UUID, query: str, top_k: int | None = None
     ) -> list[SearchResult]:
         """Search documents using VectorRAG's existing pgvector search.
@@ -338,7 +354,7 @@ class RAGService:
     ) -> list[DocumentResponse]:
         """Get documents for a course, ensuring user ownership."""
         # Verify user owns the course - this will throw 404 if not found or not owned
-        await auth.get_or_404(Roadmap, course_id, "course")
+        await auth.validate_resource("course", course_id)
 
         try:
             # Now we know the user owns the course, we can query its documents directly
@@ -362,7 +378,7 @@ class RAGService:
     async def count_documents(self, auth: AuthContext, course_id: uuid.UUID) -> int:
         """Count documents for a course, ensuring user ownership."""
         # Verify user owns the course - this will throw 404 if not found or not owned
-        await auth.get_or_404(Roadmap, course_id, "course")
+        await auth.validate_resource("course", course_id)
 
         try:
             # Now we know the user owns the course, we can count its documents directly
@@ -396,7 +412,7 @@ class RAGService:
                 raise HTTPException(status_code=404, detail="Document not found")
 
             # Verify user owns the course/roadmap that contains this document
-            await auth.get_or_404(Roadmap, doc.roadmap_id, "course")
+            await auth.validate_resource("course", doc.roadmap_id)
 
             # Delete file from filesystem if it exists
             if doc.file_path:
@@ -446,7 +462,7 @@ class RAGService:
                 raise HTTPException(status_code=404, detail="Document not found")
 
             # Verify user owns the course/roadmap that contains this document
-            await auth.get_or_404(Roadmap, row.roadmap_id, "course")
+            await auth.validate_resource("course", row.roadmap_id)
 
             return DocumentResponse.model_validate(row._asdict())
         except HTTPException:

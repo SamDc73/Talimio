@@ -4,7 +4,7 @@ import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from src.ai.rag.schemas import (
     DefaultResponse,
@@ -15,7 +15,6 @@ from src.ai.rag.schemas import (
 )
 from src.ai.rag.service import RAGService
 from src.auth import CurrentAuth
-from src.courses.models import Roadmap
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +42,7 @@ async def get_rag_service() -> RAGService:
 # Ownership validation is handled via UserContext in each endpoint
 
 
-@router.post("/courses/{course_id}/documents")
+@router.post("/courses/{course_id}/documents", response_model=DocumentResponse)
 async def upload_document(
     course_id: uuid.UUID,
     document_type: Annotated[str, Form()],
@@ -52,17 +51,23 @@ async def upload_document(
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
     url: Annotated[str | None, Form()] = None,
     file: Annotated[UploadFile | None, File()] = None,
-) -> DocumentResponse:
+) -> dict:
     """Upload a document to a course."""
     # Validate course access via AuthContext
-    await auth.get_or_404(Roadmap, course_id, "course")
+    await auth.validate_resource("course", course_id)
 
     # Only file uploads supported in MVP (no URL crawling)
     if not file:
-        raise HTTPException(status_code=400, detail="File upload required")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File upload required"
+        )
 
     if document_type == "url":
-        raise HTTPException(status_code=400, detail="URL documents not supported in MVP. Please upload a file.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URL documents not supported in MVP. Please upload a file."
+        )
 
     file_content = None
     filename = None
@@ -71,7 +76,7 @@ async def upload_document(
         filename = file.filename
 
     try:
-        return await rag_service.upload_document(
+        result = await rag_service.upload_document(
             auth,
             course_id,
             document_type,
@@ -80,28 +85,44 @@ async def upload_document(
             url,
             filename,
         )
+        return result.model_dump() if hasattr(result, "model_dump") else result
 
         # Don't process immediately to avoid blocking
         # TODO: Add to background job queue
 
-    except HTTPException:
-        raise
+    except ValueError as e:
+        # Validation errors
+        logger.exception("Validation error uploading document: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        ) from e
+    except RuntimeError as e:
+        # System errors (API failures, processing errors)
+        logger.exception("System error uploading document: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document upload temporarily unavailable"
+        ) from e
     except Exception as e:
-        logger.exception("Failed to upload document")
-        raise HTTPException(status_code=500, detail="Failed to upload document") from e
+        logger.exception("Unexpected error uploading document")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to upload document"
+        ) from e
 
 
-@router.get("/courses/{course_id}/documents")
+@router.get("/courses/{course_id}/documents", response_model=DocumentList)
 async def list_documents(
     course_id: uuid.UUID,
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
     skip: int = 0,
     limit: int = 20,
-) -> DocumentList:
+) -> dict:
     """List documents for a course - with proper error handling."""
     # Validate course access via AuthContext
-    await auth.get_or_404(Roadmap, course_id, "course")
+    await auth.validate_resource("course", course_id)
 
     try:
         documents = await rag_service.get_documents(auth, course_id, skip=skip, limit=limit)
@@ -109,24 +130,26 @@ async def list_documents(
         # Get total count
         total = await rag_service.count_documents(auth, course_id)
 
-        return DocumentList(documents=documents, total=total, page=skip // limit + 1, size=limit)
+        result = DocumentList(documents=documents, total=total, page=skip // limit + 1, size=limit)
+        return result.model_dump()
 
     except Exception:
         # Log but don't crash - return empty list
         logger.exception("Error listing documents for course %s", course_id)
-        return DocumentList(documents=[], total=0, page=1, size=limit)
+        result = DocumentList(documents=[], total=0, page=1, size=limit)
+        return result.model_dump()
 
 
-@router.post("/courses/{course_id}/search")
+@router.post("/courses/{course_id}/search", response_model=SearchResponse)
 async def search_documents(
     course_id: uuid.UUID,
     search_request: SearchRequest,
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
-) -> SearchResponse:
+) -> dict:
     """Search documents within a course using RAG."""
     # Validate course access via AuthContext
-    await auth.get_or_404(Roadmap, course_id, "course")
+    await auth.validate_resource("course", course_id)
 
     try:
         results = await rag_service.search_documents(
@@ -136,41 +159,99 @@ async def search_documents(
             search_request.top_k,
         )
 
-        return SearchResponse(results=results, total=len(results))
+        result = SearchResponse(results=results, total=len(results))
+        return result.model_dump()
 
-    except Exception:
-        logger.exception("Error searching documents")
-        return SearchResponse(results=[], total=0)
+    except ValueError as e:
+        # Validation errors
+        logger.exception("Validation error searching documents: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        ) from e
+    except RuntimeError as e:
+        # System errors (API failures, search errors)
+        logger.exception("System error searching documents: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document search temporarily unavailable"
+        ) from e
+    except Exception as e:
+        logger.exception("Unexpected error searching documents")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to search documents"
+        ) from e
 
 
-@router.delete("/documents/{document_id}")
+@router.delete("/documents/{document_id}", response_model=DefaultResponse)
 async def delete_document(
     document_id: int,
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
-) -> DefaultResponse:
+) -> dict:
     """Delete a document."""
     try:
         # Validate user owns the document and delete it
         await rag_service.delete_document(auth, document_id)
-        return DefaultResponse(
+        result = DefaultResponse(
             status=True,
             message="Document deleted successfully",
         )
+        return result.model_dump()
 
+    except ValueError as e:
+        # Validation errors (e.g., document not found, not owned by user)
+        logger.exception("Validation error deleting document: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        ) from e
+    except RuntimeError as e:
+        # System errors
+        logger.exception("System error deleting document: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document deletion temporarily unavailable"
+        ) from e
     except Exception as e:
-        logger.exception("Error deleting document")
-        raise HTTPException(status_code=500, detail="Failed to delete document") from e
+        logger.exception("Unexpected error deleting document")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete document"
+        ) from e
 
 
-@router.get("/documents/{document_id}")
+@router.get("/documents/{document_id}", response_model=DocumentResponse)
 async def get_document(
     document_id: int,
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
-) -> DocumentResponse:
+) -> dict:
     """Get document details."""
-    return await rag_service.get_document(auth, document_id)
+    try:
+        result = await rag_service.get_document(auth, document_id)
+        return result.model_dump() if hasattr(result, "model_dump") else result
+    except ValueError as e:
+        # Validation errors (e.g., document not found)
+        logger.exception("Validation error getting document: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        ) from e
+    except RuntimeError as e:
+        # System errors
+        logger.exception("System error getting document: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document retrieval temporarily unavailable"
+        ) from e
+    except Exception as e:
+        logger.exception("Unexpected error getting document")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get document"
+        ) from e
 
 
 # URL extraction endpoint removed - MVP only supports file uploads

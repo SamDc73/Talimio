@@ -8,7 +8,6 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import (
-    JSON,
     TIMESTAMP,
     Boolean,
     DateTime,
@@ -36,7 +35,6 @@ class Course(Base):
     description: Mapped[str] = mapped_column(String, nullable=False)
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of tags
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    rag_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # RAG integration flag
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
@@ -146,9 +144,6 @@ class CourseDocument(Base):
     crawl_date: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     content_hash: Mapped[str | None] = mapped_column(String(64))
     parsed_content: Mapped[str | None] = mapped_column(Text)
-    doc_metadata: Mapped[dict | None] = mapped_column(
-        JSON, name="metadata"
-    )  # Use name parameter to map to database column
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=lambda: datetime.now(UTC))
     processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     embedded_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))

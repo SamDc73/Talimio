@@ -11,7 +11,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from src.ai.ai_service import get_ai_service
+from src.ai.service import get_ai_service
 from src.books.models import Book
 
 from .services.book_content_service import BookContentService

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import AsyncGenerator, Callable
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 import httpx
@@ -526,7 +526,7 @@ async def _handle_local_file(url: str, book: Book) -> FileResponse:
 
 
 async def _handle_range_request(
-    url: str, range_header: str, media_type: str, stream_func: Callable[[], AsyncGenerator[bytes, None]]
+    url: str, range_header: str, media_type: str, stream_func: Any
 ) -> StreamingResponse | None:
     """Handle range requests for partial content."""
     async with httpx.AsyncClient(timeout=10.0) as client:

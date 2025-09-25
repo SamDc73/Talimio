@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.memory import get_memory_wrapper
+from src.ai.memory import add_memory, delete_memory, get_memories
 from src.user.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
     CustomInstructionsResponse,
@@ -105,8 +105,6 @@ async def get_user_settings(user_id: UUID, db_session: AsyncSession) -> UserSett
         UserSettingsResponse: User's settings, memory information, and preferences
     """
     try:
-        memory_manager = await get_memory_wrapper()
-
         # Get user preferences from database (includes custom instructions)
         preferences = await _load_user_preferences(user_id, db_session)
 
@@ -115,9 +113,9 @@ async def get_user_settings(user_id: UUID, db_session: AsyncSession) -> UserSett
         if preferences.user_preferences:
             custom_instructions = preferences.user_preferences.get("custom_instructions", "")
 
-        # Get memory count using async method
+        # Get memory count using direct function
         try:
-            memories = await memory_manager.get_memories(user_id, limit=1000)
+            memories = await get_memories(user_id, limit=1000)
             memory_count = len(memories)
         except Exception as e:
             logger.warning(f"Failed to count memories for user {user_id}: {e}")
@@ -165,10 +163,9 @@ async def update_custom_instructions(
         if success:
             # Also add a memory entry about the instruction update
             try:
-                memory_wrapper = await get_memory_wrapper()
-                await memory_wrapper.add_memory(
-                    content="Updated personal AI instructions",
+                await add_memory(
                     user_id=user_id,
+                    content="Updated personal AI instructions",
                     metadata={
                         "interaction_type": "settings_update",
                         "setting_type": "custom_instructions",
@@ -201,13 +198,8 @@ async def get_user_memories(user_id: UUID) -> list[dict]:
         List of memories with content, timestamps, and metadata
     """
     try:
-        memory_manager = await get_memory_wrapper()
-
-        # Get all memories (retrieves all without search)
-        memories = await memory_manager.get_memories(
-            user_id=user_id,
-            limit=1000,  # High limit to get all memories
-        )
+        # Get all memories using direct function
+        memories = await get_memories(user_id, limit=1000)
 
         # Format memories for web app consumption
         formatted_memories = []
@@ -241,8 +233,7 @@ async def delete_user_memory(user_id: UUID, memory_id: str) -> bool:
         bool: True if deletion was successful, False otherwise
     """
     try:
-        memory_manager = await get_memory_wrapper()
-        return await memory_manager.delete_memory(user_id, memory_id)
+        return await delete_memory(user_id, memory_id)
     except Exception as e:
         logger.exception(f"Error deleting memory {memory_id} for user {user_id}: {e}")
         return False

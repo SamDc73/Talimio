@@ -7,12 +7,12 @@ eliminating the need to pass user_id in the URL.
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth import CurrentAuth
 from src.database.session import get_db_session
-from src.middleware.security import api_rate_limit
+from src.middleware.security import api_rate_limit, create_rate_limit_dependency
 from src.user.schemas import (
     CustomInstructionsRequest,
     CustomInstructionsResponse,
@@ -33,7 +33,11 @@ from src.user.service import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/user", tags=["current-user"])
+router = APIRouter(
+    prefix="/api/v1/user",
+    tags=["current-user"],
+    dependencies=[Depends(create_rate_limit_dependency(api_rate_limit))]
+)
 
 
 @router.get("/settings")
@@ -125,9 +129,7 @@ async def delete_current_user_memory(auth: CurrentAuth, memory_id: str) -> dict[
 
 
 @router.put("/preferences")
-@api_rate_limit
 async def update_current_user_preferences(
-    request: Request,  # Required for rate limiting decorator  # noqa: ARG001
     auth: CurrentAuth,
     preferences_request: PreferencesUpdateRequest,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -155,9 +157,7 @@ async def update_current_user_preferences(
 
 
 @router.get("/preferences")
-@api_rate_limit
 async def get_current_user_preferences(
-    request: Request,  # Required for rate limiting decorator  # noqa: ARG001
     auth: CurrentAuth,
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> UserPreferences:

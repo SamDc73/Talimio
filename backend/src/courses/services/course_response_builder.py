@@ -85,7 +85,6 @@ class CourseResponseBuilder:
             description=roadmap.description,
             tags=roadmap.tags or "[]",
             archived=roadmap.archived,
-            rag_enabled=roadmap.rag_enabled,
             modules=modules_data,
             created_at=roadmap.created_at,
             updated_at=roadmap.updated_at,
@@ -110,7 +109,6 @@ class CourseResponseBuilder:
                 description=course.description,
                 tags=course.tags or "[]",
                 archived=course.archived,
-                rag_enabled=course.rag_enabled,
                 modules=[],  # Empty modules for list view
                 created_at=course.created_at,
                 updated_at=course.updated_at,

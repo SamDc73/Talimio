@@ -44,7 +44,6 @@ class CourseBase(BaseModel):
     description: str = Field("", description="Course description")
     tags: str = Field("[]", description="Course tags as JSON string")
     archived: bool = Field(default=False, description="Whether the course is archived")
-    rag_enabled: bool = Field(default=False, description="Whether RAG is enabled for this course")
 
 
 class CourseCreate(BaseModel):
@@ -60,7 +59,6 @@ class CourseUpdate(BaseModel):
     description: str | None = Field(None, description="Course description")
     tags: str | None = Field(None, description="Course tags as JSON string")
     archived: bool | None = Field(None, description="Whether the course is archived")
-    rag_enabled: bool | None = Field(None, description="Whether RAG is enabled for this course")
 
 
 class CourseResponse(CourseBase):

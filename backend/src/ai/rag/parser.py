@@ -22,7 +22,7 @@ class BaseIngestor:
         """Save binary file with given extension and return path and content hash."""
         # Generate unique filename
         file_id = str(uuid.uuid4())
-        file_path = rag_config.upload_dir / f"{file_id}.{extension}"
+        file_path = rag_config.temp_processing_dir / f"{file_id}.{extension}"
 
         # Save file
         with file_path.open("wb") as f:
@@ -50,6 +50,8 @@ class PDFIngestor(BaseIngestor):
                 extract_images_in_pdf=rag_config.extract_images,
                 extract_tables=rag_config.extract_tables,
                 infer_table_structure=rag_config.extract_tables,
+                # TODO: Future enhancement - add language detection or per-document config
+                # For now, default to English which covers most use cases
                 ocr_languages=["eng"] if rag_config.enable_ocr else None,
             )
             return "\n".join([str(el) for el in elements])
@@ -109,7 +111,7 @@ class TextIngestor(BaseIngestor):
         # Generate unique filename preserving extension
         file_id = str(uuid.uuid4())
         original_ext = Path(filename).suffix
-        file_path = rag_config.upload_dir / f"{file_id}{original_ext}"
+        file_path = rag_config.temp_processing_dir / f"{file_id}{original_ext}"
 
         # Save file
         try:
@@ -195,6 +197,9 @@ class DocumentProcessor:
                 strategy="hi_res" if document_type == "pdf" and rag_config.enable_ocr else "auto",
                 extract_images_in_pdf=rag_config.extract_images,
                 extract_tables=rag_config.extract_tables,
+                # TODO: Future enhancement - add language detection or per-document config
+                # For now, default to English which covers most use cases
+                ocr_languages=["eng"] if rag_config.enable_ocr else None,
             )
             return "\n".join([str(el) for el in elements])
 

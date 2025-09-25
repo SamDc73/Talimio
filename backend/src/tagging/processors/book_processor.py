@@ -1,13 +1,12 @@
 """Book content processor for tag generation."""
 
 import logging
-from pathlib import Path
 
 import fitz  # PyMuPDF
 
 from src.books.models import Book
-from src.config.settings import get_settings
 from src.database.session import AsyncSession
+from src.storage.factory import get_storage_provider
 
 
 logger = logging.getLogger(__name__)
@@ -27,23 +26,21 @@ class BookProcessor:
     async def extract_content_for_tagging(
         self,
         book: Book,
-        file_path: str,
+        file_content: bytes,
+        file_extension: str,
     ) -> dict[str, str]:
         """Extract book content for tag generation.
 
         Args:
             book: Book model instance
-            file_path: Path to the book file
+            file_content: File content as bytes
+            file_extension: File extension (e.g., ".pdf", ".epub")
 
         Returns
         -------
             Dictionary with title, author, and content_preview
         """
         try:
-            # Read file content
-            file_content = Path(file_path).read_bytes()
-            file_extension = Path(file_path).suffix.lower()
-
             # Extract content based on file type
             if file_extension == ".pdf":
                 content_preview = self._extract_pdf_content(file_content)
@@ -267,22 +264,23 @@ async def process_book_for_tagging(
         logger.error(f"Book not found: {book_id}")
         return None
 
-    # Construct file path using settings, avoiding duplicate segments
-    settings = get_settings()
-    base = Path(settings.LOCAL_STORAGE_PATH)
-    fp = Path(book.file_path)
-    # If book.file_path is relative, join with base; otherwise use as-is
-    file_path = str((base / fp).resolve()) if not fp.is_absolute() else str(fp)
+    try:
+        # Get storage provider and download file content
+        storage = get_storage_provider()
+        file_content = await storage.read(book.file_path)
 
-    if not Path(file_path).exists():
-        logger.error(f"Book file not found: {file_path}")
-        # Return basic info from database
+        # Determine file extension from file path
+        file_extension = f".{book.file_type}" if book.file_type else ".pdf"
+
+        # Process book
+        processor = BookProcessor(session)
+        return await processor.extract_content_for_tagging(book, file_content, file_extension)
+
+    except Exception as e:
+        logger.error(f"Error downloading or processing book file: {e}")
+        # Return basic info from database as fallback
         return {
             "title": book.title,
             "author": book.author,
             "content_preview": book.description or "",
         }
-
-    # Process book
-    processor = BookProcessor(session)
-    return await processor.extract_content_for_tagging(book, file_path)

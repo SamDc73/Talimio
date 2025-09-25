@@ -63,7 +63,7 @@ def validate_content_type(content_type: str) -> str:
 
 
 # Content processor mapping
-async def get_content_processor(content_type: str) -> Callable:
+async def get_content_processor(content_type: str):
     """Get the appropriate content processor for the given type.
 
     Args:

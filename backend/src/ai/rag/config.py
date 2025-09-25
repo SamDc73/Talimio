@@ -12,7 +12,7 @@ class RAGConfig(BaseSettings):
 
     # txtai Configuration
     embedding_model: str = Field(
-        ...,  # Required field, no default
+        default="",  # Optional - RAG might not be configured
         description="Model for generating embeddings via txtai",
     )
     embedding_output_dim: int | None = Field(
@@ -56,15 +56,15 @@ class RAGConfig(BaseSettings):
         description="Number of chunks to retrieve before reranking",
     )
     rerank_k: int = Field(
-        ...,  # Required field, no default
+        default=10,  # Sensible default
         description="Number of chunks to return after reranking",
     )
     rerank_model: str = Field(
-        ...,  # Required field, no default
+        default="",  # Optional - reranking might not be configured
         description="Model for reranking results",
     )
     rerank_enabled: bool = Field(
-        ...,  # Required field, no default
+        default=False,  # Disabled by default if not configured
         description="Whether to enable reranking",
     )
     min_similarity_score: float = Field(
@@ -82,13 +82,17 @@ class RAGConfig(BaseSettings):
         description="Number of recent interactions to remember",
     )
 
-    # Storage Configuration
-    upload_dir: Path = Field(
-        default_factory=lambda: Path("uploads/documents"),
-        description="Directory for uploaded documents",
+    # Temporary Processing Configuration
+    # NOTE: This is separate from the main storage system (/src/storage/)
+    # RAG uses temporary local files during document processing (parsing, chunking)
+    # which are cleaned up after chunks are stored in the database.
+    # Main storage handles permanent user files (books, uploads).
+    temp_processing_dir: Path = Field(
+        default=Path("temp/rag_processing"),
+        description="Temporary directory for document processing (cleaned after processing)",
     )
     max_file_size_mb: int = Field(
-        ...,  # Required field, no default
+        default=10,  # 10MB default limit
         description="Maximum file size in MB",
     )
 

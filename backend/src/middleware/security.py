@@ -45,7 +45,7 @@ api_rate_limit = limiter.limit("100/minute")  # General API calls
 
 def create_rate_limit_dependency(
     limit_decorator: Callable[[Callable], Callable],
-) -> Callable[[Request], Awaitable[None]]:
+):
     """Create rate limit dependencies from decorators.
 
     This allows applying rate limits at router level without modifying functions.

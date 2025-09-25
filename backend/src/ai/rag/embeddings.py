@@ -31,7 +31,15 @@ class VectorRAG:
         if self.embedding_dim:
             self.embedding_dim = int(self.embedding_dim)
 
-        logger.info(f"VectorRAG initialized with model: {self.embedding_model}, dim: {self.embedding_dim}")
+        # Get context size for embedding models if specified
+        self.embedding_context_size = os.getenv("RAG_EMBEDDING_CONTEXT_SIZE")
+        if self.embedding_context_size:
+            self.embedding_context_size = int(self.embedding_context_size)
+
+        logger.info(
+            f"VectorRAG initialized with model: {self.embedding_model}, "
+            f"dim: {self.embedding_dim}, context_size: {self.embedding_context_size}"
+        )
 
     async def generate_embedding(self, text: str) -> list[float]:
         """Generate embedding for text using LiteLLM's async support."""
@@ -48,6 +56,11 @@ class VectorRAG:
             # when LITELLM_DROP_PARAMS=true (which we have set)
             if self.embedding_dim:
                 embed_kwargs["dimensions"] = self.embedding_dim
+
+            # Pass context size if specified and using Ollama
+            # Ollama-specific: forwards as {"options": {"num_ctx": value}}
+            if self.embedding_context_size and self.embedding_model and self.embedding_model.startswith("ollama/"):
+                embed_kwargs["num_ctx"] = self.embedding_context_size
 
             # Use LiteLLM's async embedding - provider agnostic
             response = await litellm.aembedding(**embed_kwargs)
@@ -138,7 +151,6 @@ class VectorRAG:
         """Search course documents using vector similarity."""
         try:
             # Generate embedding for the query
-            logger.info(f"Generating embedding for query: {query}")
             query_embedding = await self.generate_embedding(query)
 
             # Convert to pgvector format
@@ -176,7 +188,9 @@ class VectorRAG:
                 for row in rows
             ]
 
-            logger.info(f"Found {len(results)} vector search results for query: {query}")
+            # Log count only, not the query text
+            if results:
+                logger.debug(f"Found {len(results)} vector search results")
             return results
 
         except Exception:

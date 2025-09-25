@@ -8,8 +8,6 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from src.ai.ai_service import get_ai_service
-
 from .service import VideoService
 from .services.video_progress_tracker import VideoProgressTracker
 
@@ -29,7 +27,6 @@ class VideosFacade:
         # Internal services - not exposed to outside modules
         self._video_service = VideoService()
         self._progress_service = VideoProgressTracker()  # Implements ProgressTracker protocol
-        self._ai_service = get_ai_service()
 
     async def get_content_with_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
         """
@@ -219,71 +216,16 @@ class VideosFacade:
             logger.exception(f"Error marking chapter complete for video {video_id}: {e}")
             return {"error": "Failed to mark chapter complete", "success": False}
 
-    # AI operations
+    # Transcript operation (delegates to video service)
     async def get_video_transcript(self, video_id: UUID, user_id: UUID, url: str) -> str:
         """Get or generate transcript for a video."""
         try:
-            return await self._ai_service.process_content(
-                content_type="video", action="transcript", user_id=user_id, video_id=str(video_id), url=url
-            )
+            # The actual transcript is fetched from the video service, not AI
+            from src.database.session import async_session_maker
+            async with async_session_maker() as session:
+                return await self._video_service.get_transcript(session, str(video_id), user_id, url)
         except Exception as e:
             logger.exception(f"Error getting transcript for video {video_id}: {e}")
             raise
 
-    async def summarize_video(self, video_id: UUID, user_id: UUID, transcript: str) -> str:
-        """Generate a summary of the video."""
-        try:
-            return await self._ai_service.process_content(
-                content_type="video", action="summarize", user_id=user_id, video_id=str(video_id), transcript=transcript
-            )
-        except Exception as e:
-            logger.exception(f"Error summarizing video {video_id}: {e}")
-            raise
-
-    async def ask_video_question(
-        self, video_id: UUID, user_id: UUID, question: str, timestamp: float | None = None
-    ) -> str:
-        """Ask a question about the video content."""
-        try:
-            return await self._ai_service.process_content(
-                content_type="video",
-                action="question",
-                user_id=user_id,
-                video_id=str(video_id),
-                question=question,
-                timestamp=timestamp,
-            )
-        except Exception as e:
-            logger.exception(f"Error answering question for video {video_id}: {e}")
-            raise
-
-    async def chat_about_video(
-        self, video_id: UUID, user_id: UUID, message: str, history: list[dict[str, Any]] | None = None
-    ) -> str:
-        """Have a conversation about the video."""
-        try:
-            return await self._ai_service.process_content(
-                content_type="video",
-                action="chat",
-                user_id=user_id,
-                video_id=str(video_id),
-                message=message,
-                history=history,
-            )
-        except Exception as e:
-            logger.exception(f"Error in video chat for {video_id}: {e}")
-            raise
-
-    async def process_video_for_rag(self, video_id: UUID, user_id: UUID, transcript: str) -> dict[str, Any]:
-        """Process video transcript for RAG indexing."""
-        try:
-            return await self._ai_service.process_content(
-                content_type="video",
-                action="process_rag",
-                user_id=user_id,
-                video_id=str(video_id),
-                transcript=transcript,
-            )
-        except Exception as e:
-            logger.exception(f"Error processing video {video_id} for RAG: {e}")
-            raise
+    # AI operations removed - videos don't need direct AI interaction anymore

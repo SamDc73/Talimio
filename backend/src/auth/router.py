@@ -5,17 +5,21 @@ import contextlib
 import hashlib
 import logging
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, EmailStr
 
 from src.auth.config import supabase
 from src.auth.context import CurrentAuth
 from src.config.settings import get_settings
-from src.middleware.security import auth_rate_limit
+from src.middleware.security import auth_rate_limit, create_rate_limit_dependency
 
 
-router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+router = APIRouter(
+    prefix="/api/v1/auth",
+    tags=["auth"],
+    dependencies=[Depends(create_rate_limit_dependency(auth_rate_limit))]
+)
 logger = logging.getLogger(__name__)
 
 # Simple in-memory lock for refresh tokens to prevent race conditions
@@ -133,8 +137,7 @@ class PasswordResetRequest(BaseModel):
 
 
 @router.post("/signup")
-@auth_rate_limit
-async def signup(request: Request, data: SignupRequest) -> SignupResponse:  # noqa: ARG001
+async def signup(data: SignupRequest) -> SignupResponse:
     """Create a new user account."""
     settings = get_settings()
 
@@ -194,8 +197,7 @@ async def signup(request: Request, data: SignupRequest) -> SignupResponse:  # no
 
 
 @router.post("/login")
-@auth_rate_limit
-async def login(request: Request, response: Response, data: LoginRequest) -> LoginResponse:  # noqa: ARG001
+async def login(response: Response, data: LoginRequest) -> LoginResponse:
     """Login with email and password."""
     settings = get_settings()
     if settings.AUTH_PROVIDER != "supabase":
@@ -339,6 +341,9 @@ async def _perform_token_refresh(refresh_token_value: str, response: Response) -
     """Perform the actual token refresh with Supabase."""
     settings = get_settings()
 
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Authentication service not configured")
+
     # Use the refresh token to get a new session (run in thread pool)
     auth_response = await run_in_threadpool(
         supabase.auth.refresh_session,
@@ -415,7 +420,6 @@ def _handle_refresh_error(error: Exception, response: Response) -> None:
 
 
 @router.post("/refresh")
-@auth_rate_limit  # Use stricter rate limit (5/min) to prevent refresh token abuse
 async def refresh_token(request: Request, response: Response) -> RefreshResponse:
     """Refresh the access token using the refresh_token cookie."""
     # Validate prerequisites and get the refresh token
@@ -454,11 +458,12 @@ async def refresh_token(request: Request, response: Response) -> RefreshResponse
 
     except Exception as e:
         _handle_refresh_error(e, response)
+        # This line is unreachable, but satisfies type checker
+        raise
 
 
 @router.post("/reset-password")
-@auth_rate_limit
-async def reset_password(request: Request, data: PasswordResetRequest) -> MessageResponse:  # noqa: ARG001
+async def reset_password(data: PasswordResetRequest) -> MessageResponse:
     """Send password reset email via Supabase Auth."""
     settings = get_settings()
     if settings.AUTH_PROVIDER != "supabase":

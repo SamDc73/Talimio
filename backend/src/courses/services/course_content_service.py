@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.ai_service import AIService
+from src.ai.service import AIService
 from src.courses.models import Course, CourseModule
 from src.database.session import async_session_maker
 
@@ -54,20 +54,27 @@ class CourseContentService:
             course = Course(**data, user_id=user_id, created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
 
             session.add(course)
-            await session.commit()
-            await session.refresh(course)
+            await session.flush()  # Flush to get the ID without committing
 
-            logger.info(f"Created course {course.id} for user {user_id}")
-
-            # Create nodes from modules
+            # Create nodes from modules in the same transaction
             if modules:
                 await self._create_course_nodes(session, course.id, modules)
+            else:
+                logger.warning(f"No modules to create for course {course.id}")
+
+            # Commit everything together
+            await session.commit()
+            await session.refresh(course)
 
             # Auto-generate tags from course content
             try:
                 await self._auto_tag_course(session, course, user_id)
             except Exception as e:
                 logger.warning(f"Automatic tagging failed for course {course.id}: {e}")
+
+            # Single log for entire operation
+            module_count = len(modules) if modules else 0
+            logger.info(f"Created course {course.id} with {module_count} modules")
 
             return course
 
@@ -109,7 +116,6 @@ class CourseContentService:
             await session.commit()
             await session.refresh(course)
 
-            logger.info(f"Updated course {course.id}")
             return course
 
     async def _auto_tag_course(self, session: AsyncSession, course: Course, user_id: UUID) -> list[str]:
@@ -138,7 +144,6 @@ class CourseContentService:
             if tags:
                 course.tags = json.dumps(tags)
                 await session.commit()
-                logger.info(f"Successfully tagged course {course.id} with {len(tags)} tags")
 
             return tags or []
 
@@ -148,20 +153,19 @@ class CourseContentService:
 
     async def _generate_course_from_prompt(self, prompt: str, user_id: UUID) -> dict:
         """Generate course data from AI prompt. Fails fast on error/timeout."""
-        # Use centralized AI service (timeouts/retries handled there)
-        ai_result = await self.ai_service.process_content(
-            content_type="course",
-            action="generate",
+        # Use the actual course_generate method that exists on AIService
+        ai_result = await self.ai_service.course_generate(
             user_id=user_id,
             topic=prompt,
         )
 
-        # AI service returns a roadmap dict, not a wrapped {success, result}
-        if not isinstance(ai_result, dict):
+        # AI service returns a CourseStructure object
+        if not ai_result:
             error_msg = "Invalid AI response format for course generation"
             raise TypeError(error_msg)
 
-        course_data = ai_result
+        # Convert CourseStructure to dict
+        course_data = ai_result.model_dump() if hasattr(ai_result, "model_dump") else ai_result
 
         # Ensure required fields are present with defaults
         title = course_data.get("title")
@@ -170,16 +174,42 @@ class CourseContentService:
             error_msg = "AI generation returned no title"
             raise RuntimeError(error_msg)
 
-        return {
+        # Transform flat lessons into modules with lessons
+        lessons = course_data.get("lessons", [])
+        modules = []
+
+        if lessons:
+            # Group lessons by module field if present, otherwise create single module
+            module_map = {}
+            for lesson in lessons:
+                module_name = lesson.get("module", "Core Concepts")
+                if module_name not in module_map:
+                    module_map[module_name] = {
+                        "title": module_name,
+                        "description": f"Learn about {module_name.lower()}",
+                        "lessons": []
+                    }
+                module_map[module_name]["lessons"].append({
+                    "title": lesson.get("title", ""),
+                    "description": lesson.get("description", "")
+                })
+
+            modules = list(module_map.values())
+        else:
+            logger.warning("AI generated no lessons")
+
+        result = {
             "title": title,
             "description": description or f"A course about {prompt}",
             "tags": course_data.get("tags", []),
-            # Include the generated course structure with new naming
-            "modules": course_data.get("modules", []),
-            # Rely on DB defaults for archived/rag_enabled; include if provided
-            **({"rag_enabled": course_data["rag_enabled"]} if "rag_enabled" in course_data else {}),
-            **({"archived": course_data["archived"]} if "archived" in course_data else {}),
+            "modules": modules,
         }
+
+        # Add optional fields if present
+        if "archived" in course_data:
+            result["archived"] = course_data["archived"]
+
+        return result
 
     async def _create_course_nodes(
         self, session: AsyncSession, course_id: UUID, modules: list[dict], parent_id: UUID | None = None
@@ -213,7 +243,3 @@ class CourseContentService:
             if lessons:
                 await self._create_course_nodes(session, course_id, lessons, parent_id=node.id)
 
-        # Commit all nodes together
-        if parent_id is None:  # Only commit at the top level
-            await session.commit()
-            logger.info(f"Created {len(modules)} modules for course {course_id}")

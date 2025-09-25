@@ -57,14 +57,12 @@ class AdaptiveContextService:
             user_id: User ID
             course_id: Course ID
         """
-        from src.ai.memory import get_memory_wrapper
+        from src.ai.memory import search_memories
 
         try:
             # Get recent quiz performance patterns from mem0
-            memory = await get_memory_wrapper()
-
             # Search for recent learning patterns for this course
-            recent_patterns = await memory.search_memories(
+            recent_patterns = await search_memories(
                 user_id=user_id,
                 query=f"learning patterns course {course_id} weak concepts performance",
                 limit=5,
@@ -236,12 +234,10 @@ class AdaptiveContextService:
         -------
             List of relevant learning patterns
         """
-        from src.ai.memory import get_memory_wrapper
-
-        memory = await get_memory_wrapper()
+        from src.ai.memory import search_memories
 
         # Search for relevant patterns
-        patterns = await memory.search_memories(
+        patterns = await search_memories(
             user_id=user_id,
             query=f"learning patterns for {lesson_topic}",
             limit=limit * 2,  # Get more to filter

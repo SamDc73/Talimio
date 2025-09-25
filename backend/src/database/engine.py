@@ -24,7 +24,9 @@ def create_app_engine() -> AsyncEngine:
         pool_size = 3  # Small pool for session pooler
         max_overflow = 2  # Minimal overflow
         pool_recycle = 1800  # 30 minutes - before pooler idle timeout
-        pool_pre_ping = False  # Not needed with good recycle settings
+        # Pre-ping ensures stale/closed connections are detected and reconnected before use
+        # This mitigates OperationalError: "server closed the connection unexpectedly"
+        pool_pre_ping = True
     else:
         # Direct connection: Standard pooling
         pool_size = 10
@@ -42,19 +44,26 @@ def create_app_engine() -> AsyncEngine:
         pool_pre_ping=pool_pre_ping,
         pool_use_lifo=True,  # Reuse hot connections (better for poolers)
         connect_args={
-            # Client-side settings that always work
-            "prepare_threshold": 5,  # Prepare after 5 executions (client-side)
+            # Disable prepared statements to prevent conflicts between connection pools
+            # When mem0 and SQLAlchemy use separate pools, prepared statements can
+            # cause "prepared statement does not exist" errors
+            "prepare_threshold": None,  # None disables prepared statements in psycopg3
             "connect_timeout": 10,  # Fast failure on connection attempts
-            # Note: Server settings like statement_timeout are controlled by 
+            # Note: Server settings like statement_timeout are controlled by
             # Session pooler and cannot be overridden via connection string
         },
     )
 
     # Clean stale prepared statements on new connections
     # This prevents "prepared statement already exists" errors
+    # Note: AsyncEngine only supports listeners on sync_engine
     @event.listens_for(engine.sync_engine, "connect")
     def clean_prepared_statements(dbapi_conn, conn_record) -> None:
-        """Clean any stale prepared statements from previous app instances."""
+        """Clean any stale prepared statements from previous app instances.
+
+        This runs on every connection, including those used by async sessions.
+        Combined with prepare_threshold=0, this eliminates prepared statement conflicts.
+        """
         try:
             cursor = dbapi_conn.cursor()
             cursor.execute("DEALLOCATE ALL")

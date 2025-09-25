@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.constants import TAG_CATEGORIES, TAG_CATEGORY_COLORS
 from src.ai.prompts import CONTENT_TAGGING_PROMPT
 
 from .models import Tag, TagAssociation
@@ -356,14 +355,10 @@ class TaggingService:
         tags_to_create = []
         for name in tag_names:
             if name not in existing_tags:
-                # Determine category and color
-                category = self._determine_tag_category(name)
-                color = TAG_CATEGORY_COLORS.get(category, TAG_CATEGORY_COLORS["default"])
-
                 tag = Tag(
                     name=name,
-                    category=category,
-                    color=color,
+                    category="default",
+                    color="#6366F1",  # Default indigo color
                     usage_count=0,
                 )
                 tags_to_create.append(tag)
@@ -430,20 +425,6 @@ class TaggingService:
         self.session.add(association)
         return association
 
-    def _determine_tag_category(self, tag_name: str) -> str:
-        """Determine the category of a tag based on its name.
-
-        Args:
-            tag_name: Name of the tag
-
-        Returns
-        -------
-            Category name
-        """
-        for category, tags in TAG_CATEGORIES.items():
-            if tag_name in tags:
-                return category
-        return "default"
 
 
 async def update_content_tags_json(

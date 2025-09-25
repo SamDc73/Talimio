@@ -4,6 +4,7 @@ This module handles web content search using Exa API for finding
 high-quality educational resources from across the web.
 """
 
+import asyncio
 import logging
 import os
 from datetime import UTC
@@ -61,7 +62,7 @@ async def search_web_content(
 
         from datetime import datetime, timedelta
 
-        import exa_py
+        import exa_py  # type: ignore[import-not-found]
 
         client = exa_py.Exa(api_key=exa_api_key)
 
@@ -72,8 +73,9 @@ async def search_web_content(
         end_date = datetime.now(UTC)
         start_date = end_date - timedelta(days=365)  # Last year
 
-        # Perform search with content retrieval
-        response = client.search_and_contents(
+        # Perform search with content retrieval (wrap in thread to avoid blocking)
+        response = await asyncio.to_thread(
+            client.search_and_contents,
             query,
             num_results=max_results,
             use_autoprompt=True,  # Exa will optimize the query

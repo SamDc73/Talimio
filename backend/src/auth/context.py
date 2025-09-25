@@ -102,6 +102,29 @@ class UserContext:
         """Return True if a row exists and is owned by the current user."""
         return (await self.get_owned(model, record_id, id_field=id_field)) is not None
 
+    async def validate_resource(self, resource_type: str, resource_id: Any) -> Any:
+        """Validate user has access to a resource by type name.
+
+        This method allows validation without importing domain models directly,
+        preventing circular dependencies in infrastructure modules like ai/rag.
+        """
+        # Map resource types to models (auth module is allowed to know domains)
+        model_map = {
+            "course": "src.courses.models.Roadmap",
+            "book": "src.books.models.Book",
+            "video": "src.videos.models.Video",
+        }
+
+        if resource_type not in model_map:
+            raise NotFoundError(detail=f"Unknown resource type: {resource_type}")
+
+        # Dynamic import to avoid circular dependencies
+        module_path, class_name = model_map[resource_type].rsplit(".", 1)
+        module = __import__(module_path, fromlist=[class_name])
+        model_class = getattr(module, class_name)
+
+        return await self.get_or_404(model_class, resource_id, resource_type)
+
 
 # FastAPI DI helpers
 # New preferred names

@@ -6,6 +6,7 @@ This module handles YouTube video search and discovery for educational content.
 import asyncio
 import json
 import logging
+from asyncio import subprocess
 from typing import Any
 
 from .registry import register_function
@@ -72,7 +73,7 @@ async def search_youtube_videos(
     try:
         # Run yt-dlp subprocess
         process = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
 

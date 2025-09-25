@@ -10,7 +10,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from src.ai.ai_service import get_ai_service
+from src.ai.service import get_ai_service
 
 from .services.course_content_service import CourseContentService
 from .services.course_progress_service import CourseProgressService
@@ -172,7 +172,7 @@ class CoursesFacade:
             async with async_session_maker() as session:
                 query_service = CourseQueryService(session, user_id)
                 limit = (filters or {}).get("limit", 20)
-                results, total = await query_service.list_courses(per_page=limit, search=query)
+                results, _total = await query_service.list_courses(per_page=limit, search=query)
 
             return {"results": results, "success": True}
 

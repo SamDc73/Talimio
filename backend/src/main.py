@@ -24,7 +24,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 
 from .ai.rag.router import router as rag_router
-from .assistant.router import router as assistant_router
+from .ai.assistant.router import router as assistant_router
 from .auth.exceptions import (
     AuthenticationError,
     InvalidCredentialsError,
@@ -81,19 +81,22 @@ from .videos.router import router as videos_router
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Suppress LiteLLM capability detection warnings for Cohere embeddings
-# These warnings occur during startup when LiteLLM tests if models support certain parameters
+# Suppress verbose third-party library logs
 litellm_logger = logging.getLogger("LiteLLM")
 litellm_logger.setLevel(logging.ERROR)  # Only show errors, not warnings
 
 
-# Alternatively, create a custom filter for specific Cohere embedding errors
+# mem0 vector store connection pool logs
+pgvector_logger = logging.getLogger("mem0.vector_stores.pgvector")
+pgvector_logger.setLevel(logging.INFO)  # Keep verbose in dev
+
+
+# Filter for Cohere embedding warnings
 class CohereEmbeddingWarningFilter(logging.Filter):
     """Filter out Cohere embedding capability detection warnings."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Filter out specific Cohere embedding warnings."""
-        # Filter out specific Cohere embedding capability detection warnings
         message = str(record.getMessage())
         return not (
             "Could not detect capabilities for cohere/embed" in message
@@ -109,12 +112,15 @@ logging.getLogger().addFilter(CohereEmbeddingWarningFilter())
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events."""
     # Startup
-    # Validate RAG configuration
+    # Validate RAG configuration if configured
     try:
-        from src.ai.constants import rag_config
+        from src.ai.rag.config import rag_config
 
-        rag_config.validate_config()
-        logger.info("RAG configuration validated successfully")
+        # RAGConfig with Pydantic validates itself on instantiation
+        if rag_config.embedding_model:
+            logger.info("RAG configuration validated successfully")
+        else:
+            logger.info("RAG not configured - skipping RAG initialization")
     except ValueError as e:
         logger.exception(f"Invalid RAG configuration: {e}")
         raise
@@ -160,7 +166,26 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
             raise
 
     yield
-    # Shutdown (if needed)
+
+    # Shutdown - Clean up resources
+    logger.info("Starting graceful shutdown...")
+
+    # Cleanup memory wrapper connections first (this was the root cause!)
+    try:
+        from src.ai.memory import cleanup_memory_wrapper
+        await cleanup_memory_wrapper()
+        logger.info("Memory wrapper cleaned up successfully")
+    except Exception as e:
+        logger.warning(f"Error cleaning up memory wrapper: {e}")
+
+    # Close database engine and all connections
+    try:
+        await engine.dispose()
+        logger.info("Database engine disposed successfully")
+    except Exception as e:
+        logger.warning(f"Error disposing database engine: {e}")
+
+    logger.info("Shutdown complete")
 
 
 def create_app() -> FastAPI:
