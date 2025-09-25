@@ -202,8 +202,8 @@ export function useMDXCompile(content) {
 
 			const compilationPromise = (async () => {
 				try {
-					// Compile MDX to JavaScript
-					const compiledCode = await compile(content, mdxOptions)
+					// Compile MDX to JavaScript (use preprocessed content)
+					const compiledCode = await compile(processedContent, mdxOptions)
 
 					// Prepare code with React in scope
 					const rawCode = String(compiledCode)
@@ -236,8 +236,8 @@ export function useMDXCompile(content) {
 						})
 					}
 
-					// Cache the component
-					mdxCache.set(content, MdxComponent)
+					// Cache the component (use processedContent as key)
+					mdxCache.set(processedContent, MdxComponent)
 
 					return MdxComponent
 				} catch (err) {
@@ -254,7 +254,7 @@ export function useMDXCompile(content) {
 					}
 
 					// Clear from compiling cache on error
-					mdxCache.compiling.delete(mdxCache.getKey(content))
+					mdxCache.compiling.delete(mdxCache.getKey(processedContent))
 
 					if (process.env.NODE_ENV === "development") {
 					}
@@ -264,7 +264,7 @@ export function useMDXCompile(content) {
 			})()
 
 			// Store the compilation promise
-			mdxCache.setCompiling(content, compilationPromise)
+			mdxCache.setCompiling(processedContent, compilationPromise)
 
 			// Handle the promise
 			compilationPromise
