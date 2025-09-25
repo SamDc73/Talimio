@@ -1,4 +1,4 @@
-export type ContentType = "youtube" | "flashcards"
+export type ContentType = "youtube"
 
 export interface ContentItem {
 	id: string
@@ -15,7 +15,7 @@ export interface ContentItem {
 export interface FilterOption {
 	id: string
 	label: string
-	icon: "Search" | "Youtube" | "Layers" | "BookOpen" | "FileText"
+	icon: "Search" | "Youtube" | "BookOpen" | "FileText"
 }
 
 export interface SortOption {

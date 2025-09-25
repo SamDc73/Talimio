@@ -3,7 +3,7 @@ import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
 /**
  * Simple pill-style progress indicator component for sidebar
  * Shows completion percentage as a clean pill badge following styling guidelines
- * @param {string} variant - Content type variant: 'course', 'book', 'video', 'flashcard'
+ * @param {string} variant - Content type variant: 'course', 'book', 'video'
  */
 function ProgressIndicator({
 	progress,
@@ -20,7 +20,6 @@ function ProgressIndicator({
 		course: "bg-teal-50 text-teal-600", // Following styling guide
 		book: "bg-blue-50 text-blue-600",
 		video: "bg-violet-50 text-violet-600",
-		flashcard: "bg-amber-50 text-amber-600",
 	}
 
 	const styleClass = variantStyles[variant] || variantStyles.default

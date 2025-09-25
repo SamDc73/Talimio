@@ -11,8 +11,8 @@
 
 import { CheckCircle2, Plus, RefreshCw, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Button } from "../../../components/button"
-import { Card } from "../../../components/card"
+import { Button } from "@/components/button"
+import { Card } from "@/components/card"
 import { usePolling } from "../../../hooks/usePolling"
 import { useDocumentsService } from "../api/documentsApi"
 import DocumentList from "../components/DocumentList"
@@ -58,7 +58,7 @@ function DocumentsView({ courseId }) {
 					setDocuments([])
 				}
 			} catch (error) {
-				logger.error('Failed to load documents', error, { courseId })
+				logger.error("Failed to load documents", error, { courseId })
 			} finally {
 				setIsLoading(false)
 				setIsRefreshing(false)
@@ -94,9 +94,9 @@ function DocumentsView({ courseId }) {
 	const handleDocumentsUploaded = useCallback(
 		async (uploadedDocuments) => {
 			setDocuments((prev) => [...uploadedDocuments, ...prev])
-			logger.track('documents_uploaded', { 
-				courseId, 
-				count: uploadedDocuments.length 
+			logger.track("documents_uploaded", {
+				courseId,
+				count: uploadedDocuments.length,
 			})
 			startPolling()
 		},
@@ -111,13 +111,13 @@ function DocumentsView({ courseId }) {
 		try {
 			await documentsServiceRef.current.deleteDocument(document.id)
 			setDocuments((prev) => prev.filter((doc) => doc.id !== document.id))
-			logger.track('document_deleted', { 
-				documentId: document.id, 
-				title: document.title 
+			logger.track("document_deleted", {
+				documentId: document.id,
+				title: document.title,
 			})
 		} catch (error) {
-			logger.error('Failed to remove document', error, { 
-				documentId: document.id 
+			logger.error("Failed to remove document", error, {
+				documentId: document.id,
 			})
 			// Could show an error modal or alert here if needed
 		}
@@ -125,15 +125,15 @@ function DocumentsView({ courseId }) {
 
 	const handleViewDocument = useCallback((document) => {
 		setSelectedDocument(document)
-		logger.track('document_view_attempted', { 
-			documentId: document.id 
+		logger.track("document_view_attempted", {
+			documentId: document.id,
 		})
 		// Feature not implemented yet - could show a modal explaining this
 	}, [])
 
 	const handleDownloadDocument = useCallback((document) => {
-		logger.track('document_download_attempted', { 
-			documentId: document.id 
+		logger.track("document_download_attempted", {
+			documentId: document.id,
 		})
 		// Feature not implemented yet - could show a modal explaining this
 	}, [])

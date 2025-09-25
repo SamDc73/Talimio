@@ -52,8 +52,6 @@ export function useContentHandlers({ filters, pinning, setContentItems, loadCont
 			navigate(`/videos/${item.id}`)
 		} else if (item.type === "book") {
 			navigate(`/books/${item.id}`)
-		} else if (item.type === "flashcards") {
-			navigate(`/flashcards/${item.id}`)
 		}
 	}
 
@@ -104,14 +102,6 @@ export function useContentHandlers({ filters, pinning, setContentItems, loadCont
 		await loadContentData()
 	}
 
-	// Event handler: user created deck
-	const handleDeckCreated = async () => {
-		// Refresh via React Query
-		await loadContentData()
-		// Toast should be in mutation onSuccess
-		console.log("Deck Created!")
-	}
-
 	return {
 		handleGenerateCourse,
 		handleRoadmapCreated,
@@ -121,6 +111,5 @@ export function useContentHandlers({ filters, pinning, setContentItems, loadCont
 		handleTagsUpdated,
 		handleBookUploaded,
 		handleVideoAdded,
-		handleDeckCreated,
 	}
 }

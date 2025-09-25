@@ -11,10 +11,10 @@
 
 import { AlertCircle, CheckCircle2, FileText, Link2, Upload, X } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Button } from "../../../components/button"
-import { Card } from "../../../components/card"
-import { Input } from "../../../components/input"
-import { Label } from "../../../components/label"
+import { Button } from "@/components/button"
+import { Card } from "@/components/card"
+import { Input } from "@/components/input"
+import { Label } from "@/components/label"
 
 function DocumentUploader({
 	onDocumentsChange,

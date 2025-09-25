@@ -4,7 +4,6 @@ import { updateLessonStatus } from "../services/progressService"
 import useAppStore from "../stores/useAppStore"
 import { getCourseWithModules } from "../utils/courseDetection"
 
-
 const ProgressContext = createContext(null)
 
 export function ProgressProvider({ children, courseId, isCourseMode = false }) {

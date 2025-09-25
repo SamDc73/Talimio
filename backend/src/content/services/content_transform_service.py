@@ -8,7 +8,6 @@ from src.content.schemas import (
     BookContent,
     ContentMetadata,
     CourseContent,
-    FlashcardContent,
     ProgressData,
     YoutubeContent,
 )
@@ -42,8 +41,6 @@ class ContentTransformService:
         for row in rows:
             if row.type == "youtube":
                 items.append(ContentTransformService._create_youtube_content(row))
-            elif row.type == "flashcards":
-                items.append(ContentTransformService._create_flashcard_content(row))
             elif row.type == "book":
                 items.append(ContentTransformService._create_book_content(row))
             elif row.type in ("roadmap", "course"):
@@ -85,27 +82,6 @@ class ContentTransformService:
             metadata=metadata,
         )
 
-    @staticmethod
-    def _create_flashcard_content(row: Any) -> FlashcardContent:
-        """Create FlashcardContent from row data."""
-        metadata = ContentMetadata()
-
-        # Progress will be calculated later by the progress service
-        progress = _create_progress_data(percentage=row.progress or 0, completed_items=0, total_items=row.count1 or 0)
-
-        return FlashcardContent(
-            id=row.id,
-            title=row.title,
-            description=row.description,
-            card_count=row.count1 or 0,
-            due_count=0,  # Will be calculated by progress service
-            created_at=row.created_at,
-            updated_at=row.last_accessed or row.created_at,
-            progress=progress,
-            tags=_safe_parse_tags(row.tags),
-            status="archived" if row.archived else "active",
-            metadata=metadata,
-        )
 
     @staticmethod
     def _create_book_content(row: Any) -> BookContent:

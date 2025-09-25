@@ -196,7 +196,6 @@ const useTagStore = create(
 			_normalizeContentType(contentType) {
 				const supportedTypes = {
 					youtube: "video",
-					flashcards: "flashcard",
 					course: "course",
 					book: "book",
 					video: "video",

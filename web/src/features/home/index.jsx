@@ -75,7 +75,6 @@ export default function HomePage() {
 		handleTagsUpdated,
 		handleBookUploaded,
 		handleVideoAdded,
-		handleDeckCreated,
 	} = useContentHandlers({
 		filters,
 		pinning,
@@ -228,7 +227,6 @@ export default function HomePage() {
 									dialogs.setShowUploadDialog(true)
 								}}
 								onAddYoutube={() => dialogs.setShowYoutubeDialog(true)}
-								onCreateFlashcards={() => dialogs.setShowFlashcardDialog(true)}
 								progressLoading={progressLoading}
 							/>
 							{/* Add pagination if we have more than one page */}
@@ -276,15 +274,9 @@ export default function HomePage() {
 							dialogs.setShowUploadDialog(true)
 						}}
 						onAddYoutube={() => dialogs.setShowYoutubeDialog(true)}
-						onCreateFlashcards={() => dialogs.setShowFlashcardDialog(true)}
 					/>
 
-					<DialogsContainer
-						dialogs={dialogs}
-						onBookUploaded={handleBookUploaded}
-						onVideoAdded={handleVideoAdded}
-						onDeckCreated={handleDeckCreated}
-					/>
+					<DialogsContainer dialogs={dialogs} onBookUploaded={handleBookUploaded} onVideoAdded={handleVideoAdded} />
 
 					<RoadmapPromptModal
 						open={dialogs.showRoadmapModal}

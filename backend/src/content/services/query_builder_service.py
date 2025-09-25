@@ -31,10 +31,6 @@ class QueryBuilderService:
             if user_id:
                 needs_user_id = True
 
-        if not content_type or content_type == ContentType.FLASHCARDS:
-            queries.append(QueryBuilderService._get_flashcard_query(search, include_archived, user_id))
-            if user_id:
-                needs_user_id = True
 
         if not content_type or content_type == ContentType.BOOK:
             queries.append(QueryBuilderService._get_book_query(search, include_archived, user_id))
@@ -103,58 +99,6 @@ class QueryBuilderService:
 
         return query
 
-    @staticmethod
-    def _get_flashcard_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
-        """Get SQL query for flashcards."""
-        return QueryBuilderService.get_flashcards_query(
-            search, archived_only=False, include_archived=include_archived, user_id=user_id
-        )
-
-    @staticmethod
-    def get_flashcards_query(
-        search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: UUID | None = None
-    ) -> str:
-        """Get SQL query for flashcards with user filtering."""
-        query = """
-            SELECT
-                id::text,
-                name as title,
-                COALESCE(description, '') as description,
-                'flashcards' as type,
-                COALESCE(updated_at, created_at) as last_accessed,
-                created_at,
-                tags,
-                '' as extra1,
-                '' as extra2,
-                0 as progress,
-                COALESCE(card_count, 0) as count1,
-                0 as count2,
-                COALESCE(archived, false) as archived,
-                NULL::text as toc_progress,
-                NULL::text as table_of_contents
-            FROM flashcard_decks
-        """
-
-        # Build WHERE clause
-        where_conditions = []
-
-        # Filter by user_id since flashcards are user-specific
-        if user_id:
-            where_conditions.append("user_id = :user_id")
-
-        if archived_only:
-            where_conditions.append("archived = true")
-        elif not include_archived:
-            where_conditions.append("(archived = false OR archived IS NULL)")
-        # If include_archived is True, don't add any archive filter (show all)
-
-        if search:
-            where_conditions.append("(name ILIKE :search OR description ILIKE :search)")
-
-        if where_conditions:
-            query += " WHERE " + " AND ".join(where_conditions)
-
-        return query
 
     @staticmethod
     def _get_book_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:

@@ -23,8 +23,8 @@ from sqlalchemy.exc import DatabaseError, IntegrityError, OperationalError
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 
-from .ai.rag.router import router as rag_router
 from .ai.assistant.router import router as assistant_router
+from .ai.rag.router import router as rag_router
 from .auth.exceptions import (
     AuthenticationError,
     InvalidCredentialsError,
@@ -368,7 +368,6 @@ def create_app() -> FastAPI:
     app.include_router(assistant_router)
     app.include_router(books_router)
     app.include_router(content_router)
-    # app.include_router(flashcards_router)  # Discarding flashcards module
     app.include_router(highlights_router)  # Highlights for books, videos, courses
     app.include_router(progress_router)  # Unified progress tracking
     app.include_router(rag_router)  # RAG system

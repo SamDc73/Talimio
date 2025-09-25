@@ -1,7 +1,6 @@
 """API endpoints for tagging operations."""
 
 import logging
-from collections.abc import Callable
 from typing import Annotated
 from uuid import UUID
 

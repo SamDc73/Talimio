@@ -42,10 +42,6 @@
 	--color-video-text: oklch(0.86 0.15 287);
 	--color-video-accent: oklch(0.92 0.12 287);
 
-	--color-flashcard: oklch(0.63 0.17 122);
-	--color-flashcard-text: oklch(0.63 0.17 122);
-	--color-flashcard-accent: oklch(0.75 0.15 122);
-
 	/* Status Colors - Dark mode versions */
 	--color-overdue: oklch(0.71 0.17 25);
 	--color-overdue-text: oklch(0.91 0.14 25);

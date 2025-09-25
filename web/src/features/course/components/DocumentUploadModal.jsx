@@ -11,7 +11,7 @@
 
 import { AlertTriangle, CheckCircle2, X } from "lucide-react"
 import { useCallback, useState } from "react"
-import { Button } from "../../../components/button"
+import { Button } from "@/components/button"
 import { useDocumentsService } from "../api/documentsApi"
 import { DocumentStatusProgress } from "./DocumentStatusBadge"
 import DocumentUploader from "./DocumentUploader"
@@ -70,7 +70,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 
 			// Show success/error toast
 			if (results.errors.length === 0) {
-			console.log("Action completed")
+				console.log("Action completed")
 
 				// Auto-close modal after successful upload
 				setTimeout(() => {
@@ -79,7 +79,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 			} else if (results.results.length === 0) {
 				console.log("All uploads failed")
 			} else {
-			console.log("Action completed")
+				console.log("Action completed")
 			}
 
 			// Notify parent component

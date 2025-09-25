@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, select
 
 from src.auth import CurrentAuth
-from src.middleware.security import create_rate_limit_dependency, api_rate_limit
+from src.middleware.security import api_rate_limit, create_rate_limit_dependency
 
 from .models import Highlight
 from .schemas import HighlightCreate, HighlightResponse

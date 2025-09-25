@@ -1,4 +1,4 @@
-import { Calendar, Clock, FileText, Layers, Sparkles, TimerOff, Youtube } from "lucide-react"
+import { Calendar, Clock, FileText, Sparkles, TimerOff, Youtube } from "lucide-react"
 
 export const VARIANTS = {
 	course: {
@@ -24,12 +24,6 @@ export const VARIANTS = {
 		icon: Youtube,
 		badge: "bg-violet-50 text-violet-600",
 		grad: "from-violet-400 to-violet-500",
-	},
-	flashcards: {
-		label: "Flashcards",
-		icon: Layers,
-		badge: "bg-lime-100 text-lime-700",
-		grad: "from-lime-500 to-lime-600",
 	},
 	roadmap: {
 		label: "Course",

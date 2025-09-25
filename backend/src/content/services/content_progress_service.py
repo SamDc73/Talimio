@@ -73,9 +73,6 @@ class ContentProgressService:
         except (ValueError, KeyError):
             return 0
 
-    async def _get_flashcard_progress(self, _content_id: UUID, _user_id: UUID | None) -> int:
-        """Get flashcard progress."""
-        return 0  # TODO: Implement when flashcard progress is needed
 
     def _group_items_by_type(
         self, items: list[tuple[str, str | UUID, UUID | None]]
@@ -304,64 +301,3 @@ async def _calculate_video_progress(session: AsyncSession, items: list[Any], use
     return items
 
 
-async def _calculate_flashcard_progress(session: AsyncSession, items: list[Any], user_id: UUID) -> list[Any]:
-    """Calculate accurate flashcard progress using FSRS algorithm (matching course pattern)."""
-    from datetime import UTC, datetime
-
-    from sqlalchemy import func, select
-
-    # Filter for flashcard items only
-    from src.content.schemas import ContentType
-    from src.flashcards.models import FlashcardCard, FlashcardDeck
-
-    flashcard_items = [item for item in items if hasattr(item, "type") and item.type == ContentType.FLASHCARDS]
-
-    if not flashcard_items:
-        return items
-
-    # Calculate progress for each flashcard deck
-    for item in flashcard_items:
-        try:
-            deck_id = UUID(item.id)
-            now = datetime.now(UTC)
-
-            # Get total cards, due cards, and overdue cards
-            stats_query = (
-                select(
-                    func.count(FlashcardCard.id).label("total"),
-                    func.count(FlashcardCard.id).filter(FlashcardCard.due <= now).label("due"),
-                    func.count(FlashcardCard.id).filter(FlashcardCard.due < now).label("overdue"),
-                )
-                .where(FlashcardCard.deck_id == deck_id, FlashcardDeck.user_id == user_id)
-                .join(FlashcardDeck)
-            )
-
-            result = await session.execute(stats_query)
-            stats = result.first()
-
-            from src.content.schemas import ProgressData
-
-            if not stats or stats.total == 0:
-                # No cards in deck
-                item.progress = ProgressData(percentage=0.0, completed_items=0, total_items=0)
-            else:
-                reviewed_cards = stats.total - stats.due
-                progress = (reviewed_cards / stats.total) * 100
-                item.progress = ProgressData(
-                    percentage=float(max(0, progress)), completed_items=reviewed_cards, total_items=stats.total
-                )
-
-            # Store additional stats for web app if needed
-            if hasattr(item, "due_count"):
-                item.due_count = stats.due if stats else 0
-            if hasattr(item, "card_count"):
-                item.card_count = stats.total if stats else 0
-
-        except (ValueError, Exception) as e:
-            # Keep original progress (0) if there's an error
-            logger.debug(f"Error calculating flashcard progress for deck {item.id}: {e}")
-            from src.content.schemas import ProgressData
-
-            item.progress = ProgressData(percentage=0.0, completed_items=0, total_items=0)
-
-    return items

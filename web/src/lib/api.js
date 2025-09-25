@@ -4,7 +4,7 @@ const REQUEST_TIMEOUT = 10000 // 10 seconds
 /**
  * @typedef {Object} ContentItem
  * @property {string} id - The unique identifier for the content item
- * @property {"youtube" | "flashcards" | "book" | "roadmap" | "course"} type - The type of content
+ * @property {"youtube" | "book" | "roadmap" | "course"} type - The type of content
  * @property {string} title - The title of the content
  * @property {string} description - The description of the content
  * @property {string} lastAccessedDate - The last accessed date of the content
@@ -138,10 +138,6 @@ export async function fetchContentData(includeArchived = false) {
 					channel: item.channel, // Use the correct field name from backend
 					duration: item.length, // Backend sends 'length' for duration
 				}),
-				...(item.type === "flashcards" && {
-					cardCount: item.cardCount,
-					dueCount: item.dueCount,
-				}),
 				...(item.type === "book" && {
 					author: item.author,
 					pageCount: item.pageCount || item.page_count || item.totalPages,
@@ -174,7 +170,6 @@ export function processContentData(data) {
 		{ id: "all", label: "All Content", icon: "Search" },
 		{ id: "course", label: "Courses", icon: "BookOpen" },
 		{ id: "video", label: "Videos", icon: "Youtube" },
-		{ id: "flashcards", label: "Flashcards", icon: "Layers" },
 		{ id: "book", label: "Books", icon: "FileText" },
 	]
 

@@ -1,4 +1,6 @@
 
+from typing import Any
+
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -58,7 +60,7 @@ def create_app_engine() -> AsyncEngine:
     # This prevents "prepared statement already exists" errors
     # Note: AsyncEngine only supports listeners on sync_engine
     @event.listens_for(engine.sync_engine, "connect")
-    def clean_prepared_statements(dbapi_conn, conn_record) -> None:
+    def clean_prepared_statements(dbapi_conn: Any, _conn_record: Any) -> None:
         """Clean any stale prepared statements from previous app instances.
 
         This runs on every connection, including those used by async sessions.

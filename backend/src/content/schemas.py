@@ -9,7 +9,6 @@ class ContentType(str, Enum):
     """Enumeration of content types available in the learning platform."""
 
     YOUTUBE = "youtube"
-    FLASHCARDS = "flashcards"
     BOOK = "book"
     COURSE = "course"
 
@@ -81,15 +80,6 @@ class YoutubeContent(ContentItemBase):
     model_config = {"populate_by_name": True}
 
 
-class FlashcardContent(ContentItemBase):
-    """Model for flashcard deck content items."""
-
-    type: ContentType = ContentType.FLASHCARDS
-    card_count: int = 0
-    due_count: int = 0
-
-    model_config = {"populate_by_name": True}
-
 
 class BookContent(ContentItemBase):
     """Model for book content items."""
@@ -117,7 +107,7 @@ class CourseContent(ContentItemBase):
 class ContentListResponse(BaseModel):
     """Response model for paginated content list."""
 
-    items: list[YoutubeContent | FlashcardContent | BookContent | CourseContent]
+    items: list[YoutubeContent | BookContent | CourseContent]
     total: int
     page: int
     per_page: int  # Changed from page_size to match spec

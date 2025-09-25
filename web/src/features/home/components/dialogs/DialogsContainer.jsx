@@ -1,8 +1,7 @@
 import { BookUploadDialog } from "./BookUploadDialog"
-import { FlashcardDialog } from "./FlashcardDialog"
 import { YouTubeDialog } from "./YouTubeDialog"
 
-export function DialogsContainer({ dialogs, onBookUploaded, onVideoAdded, onDeckCreated }) {
+export function DialogsContainer({ dialogs, onBookUploaded, onVideoAdded }) {
 	return (
 		<>
 			<BookUploadDialog
@@ -15,12 +14,6 @@ export function DialogsContainer({ dialogs, onBookUploaded, onVideoAdded, onDeck
 				open={dialogs.showYoutubeDialog}
 				onOpenChange={dialogs.setShowYoutubeDialog}
 				onVideoAdded={onVideoAdded}
-			/>
-
-			<FlashcardDialog
-				open={dialogs.showFlashcardDialog}
-				onOpenChange={dialogs.setShowFlashcardDialog}
-				onDeckCreated={onDeckCreated}
 			/>
 		</>
 	)

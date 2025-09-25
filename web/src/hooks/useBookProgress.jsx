@@ -15,68 +15,65 @@ export function BookProgressProvider({ children, bookId }) {
 	const [isLoading, setIsLoading] = useState(false)
 	const [error, setError] = useState(null)
 
-	const fetchAllProgressData = useCallback(
-		async (currentBookId) => {
-			if (!currentBookId) {
-				setChapterStatuses({})
-				setBookProgress({
-					totalChapters: 0,
-					completedChapters: 0,
-					progressPercentage: 0,
-				})
-				return
+	const fetchAllProgressData = useCallback(async (currentBookId) => {
+		if (!currentBookId) {
+			setChapterStatuses({})
+			setBookProgress({
+				totalChapters: 0,
+				completedChapters: 0,
+				progressPercentage: 0,
+			})
+			return
+		}
+
+		setIsLoading(true)
+		setError(null)
+
+		try {
+			let book = useAppStore.getState().books.metadata[currentBookId]
+			if (!book || !book.tableOfContents) {
+				const data = await booksApi.getBook(currentBookId)
+				useAppStore.getState().books.metadata[currentBookId] = data
+				book = data
 			}
 
-			setIsLoading(true)
-			setError(null)
+			const chapterCompletion = useAppStore.getState().books.chapterCompletion[currentBookId] || {}
 
-			try {
-				let book = useAppStore.getState().books.metadata[currentBookId]
-				if (!book || !book.tableOfContents) {
-					const data = await booksApi.getBook(currentBookId)
-					useAppStore.getState().books.metadata[currentBookId] = data
-					book = data
-				}
-
-				const chapterCompletion = useAppStore.getState().books.chapterCompletion[currentBookId] || {}
-
-				const getAllChapters = (chapters) => {
-					const allChapters = []
-					for (const chapter of chapters) {
-						allChapters.push(chapter)
-						if (chapter.children && chapter.children.length > 0) {
-							allChapters.push(...getAllChapters(chapter.children))
-						}
+			const getAllChapters = (chapters) => {
+				const allChapters = []
+				for (const chapter of chapters) {
+					allChapters.push(chapter)
+					if (chapter.children && chapter.children.length > 0) {
+						allChapters.push(...getAllChapters(chapter.children))
 					}
-					return allChapters
 				}
-
-				const allChapters = getAllChapters(book.tableOfContents)
-
-				const statusMap = {}
-				for (const chapter of allChapters) {
-					statusMap[chapter.id] = chapterCompletion[chapter.id] ? "completed" : "not_started"
-				}
-				setChapterStatuses(statusMap)
-
-				const totalChapters = allChapters.length
-				const completedChapters = allChapters.filter((chapter) => chapterCompletion[chapter.id]).length
-				const progressPercentage = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0
-
-				setBookProgress({
-					totalChapters,
-					completedChapters,
-					progressPercentage,
-				})
-			} catch (err) {
-				setError(err)
-				console.log("Error")
-			} finally {
-				setIsLoading(false)
+				return allChapters
 			}
-		},
-		[]
-	)
+
+			const allChapters = getAllChapters(book.tableOfContents)
+
+			const statusMap = {}
+			for (const chapter of allChapters) {
+				statusMap[chapter.id] = chapterCompletion[chapter.id] ? "completed" : "not_started"
+			}
+			setChapterStatuses(statusMap)
+
+			const totalChapters = allChapters.length
+			const completedChapters = allChapters.filter((chapter) => chapterCompletion[chapter.id]).length
+			const progressPercentage = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0
+
+			setBookProgress({
+				totalChapters,
+				completedChapters,
+				progressPercentage,
+			})
+		} catch (err) {
+			setError(err)
+			console.log("Error")
+		} finally {
+			setIsLoading(false)
+		}
+	}, [])
 
 	useEffect(() => {
 		fetchAllProgressData(bookId)

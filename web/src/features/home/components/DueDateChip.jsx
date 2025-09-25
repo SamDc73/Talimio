@@ -5,7 +5,7 @@ import { Button } from "@/components/button"
 import { STATES } from "@/features/home/utils/contentConstants"
 
 function DueDateChip({ dueDate, isPaused, progress, type, dueCount = 0, overdue = 0, onSnooze }) {
-	if (progress === 100 || (type === "flashcards" && dueCount === 0 && overdue === 0))
+	if (progress === 100)
 		return (
 			<motion.div
 				initial={{ opacity: 0, scale: 0.9 }}

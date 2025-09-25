@@ -3,7 +3,7 @@ import { ChevronRight } from "lucide-react"
 /**
  * Simple expandable section component with header and collapsible content
  * Used for modules, chapters, or any hierarchical navigation following original design
- * @param {string} variant - Content type variant: 'course', 'book', 'video', 'flashcard'
+ * @param {string} variant - Content type variant: 'course', 'book', 'video'
  */
 function ExpandableSection({
 	title,
@@ -22,7 +22,6 @@ function ExpandableSection({
 		course: "border-teal-200 bg-teal-50/50", // Following styling guide
 		book: "border-blue-200 bg-blue-50/50",
 		video: "border-violet-200 bg-violet-50/50",
-		flashcard: "border-amber-200 bg-amber-50/50",
 	}
 
 	const activeStyle = variantColors[variant] || variantColors.default
@@ -33,9 +32,7 @@ function ExpandableSection({
 				? "text-blue-600"
 				: variant === "video"
 					? "text-violet-600"
-					: variant === "flashcard"
-						? "text-amber-600"
-						: "text-emerald-600"
+					: "text-emerald-600"
 
 	return (
 		<div

@@ -1,16 +1,9 @@
 import { AnimatePresence, motion } from "framer-motion"
-import { BookOpen, Layers, Plus, Sparkles, Youtube } from "lucide-react"
+import { BookOpen, Plus, Sparkles, Youtube } from "lucide-react"
 import { Button } from "@/components/button"
 import { TooltipButton } from "@/components/TooltipButton"
 
-export default function FABMenu({
-	isFabExpanded,
-	onToggleExpanded,
-	onGenerateRoadmap,
-	onUploadBook,
-	onAddYoutube,
-	onCreateFlashcards,
-}) {
+export default function FABMenu({ isFabExpanded, onToggleExpanded, onGenerateRoadmap, onUploadBook, onAddYoutube }) {
 	return (
 		<div className="fixed bottom-8 right-8 z-50">
 			<AnimatePresence>
@@ -60,19 +53,6 @@ export default function FABMenu({
 							tooltipDelayDuration={200}
 						>
 							<Youtube className="h-6 w-6 text-video" />
-						</TooltipButton>
-						<TooltipButton
-							variant="secondary"
-							className="rounded-full h-14 w-14 shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5 bg-flashcard/10 hover:bg-flashcard/20 border-flashcard/20"
-							onClick={() => {
-								onCreateFlashcards()
-								onToggleExpanded()
-							}}
-							tooltipContent="Create Flashcards"
-							tooltipSide="left"
-							tooltipDelayDuration={200}
-						>
-							<Layers className="h-6 w-6 text-flashcard" />
 						</TooltipButton>
 					</motion.div>
 				)}

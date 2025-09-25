@@ -13,18 +13,12 @@ export const deleteApi = {
 		return this.deleteItem("course", id)
 	},
 
-	async deleteFlashcardDeck(id) {
-		return this.deleteItem("flashcards", id)
-	},
-
 	async deleteItem(itemType, id) {
 		// Map web app item types to backend content types
 		const contentTypeMap = {
 			video: "youtube",
 			youtube: "youtube",
 			book: "book",
-			flashcard: "flashcards",
-			flashcards: "flashcards",
 			course: "course",
 			roadmap: "course",
 		}

@@ -610,46 +610,6 @@ const useAppStore = create(
 					)
 				},
 
-				// ========== FLASHCARDS SLICE ==========
-				flashcards: {
-					// Flashcard progress: deckId -> { lastCard, settings }
-					progress: {},
-					// Flashcard metadata cache
-					metadata: {},
-					// Progress statistics cache: deckId -> { percentage, reviewed, total, due, overdue }
-					progressStats: {},
-				},
-
-				// Flashcard actions
-				updateFlashcardProgress: (deckId, progress) => {
-					set((state) => {
-						state.flashcards.progress[deckId] = {
-							...state.flashcards.progress[deckId],
-							...progress,
-							lastUpdated: Date.now(),
-						}
-					})
-					// Sync to API with debounce
-					syncToAPI("flashcards", deckId, { progress })
-				},
-
-				getFlashcardProgress: (deckId) => {
-					return get().flashcards.progress[deckId] || {}
-				},
-
-				setFlashcardProgressStats: (deckId, stats) => {
-					set((state) => {
-						state.flashcards.progressStats[deckId] = {
-							...stats,
-							lastUpdated: Date.now(),
-						}
-					})
-				},
-
-				getFlashcardProgressStats: (deckId) => {
-					return get().flashcards.progressStats[deckId] || null
-				},
-
 				// ========== PREFERENCES SLICE ==========
 				preferences: {
 					theme: "system",
@@ -987,7 +947,6 @@ const useAppStore = create(
 					books: state.books,
 					videos: state.videos,
 					courses: state.courses,
-					flashcards: state.flashcards,
 					preferences: state.preferences,
 					user: state.user,
 					// Don't persist UI state or tokens (using httpOnly cookies)

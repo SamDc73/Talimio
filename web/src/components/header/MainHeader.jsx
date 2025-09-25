@@ -756,13 +756,6 @@ export function MainHeader({ transparent = false, className }) {
 											<Youtube className="h-5 w-5 text-video" />
 											<span className="font-medium">Videos</span>
 										</Link>
-										<Link
-											to="/flashcards"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-gray-100 transition-colors"
-										>
-											<Layers className="h-5 w-5 text-flashcard" />
-											<span className="font-medium">Flashcards</span>
-										</Link>
 										<div className="px-4 py-3">
 											<Button onClick={toggleChat} className="w-full flex items-center justify-center gap-2">
 												<MessageSquare className="h-5 w-5" />

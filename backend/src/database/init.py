@@ -11,7 +11,6 @@ from src.auth.config import DEFAULT_USER_ID
 # Import all models to register them with Base metadata
 from src.books.models import *  # noqa: F403
 from src.courses.models import *  # noqa: F403
-from src.flashcards.models import *  # noqa: F403
 from src.tagging.models import *  # noqa: F403
 from src.user.models import *  # noqa: F403
 from src.videos.models import *  # noqa: F403

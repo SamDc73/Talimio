@@ -10,7 +10,6 @@ import { createContext, useContext, useEffect, useState } from "react"
 
 import { useCourseProgressService } from "../features/course"
 
-
 const CourseProgressContext = createContext(null)
 
 /**

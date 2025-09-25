@@ -24,7 +24,6 @@ class ContentArchiveService:
         table_map = {
             ContentType.BOOK: "books",
             ContentType.YOUTUBE: "videos",
-            ContentType.FLASHCARDS: "flashcard_decks",
             ContentType.COURSE: "roadmaps",
         }
 
@@ -69,7 +68,6 @@ class ContentArchiveService:
         table_map = {
             ContentType.BOOK: "books",
             ContentType.YOUTUBE: "videos",
-            ContentType.FLASHCARDS: "flashcard_decks",
             ContentType.COURSE: "roadmaps",
         }
 
@@ -133,10 +131,6 @@ class ContentArchiveService:
         if content_type:
             if content_type == ContentType.YOUTUBE:
                 combined_query = QueryBuilderService.get_youtube_query(search, archived_only=True)
-            elif content_type == ContentType.FLASHCARDS:
-                combined_query = QueryBuilderService.get_flashcards_query(
-                    search, archived_only=True, user_id=effective_user_id
-                )
             elif content_type == ContentType.BOOK:
                 combined_query = QueryBuilderService.get_books_query(
                     search, archived_only=True, user_id=effective_user_id
@@ -152,8 +146,6 @@ class ContentArchiveService:
             # Union all content types with archived filter
             combined_query = f"""
                 {QueryBuilderService.get_youtube_query(search, archived_only=True)}
-                UNION ALL
-                {QueryBuilderService.get_flashcards_query(search, archived_only=True, user_id=effective_user_id)}
                 UNION ALL
                 {QueryBuilderService.get_books_query(search, archived_only=True, user_id=effective_user_id)}
                 UNION ALL

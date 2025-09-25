@@ -1,7 +1,7 @@
 /**
  * Circular progress indicator component
  * Shows completion percentage as a circle around a number with contextual colors following styling guide
- * @param {string} variant - Content type variant: 'course', 'book', 'video', 'flashcard'
+ * @param {string} variant - Content type variant: 'course', 'book', 'video'
  */
 function ProgressCircle({ number, progress, variant = "default" }) {
 	// Map variants to stroke colors following the styling guide
@@ -10,7 +10,6 @@ function ProgressCircle({ number, progress, variant = "default" }) {
 		course: "#0d9488", // teal-600 - following styling guide
 		book: "#2563eb", // blue-600
 		video: "#7c3aed", // violet-600
-		flashcard: "#d97706", // amber-600
 	}
 
 	const strokeColor = strokeColors[variant] || strokeColors.default

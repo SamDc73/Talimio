@@ -54,9 +54,6 @@ export const useContentFilters = () => {
 					const channelName = item.channelName || item.channel || ""
 					return title.includes(query) || channelName?.toLowerCase().includes(query) || tags
 				}
-				if (item.type === "flashcards") {
-					return title.includes(query) || item.description.toLowerCase().includes(query) || tags
-				}
 				return true
 			})
 			.filter((item) => {

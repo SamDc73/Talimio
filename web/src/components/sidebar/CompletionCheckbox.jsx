@@ -3,7 +3,7 @@ import { CheckCircle, Circle, MinusSquare } from "lucide-react"
 /**
  * Simple completion checkbox component for sidebar items
  * Shows either a checkmark or empty circle with contextual colors following styling guide
- * @param {string} variant - Content type variant: 'course', 'book', 'video', 'flashcard'
+ * @param {string} variant - Content type variant: 'course', 'book', 'video'
  * @param {boolean} asDiv - Render as span instead of button to avoid nested button warnings
  */
 function CompletionCheckbox({
@@ -21,7 +21,6 @@ function CompletionCheckbox({
 		course: "text-teal-600", // Following styling guide
 		book: "text-blue-600",
 		video: "text-violet-600",
-		flashcard: "text-amber-600",
 	}
 
 	const completedColor = variantColors[variant] || variantColors.default

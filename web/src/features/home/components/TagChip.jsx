@@ -9,9 +9,6 @@ function TagChip({ tag, contentType }) {
 			case "video":
 			case "youtube":
 				return "bg-violet-50 text-violet-600"
-			case "flashcard":
-			case "flashcards":
-				return "bg-amber-50 text-amber-600"
 			default:
 				return "bg-gray-100 text-gray-100-foreground"
 		}

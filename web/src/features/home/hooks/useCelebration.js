@@ -2,7 +2,7 @@
 
 export const useCelebration = () => {
 	const priority = (i) => {
-		if (i.progress === 100 || (i.type === "flashcards" && i.due === 0 && i.overdue === 0)) return 5
+		if (i.progress === 100) return 5
 		if (i.isPaused) return 3
 		if (!i.dueDate) return 4
 		const h = (new Date(i.dueDate) - Date.now()) / 36e5

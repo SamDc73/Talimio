@@ -49,33 +49,6 @@ async def create_tables() -> None:
         """)
         logger.info("Created videos table")
 
-        # Create flashcard_decks table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS flashcard_decks (
-                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                name VARCHAR(200) NOT NULL,
-                description TEXT,
-                tags JSONB DEFAULT '[]'::jsonb,
-                archived BOOLEAN DEFAULT FALSE,
-                user_id UUID NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        logger.info("Created flashcard_decks table")
-
-        # Create flashcard_cards table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS flashcard_cards (
-                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                deck_id UUID NOT NULL REFERENCES flashcard_decks(id) ON DELETE CASCADE,
-                front TEXT NOT NULL,
-                back TEXT NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        logger.info("Created flashcard_cards table")
 
         # Create books table if not exists
         await conn.execute("""
@@ -207,7 +180,6 @@ async def create_tables() -> None:
 
         # Create indexes for better query performance
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_user_id ON videos(user_id);")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_flashcard_decks_user_id ON flashcard_decks(user_id);")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_books_user_id ON books(user_id);")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_book_progress_user_id ON book_progress(user_id);")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_roadmaps_user_id ON roadmaps(user_id);")

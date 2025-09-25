@@ -15,7 +15,6 @@ export default function ContentGrid({
 	onGenerateCourse,
 	onUploadBook,
 	onAddYoutube,
-	onCreateFlashcards,
 	_progressLoading,
 }) {
 	return (
@@ -26,12 +25,7 @@ export default function ContentGrid({
 				) : filteredAndSortedContent.length > 0 ? (
 					<AnimatePresence mode="popLayout">{visible.map(renderCard)}</AnimatePresence>
 				) : (
-					<EmptyState
-						onGenerateCourse={onGenerateCourse}
-						onUploadBook={onUploadBook}
-						onAddYoutube={onAddYoutube}
-						onCreateFlashcards={onCreateFlashcards}
-					/>
+					<EmptyState onGenerateCourse={onGenerateCourse} onUploadBook={onUploadBook} onAddYoutube={onAddYoutube} />
 				)}
 			</div>
 

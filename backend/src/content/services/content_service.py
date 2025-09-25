@@ -54,9 +54,8 @@ class ContentService:
         if self._session:
             session = self._session
             queries: list[str] = []
-            needs_user_id = False
 
-            queries, needs_user_id = QueryBuilderService.build_content_queries(
+            queries, _needs_user_id = QueryBuilderService.build_content_queries(
                 content_type, search, include_archived, effective_user_id
             )
 
@@ -92,9 +91,8 @@ class ContentService:
         # Fallback to creating a new session
         async with async_session_maker() as session:
             queries: list[str] = []
-            needs_user_id = False
 
-            queries, needs_user_id = QueryBuilderService.build_content_queries(
+            queries, _needs_user_id = QueryBuilderService.build_content_queries(
                 content_type, search, include_archived, effective_user_id
             )
 
@@ -165,7 +163,6 @@ class ContentService:
         """Delete content by type and ID using unified service pattern."""
         from src.books.facade import BooksFacade
         from src.courses.facade import CoursesFacade
-        from src.flashcards.service import delete_deck
         from src.videos.service import VideoService
 
         # Use provided session or create a new one
@@ -183,9 +180,6 @@ class ContentService:
             elif content_type == ContentType.YOUTUBE:
                 video_service = VideoService()
                 await video_service.delete_video(session, content_id, user_id)
-            elif content_type == ContentType.FLASHCARDS:
-                # Note: Flashcards still uses old pattern, needs user_id validation
-                await delete_deck(UUID(content_id), user_id)
             elif content_type == ContentType.COURSE:
                 courses_facade = CoursesFacade()
                 await courses_facade.delete_course(session, UUID(content_id), user_id)

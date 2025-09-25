@@ -127,9 +127,9 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 					allIds.forEach((id) => delete newState[id])
 					return newState
 				})
-				logger.error("Failed to toggle multiple chapter completions", error, { 
-					chapterIds: allIds, 
-					bookId: book?.id 
+				logger.error("Failed to toggle multiple chapter completions", error, {
+					chapterIds: allIds,
+					bookId: book?.id,
 				})
 			}
 		} else {
@@ -157,9 +157,9 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 					delete newState[chapterId]
 					return newState
 				})
-				logger.error("Failed to toggle chapter completion", error, { 
-					chapterId, 
-					bookId: book?.id 
+				logger.error("Failed to toggle chapter completion", error, {
+					chapterId,
+					bookId: book?.id,
 				})
 			}
 		}
@@ -216,9 +216,9 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 		SetIsExtracting(true)
 		try {
 			const result = await extractBookChapters(bookId)
-			logger.track("book_chapters_extracted", { 
-				bookId, 
-				chapterCount: result?.length || 0 
+			logger.track("book_chapters_extracted", {
+				bookId,
+				chapterCount: result?.length || 0,
 			})
 
 			// Refresh chapters

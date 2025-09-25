@@ -1,7 +1,7 @@
 /**
  * Simple generic sidebar item component
  * Handles click events and active states following original design
- * @param {string} variant - Content type variant: 'course', 'book', 'video', 'flashcard'
+ * @param {string} variant - Content type variant: 'course', 'book', 'video'
  */
 function SidebarItem({
 	title,
@@ -27,7 +27,6 @@ function SidebarItem({
 		course: "text-teal-600", // Following styling guide
 		book: "text-blue-600",
 		video: "text-violet-600",
-		flashcard: "text-amber-600",
 	}
 
 	const activeColor = variantColors[variant] || variantColors.default

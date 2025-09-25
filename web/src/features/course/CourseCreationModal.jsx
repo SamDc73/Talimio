@@ -56,9 +56,9 @@ function CourseCreationModal({
 				)
 
 				if (uploadResults.errors.length > 0) {
-			console.log("Action completed")
+					console.log("Action completed")
 				} else {
-			console.log("Action completed")
+					console.log("Action completed")
 				}
 
 				if (onSuccess) onSuccess(newCourseData)

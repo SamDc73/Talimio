@@ -146,17 +146,14 @@ function VideoViewerContent() {
 	}, [])
 
 	// Handle chapter/timestamp seeking - memoized
-	const handleSeekToChapter = useCallback(
-		(timestamp) => {
-			if (youtubePlayerRef.current) {
-				youtubePlayerRef.current.seekTo(timestamp, true)
-				setCurrentTime(timestamp) // Update immediately for responsive UI
-			} else {
-				console.log("Player not ready")
-			}
-		},
-		[]
-	)
+	const handleSeekToChapter = useCallback((timestamp) => {
+		if (youtubePlayerRef.current) {
+			youtubePlayerRef.current.seekTo(timestamp, true)
+			setCurrentTime(timestamp) // Update immediately for responsive UI
+		} else {
+			console.log("Player not ready")
+		}
+	}, [])
 
 	// Memoize time update callback
 	const handleTimeUpdate = useCallback((time) => {

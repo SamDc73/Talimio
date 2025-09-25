@@ -45,13 +45,6 @@ export function useContentList(filters = {}) {
 					channel: item.channel,
 					duration: item.length,
 				}),
-				...(item.type === "flashcards" && {
-					cardCount: item.cardCount,
-					dueCount: item.dueCount,
-					totalCards: item.cardCount,
-					due: item.dueCount || 0,
-					overdue: item.overdueCount || 0,
-				}),
 				...(item.type === "book" && {
 					author: item.author,
 					pageCount: item.pageCount || item.page_count || item.totalPages,
@@ -129,7 +122,6 @@ export function useDeleteContent() {
 				if (type === "video") return "Video"
 				if (type === "book") return "Book"
 				if (type === "course" || type === "roadmap") return "Course"
-				if (type === "flashcards") return "Flashcard Deck"
 				return "Item"
 			}
 
@@ -141,7 +133,7 @@ export function useDeleteContent() {
 					detail: { itemId: data.itemId, itemType: data.itemType },
 				})
 			)
-			
+
 			// Invalidate queries to ensure consistency with backend
 			// Backend caching has been fixed so this is now safe
 			queryClient.invalidateQueries({ queryKey: contentKeys.all })
@@ -151,7 +143,7 @@ export function useDeleteContent() {
 		onSettled: () => {
 			// Ensure queries are fresh after any deletion attempt
 			queryClient.invalidateQueries({ queryKey: contentKeys.all })
-		}
+		},
 	})
 }
 
@@ -225,7 +217,7 @@ export function useArchiveContent() {
 					})
 				}, 300)
 			}
-			
+
 			// For archive/unarchive, we can safely invalidate to get the latest state
 			// This is different from delete where invalidation can resurrect deleted items
 			if (!archive) {

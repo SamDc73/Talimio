@@ -1,6 +1,6 @@
 export interface ContentItem {
 	id: string
-	type: "youtube" | "flashcards" | "book" | "roadmap" | "course"
+	type: "youtube" | "book" | "roadmap" | "course"
 	title: string
 	description: string
 	lastAccessedDate: string
@@ -12,9 +12,6 @@ export interface ContentItem {
 	channelName?: string
 	channel_name?: string
 	duration?: number
-	// Flashcards specific
-	cardCount?: number
-	dueCount?: number
 	// Book specific
 	author?: string
 	pageCount?: number
@@ -30,7 +27,7 @@ export interface ContentItem {
 export interface FilterOption {
 	id: string
 	label: string
-	icon: "Search" | "Youtube" | "Layers" | "BookOpen" | "FileText"
+	icon: "Search" | "Youtube" | "BookOpen" | "FileText"
 }
 
 export interface SortOption {
@@ -45,7 +42,6 @@ export function processContentData(data: ContentItem[]) {
 		{ id: "all", label: "All Content", icon: "Search" },
 		{ id: "course", label: "Courses", icon: "BookOpen" },
 		{ id: "youtube", label: "Videos", icon: "Youtube" },
-		{ id: "flashcards", label: "Flashcards", icon: "Layers" },
 		{ id: "book", label: "Books", icon: "FileText" },
 	]
 

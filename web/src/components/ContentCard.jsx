@@ -8,7 +8,7 @@ import { Separator } from "@/components/separator"
 import TagChip from "@/features/home/components/TagChip"
 import TagEditModal from "@/features/home/components/TagEditModal"
 import { VARIANTS } from "@/features/home/utils/contentConstants"
-import { useDeleteContent, useArchiveContent } from "@/hooks/useContentQueries"
+import { useArchiveContent, useDeleteContent } from "@/hooks/useContentQueries"
 
 function formatDuration(seconds) {
 	if (!seconds) return "Unknown duration"
@@ -25,13 +25,12 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 	const [hover, setHover] = useState(false)
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 	const [showTagEditModal, setShowTagEditModal] = useState(false)
-	
+
 	// Use React Query mutations
 	const deleteContentMutation = useDeleteContent()
 	const archiveContentMutation = useArchiveContent()
 
 	const V = VARIANTS[item.type]
-	const isFlashcard = item.type === "flashcards"
 
 	// Use unified API progress data - extract percentage from progress object
 	const progressValue =
@@ -141,32 +140,17 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 						)}
 					</div>
 					<div>
-						{isFlashcard && (
+						<>
 							<div className="flex justify-between text-xs text-gray-100-foreground mb-2">
-								<span>
-									{item.overdue > 0 && (
-										<>
-											<span className="text-overdue-text font-medium">{item.overdue} overdue</span>
-											<span className="text-gray-100-foreground mx-1">•</span>
-										</>
-									)}
-									<span>{item.totalCards || item.cardCount || 0} cards</span>
-								</span>
+								<span>{Math.round(progressValue)}%</span>
 							</div>
-						)}
-						{!isFlashcard && (
-							<>
-								<div className="flex justify-between text-xs text-gray-100-foreground mb-2">
-									<span>{Math.round(progressValue)}%</span>
-								</div>
-								<div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-									<div
-										style={{ width: `${progressValue}%` }}
-										className={`h-full bg-gradient-to-r ${V.grad} rounded-full transition-all duration-500`}
-									/>
-								</div>
-							</>
-						)}
+							<div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+								<div
+									style={{ width: `${progressValue}%` }}
+									className={`h-full bg-gradient-to-r ${V.grad} rounded-full transition-all duration-500`}
+								/>
+							</div>
+						</>
 					</div>
 				</div>
 				{hover && (

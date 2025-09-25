@@ -1,6 +1,6 @@
 import { Button } from "@/components/button"
 
-export default function EmptyState({ onGenerateCourse, onUploadBook, onAddYoutube, onCreateFlashcards }) {
+export default function EmptyState({ onGenerateCourse, onUploadBook, onAddYoutube }) {
 	return (
 		<div className="col-span-full text-center py-12">
 			<p className="text-gray-100-foreground">No content found matching your criteria.</p>
@@ -13,9 +13,6 @@ export default function EmptyState({ onGenerateCourse, onUploadBook, onAddYoutub
 				</Button>
 				<Button variant="outline" onClick={onAddYoutube}>
 					Add YouTube video
-				</Button>
-				<Button variant="outline" onClick={onCreateFlashcards}>
-					Create flashcards
 				</Button>
 			</div>
 		</div>
