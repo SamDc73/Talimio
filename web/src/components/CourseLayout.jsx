@@ -2,7 +2,6 @@ import CourseView from "@/features/course/CourseView"
 import { useCourseContext } from "@/hooks/useCourseContext"
 import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
 import { useCourseNavigation } from "@/utils/navigationUtils"
-import { ChatSidebar } from "./header/MainHeader"
 import RoadmapHeader from "./header/RoadmapHeader"
 import { CourseSidebar } from "./sidebar"
 
@@ -48,7 +47,7 @@ export default function CourseLayout() {
 					<CourseView mode={mode} modules={modules} roadmapId={courseId} />
 				</div>
 			</div>
-			<ChatSidebar />
+			{/* ChatSidebar is globally mounted in App.jsx */}
 		</div>
 	)
 }

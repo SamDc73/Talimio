@@ -2,15 +2,15 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { useEffect } from "react"
 import { Navigate, Route, Routes, useParams } from "react-router-dom"
 import CourseLayout from "./components/CourseLayout"
-import { ChatSidebar, ChatSidebarProvider } from "./components/header/MainHeader"
 import ProtectedRoute from "./components/ProtectedRoute"
-import { TooltipProvider } from "./components/tooltip"
 import { GlobalHighlightDeletionTooltip } from "./components/ui/GlobalHighlightDeletionTooltip"
 import { GlobalTextSelectionTooltip } from "./components/ui/GlobalTextSelectionTooltip"
 import { TextSelectionProvider } from "./components/ui/text-selection-utils"
+import { TooltipProvider } from "./components/ui/tooltip"
 import { AuthProvider } from "./contexts/AuthContext"
 import { ProgressProvider } from "./contexts/ProgressContext"
 import { ThemeProvider } from "./contexts/ThemeContext"
+import { ChatSidebarProvider } from "./features/assistant/contexts/ChatSidebarContext"
 import AuthPage from "./features/auth/AuthPage"
 import { BookViewer } from "./features/book-viewer"
 import CoursePreviewPage from "./features/course/CoursePreviewPage"
@@ -46,7 +46,7 @@ function RoadmapPageWrapper() {
 
 // Course routes wrapper - only loads when actually needed
 function CourseRoutes() {
-	const { courseId, lessonId } = useParams()
+	const { courseId } = useParams()
 
 	return (
 		<CourseView
@@ -72,111 +72,102 @@ function AppContent() {
 	return (
 		<TooltipProvider>
 			<TextSelectionProvider>
-				<ChatSidebarProvider>
-					<Routes>
-						{/* Auth route */}
-						<Route path="/auth" element={isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />} />
+				<Routes>
+					{/* Auth route */}
+					<Route path="/auth" element={isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />} />
 
-						{/* Course routes with persistent layout */}
-						<Route
-							path="/course/:courseId"
-							element={
-								<ProtectedRoute>
-									<CourseLayout />
-								</ProtectedRoute>
-							}
-						>
-							{/* Nested routes that use the CourseLayout */}
-							<Route index element={<CourseRoutes />} />
-							<Route path="lesson/:lessonId" element={<CourseRoutes />} />
-						</Route>
+					{/* Course routes with persistent layout */}
+					<Route
+						path="/course/:courseId"
+						element={
+							<ProtectedRoute>
+								<CourseLayout />
+							</ProtectedRoute>
+						}
+					>
+						{/* Nested routes that use the CourseLayout */}
+						<Route index element={<CourseRoutes />} />
+						<Route path="lesson/:lessonId" element={<CourseRoutes />} />
+					</Route>
 
-						{/* Standalone lesson route also uses CourseLayout */}
-						<Route
-							path="/lesson/:lessonId"
-							element={
-								<ProtectedRoute>
-									<CourseLayout />
-								</ProtectedRoute>
-							}
-						>
-							<Route index element={<CourseRoutes />} />
-						</Route>
+					{/* Standalone lesson route also uses CourseLayout */}
+					<Route
+						path="/lesson/:lessonId"
+						element={
+							<ProtectedRoute>
+								<CourseLayout />
+							</ProtectedRoute>
+						}
+					>
+						<Route index element={<CourseRoutes />} />
+					</Route>
 
-						{/* Course preview - doesn't use persistent layout */}
-						<Route
-							path="/course/preview/:courseId"
-							element={
-								<ProtectedRoute>
-									<CoursePreviewPage />
-									<ChatSidebar />
-								</ProtectedRoute>
-							}
-						/>
+					{/* Course preview - doesn't use persistent layout */}
+					<Route
+						path="/course/preview/:courseId"
+						element={
+							<ProtectedRoute>
+								<CoursePreviewPage />
+							</ProtectedRoute>
+						}
+					/>
 
-						{/* Home page */}
-						<Route
-							path="/"
-							element={
-								<ProtectedRoute>
-									<HomePage />
-									<ChatSidebar />
-								</ProtectedRoute>
-							}
-						/>
+					{/* Home page */}
+					<Route
+						path="/"
+						element={
+							<ProtectedRoute>
+								<HomePage />
+							</ProtectedRoute>
+						}
+					/>
 
-						{/* Roadmap routes */}
-						<Route
-							path="/roadmap/preview/:roadmapId"
-							element={
-								<ProtectedRoute>
-									<RoadmapPreviewPage />
-									<ChatSidebar />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path="/roadmap/:roadmapId/lesson/:lessonId"
-							element={
-								<ProtectedRoute>
-									<RoadmapPageWrapper />
-									<ChatSidebar />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path="/roadmap/:roadmapId"
-							element={
-								<ProtectedRoute>
-									<RoadmapPageWrapper />
-									<ChatSidebar />
-								</ProtectedRoute>
-							}
-						/>
+					{/* Roadmap routes */}
+					<Route
+						path="/roadmap/preview/:roadmapId"
+						element={
+							<ProtectedRoute>
+								<RoadmapPreviewPage />
+							</ProtectedRoute>
+						}
+					/>
+					<Route
+						path="/roadmap/:roadmapId/lesson/:lessonId"
+						element={
+							<ProtectedRoute>
+								<RoadmapPageWrapper />
+							</ProtectedRoute>
+						}
+					/>
+					<Route
+						path="/roadmap/:roadmapId"
+						element={
+							<ProtectedRoute>
+								<RoadmapPageWrapper />
+							</ProtectedRoute>
+						}
+					/>
 
-						{/* Other content routes */}
-						<Route
-							path="/books/:bookId"
-							element={
-								<ProtectedRoute>
-									<BookViewer />
-									<ChatSidebar />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path="/videos/:videoId"
-							element={
-								<ProtectedRoute>
-									<VideoViewer />
-									<ChatSidebar />
-								</ProtectedRoute>
-							}
-						/>
-					</Routes>
-					<GlobalTextSelectionTooltip />
-					<GlobalHighlightDeletionTooltip />
-				</ChatSidebarProvider>
+					{/* Other content routes */}
+					<Route
+						path="/books/:bookId"
+						element={
+							<ProtectedRoute>
+								<BookViewer />
+							</ProtectedRoute>
+						}
+					/>
+					<Route
+						path="/videos/:videoId"
+						element={
+							<ProtectedRoute>
+								<VideoViewer />
+							</ProtectedRoute>
+						}
+					/>
+				</Routes>
+				<GlobalTextSelectionTooltip />
+				<GlobalHighlightDeletionTooltip />
 			</TextSelectionProvider>
 		</TooltipProvider>
 	)
@@ -188,7 +179,9 @@ export default function App() {
 			<ThemeProvider>
 				<AuthProvider>
 					<ProgressProvider>
-						<AppContent />
+						<ChatSidebarProvider>
+							<AppContent />
+						</ChatSidebarProvider>
 					</ProgressProvider>
 				</AuthProvider>
 			</ThemeProvider>

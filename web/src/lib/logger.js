@@ -51,7 +51,9 @@ class LoggerService {
 	async send(data) {
 		// In dev, just log to console with nice formatting
 		if (import.meta.env.DEV) {
-			const _style = this.getConsoleStyle(data.type)
+			const style = this.getConsoleStyle(data.type)
+			// biome-ignore lint/suspicious/noConsole: Development logging
+			console.log(`%c[${data.type.toUpperCase()}] ${data.event || data.message}`, style, data.data || data)
 			return
 		}
 
@@ -116,6 +118,8 @@ class LoggerService {
 
 		// In dev, also use console.error for better stack traces
 		if (import.meta.env.DEV) {
+			// biome-ignore lint/suspicious/noConsole: Development error logging
+			console.error(`[ERROR] ${message}`, error, context)
 		} else {
 			this.send(errorData)
 		}

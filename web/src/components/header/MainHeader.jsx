@@ -1,37 +1,24 @@
-import { AnimatePresence, motion } from "framer-motion"
+import { motion } from "framer-motion"
 import {
 	BookOpen,
-	Bot,
 	FileText,
-	GripVertical,
-	Layers,
 	LogOut,
 	Menu,
 	MessageSquare,
-	Mic,
 	Monitor,
 	Moon,
-	Paperclip,
-	Pin,
-	PinOff,
 	Search,
-	Send,
 	Settings,
 	Sparkles,
 	Sun,
 	X,
 	Youtube,
 } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "@/hooks/useAuth"
-import { useChatSidebar } from "@/hooks/useChatSidebar"
-import { ChatSidebarProvider } from "../../contexts/ChatSidebarContext"
 import { useTheme } from "../../contexts/ThemeContext"
-import { useCurrentContext } from "../../hooks/useCurrentContext"
 import { cn } from "../../lib/utils"
-import { useAssistantChat } from "../../services/assistantApi"
-import useAppStore from "../../stores/useAppStore"
 import { Button } from "../button"
 import {
 	DropdownMenu,
@@ -47,10 +34,10 @@ import { PersonalizationDialog } from "../PersonalizationDialog"
 import { Sheet, SheetContent, SheetTrigger } from "../sheet"
 import { TooltipButton } from "../TooltipButton"
 
-// Re-export for convenience
-export { ChatSidebarProvider }
-
 // User Avatar Menu Component
+/**
+ * @returns {JSX.Element}
+ */
 export function UserAvatarMenu() {
 	const { user, logout } = useAuth()
 	const navigate = useNavigate()
@@ -58,13 +45,13 @@ export function UserAvatarMenu() {
 	const [personalizationOpen, setPersonalizationOpen] = useState(false)
 	const { theme, setTheme } = useTheme()
 
-	const handleLogout = async () => {
+	const handleLogout = useCallback(async () => {
 		await logout()
 		navigate("/auth")
-	}
+	}, [logout, navigate])
 
-	// Get user initials
-	const getUserInitials = () => {
+	// Get user initials - memoized to prevent recalculation
+	const userInitials = useMemo(() => {
 		if (!user) return "U"
 		if (user.username) {
 			return user.username.substring(0, 2).toUpperCase()
@@ -74,7 +61,7 @@ export function UserAvatarMenu() {
 			return name.substring(0, 2).toUpperCase()
 		}
 		return "U"
-	}
+	}, [user])
 
 	return (
 		<>
@@ -91,7 +78,7 @@ export function UserAvatarMenu() {
 						<button type="button" className="flex items-center justify-center">
 							<div className="h-8 w-8 rounded-full bg-white flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
 								<div className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500 font-semibold text-sm">
-									{getUserInitials()}
+									{userInitials}
 								</div>
 							</div>
 						</button>
@@ -124,6 +111,7 @@ export function UserAvatarMenu() {
 								<span className="text-sm">Theme</span>
 								<div className="flex items-center gap-1 rounded-md border bg-gray-100 p-1">
 									<button
+										type="button"
 										onClick={() => setTheme("light")}
 										className={cn(
 											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
@@ -136,6 +124,7 @@ export function UserAvatarMenu() {
 										<Sun className="h-3 w-3" />
 									</button>
 									<button
+										type="button"
 										onClick={() => setTheme("dark")}
 										className={cn(
 											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
@@ -148,6 +137,7 @@ export function UserAvatarMenu() {
 										<Moon className="h-3 w-3" />
 									</button>
 									<button
+										type="button"
 										onClick={() => setTheme("system")}
 										className={cn(
 											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
@@ -176,6 +166,13 @@ export function UserAvatarMenu() {
 }
 
 // Logo Component
+/**
+ * @param {Object} props
+ * @param {string} [props.className]
+ * @param {"sm" | "md" | "lg"} [props.size="md"]
+ * @param {string} [props.href="/"]
+ * @returns {JSX.Element}
+ */
 export function Logo({ className, size = "md", href = "/" }) {
 	const sizeClasses = {
 		sm: "h-8",
@@ -183,23 +180,31 @@ export function Logo({ className, size = "md", href = "/" }) {
 		lg: "h-10",
 	}
 
+	// Compute size values to avoid nested ternaries
+	const imageDimensions = useMemo(() => {
+		if (size === "sm") return 24
+		if (size === "md") return 32
+		return 40
+	}, [size])
+
+	const textSize = useMemo(() => {
+		if (size === "sm") return "text-lg"
+		if (size === "md") return "text-xl"
+		return "text-2xl"
+	}, [size])
+
 	return (
 		<Link to={href} className={cn("flex items-center gap-2", className)}>
 			<div className="relative">
 				<img
 					src="/logo.png"
 					alt="Talimio Logo"
-					width={size === "sm" ? 24 : size === "md" ? 32 : 40}
-					height={size === "sm" ? 24 : size === "md" ? 32 : 40}
+					width={imageDimensions}
+					height={imageDimensions}
 					className={cn("object-contain", sizeClasses[size])}
 				/>
 			</div>
-			<span
-				className={cn(
-					"font-bold tracking-tight text-gray-900 dark:text-white",
-					size === "sm" ? "text-lg" : size === "md" ? "text-xl" : "text-2xl"
-				)}
-			>
+			<span className={cn("font-bold tracking-tight text-gray-900 dark:text-white", textSize)}>
 				Tali
 				<span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500">
 					mio
@@ -209,434 +214,22 @@ export function Logo({ className, size = "md", href = "/" }) {
 	)
 }
 
-// Chat Sidebar Component
-export function ChatSidebar() {
-	const { isChatOpen, toggleChat } = useChatSidebar()
-	const [inputValue, setInputValue] = useState("")
-	const [isLoading, setIsLoading] = useState(false)
-	const messagesEndRef = useRef(null)
-	const { theme } = useTheme()
-	const isDarkMode = theme === "dark"
-	const assistantSidebarPinned = useAppStore((state) => state.preferences.assistantSidebarPinned)
-	const assistantSidebarWidth = useAppStore((state) => state.preferences.assistantSidebarWidth)
-	const toggleAssistantSidebarPin = useAppStore((state) => state.toggleAssistantSidebarPin)
-	const setAssistantSidebarWidth = useAppStore((state) => state.setAssistantSidebarWidth)
-	const { sendMessage, sendStreamingMessage } = useAssistantChat()
-	const [useStreaming, _setUseStreaming] = useState(true) // Default to streaming
-	const [isResizing, setIsResizing] = useState(false)
-	const [startX, setStartX] = useState(0)
-	const [startWidth, setStartWidth] = useState(0)
-
-	// Get current page context for context-aware assistance
-	const currentContext = useCurrentContext()
-
-	// Create a unique conversation key based on context
-	const conversationKey = currentContext ? `${currentContext.contextType}-${currentContext.contextId}` : "general"
-
-	// Store conversations per context
-	const [conversations, setConversations] = useState({})
-
-	// Initialize conversation for current context if it doesn't exist
-	const initializeConversation = useCallback(() => {
-		setConversations((prev) => {
-			if (!prev[conversationKey]) {
-				const initialMessage = {
-					id: "1",
-					content: currentContext
-						? `Hello! I can see you're viewing a ${currentContext.contextType}. How can I help you with this content?`
-						: "Hello! I'm your learning assistant. How can I help you today?",
-					role: "assistant",
-					timestamp: new Date(),
-				}
-
-				return {
-					...prev,
-					[conversationKey]: [initialMessage],
-				}
-			}
-			return prev
-		})
-	}, [conversationKey, currentContext])
-
-	// Initialize conversation when context changes
-	useEffect(() => {
-		initializeConversation()
-	}, [initializeConversation])
-
-	// Get current conversation
-	const messages = conversations[conversationKey] || []
-
-	const setMessages = (updateFn) => {
-		setConversations((prev) => {
-			const currentMessages = prev[conversationKey] || []
-			const newMessages = typeof updateFn === "function" ? updateFn(currentMessages) : updateFn
-			return {
-				...prev,
-				[conversationKey]: newMessages,
-			}
-		})
-	}
-
-	// Resize handlers
-	const handleResizeStart = (e) => {
-		e.preventDefault()
-		e.stopPropagation()
-		setIsResizing(true)
-		setStartX(e.clientX)
-		setStartWidth(assistantSidebarWidth)
-		document.body.style.userSelect = "none" // Prevent text selection during resize
-		document.body.style.cursor = "col-resize" // Set global cursor
-	}
-
-	const handleResizeMove = useCallback(
-		(e) => {
-			if (!isResizing) return
-			e.preventDefault()
-
-			// Calculate new width (drag left to make wider, right to make narrower)
-			const deltaX = startX - e.clientX
-			const newWidth = startWidth + deltaX
-
-			// Apply width with constraints (min: 300px, max: 800px)
-			const clampedWidth = Math.max(300, Math.min(800, newWidth))
-			setAssistantSidebarWidth(clampedWidth)
-		},
-		[isResizing, startX, startWidth, setAssistantSidebarWidth]
-	)
-
-	const handleResizeEnd = useCallback(() => {
-		if (!isResizing) return
-		setIsResizing(false)
-		document.body.style.userSelect = "" // Restore text selection
-		document.body.style.cursor = "" // Reset global cursor
-	}, [isResizing])
-
-	// Keyboard resize handler
-	const handleKeyDown = (e) => {
-		if (e.key === "ArrowLeft") {
-			e.preventDefault()
-			const newWidth = assistantSidebarWidth + (e.shiftKey ? 50 : 10)
-			const clampedWidth = Math.max(300, Math.min(800, newWidth))
-			setAssistantSidebarWidth(clampedWidth)
-		} else if (e.key === "ArrowRight") {
-			e.preventDefault()
-			const newWidth = assistantSidebarWidth - (e.shiftKey ? 50 : 10)
-			const clampedWidth = Math.max(300, Math.min(800, newWidth))
-			setAssistantSidebarWidth(clampedWidth)
-		}
-	}
-
-	// Add event listeners for resize
-	useEffect(() => {
-		if (isResizing) {
-			document.addEventListener("mousemove", handleResizeMove)
-			document.addEventListener("mouseup", handleResizeEnd)
-
-			return () => {
-				document.removeEventListener("mousemove", handleResizeMove)
-				document.removeEventListener("mouseup", handleResizeEnd)
-			}
-		}
-	}, [isResizing, handleResizeEnd, handleResizeMove])
-
-	// Scroll to bottom when messages change
-	useEffect(() => {
-		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-	})
-
-	const handleSendMessage = async () => {
-		if (!inputValue.trim()) return
-
-		// Add user message
-		const userMessage = {
-			id: Date.now().toString(),
-			content: inputValue,
-			role: "user",
-			timestamp: new Date(),
-		}
-		setMessages((prev) => [...prev, userMessage])
-		const userInput = inputValue // Save input before clearing
-		setInputValue("")
-		setIsLoading(true)
-
-		try {
-			// Convert messages to conversation history format
-			const conversationHistory = messages.map((msg) => ({
-				role: msg.role,
-				content: msg.content,
-			}))
-
-			// Context is passed to assistant for relevant responses
-
-			if (useStreaming) {
-				// Add placeholder for assistant message
-				const assistantMessageId = (Date.now() + 1).toString()
-				const assistantMessage = {
-					id: assistantMessageId,
-					content: "",
-					role: "assistant",
-					timestamp: new Date(),
-				}
-				setMessages((prev) => [...prev, assistantMessage])
-				setIsLoading(false) // Turn off loading immediately since we have a placeholder
-
-				// Send streaming message with context
-				await sendStreamingMessage(
-					userInput,
-					conversationHistory,
-					(_chunk, fullResponse) => {
-						// Update the assistant message with streaming content
-						setMessages((prev) =>
-							prev.map((msg) => (msg.id === assistantMessageId ? { ...msg, content: fullResponse } : msg))
-						)
-					},
-					currentContext // Pass context data
-				)
-			} else {
-				// Send regular message with context
-				const response = await sendMessage(
-					userInput,
-					conversationHistory,
-					currentContext // Pass context data
-				)
-
-				const assistantMessage = {
-					id: (Date.now() + 1).toString(),
-					content: response.response,
-					role: "assistant",
-					timestamp: new Date(),
-					contextSource: response.context_source || null,
-				}
-				setMessages((prev) => [...prev, assistantMessage])
-			}
-		} catch (_error) {
-			const errorMessage = {
-				id: (Date.now() + 1).toString(),
-				content: "Sorry, I encountered an error. Please try again.",
-				role: "assistant",
-				timestamp: new Date(),
-			}
-			setMessages((prev) => [...prev, errorMessage])
-		} finally {
-			setIsLoading(false)
-		}
-	}
-
-	useEffect(() => {
-		// Add padding to main content when sidebar is pinned and open
-		if (assistantSidebarPinned && isChatOpen) {
-			document.body.style.paddingRight = `${assistantSidebarWidth}px`
-		} else {
-			document.body.style.paddingRight = "0"
-		}
-
-		return () => {
-			document.body.style.paddingRight = "0"
-		}
-	}, [assistantSidebarPinned, isChatOpen, assistantSidebarWidth])
-
-	return (
-		<>
-			{/* Overlay when sidebar is open on mobile */}
-			<AnimatePresence>
-				{isChatOpen && !assistantSidebarPinned && (
-					<motion.div
-						initial={{ opacity: 0 }}
-						animate={{ opacity: 0.5 }}
-						exit={{ opacity: 0 }}
-						className="fixed inset-0 bg-black z-40 md:hidden"
-						onClick={toggleChat}
-					/>
-				)}
-			</AnimatePresence>
-
-			{/* Chat Sidebar */}
-			<motion.div
-				className={cn(
-					"fixed top-0 right-0 z-50 h-screen shadow-xl relative",
-					isDarkMode ? "bg-zinc-900 text-white" : "bg-white text-gray-900",
-					"border-l",
-					isDarkMode ? "border-zinc-800" : "border-slate-200"
-				)}
-				style={{
-					width: `${assistantSidebarWidth}px`,
-					transition: isResizing ? "none" : "width 0.2s ease-out",
-				}}
-				initial={{ x: "100%" }}
-				animate={{
-					x: isChatOpen ? 0 : "100%",
-					position: assistantSidebarPinned && isChatOpen ? "fixed" : "fixed",
-					boxShadow: assistantSidebarPinned && isChatOpen ? "none" : "-4px 0 15px rgba(0, 0, 0, 0.1)",
-				}}
-				transition={{ type: "spring", damping: 20, stiffness: 300 }}
-			>
-				{/* Resize Handle */}
-				<div
-					role="slider"
-					aria-orientation="vertical"
-					aria-label="Resize sidebar width"
-					aria-valuemin={300}
-					aria-valuemax={800}
-					aria-valuenow={assistantSidebarWidth}
-					tabIndex={0}
-					className={cn(
-						"absolute left-0 top-0 bottom-0 w-3 cursor-col-resize z-10 group",
-						"hover:bg-blue-500/50 transition-colors duration-150",
-						"active:bg-blue-600/70 focus:outline-none focus:ring-2 focus:ring-blue-500",
-						isDarkMode ? "bg-zinc-700/30" : "bg-slate-300/30",
-						isResizing && "bg-blue-500/70"
-					)}
-					onMouseDown={handleResizeStart}
-					onKeyDown={handleKeyDown}
-					style={{
-						touchAction: "none", // Prevent touch scrolling
-					}}
-					title="Drag to resize sidebar (Arrow keys to resize, Shift+Arrow for larger steps)"
-				>
-					<div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-						<GripVertical
-							className={cn(
-								"h-5 w-5 transition-opacity duration-150",
-								isDarkMode ? "text-zinc-400" : "text-slate-500",
-								"group-hover:opacity-100",
-								isResizing ? "opacity-100" : "opacity-50"
-							)}
-						/>
-					</div>
-				</div>
-				{/* Header */}
-				<div
-					className={cn(
-						"flex items-center justify-between p-4 border-b",
-						isDarkMode ? "border-zinc-800" : "border-slate-200"
-					)}
-				>
-					<div className="flex items-center gap-2">
-						<Bot className={cn("h-5 w-5", isDarkMode ? "text-emerald-400" : "text-emerald-600")} />
-						<h2 className="font-semibold">Learning Assistant</h2>
-					</div>
-					<div className="flex items-center gap-2">
-						<Button
-							variant="ghost"
-							size="icon"
-							onClick={toggleAssistantSidebarPin}
-							className={cn(
-								isDarkMode ? "text-zinc-400 hover:text-white" : "text-gray-100-foreground hover:text-gray-900"
-							)}
-						>
-							{assistantSidebarPinned ? <PinOff className="h-5 w-5" /> : <Pin className="h-5 w-5" />}
-							<span className="sr-only">{assistantSidebarPinned ? "Unpin Chat" : "Pin Chat"}</span>
-						</Button>
-						<Button
-							variant="ghost"
-							size="icon"
-							onClick={toggleChat}
-							className={cn(
-								isDarkMode ? "text-zinc-400 hover:text-white" : "text-gray-100-foreground hover:text-gray-900"
-							)}
-						>
-							<X className="h-5 w-5" />
-							<span className="sr-only">Close</span>
-						</Button>
-					</div>
-				</div>
-
-				{/* Messages */}
-				<div className="flex flex-col h-[calc(100vh-8rem)] overflow-y-auto p-4">
-					{messages.map((message) => (
-						<div
-							key={message.id}
-							className={cn(
-								"mb-4 max-w-[85%] rounded-lg p-3",
-								message.role === "user"
-									? "ml-auto bg-green-500 text-white"
-									: isDarkMode
-										? "bg-zinc-800"
-										: "bg-slate-100"
-							)}
-						>
-							<p className="text-sm">{message.content}</p>
-							{/* Show context source for assistant messages */}
-							{message.role === "assistant" && message.contextSource && (
-								<div
-									className={cn(
-										"text-xs mt-2 pt-2 border-t opacity-70",
-										isDarkMode ? "border-zinc-700 text-zinc-400" : "border-slate-200 text-slate-500"
-									)}
-								>
-									📄 Context: {message.contextSource}
-								</div>
-							)}
-						</div>
-					))}
-					{isLoading && (
-						<div className={cn("mb-4 max-w-[85%] rounded-lg p-3", isDarkMode ? "bg-zinc-800" : "bg-slate-100")}>
-							<div className="flex gap-1">
-								<div className="h-2 w-2 rounded-full bg-current animate-bounce" />
-								<div className="h-2 w-2 rounded-full bg-current animate-bounce delay-75" />
-								<div className="h-2 w-2 rounded-full bg-current animate-bounce delay-150" />
-							</div>
-						</div>
-					)}
-					<div ref={messagesEndRef} />
-				</div>
-
-				{/* Input */}
-				<div
-					className={cn(
-						"absolute bottom-0 left-0 right-0 p-4 border-t",
-						isDarkMode ? "border-zinc-800" : "border-slate-200"
-					)}
-				>
-					<div className="relative w-full rounded-lg border bg-white shadow-sm">
-						<Input
-							value={inputValue}
-							onChange={(e) => setInputValue(e.target.value)}
-							placeholder="Ask a follow up..."
-							className={cn(
-								"border-0 focus-visible:ring-0 focus-visible:ring-offset-0 pr-24",
-								isDarkMode ? "bg-zinc-800" : "bg-white"
-							)}
-							onKeyDown={(e) => {
-								if (e.key === "Enter" && !e.shiftKey) {
-									e.preventDefault()
-									handleSendMessage()
-								}
-							}}
-						/>
-						<div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-							<Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => {}}>
-								<Paperclip className="h-4 w-4" />
-								<span className="sr-only">Attach file</span>
-							</Button>
-							<Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => {}}>
-								<Mic className="h-4 w-4" />
-								<span className="sr-only">Voice input</span>
-							</Button>
-							<Button
-								variant="ghost"
-								size="icon"
-								className="h-8 w-8 rounded-full"
-								onClick={handleSendMessage}
-								disabled={!inputValue.trim() || isLoading}
-							>
-								<Send className="h-4 w-4" />
-								<span className="sr-only">Send</span>
-							</Button>
-						</div>
-					</div>
-				</div>
-			</motion.div>
-		</>
-	)
-}
-
 // Main Header Component
+/**
+ * @param {Object} props
+ * @param {boolean} [props.transparent=false]
+ * @param {string} [props.className]
+ * @returns {JSX.Element}
+ */
 export function MainHeader({ transparent = false, className }) {
 	const [scrolled, setScrolled] = useState(false)
 	const [searchOpen, setSearchOpen] = useState(false)
 	const [searchQuery, setSearchQuery] = useState("")
-	const { toggleChat } = useChatSidebar()
+
+	// Open assistant by dispatching event
+	const toggleChat = () => {
+		window.dispatchEvent(new CustomEvent("openAssistant"))
+	}
 
 	// Handle scroll effect
 	useEffect(() => {
@@ -648,7 +241,10 @@ export function MainHeader({ transparent = false, className }) {
 	}, [])
 
 	// Determine header background style based on scroll and transparent prop
-	const headerBg = transparent ? (scrolled ? "bg-white/95 backdrop-blur-md shadow-sm" : "bg-transparent") : "bg-white"
+	const headerBg = useMemo(() => {
+		if (!transparent) return "bg-white"
+		return scrolled ? "bg-white/95 backdrop-blur-md shadow-sm" : "bg-transparent"
+	}, [transparent, scrolled])
 
 	return (
 		<header className={cn("fixed top-0 left-0 right-0 z-50 transition-all duration-300", headerBg, className)}>

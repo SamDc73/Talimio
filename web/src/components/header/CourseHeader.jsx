@@ -1,7 +1,7 @@
 import { Files, FileText, GitBranch, MessageSquare, PanelLeft } from "lucide-react"
 import { useState } from "react"
 import { Link } from "react-router-dom"
-import { useChatSidebar } from "@/hooks/useChatSidebar"
+import { useChatSidebar } from "@/features/assistant/contexts/chatSidebarContext"
 import { cn } from "../../lib/utils"
 import { TooltipButton } from "../TooltipButton"
 import { UserAvatarMenu } from "./MainHeader"

@@ -157,6 +157,7 @@ AUTH_SKIP_PATHS: list[str] = [
     "/api/v1/auth/request-password-reset",
     "/api/v1/auth/reset-password",
     # NOTE: /api/v1/auth/me is NOT in skip paths - it needs authentication
+    "/api/v1/assistant/models",
     # Docs/OpenAPI
     "/docs",
     "/redoc",

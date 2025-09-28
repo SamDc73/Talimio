@@ -252,7 +252,7 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 			<div className="h-full flex items-center justify-center bg-white">
 				<div className="text-center">
 					<div className="mb-4">
-						<div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"></div>
+						<div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
 					</div>
 					<p className="text-gray-100-foreground">Loading EPUB...</p>
 				</div>

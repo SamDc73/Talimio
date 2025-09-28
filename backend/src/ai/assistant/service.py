@@ -1,5 +1,6 @@
 """Simple assistant service with streaming support."""
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
@@ -59,6 +60,7 @@ async def chat_with_assistant(
             stream=True,
             temperature=0.7,
             max_tokens=4000,
+            model=request.model,  # Honor UI-selected model when provided
         )
 
         # Stream each chunk
@@ -146,6 +148,8 @@ async def _get_course_rag_context(request: ChatRequest) -> list:
         from src.ai.rag.service import RAGService
         from src.database.session import async_session_maker
 
+        logger.info(f"Searching for course documents with course_id: {request.context_id}, query: {request.message[:50]}...")
+
         rag_service = RAGService()
         async with async_session_maker() as session:
             # Use RAGService's internal method that takes a session directly
@@ -155,16 +159,22 @@ async def _get_course_rag_context(request: ChatRequest) -> list:
                 query=request.message,
                 top_k=5,
             )
-            logger.debug("Retrieved %d RAG results for course", len(results))
+            logger.info(f"Retrieved {len(results)} RAG results for course {request.context_id}")
+            if results:
+                logger.debug(f"First result preview: {results[0].content[:100]}...")
             return results
 
     except Exception:
-        logger.exception("RAG search failed")
+        logger.exception(f"RAG search failed for course_id: {request.context_id}")
         return []
 
 
 async def _book_context(resource_id: UUID, context_meta: dict[str, Any]) -> ContextData | None:
-    """Get text from PDF pages around current page."""
+    """Get text from PDF pages around current page.
+
+    Uses asyncio.to_thread to offload PyMuPDF parsing to a background thread,
+    preventing event loop blocking as recommended by FastAPI best practices.
+    """
     if "page" not in context_meta:
         return None
 
@@ -184,27 +194,41 @@ async def _book_context(resource_id: UUID, context_meta: dict[str, Any]) -> Cont
 
     storage = get_storage_provider()
     file_content = await storage.read(book.file_path)
-    doc = fitz.open(stream=file_content, filetype="pdf")
 
-    try:
-        start_page = max(0, current_page - 2)
-        end_page = min(doc.page_count - 1, current_page + 2)
+    def _extract_pdf_context(content: bytes, page_index: int) -> tuple[str | None, str | None]:
+        """Parse PDF synchronously and return (joined_text, source_label)."""
+        doc = fitz.open(stream=content, filetype="pdf")
+        try:
+            start_page = max(0, page_index - 2)
+            end_page = min(doc.page_count - 1, page_index + 2)
 
-        text_parts = []
-        for page_num in range(start_page, end_page + 1):
-            page_text = doc.load_page(page_num).get_text().strip()
-            if page_text:
-                text_parts.append(page_text)
+            text_parts: list[str] = []
+            for page_num in range(start_page, end_page + 1):
+                page_text = doc.load_page(page_num).get_text().strip()
+                if page_text:
+                    text_parts.append(page_text)
 
-        if not text_parts:
-            return None
+            if not text_parts:
+                return None, None
 
-        return ContextData(
-            content="\n\n".join(text_parts),
-            source=f"{book.title}: pages {start_page + 1}-{end_page + 1}",
-        )
-    finally:
-        doc.close()
+            source = f"pages {start_page + 1}-{end_page + 1}"
+            return "\n\n".join(text_parts), source
+        finally:
+            doc.close()
+
+    # Offload heavy PDF parsing work to a thread
+    joined_text, source = await asyncio.to_thread(_extract_pdf_context, file_content, current_page)
+    if not joined_text:
+        return None
+
+    # Build human-readable source label safely
+    title = getattr(book, "title", "Document")
+    source_label = f"{title}: {source}" if source else title
+
+    return ContextData(
+        content=joined_text,
+        source=source_label,
+    )
 
 
 async def _video_context(resource_id: UUID, context_meta: dict[str, Any]) -> ContextData | None:

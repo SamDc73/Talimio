@@ -2,6 +2,7 @@
  * API synchronization utilities
  * Handles debounced syncing, offline queue, and retry logic
  */
+import logger from "./logger"
 
 // Debounce timers for different data types
 const syncTimers = new Map()
@@ -61,7 +62,7 @@ async function performSync(resourceType, resourceId, data, retryCount = 0) {
 
 		// If no endpoint is available for this data type, skip sync
 		if (!endpoint) {
-			logger.info(`No sync endpoint for ${resourceType}:${resourceId}`, { data })
+			// No sync endpoint for this resource type - skip silently
 			return { skipped: true }
 		}
 
@@ -126,14 +127,14 @@ async function performSync(resourceType, resourceId, data, retryCount = 0) {
 			throw new Error(`Sync failed: ${response.statusText}`)
 		}
 
-		logger.info(`Synced ${resourceType}:${resourceId}`)
+		// Successfully synced - no need to log every sync
 		return await response.json()
 	} catch (error) {
 		logger.error(`Sync failed for ${resourceType}:${resourceId}`, error)
 
 		// Retry logic
 		if (retryCount < MAX_RETRIES) {
-			logger.info(`Retrying sync (${retryCount + 1}/${MAX_RETRIES})...`)
+			// Retrying sync after error
 			await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)))
 			return performSync(resourceType, resourceId, data, retryCount + 1)
 		}
@@ -163,7 +164,7 @@ function buildEndpoint(resourceType, resourceId, data) {
 				const chapterId = data.chapterStatus.chapterId
 				if (chapterId?.startsWith("toc_")) {
 					// This is a ToC section ID, not a chapter UUID - skip sync
-					logger.info(`Skipping chapter status sync for ToC section: ${chapterId}`)
+					// Skip ToC section IDs - they don't have backend endpoints
 					return null
 				}
 				return `${baseUrl}/books/${resourceId}/chapters/${chapterId}/status`
@@ -181,7 +182,7 @@ function buildEndpoint(resourceType, resourceId, data) {
 				const chapterId = data.chapterStatus.chapterId
 				if (chapterId && (chapterId.startsWith("chapter-") || chapterId.startsWith("toc_"))) {
 					// This is a description-based chapter ID, not a UUID - skip sync
-					logger.info(`Skipping chapter status sync for description-based chapter: ${chapterId}`)
+					// Skip description-based chapter IDs - they don't have backend endpoints
 					return null
 				}
 				return `${baseUrl}/videos/${resourceId}/chapters/${chapterId}/status`
@@ -213,7 +214,7 @@ function buildEndpoint(resourceType, resourceId, data) {
 
 		default:
 			// Don't throw error for unknown types, just skip sync
-			logger.info(`No sync handler for resource type: ${resourceType}`)
+			// No sync handler for this resource type - skip silently
 			return null
 	}
 }
@@ -271,7 +272,7 @@ function queueForOfflineSync(resourceType, resourceId, data) {
 	// Save queue to localStorage
 	localStorage.setItem("syncQueue", JSON.stringify(offlineQueue))
 
-	logger.info(`Queued for offline sync: ${resourceType}:${resourceId}`)
+	// Queued for offline sync
 }
 
 /**
@@ -280,7 +281,7 @@ function queueForOfflineSync(resourceType, resourceId, data) {
 async function processOfflineQueue() {
 	if (offlineQueue.length === 0) return
 
-	logger.info(`Processing ${offlineQueue.length} queued syncs...`)
+	// Processing offline queue
 
 	const queue = [...offlineQueue]
 	offlineQueue.length = 0 // Clear queue
@@ -320,7 +321,7 @@ function loadOfflineQueue() {
 			})
 
 			if (validQueue.length !== queue.length) {
-				logger.info(`Cleaned ${queue.length - validQueue.length} corrupted sync queue items`)
+				// Cleaned corrupted sync queue items
 			}
 
 			offlineQueue.push(...validQueue)

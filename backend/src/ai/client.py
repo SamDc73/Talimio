@@ -45,15 +45,16 @@ class LLMClient:
         user_id: str | UUID | None = None,
         response_format: Any | None = None,
         stream: bool = False,
+        model: str | None = None,
     ) -> Any:
         """Low-level completion method using LiteLLM directly."""
         try:
             # Get model from settings
             settings = get_settings()
-            model = settings.primary_llm_model
+            request_model = model or settings.primary_llm_model
 
             kwargs = {
-                "model": model,
+                "model": request_model,
                 "messages": messages,
                 "temperature": temperature if temperature is not None else settings.ai_temperature_default,
                 "timeout": settings.ai_request_timeout,
@@ -94,6 +95,7 @@ class LLMClient:
         tool_choice: str | None = None,
         format_json: bool = False,
         user_id: str | UUID | None = None,
+        model: str | None = None,
     ) -> Any:
         """Get completion with optional memory integration and structured output."""
         try:
@@ -104,7 +106,7 @@ class LLMClient:
             # Handle structured output - use instructor with native async litellm
             if response_model:
                 settings = get_settings()
-                model = settings.primary_llm_model
+                request_model = model or settings.primary_llm_model
 
                 import instructor
                 from litellm import acompletion
@@ -115,7 +117,7 @@ class LLMClient:
 
                     # Build kwargs for instructor
                     instructor_kwargs = {
-                        "model": model,  # Use the original model string with litellm prefix
+                        "model": request_model,
                         "messages": messages,
                         "response_model": response_model,
                         "temperature": temperature if temperature is not None else settings.ai_temperature_default,
@@ -167,6 +169,7 @@ class LLMClient:
                 max_tokens=max_tokens,
                 user_id=user_id,
                 response_format={"type": "json_object"} if format_json else None,
+                model=model,
             )
 
             content = response.choices[0].message.content

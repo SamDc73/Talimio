@@ -102,12 +102,11 @@ export async function updateVideoChapterStatus(videoId, chapterId, status) {
 			chapterId,
 			status,
 		}
-	} else {
-		// For UUID chapters, use the chapters endpoint
-		return await api.put(`/videos/${videoId}/chapters/${chapterId}/status`, {
-			status,
-		})
 	}
+	// For UUID chapters, use the chapters endpoint
+	return await api.put(`/videos/${videoId}/chapters/${chapterId}/status`, {
+		status,
+	})
 }
 
 /**

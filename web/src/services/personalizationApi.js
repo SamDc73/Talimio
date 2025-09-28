@@ -10,7 +10,7 @@ import { api } from "@/lib/apiClient"
  */
 export async function getUserSettings(_userId) {
 	// Use current user endpoint instead of user-specific endpoint
-	const settings = await api.get(`/user/settings`)
+	const settings = await api.get("/user/settings")
 
 	// Memory count is already included in the settings response
 	// No need for separate call
@@ -25,7 +25,7 @@ export async function getUserSettings(_userId) {
  */
 export async function updateCustomInstructions(_userId, instructions) {
 	// Use current user endpoint
-	const response = await api.put(`/user/settings/instructions`, {
+	const response = await api.put("/user/settings/instructions", {
 		instructions: instructions,
 	})
 	return response
@@ -48,7 +48,7 @@ export async function getUserMemories(_userId, limit = 50) {
  */
 export async function clearUserMemory(_userId) {
 	// Use current user endpoint to clear memories (note: singular 'memory' in endpoint)
-	const response = await api.delete(`/user/memory`)
+	const response = await api.delete("/user/memory")
 	return response
 }
 

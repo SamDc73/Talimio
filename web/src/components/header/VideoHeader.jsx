@@ -1,7 +1,7 @@
 import { MessageSquare, PanelRight } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 import { TooltipButton } from "@/components/TooltipButton"
-import { useChatSidebar } from "@/hooks/useChatSidebar"
+import { useChatSidebar } from "@/features/assistant/contexts/chatSidebarContext"
 import { useVideoProgress } from "@/hooks/useVideoProgress"
 import { formatProgressText } from "@/utils/progressUtils"
 import { UserAvatarMenu } from "./MainHeader"

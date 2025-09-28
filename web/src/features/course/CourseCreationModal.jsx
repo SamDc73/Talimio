@@ -334,6 +334,7 @@ function CourseCreationModal({
 									className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-none disabled:opacity-50"
 									rows={4}
 									maxLength={500}
+									spellCheck="true"
 								/>
 								<div className="text-right text-xs text-gray-500 mt-1">{prompt.length}/500 characters</div>
 							</div>
@@ -417,6 +418,7 @@ function CourseCreationModal({
 									className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-none disabled:opacity-50"
 									rows={3}
 									maxLength={500}
+									spellCheck="true"
 								/>
 							</div>
 							<div className="mb-6 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
@@ -483,6 +485,7 @@ function CourseCreationModal({
 									className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-none disabled:opacity-50"
 									rows={3}
 									maxLength={500}
+									spellCheck="true"
 								/>
 								<div className="text-right text-xs text-gray-500 mt-1">
 									{ragCourseDescription.length}/500 characters

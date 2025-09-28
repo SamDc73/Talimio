@@ -45,18 +45,17 @@ export async function updateBookChapterStatus(bookId, chapterId, status) {
 		}
 		const data = await response.json()
 		return data
-	} else {
-		// For UUID chapters, use the chapters endpoint
-		const response = await fetchWithTimeout(`${API_BASE}/books/${bookId}/chapters/${chapterId}/status`, {
-			method: "PUT",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ status }),
-		})
-
-		if (!response.ok) {
-			throw new Error(`Failed to update chapter status: ${response.statusText}`)
-		}
-		const data = await response.json()
-		return data
 	}
+	// For UUID chapters, use the chapters endpoint
+	const response = await fetchWithTimeout(`${API_BASE}/books/${bookId}/chapters/${chapterId}/status`, {
+		method: "PUT",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ status }),
+	})
+
+	if (!response.ok) {
+		throw new Error(`Failed to update chapter status: ${response.statusText}`)
+	}
+	const data = await response.json()
+	return data
 }

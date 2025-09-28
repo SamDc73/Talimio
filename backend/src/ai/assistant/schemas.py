@@ -32,10 +32,3 @@ class ChatRequest(BaseModel):
     context_meta: dict[str, Any] | None = Field(
         None, description="Additional context metadata (page number, timestamp, etc.)"
     )
-
-
-class ChatResponse(BaseModel):
-    """Response schema for chat endpoint (rarely used since we stream)."""
-
-    response: str
-    conversation_id: UUID | None = None
