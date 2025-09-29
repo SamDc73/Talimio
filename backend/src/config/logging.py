@@ -20,6 +20,7 @@ def setup_logging() -> dict[str, Any]:
                 "level": "INFO",
             },
         },
+
         "root": {"level": "INFO", "handlers": ["console"]},
     }
 

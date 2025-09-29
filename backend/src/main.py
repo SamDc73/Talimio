@@ -37,6 +37,9 @@ from .auth.router import router as auth_router
 # Import models to register them with SQLAlchemy - MUST be after database.base import
 from .books.models import Book, BookProgress  # noqa: F401
 from .books.router import router as books_router
+
+# Setup logging
+from .config.logging import setup_logging
 from .config.settings import get_settings
 from .content.router import router as content_router
 from .courses.models import (  # noqa: F401
@@ -77,41 +80,37 @@ from .videos.models import Video  # noqa: F401
 from .videos.router import router as videos_router
 
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
+setup_logging()
 logger = logging.getLogger(__name__)
 
-# Suppress verbose third-party library logs
-litellm_logger = logging.getLogger("LiteLLM")
-litellm_logger.setLevel(logging.ERROR)  # Only show errors, not warnings
 
 
-# mem0 vector store connection pool logs
-pgvector_logger = logging.getLogger("mem0.vector_stores.pgvector")
-pgvector_logger.setLevel(logging.INFO)  # Keep verbose in dev
 
 
-# Filter for Cohere embedding warnings
-class CohereEmbeddingWarningFilter(logging.Filter):
-    """Filter out Cohere embedding capability detection warnings."""
+def _register_routers(app: FastAPI) -> None:
+    """Register all application routers."""
+    # Note: Auth router removed - using new auth manager system
+    app.include_router(assistant_router)
+    app.include_router(books_router)
+    app.include_router(content_router)
+    app.include_router(highlights_router)  # Highlights for books, videos, courses
+    app.include_router(progress_router)  # Unified progress tracking
+    app.include_router(rag_router)  # RAG system
 
-    def filter(self, record: logging.LogRecord) -> bool:
-        """Filter out specific Cohere embedding warnings."""
-        message = str(record.getMessage())
-        return not (
-            "Could not detect capabilities for cohere/embed" in message
-            or "output_dimension is not supported" in message
-        )
+    # Course management - new unified API
+    from src.courses.router import router as courses_router
+    app.include_router(courses_router)
+
+    # Legacy roadmaps API has been removed - all functionality moved to courses API
+
+    app.include_router(tagging_router)
+    app.include_router(user_router)
+    app.include_router(videos_router)
+    app.include_router(auth_router)
 
 
-# Apply the filter to the root logger to catch all instances
-logging.getLogger().addFilter(CohereEmbeddingWarningFilter())
-
-
-@asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
-    """Application lifespan events."""
-    # Startup
+async def _startup_validation() -> None:
+    """Validate configurations on startup."""
     # Validate RAG configuration if configured
     try:
         from src.ai.rag.config import rag_config
@@ -134,7 +133,9 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         logger.exception(f"Auth configuration validation failed: {e}")
         raise
 
-    # Initialize database with simple setup
+
+async def _startup_database() -> None:
+    """Initialize database with retry logic."""
     max_retries = 5
     retry_delay = 1  # seconds
 
@@ -165,9 +166,9 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
             logger.exception("Startup failed with unexpected error")
             raise
 
-    yield
 
-    # Shutdown - Clean up resources
+async def _shutdown_cleanup() -> None:
+    """Clean up resources on shutdown."""
     logger.info("Starting graceful shutdown...")
 
     # Cleanup memory wrapper connections first (this was the root cause!)
@@ -186,6 +187,19 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning(f"Error disposing database engine: {e}")
 
     logger.info("Shutdown complete")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    """Application lifespan events."""
+    # Startup
+    await _startup_validation()
+    await _startup_database()
+
+    yield
+
+    # Shutdown
+    await _shutdown_cleanup()
 
 
 def create_app() -> FastAPI:
@@ -327,62 +341,14 @@ def create_app() -> FastAPI:
             suggestions=["Please try again later", "If the problem persists, contact support with the error ID"],
         )
 
-    # Register health check endpoints
+    # Register health check endpoint
     @app.get("/health")
     async def health_check() -> dict[str, str]:
         """Check application health status."""
         return {"status": "healthy"}
 
-    @app.get("/health/db")
-    async def health_check_db() -> dict[str, str]:
-        """Database health check endpoint."""
-        try:
-            from sqlalchemy import text
-
-            from src.database.session import async_session_maker
-
-            async with async_session_maker() as session:
-                # Simple query to check database connectivity
-                await session.execute(text("SELECT 1"))
-            return {"db_status": "healthy"}
-        except Exception as e:
-            logger.exception("Database health check failed")
-            return JSONResponse(status_code=503, content={"db_status": "unhealthy", "error": str(e)})
-
-    @app.get("/health/auth")
-    async def health_check_auth() -> dict[str, str]:
-        """Auth service health check endpoint."""
-        try:
-            settings = get_settings()
-            if settings.AUTH_PROVIDER == "supabase":
-                # Test Supabase connectivity (basic check)
-                # This is a simple check - could be expanded to test actual Supabase connection
-                return {"auth_status": "healthy", "provider": "supabase"}
-            return {"auth_status": "healthy", "provider": "none"}
-        except Exception as e:
-            logger.exception("Auth health check failed")
-            return JSONResponse(status_code=503, content={"auth_status": "unhealthy", "error": str(e)})
-
-    # Register routers
-    # Note: Auth router removed - using new auth manager system
-    app.include_router(assistant_router)
-    app.include_router(books_router)
-    app.include_router(content_router)
-    app.include_router(highlights_router)  # Highlights for books, videos, courses
-    app.include_router(progress_router)  # Unified progress tracking
-    app.include_router(rag_router)  # RAG system
-
-    # Course management - new unified API
-    from src.courses.router import router as courses_router
-
-    app.include_router(courses_router)
-
-    # Legacy roadmaps API has been removed - all functionality moved to courses API
-
-    app.include_router(tagging_router)
-    app.include_router(user_router)
-    app.include_router(videos_router)
-    app.include_router(auth_router)
+    # Register all routers
+    _register_routers(app)
 
     # Startup tasks are now handled by the lifespan context manager
 
