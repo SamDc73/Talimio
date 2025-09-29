@@ -122,10 +122,6 @@ class ContentArchiveService:
 
         offset = (page - 1) * page_size
         search_term = f"%{search}%" if search else None
-        # For content listing, we don't require authentication
-        # If no user is provided, we'll show content with 0% progress
-        # current_user_id is already a string or None from the router
-        effective_user_id = current_user_id
 
         # Construct the combined query with archived filter
         if content_type:
@@ -133,11 +129,11 @@ class ContentArchiveService:
                 combined_query = QueryBuilderService.get_youtube_query(search, archived_only=True)
             elif content_type == ContentType.BOOK:
                 combined_query = QueryBuilderService.get_books_query(
-                    search, archived_only=True, user_id=effective_user_id
+                    search, archived_only=True, user_id=current_user_id
                 )
             elif content_type == ContentType.COURSE:
                 combined_query = QueryBuilderService.get_roadmaps_query(
-                    search, archived_only=True, user_id=effective_user_id
+                    search, archived_only=True, user_id=current_user_id
                 )
             else:
                 msg = f"Unsupported content type: {content_type}"
@@ -147,17 +143,17 @@ class ContentArchiveService:
             combined_query = f"""
                 {QueryBuilderService.get_youtube_query(search, archived_only=True)}
                 UNION ALL
-                {QueryBuilderService.get_books_query(search, archived_only=True, user_id=effective_user_id)}
+                {QueryBuilderService.get_books_query(search, archived_only=True, user_id=current_user_id)}
                 UNION ALL
-                {QueryBuilderService.get_roadmaps_query(search, archived_only=True, user_id=effective_user_id)}
+                {QueryBuilderService.get_roadmaps_query(search, archived_only=True, user_id=current_user_id)}
             """
 
         async with async_session_maker() as session:
             # Get total count and paginated results
-            total = await QueryBuilderService.get_total_count(session, combined_query, search_term, effective_user_id)
+            total = await QueryBuilderService.get_total_count(session, combined_query, search_term, current_user_id)
             service = ContentService()
             rows = await service.get_paginated_results(
-                session, combined_query, search_term, page_size, offset, effective_user_id
+                session, combined_query, search_term, page_size, offset, current_user_id
             )
 
             # Transform rows to content items

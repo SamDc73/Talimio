@@ -23,7 +23,7 @@ class LessonService:
         self.session = session
         self.user_id = user_id
         # Use existing secure LessonQueryService for generation logic
-        self.lesson_query_service = LessonQueryService(session, user_id)
+        self.lesson_query_service = LessonQueryService(session)
 
     async def get_lesson(self, course_id: UUID, lesson_id: UUID, generate: bool = False) -> LessonResponse:
         """Get lesson with single query including user isolation.

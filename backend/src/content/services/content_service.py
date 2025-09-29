@@ -47,8 +47,6 @@ class ContentService:
         """
         offset = (page - 1) * page_size
         search_term = f"%{search}%" if search else None
-        # Use user ID for user-specific filtering
-        effective_user_id = user_id
 
         # Use provided session or create a new one
         if self._session:
@@ -56,16 +54,16 @@ class ContentService:
             queries: list[str] = []
 
             queries, _needs_user_id = QueryBuilderService.build_content_queries(
-                content_type, search, include_archived, effective_user_id
+                content_type, search, include_archived, user_id
             )
 
             if not queries:
                 return ContentListResponse(items=[], total=0, page=page, per_page=page_size)
 
             combined_query = " UNION ALL ".join(f"({q})" for q in queries)
-            total = await QueryBuilderService.get_total_count(session, combined_query, search_term, effective_user_id)
+            total = await QueryBuilderService.get_total_count(session, combined_query, search_term, user_id)
             rows = await self.get_paginated_results(
-                session, combined_query, search_term, page_size, offset, effective_user_id
+                session, combined_query, search_term, page_size, offset, user_id
             )
             items = ContentTransformService.transform_rows_to_items(rows)
 
@@ -93,16 +91,16 @@ class ContentService:
             queries: list[str] = []
 
             queries, _needs_user_id = QueryBuilderService.build_content_queries(
-                content_type, search, include_archived, effective_user_id
+                content_type, search, include_archived, user_id
             )
 
             if not queries:
                 return ContentListResponse(items=[], total=0, page=page, per_page=page_size)
 
             combined_query = " UNION ALL ".join(f"({q})" for q in queries)
-            total = await QueryBuilderService.get_total_count(session, combined_query, search_term, effective_user_id)
+            total = await QueryBuilderService.get_total_count(session, combined_query, search_term, user_id)
             rows = await self.get_paginated_results(
-                session, combined_query, search_term, page_size, offset, effective_user_id
+                session, combined_query, search_term, page_size, offset, user_id
             )
             items = ContentTransformService.transform_rows_to_items(rows)
 

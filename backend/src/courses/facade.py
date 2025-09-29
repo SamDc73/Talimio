@@ -53,7 +53,7 @@ class CoursesFacade:
             from src.database.session import async_session_maker
 
             async with async_session_maker() as session:
-                query_service = CourseQueryService(session, user_id)
+                query_service = CourseQueryService(session)
                 course_response = await query_service.get_course(course_id, user_id)
                 course = course_response.model_dump() if course_response else None
 
@@ -170,9 +170,9 @@ class CoursesFacade:
             from src.database.session import async_session_maker
 
             async with async_session_maker() as session:
-                query_service = CourseQueryService(session, user_id)
+                query_service = CourseQueryService(session)
                 limit = (filters or {}).get("limit", 20)
-                results, _total = await query_service.list_courses(per_page=limit, search=query)
+                results, _total = await query_service.list_courses(per_page=limit, search=query, user_id=user_id)
 
             return {"results": results, "success": True}
 
@@ -330,7 +330,7 @@ class CoursesFacade:
             from src.database.session import async_session_maker
 
             async with async_session_maker() as session:
-                lesson_service = LessonQueryService(session, user_id)
+                lesson_service = LessonQueryService(session)
                 return await lesson_service.get_lesson_simplified(course_id, lesson_id, generate, user_id)
 
         except Exception:

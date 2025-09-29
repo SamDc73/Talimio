@@ -15,24 +15,22 @@ from src.courses.services.course_response_builder import CourseResponseBuilder
 class CourseQueryService:
     """Service for querying course data."""
 
-    def __init__(self, session: AsyncSession, user_id: UUID | None = None) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         """Initialize the course query service.
 
         Args:
             session: Database session
-            user_id: User ID for user-specific operations
         """
         self.session = session
-        self.user_id = user_id
         self.response_builder = CourseResponseBuilder(session)
         self._logger = logging.getLogger(__name__)
 
-    async def get_course(self, course_id: UUID, user_id: UUID | None = None) -> CourseResponse:
+    async def get_course(self, course_id: UUID, user_id: UUID) -> CourseResponse:
         """Get a specific course by ID.
 
         Args:
             course_id: Course ID
-            user_id: User ID (optional override)
+            user_id: User ID for ownership check
 
         Returns
         -------
@@ -42,11 +40,8 @@ class CourseQueryService:
         ------
             HTTPException: If course not found
         """
-        # Get effective user_id
-        effective_user_id = user_id or self.user_id
-
         # Get the roadmap/course with user filtering
-        query = select(Roadmap).where(Roadmap.id == course_id, Roadmap.user_id == effective_user_id)
+        query = select(Roadmap).where(Roadmap.id == course_id, Roadmap.user_id == user_id)
 
         result = await self.session.execute(query)
         roadmap = result.scalar_one_or_none()
@@ -83,20 +78,20 @@ class CourseQueryService:
             page: Page number (1-based)
             per_page: Items per page
             search: Optional search term
-            user_id: User ID (optional override)
+            user_id: User ID for filtering (None returns empty list)
 
         Returns
         -------
             Tuple of (courses list, total count)
         """
+        if not user_id:
+            return [], 0
+
         offset = (page - 1) * per_page
 
-        # Get effective user_id
-        effective_user_id = user_id or self.user_id
-
         # Build query with user filtering
-        query = select(Roadmap).where(Roadmap.user_id == effective_user_id)
-        count_query = select(func.count(Roadmap.id)).where(Roadmap.user_id == effective_user_id)
+        query = select(Roadmap).where(Roadmap.user_id == user_id)
+        count_query = select(func.count(Roadmap.id)).where(Roadmap.user_id == user_id)
 
         if search:
             search_filter = or_(Roadmap.title.ilike(f"%{search}%"), Roadmap.description.ilike(f"%{search}%"))

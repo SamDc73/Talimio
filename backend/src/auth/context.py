@@ -143,10 +143,8 @@ CurrentAuth = Annotated[AuthContext, Depends(get_auth_context)]
 # Centralized list of paths that bypass auth enforcement in the middleware
 # Kept here to give ownership of auth concerns to the auth module
 AUTH_SKIP_PATHS: list[str] = [
-    # Health checks
+    # Health check
     "/health",
-    "/health/db",
-    "/health/auth",
     # Auth routes (these handle their own auth or are public entrypoints)
     "/api/v1/auth/login",
     "/api/v1/auth/signup",

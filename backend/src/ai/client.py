@@ -200,9 +200,9 @@ class LLMClient:
             from src.ai.memory import get_memories
 
             # Normalize user_id to UUID
-            effective_user_id: UUID = user_id if isinstance(user_id, UUID) else UUID(str(user_id))
+            normalized_user_id: UUID = user_id if isinstance(user_id, UUID) else UUID(str(user_id))
 
-            memories = await get_memories(user_id=effective_user_id, limit=10)
+            memories = await get_memories(user_id=normalized_user_id, limit=10)
 
             if not memories:
                 return messages
