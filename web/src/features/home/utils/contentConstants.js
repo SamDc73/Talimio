@@ -8,7 +8,7 @@ export const VARIANTS = {
 		grad: "from-cyan-400 to-cyan-500",
 	},
 	book: {
-		label: "PDF",
+		label: "Book",
 		icon: FileText,
 		badge: "bg-blue-50 text-blue-600",
 		grad: "from-blue-400 to-blue-500",
