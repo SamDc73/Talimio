@@ -13,8 +13,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# AI imports removed - using facades instead
-# UserContext removed - using UUID directly
+from src.ai.rag.service import RAGService
 from src.database.pagination import Paginator
 from src.database.session import async_session_maker
 from src.tagging.service import TaggingService
@@ -45,6 +44,15 @@ def parse_video_id(video_id: str) -> UUID:
     except ValueError as e:
         msg = f"Invalid UUID format: {video_id}"
         raise ValueError(msg) from e
+
+
+async def _embed_video_background(video_id: str) -> None:
+    """Background task to embed a video."""
+    try:
+        async with async_session_maker() as session:
+            await RAGService().process_video(session, video_id)
+    except Exception:
+        logger.exception("Failed to embed video %s", video_id)
 
 
 async def _mark_video_status(video_id: str, status: str, error_context: str = "") -> None:
@@ -369,7 +377,8 @@ class VideoService:
         # Ensure video object is refreshed before validation
         await db.refresh(video)
 
-        # TODO: Trigger background RAG processing when implemented
+        # Trigger background RAG processing of transcript when available
+        background_tasks.add_task(_embed_video_background, video.id)
 
         # Trigger background chapter extraction
         background_tasks.add_task(_extract_chapters_background, str(video.id), user_id)
@@ -494,6 +503,11 @@ class VideoService:
         """Delete a video."""
         # Get video with user validation (optimized single query)
         video = await self._get_user_video(db, video_id, user_id)
+
+        # Delete RAG chunks first
+        from src.ai.rag.service import RAGService
+
+        await RAGService.delete_chunks_by_doc_id(db, str(video.id), doc_type="video")
 
         await db.delete(video)
         # Note: Commit is handled by the caller (content_service)
@@ -808,6 +822,18 @@ class VideoService:
             "segment_count": row.transcript_data.get("total_segments", 0),
             "processed_at": row.transcript_data.get("processed_at"),
         }
+
+    async def search_video(self, db: AsyncSession, video_id: str, user_id: UUID, query: str, limit: int = 5) -> list[dict]:
+        """Search this video's transcript chunks using pgvector."""
+        # Ownership validation
+        video = await self._get_user_video(db, video_id, user_id)
+
+        from src.ai.rag.embeddings import VectorRAG
+
+        rag = VectorRAG()
+        results = await rag.search(db, doc_type="video", query=query, limit=limit, doc_id=video.id)
+        # Convert SearchResult objects to dicts for callers
+        return [r.model_dump() for r in results]
 
     async def get_video_transcript_segments(self, db: AsyncSession, video_id: str, user_id: UUID | None = None) -> VideoTranscriptResponse:
         """Get transcript segments with timestamps for a video."""

@@ -7,13 +7,14 @@ from typing import Annotated, Any
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
+from src.ai.rag.service import RAGService
 from src.auth import CurrentAuth
 from src.books.models import Book
-from src.database.session import DbSession
+from src.database.session import DbSession, async_session_maker
 from src.middleware.security import books_rate_limit
 from src.storage.factory import get_storage_provider
 
@@ -38,6 +39,15 @@ logger = logging.getLogger(__name__)
 books_facade = BooksFacade()
 
 router = APIRouter(prefix="/api/v1/books", tags=["books"], dependencies=[Depends(books_rate_limit)])
+
+
+async def _embed_book_background(book_id: str) -> None:
+    """Background task to embed a book."""
+    try:
+        async with async_session_maker() as session:
+            await RAGService().process_book(session, book_id)
+    except Exception:
+        logger.exception("Failed to embed book %s", book_id)
 
 
 def _build_progress_dict(progress_data: BookProgressUpdate) -> dict:
@@ -241,6 +251,7 @@ async def create_book_endpoint(
     publication_year: Annotated[int | None, Form(description="Publication year")] = None,
     publisher: Annotated[str | None, Form(description="Publisher")] = None,
     tags: Annotated[str, Form(description="Tags as JSON array string")] = "[]",
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ) -> BookResponse:
     """Add a new book (PDF, EPUB)."""
     try:
@@ -341,6 +352,10 @@ async def create_book_endpoint(
             )
 
         book = result.get("book", {})
+
+        if getattr(book, "id", None):
+            background_tasks.add_task(_embed_book_background, book.id)
+
         return BookResponse.model_validate(book)
 
     except HTTPException:

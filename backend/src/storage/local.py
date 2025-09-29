@@ -72,6 +72,15 @@ class LocalStorage(AbstractStorage):
             raise StorageFileNotFoundError(msg)
         return str(path.absolute())
 
+    async def download(self, key: str) -> bytes:
+        """Return file bytes for local storage."""
+        path = self._get_full_path(key)
+        if not path.exists():
+            msg = f"File not found: {key}"
+            raise StorageFileNotFoundError(msg)
+        async with aiofiles.open(path, "rb") as file_obj:
+            return await file_obj.read()
+
     async def delete(self, key: str) -> None:
         """Delete a file from local storage.
 

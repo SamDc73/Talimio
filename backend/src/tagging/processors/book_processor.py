@@ -136,8 +136,11 @@ class BookProcessor:
         content_parts = []
 
         try:
-            # Open EPUB directly from bytes with PyMuPDF
-            epub_document = fitz.open(stream=file_content, filetype="epub")
+            # Open EPUB directly from bytes with PyMuPDF (suppress MuPDF CSS warnings)
+            import os
+            from contextlib import redirect_stderr
+            with redirect_stderr(open(os.devnull, "w")):  # noqa: PTH123
+                epub_document = fitz.open(stream=file_content, filetype="epub")
 
             if epub_document is None:
                 logger.warning("Failed to open EPUB document")
@@ -267,7 +270,7 @@ async def process_book_for_tagging(
     try:
         # Get storage provider and download file content
         storage = get_storage_provider()
-        file_content = await storage.read(book.file_path)
+        file_content = await storage.download(book.file_path)
 
         # Determine file extension from file path
         file_extension = f".{book.file_type}" if book.file_type else ".pdf"
@@ -277,7 +280,7 @@ async def process_book_for_tagging(
         return await processor.extract_content_for_tagging(book, file_content, file_extension)
 
     except Exception as e:
-        logger.error(f"Error downloading or processing book file: {e}")
+        logger.exception(f"Error downloading or processing book file: {e}")
         # Return basic info from database as fallback
         return {
             "title": book.title,

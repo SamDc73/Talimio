@@ -22,21 +22,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["rag"])
 
-# DO NOT create services at module level!
-_rag_service: RAGService | None = None
 
-
-async def get_rag_service() -> RAGService:
+def get_rag_service() -> RAGService:
     """Dependency to get RAG service instance."""
-    global _rag_service  # noqa: PLW0603
-    if _rag_service is None:
-        try:
-            _rag_service = RAGService()
-        except Exception:
-            logger.exception("Failed to initialize RAG service")
-            # Create a minimal instance that won't crash
-            _rag_service = RAGService()
-    return _rag_service
+    return RAGService()
 
 
 # Ownership validation is handled via UserContext in each endpoint
@@ -85,7 +74,7 @@ async def upload_document(
             url,
             filename,
         )
-        return result.model_dump() if hasattr(result, "model_dump") else result
+        return result.model_dump(by_alias=True) if hasattr(result, "model_dump") else result
 
         # Don't process immediately to avoid blocking
         # TODO: Add to background job queue
@@ -131,7 +120,7 @@ async def list_documents(
         total = await rag_service.count_documents(auth, course_id)
 
         result = DocumentList(documents=documents, total=total, page=skip // limit + 1, size=limit)
-        return result.model_dump()
+        return result.model_dump(by_alias=True)
 
     except Exception:
         # Log but don't crash - return empty list
@@ -160,7 +149,7 @@ async def search_documents(
         )
 
         result = SearchResponse(results=results, total=len(results))
-        return result.model_dump()
+        return result.model_dump(by_alias=True)
 
     except ValueError as e:
         # Validation errors
@@ -198,7 +187,7 @@ async def delete_document(
             status=True,
             message="Document deleted successfully",
         )
-        return result.model_dump()
+        return result.model_dump(by_alias=True)
 
     except ValueError as e:
         # Validation errors (e.g., document not found, not owned by user)
@@ -231,7 +220,7 @@ async def get_document(
     """Get document details."""
     try:
         result = await rag_service.get_document(auth, document_id)
-        return result.model_dump() if hasattr(result, "model_dump") else result
+        return result.model_dump(by_alias=True) if hasattr(result, "model_dump") else result
     except ValueError as e:
         # Validation errors (e.g., document not found)
         logger.exception("Validation error getting document: %s", str(e))

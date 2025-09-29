@@ -8,12 +8,18 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select
+
 from src.ai.client import LLMClient
 from src.ai.models import CourseStructure
 from src.ai.prompts import (
     ASSISTANT_CHAT_SYSTEM_PROMPT,
 )
+from src.ai.rag.embeddings import VectorRAG
 from src.ai.rag.service import RAGService
+from src.books.models import Book
+from src.database.session import async_session_maker
+from src.videos.models import Video
 
 
 logger = logging.getLogger(__name__)
@@ -81,6 +87,37 @@ class AIService:
         )
 
         return str(response)
+
+    # RAG helpers
+    async def get_book_rag_context(self, book_id: UUID, query: str, user_id: UUID, limit: int = 5) -> list[dict]:
+        """Search book chunks via VectorRAG.search with ownership enforcement.
+
+        Returns a list of result dicts with content and metadata (e.g., page).
+        """
+        async with async_session_maker() as session:
+            # Ownership check
+            book = await session.scalar(select(Book).where(Book.id == book_id, Book.user_id == user_id))
+            if not book:
+                return []
+
+            rag = VectorRAG()
+            results = await rag.search(session, doc_type="book", query=query, limit=limit, doc_id=book.id)
+            return [r.model_dump() for r in results]
+
+    async def get_video_rag_context(self, video_id: UUID, query: str, user_id: UUID, limit: int = 5) -> list[dict]:
+        """Search video transcript chunks via VectorRAG.search with ownership enforcement.
+
+        Returns a list of result dicts with content and metadata (e.g., start/end).
+        """
+        async with async_session_maker() as session:
+            # Ownership check
+            video = await session.scalar(select(Video).where(Video.id == video_id, Video.user_id == user_id))
+            if not video:
+                return []
+
+            rag = VectorRAG()
+            results = await rag.search(session, doc_type="video", query=query, limit=limit, doc_id=video.id)
+            return [r.model_dump() for r in results]
 
 
 # Singleton instance

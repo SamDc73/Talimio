@@ -79,15 +79,13 @@ class BooksFacade:
         Handles book creation and coordinates all related operations.
         """
         try:
-            # Use the new content service which handles tags, progress, and AI processing
-            book = await self._content_service.create_content(book_data, user_id)
+            book = await self._content_service.create_book(book_data, user_id)
 
-            # Auto-tag the created book
             try:
                 if getattr(book, "id", None):
                     await self._auto_tag_book(book.id, user_id)
-            except Exception as e:
-                logger.warning(f"Automatic tagging failed for book {getattr(book, 'id', None)}: {e}")
+            except Exception as exc:
+                logger.warning("Automatic tagging failed for book %s: %s", getattr(book, "id", None), exc)
 
             return {"book": book, "success": True}
 
@@ -254,6 +252,11 @@ class BooksFacade:
             msg = f"Book {book_id} not found"
             raise ValueError(msg)
 
+        # Delete RAG chunks first
+        from src.ai.rag.service import RAGService
+
+        await RAGService.delete_chunks_by_doc_id(db, str(book.id), doc_type="book")
+
         # Delete the book (cascade handles related records)
         await db.delete(book)
         # Note: Commit is handled by the caller (content_service)
@@ -361,59 +364,3 @@ class BooksFacade:
             logger.exception("Error marking chapter complete for book %s", book_id)
             return {"error": "Failed to mark chapter complete", "success": False}
 
-    # AI operations
-    async def ask_book_question(
-        self, book_id: UUID, user_id: UUID, question: str, page: int | None = None
-    ) -> dict[str, Any] | None:
-        """Ask a question about the book content."""
-        try:
-            return await self._ai_service.process_content(
-                content_type="book",
-                action="question",
-                user_id=user_id,
-                book_id=str(book_id),
-                question=question,
-                page=page,
-            )
-        except Exception:
-            logger.exception("Error answering question for book %s", book_id)
-            raise
-
-    async def summarize_book(
-        self, book_id: UUID, user_id: UUID, page_range: tuple[int, int] | None = None
-    ) -> dict[str, Any] | None:
-        """Generate a summary of the book."""
-        try:
-            return await self._ai_service.process_content(
-                content_type="book", action="summarize", user_id=user_id, book_id=str(book_id), page_range=page_range
-            )
-        except Exception:
-            logger.exception("Error summarizing book %s", book_id)
-            raise
-
-    async def chat_about_book(
-        self, book_id: UUID, user_id: UUID, message: str, history: list[dict[str, Any]] | None = None
-    ) -> dict[str, Any] | None:
-        """Have a conversation about the book."""
-        try:
-            return await self._ai_service.process_content(
-                content_type="book",
-                action="chat",
-                user_id=user_id,
-                book_id=str(book_id),
-                message=message,
-                history=history,
-            )
-        except Exception:
-            logger.exception("Error in book chat for %s", book_id)
-            raise
-
-    async def process_book_for_rag(self, book_id: UUID, user_id: UUID, file_path: str) -> dict[str, Any] | None:
-        """Process book content for RAG indexing."""
-        try:
-            return await self._ai_service.process_content(
-                content_type="book", action="process_rag", user_id=user_id, book_id=str(book_id), file_path=file_path
-            )
-        except Exception:
-            logger.exception("Error processing book %s for RAG", book_id)
-            raise

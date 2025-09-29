@@ -1,77 +1,40 @@
-"""RAG system service layer using txtai."""
+"""RAG system service layer orchestrating LiteLLM + pgvector RAG flows."""
 
+import contextlib
 import logging
+import tempfile
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
 
 from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from txtai.embeddings import Embeddings
 
-from src.ai.rag.chunker import ChunkerFactory
+from src.ai.rag.chunker import chunk_text_async
 from src.ai.rag.config import rag_config
 from src.ai.rag.parser import DocumentProcessor
 from src.ai.rag.schemas import DocumentResponse, SearchResult
 from src.auth import AuthContext
+from src.books.models import Book
 from src.courses.models import CourseDocument
+from src.storage.factory import get_storage_provider
+from src.videos.models import Video
 
 
 logger = logging.getLogger(__name__)
 
 
 class RAGService:
-    """RAG service orchestrator using txtai and related libraries."""
-
-    # Singleton instance
-    _instance: Optional["RAGService"] = None
-    _initialized = False
-
-    def __new__(cls) -> "RAGService":
-        """Singleton pattern to prevent multiple initializations."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+    """RAG service orchestrator built on LiteLLM embeddings and pgvector storage."""
 
     def __init__(self) -> None:
-        """Initialize RAG service with txtai components."""
-        if not self._initialized:
-            # Configuration from centralized config
-            self.config = rag_config
+        """Initialize RAG service components for LiteLLM + pgvector pipeline."""
+        # Configuration from centralized config
+        self.config = rag_config
 
-            # Components will be lazily initialized
-            self._embeddings = None  # txtai Embeddings
-            self._document_processor = None  # Unstructured parser
-            self._chunker = None  # Chonkie chunker
-
-            self._initialized = True
-
-    @property
-    def embeddings(self) -> Embeddings:
-        """Get txtai embeddings - but we're not using it anymore.
-
-        We use VectorRAG directly for embeddings since it already handles:
-        - LiteLLM embeddings generation
-        - pgvector storage
-        - Search functionality
-
-        This property is kept for backward compatibility but delegates to VectorRAG.
-        """
-        if self._embeddings is None:
-            # We don't really need txtai for embeddings anymore
-            # VectorRAG handles everything
-            logger.info("Note: Using VectorRAG for embeddings, not txtai")
-
-            # Create a minimal txtai instance if needed for compatibility
-            # But the actual work is done by VectorRAG
-            self._embeddings = Embeddings(
-                {
-                    "content": True,  # In-memory only
-                    "backend": "numpy",  # Simple backend
-                }
-            )
-        return self._embeddings
+        # Components will be lazily initialized
+        self._document_processor = None  # Unstructured parser
 
     @property
     def document_processor(self) -> DocumentProcessor:
@@ -80,12 +43,7 @@ class RAGService:
             self._document_processor = DocumentProcessor()
         return self._document_processor
 
-    @property
-    def chunker(self) -> Any:
-        """Lazy load Chonkie chunker."""
-        if self._chunker is None:
-            self._chunker = ChunkerFactory.get_default_chunker()
-        return self._chunker
+
 
     async def upload_document(
         self,
@@ -115,6 +73,18 @@ class RAGService:
 
             # Store file if provided
             if file_content and filename:
+                # Check file size limit
+                file_size_mb = len(file_content) / (1024 * 1024)
+                if file_size_mb > self.config.max_file_size_mb:
+                    logger.warning(
+                        "File %s too large: %.2fMB > %dMB limit",
+                        filename, file_size_mb, self.config.max_file_size_mb
+                    )
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large: {file_size_mb:.1f}MB exceeds {self.config.max_file_size_mb}MB limit"
+                    )
+
                 from src.config.settings import get_settings
 
                 settings = get_settings()
@@ -138,10 +108,11 @@ class RAGService:
             await auth.session.commit()
 
             # Process the document immediately after upload
+            doc_id = doc.id  # Capture ID before potential session issues
             try:
-                await self.process_document(auth.session, doc.id)
+                await self.process_document(auth.session, doc_id)
             except Exception:
-                logger.exception("Failed to process document %s", doc.id)
+                logger.exception("Failed to process document %s", doc_id)
                 # Don't fail the upload if processing fails - it can be retried later
 
             # Re-query to get a Row object that works with model_validate
@@ -190,21 +161,35 @@ class RAGService:
                     {"crawl_date": crawl_date, "doc_id": document_id},
                 )
             elif doc_dict["file_path"]:
-                # TODO: Parse file with Unstructured for better extraction
-                # Should handle tables, OCR, complex layouts
-                text_content = await self.document_processor.process_document(
-                    doc_dict["file_path"], doc_dict["document_type"]
-                )
+                # Process file using temp copy for efficient memory usage
+                stored_file_path = Path(doc_dict["file_path"])
+                if not stored_file_path.exists():
+                    msg = f"Stored file not found: {stored_file_path}"
+                    raise ValueError(msg)
+
+                # Create temp file and copy content
+                with tempfile.NamedTemporaryFile(delete=False, suffix=stored_file_path.suffix) as temp_file:
+                    temp_file.write(stored_file_path.read_bytes())
+                    temp_file_path = temp_file.name
+
+                try:
+                    # Process the temp file
+                    text_content = await self.document_processor.process_document(
+                        temp_file_path, doc_dict["document_type"]
+                    )
+                finally:
+                    # Always clean up temp file
+                    with contextlib.suppress(OSError):
+                        Path(temp_file_path).unlink()
             else:
                 msg = "No file path or URL to process"
                 raise ValueError(msg)
 
-            # Chunk via centralized chunker
-            chunks = await self.chunker.chunk_text_async(text_content)
+            # Chunk text using Chonkie
+            chunks = await chunk_text_async(text_content)
             logger.info("Document %s chunked into %s pieces", document_id, len(chunks))
 
-            # Store chunks in txtai/pgvector
-            # TODO: Use txtai's index method instead of custom storage
+            # Store chunks in pgvector via VectorRAG helper
             await self._store_document_chunks(session, document_id, chunks)
 
             # Update status to embedded
@@ -222,6 +207,18 @@ class RAGService:
 
             logger.info("Successfully processed document %s", document_id)
 
+            # Clean up stored source file after successful processing
+            # Course documents are reference materials, not user-viewed content like books
+            if doc_dict.get("file_path"):
+                try:
+                    file_path = Path(doc_dict["file_path"])
+                    if file_path.exists():
+                        file_path.unlink()
+                        logger.debug("Cleaned up source file for document %s", document_id)
+                except Exception:
+                    # Do not fail the request if cleanup fails
+                    logger.debug("Post-process source cleanup failed for document %s", document_id)
+
         except Exception:
             logger.exception("Failed to process document %s", document_id)
             await session.execute(
@@ -230,17 +227,196 @@ class RAGService:
             await session.commit()
             raise
 
-    async def _store_document_chunks(self, session: AsyncSession, document_id: int, chunks: list[str]) -> None:
-        """Store document chunks with embeddings using txtai's native index method.
+    async def _cleanup_course_source_file(self, session: AsyncSession, document_id: int, file_path_str: str | None) -> None:
+        """Delete a local course document source file and clear file_path in DB."""
+        if not file_path_str:
+            return
+        fp = Path(file_path_str)
+        if fp.exists():
+            with contextlib.suppress(Exception):
+                fp.unlink()
+        await session.execute(
+            text("UPDATE roadmap_documents SET file_path = NULL WHERE id = :doc_id"),
+            {"doc_id": document_id},
+        )
+        await session.commit()
 
-        With pgvector backend, txtai handles:
-        - Embedding generation (via our LiteLLM transform)
-        - Vector storage in pgvector
-        - Content/metadata storage in PostgreSQL
-        - Automatic indexing and optimization
+    async def _cleanup_book_source_file(self, session: AsyncSession, book_id: uuid.UUID) -> None:
+        """Delete a stored book file via storage provider and clear file_path in DB."""
+        # Reload latest book row to ensure we have current file_path
+        book = await session.get(Book, book_id)
+        if not book or not getattr(book, "file_path", None):
+            return
+        storage = get_storage_provider()
+        with contextlib.suppress(Exception):
+            await storage.delete(book.file_path)  # type: ignore[arg-type]
+        # Clear DB reference
+        book.file_path = None  # type: ignore[assignment]
+        await session.commit()
 
-        Based on: https://neuml.github.io/txtai/embeddings/#index
+    async def process_book(self, session: AsyncSession, book_id: uuid.UUID) -> None:
+        """Process a book (parse, chunk, embed, index) with unified RAG pipeline."""
+        try:
+            # Load book
+            book = await session.get(Book, book_id)
+            if not book:
+                logger.warning("Book %s not found for processing", book_id)
+                return
+
+            # Validate file
+            if not getattr(book, "file_path", None):
+                logger.warning("Book %s has no file path; marking as failed", book_id)
+                book.rag_status = "failed"
+                with contextlib.suppress(Exception):  # type: ignore[name-defined]
+                    book.rag_error = "missing_file"  # type: ignore[attr-defined]
+                await session.commit()
+                return
+
+            # Mark processing
+            book.rag_status = "processing"
+            await session.commit()
+
+            # Download file
+            storage = get_storage_provider()
+            file_bytes = await storage.download(book.file_path)
+
+            # Parse via Unstructured using a secure temp file
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=f".{(book.file_type or 'pdf').lower()}"
+            ) as temp_file:
+                temp_file.write(file_bytes)
+                temp_path = temp_file.name
+            try:
+                text_content = await self.document_processor.process_document(
+                    temp_path, (book.file_type or "pdf").lower()
+                )
+            finally:
+                # Always clean up temp file
+                with contextlib.suppress(OSError):
+                    Path(temp_path).unlink()
+
+            # Chunk
+            chunks = await chunk_text_async(text_content)
+
+            # Store chunks
+            if not hasattr(self, "_vector_rag"):
+                from src.ai.rag.embeddings import VectorRAG
+                self._vector_rag = VectorRAG()
+
+            await self._vector_rag.store_document_chunks_with_embeddings(
+                session=session,
+                doc_type="book",
+                doc_id=book.id,
+                title=book.title or "",
+                chunks=chunks,
+            )
+
+            # Mark completed
+            book.rag_status = "completed"
+            book.rag_processed_at = datetime.now(UTC)
+            await session.commit()
+
+            logger.info("Successfully processed book %s", book_id)
+
+            # Note: We do not delete the original book file here; keep for user access
+
+        except Exception:
+            logger.exception("Failed to process book %s", book_id)
+            # Best-effort mark failed
+            try:
+                book = await session.get(Book, book_id)
+                if book:
+                    book.rag_status = "failed"
+                    await session.commit()
+            except Exception:
+                await session.rollback()
+            raise
+
+    async def process_video(self, session: AsyncSession, video_id: uuid.UUID) -> None:
+        """Process a video (transcript segments to chunks → embed → index)."""
+        try:
+            video = await session.get(Video, video_id)
+            if not video:
+                logger.warning("Video %s not found for processing", video_id)
+                return
+
+            # Mark processing
+            video.rag_status = "processing"
+            await session.commit()
+
+            # Collect transcript chunks
+            chunks, per_chunk_meta = await self._collect_video_transcript_chunks(video)
+
+            if not chunks:
+                video.rag_status = "failed"
+                await session.commit()
+                return
+
+            # Store chunks (current API: per-chunk to preserve per-chunk metadata)
+            if not hasattr(self, "_vector_rag"):
+                from src.ai.rag.embeddings import VectorRAG
+
+                self._vector_rag = VectorRAG()
+
+            for idx, chunk in enumerate(chunks):
+                meta = per_chunk_meta[idx] if idx < len(per_chunk_meta) else {}
+                await self._vector_rag.store_document_chunks_with_embeddings(
+                    session=session,
+                    doc_type="video",
+                    doc_id=video.id,
+                    title=video.title or "",
+                    chunks=[chunk],
+                    extra_metadata=meta,
+                )
+
+            # Mark completed
+            video.rag_status = "completed"
+            video.rag_processed_at = datetime.now(UTC)
+            await session.commit()
+
+            logger.info("Successfully processed video %s", video_id)
+
+        except Exception:
+            logger.exception("Failed to process video %s", video_id)
+            try:
+                video = await session.get(Video, video_id)
+                if video:
+                    video.rag_status = "failed"
+                    await session.commit()
+            except Exception:
+                await session.rollback()
+            raise
+
+    async def _collect_video_transcript_chunks(self, video: Video) -> tuple[list[str], list[dict]]:
+        """Collect transcript chunks and per-chunk metadata for a video.
+
+        Prefer structured segments with timestamps from transcript_data; otherwise
+        fall back to chunking the raw transcript text via the default chunker.
         """
+        chunks: list[str] = []
+        per_chunk_meta: list[dict] = []
+
+        segments = None
+        if getattr(video, "transcript_data", None) and isinstance(video.transcript_data, dict):
+            segments = video.transcript_data.get("segments")
+
+        if segments:
+            for seg in segments:
+                text_val = (seg.get("text") or "").strip()
+                if not text_val:
+                    continue
+                chunks.append(text_val)
+                per_chunk_meta.append({"start": seg.get("start"), "end": seg.get("end")})
+        else:
+            transcript = getattr(video, "transcript", None)
+            if isinstance(transcript, str) and transcript:
+                chunks = await chunk_text_async(transcript)
+                per_chunk_meta = [{} for _ in chunks]
+
+        return chunks, per_chunk_meta
+
+    async def _store_document_chunks(self, session: AsyncSession, document_id: int, chunks: list[str]) -> None:
+        """Store document chunks with embeddings using VectorRAG."""
         try:
             # Get document metadata
             result = await session.execute(
@@ -257,43 +433,16 @@ class RAGService:
                 msg = f"Document {document_id} not found"
                 raise ValueError(msg)
 
-            # Generate consistent UUID for document
-            doc_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"course_document_{document_id}")
+            # Determine deterministic UUID for course document
+            doc_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"document_{document_id}")
 
-            # Prepare documents for txtai indexing
-            # Format based on: https://neuml.github.io/txtai/embeddings/#index
-            documents = []
-            for i, chunk in enumerate(chunks):
-                if not chunk.strip():
-                    continue
-
-                # txtai expects: (id, data, tags) tuple
-                # When data is a dict, "text" key contains the content to embed
-                doc_id = f"{doc_uuid}_{i}"
-
-                # Tags for filtering (txtai uses these for search filtering)
-                tags = f"course:{doc_info.course_id} doc:{document_id} type:{doc_info.document_type}"
-
-                # Data dictionary with text and metadata
-                # txtai will store this in PostgreSQL content tables
-                data = {
-                    "text": chunk,  # Required: text to embed
-                    "document_id": document_id,
-                    "course_id": str(doc_info.course_id),
-                    "title": doc_info.title,
-                    "document_type": doc_info.document_type,
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
-                }
-                documents.append((doc_id, data, tags))
-
-            if not documents:
+            # Prepare chunks to ensure we don't call VectorRAG with empty content
+            valid_chunk_count = sum(1 for chunk in chunks if chunk.strip())
+            if not valid_chunk_count:
                 logger.warning("No valid chunks to index for document %s", document_id)
                 return
 
-            # Use VectorRAG directly for storing embeddings
-            # It already handles LiteLLM + pgvector perfectly
-            logger.info("Storing %s chunks for document %s using VectorRAG with pgvector", len(chunks), document_id)
+            logger.info("Storing %s chunks for document %s using LiteLLM + pgvector", valid_chunk_count, document_id)
 
             # Get VectorRAG instance
             if not hasattr(self, "_vector_rag"):
@@ -304,10 +453,14 @@ class RAGService:
             # Use VectorRAG's existing method to store chunks with embeddings
             await self._vector_rag.store_document_chunks_with_embeddings(
                 session=session,
-                document_id=document_id,
-                course_id=doc_info.course_id,
+                doc_type="course",
+                doc_id=doc_uuid,
                 title=doc_info.title,
                 chunks=chunks,
+                course_id=doc_info.course_id,
+                extra_metadata={
+                    "document_id": document_id,
+                },
             )
 
             logger.info("Successfully stored %s chunks for document %s in pgvector", len(chunks), document_id)
@@ -326,23 +479,23 @@ class RAGService:
     async def search_roadmap_documents(
         self, session: AsyncSession, course_id: uuid.UUID, query: str, top_k: int | None = None
     ) -> list[SearchResult]:
-        """Search documents using VectorRAG's existing pgvector search.
-
-        Why complicate things? VectorRAG already has a perfect search method!
-        """
+        """Search course documents via unified VectorRAG.search with course_id filter."""
         try:
             if top_k is None:
                 top_k = self.config.rerank_k
 
-            # Get VectorRAG instance
+            # Lazy init
             if not hasattr(self, "_vector_rag"):
                 from src.ai.rag.embeddings import VectorRAG
 
                 self._vector_rag = VectorRAG()
 
-            # Use VectorRAG's existing search method
-            return await self._vector_rag.search_course_documents_vector(
-                session=session, course_id=course_id, query=query, limit=top_k
+            return await self._vector_rag.search(
+                session=session,
+                doc_type="course",
+                query=query,
+                limit=top_k,
+                course_id=course_id,
             )
 
         except Exception:

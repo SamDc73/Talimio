@@ -85,18 +85,40 @@ async def _build_messages(request: ChatRequest, user_id: UUID) -> list[dict[str,
 
     # Get immediate context (current page, timestamp, lesson)
     if request.context_type and request.context_id:
-        context_data = await _get_immediate_context(request, user_id)
+        context_meta = request.context_meta or {}
+        context_meta["user_id"] = user_id
+        context_data = await get_context(
+            context_type=request.context_type,
+            resource_id=request.context_id,
+            context_meta=context_meta,
+        )
         if context_data:
             context_parts.append(f"Current {request.context_type} context:\n{context_data.content}")
             logger.debug("Added immediate context from %s", context_data.source)
 
-    # Get semantic context (RAG search - only for courses right now)
-    if request.context_type == "course" and request.context_id:
-        semantic_results = await _get_course_rag_context(request)
+    # Get semantic context (RAG search)
+    if request.context_type and request.context_id:
+        semantic_results = await _get_rag_context(request, user_id)
+
         if semantic_results:
-            # Just take top 3 results to avoid overwhelming the context
-            semantic_text = "\n\n".join(r.content for r in semantic_results[:3])
-            context_parts.append(f"Related course content:\n{semantic_text}")
+            # Take top 3 results; include metadata cues (page or start-end)
+            top = semantic_results[:3]
+            blocks: list[str] = []
+
+            # Simple suffix mapping for metadata
+            suffix_map = {
+                "book": lambda meta: f"\n[page {meta.get('page')}]" if meta.get("page") is not None else "",
+                "video": lambda meta: f"\n[time {meta.get('start')}-{meta.get('end')}s]" if meta.get("start") is not None and meta.get("end") is not None else "",
+            }
+
+            for r in top:
+                content = getattr(r, "content", str(r))
+                meta = getattr(r, "metadata", {}) or {}
+                suffix = suffix_map.get(request.context_type, lambda _: "")(meta)
+                blocks.append(f"{content}{suffix}")
+
+            semantic_text = "\n\n".join(blocks)
+            context_parts.append(f"Related {request.context_type} content:\n{semantic_text}")
             logger.debug("Added %d semantic search results", len(semantic_results))
 
     # Use unified prompt that handles context intelligently
@@ -119,53 +141,67 @@ async def _build_messages(request: ChatRequest, user_id: UUID) -> list[dict[str,
     return messages
 
 
-async def _get_immediate_context(request: ChatRequest, user_id: UUID) -> ContextData | None:
-    """Get immediate context from current page/timestamp/lesson."""
-    if not request.context_type or not request.context_id:
-        return None
 
-    try:
-        # Ensure user_id is in context_meta
-        context_meta = request.context_meta or {}
-        context_meta["user_id"] = user_id
-
-        return await get_context(
-            context_type=request.context_type,
-            resource_id=request.context_id,
-            context_meta=context_meta,
-        )
-    except Exception as e:
-        logger.warning("Failed to get immediate context: %s", e)
-        return None
-
-
-async def _get_course_rag_context(request: ChatRequest) -> list:
-    """Get semantic search results for course context."""
+async def _get_rag_context(request: ChatRequest, user_id: UUID) -> list:
+    """Get semantic search results for any context type."""
     if not request.context_id:
         return []
 
     try:
-        from src.ai.rag.service import RAGService
-        from src.database.session import async_session_maker
+        if request.context_type == "course":
+            from src.ai.rag.service import RAGService
+            from src.database.session import async_session_maker
 
-        logger.info(f"Searching for course documents with course_id: {request.context_id}, query: {request.message[:50]}...")
+            logger.info(f"Searching for course documents with course_id: {request.context_id}, query: {request.message[:50]}...")
 
-        rag_service = RAGService()
-        async with async_session_maker() as session:
-            # Use RAGService's internal method that takes a session directly
-            results = await rag_service.search_roadmap_documents(
-                session=session,
-                course_id=request.context_id,
-                query=request.message,
-                top_k=5,
-            )
-            logger.info(f"Retrieved {len(results)} RAG results for course {request.context_id}")
-            if results:
-                logger.debug(f"First result preview: {results[0].content[:100]}...")
-            return results
+            rag_service = RAGService()
+            async with async_session_maker() as session:
+                results = await rag_service.search_roadmap_documents(
+                    session=session,
+                    course_id=request.context_id,
+                    query=request.message,
+                    top_k=5,
+                )
+                logger.info(f"Retrieved {len(results)} RAG results for course {request.context_id}")
+                if results:
+                    logger.debug(f"First result preview: {results[0].content[:100]}...")
+                return results
+
+        elif request.context_type in ("book", "video"):
+            from uuid import UUID as _UUID
+
+            from sqlalchemy import select as _select
+
+            from src.ai.rag.embeddings import VectorRAG
+            from src.database.session import async_session_maker as _sm
+
+            model_map = {"book": ("src.books.models", "Book"), "video": ("src.videos.models", "Video")}
+            module_name, model_name = model_map[request.context_type]
+
+            # Dynamic import to avoid circular imports
+            import importlib
+            module = importlib.import_module(module_name)
+            model_class = getattr(module, model_name)
+
+            rag = VectorRAG()
+            async with _sm() as session:
+                # Ownership check
+                resource = await session.scalar(
+                    _select(model_class).where(
+                        model_class.id == _UUID(str(request.context_id)),
+                        model_class.user_id == user_id
+                    )
+                )
+                if not resource:
+                    return []
+
+                return await rag.search(session, doc_type=request.context_type, query=request.message, limit=5, doc_id=resource.id)
+
+        else:
+            return []
 
     except Exception:
-        logger.exception(f"RAG search failed for course_id: {request.context_id}")
+        logger.exception(f"RAG search failed for {request.context_type}_id: {request.context_id}")
         return []
 
 
@@ -193,7 +229,7 @@ async def _book_context(resource_id: UUID, context_meta: dict[str, Any]) -> Cont
             return None
 
     storage = get_storage_provider()
-    file_content = await storage.read(book.file_path)
+    file_content = await storage.download(book.file_path)
 
     def _extract_pdf_context(content: bytes, page_index: int) -> tuple[str | None, str | None]:
         """Parse PDF synchronously and return (joined_text, source_label)."""

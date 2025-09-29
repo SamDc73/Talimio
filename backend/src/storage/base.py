@@ -21,6 +21,11 @@ class AbstractStorage(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def download(self, key: str) -> bytes:
+        """Download file content from storage."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def get_download_url(self, key: str) -> str:
         """Get a download URL for the file.
 
