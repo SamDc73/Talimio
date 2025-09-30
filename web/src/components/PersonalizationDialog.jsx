@@ -4,7 +4,6 @@
 
 import { Brain, ChevronLeft, Eye, RotateCcw, Save, Trash2, X } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
-import { useAuth } from "../hooks/useAuth"
 import {
 	clearUserMemory,
 	deleteMemory,
@@ -17,7 +16,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Label } from "./label"
 
 export function PersonalizationDialog({ open, onOpenChange }) {
-	const { user } = useAuth()
 	const [isLoading, setIsLoading] = useState(false)
 	const [isSaving, setIsSaving] = useState(false)
 	const [isClearing, setIsClearing] = useState(false)
@@ -30,8 +28,6 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 	const [isLoadingMemories, setIsLoadingMemories] = useState(false)
 
 	const loadUserSettings = useCallback(async () => {
-		if (!user?.id) return
-
 		setIsLoading(true)
 		try {
 			const settings = await getUserSettings()
@@ -43,7 +39,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		} finally {
 			setIsLoading(false)
 		}
-	}, [user])
+	}, [])
 
 	// Load user settings when dialog opens
 	useEffect(() => {
@@ -58,8 +54,6 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 	}, [instructions, originalInstructions])
 
 	const handleSave = async () => {
-		if (!user?.id) return
-
 		setIsSaving(true)
 		try {
 			await updateCustomInstructions(instructions)
@@ -73,8 +67,6 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 	}
 
 	const handleClearMemory = async () => {
-		if (!user?.id) return
-
 		if (!window.confirm("Are you sure you want to clear all your learning history? This action cannot be undone.")) {
 			return
 		}
@@ -102,8 +94,6 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			return
 		}
 
-		if (!user?.id) return
-
 		setIsLoadingMemories(true)
 		try {
 			const userMemories = await getUserMemories()
@@ -130,8 +120,6 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 	}
 
 	const handleDeleteMemory = async (memoryId) => {
-		if (!user?.id) return
-
 		try {
 			await deleteMemory(memoryId)
 			// Remove from local state
