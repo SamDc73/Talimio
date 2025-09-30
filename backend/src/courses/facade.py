@@ -326,12 +326,16 @@ class CoursesFacade:
         Passes user_id through to ensure authenticated generation and user isolation.
         """
         try:
-            from src.courses.services.lesson_query_service import LessonQueryService
+            from src.courses.services.lesson_service import LessonService
             from src.database.session import async_session_maker
 
             async with async_session_maker() as session:
-                lesson_service = LessonQueryService(session)
-                return await lesson_service.get_lesson_simplified(course_id, lesson_id, generate, user_id)
+                if not user_id:
+                    from fastapi import HTTPException
+
+                    raise HTTPException(status_code=401, detail="User authentication required")
+                lesson_service = LessonService(session, user_id)
+                return await lesson_service.get_lesson(course_id, lesson_id, generate)
 
         except Exception:
             logger.exception("Error getting lesson %s for course %s", lesson_id, course_id)

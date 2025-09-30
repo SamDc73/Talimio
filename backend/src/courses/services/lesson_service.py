@@ -1,15 +1,17 @@
 """Lesson service with SQL-first queries and mandatory user isolation."""
 
 import logging
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai.client import LLMClient
+from src.auth.context import AuthContext
 from src.courses.models import Course, Node
 from src.courses.schemas import LessonResponse
-from src.courses.services.lesson_query_service import LessonQueryService
 
 
 logger = logging.getLogger(__name__)
@@ -22,8 +24,6 @@ class LessonService:
         """Initialize with user context for security isolation."""
         self.session = session
         self.user_id = user_id
-        # Use existing secure LessonQueryService for generation logic
-        self.lesson_query_service = LessonQueryService(session)
 
     async def get_lesson(self, course_id: UUID, lesson_id: UUID, generate: bool = False) -> LessonResponse:
         """Get lesson with single query including user isolation.
@@ -65,16 +65,16 @@ class LessonService:
         lesson, course = row
 
         # Generate content with user-aware locking if needed
-        if generate and (not lesson.content or len(lesson.content.strip()) == 0):
+        if generate and not (lesson.content and lesson.content.strip()):
             lesson = await self._generate_content_secure(lesson, course)
 
         return LessonResponse(
             id=lesson.id,
             course_id=course.id,
-            module_id=lesson.parent_id if lesson.parent_id else lesson.id,
+            module_id=lesson.parent_id or lesson.id,
             title=lesson.title,
             description=lesson.description,
-            content=lesson.content,  # Fix: Include the content field!
+            content=lesson.content,
             html_cache=None,
             citations=[],
             created_at=lesson.created_at,
@@ -82,20 +82,88 @@ class LessonService:
         )
 
     async def _generate_content_secure(self, lesson: Node, course: Course) -> Node:
-        """Generate content using existing secure generation logic.
+        """Generate content with conditional update to prevent concurrent writes.
 
-        This method delegates to LessonQueryService for content generation while
-        maintaining the single-query pattern. The lesson and course
-        objects are already validated, so we can safely generate content.
+        Uses LLMClient with AuthContext and only updates the lesson if content is
+        still empty, to avoid race conditions across concurrent requests.
         """
-        # Delegate to the existing secure generation service which has:
-        # - User-aware locking to prevent concurrent generation
-        # - Retry mechanisms with exponential backoff
-        # - Proper error handling and audit logging
-        # - Adaptive context building for personalized content
-        # Trigger generation via the existing service (handles locking, retries, logging)
-        await self.lesson_query_service.get_lesson(course.id, lesson.id, generate=True)
+        # Build minimal context
+        context = {
+            "title": lesson.title,
+            "description": lesson.description or "",
+            "course_id": str(course.id),
+            "course_title": course.title,
+            "user_id": self.user_id,
+        }
 
-        # Refresh the lesson from the DB to get the newly generated content and timestamps
-        await self.session.refresh(lesson)
+        try:
+            logger.info(
+                "Generating lesson content",
+                extra={
+                    "user_id": str(self.user_id),
+                    "lesson_id": str(lesson.id),
+                    "lesson_title": lesson.title,
+                },
+            )
+
+            # Create auth context for RAG enrichment
+            auth = AuthContext(self.user_id, self.session)
+
+            llm_client = LLMClient()
+            lesson_content = await llm_client.create_lesson(context, auth)
+            content = lesson_content.body
+
+            # Conditional update - only set content if still empty
+            update_stmt = (
+                update(Node)
+                .where(
+                    Node.id == lesson.id,
+                    or_(Node.content.is_(None), Node.content == ""),
+                )
+                .values(content=content, updated_at=datetime.now(UTC))
+            )
+
+            update_result = await self.session.execute(update_stmt)
+            updated_rows = update_result.rowcount
+
+            if updated_rows and updated_rows > 0:
+                await self.session.commit()
+                # Refresh to get persisted values
+                await self.session.refresh(lesson)
+
+                logger.info(
+                    "Lesson content generated and saved",
+                    extra={
+                        "user_id": str(self.user_id),
+                        "lesson_id": str(lesson.id),
+                        "content_length": len(content) if content else 0,
+                    },
+                )
+            else:
+                # Another process already generated content; refresh to load it
+                logger.info(
+                    "Content already generated by another process",
+                    extra={"user_id": str(self.user_id), "lesson_id": str(lesson.id)},
+                )
+                await self.session.refresh(lesson)
+
+        except ValueError as e:
+            # Validation errors (bad input, MDX issues)
+            logger.exception(
+                "Validation error generating lesson content: %s", str(e), extra={"user_id": str(self.user_id), "lesson_id": str(lesson.id)}
+            )
+            raise HTTPException(status_code=400, detail=f"Invalid lesson content: {e}") from e
+        except RuntimeError as e:
+            # System errors (API failures, network issues, timeouts)
+            logger.exception(
+                "System error generating lesson content: %s", str(e), extra={"user_id": str(self.user_id), "lesson_id": str(lesson.id)}
+            )
+            raise HTTPException(status_code=503, detail="Unable to generate lesson content. Please try again.") from e
+        except Exception as e:
+            logger.exception(
+                "Unexpected error generating lesson content",
+                extra={"user_id": str(self.user_id), "lesson_id": str(lesson.id)},
+            )
+            raise HTTPException(status_code=500, detail="An unexpected error occurred while generating lesson content") from e
+
         return lesson
