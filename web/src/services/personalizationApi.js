@@ -5,10 +5,9 @@
 import { api } from "@/lib/apiClient"
 
 /**
- * Get user personalization settings
- * @param {string} userId - The user ID to fetch settings for
+ * Get user personalization settings for current authenticated user
  */
-export async function getUserSettings(_userId) {
+export async function getUserSettings() {
 	// Use current user endpoint instead of user-specific endpoint
 	const settings = await api.get("/user/settings")
 
@@ -19,11 +18,10 @@ export async function getUserSettings(_userId) {
 }
 
 /**
- * Update custom AI instructions
- * @param {string} userId - The user ID
+ * Update custom AI instructions for current authenticated user
  * @param {string} instructions - The custom instructions to set
  */
-export async function updateCustomInstructions(_userId, instructions) {
+export async function updateCustomInstructions(instructions) {
 	// Use current user endpoint
 	const response = await api.put("/user/settings/instructions", {
 		instructions: instructions,
@@ -32,26 +30,24 @@ export async function updateCustomInstructions(_userId, instructions) {
 }
 
 /**
- * Get user memories from the AI system
- * @param {string} userId - The user ID
+ * Get user memories from the AI system for current authenticated user
  * @param {number} limit - Maximum number of memories to fetch
  */
-export async function getUserMemories(_userId, limit = 50) {
+export async function getUserMemories(limit = 50) {
 	// Use current user endpoint
 	const response = await api.get(`/user/memories?limit=${limit}`)
 	return response.memories || []
 }
 
 /**
- * Clear all user memories (deletes one by one - MVP approach)
- * @param {string} userId - The user ID
+ * Clear all user memories (deletes one by one - MVP approach) for current authenticated user
  */
-export async function clearUserMemory(_userId) {
+export async function clearUserMemory() {
     // Clear all memories by deleting them one-by-one using the existing endpoint
     // Backend supports DELETE /user/memories/{memory_id} but not a bulk delete endpoint
     // We fetch current memories and delete each to achieve a full clear.
     try {
-        const memories = await getUserMemories(_userId, 1000)
+        const memories = await getUserMemories(1000)
         if (!Array.isArray(memories) || memories.length === 0) {
             return { status: "success", message: "No memories to delete" }
         }
@@ -76,11 +72,10 @@ export async function clearUserMemory(_userId) {
 }
 
 /**
- * Delete a specific memory
- * @param {string} userId - The user ID
+ * Delete a specific memory for current authenticated user
  * @param {string} memoryId - The memory ID to delete
  */
-export async function deleteMemory(_userId, memoryId) {
+export async function deleteMemory(memoryId) {
 	// Use current user endpoint
 	const response = await api.delete(`/user/memories/${memoryId}`)
 	return response
