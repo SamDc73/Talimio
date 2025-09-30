@@ -20,9 +20,25 @@ export function useVideoProgress(videoId) {
 	const currentProgress = progressQuery.data?.[videoId] || 0
 	const rawMetadata = progressQuery.metadata?.[videoId] || {}
 
-	// Extract values with defaults
-	const completedChapters = rawMetadata.completedChapters || {}
-	const totalChapters = rawMetadata.totalChapters || 0
+	// Extract values with defaults (support both camelCase and snake_case like books)
+	// Normalize completedChapters to a boolean map regardless of backend shape
+	let completedChapters = {}
+	if (rawMetadata.completedChapters && typeof rawMetadata.completedChapters === "object") {
+		completedChapters = rawMetadata.completedChapters
+	} else if (rawMetadata.completed_chapters) {
+		const cc = rawMetadata.completed_chapters
+		if (Array.isArray(cc)) {
+			// Convert list of IDs to boolean map
+			completedChapters = cc.reduce((acc, id) => {
+				acc[id] = true
+				return acc
+			}, {})
+		} else if (typeof cc === "object") {
+			completedChapters = cc
+		}
+	}
+
+	const totalChapters = rawMetadata.totalChapters || rawMetadata.total_chapters || 0
 
 	// Check if a specific chapter is completed
 	const isCompleted = (chapterId) => {
@@ -53,6 +69,7 @@ export function useVideoProgress(videoId) {
 			progress: newProgress,
 			metadata: {
 				content_type: "video",
+				// Persist using camelCase keys for harmony across frontend
 				completedChapters: newCompletedChapters,
 				totalChapters: actualTotalChapters,
 			},

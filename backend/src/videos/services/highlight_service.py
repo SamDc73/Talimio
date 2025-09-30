@@ -58,19 +58,19 @@ class VideoHighlightService(HighlightInterface):
             await self.session.refresh(highlight)
         except IntegrityError as e:
             await self.session.rollback()
-            logger.error(f"Integrity constraint violation creating video highlight: {e}")
+            logger.exception(f"Integrity constraint violation creating video highlight: {e}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid highlight data or duplicate entry"
             ) from e
         except SQLAlchemyError as e:
             await self.session.rollback()
-            logger.error(f"Database error creating video highlight: {e}")
+            logger.exception(f"Database error creating video highlight: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
             ) from e
         except Exception as e:
             await self.session.rollback()
-            logger.error(f"Unexpected error creating video highlight: {e}")
+            logger.exception(f"Unexpected error creating video highlight: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"
             ) from e
@@ -154,13 +154,13 @@ class VideoHighlightService(HighlightInterface):
             await self.session.refresh(highlight)
         except SQLAlchemyError as e:
             await self.session.rollback()
-            logger.error(f"Database error updating video highlight {highlight_id}: {e}")
+            logger.exception(f"Database error updating video highlight {highlight_id}: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
             ) from e
         except Exception as e:
             await self.session.rollback()
-            logger.error(f"Unexpected error updating video highlight {highlight_id}: {e}")
+            logger.exception(f"Unexpected error updating video highlight {highlight_id}: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"
             ) from e
@@ -182,13 +182,13 @@ class VideoHighlightService(HighlightInterface):
             await self.session.commit()
         except SQLAlchemyError as e:
             await self.session.rollback()
-            logger.error(f"Database error deleting video highlight {highlight_id}: {e}")
+            logger.exception(f"Database error deleting video highlight {highlight_id}: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
             ) from e
         except Exception as e:
             await self.session.rollback()
-            logger.error(f"Unexpected error deleting video highlight {highlight_id}: {e}")
+            logger.exception(f"Unexpected error deleting video highlight {highlight_id}: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"
             ) from e

@@ -229,3 +229,5 @@ class VideosFacade:
             raise
 
     # AI operations removed - videos don't need direct AI interaction anymore
+
+videos_facade = VideosFacade()

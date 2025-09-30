@@ -11,7 +11,7 @@ export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
 	const { toggleChat } = useChatSidebar()
 
 	// Use chapter-based progress from the hook
-	const { progress } = useVideoProgress(video?.uuid)
+	const { progress } = useVideoProgress(video?.id)
 
 	return (
 		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
@@ -34,7 +34,7 @@ export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
 							<div className="flex items-center mt-1">
 								<div className="w-32 md:w-48 bg-slate-200 rounded-full h-1.5 overflow-hidden">
 									<div
-										className="h-full bg-gradient-to-r from-red-500 to-pink-500 rounded-full transition-all duration-300"
+										className="h-full bg-gradient-to-r from-violet-500 to-violet-600 rounded-full transition-all duration-300"
 										style={{ width: `${progress.percentage}%` }}
 									/>
 								</div>

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from uuid import UUID as UUID_TYPE
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -73,11 +73,7 @@ class Video(Base):
         back_populates="video",
         cascade="all, delete-orphan",
     )
-    progress_records: Mapped[list[VideoProgress]] = relationship(
-        "VideoProgress",
-        back_populates="video",
-        cascade="all, delete-orphan",
-    )
+
 
 
 class VideoChapter(Base):
@@ -108,33 +104,4 @@ class VideoChapter(Base):
     video: Mapped[Video] = relationship("Video", back_populates="chapters")
 
 
-class VideoProgress(Base):
-    """Model for tracking user-specific video progress."""
 
-    __tablename__ = "video_progress"
-
-    id: Mapped[UUID_TYPE] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    video_id: Mapped[UUID_TYPE] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("videos.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    user_id: Mapped[UUID_TYPE] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
-    last_position: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)  # Position in seconds
-    completion_percentage: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
-    last_watched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-    )
-
-    # Relationships
-    video: Mapped[Video] = relationship("Video", back_populates="progress_records")

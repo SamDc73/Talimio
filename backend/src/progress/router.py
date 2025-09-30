@@ -1,7 +1,7 @@
 """Progress tracking API endpoints."""
 
 import logging
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, Response, status
 
@@ -32,7 +32,7 @@ progress_rate_limit = limiter.limit("10/minute")
 @router.post("/batch")
 async def get_batch_progress(
     request: BatchProgressRequest,
-    response: Response,
+    _response: Response,
     auth: CurrentAuth,
 ) -> BatchProgressResponse:
     """Get progress for multiple content items in one request."""
@@ -74,7 +74,7 @@ async def get_single_progress(
 
         # Return virtual progress (no DB write)
         return ProgressResponse(
-            id=UUID("00000000-0000-0000-0000-000000000000"),
+            id=uuid4(),
             content_id=content_id,
             content_type=content_type,  # Use actual type, not default "book"
             progress_percentage=0.0,

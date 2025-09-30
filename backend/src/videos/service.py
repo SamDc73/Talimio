@@ -23,13 +23,10 @@ from src.videos.schemas import (
     VideoChapterResponse,
     VideoCreate,
     VideoListResponse,
-    VideoProgressResponse,
-    VideoProgressUpdate,
     VideoResponse,
     VideoTranscriptResponse,
     VideoUpdate,
 )
-from src.videos.services.video_progress_service import VideoProgressService
 
 
 logger = logging.getLogger(__name__)
@@ -474,30 +471,7 @@ class VideoService:
 
         return VideoResponse.model_validate(self._video_to_dict(video))
 
-    async def update_progress(
-        self,
-        db: AsyncSession,
-        video_id: str,
-        progress_data: VideoProgressUpdate,
-        user_id: UUID,
-    ) -> VideoProgressResponse:
-        """Update video watch progress for a specific user."""
-        # UserContext removed - using UUID directly
-        progress_service = VideoProgressService(db, user_id)
 
-        return await progress_service.update_video_progress(video_id, progress_data)
-
-    async def get_video_progress(
-        self,
-        db: AsyncSession,
-        video_id: str,
-        user_id: UUID,
-    ) -> VideoProgressResponse | None:
-        """Get video progress for a specific user."""
-        # UserContext removed - using UUID directly
-        progress_service = VideoProgressService(db, user_id)
-
-        return await progress_service.get_video_progress(video_id)
 
     async def delete_video(self, db: AsyncSession, video_id: str, user_id: UUID) -> None:
         """Delete a video."""
@@ -682,8 +656,29 @@ class VideoService:
         all_chapters = all_chapters_result.scalars().all()
 
         if all_chapters:
-            # Update video timestamp (chapter completion is tracked per-user in VideoProgress)
+            # Update video timestamp (chapter completion is tracked per-user in unified progress system)
             video.updated_at = datetime.now(UTC)
+
+        # Update unified progress to reflect chapter completion state
+        # Compute completion percentage from completed chapters and persist via the unified progress service.
+        try:
+            if all_chapters:
+                completed_chapter_ids = [str(c.id) for c in all_chapters if c.status == "completed"]
+                total = len(all_chapters)
+                completion_pct = (len(completed_chapter_ids) / total) * 100 if total > 0 else 0.0
+
+                # Persist unified progress for this user/video via facade (imports locally to avoid circular deps)
+                from src.videos.facade import videos_facade
+
+                await videos_facade.update_video_progress(
+                    video.id,
+                    user_id,
+                    {"completion_percentage": completion_pct, "completed_chapters": completed_chapter_ids},
+                )
+        except Exception as e:
+            logger.warning(
+                f"Failed to update unified progress for video {video_id} after chapter status change: {e}"
+            )
 
         await db.commit()
         await db.refresh(chapter)
@@ -715,29 +710,15 @@ class VideoService:
         completed_count = len(completed_chapter_ids)
         completion_percentage = (completed_count / total_chapters) * 100
 
-        # Update or create VideoProgress record if user_id is provided
+        # Update progress using facade if user_id is provided
         if user_id:
-            from src.videos.models import VideoProgress
+            from src.videos.facade import videos_facade
 
-            # Find or create progress record
-            progress_query = select(VideoProgress).where(
-                VideoProgress.video_id == video.id,
-                VideoProgress.user_id == user_id,
-            )
-            progress_result = await db.execute(progress_query)
-            progress = progress_result.scalar_one_or_none()
-
-            if not progress:
-                progress = VideoProgress(
-                    video_id=video.id,
-                    user_id=user_id,
-                )
-                db.add(progress)
-
-            # Update completion percentage
-            progress.completion_percentage = completion_percentage
-            progress.last_watched_at = datetime.now(UTC)
-            progress.updated_at = datetime.now(UTC)
+            progress_data = {
+                "completion_percentage": completion_percentage,
+                "completed_chapters": completed_chapter_ids,
+            }
+            await videos_facade.update_video_progress(parse_video_id(video_id), user_id, progress_data)
 
         # Update video timestamp
         video.updated_at = datetime.now(UTC)

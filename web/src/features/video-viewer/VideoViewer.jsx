@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { VideoHeader } from "@/components/header/VideoHeader"
 import { VideoSidebar } from "@/components/sidebar"
-import { useVideoProgressWithPosition } from "@/hooks/useVideoProgress"
+import { useVideoProgress, useVideoProgressWithPosition } from "@/hooks/useVideoProgress"
 import { getVideo } from "@/services/videosService"
 import useAppStore, { selectSidebarOpen, selectToggleSidebar } from "@/stores/useAppStore"
 import { useVideoProgressSaving } from "./hooks/useVideoProgressSaving"
@@ -24,8 +24,9 @@ function VideoViewerContent() {
 	const isOpen = useAppStore(selectSidebarOpen)
 	const toggleSidebar = useAppStore(selectToggleSidebar)
 
-	// Use unified progress hook
+	// Use unified progress hooks
 	const { updateVideoProgress: updateProgress } = useVideoProgressWithPosition(videoId)
+	const { progress: chapterProgress } = useVideoProgress(videoId)
 
 	// Local state
 	const [video, setVideo] = useState(null)
@@ -64,7 +65,6 @@ function VideoViewerContent() {
 				setCurrentTime(savedProgress)
 			} catch (err) {
 				setError(err.message || "Failed to load video")
-				console.log("Error")
 			} finally {
 				setLoading(false)
 			}
@@ -151,7 +151,6 @@ function VideoViewerContent() {
 			youtubePlayerRef.current.seekTo(timestamp, true)
 			setCurrentTime(timestamp) // Update immediately for responsive UI
 		} else {
-			console.log("Player not ready")
 		}
 	}, [])
 
@@ -178,7 +177,9 @@ function VideoViewerContent() {
 	)
 
 	// Calculate progress percentage
-	const progressPercentage = duration > 0 ? Math.round((currentTime / duration) * 100) : getVideoProgress(video)
+	const timeBased = duration > 0 ? Math.round((currentTime / duration) * 100) : getVideoProgress(video)
+	const chapterBased = Math.round(chapterProgress?.percentage || 0)
+	const progressPercentage = Math.max(chapterBased, timeBased)
 
 	// Format duration helper
 	const formatDuration = (seconds) => {
