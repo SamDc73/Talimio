@@ -47,9 +47,32 @@ export async function getUserMemories(_userId, limit = 50) {
  * @param {string} userId - The user ID
  */
 export async function clearUserMemory(_userId) {
-	// Use current user endpoint to clear memories (note: singular 'memory' in endpoint)
-	const response = await api.delete("/user/memory")
-	return response
+    // Clear all memories by deleting them one-by-one using the existing endpoint
+    // Backend supports DELETE /user/memories/{memory_id} but not a bulk delete endpoint
+    // We fetch current memories and delete each to achieve a full clear.
+    try {
+        const memories = await getUserMemories(_userId, 1000)
+        if (!Array.isArray(memories) || memories.length === 0) {
+            return { status: "success", message: "No memories to delete" }
+        }
+
+        // Delete sequentially to avoid overwhelming the server and to simplify error handling
+        let deleted = 0
+        for (const m of memories) {
+            if (!m?.id) continue
+            try {
+                await api.delete(`/user/memories/${m.id}`)
+                deleted += 1
+            } catch (_e) {
+                // Continue deleting remaining memories even if one fails
+            }
+        }
+
+        return { status: "success", message: "Cleared user memories", deleted }
+    } catch (e) {
+        // Surface an error consistent with other API methods
+        throw e
+    }
 }
 
 /**
