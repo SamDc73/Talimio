@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
+import { LoginHeader } from "@/components/header/LoginHeader"
 import { useAuth } from "@/hooks/useAuth"
 import LoginForm from "./LoginForm"
 import PasswordResetForm from "./PasswordResetForm"
@@ -62,6 +63,8 @@ function AuthPage() {
 
 	return (
 		<>
+			<LoginHeader />
+
 			{error && (
 				<div className="fixed top-4 right-4 bg-red-500 text-red-500-foreground px-4 py-2 rounded-lg shadow-lg animate-slideDown z-50">
 					{error}
