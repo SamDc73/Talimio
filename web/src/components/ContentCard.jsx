@@ -140,17 +140,15 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 						)}
 					</div>
 					<div>
-						<>
-							<div className="flex justify-between text-xs text-gray-100-foreground mb-2">
-								<span>{Math.round(progressValue)}%</span>
-							</div>
-							<div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-								<div
-									style={{ width: `${progressValue}%` }}
-									className={`h-full bg-gradient-to-r ${V.grad} rounded-full transition-all duration-500`}
-								/>
-							</div>
-						</>
+						<div className="flex justify-between text-xs text-gray-100-foreground mb-2">
+							<span>{Math.round(progressValue)}%</span>
+						</div>
+						<div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+							<div
+								style={{ width: `${progressValue}%` }}
+								className={`h-full bg-gradient-to-r ${V.grad} rounded-full transition-all duration-500`}
+							/>
+						</div>
 					</div>
 				</div>
 				{hover && (

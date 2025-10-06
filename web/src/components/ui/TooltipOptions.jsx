@@ -5,7 +5,7 @@ import { useRef, useState } from "react"
  * OPTION 1: Minimalist Pill (Current Style)
  * Clean, simple rounded pill with icon buttons
  */
-export function Option1_MinimalistPill({ handlers, selectedText, onClose, tooltipX, tooltipY }) {
+export function OptionMinimalistPill({ handlers, selectedText, onClose, tooltipX, tooltipY }) {
 	const tooltipRef = useRef(null)
 
 	return (
@@ -54,7 +54,7 @@ export function Option1_MinimalistPill({ handlers, selectedText, onClose, toolti
  * OPTION 2: Floating Action Buttons (FAB Style)
  * Separate circular buttons with subtle shadows
  */
-export function Option2_FloatingButtons({ handlers, selectedText, onClose, tooltipX, tooltipY }) {
+export function OptionFloatingButtons({ handlers, selectedText, onClose, tooltipX, tooltipY }) {
 	const tooltipRef = useRef(null)
 
 	return (
@@ -101,7 +101,7 @@ export function Option2_FloatingButtons({ handlers, selectedText, onClose, toolt
  * OPTION 3: Glass Card
  * Card-style with glassmorphism effect and labels
  */
-export function Option3_GlassCard({ handlers, selectedText, onClose, tooltipX, tooltipY }) {
+export function OptionGlassCard({ handlers, selectedText, onClose, tooltipX, tooltipY }) {
 	const tooltipRef = useRef(null)
 
 	return (
@@ -156,7 +156,7 @@ export function Option3_GlassCard({ handlers, selectedText, onClose, tooltipX, t
  * OPTION 4: Bubble Style
  * Rounded bubble with colored backgrounds
  */
-export function Option4_BubbleStyle({ handlers, selectedText, onClose, tooltipX, tooltipY }) {
+export function OptionBubbleStyle({ handlers, selectedText, onClose, tooltipX, tooltipY }) {
 	const tooltipRef = useRef(null)
 
 	return (
@@ -219,10 +219,10 @@ export function TooltipOptionsDemo() {
 	}
 
 	const options = [
-		{ id: 1, name: "Minimalist Pill", component: Option1_MinimalistPill },
-		{ id: 2, name: "Floating Buttons", component: Option2_FloatingButtons },
-		{ id: 3, name: "Glass Card", component: Option3_GlassCard },
-		{ id: 4, name: "Bubble Style", component: Option4_BubbleStyle },
+		{ id: 1, name: "Minimalist Pill", component: OptionMinimalistPill },
+		{ id: 2, name: "Floating Buttons", component: OptionFloatingButtons },
+		{ id: 3, name: "Glass Card", component: OptionGlassCard },
+		{ id: 4, name: "Bubble Style", component: OptionBubbleStyle },
 	]
 
 	const SelectedComponent = options.find((opt) => opt.id === selectedOption)?.component
@@ -236,6 +236,7 @@ export function TooltipOptionsDemo() {
 				{options.map((option) => (
 					<button
 						key={option.id}
+						type="button"
 						onClick={() => setSelectedOption(option.id)}
 						className={`px-4 py-2 rounded-lg border transition-colors ${
 							selectedOption === option.id
@@ -268,6 +269,7 @@ export function TooltipOptionsDemo() {
 				)}
 
 				<button
+					type="button"
 					onClick={() => setShowTooltip(!showTooltip)}
 					className="mt-4 px-4 py-2 bg-green-500 text-white rounded-lg"
 				>

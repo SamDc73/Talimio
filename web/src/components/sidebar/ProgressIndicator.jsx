@@ -26,11 +26,14 @@ function ProgressIndicator({
 
 	return (
 		<div
-			className={`flex items-center gap-2 px-4 pt-20 transition-opacity duration-300 ${
+			className={`flex items-center gap-2 px-5 py-6 transition-opacity duration-300 ${
 				isOpen ? "opacity-100" : "opacity-0"
 			}`}
 		>
-			<span className={`${styleClass} text-xs font-semibold rounded-full px-3 py-1`} data-testid={dataTestId}>
+			<span
+				className={`${styleClass} text-xs font-semibold rounded-full px-3 py-1.5 shadow-sm`}
+				data-testid={dataTestId}
+			>
 				{progress}% {suffix}
 			</span>
 			{children}

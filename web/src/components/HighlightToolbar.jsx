@@ -95,7 +95,6 @@ export function HighlightToolbar({ highlights = [], onDelete, className }) {
 		if (hoveredHighlight) {
 			const text = hoveredHighlight.highlight_data?.text || hoveredHighlight.text || ""
 			navigator.clipboard.writeText(text)
-			console.log("Action completed")
 			setIsVisible(false)
 		}
 	}

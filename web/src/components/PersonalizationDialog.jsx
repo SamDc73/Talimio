@@ -35,7 +35,6 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			setOriginalInstructions(settings.custom_instructions || "")
 			setMemoryCount(settings.memory_count || 0)
 		} catch (_error) {
-			console.log("Error")
 		} finally {
 			setIsLoading(false)
 		}
@@ -58,9 +57,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		try {
 			await updateCustomInstructions(instructions)
 			setOriginalInstructions(instructions)
-			console.log("Success")
 		} catch (_error) {
-			console.log("Error")
 		} finally {
 			setIsSaving(false)
 		}
@@ -76,9 +73,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			await clearUserMemory()
 			setMemoryCount(0)
 			setMemories([])
-			console.log("Success")
 		} catch (_error) {
-			console.log("Error")
 		} finally {
 			setIsClearing(false)
 		}
@@ -100,7 +95,6 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			setMemories(userMemories)
 			setShowMemories(true)
 		} catch (_error) {
-			console.log("Error")
 		} finally {
 			setIsLoadingMemories(false)
 		}
@@ -125,10 +119,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			// Remove from local state
 			setMemories((prev) => prev.filter((m) => m.id !== memoryId))
 			setMemoryCount((prev) => Math.max(0, prev - 1))
-			console.log("Success")
-		} catch (_error) {
-			console.log("Error")
-		}
+		} catch (_error) {}
 	}
 
 	const characterCount = instructions.length

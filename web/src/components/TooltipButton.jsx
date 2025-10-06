@@ -30,13 +30,37 @@ const TooltipButton = forwardRef(function TooltipButton(
 		)
 	}
 
+	const isDisabled = buttonProps.disabled
+
 	return (
 		<TooltipProvider delayDuration={tooltipDelayDuration}>
 			<Tooltip>
 				<TooltipTrigger asChild>
-					<Button ref={ref} className={cn(className)} asChild={asChild} variant={variant} size={size} {...buttonProps}>
-						{children}
-					</Button>
+					{isDisabled ? (
+						<span className="inline-block">
+							<Button
+								ref={ref}
+								className={cn(className)}
+								asChild={asChild}
+								variant={variant}
+								size={size}
+								{...buttonProps}
+							>
+								{children}
+							</Button>
+						</span>
+					) : (
+						<Button
+							ref={ref}
+							className={cn(className)}
+							asChild={asChild}
+							variant={variant}
+							size={size}
+							{...buttonProps}
+						>
+							{children}
+						</Button>
+					)}
 				</TooltipTrigger>
 				<TooltipContent side={tooltipSide}>{tooltipContent}</TooltipContent>
 			</Tooltip>

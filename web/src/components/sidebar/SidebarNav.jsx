@@ -9,7 +9,7 @@ function SidebarNav({ children, className = "" }) {
 
 	return (
 		<nav
-			className={`flex-1 p-3 space-y-4 overflow-y-auto transition-opacity duration-300 ${
+			className={`flex-1 px-4 pb-4 space-y-3 overflow-y-auto transition-opacity duration-300 ${
 				isOpen ? "opacity-100" : "opacity-0"
 			} ${className}`}
 		>

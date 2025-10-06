@@ -1,6 +1,7 @@
 import { ChevronRight, FileText } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useBookProgress } from "@/hooks/useBookProgress"
+import logger from "@/lib/logger"
 import { extractBookChapters, getBookChapters } from "@/services/booksService"
 import CompletionCheckbox from "./CompletionCheckbox"
 import ProgressCircle from "./ProgressCircle"
@@ -120,7 +121,7 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 					allIds.forEach((id) => delete newState[id])
 					return newState
 				})
-			} catch (_error) {
+			} catch (error) {
 				// Revert optimistic update on error
 				setOptimisticCompletions((prev) => {
 					const newState = { ...prev }
