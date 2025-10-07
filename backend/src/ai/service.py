@@ -11,7 +11,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from src.ai.client import LLMClient
-from src.ai.models import CourseStructure
+from src.ai.models import CourseStructure, ExecutionPlan
 from src.ai.prompts import (
     ASSISTANT_CHAT_SYSTEM_PROMPT,
 )
@@ -87,6 +87,27 @@ class AIService:
         )
 
         return str(response)
+
+    # Code execution operations
+    async def generate_execution_plan(
+        self,
+        *,
+        language: str,
+        source_code: str,
+        stderr: str | None = None,
+        stdin: str | None = None,
+        sandbox_state: dict[str, Any] | None = None,
+        user_id: str | UUID | None = None,
+    ) -> ExecutionPlan:
+        """Generate a sandbox execution plan for code execution."""
+        return await self._llm_client.generate_execution_plan(
+            language=language,
+            source_code=source_code,
+            stderr=stderr,
+            stdin=stdin,
+            sandbox_state=sandbox_state,
+            user_id=user_id,
+        )
 
     # RAG helpers
     async def get_book_rag_context(self, book_id: UUID, query: str, user_id: UUID, limit: int = 5) -> list[dict]:

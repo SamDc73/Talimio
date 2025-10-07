@@ -1,6 +1,7 @@
 """Pydantic schemas for the unified courses API."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -44,6 +45,7 @@ class CourseBase(BaseModel):
     description: str = Field("", description="Course description")
     tags: str = Field("[]", description="Course tags as JSON string")
     archived: bool = Field(default=False, description="Whether the course is archived")
+    setup_commands: list[str] = Field(default_factory=list, description="Commands to run once per course sandbox")
 
 
 class CourseCreate(BaseModel):
@@ -111,8 +113,27 @@ class MDXValidateResponse(BaseModel):
 
     valid: bool = Field(..., description="Whether the MDX content is valid")
     error: str | None = Field(None, description="Error message if validation failed")
-    metadata: dict | None = Field(None, description="Additional metadata from validation")
-
+    metadata: dict[str, Any] | None = Field(None, description="Extracted metadata from MDX content")
 
 # NOTE: Quiz schemas removed - quizzes are embedded in lesson content (MDX)
 # Quiz results are handled through lesson progress updates, not separate submissions
+
+
+class CodeExecuteRequest(BaseModel):
+    """Request to execute a code snippet via E2B."""
+
+    code: str = Field(..., min_length=1, description="Source code to execute")
+    language: str = Field(..., min_length=1, description="Language name/alias, e.g., python, js, cpp")
+    stdin: str | None = Field(None, description="Optional stdin input")
+    lesson_id: UUID | None = Field(None, description="Optional lesson id for analytics/logging")
+    course_id: UUID | None = Field(None, description="Course id for sandbox scoping and setup commands")
+
+
+class CodeExecuteResponse(BaseModel):
+    """Normalized execution response payload."""
+
+    stdout: str | None = None
+    stderr: str | None = None
+    status: str | None = None
+    time: float | None = None
+    memory: float | None = None

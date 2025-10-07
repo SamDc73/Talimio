@@ -33,7 +33,6 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 	// Handle upload process
 	const handleUpload = async () => {
 		if (documents.length === 0) {
-			console.log("No documents to upload")
 			return
 		}
 
@@ -60,7 +59,8 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 
 				if (result) {
 					return { ...doc, status: "embedded", id: result.id }
-				} else if (error) {
+				}
+				if (error) {
 					return { ...doc, status: "failed", error: error.error }
 				}
 				return doc
@@ -70,16 +70,12 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 
 			// Show success/error toast
 			if (results.errors.length === 0) {
-				console.log("Action completed")
-
 				// Auto-close modal after successful upload
 				setTimeout(() => {
 					handleClose()
 				}, 2000)
 			} else if (results.results.length === 0) {
-				console.log("All uploads failed")
 			} else {
-				console.log("Action completed")
 			}
 
 			// Notify parent component
@@ -94,8 +90,6 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 				error: error.message || "Upload failed",
 			}))
 			setDocuments(failedDocs)
-
-			console.log("Upload failed")
 		} finally {
 			setIsUploading(false)
 		}

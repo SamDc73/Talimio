@@ -88,11 +88,12 @@ class CourseProgressService(ProgressTracker):
                 "total_lessons": total_lessons,
                 "quiz_scores": metadata.get("quiz_scores", {}),
                 "learning_patterns": metadata.get("learning_patterns", {}),
-                "pacing_preference": metadata.get("pacing_preference", "normal"),
-                "last_accessed_at": progress_data.updated_at,
-                "created_at": progress_data.created_at,
-                "updated_at": progress_data.updated_at,
             }
+
+    async def calculate_completion_percentage(self, content_id: UUID, user_id: UUID) -> float:
+        """Calculate completion percentage (0.0 to 100.0)."""
+        progress = await self.get_progress(content_id, user_id)
+        return progress.get("completion_percentage", 0.0)
 
     async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update progress data for specific course and user."""

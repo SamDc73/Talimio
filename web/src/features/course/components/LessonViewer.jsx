@@ -132,7 +132,7 @@ export function LessonViewer({ lesson, isLoading, error, onBack, onMarkComplete,
 							isDarkMode ? "prose-invert prose-emerald" : "prose-emerald"
 						)}
 					>
-						<ContentRenderer content={lesson.md_source || lesson.content} />
+						<ContentRenderer content={lesson.md_source || lesson.content} lessonId={lesson.id} courseId={lesson.course_id} />
 					</div>
 				</div>
 			</div>

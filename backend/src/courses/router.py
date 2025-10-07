@@ -8,15 +8,20 @@ CourseOrchestratorService has been completely removed and replaced with
 CoursesFacade for all endpoints including lesson-specific operations.
 """
 
+import logging
+import os
+import time
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth import CurrentAuth
 from src.courses.facade import CoursesFacade
 from src.courses.schemas import (
+    CodeExecuteRequest,
+    CodeExecuteResponse,
     CourseCreate,
     CourseListResponse,
     CourseResponse,
@@ -25,6 +30,7 @@ from src.courses.schemas import (
     MDXValidateRequest,
     MDXValidateResponse,
 )
+from src.courses.services.code_execution_service import CodeExecutionError, CodeExecutionService
 from src.courses.services.lesson_service import LessonService
 from src.courses.services.mdx_service import mdx_service
 from src.database.session import get_db_session
@@ -37,6 +43,9 @@ router = APIRouter(
 )
 
 
+# Local logger for analytics
+logger = logging.getLogger(__name__)
+
 def get_courses_facade() -> CoursesFacade:
     """Get courses facade instance."""
     return CoursesFacade()
@@ -48,6 +57,11 @@ def get_lesson_service(
 ) -> LessonService:
     """Get lesson service instance with user_id injection."""
     return LessonService(session, auth.user_id)
+
+
+def get_code_execution_service() -> CodeExecutionService:
+    """Get code execution service instance."""
+    return CodeExecutionService()
 
 
 # Course operations
@@ -206,3 +220,116 @@ async def validate_mdx(request: MDXValidateRequest) -> MDXValidateResponse:
         metadata = mdx_service.extract_metadata(request.content)
 
     return MDXValidateResponse(valid=is_valid, error=error, metadata=metadata)
+
+
+# --- Code Execution (E2B) ---
+
+# very small in-memory per-user rate limiter (no over-engineering)
+_rate_state: dict[str, tuple[float, int]] = {}
+
+
+def _check_rate_limit(user_id: UUID) -> None:
+    limit = int(os.getenv("CODE_EXEC_RATE_LIMIT_PER_USER", "10"))
+    window = int(os.getenv("CODE_EXEC_RATE_LIMIT_WINDOW", "60"))
+    now = time.time()
+    key = str(user_id)
+    start, count = _rate_state.get(key, (now, 0))
+    if now - start > window:
+        _rate_state[key] = (now, 1)
+        return
+    if count + 1 > limit:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please try again later.")
+    _rate_state[key] = (start, count + 1)
+
+
+@router.post("/code/execute")
+async def execute_code(
+    request: CodeExecuteRequest,
+    auth: CurrentAuth,
+    svc: Annotated[CodeExecutionService, Depends(get_code_execution_service)],
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
+) -> CodeExecuteResponse:
+    """Execute a single code snippet via E2B sandbox.
+
+    Auth is required; rate limited per user; minimal logging/analytics.
+    Uses course-scoped sandboxes with setup_commands for fast execution.
+    """
+    _check_rate_limit(auth.user_id)
+
+    # Fetch setup_commands from course if course_id provided
+    setup_commands: list[str] = []
+    if request.course_id:
+        try:
+            result = await facade.get_course_with_progress(request.course_id, auth.user_id)
+            if result.get("success") and "course" in result:
+                course = result["course"]
+                setup_commands = course.setup_commands or []
+        except Exception:
+            logger.debug("Could not fetch course setup_commands for course_id=%s", request.course_id)
+
+    try:
+        result = await svc.execute(
+            source_code=request.code,
+            language=request.language,
+            stdin=request.stdin,
+            user_id=str(auth.user_id),
+            course_id=str(request.course_id) if request.course_id else None,
+            lesson_id=str(request.lesson_id) if request.lesson_id else None,
+            setup_commands=setup_commands,
+        )
+    except CodeExecutionError as error:
+        logger.warning(
+            "CODE_EXECUTION_ERROR",
+            extra={
+                "user_id": str(auth.user_id),
+                "lesson_id": str(request.lesson_id) if request.lesson_id else None,
+                "language": request.language,
+                "error_code": error.error_code,
+            },
+        )
+        detail = f"{error} (code: {error.error_code})"
+        raise HTTPException(status_code=error.status_code, detail=detail) from error
+    except ValueError as exc:
+        logger.warning(
+            "CODE_EXECUTION_INVALID_INPUT",
+            extra={
+                "user_id": str(auth.user_id),
+                "lesson_id": str(request.lesson_id) if request.lesson_id else None,
+                "language": request.language,
+            },
+            exc_info=True,
+        )
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception(
+            "CODE_EXECUTION_UNEXPECTED",
+            extra={
+                "user_id": str(auth.user_id),
+                "lesson_id": str(request.lesson_id) if request.lesson_id else None,
+                "language": request.language,
+            },
+        )
+        raise HTTPException(status_code=502, detail="Execution failed") from exc
+
+    response = CodeExecuteResponse(
+        stdout=result.stdout,
+        stderr=result.stderr,
+        status=result.status,
+        time=result.time,
+        memory=result.memory,
+    )
+
+    # Minimal analytics log
+    logger.info(
+        "CODE_EXECUTION",
+        extra={
+            "user_id": str(auth.user_id),
+            "lesson_id": str(request.lesson_id) if request.lesson_id else None,
+            "language": request.language,
+            "status": response.status,
+            "time": response.time,
+            "memory": response.memory,
+        },
+    )
+
+    return response

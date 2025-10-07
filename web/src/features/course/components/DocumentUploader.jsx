@@ -220,7 +220,7 @@ function DocumentUploader({
 		const k = 1024
 		const sizes = ["Bytes", "KB", "MB", "GB"]
 		const i = Math.floor(Math.log(bytes) / Math.log(k))
-		return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`
+		return `${Number.parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`
 	}
 
 	// Get status icon
@@ -249,7 +249,7 @@ function DocumentUploader({
 					<div className="p-5">
 						<div className="flex items-center justify-between mb-4">
 							<div className="flex items-center space-x-2">
-								<div className="w-2 h-2 bg-green-500 rounded-full"></div>
+								<div className="w-2 h-2 bg-green-500 rounded-full" />
 								<span className="text-sm font-semibold text-green-900 dark:text-green-100">Ready to Upload</span>
 								<span className="text-xs bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 px-2 py-0.5 rounded-full font-medium">
 									{documents.length}

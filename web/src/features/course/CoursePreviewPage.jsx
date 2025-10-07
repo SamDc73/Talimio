@@ -50,7 +50,6 @@ function CoursePreviewPage() {
 					tags: tags,
 				})
 			} catch (_error) {
-				console.log("Error")
 			} finally {
 				setIsLoading(false)
 			}
@@ -63,7 +62,6 @@ function CoursePreviewPage() {
 
 	const handleSave = async () => {
 		if (!formData.title.trim()) {
-			console.log("Title Required")
 			return
 		}
 
@@ -75,12 +73,9 @@ function CoursePreviewPage() {
 				description: formData.description,
 			})
 
-			console.log("Course Updated!")
-
 			// Navigate to the course view
 			navigate(`/course/${courseId}`)
 		} catch (_error) {
-			console.log("Save Failed")
 		} finally {
 			setIsSaving(false)
 		}
@@ -96,8 +91,6 @@ function CoursePreviewPage() {
 				userPrompt: originalPrompt,
 			})
 
-			console.log("Course Regenerated!")
-
 			// Navigate to new course preview
 			navigate(`/course/preview/${response.id}`, {
 				state: {
@@ -107,7 +100,6 @@ function CoursePreviewPage() {
 				replace: true,
 			})
 		} catch (_error) {
-			console.log("Regeneration Failed")
 		} finally {
 			setIsRegenerating(false)
 		}

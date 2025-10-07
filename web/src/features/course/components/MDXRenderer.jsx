@@ -2,30 +2,7 @@ import { MDXProvider } from "@mdx-js/react"
 import React from "react"
 import { FillInTheBlank, FreeForm, MultipleChoice } from "@/components/quiz/index.js"
 import { useMDXCompile } from "@/hooks/useMDXCompile"
-
-// Code block component with language display
-function CodeBlock({ children, className, ...props }) {
-	// Extract language from data-language attribute (rehype-pretty-code provides this reliably)
-	const language = props["data-language"] || "text"
-
-	// Only show language badge if it's not plain text
-	const showLanguage = language && language !== "text" && language !== "plaintext"
-
-	return (
-		<div className="relative group mb-4 rounded-lg overflow-hidden bg-gray-900">
-			{/* Language badge */}
-			{showLanguage && (
-				<div className="absolute top-0 right-0 px-2 py-1 text-xs font-mono text-gray-400 bg-gray-800 rounded-bl-md z-10">
-					{language}
-				</div>
-			)}
-
-			<pre className={`overflow-x-auto p-4 text-gray-100 text-sm font-mono ${className || ""}`} {...props}>
-				{children}
-			</pre>
-		</div>
-	)
-}
+import ExecutableCodeBlock from "./ExecutableCodeBlock.jsx"
 
 // Static component overrides - defined once outside component
 const MDX_COMPONENTS = {
@@ -83,7 +60,6 @@ const MDX_COMPONENTS = {
 		}
 		return <figure {...props}>{children}</figure>
 	},
-	pre: CodeBlock,
 
 	// Style blockquotes
 	blockquote: (props) => (
@@ -130,25 +106,23 @@ const MDX_COMPONENTS = {
 		return <input {...props} />
 	},
 }
-
 /**
  * MDXRenderer - Simplified MDX renderer for React 19
  *
  * Features:
  * - GitHub Flavored Markdown (tables, task lists, etc.)
- * - Math rendering with KaTeX
  * - Syntax highlighting for code blocks
- * - Emoji support
+ * - Math support (LaTeX)
  * - Auto-linking headings
  * - Interactive component support
  */
-export function MDXRenderer({ content }) {
+export function MDXRenderer({ content, lessonId, courseId }) {
 	// Use the custom hook for all compilation logic
-	const { Component, error, isLoading } = useMDXCompile(content)
+	const { Component, error, isLoading } = useMDXCompile(content, { lessonId, courseId })
 
 	// Render states
 	if (!content) {
-		return <div className="text-gray-500 p-4 text-center">No content to display</div>
+		return null
 	}
 
 	if (error) {
@@ -186,9 +160,18 @@ export function MDXRenderer({ content }) {
 	// Render the MDX component
 	return (
 		<div className="markdown-content prose prose-zinc max-w-none">
-			<MDXProvider components={MDX_COMPONENTS}>
-				<Component components={MDX_COMPONENTS} />
-			</MDXProvider>
+			{(() => {
+				// Override only the `pre` component to inject ExecutableCodeBlock with lessonId and courseId
+				const componentsWithLesson = {
+					...MDX_COMPONENTS,
+					pre: (props) => <ExecutableCodeBlock {...props} lessonId={lessonId} courseId={courseId} />,
+				}
+				return (
+					<MDXProvider components={componentsWithLesson}>
+						<Component components={componentsWithLesson} />
+					</MDXProvider>
+				)
+			})()}
 		</div>
 	)
 }

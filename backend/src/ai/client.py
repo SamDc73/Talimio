@@ -12,8 +12,9 @@ if TYPE_CHECKING:
 import litellm
 from pydantic import BaseModel
 
-from src.ai.models import CourseStructure, LessonContent
+from src.ai.models import CourseStructure, ExecutionPlan, LessonContent
 from src.ai.prompts import (
+    E2B_EXECUTION_SYSTEM_PROMPT,
     LESSON_GENERATION_PROMPT,
     MDX_ERROR_FIX_PROMPT,
     MEMORY_CONTEXT_SYSTEM_PROMPT,
@@ -472,6 +473,51 @@ class LLMClient:
             self._logger.exception("Error generating lesson content")
             msg = "Failed to generate lesson content"
             raise RuntimeError(msg) from e
+
+    async def generate_execution_plan(
+        self,
+        *,
+        language: str,
+        source_code: str,
+        stderr: str | None = None,
+        stdin: str | None = None,
+        sandbox_state: dict[str, Any] | None = None,
+        user_id: str | UUID | None = None,
+    ) -> ExecutionPlan:
+        """Create a sandbox execution plan using Instructor-bound JSON output."""
+        payload: dict[str, Any] = {
+            "language": language,
+            "source_code": source_code[:6000],
+            "source_code_truncated": len(source_code) > 6000,
+            "stderr": (stderr or "")[:4000],
+            "stdin": (stdin or "")[:2000],
+            "sandbox_state": sandbox_state or {},
+        }
+
+        messages = [
+            {"role": "system", "content": E2B_EXECUTION_SYSTEM_PROMPT},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=False, indent=2)},
+        ]
+
+        try:
+            plan = await self.get_completion(
+                messages,
+                response_model=ExecutionPlan,
+                temperature=0.1,
+                max_tokens=2000,
+                user_id=user_id,
+            )
+
+            if not isinstance(plan, ExecutionPlan):
+                msg = "Expected ExecutionPlan from structured output"
+                raise TypeError(msg)
+
+            return plan
+
+        except Exception as exc:  # pragma: no cover - surfaced to caller
+            self._logger.exception("Failed to generate execution plan")
+            msg = "Execution planning failed"
+            raise RuntimeError(msg) from exc
 
     async def _save_conversation_to_memory(
         self, user_id: str | UUID, messages: list[dict[str, Any]], response: Any

@@ -50,19 +50,20 @@ Additional Context: {description}
 4. **Practical Focus**: Emphasize real-world applications and hands-on learning
 
 # Output Format
-Generate a JSON object with this structure:
 
 ```json
 {{
   "title": "Clear course title",
   "description": "What learners will achieve",
+  "setup_commands": ["apt-get update", "pip install numpy pandas matplotlib"],
   "modules": [
-    {{
+    {
       "title": "Module name",
       "description": "What will be learned",
       "lessons": [
         {{
           "title": "Lesson name",
+{{ ... }}
           "description": "Lesson content"
         }}
       ]
@@ -71,11 +72,21 @@ Generate a JSON object with this structure:
 }}
 ```
 
+**setup_commands**: Optional list of commands to install dependencies for code execution in this course.
+- Include ONLY if the course introduces tools that are not already available in the default E2B sandbox
+- Prefer package managers: `pip install <pkg>`, `npm install <pkg>`, `apt-get install -y <pkg>`
+- Keep the list minimal—only essential dependencies
+- Leave empty `[]` for:
+    - Theory-only courses with no runnable code
+    - Languages already bundled in the default E2B sandbox: `python`, `javascript`, `typescript`, `r`, `java`, `bash`
+- If a course requires another language runtime or framework, note that it must be provisioned via a custom E2B sandbox template and avoid adding setup commands here
+
 # Example:
 ```json
 {{
   "title": "Python Programming Mastery",
   "description": "Master Python from basics to advanced concepts",
+  "setup_commands": ["pip install numpy pandas matplotlib"],
   "modules": [
     {{
       "title": "Introduction to Python",
@@ -157,6 +168,44 @@ CODE BLOCK RULES (MUST FOLLOW EXACTLY):
 - NEVER use 4 or more backticks
 - ALWAYS specify the language after opening backticks: ```python, ```javascript, ```bash
 - EVERY code block MUST be closed - count your backticks!
+
+SELF-CONTAINED EXECUTABLE CODE BLOCKS (SMART DISPLAY):
+- All code blocks must be executable on their own without external context. ALWAYS include any required imports, constants, helper functions, sample data, or setup INSIDE the SAME code block.
+- Wrap non-essential scaffolding between language-appropriate hidden markers so the UI hides it from readers but still executes it:
+  - Python: `# hidden:start` ... `# hidden:end`
+  - JavaScript/TypeScript: `// hidden:start` ... `// hidden:end`
+  - Bash: `# hidden:start` ... `# hidden:end`
+- Only the lines outside the hidden markers will be shown to learners; everything inside hidden markers is still sent to the runner.
+- Use this to hide: long import lists, helper functions, constants (e.g., `COLOR_NAMES`, `UNITS`), dataset definitions, boilerplate setup, or repetitive code.
+- Keep hidden sections minimal and focused-only what's needed to make the visible snippet runnable.
+
+Examples (follow EXACTLY):
+
+```python
+# hidden:start
+import math
+COLOR_NAMES = ["black","brown","red","orange","yellow","green","blue","violet","grey","white"]
+UNITS = ["","kilo","mega","giga","tera","peta","exa","zetta","yotta","ronna"]
+def _label(colors):
+    value = (COLOR_NAMES.index(colors[0]) * 10 + COLOR_NAMES.index(colors[1])) * (10 ** COLOR_NAMES.index(colors[2]))
+    unit_index = 0
+    while value >= 1000:
+        value /= 1000
+        unit_index += 1
+    return f"{int(value)} {UNITS[unit_index]}"
+# hidden:end
+
+print(_label(["red","green","blue"]))
+```
+
+```javascript
+// hidden:start
+const DATA = Array.from({ length: 10 }, (_, i) => i + 1)
+function sum(arr){ return arr.reduce((a,b)=>a+b,0) }
+// hidden:end
+
+console.log(sum(DATA))
+```
 
 GENERAL MDX RULES:
 - Do NOT use curly braces {} anywhere except inside code block examples
@@ -688,3 +737,66 @@ Return the COMPLETE corrected content."""
 
 # Memory Context System Prompt Template
 MEMORY_CONTEXT_SYSTEM_PROMPT = "Personal Context: {memory_context}"
+
+
+# Code Execution Planning Prompt
+E2B_EXECUTION_SYSTEM_PROMPT = """
+You are Talimio's autonomous code execution planner operating inside an E2B Code Interpreter sandbox.
+
+The sandbox is a fresh Debian-based VM with internet access and these guaranteed facts:
+- You can run shell commands via `sandbox.commands.run` with default user privileges.
+- Python 3, Node.js/npm, Git, and common build essentials (gcc, make) are preinstalled.
+- You may install additional tooling at runtime using Debian packages (`apt-get install -y --no-install-recommends <pkg>`), language package managers, or project scaffolding commands.
+- File operations happen through an API that writes full files; overwrite files completely when updating them.
+- Sandboxes persist for the duration of the session (per user+lesson). Your installs and files remain available until the sandbox expires, so prefer idempotent steps.
+
+Your job: given a programming language, source code, and optional error output, produce a structured ExecutionPlan that:
+1. Creates any necessary project files (e.g., `main.go`, `package.json`, `composer.json`, build scripts).
+2. Installs every required runtime, compiler, or dependency using the simplest official toolchain.
+3. Runs the user code once, capturing stdout/stderr.
+4. Keeps steps minimal, idempotent, and safe.
+
+Creative freedom: you may combine languages or tooling (e.g., install PHP via apt, then Composer packages; compile Rust using cargo; leverage Go modules). Prefer official package repositories and language-native managers. Feel free to initialize projects (`npm init -y`, `cargo new --bin`, `go mod init`, `dotnet new console`) when that simplifies execution.
+
+Guardrails:
+- Never use `sudo`, `curl`, `wget`, or fetch remote scripts via pipes. Stick to package managers and official CLIs available through apt or language-specific installers.
+- Keep command count reasonable (aim for <= 12 install/setup/run commands total).
+- Use `apt-get update` only once per sandbox (create `/tmp/.apt_updated` or similar sentinel if needed).
+- Ensure commands are idempotent—rerunning the plan should not fail.
+- When setting environment variables, surface them in the `environment` map instead of exporting inline.
+
+Available installation tools (non-exhaustive):
+- System packages: `apt-get install -y --no-install-recommends <pkg>`
+- Python: `python -m pip install <package>` (pipx optional)
+- Node.js: `npm`, `yarn`, or `pnpm` (npm preinstalled)
+- Ruby: `gem install <package>`
+- PHP: `composer` (install via apt if needed)
+- Go: `go install`, `go build`, `go run`
+- Rust: `cargo`, `rustc`
+- Java: `jbang`, `sdkman`-installed JDKs (prefer `apt-get install default-jdk`)
+- .NET: `dotnet` CLI (install via apt `dotnet-sdk-8.0` etc.)
+- R: `R -q -e "install.packages('pkg', repos='https://cloud.r-project.org', quiet=TRUE)"`
+- Julia: `julia -e "using Pkg; Pkg.add('PkgName')"`
+
+Output strictly as JSON conforming to the `ExecutionPlan` schema:
+- `language`: normalized language string.
+- `summary`: short explanation of the plan (<= 2 sentences).
+- `files`: list of objects with `path`, `content`, and optional `executable` boolean.
+- `actions`: ordered list of steps. Each step MUST be one of:
+    - `{ "type": "command", "command": "...", "user": "sandbox" | "root" }`
+        - Use `user: "root"` only for package installs that require elevated permissions. Default to `sandbox` otherwise.
+    - `{ "type": "patch", "path": "...", "language": "python", "original": "...", "replacement": "...", "explanation": "why" }`
+        - Only emit patch actions for code snippets ≤ 100 lines. The replacement must be runnable as-is and include any imports/constants it needs.
+        - Preserve surrounding context so replacements succeed verbatim.
+        - Prefer a single patch when it fixes the error without additional commands.
+- `setup_commands`: preparatory commands (mkdir, chmod, sentinel creation).
+- `install_commands`: installation commands (package managers, toolchains).
+- `run_commands`: commands that execute or test the user code. Include exactly one primary run command. If a REPL or watcher is needed, explain in summary but run once.
+- `environment`: map of env vars required by subsequent commands.
+
+Important formatting rules:
+- Commands must be raw strings without placeholders or comments.
+- Do not wrap commands in shell conditionals. Use separate commands instead (e.g., `test -f ... || touch ...`).
+- Use absolute or sensible relative paths (`/home/user/`, project directories under `/home/user/project`, etc.).
+- Assume working directory is the sandbox root; create directories as needed.
+"""

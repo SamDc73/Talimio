@@ -50,6 +50,15 @@ class CourseContentService:
                     # Best-effort serialization
                     data["tags"] = json.dumps(data["tags"])  # type: ignore[arg-type]
 
+            # Convert setup_commands to JSON string if present
+            if "setup_commands" in data and data["setup_commands"] is not None:
+                if isinstance(data["setup_commands"], (list, tuple)):
+                    data["setup_commands"] = json.dumps(list(data["setup_commands"]))
+                elif isinstance(data["setup_commands"], str):
+                    pass  # Already JSON-encoded
+                else:
+                    data["setup_commands"] = json.dumps(data["setup_commands"])  # type: ignore[arg-type]
+
             # Create course instance
             course = Course(**data, user_id=user_id, created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
 
@@ -182,14 +191,20 @@ class CourseContentService:
             # Group lessons by module field if present, otherwise create single module
             module_map = {}
             for lesson in lessons:
-                module_name = lesson.get("module", "Core Concepts")
-                if module_name not in module_map:
-                    module_map[module_name] = {
+                raw_module_name = lesson.get("module")
+                if isinstance(raw_module_name, str):
+                    module_name = raw_module_name.strip() or "Core Concepts"
+                else:
+                    module_name = "Core Concepts"
+
+                normalized_key = module_name
+                if normalized_key not in module_map:
+                    module_map[normalized_key] = {
                         "title": module_name,
                         "description": f"Learn about {module_name.lower()}",
                         "lessons": []
                     }
-                module_map[module_name]["lessons"].append({
+                module_map[normalized_key]["lessons"].append({
                     "title": lesson.get("title", ""),
                     "description": lesson.get("description", "")
                 })
@@ -202,6 +217,7 @@ class CourseContentService:
             "title": title,
             "description": description or f"A course about {prompt}",
             "tags": course_data.get("tags", []),
+            "setup_commands": course_data.get("setup_commands", []),
             "modules": modules,
         }
 

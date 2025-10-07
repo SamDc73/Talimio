@@ -3,42 +3,12 @@ import React, { useEffect, useState } from "react"
 import * as runtime from "react/jsx-runtime"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import rehypeKatex from "rehype-katex"
-import rehypePrettyCode from "rehype-pretty-code"
 import rehypeSlug from "rehype-slug"
 import remarkEmoji from "remark-emoji"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
 import { mdxCache } from "@/lib/mdx-cache"
 
-// Configure rehype-pretty-code
-const prettyCodeOptions = {
-	theme: "catppuccin-latte",
-	keepBackground: true,
-	defaultLang: "text",
-	onVisitLine(node) {
-		if (!node.properties.className) {
-			node.properties.className = []
-		}
-	},
-	onVisitHighlightedLine(node) {
-		node.properties.className = ["line--highlighted"]
-	},
-	onVisitHighlightedWord(node) {
-		node.properties.className = ["word--highlighted"]
-	},
-	transformers: [
-		{
-			pre(node) {
-				const codeElement = node.children?.[0]
-				if (codeElement?.properties?.["data-language"]) {
-					node.properties = node.properties || {}
-					node.properties["data-language"] = codeElement.properties["data-language"]
-				}
-				return node
-			},
-		},
-	],
-}
 
 // MDX compilation options
 const mdxOptions = {
@@ -56,7 +26,6 @@ const mdxOptions = {
 	rehypePlugins: [
 		rehypeSlug, // Add IDs to headings
 		[rehypeAutolinkHeadings, { behavior: "wrap" }], // Link headings
-		[rehypePrettyCode, prettyCodeOptions], // Syntax highlighting
 		rehypeKatex, // Math rendering
 	],
 }

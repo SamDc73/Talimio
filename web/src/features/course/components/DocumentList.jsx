@@ -99,9 +99,8 @@ function DocumentList({
 
 			if (sortOrder === "asc") {
 				return aValue > bValue ? 1 : -1
-			} else {
-				return aValue < bValue ? 1 : -1
 			}
+			return aValue < bValue ? 1 : -1
 		})
 
 		return filtered
@@ -121,7 +120,7 @@ function DocumentList({
 		const k = 1024
 		const sizes = ["Bytes", "KB", "MB", "GB"]
 		const i = Math.floor(Math.log(bytes) / Math.log(k))
-		return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`
+		return `${Number.parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`
 	}
 
 	// Format date
@@ -150,7 +149,7 @@ function DocumentList({
 		return (
 			<Card className={className}>
 				<div className="p-6 text-center">
-					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4" />
 					<p className="text-gray-600">Loading documents...</p>
 				</div>
 			</Card>

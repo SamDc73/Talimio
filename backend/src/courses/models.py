@@ -34,6 +34,7 @@ class Course(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False)
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of tags
+    setup_commands: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of setup commands
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)

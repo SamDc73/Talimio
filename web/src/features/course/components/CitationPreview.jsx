@@ -13,7 +13,7 @@ import { ChevronRight, ExternalLink, Eye, FileText, Link2 } from "lucide-react"
 import { useEffect, useRef } from "react"
 import { Button } from "@/components/button"
 import { Card } from "@/components/card"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/tooltip"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 /**
  * InlineCitation - Small clickable citation number
@@ -286,7 +286,7 @@ export function CitationModal({ citation, isOpen, onClose, onViewDocument }) {
  * Helper function to parse text with inline citations
  * Converts [1], [2] patterns to InlineCitation components
  */
-export const parseCitationsInText = (text, citations = [], onCitationClick) => {
+export const parseCitationsInText = (text, citations, onCitationClick) => {
 	if (!text || citations.length === 0) return text
 
 	// Regular expression to find citation patterns like [1], [2], etc.
@@ -296,7 +296,7 @@ export const parseCitationsInText = (text, citations = [], onCitationClick) => {
 	let match = citationRegex.exec(text)
 
 	while (match !== null) {
-		const citationNumber = parseInt(match[1], 10)
+		const citationNumber = Number.parseInt(match[1], 10)
 		const citation = citations[citationNumber - 1] // Arrays are 0-indexed
 
 		// Add text before citation

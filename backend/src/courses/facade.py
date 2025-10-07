@@ -5,6 +5,7 @@ Single entry point for all course/roadmap-related operations.
 Coordinates internal course services and provides stable API for other modules.
 """
 
+import contextlib
 import json
 import logging
 from typing import Any
@@ -12,6 +13,7 @@ from uuid import UUID
 
 from src.ai.service import get_ai_service
 
+from .schemas import CourseResponse
 from .services.course_content_service import CourseContentService
 from .services.course_progress_service import CourseProgressService
 from .services.course_query_service import CourseQueryService
@@ -91,7 +93,26 @@ class CoursesFacade:
             # Use the content service which handles tags, progress, and AI processing
             course = await self._content_service.create_course(course_data, user_id)
 
-            return {"course": course, "success": True}
+            # Build CourseResponse from the created course
+            # Parse setup_commands from JSON string
+            setup_commands = []
+            if course.setup_commands:
+                with contextlib.suppress(Exception):
+                    setup_commands = json.loads(course.setup_commands)
+
+            course_response = CourseResponse.model_construct(
+                id=course.id,
+                title=course.title,
+                description=course.description,
+                tags=course.tags or "[]",
+                setup_commands=setup_commands,
+                archived=course.archived,
+                modules=[],  # Empty modules for newly created course
+                created_at=course.created_at,
+                updated_at=course.updated_at,
+            )
+
+            return {"course": course_response, "success": True}
 
         except Exception:
             logger.exception("Error creating course for user %s", user_id)
@@ -154,7 +175,26 @@ class CoursesFacade:
             # Update through content service which handles tags and reprocessing
             course = await self._content_service.update_course(course_id, update_data, user_id)
 
-            return {"course": course, "success": True}
+            setup_commands: list[str] = []
+            if course.setup_commands:
+                try:
+                    setup_commands = json.loads(course.setup_commands)
+                except Exception:
+                    logger.warning("Failed to parse setup_commands for course %s", course_id)
+
+            course_response = CourseResponse.model_construct(
+                id=course.id,
+                title=course.title,
+                description=course.description,
+                tags=course.tags or "[]",
+                setup_commands=setup_commands,
+                archived=course.archived,
+                modules=[],
+                created_at=course.created_at,
+                updated_at=course.updated_at,
+            )
+
+            return {"course": course_response, "success": True}
 
         except Exception:
             logger.exception("Error updating course %s", course_id)

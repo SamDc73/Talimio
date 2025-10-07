@@ -1,5 +1,6 @@
 """Course response builder service for constructing course responses."""
 
+import contextlib
 from typing import Any
 from uuid import UUID
 
@@ -79,11 +80,20 @@ class CourseResponseBuilder:
         -------
             Course response
         """
+        import json
+
+        # Parse setup_commands from JSON string
+        setup_commands = []
+        if roadmap.setup_commands:
+            with contextlib.suppress(Exception):
+                setup_commands = json.loads(roadmap.setup_commands)
+
         return CourseResponse(
             id=roadmap.id,
             title=roadmap.title,
             description=roadmap.description,
             tags=roadmap.tags or "[]",
+            setup_commands=setup_commands,
             archived=roadmap.archived,
             modules=modules_data,
             created_at=roadmap.created_at,
@@ -101,13 +111,22 @@ class CourseResponseBuilder:
         -------
             List of course responses
         """
+        import json
+
         course_responses = []
         for course in courses:
+            # Parse setup_commands from JSON string
+            setup_commands = []
+            if course.setup_commands:
+                with contextlib.suppress(Exception):
+                    setup_commands = json.loads(course.setup_commands)
+
             course_response = CourseResponse(
                 id=course.id,
                 title=course.title,
                 description=course.description,
                 tags=course.tags or "[]",
+                setup_commands=setup_commands,
                 archived=course.archived,
                 modules=[],  # Empty modules for list view
                 created_at=course.created_at,

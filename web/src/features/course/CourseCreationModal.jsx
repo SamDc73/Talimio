@@ -56,9 +56,7 @@ function CourseCreationModal({
 				)
 
 				if (uploadResults.errors.length > 0) {
-					console.log("Action completed")
 				} else {
-					console.log("Action completed")
 				}
 
 				if (onSuccess) onSuccess(newCourseData)
@@ -74,14 +72,12 @@ function CourseCreationModal({
 		if (ragDocuments.length > 0) {
 			uploadAndFinish()
 		} else {
-			// No documents to upload, just finish
-			console.log("Action completed")
 			if (onSuccess) onSuccess(newCourseData)
 			goToCoursePreview(newCourseData.id)
 			onClose()
 			setIsUploadingDocuments(false)
 		}
-	}, [newCourseData, documentsService, goToCoursePreview, onClose, onSuccess, ragDocuments, ragCourseTitle])
+	}, [newCourseData, documentsService, goToCoursePreview, onClose, onSuccess, ragDocuments])
 
 	// Handle file selection and metadata extraction
 	const _handleFileChange = async (e) => {
@@ -110,14 +106,10 @@ function CourseCreationModal({
 			if (metadata.description || metadata.summary) {
 				setCourseDescription(metadata.description || metadata.summary)
 			}
-
-			console.log("Document Analyzed")
 		} catch (_error) {
 			// If extraction fails, use filename as title
 			const titleFromFilename = file.name.replace(/\.[^/.]+$/, "")
 			setCourseTitle(titleFromFilename)
-
-			console.log("Metadata extraction failed")
 		} finally {
 			setIsExtractingMetadata(false)
 		}
@@ -216,15 +208,12 @@ function CourseCreationModal({
 
 			const courseData = await courseService.createCourseFromDocument(formData)
 
-			console.log("Action completed")
-
 			if (onSuccess) onSuccess(courseData)
 			goToCoursePreview(courseData.id)
 			onClose()
 		} catch (err) {
 			// Handle specific error cases
 			if (err.message?.includes("already exists")) {
-				console.log("Duplicate Course")
 			} else {
 				setError(err.message || "Failed to create course from document. Please try again.")
 			}

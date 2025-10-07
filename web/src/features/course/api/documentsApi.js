@@ -327,7 +327,23 @@ export function useDocumentsService(courseId = null) {
 				)
 			},
 		}),
-		[courseId] // Only courseId affects the service methods
+		[
+			courseId,
+			deleteDocument.error,
+			deleteDocument.execute,
+			deleteDocument.isLoading,
+			getDocument.error,
+			getDocument.execute,
+			getDocument.isLoading,
+			getDocuments.error,
+			getDocuments.execute,
+			getDocuments.isLoading,
+			searchDocuments.error,
+			searchDocuments.execute,
+			searchDocuments.isLoading,
+			uploadDocument.error,
+			uploadDocument.isLoading,
+		] // Only courseId affects the service methods
 	)
 }
 

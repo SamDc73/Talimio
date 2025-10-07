@@ -30,7 +30,6 @@ export function useLessonViewer(courseId) {
 					setError(
 						"Lesson content is not available. The system is attempting to generate it. Please try again in a moment."
 					)
-					console.log("Content Generation in Progress")
 				} else {
 					setLesson(lessonData)
 				}
@@ -47,7 +46,6 @@ export function useLessonViewer(courseId) {
 				}
 
 				setError(errorMessage)
-				console.log("Error Loading Lesson")
 			} finally {
 				setIsLoading(false)
 			}
@@ -58,9 +56,7 @@ export function useLessonViewer(courseId) {
 	/**
 	 * Generate a new lesson (requires moduleId, so disabled for now)
 	 */
-	const createLesson = useCallback(async () => {
-		console.log("Feature not available")
-	}, [])
+	const createLesson = useCallback(async () => {}, [])
 
 	/**
 	 * Clear the current lesson
