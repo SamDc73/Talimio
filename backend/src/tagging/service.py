@@ -409,8 +409,10 @@ class TaggingService:
             ),
         )
 
-        if existing.scalar_one_or_none():
-            return existing.scalar_one()
+        # Read the scalar exactly once; scalar_one_or_none() consumes the result
+        existing_assoc = existing.scalar_one_or_none()
+        if existing_assoc is not None:
+            return existing_assoc
 
         # Create new association
         association = TagAssociation(

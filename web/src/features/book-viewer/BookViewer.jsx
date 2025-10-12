@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { useEffect, useRef } from "react"
 import { useParams } from "react-router-dom"
+import ErrorBoundary from "@/components/ErrorBoundary"
 import { BookHeader } from "@/components/header/BookHeader"
 import BookSidebar from "@/components/sidebar/BookSidebar"
 import {
@@ -10,114 +12,116 @@ import {
 	useSidebarOpen,
 	useToggleSidebar,
 } from "@/hooks/book-hooks"
-import { booksApi } from "@/services/booksApi"
-import EpubErrorBoundary from "./components/EPUBErrorBoundary"
+import { booksApi } from "./api/booksApi"
 import EpubViewer from "./components/EPUBViewer"
-import PdfErrorBoundary from "./components/PDFErrorBoundary"
 import PdfViewer from "./components/PDFViewer"
 
-// CSS removed - using Tailwind classes
+function BookViewerStatus({ tone, title, description }) {
+	if (tone === "loading") {
+		return (
+			<div className="flex h-screen w-full items-center justify-center bg-white">
+				<div className="text-xl text-gray-500">{title}</div>
+			</div>
+		)
+	}
+
+	return (
+		<div className="flex h-screen w-full flex-col items-center justify-center bg-white px-8 text-center text-gray-900">
+			<h2 className="mb-4 text-2xl text-red-500">{title}</h2>
+			{description ? <p className="text-gray-500">{description}</p> : null}
+		</div>
+	)
+}
 
 function BookViewerContent() {
 	const { bookId } = useParams()
-	const [book, setBook] = useState(null)
-	const [loading, setLoading] = useState(true)
-	const [error, setError] = useState(null)
-	const pdfViewerRef = useRef(null)
+	const viewerApiRef = useRef(null)
 
-	// Debug bookId
-	useEffect(() => {}, [])
-
-	// Get zoom and page from reading state using custom hooks
 	const zoomLevel = useBookZoomLevel(bookId)
 	const currentPage = useBookCurrentPage(bookId)
 	const totalPages = useBookTotalPages(bookId)
-
-	// Get store actions
 	const { setBookZoom } = useBookActions()
-
-	// Sidebar state management - use proper selectors
 	const sidebarOpen = useSidebarOpen()
 	const toggleSidebar = useToggleSidebar()
+	const bookUrl = bookId ? `/api/v1/books/${bookId}/content` : null
 
-	// Book URL for PDF/EPUB viewers
-	// Use /content endpoint which proxies through backend to avoid CORS issues
-	const bookUrl = `/api/v1/books/${bookId}/content`
+	const {
+		data: book,
+		isLoading,
+		isError,
+		error,
+	} = useQuery({
+		queryKey: ["book", bookId],
+		queryFn: () => booksApi.getBook(bookId),
+		enabled: Boolean(bookId),
+		staleTime: 60 * 1000,
+		gcTime: 5 * 60 * 1000,
+		// Prevent background refetches and retry storms causing 429
+		refetchOnWindowFocus: false,
+		retry: false,
+	})
 
 	useEffect(() => {
-		const fetchBook = async () => {
-			try {
-				setLoading(true)
-				const data = await booksApi.getBook(bookId)
-				setBook(data)
-			} catch (err) {
-				setError(err.message)
-			} finally {
-				setLoading(false)
-			}
-		}
-		if (bookId) {
-			fetchBook()
-		}
-	}, [bookId]) // Only depend on bookId
+		void bookId
+		viewerApiRef.current = null
+	}, [bookId])
 
-	// Zoom handlers
 	const handleZoomIn = () => {
-		const newZoom = Math.min(300, zoomLevel + 25)
-		setBookZoom(bookId, newZoom)
+		viewerApiRef.current?.zoomIn?.()
 	}
 
 	const handleZoomOut = () => {
-		const newZoom = Math.max(50, zoomLevel - 25)
-		setBookZoom(bookId, newZoom)
+		viewerApiRef.current?.zoomOut?.()
 	}
 
 	const handleFitToScreen = () => {
-		if (pdfViewerRef.current?.fitToScreen) {
-			pdfViewerRef.current.fitToScreen()
-		}
+		viewerApiRef.current?.fitToScreen?.()
 	}
 
 	const handleChapterClick = (pageNumber) => {
-		if (pdfViewerRef.current?.goToPage) {
-			pdfViewerRef.current.goToPage(pageNumber)
-		}
+		viewerApiRef.current?.goToPage?.(pageNumber)
 	}
 
-	if (loading) {
-		return (
-			<div className="w-full h-screen flex items-center justify-center bg-white">
-				<div className="text-xl text-gray-500">Loading book...</div>
-			</div>
-		)
+	const handleRegisterApi = (api) => {
+		viewerApiRef.current = api
 	}
 
-	if (error) {
-		return (
-			<div className="w-full h-screen flex flex-col items-center justify-center bg-white text-gray-900 px-8 text-center">
-				<h2 className="text-2xl mb-4 text-red-500">Error loading book</h2>
-				<p className="text-gray-500">{error}</p>
-			</div>
-		)
+	if (!bookId) {
+		return <BookViewerStatus tone="error" title="Missing book identifier" />
 	}
 
-	if (!book) {
-		return (
-			<div className="w-full h-screen flex flex-col items-center justify-center bg-white text-gray-900 px-8 text-center">
-				<h2 className="text-2xl mb-4 text-red-500">Book not found</h2>
-			</div>
-		)
+	if (isLoading) {
+		return <BookViewerStatus tone="loading" title="Loading book..." />
 	}
 
-	const fileType = book.fileType?.toLowerCase()
+	if (isError) {
+		const message = error instanceof Error ? error.message : "Failed to load book"
+		return <BookViewerStatus tone="error" title="Error loading book" description={message} />
+	}
 
-	// Font size handlers for EPUB
+	if (!book || !bookUrl) {
+		return <BookViewerStatus tone="empty" title="Book not found" />
+	}
+
+	const fileType = book.fileType?.toLowerCase() ?? ""
+	const isPdf = fileType === "pdf"
+	const isEpub = fileType === "epub"
+	const fallbackTotalPages = book.totalPages ?? 0
+	const sidebarTotalPages = totalPages || fallbackTotalPages
+	const progressPercentage = sidebarTotalPages ? Math.round(((currentPage || 0) / sidebarTotalPages) * 100) : 0
+
 	const handleFontIncrease = () => {
+		if (!isEpub) {
+			return
+		}
 		const newSize = Math.min(200, zoomLevel + 25)
 		setBookZoom(bookId, newSize)
 	}
 
 	const handleFontDecrease = () => {
+		if (!isEpub) {
+			return
+		}
 		const newSize = Math.max(50, zoomLevel - 25)
 		setBookZoom(bookId, newSize)
 	}
@@ -129,8 +133,8 @@ function BookViewerContent() {
 				bookId={bookId}
 				onToggleSidebar={toggleSidebar}
 				isSidebarOpen={sidebarOpen}
-				showZoomControls={fileType === "pdf"}
-				showFontControls={fileType === "epub"}
+				showZoomControls={isPdf}
+				showFontControls={isEpub}
 				zoomLevel={zoomLevel}
 				fontSize={zoomLevel}
 				onZoomIn={handleZoomIn}
@@ -140,32 +144,31 @@ function BookViewerContent() {
 				onFontDecrease={handleFontDecrease}
 			/>
 
-			{sidebarOpen && (
+			{sidebarOpen ? (
 				<BookSidebar
-					book={{ ...book, totalPages: totalPages || book.totalPages }}
+					book={{ ...book, totalPages: sidebarTotalPages }}
 					bookId={bookId}
 					onChapterClick={handleChapterClick}
 					currentPage={currentPage}
-					progressPercentage={totalPages ? Math.round((currentPage / totalPages) * 100) : 0}
+					progressPercentage={progressPercentage}
 				/>
-			)}
+			) : null}
 
 			<main className={`flex-1 transition-all duration-300 ${sidebarOpen ? "ml-64" : "ml-0"} pt-16`}>
 				<div className="h-full overflow-hidden">
-					{fileType === "pdf" ? (
-						<PdfErrorBoundary>
-							<PdfViewer ref={pdfViewerRef} url={bookUrl} zoom={zoomLevel} bookId={bookId} />
-						</PdfErrorBoundary>
-					) : fileType === "epub" ? (
-						<EpubErrorBoundary>
-							<EpubViewer url={bookUrl} bookId={bookId} bookInfo={book} />
-						</EpubErrorBoundary>
-					) : (
-						<div className="w-full h-screen flex flex-col items-center justify-center bg-white text-gray-900 px-8 text-center">
-							<h2 className="text-2xl mb-4 text-red-500">Unsupported file format</h2>
-							<p>Only PDF and EPUB files are supported.</p>
-						</div>
-					)}
+					<ErrorBoundary>
+						{isPdf ? (
+							<PdfViewer url={bookUrl} bookId={bookId} registerApi={handleRegisterApi} />
+						) : isEpub ? (
+							<EpubViewer url={bookUrl} bookId={bookId} />
+						) : (
+							<BookViewerStatus
+								tone="empty"
+								title="Unsupported file format"
+								description="Only PDF and EPUB files are supported."
+							/>
+						)}
+					</ErrorBoundary>
 				</div>
 			</main>
 		</div>

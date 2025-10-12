@@ -1,4 +1,18 @@
+import { useEffect, useState } from "react"
 import useAppStore from "@/stores/useAppStore"
+
+const EMPTY_READING_STATE = Object.freeze({
+	currentPage: 1,
+	totalPages: 0,
+	zoomLevel: 100,
+	scrollPosition: { x: 0, y: 0 },
+	epubState: {
+		location: null,
+		fontSize: 100,
+		lastUpdated: null,
+	},
+	lastUpdated: null,
+})
 
 // Book zoom level hook
 export const useBookZoomLevel = (bookId) => {
@@ -54,23 +68,9 @@ export const useSidebarOpen = () => {
 export const useToggleSidebar = () => {
 	return useAppStore((state) => state.toggleSidebar)
 }
-
 // Book reading state hook
 export const useBookReadingState = (bookId) => {
-	return useAppStore(
-		(state) =>
-			state.books.readingState[bookId] || {
-				currentPage: 1,
-				totalPages: 0,
-				zoomLevel: 100,
-				scrollPosition: { x: 0, y: 0 },
-				epubState: {
-					location: null,
-					fontSize: 100,
-					lastUpdated: null,
-				},
-			}
-	)
+	return useAppStore((state) => state.books.readingState[bookId] || EMPTY_READING_STATE)
 }
 
 // Book progress hook
@@ -86,4 +86,25 @@ export const useBookLoading = (bookId) => {
 // Book error state hook
 export const useBookError = (bookId) => {
 	return useAppStore((state) => state.books.error[bookId] || null)
+}
+
+export const useBookStoreHydrated = () => {
+	const [hydrated, setHydrated] = useState(() => useAppStore.persist?.hasHydrated?.() ?? false)
+
+	useEffect(() => {
+		if (useAppStore.persist?.hasHydrated?.()) {
+			setHydrated(true)
+			return
+		}
+
+		const unsub = useAppStore.persist?.onFinishHydration?.(() => {
+			setHydrated(true)
+		})
+
+		return () => {
+			unsub?.()
+		}
+	}, [])
+
+	return hydrated
 }

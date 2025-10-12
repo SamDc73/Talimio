@@ -166,7 +166,6 @@
 
 /* Import third-party styles */
 @import "katex/dist/katex.min.css";
-@import "react-pdf-highlighter/dist/style.css";
 
 /* Auth animations */
 @keyframes slideUp {

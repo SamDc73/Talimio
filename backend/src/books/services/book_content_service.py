@@ -9,8 +9,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book
-from src.database.session import async_session_maker
-from src.storage.factory import get_storage_provider
 
 
 logger = logging.getLogger(__name__)
@@ -19,84 +17,77 @@ logger = logging.getLogger(__name__)
 class BookContentService:
     """Book service handling book-specific content operations."""
 
-    def __init__(self, session: AsyncSession | None = None) -> None:
+    def __init__(self, session: AsyncSession, user_id: UUID) -> None:
+        """Initialize with user context for security isolation."""
         self.session = session
+        self.user_id = user_id
 
-    async def create_book(self, data: dict, user_id: UUID) -> Book:
-        """Create a new book."""
-        async with async_session_maker() as session:
-            # Convert tags to JSON if present
-            if "tags" in data and data["tags"] is not None:
-                data["tags"] = json.dumps(data["tags"])
+    async def create_book(self, data: dict) -> Book:
+        """Create a new book with user isolation."""
+        # Convert tags to JSON if present
+        if "tags" in data and data["tags"] is not None:
+            data["tags"] = json.dumps(data["tags"])
 
-            # Create book instance
-            book = Book(**data, user_id=user_id, created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
+        existing_book: Book | None = None
+        file_hash = data.get("file_hash")
+        if file_hash:
+            # Check for duplicate in user's library only
+            result = await self.session.execute(
+                select(Book).where(Book.file_hash == file_hash, Book.user_id == self.user_id)
+            )
+            existing_book = result.scalar_one_or_none()
 
-            session.add(book)
-            await session.commit()
-            await session.refresh(book)
+        if existing_book is not None:
+            await self.session.refresh(existing_book)
+            logger.info(
+                "Reusing existing book",
+                extra={"user_id": str(self.user_id), "book_id": str(existing_book.id)}
+            )
+            return existing_book
 
-            logger.info(f"Created book {book.id} for user {user_id}")
-            return book
+        # Create book instance
+        book = Book(**data, user_id=self.user_id, created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
 
-    async def update_book(self, book_id: UUID, data: dict, user_id: UUID) -> Book:
-        """Update an existing book."""
-        async with async_session_maker() as session:
-            # Get the book
-            query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
-            result = await session.execute(query)
-            book = result.scalar_one_or_none()
+        self.session.add(book)
+        await self.session.commit()
+        await self.session.refresh(book)
 
-            if not book:
-                msg = f"Book {book_id} not found"
-                raise ValueError(msg)
+        logger.info(
+            "Book created",
+            extra={"user_id": str(self.user_id), "book_id": str(book.id), "title": book.title}
+        )
+        return book
 
-            # Update fields
-            for field, value in data.items():
-                if (field == "tags" and value is not None) or (field == "table_of_contents" and value is not None):
-                    setattr(book, field, json.dumps(value))
-                else:
-                    setattr(book, field, value)
+    async def update_book(self, book_id: UUID, data: dict) -> Book:
+        """Update an existing book with ownership validation."""
+        # Get the book with user isolation
+        query = select(Book).where(Book.id == book_id, Book.user_id == self.user_id)
+        result = await self.session.execute(query)
+        book = result.scalar_one_or_none()
 
-            book.updated_at = datetime.now(UTC)
+        if not book:
+            logger.warning(
+                "BOOK_ACCESS_DENIED",
+                extra={"user_id": str(self.user_id), "book_id": str(book_id), "operation": "update"}
+            )
+            msg = f"Book {book_id} not found"
+            raise ValueError(msg)
 
-            await session.commit()
-            await session.refresh(book)
+        # Update fields
+        for field, value in data.items():
+            if (field == "tags" and value is not None) or (field == "table_of_contents" and value is not None):
+                setattr(book, field, json.dumps(value))
+            else:
+                setattr(book, field, value)
 
-            logger.info(f"Updated book {book.id}")
-            return book
+        book.updated_at = datetime.now(UTC)
 
-    async def delete_book(self, book_id: UUID, user_id: UUID) -> bool:
-        """Delete a book."""
-        async with async_session_maker() as session:
-            # Get the book
-            query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
-            result = await session.execute(query)
-            book = result.scalar_one_or_none()
+        await self.session.commit()
+        await self.session.refresh(book)
 
-            if not book:
-                return False
+        logger.info(
+            "Book updated",
+            extra={"user_id": str(self.user_id), "book_id": str(book.id)}
+        )
+        return book
 
-            # Store file path before deletion
-            file_path = book.file_path
-
-            # Delete the book (cascade will handle related records)
-            await session.delete(book)
-            await session.commit()
-
-            # Delete file from storage (R2 or local)
-            try:
-                storage = get_storage_provider()
-
-                # Delete the main book file
-                if file_path:
-                    await storage.delete(file_path)
-                    logger.info(f"Deleted book file from storage: {file_path}")
-
-            except Exception as e:
-                # Log error but don't fail the deletion
-                # The database record is already deleted
-                logger.exception(f"Failed to delete file from storage for book {book_id}: {e}")
-
-            logger.info(f"Deleted book {book_id}")
-            return True

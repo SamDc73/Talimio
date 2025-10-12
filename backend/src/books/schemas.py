@@ -5,28 +5,6 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class BookBase(BaseModel):
-    """Base schema for book data."""
-
-    model_config = ConfigDict(populate_by_name=True)
-
-    title: str = Field(..., max_length=500)
-    subtitle: str | None = Field(None, max_length=500)
-    author: str = Field(..., max_length=200)
-    description: str | None = None
-    isbn: str | None = Field(None, max_length=20)
-    language: str | None = Field(None, max_length=10)
-    publication_year: int | None = Field(None, ge=1000, le=2030, alias="publicationYear")
-    publisher: str | None = Field(None, max_length=200)
-    tags: list[str] = Field(default_factory=list)
-
-
-class BookCreate(BookBase):
-    """Schema for creating a book."""
-
-    file_type: str = Field(..., pattern="^(pdf|epub)$", alias="fileType")
-
-
 class BookUpdate(BaseModel):
     """Schema for updating a book."""
 
@@ -161,19 +139,36 @@ class BookProgressResponse(BookProgressBase):
 
     @field_validator("bookmarks", mode="before")
     @classmethod
-    def validate_bookmarks(cls, v: str | list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-        """Convert bookmarks from JSON string to list."""
+    def validate_bookmarks(cls, v: str | list[int] | list[Any] | None) -> list[int]:
+        """Normalize bookmarks to a list of integers.
+
+        Accepts:
+        - JSON string representing a list
+        - A list of ints/strings (strings will be coerced where possible)
+        - None (returns empty list)
+        """
         if v is None:
             return []
+        # If provided as JSON string, parse first
         if isinstance(v, str):
             import json
 
             try:
-                return json.loads(v)
+                parsed = json.loads(v)
             except (json.JSONDecodeError, TypeError):
                 return []
+            v = parsed
+        # Coerce any list-like into list[int]
         if isinstance(v, list):
-            return v
+            result: list[int] = []
+            for item in v:
+                try:
+                    # Allow numeric strings to be coerced
+                    result.append(int(item))
+                except (TypeError, ValueError):
+                    # Skip non-coercible entries to maintain type safety
+                    continue
+            return result
         return []
 
     updated_at: datetime | None = Field(None, alias="updatedAt")  # None if not yet saved
@@ -194,18 +189,6 @@ class BookProgressResponse(BookProgressBase):
         if isinstance(v, dict):
             return v
         return {}
-
-    @property
-    def bookmarks_list(self) -> list[int]:
-        """Convert bookmarks JSON string to list."""
-        if isinstance(self.bookmarks, str):
-            import json
-
-            try:
-                return json.loads(self.bookmarks)
-            except (json.JSONDecodeError, TypeError):
-                return []
-        return self.bookmarks or []
 
 
 class BookWithProgress(BookResponse):
@@ -255,12 +238,6 @@ class BookChapterBatchStatusUpdate(BaseModel):
 
     chapter_id: UUID = Field(..., alias="chapterId")
     status: str = Field(..., pattern="^(not_started|in_progress|completed)$")
-
-
-class BookChapterBatchUpdateRequest(BaseModel):
-    """Schema for batch chapter status update request."""
-
-    updates: list[BookChapterBatchStatusUpdate] = Field(..., min_length=1, max_length=50)
 
 
 # Update forward references

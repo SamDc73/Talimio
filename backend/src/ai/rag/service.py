@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.exc import StaleDataError
 
 from src.ai.rag.chunker import chunk_text_async
 from src.ai.rag.config import rag_config
@@ -320,6 +321,12 @@ class RAGService:
 
             # Note: We do not delete the original book file here; keep for user access
 
+        except StaleDataError:
+            # Book row was deleted between load and commit; treat as benign and exit quietly
+            with contextlib.suppress(Exception):
+                await session.rollback()
+            logger.info("Book %s was deleted during processing; aborting embedding", book_id)
+            return
         except Exception:
             logger.exception("Failed to process book %s", book_id)
             # Best-effort mark failed

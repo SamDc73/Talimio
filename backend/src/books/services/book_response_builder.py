@@ -2,7 +2,6 @@
 
 import json
 import logging
-from typing import Any
 
 from src.books.models import Book, BookChapter, BookProgress
 from src.books.schemas import (
@@ -101,11 +100,6 @@ class BookResponseBuilder:
         return BookChapterResponse.model_validate(chapter)
 
     @staticmethod
-    def build_progress_response(progress: BookProgress) -> BookProgressResponse:
-        """Convert BookProgress model to BookProgressResponse."""
-        return BookProgressResponse.model_validate(progress)
-
-    @staticmethod
     def build_book_list(books: list[Book]) -> list[BookResponse]:
         """Convert list of Book models to list of BookResponse."""
         return [BookResponseBuilder.build_book_response(book) for book in books]
@@ -136,62 +130,4 @@ class BookResponseBuilder:
             result.append(toc_item)
         return result
 
-    @staticmethod
-    def serialize_tags(tags: list[str]) -> str:
-        """Serialize tags list to JSON string."""
-        return json.dumps(tags)
 
-    @staticmethod
-    def deserialize_tags(tags_json: str | None) -> list[str]:
-        """Deserialize tags from JSON string."""
-        if not tags_json:
-            return []
-        try:
-            return json.loads(tags_json)
-        except (json.JSONDecodeError, TypeError):
-            return []
-
-    @staticmethod
-    def serialize_toc(toc: list[dict] | None) -> str | None:
-        """Serialize table of contents to JSON string."""
-        if not toc:
-            return None
-        try:
-            return json.dumps(toc)
-        except (TypeError, ValueError):
-            return None
-
-    @staticmethod
-    def deserialize_toc(toc_json: str | None) -> list[dict] | None:
-        """Deserialize table of contents from JSON string."""
-        if not toc_json:
-            return None
-        try:
-            return json.loads(toc_json)
-        except (json.JSONDecodeError, TypeError):
-            return None
-
-    @staticmethod
-    def build_error_response(
-        error_code: str, error_message: str, details: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
-        """Build consistent error response format."""
-        response = {
-            "error": error_code,
-            "message": error_message,
-            "timestamp": None,  # This would be set by the framework
-        }
-        if details:
-            response["details"] = details
-        return response
-
-    @staticmethod
-    def build_success_response(data: Any, message: str | None = None) -> dict[str, Any]:
-        """Build consistent success response format."""
-        response = {
-            "success": True,
-            "data": data,
-        }
-        if message:
-            response["message"] = message
-        return response

@@ -943,13 +943,27 @@ const useAppStore = create(
 				name: "learning-roadmap-storage",
 				storage: createJSONStorage(() => localStorage),
 				partialize: (state) => ({
-					// Only persist these parts of the state
-					books: state.books,
-					videos: state.videos,
-					courses: state.courses,
+					// Only persist what's needed across sessions
+					// Don't persist loading/error (ephemeral)
+					books: {
+						progress: state.books.progress,
+						readingState: state.books.readingState,
+						// Don't persist: loading, error (ephemeral - reset on page load)
+					},
+					videos: {
+						progress: state.videos.progress,
+						playbackState: state.videos.playbackState,
+						// Don't persist: loading, error (ephemeral)
+					},
+					courses: {
+						progress: state.courses.progress,
+						activeCourseId: state.courses.activeCourseId,
+						lastViewedCourseId: state.courses.lastViewedCourseId,
+						// Don't persist: loading, error (ephemeral)
+					},
 					preferences: state.preferences,
 					user: state.user,
-					// Don't persist UI state or tokens (using httpOnly cookies)
+					// Don't persist tokens - using httpOnly cookies
 				}),
 				version: 4, // Increment version to trigger migration
 				migrate: (persistedState, version) => {

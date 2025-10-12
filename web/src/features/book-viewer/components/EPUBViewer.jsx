@@ -1,7 +1,6 @@
-import { useCallback, useContext, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { ReactReader } from "react-reader"
-import { AuthContext } from "@/contexts/AuthContext"
-import { useBookActions, useBookZoomLevel } from "@/hooks/book-hooks"
+import { useBookActions, useBookReadingState, useBookZoomLevel } from "@/hooks/book-hooks"
 
 function EPUBViewer({ url, bookId, onProgressUpdate }) {
 	const [location, setLocation] = useState(null)
@@ -12,17 +11,8 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState(null)
 
-	// Auth context for user-scoped persistence
-	const { user, authMode } = useContext(AuthContext)
-
-	// Create a user-scoped localStorage key for EPUB location persistence
-	const createUserScopedKey = useCallback(
-		(bookId) => {
-			const scopeSuffix = user?.id ? user.id : authMode === "none" ? "single" : "anon"
-			return `epub-location-${bookId}-${scopeSuffix}`
-		},
-		[user?.id, authMode]
-	)
+	// Zustand reading state for initial EPUB location
+	const readingState = useBookReadingState(bookId)
 
 	// Get font size from store (use zoomLevel as fontSize for EPUBs)
 	const fontSize = useBookZoomLevel(bookId)
@@ -35,16 +25,8 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 		(epubcifi) => {
 			setLocation(epubcifi)
 
-			// Save location to localStorage for persistence
+			// Persist location and progress via store
 			if (firstRenderDone && epubcifi) {
-				const newKey = createUserScopedKey(bookId)
-				localStorage.setItem(newKey, epubcifi)
-				// Cleanup legacy unscoped key after migration
-				const oldKey = `epub-location-${bookId}`
-				if (localStorage.getItem(oldKey)) {
-					localStorage.removeItem(oldKey)
-				}
-
 				// Get progress percentage from rendition if available
 				let displayPercentage
 				if (renditionRef.current) {
@@ -62,7 +44,7 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 				}
 			}
 		},
-		[firstRenderDone, bookId, onProgressUpdate, onEpubLocationChange, createUserScopedKey]
+		[firstRenderDone, bookId, onProgressUpdate, onEpubLocationChange]
 	)
 
 	// Apply font size changes
@@ -127,27 +109,15 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 
 			// Navigation is now hidden via the styles prop in ReactReader
 
-			// Get saved location
-			// Prefer user-scoped key; migrate legacy unscoped if present
-			const scopedKey = createUserScopedKey(bookId)
-			let savedLocation = localStorage.getItem(scopedKey)
-			if (!savedLocation) {
-				const oldKey = `epub-location-${bookId}`
-				const legacyLocation = localStorage.getItem(oldKey)
-				if (legacyLocation) {
-					// Migrate to scoped key and remove legacy
-					localStorage.setItem(scopedKey, legacyLocation)
-					localStorage.removeItem(oldKey)
-					savedLocation = legacyLocation
-				}
-			}
+			// Get saved location from store (Zustand)
+			const savedLocation = readingState?.epubState?.location
 			if (savedLocation) {
 				setLocation(savedLocation)
 			}
 
 			setFirstRenderDone(true)
 		},
-		[applyFontSize, bookId, createUserScopedKey]
+		[applyFontSize, readingState]
 	)
 
 	// Update font size when it changes
@@ -207,13 +177,21 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 					throw new Error(`Failed to load EPUB: ${response.statusText}`)
 				}
 
-				// Verify content type (optional)
-				const _contentType = response.headers.get("content-type")
-
-				// Get the blob with correct MIME type
+				// Verify content type and binary signature (must be a ZIP for EPUB)
+				const contentType = response.headers.get("content-type") || ""
 				const blob = await response.blob()
+				const head = await blob.slice(0, 4).arrayBuffer()
+				const b = new Uint8Array(head)
+				const looksLikeZip =
+					b.length >= 4 && b[0] === 0x50 && b[1] === 0x4b && (b[2] === 0x03 || b[2] === 0x05 || b[2] === 0x07)
 
-				// Create a new blob with explicit EPUB MIME type if needed
+				if (!looksLikeZip) {
+					throw new Error(
+						`Invalid EPUB response (not a ZIP). content-type=${contentType || "unknown"}. Ensure the URL points to the binary .epub download endpoint.`
+					)
+				}
+
+				// Normalize MIME to application/epub+zip for downstream consumers
 				const epubBlob =
 					blob.type === "application/epub+zip" ? blob : new Blob([blob], { type: "application/epub+zip" })
 
@@ -222,10 +200,10 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 					URL.revokeObjectURL(objectUrlRef.current)
 				}
 
-				// Create a blob URL that react-reader can use
-				const blobUrl = URL.createObjectURL(epubBlob)
-				objectUrlRef.current = blobUrl
-				setEpubUrl(blobUrl)
+				// Provide a Blob URL to ReactReader/epub.js for broad compatibility
+				const objectUrl = URL.createObjectURL(epubBlob)
+				objectUrlRef.current = objectUrl
+				setEpubUrl(objectUrl)
 				setLoading(false)
 			} catch (err) {
 				setError(err.message)
@@ -296,11 +274,10 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 							width: "100%",
 							height: "100%",
 							allowScriptedContent: false,
-							method: "default",
 						}}
 						epubInitOptions={{
 							openAs: "epub",
-							encoding: "base64",
+							replacements: "blobUrl",
 						}}
 						styles={{
 							container: {

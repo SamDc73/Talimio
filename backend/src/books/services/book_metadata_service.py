@@ -1,6 +1,5 @@
 """Book metadata extraction utilities."""
 
-import json
 import logging
 
 import fitz  # PyMuPDF
@@ -219,63 +218,15 @@ class BookMetadataService:
         return result
 
     @staticmethod
-    def serialize_toc_for_db(table_of_contents: list[dict] | None) -> str | None:
-        """
-        Serialize table of contents for database storage.
-
-        Args:
-            table_of_contents: TOC list from extraction
-
-        Returns
-        -------
-            JSON string for database storage or None
-        """
-        if table_of_contents:
-            return json.dumps(table_of_contents)
-        return None
-
-    @staticmethod
-    def deserialize_toc_from_db(toc_json: str | None) -> list[dict] | None:
-        """
-        Deserialize table of contents from database.
-
-        Args:
-            toc_json: JSON string from database
-
-        Returns
-        -------
-            TOC list or None
-        """
-        if not toc_json:
-            return None
-
-        try:
-            toc_data = json.loads(toc_json)
-            if isinstance(toc_data, list):
-                return toc_data
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("Failed to deserialize TOC from database")
-
-        return None
-
-    @staticmethod
     def convert_toc_to_schema(toc_data: list[dict]) -> list:
         """
-        Convert table of contents data to schema objects.
+        Convert table of contents data to schema-friendly dicts.
 
-        Note: Returns list of dicts for now to avoid circular imports.
-        The schema conversion should be done at the API layer.
-
-        Args:
-            toc_data: List of TOC dictionaries
-
-        Returns
-        -------
-            List of processed TOC items with children
+        Note: Returns list of dicts to avoid circular imports; schema conversion is at API layer.
         """
-        result = []
+        result: list[dict] = []
         for item in toc_data:
-            children = []
+            children: list[dict] = []
             if item.get("children"):
                 children = BookMetadataService.convert_toc_to_schema(item["children"])
 

@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from src.ai.rag.service import RAGService
 from src.auth import CurrentAuth
 from src.books.models import Book
-from src.database.session import DbSession, async_session_maker
+from src.database.session import async_session_maker
 from src.middleware.security import books_rate_limit
 from src.storage.factory import get_storage_provider
 
@@ -31,17 +31,15 @@ from .schemas import (
     BookWithProgress,
 )
 from .services.book_metadata_service import BookMetadataService
+from .services.book_response_builder import BookResponseBuilder
 
 
 logger = logging.getLogger(__name__)
 
-# Create facade instance
-books_facade = BooksFacade()
-
 router = APIRouter(prefix="/api/v1/books", tags=["books"], dependencies=[Depends(books_rate_limit)])
 
 
-async def _embed_book_background(book_id: str) -> None:
+async def _embed_book_background(book_id: UUID) -> None:
     """Background task to embed a book."""
     try:
         async with async_session_maker() as session:
@@ -108,8 +106,9 @@ async def list_books(
 ) -> BookListResponse:
     """List all books with pagination and optional filtering."""
     try:
-        # Get books through facade
-        result = await books_facade.get_user_books(auth.user_id, include_progress=True)
+        # Initialize facade with user context
+        facade = BooksFacade(auth.session, auth.user_id)
+        result = await facade.get_user_books(include_progress=True)
 
         if not result.get("success"):
             raise HTTPException(
@@ -157,82 +156,11 @@ async def list_books(
 async def get_book_endpoint(book_id: UUID, auth: CurrentAuth) -> BookWithProgress:
     """Get book details with progress information."""
     try:
-        result = await books_facade.get_book_with_progress(book_id, auth.user_id)
-
-        if not result.get("success"):
-            if "not found" in result.get("error", "").lower():
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result.get("error", "Failed to get book")
-            )
-
-        book = result.get("book", {})
-        progress = result.get("progress", {})
-
-        # Convert to BookWithProgress format
-        # Create a proper BookResponse first
-        book_response = BookResponse(
-            id=book.get("id"),
-            title=book.get("title"),
-            author=book.get("author"),
-            subtitle=book.get("subtitle"),
-            description=book.get("description"),
-            isbn=book.get("isbn"),
-            language=book.get("language"),
-            publication_year=book.get("publication_year"),
-            publisher=book.get("publisher"),
-            tags=book.get("tags", []),
-            file_type=book.get("file_type"),
-            file_path=book.get("file_path"),
-            file_size=book.get("file_size"),
-            total_pages=book.get("total_pages"),
-            table_of_contents=book.get("table_of_contents"),
-            rag_status=book.get("rag_status"),
-            rag_processed_at=book.get("rag_processed_at"),
-            created_at=book.get("created_at"),
-            updated_at=book.get("updated_at"),
-        )
-
-        return BookWithProgress(
-            id=book_response.id,
-            title=book_response.title,
-            author=book_response.author,
-            subtitle=book_response.subtitle,
-            description=book_response.description,
-            isbn=book_response.isbn,
-            language=book_response.language,
-            publication_year=book_response.publication_year,
-            publisher=book_response.publisher,
-            tags=book_response.tags,
-            file_type=book_response.file_type,
-            file_path=book_response.file_path,
-            file_size=book_response.file_size,
-            total_pages=book_response.total_pages,
-            table_of_contents=book_response.table_of_contents,
-            rag_status=book_response.rag_status,
-            rag_processed_at=book_response.rag_processed_at,
-            created_at=book_response.created_at,
-            updated_at=book_response.updated_at,
-            progress=BookProgressResponse(
-                id=progress.get("id"),  # None if not yet saved to database
-                book_id=book_id,
-                current_page=progress.get("current_page", 1),
-                progress_percentage=progress.get("completion_percentage", 0),
-                total_pages_read=progress.get("total_pages_read", progress.get("page", 1)),
-                reading_time_minutes=progress.get("reading_time_minutes", 0),
-                status=progress.get("status", "not_started"),
-                notes=progress.get("notes"),
-                bookmarks=progress.get("bookmarks", []),
-                toc_progress=progress.get("toc_progress", {}),
-                last_read_at=progress.get("last_read_at"),
-                created_at=progress.get("created_at"),  # None if not yet saved
-                updated_at=progress.get("updated_at"),  # None if not yet saved
-            )
-            if progress
-            else None,
-        )
-    except HTTPException:
-        raise
+        facade = BooksFacade(auth.session, auth.user_id)
+        # Facade returns a fully built BookWithProgress
+        return await facade.get_book(book_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
         logger.exception(f"Error getting book {book_id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
@@ -337,8 +265,9 @@ async def create_book_endpoint(
         }
 
         # Upload book through facade
-        result = await books_facade.upload_book(
-            file_path=file_path, title=final_title, user_id=auth.user_id, metadata=book_metadata
+        facade = BooksFacade(auth.session, auth.user_id)
+        result = await facade.upload_book(
+            file_path=file_path, title=final_title, metadata=book_metadata
         )
 
         if not result.get("success"):
@@ -356,7 +285,8 @@ async def create_book_endpoint(
         if getattr(book, "id", None):
             background_tasks.add_task(_embed_book_background, book.id)
 
-        return BookResponse.model_validate(book)
+        # Build response explicitly to avoid any lazy attribute refresh during Pydantic validation
+        return BookResponseBuilder.build_book_response(book)
 
     except HTTPException:
         raise
@@ -372,7 +302,8 @@ async def update_book_endpoint(book_id: UUID, book_data: BookUpdate, auth: Curre
         # Convert Pydantic model to dict
         update_dict = book_data.model_dump(exclude_unset=True)
 
-        result = await books_facade.update_book(book_id, auth.user_id, update_dict)
+        facade = BooksFacade(auth.session, auth.user_id)
+        result = await facade.update_book(book_id, update_dict)
 
         if not result.get("success"):
             raise HTTPException(
@@ -389,11 +320,12 @@ async def update_book_endpoint(book_id: UUID, book_data: BookUpdate, auth: Curre
 
 
 @router.delete("/{book_id}")
-async def delete_book_endpoint(book_id: UUID, auth: CurrentAuth, db: DbSession) -> None:
+async def delete_book_endpoint(book_id: UUID, auth: CurrentAuth) -> None:
     """Delete a book."""
     try:
-        await books_facade.delete_book(db, book_id, auth.user_id)
-        await db.commit()
+        facade = BooksFacade(auth.session, auth.user_id)
+        await facade.delete_book(auth.session, book_id, auth.user_id)
+        await auth.session.commit()
     except ValueError as e:
         # Book not found
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -418,7 +350,8 @@ async def update_book_progress_endpoint(
         # Convert progress data to dict for facade
         progress_dict = _build_progress_dict(progress_data)
 
-        result = await books_facade.update_book_progress(book_id, auth.user_id, progress_dict)
+        facade = BooksFacade(auth.session, auth.user_id)
+        result = await facade.update_book_progress(book_id, progress_dict)
 
         if not result.get("success"):
             raise HTTPException(
@@ -447,19 +380,12 @@ async def update_book_progress_post_endpoint(
 
 
 @router.get("/{book_id}/file", response_model=None)
-async def serve_book_file(book_id: UUID, auth: CurrentAuth, db: DbSession) -> FileResponse | RedirectResponse:
+async def serve_book_file(book_id: UUID, auth: CurrentAuth) -> FileResponse | RedirectResponse:
     """Serve the actual book file for viewing."""
-    # Simple direct database query
-    from sqlalchemy import select
-
     from src.books.models import Book
 
-    query = select(Book).where(Book.id == book_id, Book.user_id == auth.user_id)
-    result = await db.execute(query)
-    book = result.scalar_one_or_none()
-
-    if not book:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
+    # Use auth context helper for ownership check
+    book = await auth.get_or_404(Book, book_id, "book")
 
     if not book.file_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book file not found")
@@ -483,22 +409,16 @@ async def serve_book_file(book_id: UUID, auth: CurrentAuth, db: DbSession) -> Fi
 
 
 @router.get("/{book_id}/presigned-url")
-async def get_book_presigned_url(book_id: UUID, auth: CurrentAuth, db: DbSession) -> dict:
+async def get_book_presigned_url(book_id: UUID, auth: CurrentAuth) -> dict:
     """Get a presigned URL for direct book download from R2/storage.
 
     This is useful when you want the browser to directly download from R2
     without proxying through the backend.
     """
-    from sqlalchemy import select
-
     from src.books.models import Book
 
-    query = select(Book).where(Book.id == book_id, Book.user_id == auth.user_id)
-    result = await db.execute(query)
-    book = result.scalar_one_or_none()
-
-    if not book:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
+    # Use auth context helper for ownership check
+    book = await auth.get_or_404(Book, book_id, "book")
 
     if not book.file_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book file not found")
@@ -571,7 +491,7 @@ async def _handle_range_request(
 
 @router.get("/{book_id}/content", response_model=None)
 async def stream_book_content(
-    book_id: UUID, request: Request, auth: CurrentAuth, db: DbSession
+    book_id: UUID, request: Request, auth: CurrentAuth
 ) -> StreamingResponse | FileResponse:
     """Stream book PDF content through backend to avoid CORS issues.
 
@@ -579,17 +499,10 @@ async def stream_book_content(
     streaming it back to the client. This completely bypasses CORS issues
     with signed URLs. Supports range requests for efficient PDF loading.
     """
-    # Simple direct database query
-    from sqlalchemy import select
-
     from src.books.models import Book
 
-    query = select(Book).where(Book.id == book_id, Book.user_id == auth.user_id)
-    result = await db.execute(query)
-    book = result.scalar_one_or_none()
-
-    if not book:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
+    # Use auth context helper for ownership check
+    book = await auth.get_or_404(Book, book_id, "book")
 
     if not book.file_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book file not found")
@@ -654,7 +567,8 @@ async def get_book_chapters_endpoint(book_id: UUID, auth: CurrentAuth) -> list[d
     Returns the table of contents structure, not database chapter records.
     """
     try:
-        result = await books_facade.get_book_chapters(book_id, auth.user_id)
+        facade = BooksFacade(auth.session, auth.user_id)
+        result = await facade.get_book_chapters(book_id)
 
         if not result.get("success"):
             # Check if it's a "not found" error
@@ -683,7 +597,8 @@ async def update_book_chapter_status_endpoint(
     try:
         # Use mark_chapter_complete on the facade
         completed = status_data.status == "completed"
-        result = await books_facade.mark_chapter_complete(book_id, auth.user_id, str(chapter_id), completed)
+        facade = BooksFacade(auth.session, auth.user_id)
+        result = await facade.mark_chapter_complete(book_id, str(chapter_id), completed)
 
         if not result.get("success"):
             raise HTTPException(
@@ -724,49 +639,42 @@ class RAGStatusResponse(BaseModel):
 @router.get("/{book_id}/rag-status")
 async def get_book_rag_status(book_id: UUID, auth: CurrentAuth) -> RAGStatusResponse:
     """Get the RAG embedding status for a book."""
-    from sqlalchemy import select
-
     from src.books.models import Book
-    from src.database.session import async_session_maker
 
-    async with async_session_maker() as session:
-        result = await session.execute(select(Book).where(Book.id == book_id, Book.user_id == auth.user_id))
-        book = result.scalar_one_or_none()
+    # Use auth context helper for ownership check
+    book = await auth.get_or_404(Book, book_id, "book")
 
-        if not book:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
+    # Generate status message
+    status_messages = {
+        "pending": "Book is ready to read! AI chat will be available once processing completes.",
+        "processing": "Book is being processed for AI chat. You can start reading now!",
+        "completed": "Book is ready! AI chat is now available.",
+        "failed": "Processing failed. AI chat is not available, but you can still read the book.",
+    }
 
-        # Generate status message
-        status_messages = {
-            "pending": "Book is ready to read! AI chat will be available once processing completes.",
-            "processing": "Book is being processed for AI chat. You can start reading now!",
-            "completed": "Book is ready! AI chat is now available.",
-            "failed": "Processing failed. AI chat is not available, but you can still read the book.",
-        }
+    # Get chunk count if available
+    chunk_count = None
+    if book.rag_status in ["completed", "processing"]:
+        try:
+            from sqlalchemy import text
 
-        # Get chunk count if available
-        chunk_count = None
-        if book.rag_status in ["completed", "processing"]:
-            try:
-                from sqlalchemy import text
+            count_result = await auth.session.execute(
+                text("SELECT COUNT(*) FROM rag_document_chunks WHERE doc_id = :doc_id"), {"doc_id": str(book_id)}
+            )
+            chunk_count = count_result.scalar()
+        except Exception:
+            logger.debug("Could not count RAG chunks")
 
-                count_result = await session.execute(
-                    text("SELECT COUNT(*) FROM rag_document_chunks WHERE doc_id = :doc_id"), {"doc_id": str(book_id)}
-                )
-                chunk_count = count_result.scalar()
-            except Exception:
-                logger.debug("Could not count RAG chunks")
+    # Get error details if failed
+    error_details = None
+    if book.rag_status == "failed" and hasattr(book, "rag_error"):
+        error_details = getattr(book, "rag_error", None)
 
-        # Get error details if failed
-        error_details = None
-        if book.rag_status == "failed" and hasattr(book, "rag_error"):
-            error_details = getattr(book, "rag_error", None)
-
-        return RAGStatusResponse(
-            book_id=book_id,
-            rag_status=book.rag_status,
-            rag_processed_at=book.rag_processed_at.isoformat() if book.rag_processed_at else None,
-            message=status_messages.get(book.rag_status, "Unknown status"),
-            chunk_count=chunk_count,
-            error_details=error_details,
-        )
+    return RAGStatusResponse(
+        book_id=book_id,
+        rag_status=book.rag_status,
+        rag_processed_at=book.rag_processed_at.isoformat() if book.rag_processed_at else None,
+        message=status_messages.get(book.rag_status, "Unknown status"),
+        chunk_count=chunk_count,
+        error_details=error_details,
+    )

@@ -318,6 +318,3 @@ class BookQueryService:
             if total_books and total_books > 0
             else 0,
         }
-
-
-# Removed _book_to_response - now handled by BookResponseBuilder

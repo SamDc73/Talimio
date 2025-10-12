@@ -35,6 +35,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 			const response = await fetch("/api/v1/books", {
 				method: "POST",
 				body: formData,
+				credentials: "include", // Include auth cookies
 			})
 
 			if (!response.ok) {
@@ -62,7 +63,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 			if (onBookUploaded) {
 				onBookUploaded(newBook)
 			}
-		} catch (error) {
+		} catch (_error) {
 			console.log("Upload Failed")
 		} finally {
 			setIsUploadingBook(false)

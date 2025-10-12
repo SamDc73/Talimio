@@ -2,7 +2,7 @@ import { ChevronRight, FileText } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useBookProgress } from "@/hooks/useBookProgress"
 import logger from "@/lib/logger"
-import { extractBookChapters, getBookChapters } from "@/services/booksService"
+import { useBookChaptersApi } from "@/hooks/useApiHelpers"
 import CompletionCheckbox from "./CompletionCheckbox"
 import ProgressCircle from "./ProgressCircle"
 import ProgressIndicator from "./ProgressIndicator"
@@ -35,6 +35,9 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 	const [IsExtracting, SetIsExtracting] = useState(false)
 	const [IsLoadingChapters, SetIsLoadingChapters] = useState(false)
 	const [optimisticCompletions, setOptimisticCompletions] = useState({})
+
+	// Hook-based API for book chapters
+	const chaptersApi = useBookChaptersApi(bookId)
 
 	// Use the standardized hook with bookId prop
 	const { progress, toggleCompletion, isCompleted, batchUpdate, refetch } = useBookProgress(bookId)
@@ -184,6 +187,7 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 	 * Fetch chapters from API only once per book
 	 * Skip if book already has tableOfContents to prevent unnecessary API calls
 	 */
+	/* biome-ignore lint/correctness/useExhaustiveDependencies: chaptersApi functions are stable enough for this effect and are gated by bookId; adding them causes unnecessary reruns */
 	useEffect(() => {
 		if (!bookId) return
 
@@ -192,10 +196,10 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 			return
 		}
 
-		async function fetchChapters() {
+		async function loadChapters() {
 			SetIsLoadingChapters(true)
 			try {
-				const chapters = await getBookChapters(bookId)
+				const chapters = await chaptersApi.fetchChapters()
 				SetApiChapters(chapters || [])
 			} catch (error) {
 				// Don't log error if it's expected (404 when no chapters exist)
@@ -207,7 +211,7 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 			}
 		}
 
-		fetchChapters()
+		loadChapters()
 	}, [bookId, book?.tableOfContents?.length])
 
 	/**
@@ -216,14 +220,14 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 	const handleExtractChapters = async () => {
 		SetIsExtracting(true)
 		try {
-			const result = await extractBookChapters(bookId)
+			const result = await chaptersApi.extractChapters()
 			logger.track("book_chapters_extracted", {
 				bookId,
 				chapterCount: result?.length || 0,
 			})
 
 			// Refresh chapters
-			const chapters = await getBookChapters(book.id)
+			const chapters = await chaptersApi.fetchChapters()
 			SetApiChapters(chapters || [])
 
 			// Refresh progress data

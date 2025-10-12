@@ -1,446 +1,420 @@
-/**
- * PDF Highlighter component that adds highlighting functionality on top of PDFViewer.
- * Manages highlight creation, deletion, and interaction while composing the core PDFViewer.
- */
-
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { debounce } from "lodash-es"
-import { Highlighter, Sparkles } from "lucide-react"
+import { createPluginRegistration } from "@embedpdf/core"
+import { EmbedPDF } from "@embedpdf/core/react"
+import { usePdfiumEngine } from "@embedpdf/engines/react"
+import {
+	GlobalPointerProvider,
+	InteractionManagerPluginPackage,
+	PagePointerProvider,
+} from "@embedpdf/plugin-interaction-manager/react"
+import { LoaderPluginPackage } from "@embedpdf/plugin-loader/react"
+import { RenderLayer, RenderPluginPackage } from "@embedpdf/plugin-render/react"
+import { Scroller, ScrollPluginPackage, useScroll } from "@embedpdf/plugin-scroll/react"
+import { SelectionLayer, SelectionPluginPackage } from "@embedpdf/plugin-selection/react"
+import { Viewport, ViewportPluginPackage } from "@embedpdf/plugin-viewport/react"
+import { useZoom, ZoomMode, ZoomPluginPackage } from "@embedpdf/plugin-zoom/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Highlight, PdfHighlighter, PdfLoader } from "react-pdf-highlighter"
-import { supabase } from "@/lib/supabase"
-import { highlightService } from "@/services/highlightService"
-import { useHighlightActions } from "@/stores/highlights"
-import useAppStore from "@/stores/useAppStore"
+import { useBookActions, useBookReadingState, useBookStoreHydrated } from "@/hooks/book-hooks"
 
-import "../styles/highlights.css" // Apply unified highlight overrides
-import "../styles/pdf-viewer.css" // PDF viewer specific styles
+function ViewerRuntime({
+	bookId,
+	registerApi,
+	getBookReadingState,
+	updateBookReadingState,
+	hasRestoredPage,
+	onMarkPageRestored,
+}) {
+	const { provides: scrollProvides, state: scrollState } = useScroll()
+	const { provides: zoomProvides, state: zoomState } = useZoom()
+	const currentZoomLevel = zoomState?.currentZoomLevel
+	const hasAppliedStoredZoomRef = useRef(false)
+	const pendingRestoreTargetRef = useRef(null)
 
-/**
- * PDFViewer - PDF viewer component with highlighting capabilities
- *
- * @param {Object} props
- * @param {string} props.url - URL of the PDF to load
- * @param {Function} props.onTextSelection - Callback when text is selected for AI
- * @param {string} props.bookId - ID of the book for state management
- * @param {Function} props.registerApi - Function to register viewer API (deprecated)
- */
-function PDFViewer({ url, onTextSelection, bookId, registerApi = null }) {
-	// State for PDF URL resolution
-	const [pdfUrl, setPdfUrl] = useState(null)
-	const [loading, setLoading] = useState(true)
-	const [loadError, setLoadError] = useState(null)
-
-	// Refs for scroll management
-	const scrollToRef = useRef(null)
-	const pdfDocumentRef = useRef(null)
-	const pdfHighlighterRef = useRef(null)
-	const hasRestoredPageRef = useRef(false)
-
-	// Highlight store actions
-	const { onHighlightClick, onHighlightHover } = useHighlightActions()
-
-	// Reading state from store
-	const updateBookReadingState = useAppStore((state) => state.updateBookReadingState)
-	const getBookReadingState = useAppStore((state) => state.getBookReadingState)
-
-	// Zoom state
-	const [scale, setScale] = useState(1.0)
-
-	// Query client for cache management
-	const queryClient = useQueryClient()
-
-	// Fetch highlights from server
-	const { data: highlights = [], isLoading: highlightsLoading } = useQuery({
-		queryKey: ["highlights", "book", bookId],
-		queryFn: async () => {
-			try {
-				const data = await highlightService.getHighlights("book", bookId)
-				return data
-			} catch (error) {
-				// Silently handle auth errors - user might not be logged in
-				if (error?.status === 401 || error?.status === 422) {
-					return []
-				}
-				throw error
-			}
-		},
-		enabled: !!bookId,
-		staleTime: 5 * 60 * 1000, // 5 minutes
-		gcTime: 10 * 60 * 1000, // 10 minutes cache
-		retry: false, // Don't retry on auth errors
-	})
-
-	// Create highlight mutation with optimistic updates
-	const createHighlightMutation = useMutation({
-		mutationFn: async ({ position, content, comment }) => {
-			// Validate required data
-			if (!position?.rects || !Array.isArray(position.rects)) {
-				throw new Error("Invalid highlight position data")
-			}
-
-			if (!bookId) {
-				throw new Error("Cannot create highlight without book ID")
-			}
-
-			// Transform position data to match backend expectations
-			const transformedRects = position.rects.map((rect) => ({
-				x1: rect.x1,
-				y1: rect.y1,
-				x2: rect.x2,
-				y2: rect.y2,
-				width: rect.width,
-				height: rect.height,
-				pageNumber: rect.pageNumber || position.pageNumber,
-			}))
-
-			// Format data for backend PDF validation
-			const highlightData = {
-				text: content?.text || "",
-				page: position.pageNumber,
-				position: {
-					rects: transformedRects,
-					pageNumber: position.pageNumber,
-					boundingRect: position.boundingRect,
-				},
-				note: comment?.text || "", // Store comment text as 'note' field
-			}
-			const result = await highlightService.createHighlight("book", bookId, highlightData)
-			return result
-		},
-		onMutate: async ({ position, content, comment }) => {
-			// Cancel any outgoing refetches (so they don't overwrite our optimistic update)
-			await queryClient.cancelQueries({ queryKey: ["highlights", "book", bookId] })
-
-			// Snapshot the previous value
-			const previousHighlights = queryClient.getQueryData(["highlights", "book", bookId])
-
-			// Optimistically update to the new value
-			queryClient.setQueryData(["highlights", "book", bookId], (old) => [
-				...(old || []),
-				{
-					id: `temp-${Date.now()}`,
-					position,
-					content,
-					comment,
-					type: "BOOK",
-					entityId: bookId,
-					userId: supabase.auth.user()?.id,
-					createdAt: new Date().toISOString(),
-					updatedAt: new Date().toISOString(),
-				},
-			])
-
-			// Return a context object with the snapshotted value
-			return { previousHighlights }
-		},
-		onError: (_error, _variables, context) => {
-			// Rollback to the previous value on error
-			queryClient.setQueryData(["highlights", "book", bookId], context.previousHighlights)
-		},
-		onSuccess: (_data) => {
-			// Invalidate and refetch
-			queryClient.invalidateQueries({ queryKey: ["highlights", "book", bookId] })
-		},
-	})
-
-	// Map server highlights to PDFHighlighter format
-	const pdfHighlights = useMemo(() => {
-		return highlights.map((h) => ({
-			...h,
-			comment: { text: h.note || "" },
-		}))
-	}, [highlights])
-
-	const handleHighlightAI = (highlight) => {
-		onTextSelection(highlight)
-	}
-
-	// Tip component for text selection
-	function CreateTipContent({ position, content, hideTipAndSelection }) {
-		const handleCreateHighlight = (note) => {
-			const newHighlight = {
-				position,
-				content,
-				comment: { text: note },
-			}
-			createHighlightMutation.mutate(newHighlight)
-			hideTipAndSelection()
-		}
-
-		const handleAIAction = () => {
-			handleHighlightAI({ content, position })
-			hideTipAndSelection()
-		}
-
-		const handleHighlightClick = () => {
-			handleCreateHighlight("")
-		}
-
-		return (
-			<div className="flex flex-col space-y-2 p-2 bg-white rounded-lg shadow-lg border border-gray-200">
-				<button
-					type="button"
-					onClick={handleHighlightClick}
-					className="flex items-center px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded"
-				>
-					<Highlighter className="w-4 h-4 mr-2" />
-					Highlight
-				</button>
-				<button
-					type="button"
-					onClick={handleAIAction}
-					className="flex items-center px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded"
-				>
-					<Sparkles className="w-4 h-4 mr-2" />
-					Ask AI
-				</button>
-			</div>
-		)
-	}
-
-	const zoomIn = useCallback(() => {
-		setScale((prevScale) => {
-			const currentScale = typeof prevScale === "number" ? prevScale : 1.0
-			return Math.min(currentScale + 0.2, 3.0)
-		})
-	}, [])
-
-	const zoomOut = useCallback(() => {
-		setScale((prevScale) => {
-			const currentScale = typeof prevScale === "number" ? prevScale : 1.0
-			return Math.max(currentScale - 0.2, 0.4)
-		})
-	}, [])
-
-	// Create debounced function using useMemo to ensure stable reference
-	const trackCurrentPage = useMemo(
-		() =>
-			debounce((viewer) => {
-				if (!viewer) return
-				const { currentPage } = viewer
-				const readingState = getBookReadingState(bookId)
-				if (readingState?.currentPage !== currentPage) {
-					updateBookReadingState(bookId, { currentPage })
-				}
-			}, 500),
-		[bookId, getBookReadingState, updateBookReadingState]
-	)
-
-	const handlePdfLoad = (pdfDocument) => {
-		pdfDocumentRef.current = pdfDocument
-
-		// Restore last known page
-		const readingState = getBookReadingState(bookId)
-		if (readingState?.currentPage && !hasRestoredPageRef.current) {
-			const tempHighlight = {
-				id: `goto-page-${readingState.currentPage}`,
-				position: { pageNumber: readingState.currentPage },
-			}
-			if (scrollToRef.current) {
-				scrollToRef.current(tempHighlight)
-			}
-			hasRestoredPageRef.current = true
-		}
-	}
-
-	// Register API for parent component
 	useEffect(() => {
-		if (registerApi) {
-			const fitToScreen = () => {
-				setScale("page-width")
-			}
+		if (!scrollProvides || !bookId) {
+			return undefined
+		}
 
-			const goToPage = (pageNumber) => {
-				if (scrollToRef.current) {
-					const tempHighlight = { id: `goto-page-${pageNumber}`, position: { pageNumber } }
-					scrollToRef.current(tempHighlight)
+		return scrollProvides.onPageChange(({ pageNumber, totalPages }) => {
+			const currentState = getBookReadingState(bookId)
+
+			if (!hasRestoredPage) {
+				if (pendingRestoreTargetRef.current && pageNumber === pendingRestoreTargetRef.current) {
+					pendingRestoreTargetRef.current = null
+					onMarkPageRestored()
+				}
+				if (pendingRestoreTargetRef.current && pageNumber !== pendingRestoreTargetRef.current) {
+					return
+				}
+				if (!pendingRestoreTargetRef.current && currentState?.currentPage && currentState.currentPage !== pageNumber) {
+					return
 				}
 			}
 
-			const getCurrentPage = () => {
-				const state = getBookReadingState(bookId)
-				return state?.currentPage || 1
+			if (currentState?.currentPage !== pageNumber) {
+				updateBookReadingState(bookId, { currentPage: pageNumber, totalPages })
 			}
+		})
+	}, [bookId, getBookReadingState, hasRestoredPage, onMarkPageRestored, scrollProvides, updateBookReadingState])
 
-			const getTotalPages = () => {
-				return pdfDocumentRef.current?.numPages || 0
-			}
-
-			registerApi({
-				goToPage,
-				fitToScreen,
-				getCurrentPage,
-				getTotalPages,
-				zoomIn,
-				zoomOut,
-			})
-		}
-	}, [bookId, registerApi, getBookReadingState, zoomIn, zoomOut])
-
-	// Handle API redirects to get actual PDF URL
 	useEffect(() => {
-		// Reset state when URL changes
-		pdfDocumentRef.current = null
-		hasRestoredPageRef.current = false
-
-		if (!url) {
-			setPdfUrl(null)
+		if (!scrollProvides || hasRestoredPage || !bookId || !scrollState?.totalPages) {
 			return
 		}
-		setLoading(true)
-		setLoadError(null)
 
-		if (url.startsWith("/api")) {
-			// Handle API URLs that need authentication
-			supabase.auth
-				.getSession()
-				.then(({ data: { session } }) => {
-					const headers = {}
-					if (session?.access_token) {
-						headers.Authorization = `Bearer ${session.access_token}`
-					}
+		const readingState = getBookReadingState(bookId)
+		const targetPage = readingState?.currentPage
+		if (!targetPage || targetPage <= 0) {
+			return
+		}
 
-					return fetch(url, {
-						method: "GET",
-						headers,
-						credentials: "include",
-					})
-				})
-				.then(async (response) => {
-					if (response.ok) {
-						const contentType = response.headers.get("content-type")
-						if (contentType?.includes("application/json")) {
-							const data = await response.json()
-							if (data.url && data.type === "presigned") {
-								setPdfUrl(data.url)
-							}
-						} else if (contentType?.includes("application/pdf")) {
-							setPdfUrl(url)
-						}
-					} else {
-						throw new Error(`Failed to fetch PDF: ${response.status}`)
-					}
-					setLoading(false)
-					return null
-				})
-				.catch((error) => {
+		if (targetPage > scrollState.totalPages) {
+			pendingRestoreTargetRef.current = targetPage
+			return
+		}
+
+		if (scrollState.currentPage === targetPage) {
+			pendingRestoreTargetRef.current = null
+			onMarkPageRestored()
+			return
+		}
+
+		if (pendingRestoreTargetRef.current !== targetPage) {
+			pendingRestoreTargetRef.current = targetPage
+		}
+
+		scrollProvides.scrollToPage({ pageNumber: targetPage, behavior: "instant" })
+	}, [
+		bookId,
+		getBookReadingState,
+		hasRestoredPage,
+		onMarkPageRestored,
+		scrollProvides,
+		scrollState.currentPage,
+		scrollState.totalPages,
+	])
+
+	useEffect(() => {
+		if (!scrollProvides || hasRestoredPage) {
+			return
+		}
+		const off = scrollProvides.onLayoutReady?.(() => {
+			const target = pendingRestoreTargetRef.current
+			if (!target) return
+			scrollProvides.scrollToPage({ pageNumber: target, behavior: "instant" })
+		})
+		return () => off?.()
+	}, [scrollProvides, hasRestoredPage])
+
+	useEffect(() => {
+		if (!registerApi || !scrollProvides || !zoomProvides) {
+			return
+		}
+		registerApi({
+			goToPage: (pageNumber) => {
+				scrollProvides.scrollToPage({ pageNumber })
+			},
+			fitToScreen: () => zoomProvides.requestZoom(ZoomMode.FitWidth),
+			getCurrentPage: () => scrollProvides.getCurrentPage?.() ?? 1,
+			getTotalPages: () => scrollProvides.getTotalPages?.() ?? 0,
+			zoomIn: zoomProvides.zoomIn,
+			zoomOut: zoomProvides.zoomOut,
+		})
+	}, [registerApi, scrollProvides, zoomProvides])
+
+	useEffect(() => {
+		if (!bookId || currentZoomLevel === undefined) {
+			return
+		}
+		const storedZoom = getBookReadingState(bookId)?.zoomLevel
+		const currentPct = Math.round(currentZoomLevel * 100)
+
+		// During initialization, never overwrite a stored zoom with a different initial value.
+		if (!hasAppliedStoredZoomRef.current) {
+			if (typeof storedZoom === "number" && storedZoom > 0) {
+				if (storedZoom !== currentPct) {
+					return
+				}
+				// already at stored zoom; allow future persisting
+				hasAppliedStoredZoomRef.current = true
+			} else {
+				// no stored zoom; allow persisting from now on
+				hasAppliedStoredZoomRef.current = true
+			}
+		}
+
+		// If not marked applied yet, do nothing
+		if (!hasAppliedStoredZoomRef.current) {
+			return
+		}
+
+		// Avoid redundant writes
+		if (typeof storedZoom === "number" && storedZoom === currentPct) {
+			return
+		}
+
+		const toPersist = currentPct
+		updateBookReadingState(bookId, { zoomLevel: toPersist })
+	}, [bookId, currentZoomLevel, updateBookReadingState, getBookReadingState])
+
+	useEffect(() => {
+		// Wait for zoom system to initialize (currentZoomLevel becomes defined)
+		if (!bookId || !zoomProvides || hasAppliedStoredZoomRef.current || currentZoomLevel === undefined) {
+			return
+		}
+		const storedZoom = getBookReadingState(bookId)?.zoomLevel
+		if (typeof storedZoom === "number" && storedZoom > 0) {
+			zoomProvides.requestZoom(storedZoom / 100)
+		}
+		hasAppliedStoredZoomRef.current = true
+	}, [bookId, getBookReadingState, zoomProvides, currentZoomLevel])
+
+	const renderPage = useCallback(
+		({ width, height, pageIndex, scale, rotation }) => (
+			<div
+				className="mx-auto"
+				style={{
+					width,
+					height,
+					position: "relative",
+				}}
+			>
+				<PagePointerProvider
+					pageIndex={pageIndex}
+					pageWidth={width}
+					pageHeight={height}
+					rotation={rotation}
+					scale={scale}
+				>
+					<RenderLayer pageIndex={pageIndex} scale={scale} />
+					<SelectionLayer pageIndex={pageIndex} scale={scale} background="Highlight" />
+				</PagePointerProvider>
+			</div>
+		),
+		[]
+	)
+
+	return (
+		<Viewport className="h-full w-full">
+			<Scroller renderPage={renderPage} />
+		</Viewport>
+	)
+}
+
+function PDFViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi = null }) {
+	// Component-local state (ephemeral UI)
+	const [hasRestoredPage, setHasRestoredPage] = useState(false)
+	const [pdfBlobUrl, setPdfBlobUrl] = useState(null)
+	const [loadError, setLoadError] = useState(null)
+	const previousSourceRef = useRef({ url: null, bookId: null })
+	const blobUrlRef = useRef(null)
+	const initialZoomLevelRef = useRef(null)
+	const initialPageRef = useRef(null)
+
+	// Zustand store access via custom hooks (persistent state)
+	const readingState = useBookReadingState(bookId)
+	const { updateBookReadingState } = useBookActions()
+	const storeHydrated = useBookStoreHydrated()
+
+	// Capture initial snapshots at render time (before plugin creation) to reduce flicker
+	if (
+		initialZoomLevelRef.current === null &&
+		typeof readingState?.zoomLevel === "number" &&
+		readingState.zoomLevel > 0
+	) {
+		initialZoomLevelRef.current = readingState.zoomLevel
+	}
+	if (
+		initialPageRef.current === null &&
+		typeof readingState?.currentPage === "number" &&
+		readingState.currentPage > 0
+	) {
+		initialPageRef.current = readingState.currentPage
+	}
+
+	const { engine, isLoading: engineLoading } = usePdfiumEngine()
+
+	const markPageRestored = useCallback(() => {
+		setHasRestoredPage(true)
+	}, [])
+
+	// Fetch PDF and create blob URL (EmbedPDF needs blob URL for auth endpoints)
+	useEffect(() => {
+		if (!url) {
+			if (blobUrlRef.current) {
+				URL.revokeObjectURL(blobUrlRef.current)
+				blobUrlRef.current = null
+			}
+			setPdfBlobUrl(null)
+			setLoadError(null)
+			return
+		}
+
+		let cancelled = false
+
+		const fetchPdf = async () => {
+			try {
+				setLoadError(null)
+				// Fetch from authenticated endpoint (cookies sent automatically)
+				const response = await fetch(url, { credentials: "include" })
+
+				if (!response.ok) {
+					throw new Error(`Failed to load PDF: ${response.status}`)
+				}
+
+				const blob = await response.blob()
+
+				if (cancelled) {
+					return
+				}
+
+				// Create blob URL for EmbedPDF
+				if (blobUrlRef.current) {
+					URL.revokeObjectURL(blobUrlRef.current)
+				}
+				const blobUrl = URL.createObjectURL(blob)
+				blobUrlRef.current = blobUrl
+				setPdfBlobUrl(blobUrl)
+			} catch (error) {
+				if (!cancelled) {
 					setLoadError(error.message)
-					setLoading(false)
-				})
-		} else {
-			setPdfUrl(url)
-			setLoading(false)
+					setPdfBlobUrl(null)
+				}
+			}
+		}
+
+		fetchPdf()
+
+		return () => {
+			cancelled = true
 		}
 	}, [url])
 
-	// Error states
+	// Cleanup blob URL on unmount
+	useEffect(() => {
+		return () => {
+			if (blobUrlRef.current) {
+				URL.revokeObjectURL(blobUrlRef.current)
+			}
+		}
+	}, [])
+
+	// Reset page restoration when source changes
+	useEffect(() => {
+		const hasSourceChanged = previousSourceRef.current.url !== url || previousSourceRef.current.bookId !== bookId
+		if (hasSourceChanged) {
+			setHasRestoredPage(false)
+			previousSourceRef.current = { url, bookId }
+		}
+	}, [url, bookId])
+
+	// Capture initial persisted zoom once (avoid plugin re-instantiation on zoom changes)
+	useEffect(() => {
+		if (!storeHydrated) return
+		if (initialZoomLevelRef.current === null) {
+			const z = readingState?.zoomLevel
+			if (typeof z === "number" && z > 0) {
+				initialZoomLevelRef.current = z
+			}
+		}
+	}, [storeHydrated, readingState?.zoomLevel])
+
+	// Capture initial persisted page once for ScrollPlugin.initialPage
+	useEffect(() => {
+		if (!storeHydrated) return
+		if (initialPageRef.current === null) {
+			const p = readingState?.currentPage
+			if (typeof p === "number" && p > 0) {
+				initialPageRef.current = p
+			}
+		}
+	}, [storeHydrated, readingState?.currentPage])
+
+	const plugins = useMemo(() => {
+		if (!pdfBlobUrl) {
+			return []
+		}
+
+		const documentId = bookId ? `book-${bookId}` : "pdf-document"
+		// Prefer saved zoom for initial load to avoid flicker; fall back to Automatic
+		const initialZoomLevel =
+			typeof initialZoomLevelRef.current === "number" && initialZoomLevelRef.current > 0
+				? initialZoomLevelRef.current / 100
+				: ZoomMode.Automatic
+		return [
+			createPluginRegistration(LoaderPluginPackage, {
+				loadingOptions: {
+					type: "url",
+					pdfFile: {
+						id: documentId,
+						url: pdfBlobUrl,
+					},
+				},
+			}),
+			createPluginRegistration(ViewportPluginPackage),
+			createPluginRegistration(ScrollPluginPackage, {
+				initialPage:
+					typeof initialPageRef.current === "number" && initialPageRef.current > 0 ? initialPageRef.current : undefined,
+			}),
+			createPluginRegistration(RenderPluginPackage),
+			createPluginRegistration(ZoomPluginPackage, {
+				defaultZoomLevel: initialZoomLevel,
+			}),
+			createPluginRegistration(InteractionManagerPluginPackage),
+			createPluginRegistration(SelectionPluginPackage),
+		]
+	}, [bookId, pdfBlobUrl])
+
 	if (!url) {
 		return (
-			<div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
+			<div className="flex h-64 items-center justify-center rounded-lg bg-gray-50">
 				<p className="text-gray-600">No PDF URL provided</p>
 			</div>
 		)
 	}
 
-	if (loading && !pdfUrl) {
+	if (loadError) {
 		return (
-			<div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
+			<div className="flex h-64 items-center justify-center rounded-lg bg-gray-50">
 				<div className="text-center">
-					<p className="text-gray-600">Resolving PDF location...</p>
-					<p className="text-xs text-gray-500 mt-2">Fetching document from server</p>
+					<p className="text-red-600 font-semibold">Failed to load PDF</p>
+					<p className="mt-2 text-xs text-red-500">{loadError}</p>
 				</div>
 			</div>
 		)
 	}
 
-	if (!pdfUrl && loadError) {
+	if (!storeHydrated) {
 		return (
-			<div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
-				<div className="text-center">
-					<p className="text-red-600">Failed to load PDF</p>
-					<p className="text-xs text-red-500 mt-2">{loadError}</p>
-				</div>
+			<div className="flex h-64 items-center justify-center rounded-lg bg-gray-50">
+				<p className="text-gray-600">Preparing reader…</p>
 			</div>
 		)
 	}
 
-	if (!pdfUrl) {
-		return null
+	if (!pdfBlobUrl || engineLoading || !engine || plugins.length === 0) {
+		return (
+			<div className="flex h-64 items-center justify-center rounded-lg bg-gray-50">
+				<p className="text-gray-600">Loading PDF…</p>
+			</div>
+		)
 	}
 
 	return (
-		<div className="h-full overflow-auto scroll-smooth py-8 bg-gray-100 dark:bg-gray-800 relative flex flex-col">
-			<PdfLoader
-				url={pdfUrl}
-				beforeLoad={<div className="flex items-center justify-center h-64 text-gray-600">Loading PDF…</div>}
-				onError={(error) => {
-					setLoadError(error.message || "Failed to load PDF")
-				}}
-			>
-				{(pdfDocument) => {
-					// Handle PDF load once
-					if (!pdfDocumentRef.current) {
-						handlePdfLoad(pdfDocument)
-					}
-
-					return (
-						<div className="h-full flex justify-center items-start min-h-full">
-							<div className="h-full w-full">
-								<div className="mx-auto relative shadow-md bg-white">
-									<PdfHighlighter
-										ref={pdfHighlighterRef}
-										pdfDocument={pdfDocument}
-										scale={scale}
-										highlights={pdfHighlights}
-										onScrollChange={() => {
-											trackCurrentPage(pdfHighlighterRef.current?.viewer)
-										}}
-										scrollRef={(scrollTo) => {
-											scrollToRef.current = scrollTo
-										}}
-										enableAreaSelection={(event) => event.altKey}
-										onSelectionFinished={(position, content, hideTipAndSelection) => {
-											return (
-												<CreateTipContent
-													position={position}
-													content={content}
-													hideTipAndSelection={hideTipAndSelection}
-												/>
-											)
-										}}
-										highlightTransform={(
-											highlight,
-											_index,
-											_setTip,
-											_hideTip,
-											_viewportToScaled,
-											_screenshot,
-											isScrolledTo
-										) => (
-											<Highlight
-												isScrolledTo={isScrolledTo}
-												position={highlight.position}
-												comment={highlight.comment}
-												onClick={() => onHighlightClick(highlight.id)}
-												onMouseOver={() => onHighlightHover(highlight.id)}
-											/>
-										)}
-									>
-										{/* Empty div for PdfHighlighter's internal structure */}
-										<div className="absolute inset-0 pointer-events-none" />
-										{highlightsLoading && (
-											<div className="absolute top-2 left-2 z-10 rounded bg-black/50 text-white text-xs px-2 py-1">
-												Loading highlights...
-											</div>
-										)}
-									</PdfHighlighter>
-								</div>
-							</div>
-						</div>
-					)
-				}}
-			</PdfLoader>
+		<div className="relative flex h-full flex-col overflow-auto bg-gray-100 py-8 dark:bg-gray-800">
+			<EmbedPDF engine={engine} plugins={plugins}>
+				<GlobalPointerProvider>
+					<div className="flex h-full w-full justify-center">
+						<ViewerRuntime
+							bookId={bookId}
+							registerApi={registerApi}
+							getBookReadingState={(id) => (id === bookId ? readingState : null)}
+							updateBookReadingState={updateBookReadingState}
+							hasRestoredPage={hasRestoredPage}
+							onMarkPageRestored={markPageRestored}
+						/>
+					</div>
+				</GlobalPointerProvider>
+			</EmbedPDF>
 		</div>
 	)
 }
