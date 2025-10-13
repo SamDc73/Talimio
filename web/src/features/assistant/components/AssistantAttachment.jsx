@@ -10,9 +10,9 @@ import {
 import { FileText, PlusIcon, XIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useShallow } from "zustand/shallow"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/Avatar"
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/Dialog"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/Tooltip"
 import { TooltipIconButton } from "@/features/assistant/components/TooltipIconButton"
 import { cn } from "@/lib/utils"
 

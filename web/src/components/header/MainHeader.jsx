@@ -16,10 +16,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { useAuth } from "@/hooks/useAuth"
-import { useTheme } from "../../contexts/ThemeContext"
-import { cn } from "../../lib/utils"
-import { Button } from "../button"
+import { Button } from "@/components/Button"
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -28,11 +25,14 @@ import {
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
-} from "../drop-menu"
-import { Input } from "../input"
-import { PersonalizationDialog } from "../PersonalizationDialog"
-import { Sheet, SheetContent, SheetTrigger } from "../sheet"
-import { TooltipButton } from "../TooltipButton"
+} from "@/components/DropdownMenu"
+import { Input } from "@/components/Input"
+import { PersonalizationDialog } from "@/components/PersonalizationDialog"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/Sheet"
+import { TooltipButton } from "@/components/TooltipButton"
+import { useTheme } from "@/contexts/ThemeContext"
+import { useAuth } from "@/hooks/useAuth"
+import { cn } from "@/lib/utils"
 
 // User Avatar Menu Component
 /**
@@ -70,7 +70,7 @@ export function UserAvatarMenu() {
 					<TooltipButton
 						variant="ghost"
 						size="icon"
-						className="h-10 w-10 rounded-full hover:bg-gray-100 transition-all p-0"
+						className="h-10 w-10 rounded-full hover:bg-muted transition-all p-0"
 						tooltipContent="Profile"
 						tooltipSide="bottom"
 						asChild
@@ -116,8 +116,8 @@ export function UserAvatarMenu() {
 										className={cn(
 											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
 											theme === "light"
-												? "bg-white text-gray-900 shadow-sm"
-												: "text-gray-100-foreground hover:text-gray-900"
+												? "bg-white text-foreground shadow-sm"
+												: "text-gray-100-foreground hover:text-foreground"
 										)}
 										aria-label="Light theme"
 									>
@@ -129,8 +129,8 @@ export function UserAvatarMenu() {
 										className={cn(
 											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
 											theme === "dark"
-												? "bg-white text-gray-900 shadow-sm"
-												: "text-gray-100-foreground hover:text-gray-900"
+												? "bg-white text-foreground shadow-sm"
+												: "text-gray-100-foreground hover:text-foreground"
 										)}
 										aria-label="Dark theme"
 									>
@@ -142,8 +142,8 @@ export function UserAvatarMenu() {
 										className={cn(
 											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
 											theme === "system"
-												? "bg-white text-gray-900 shadow-sm"
-												: "text-gray-100-foreground hover:text-gray-900"
+												? "bg-white text-foreground shadow-sm"
+												: "text-gray-100-foreground hover:text-foreground"
 										)}
 										aria-label="System theme"
 									>
@@ -204,7 +204,7 @@ export function Logo({ className, size = "md", href = "/" }) {
 					className={cn("object-contain", sizeClasses[size])}
 				/>
 			</div>
-			<span className={cn("font-bold tracking-tight text-gray-900 dark:text-white", textSize)}>
+			<span className={cn("font-bold tracking-tight text-foreground dark:text-white", textSize)}>
 				Tali
 				<span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500">
 					mio
@@ -291,7 +291,7 @@ export function MainHeader({ transparent = false, className }) {
 									variant="ghost"
 									size="icon"
 									onClick={() => setSearchOpen(true)}
-									className="h-10 w-10 rounded-full text-gray-100-foreground hover:bg-gray-100 transition-all"
+									className="h-10 w-10 rounded-full text-gray-100-foreground hover:bg-muted transition-all"
 									tooltipContent="Search"
 								>
 									<Search className="h-5 w-5" />
@@ -302,7 +302,7 @@ export function MainHeader({ transparent = false, className }) {
 								variant="ghost"
 								size="icon"
 								onClick={toggleChat}
-								className="h-10 w-10 rounded-full text-gray-100-foreground hover:bg-gray-100 transition-all"
+								className="h-10 w-10 rounded-full text-gray-100-foreground hover:bg-muted transition-all"
 								tooltipContent="Chat with AI"
 								tooltipSide="bottom"
 							>
@@ -319,7 +319,7 @@ export function MainHeader({ transparent = false, className }) {
 								<Button
 									variant="ghost"
 									size="icon"
-									className="md:hidden h-10 w-10 rounded-full text-gray-100-foreground hover:bg-gray-100 ml-1"
+									className="md:hidden h-10 w-10 rounded-full text-gray-100-foreground hover:bg-muted ml-1"
 								>
 									<Menu className="h-5 w-5" />
 									<span className="sr-only">Toggle menu</span>
@@ -333,21 +333,21 @@ export function MainHeader({ transparent = false, className }) {
 									<nav className="flex flex-col space-y-4">
 										<Link
 											to="/courses"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-gray-100 transition-colors"
+											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
 										>
 											<BookOpen className="h-5 w-5 text-course" />
 											<span className="font-medium">Courses</span>
 										</Link>
 										<Link
 											to="/books"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-gray-100 transition-colors"
+											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
 										>
 											<FileText className="h-5 w-5 text-book" />
 											<span className="font-medium">Books</span>
 										</Link>
 										<Link
 											to="/videos"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-gray-100 transition-colors"
+											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
 										>
 											<Youtube className="h-5 w-5 text-video" />
 											<span className="font-medium">Videos</span>

@@ -1,10 +1,10 @@
 import { Files, FileText, GitBranch, MessageSquare, PanelLeft } from "lucide-react"
 import { useState } from "react"
 import { Link } from "react-router-dom"
+import { UserAvatarMenu } from "@/components/header/MainHeader"
+import { TooltipButton } from "@/components/TooltipButton"
 import { useChatSidebar } from "@/features/assistant/contexts/chatSidebarContext"
-import { cn } from "../../lib/utils"
-import { TooltipButton } from "../TooltipButton"
-import { UserAvatarMenu } from "./MainHeader"
+import { cn } from "@/lib/utils"
 
 export function CourseHeader({
 	courseName,
@@ -34,7 +34,7 @@ export function CourseHeader({
 
 					{/* Course Info Section */}
 					<div className="flex-1 min-w-0">
-						<h1 className="text-base font-semibold text-gray-900 truncate">{courseName}</h1>
+						<h1 className="text-base font-semibold text-foreground truncate">{courseName}</h1>
 						<div className="flex items-center mt-1">
 							<div className="w-32 md:w-48 bg-gray-100 rounded-full h-1.5 overflow-hidden">
 								<div
@@ -51,7 +51,7 @@ export function CourseHeader({
 						<button
 							className={cn(
 								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
-								mode === "outline" ? "bg-white text-gray-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+								mode === "outline" ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-slate-700"
 							)}
 							type="button"
 							onClick={() => mode !== "outline" && onModeChange("outline")}
@@ -63,7 +63,7 @@ export function CourseHeader({
 						<button
 							className={cn(
 								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
-								mode === "track" ? "bg-white text-gray-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+								mode === "track" ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-slate-700"
 							)}
 							type="button"
 							onClick={() => mode !== "track" && onModeChange("track")}
@@ -75,7 +75,7 @@ export function CourseHeader({
 						<button
 							className={cn(
 								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
-								mode === "documents" ? "bg-white text-gray-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+								mode === "documents" ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-slate-700"
 							)}
 							type="button"
 							onClick={() => mode !== "documents" && onModeChange("documents")}

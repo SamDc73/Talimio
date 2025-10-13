@@ -4,16 +4,16 @@
 
 import { Brain, ChevronLeft, Eye, RotateCcw, Save, Trash2, X } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
+import { Button } from "@/components/Button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/Dialog"
+import { Label } from "@/components/Label"
 import {
 	clearUserMemory,
 	deleteMemory,
 	getUserMemories,
 	getUserSettings,
 	updateCustomInstructions,
-} from "../services/personalizationApi.js"
-import { Button } from "./button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./dialog"
-import { Label } from "./label"
+} from "@/services/personalizationApi.js"
 
 export function PersonalizationDialog({ open, onOpenChange }) {
 	const [isLoading, setIsLoading] = useState(false)
@@ -175,7 +175,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 										>
 											<X className="h-3 w-3" />
 										</Button>
-										<p className="text-sm font-medium text-gray-900 mb-2 pr-8">{memory.content}</p>
+										<p className="text-sm font-medium text-foreground mb-2 pr-8">{memory.content}</p>
 										<div className="flex items-center justify-between text-xs text-gray-100-foreground">
 											<span>{formatTimestamp(memory.timestamp)}</span>
 										</div>
@@ -218,7 +218,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 									value={instructions}
 									onChange={(e) => setInstructions(e.target.value)}
 									placeholder="Tell the AI how you'd like it to respond. For example: 'I prefer concise explanations with practical examples' or 'I'm a visual learner who likes diagrams and step-by-step guides.'"
-									className="w-full min-h-[120px] p-3 text-sm border border-gray-300 bg-white rounded-md resize-y focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+									className="w-full min-h-[120px] p-3 text-sm border border-border bg-white rounded-md resize-y focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
 									maxLength={maxCharacters}
 								/>
 								<div className="flex justify-between items-center text-xs text-gray-100-foreground">

@@ -1,6 +1,6 @@
 import { forwardRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Button } from "@/components/Button"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/Tooltip"
 
 /**
  * TooltipButton - A button with sexy, subtle tooltip that appears on hover

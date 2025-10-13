@@ -1,4 +1,4 @@
-import { Button } from "@/components/button"
+import { Button } from "@/components/Button"
 
 export default function EmptyState({ onGenerateCourse, onUploadBook, onAddYoutube }) {
 	return (

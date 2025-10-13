@@ -1,10 +1,10 @@
 import { MessageSquare, PanelRight } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
+import { UserAvatarMenu } from "@/components/header/MainHeader"
 import { TooltipButton } from "@/components/TooltipButton"
 import { useChatSidebar } from "@/features/assistant/contexts/chatSidebarContext"
 import { useVideoProgress } from "@/hooks/useVideoProgress"
 import { formatProgressText } from "@/utils/progressUtils"
-import { UserAvatarMenu } from "./MainHeader"
 
 export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
 	const _navigate = useNavigate()

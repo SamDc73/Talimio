@@ -1,10 +1,10 @@
 import { motion } from "framer-motion"
 import { Archive, MoreHorizontal, Pin, Tag, X } from "lucide-react"
 import { useState } from "react"
-import { Button } from "@/components/button"
+import { Button } from "@/components/Button"
 import { ConfirmationDialog } from "@/components/ConfirmationDialog"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover"
-import { Separator } from "@/components/separator"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/Popover"
+import { Separator } from "@/components/Separator"
 import TagChip from "@/features/home/components/TagChip"
 import TagEditModal from "@/features/home/components/TagEditModal"
 import { VARIANTS } from "@/features/home/utils/contentConstants"
@@ -89,10 +89,10 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 				exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
 				transition={{ duration: 0.4, delay: 0.1 * index }}
 				whileHover={{ y: -5, transition: { duration: 0.2 } }}
-				className={`bg-white rounded-2xl overflow-hidden relative flex flex-col h-full cursor-pointer ${
+				className={`bg-background rounded-2xl overflow-hidden relative flex flex-col h-full cursor-pointer ${
 					pinned
 						? "shadow-md border-2 border-green-500/10 bg-green-500/5"
-						: "shadow-sm hover:shadow-md border border-gray-200"
+						: "shadow-sm hover:shadow-md border border-border"
 				}`}
 				onMouseEnter={() => setHover(true)}
 				onMouseLeave={() => setHover(false)}
@@ -106,7 +106,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 							<span>{V.label}</span>
 						</div>
 					</div>
-					<h3 className="text-xl font-display font-bold text-gray-900 hover:underline line-clamp-2 mb-1">
+					<h3 className="text-xl font-display font-bold text-foreground hover:underline line-clamp-2 mb-1">
 						{item.title}
 					</h3>
 

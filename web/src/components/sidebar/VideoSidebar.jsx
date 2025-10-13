@@ -264,7 +264,7 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 														? "text-violet-700"
 														: isActive
 															? "text-violet-600"
-															: "text-gray-900 group-hover:text-violet-600"
+															: "text-foreground group-hover:text-violet-600"
 												}`}
 											>
 												{chapter.title}

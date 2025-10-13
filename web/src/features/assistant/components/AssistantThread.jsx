@@ -19,7 +19,7 @@ import {
 	Square,
 	X,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/Button"
 import {
 	ComposerAddAttachment,
 	ComposerAttachments,

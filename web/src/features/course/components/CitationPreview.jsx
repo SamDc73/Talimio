@@ -11,9 +11,9 @@
 
 import { ChevronRight, ExternalLink, Eye, FileText, Link2 } from "lucide-react"
 import { useEffect, useRef } from "react"
-import { Button } from "@/components/button"
-import { Card } from "@/components/card"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Button } from "@/components/Button"
+import { Card } from "@/components/Card"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/Tooltip"
 
 /**
  * InlineCitation - Small clickable citation number

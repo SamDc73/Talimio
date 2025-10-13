@@ -7,7 +7,7 @@
 
 import { X } from "lucide-react"
 import { useState } from "react"
-import { Button } from "../../components/ui/button"
+import { Button } from "@/components/Button"
 import { useCourseNavigation } from "../../utils/navigationUtils"
 import { useCourseService } from "./api/courseApi"
 

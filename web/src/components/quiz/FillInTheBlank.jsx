@@ -21,7 +21,7 @@ export function FillInTheBlank({ question, answer, caseSensitive = false, explan
 
 	return (
 		<div className="border-l-4 border-l-green-500/20 pl-6 my-8 bg-white/30 rounded-r-lg">
-			<h4 className="mb-6 text-lg font-medium text-gray-900">{question}</h4>
+			<h4 className="mb-6 text-lg font-medium text-foreground">{question}</h4>
 
 			<div className="mb-6">
 				<input
@@ -35,7 +35,7 @@ export function FillInTheBlank({ question, answer, caseSensitive = false, explan
 					}}
 					disabled={showFeedback}
 					placeholder="Type your answer here..."
-					className={`w-full px-4 py-3 text-sm rounded-lg border transition-all focus:ring-2 focus:ring-green-500/20 focus:outline-none ${
+					className={`w-full px-4 py-3 text-sm rounded-lg border transition-all focus:ring-2 focus:ring-primary/20 focus:outline-none ${
 						showFeedback
 							? isCorrect
 								? "bg-emerald-50 border-emerald-200 text-emerald-900 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-100"
@@ -70,7 +70,7 @@ export function FillInTheBlank({ question, answer, caseSensitive = false, explan
 						</div>
 						{!isCorrect && (
 							<p className="mb-2 text-sm text-gray-100-foreground">
-								The correct answer is: <span className="font-medium text-gray-900">{answer}</span>
+								The correct answer is: <span className="font-medium text-foreground">{answer}</span>
 							</p>
 						)}
 						{explanation && <p className="text-sm leading-relaxed text-gray-100-foreground">{explanation}</p>}
@@ -78,7 +78,7 @@ export function FillInTheBlank({ question, answer, caseSensitive = false, explan
 					<button
 						type="button"
 						onClick={handleReset}
-						className="px-4 py-2 bg-gray-100 text-gray-900 hover:bg-gray-100/80 rounded-lg text-sm font-medium transition-colors"
+						className="px-4 py-2 bg-gray-100 text-foreground hover:bg-muted/80 rounded-lg text-sm font-medium transition-colors"
 					>
 						Try Again
 					</button>

@@ -1,7 +1,7 @@
 import { AlertTriangle } from "lucide-react"
 
-import { Button } from "@/components/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/dialog"
+import { Button } from "@/components/Button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/Dialog"
 
 export function ConfirmationDialog({
 	open,
@@ -36,7 +36,7 @@ export function ConfirmationDialog({
 							</div>
 						)}
 						<div className="text-left">
-							<DialogTitle className="text-lg font-semibold text-gray-900">{title}</DialogTitle>
+							<DialogTitle className="text-lg font-semibold text-foreground">{title}</DialogTitle>
 						</div>
 					</div>
 				</DialogHeader>

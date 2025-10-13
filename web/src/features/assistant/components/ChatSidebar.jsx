@@ -3,7 +3,7 @@ import { AnimatePresence, motion, useDragControls } from "framer-motion"
 import { GripVertical, Pin, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import ErrorBoundary from "@/components/ErrorBoundary"
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/Button"
 import { AssistantThread } from "@/features/assistant/components/AssistantThread"
 import {
 	useAssistantPinned,

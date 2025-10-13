@@ -1,9 +1,9 @@
 import { useState } from "react"
 
-import { Button } from "@/components/button"
-import { Input } from "@/components/input"
-import { Label } from "@/components/label"
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/sheet"
+import { Button } from "@/components/Button"
+import { Input } from "@/components/Input"
+import { Label } from "@/components/Label"
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/Sheet"
 import { createVideo } from "@/services/videosService"
 
 export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {

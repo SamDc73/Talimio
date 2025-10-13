@@ -42,7 +42,7 @@ function ExpandableSection({
 		>
 			<button
 				type="button"
-				className={`flex items-center gap-3 justify-between w-full px-4 py-3 text-left font-semibold text-sm text-gray-900 ${children && isExpanded ? "border-b border-gray-200/60" : ""} rounded-t-xl ${showExpandButton ? "cursor-pointer hover:bg-slate-50/50" : ""} transition-colors`}
+				className={`flex items-center gap-3 justify-between w-full px-4 py-3 text-left font-semibold text-sm text-foreground ${children && isExpanded ? "border-b border-gray-200/60" : ""} rounded-t-xl ${showExpandButton ? "cursor-pointer hover:bg-slate-50/50" : ""} transition-colors`}
 				style={{ background: isActive ? "transparent" : "#fff" }}
 				onClick={showExpandButton ? onToggle : undefined}
 				aria-expanded={showExpandButton ? isExpanded : undefined}

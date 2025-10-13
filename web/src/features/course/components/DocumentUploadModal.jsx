@@ -11,7 +11,7 @@
 
 import { AlertTriangle, CheckCircle2, X } from "lucide-react"
 import { useCallback, useState } from "react"
-import { Button } from "@/components/button"
+import { Button } from "@/components/Button"
 import { useDocumentsService } from "../api/documentsApi"
 import { DocumentStatusProgress } from "./DocumentStatusBadge"
 import DocumentUploader from "./DocumentUploader"

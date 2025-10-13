@@ -4,7 +4,7 @@ function Card({ className, ref, ...props }) {
 	return (
 		<div
 			ref={ref}
-			className={cn("rounded-lg border border-gray-200 bg-white text-gray-900 shadow-sm", className)}
+			className={cn("rounded-lg border border-border bg-background text-foreground shadow-sm", className)}
 			{...props}
 		/>
 	)
@@ -25,7 +25,7 @@ function CardTitle({ className, ref, ...props }) {
 }
 
 function CardDescription({ className, ref, ...props }) {
-	return <p ref={ref} className={cn("text-sm text-gray-600", className)} {...props} />
+	return <p ref={ref} className={cn("text-sm text-muted-foreground", className)} {...props} />
 }
 
 function CardContent({ className, ref, ...props }) {

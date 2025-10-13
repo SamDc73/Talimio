@@ -1,7 +1,7 @@
 import { motion } from "framer-motion"
 import { Search, Sparkles, X, Youtube } from "lucide-react"
-import { Button } from "@/components/button"
-import { Input } from "@/components/input"
+import { Button } from "@/components/Button"
+import { Input } from "@/components/Input"
 import FilterPopover from "./FilterPopover"
 
 function SearchBar({

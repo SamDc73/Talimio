@@ -14,7 +14,7 @@ function RadioGroupItem({ className, ref, ...props }) {
 		<RadioGroupPrimitive.Item
 			ref={ref}
 			className={cn(
-				"aspect-square h-4 w-4 rounded-full border border-green-500 text-green-500 ring-offset-white focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+				"aspect-square h-4 w-4 rounded-full border border-primary text-primary ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
 				className
 			)}
 			{...props}

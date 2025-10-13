@@ -17,7 +17,7 @@ import SearchBar from "@/features/home/components/SearchBar"
 import SkeletonGrid from "@/features/home/components/SkeletonGrid"
 import WelcomeHeader from "@/features/home/components/WelcomeHeader"
 import { useCelebration } from "@/features/home/hooks/useCelebration"
-import { useContentData } from "@/features/home/hooks/useContentData.jsx"
+import { useContentData } from "@/features/home/hooks/useContentData"
 import { useContentFilters } from "@/features/home/hooks/useContentFilters"
 import { useContentHandlers } from "@/features/home/hooks/useContentHandlers"
 import { useContentProgressSync } from "@/features/home/hooks/useContentProgressSync"
@@ -43,9 +43,7 @@ export default function HomePage() {
 		contentItems,
 		setContentItems,
 		filterOptions,
-		setFilterOptions,
 		sortOptions,
-		setSortOptions,
 		isLoading: contentLoading,
 		loadContentData,
 	} = useContentData(filters, pinning)

@@ -1,8 +1,8 @@
 import { motion } from "framer-motion"
 import { X } from "lucide-react"
 
-import { Badge } from "@/components/badge"
-import { Button } from "@/components/button"
+import { Badge } from "@/components/Badge"
+import { Button } from "@/components/Button"
 
 export default function FilterBadges({
 	activeFilter,

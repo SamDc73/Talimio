@@ -1,12 +1,12 @@
 import { SlidersHorizontal } from "lucide-react"
 
-import { Button } from "@/components/button"
-import { Input } from "@/components/input"
-import { Label } from "@/components/label"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover"
-import { RadioGroup, RadioGroupItem } from "@/components/radio-group"
-import { Separator } from "@/components/separator"
-import { renderIcon } from "@/features/home/utils/iconMapping.jsx"
+import { Button } from "@/components/Button"
+import { Input } from "@/components/Input"
+import { Label } from "@/components/Label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/Popover"
+import { RadioGroup, RadioGroupItem } from "@/components/RadioGroup"
+import { Separator } from "@/components/Separator"
+import { renderIcon } from "@/features/home/utils/iconMapping"
 
 function FilterPopover({
 	filterOptions,

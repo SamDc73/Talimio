@@ -1,6 +1,6 @@
 import { ArrowLeft, CheckCircle, RotateCcw } from "lucide-react"
 import { useRef } from "react"
-import { Button } from "@/components/button"
+import { Button } from "@/components/Button"
 import { cn } from "@/lib/utils"
 import { ContentRenderer } from "./ContentRenderer"
 

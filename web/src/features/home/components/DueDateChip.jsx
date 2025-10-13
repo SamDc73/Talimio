@@ -1,7 +1,7 @@
 import { motion } from "framer-motion"
 import { Check, Pause } from "lucide-react"
 
-import { Button } from "@/components/button"
+import { Button } from "@/components/Button"
 import { STATES } from "@/features/home/utils/contentConstants"
 
 function DueDateChip({ dueDate, isPaused, progress, type, dueCount = 0, overdue = 0, onSnooze }) {

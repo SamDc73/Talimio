@@ -1,6 +1,6 @@
 import { AnimatePresence } from "framer-motion"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
-import { Button } from "@/components/button"
+import { Button } from "@/components/Button"
 import EmptyState from "./EmptyState"
 import SkeletonGrid from "./SkeletonGrid"
 

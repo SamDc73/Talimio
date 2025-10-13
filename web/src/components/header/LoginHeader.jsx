@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { Link } from "react-router-dom"
-import { cn } from "../../lib/utils"
+import { cn } from "@/lib/utils"
 
 // Logo Component
 /**
@@ -41,7 +41,7 @@ export function LoginLogo({ className, size = "md", href = "/" }) {
 					className={cn("object-contain", sizeClasses[size])}
 				/>
 			</div>
-			<span className={cn("font-bold tracking-tight text-gray-900 dark:text-white", textSize)}>
+			<span className={cn("font-bold tracking-tight text-foreground dark:text-white", textSize)}>
 				Tali
 				<span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500">
 					mio

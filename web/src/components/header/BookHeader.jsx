@@ -1,91 +1,88 @@
 import { Maximize, MessageSquare, PanelLeft, Type } from "lucide-react"
 // No useEffect needed
 import { Link } from "react-router-dom"
+import { UserAvatarMenu } from "@/components/header/MainHeader"
 import { TooltipButton } from "@/components/TooltipButton"
 import { useChatSidebar } from "@/features/assistant/contexts/chatSidebarContext"
 import useAppStore from "@/stores/useAppStore"
 import { formatProgressText } from "@/utils/progressUtils"
-import { UserAvatarMenu } from "./MainHeader"
 
 export function BookHeader({
-  book,
-  bookId, // Always use explicit bookId from parent
-  onToggleSidebar,
-  isSidebarOpen,
-  onZoomIn = () => {},
-  onZoomOut = () => {},
-  onFitToScreen = () => {},
-  zoomLevel = 100,
-  showZoomControls = false,
-  showFontControls = false,
-  onFontIncrease = () => {},
-  onFontDecrease = () => {},
-  fontSize = 100,
+	book,
+	bookId, // Always use explicit bookId from parent
+	onToggleSidebar,
+	isSidebarOpen,
+	onZoomIn = () => {},
+	onZoomOut = () => {},
+	onFitToScreen = () => {},
+	zoomLevel = 100,
+	showZoomControls = false,
+	showFontControls = false,
+	onFontIncrease = () => {},
+	onFontDecrease = () => {},
+	fontSize = 100,
 }) {
-  const { toggleChat } = useChatSidebar()
+	const { toggleChat } = useChatSidebar()
 
-  // Use the bookId passed from parent component (BookViewer) which knows the URL param
-  // This ensures consistency across all components
-  const isEpub = (book?.fileType?.toLowerCase?.() || "") === "epub"
-  const currentPage = useAppStore((state) => state.books?.readingState?.[bookId]?.currentPage || 1)
-  const storedTotalPages = useAppStore((state) => state.books?.readingState?.[bookId]?.totalPages)
-  const totalPages = storedTotalPages || book?.totalPages || 0
-  // For EPUB, progress is tracked via epubState.progress (0-100). Fallback to books.progress slice.
-  const epubProgressFromReading = useAppStore(
-    (state) => state.books?.readingState?.[bookId]?.epubState?.progress
-  )
-  const epubProgressFromSlice = useAppStore((state) => state.books?.progress?.[bookId]?.percentage)
-  const epubProgressPct =
-    (typeof epubProgressFromReading === "number" ? epubProgressFromReading : undefined) ??
-    (typeof epubProgressFromSlice === "number" ? epubProgressFromSlice : undefined) ??
-    0
-  const progressPercentage = isEpub
-    ? epubProgressPct
-    : totalPages
-    ? Math.round((currentPage / totalPages) * 100)
-    : 0
-  // Derive a display page for EPUB from percentage and known totalPages
-  const displayCurrentPage = isEpub && totalPages
-    ? Math.max(1, Math.min(totalPages, Math.round((progressPercentage / 100) * totalPages)))
-    : currentPage
-  return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
-      <div className="container mx-auto px-4">
-        <div className="flex h-16 items-center">
-          {/* Logo Section */}
-          <div className="flex-shrink-0 mr-4">
-            <Link to="/" className="block">
-              <img src="/logo.png" alt="Talimio Logo" width={32} height={32} className="object-contain" />
-            </Link>
-          </div>
+	// Use the bookId passed from parent component (BookViewer) which knows the URL param
+	// This ensures consistency across all components
+	const isEpub = (book?.fileType?.toLowerCase?.() || "") === "epub"
+	const currentPage = useAppStore((state) => state.books?.readingState?.[bookId]?.currentPage || 1)
+	const storedTotalPages = useAppStore((state) => state.books?.readingState?.[bookId]?.totalPages)
+	const totalPages = storedTotalPages || book?.totalPages || 0
+	// For EPUB, progress is tracked via epubState.progress (0-100). Fallback to books.progress slice.
+	const epubProgressFromReading = useAppStore((state) => state.books?.readingState?.[bookId]?.epubState?.progress)
+	const epubProgressFromSlice = useAppStore((state) => state.books?.progress?.[bookId]?.percentage)
+	const epubProgressPct =
+		(typeof epubProgressFromReading === "number" ? epubProgressFromReading : undefined) ??
+		(typeof epubProgressFromSlice === "number" ? epubProgressFromSlice : undefined) ??
+		0
+	const progressPercentage = isEpub ? epubProgressPct : totalPages ? Math.round((currentPage / totalPages) * 100) : 0
+	// Derive a display page for EPUB from percentage and known totalPages
+	const displayCurrentPage =
+		isEpub && totalPages
+			? Math.max(1, Math.min(totalPages, Math.round((progressPercentage / 100) * totalPages)))
+			: currentPage
+	return (
+		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
+			<div className="container mx-auto px-4">
+				<div className="flex h-16 items-center">
+					{/* Logo Section */}
+					<div className="flex-shrink-0 mr-4">
+						<Link to="/" className="block">
+							<img src="/logo.png" alt="Talimio Logo" width={32} height={32} className="object-contain" />
+						</Link>
+					</div>
 
-          {/* Divider */}
-          <div className="h-8 w-px bg-slate-200 mx-3" />
+					{/* Divider */}
+					<div className="h-8 w-px bg-slate-200 mx-3" />
 
-          {/* Book Info Section */}
-          <div className="flex-1 min-w-0">
-            <h1 className="text-base font-semibold text-slate-800 truncate">{book?.title || "Loading..."}</h1>
-            {book && (
-              <div className="flex items-center mt-1">
-                <div className="w-32 md:w-48 bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-blue-400 to-blue-500 rounded-full transition-all duration-300"
-                    style={{ width: `${progressPercentage}%` }}
-                  />
-                </div>
-                <span className="ml-2 text-xs font-medium text-slate-600">
-                  {formatProgressText(progressPercentage)}
-                </span>
-                <span className="ml-3 text-xs text-slate-500">
-                  {totalPages > 0 && displayCurrentPage > 0 ? `Page ${displayCurrentPage} of ${totalPages}` : book.author || ""}
-                </span>
-              </div>
-            )}
-          </div>
+					{/* Book Info Section */}
+					<div className="flex-1 min-w-0">
+						<h1 className="text-base font-semibold text-slate-800 truncate">{book?.title || "Loading..."}</h1>
+						{book && (
+							<div className="flex items-center mt-1">
+								<div className="w-32 md:w-48 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+									<div
+										className="h-full bg-gradient-to-r from-blue-400 to-blue-500 rounded-full transition-all duration-300"
+										style={{ width: `${progressPercentage}%` }}
+									/>
+								</div>
+								<span className="ml-2 text-xs font-medium text-slate-600">
+									{formatProgressText(progressPercentage)}
+								</span>
+								<span className="ml-3 text-xs text-slate-500">
+									{totalPages > 0 && displayCurrentPage > 0
+										? `Page ${displayCurrentPage} of ${totalPages}`
+										: book.author || ""}
+								</span>
+							</div>
+						)}
+					</div>
 
-          {/* Actions Section */}
-          <div className="flex items-center gap-2">
-            {/* Zoom Controls for PDF */}
+					{/* Actions Section */}
+					<div className="flex items-center gap-2">
+						{/* Zoom Controls for PDF */}
 						{showZoomControls && (
 							<div className="flex items-center border border-gray-200 rounded-full h-8 px-1 bg-gray-100/50">
 								<TooltipButton

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ChatSidebar } from "../components/ChatSidebar"
+import { ChatSidebar } from "@/features/assistant/components/ChatSidebar"
 import { ChatSidebarContext } from "./chatSidebarContext"
 
 export function ChatSidebarProvider({ children }) {

@@ -1,7 +1,7 @@
 import { Slot } from "@radix-ui/react-slot"
 
 import { cn } from "@/lib/utils"
-import { buttonVariants } from "./button-variants"
+import { buttonVariants } from "./buttonVariants.js"
 
 function Button({ className, variant, size, asChild = false, ref, ...props }) {
 	const Comp = asChild ? Slot : "button"

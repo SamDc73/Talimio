@@ -3,8 +3,8 @@ import { Sparkles, Wand2 } from "lucide-react"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 
-import { Button } from "@/components/button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/dialog"
+import { Button } from "@/components/Button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/Dialog"
 import { api } from "@/lib/apiClient"
 
 function RoadmapPromptModal({ open, onOpenChange, onRoadmapCreated }) {

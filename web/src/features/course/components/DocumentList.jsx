@@ -24,10 +24,10 @@ import {
 	Trash2,
 } from "lucide-react"
 import { useMemo, useState } from "react"
-import { Button } from "@/components/button"
-import { Card } from "@/components/card"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/drop-menu"
-import { Input } from "@/components/input"
+import { Button } from "@/components/Button"
+import { Card } from "@/components/Card"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/DropdownMenu"
+import { Input } from "@/components/Input"
 import { isDocumentFailed, isDocumentProcessing, isDocumentReady } from "../utils/documentUtils"
 import DocumentStatusBadge, { DocumentStatusSummary } from "./DocumentStatusBadge"
 

@@ -19,14 +19,14 @@ export function MultipleChoice({ question, options, correctAnswer, explanation }
 
 	return (
 		<div className="border-l-4 border-l-green-500/20 pl-6 my-8 bg-white/30 rounded-r-lg">
-			<h4 className="mb-6 text-lg font-medium text-gray-900">{question}</h4>
+			<h4 className="mb-6 text-lg font-medium text-foreground">{question}</h4>
 
 			<div className="mb-6 space-y-2">
 				{options.map((option, index) => {
 					const isCorrectOption = index === correctAnswer
 					const isSelected = index === selectedAnswer
 
-					let optionClasses = "bg-white border border-gray-200 hover:bg-gray-100/30"
+					let optionClasses = "bg-white border border-gray-200 hover:bg-muted/30"
 
 					if (showFeedback) {
 						if (isCorrectOption) {
@@ -39,7 +39,7 @@ export function MultipleChoice({ question, options, correctAnswer, explanation }
 							optionClasses = "bg-gray-100/20 border-gray-200 text-gray-100-foreground"
 						}
 					} else if (isSelected) {
-						optionClasses = "bg-green-500/5 border-green-500/30 text-gray-900"
+						optionClasses = "bg-green-500/5 border-green-500/30 text-foreground"
 					}
 
 					return (
@@ -56,7 +56,7 @@ export function MultipleChoice({ question, options, correctAnswer, explanation }
 								checked={selectedAnswer === index}
 								onChange={() => !showFeedback && setSelectedAnswer(index)}
 								disabled={showFeedback}
-								className="mt-1 text-green-500 focus:ring-green-500 focus:ring-2 focus:ring-offset-0 border-gray-400"
+								className="mt-1 text-primary focus:ring-primary focus:ring-2 focus:ring-offset-0 border-gray-400"
 							/>
 							<span className="flex-1 text-sm leading-relaxed">{option}</span>
 							{showFeedback && isCorrectOption && (
@@ -97,7 +97,7 @@ export function MultipleChoice({ question, options, correctAnswer, explanation }
 					<button
 						type="button"
 						onClick={handleReset}
-						className="px-4 py-2 bg-gray-100 text-gray-900 hover:bg-gray-100/80 rounded-lg text-sm font-medium transition-colors"
+						className="px-4 py-2 bg-gray-100 text-foreground hover:bg-gray-100/80 rounded-lg text-sm font-medium transition-colors"
 					>
 						Try Again
 					</button>

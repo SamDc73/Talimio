@@ -11,13 +11,13 @@
 
 import { CheckCircle2, Plus, RefreshCw, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Button } from "@/components/button"
-import { Card } from "@/components/card"
+import { Button } from "@/components/Button"
+import { Card } from "@/components/Card"
 import { usePolling } from "../../../hooks/usePolling"
 import { useDocumentsService } from "../api/documentsApi"
-import DocumentList from "../components/DocumentList"
-import { DocumentStatusSummary } from "../components/DocumentStatusBadge"
-import DocumentUploadModal from "../components/DocumentUploadModal"
+import DocumentList from "@/features/course/components/DocumentList"
+import { DocumentStatusSummary } from "@/features/course/components/DocumentStatusBadge"
+import DocumentUploadModal from "@/features/course/components/DocumentUploadModal"
 
 const POLLING_INTERVAL = 5000 // 5 seconds
 
@@ -64,7 +64,7 @@ function DocumentsView({ courseId }) {
 				setIsRefreshing(false)
 			}
 		},
-		[] // No dependencies - uses refs instead
+		[courseId] // courseId is used in the catch block
 	)
 
 	const { startPolling, stopPolling } = usePolling(() => loadDocuments(true), POLLING_INTERVAL, [loadDocuments])

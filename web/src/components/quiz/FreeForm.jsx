@@ -19,7 +19,7 @@ export function FreeForm({ question, sampleAnswer, minLength = 50 }) {
 
 	return (
 		<div className="border-l-4 border-l-green-500/20 pl-6 my-8 bg-white/30 rounded-r-lg">
-			<h4 className="mb-6 text-lg font-medium text-gray-900">{question}</h4>
+			<h4 className="mb-6 text-lg font-medium text-foreground">{question}</h4>
 
 			<div className="mb-6">
 				<textarea
@@ -28,7 +28,7 @@ export function FreeForm({ question, sampleAnswer, minLength = 50 }) {
 					disabled={submitted}
 					placeholder="Type your answer here..."
 					rows={4}
-					className={`w-full px-4 py-3 text-sm rounded-lg border resize-y transition-all focus:ring-2 focus:ring-green-500/20 focus:outline-none placeholder:text-gray-400 ${
+					className={`w-full px-4 py-3 text-sm rounded-lg border resize-y transition-all focus:ring-2 focus:ring-primary/20 focus:outline-none placeholder:text-gray-400 ${
 						submitted
 							? "bg-emerald-50 border-emerald-200 text-emerald-900 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-100"
 							: "bg-white border-gray-200 focus:border-green-500/50"
@@ -73,8 +73,10 @@ export function FreeForm({ question, sampleAnswer, minLength = 50 }) {
 
 					{sampleAnswer && (
 						<details className="mb-4 group">
-							<summary className="cursor-pointer p-4 rounded-lg border border-gray-200 bg-white hover:bg-gray-100/30 transition-colors">
-								<span className="text-sm font-medium text-gray-900 group-open:text-green-500">View Sample Answer</span>
+							<summary className="cursor-pointer p-4 rounded-lg border border-gray-200 bg-white hover:bg-muted/30 transition-colors">
+								<span className="text-sm font-medium text-foreground group-open:text-green-500">
+									View Sample Answer
+								</span>
 							</summary>
 							<div className="mt-3 p-4 rounded-lg bg-gray-100/20 border border-gray-200">
 								<p className="text-sm leading-relaxed text-gray-100-foreground">{sampleAnswer}</p>
@@ -85,7 +87,7 @@ export function FreeForm({ question, sampleAnswer, minLength = 50 }) {
 					<button
 						type="button"
 						onClick={handleReset}
-						className="px-4 py-2 bg-gray-100 text-gray-900 hover:bg-gray-100/80 rounded-lg text-sm font-medium transition-colors"
+						className="px-4 py-2 bg-gray-100 text-foreground hover:bg-gray-100/80 rounded-lg text-sm font-medium transition-colors"
 					>
 						Write Another Answer
 					</button>

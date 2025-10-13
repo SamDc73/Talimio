@@ -9,7 +9,7 @@
 
 import { AlertCircle, BookOpen, FileText, Sparkles, Upload, X } from "lucide-react"
 import { useEffect, useState } from "react"
-import { Button } from "../../components/button"
+import { Button } from "@/components/Button"
 import { useCourseNavigation } from "../../utils/navigationUtils"
 import { useCourseService } from "./api/courseApi"
 import { useDocumentsService } from "./api/documentsApi"

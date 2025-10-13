@@ -1,8 +1,8 @@
 import { Loader2, Tag as TagIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 
-import { Button } from "../../../components/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../components/dialog"
+import { Button } from "@/components/Button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
 import useTagStore from "../../../stores/useTagStore"
 
 import { TagList } from "./Tag"
