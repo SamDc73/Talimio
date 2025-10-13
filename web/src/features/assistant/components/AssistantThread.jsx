@@ -17,6 +17,7 @@ import {
 	PencilIcon,
 	RefreshCwIcon,
 	Square,
+	X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -28,6 +29,8 @@ import { MarkdownText } from "@/features/assistant/components/MarkdownText"
 import { ModelPicker } from "@/features/assistant/components/ModelPicker"
 import { ToolFallback } from "@/features/assistant/components/ToolFallback"
 import { TooltipIconButton } from "@/features/assistant/components/TooltipIconButton"
+import { useChatSidebar } from "@/features/assistant/contexts/chatSidebarContext"
+import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
 
 export function AssistantThread() {
@@ -42,7 +45,6 @@ export function AssistantThread() {
 				>
 					<ThreadPrimitive.Viewport className="aui-thread-viewport relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden px-4 pt-2">
 						<ThreadWelcome />
-
 						<ThreadPrimitive.Messages
 							components={{
 								UserMessage,
@@ -58,70 +60,6 @@ export function AssistantThread() {
 				</ThreadPrimitive.Root>
 			</MotionConfig>
 		</LazyMotion>
-	)
-}
-
-function ThreadScrollToBottom() {
-	return (
-		<ThreadPrimitive.ScrollToBottom asChild>
-			<TooltipIconButton
-				tooltip="Scroll to bottom"
-				variant="outline"
-				className="aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible dark:bg-background dark:hover:bg-accent"
-			>
-				<ArrowDownIcon />
-			</TooltipIconButton>
-		</ThreadPrimitive.ScrollToBottom>
-	)
-}
-
-function ThreadWelcome() {
-	return (
-		<ThreadPrimitive.Empty>
-			<div className="aui-thread-welcome-root mx-auto mt-8 mb-auto flex w-full max-w-[var(--thread-max-width)] flex-grow flex-col">
-				<div className="aui-thread-welcome-center flex w-full flex-grow flex-col items-center justify-center">
-					<div className="aui-thread-welcome-message flex size-full flex-col justify-center px-6">
-						<m.div
-							initial={{ opacity: 0, y: 10 }}
-							animate={{ opacity: 1, y: 0 }}
-							exit={{ opacity: 0, y: 10 }}
-							className="aui-thread-welcome-message-motion-1 text-2xl font-semibold"
-						>
-							Hello there!
-						</m.div>
-						<m.div
-							initial={{ opacity: 0, y: 10 }}
-							animate={{ opacity: 1, y: 0 }}
-							exit={{ opacity: 0, y: 10 }}
-							transition={{ delay: 0.1 }}
-							className="aui-thread-welcome-message-motion-2 text-2xl text-muted-foreground/65"
-						>
-							How can I help you today?
-						</m.div>
-					</div>
-				</div>
-			</div>
-		</ThreadPrimitive.Empty>
-	)
-}
-
-function Composer() {
-	return (
-		<div className="aui-composer-wrapper sticky bottom-0 mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 overflow-visible rounded-t-3xl bg-background pb-4 md:pb-6">
-			<ThreadScrollToBottom />
-			<ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col rounded-3xl border border-border bg-muted px-1 pt-2 shadow-[0_9px_9px_0px_rgba(0,0,0,0.01),0_2px_5px_0px_rgba(0,0,0,0.06)] dark:border-muted-foreground/15">
-				<ComposerAttachments />
-				<ComposerPrimitive.Input
-					placeholder="Send a message..."
-					className="aui-composer-input mb-1 max-h-32 min-h-16 w-full resize-none bg-transparent px-3.5 pt-1.5 pb-3 text-base outline-none placeholder:text-muted-foreground focus:outline-primary"
-					rows={1}
-					autoFocus
-					aria-label="Message input"
-					spellCheck="true"
-				/>
-				<ComposerAction />
-			</ComposerPrimitive.Root>
-		</div>
 	)
 }
 
@@ -199,6 +137,93 @@ function AssistantMessage() {
 				</div>
 			</div>
 		</MessagePrimitive.Root>
+	)
+}
+
+function ThreadWelcome() {
+	return (
+		<ThreadPrimitive.Empty>
+			<div className="aui-thread-welcome-root mx-auto mt-8 mb-auto flex w-full max-w-[var(--thread-max-width)] flex-grow flex-col">
+				<div className="aui-thread-welcome-center flex w-full flex-grow flex-col items-center justify-center">
+					<div className="aui-thread-welcome-message flex size-full flex-col justify-center px-6">
+						<m.div
+							initial={{ opacity: 0, y: 10 }}
+							animate={{ opacity: 1, y: 0 }}
+							exit={{ opacity: 0, y: 10 }}
+							className="aui-thread-welcome-message-motion-1 text-2xl font-semibold"
+						>
+							Hello there!
+						</m.div>
+						<m.div
+							initial={{ opacity: 0, y: 10 }}
+							animate={{ opacity: 1, y: 0 }}
+							exit={{ opacity: 0, y: 10 }}
+							transition={{ delay: 0.1 }}
+							className="aui-thread-welcome-message-motion-2 text-2xl text-muted-foreground/65"
+						>
+							How can I help you today?
+						</m.div>
+					</div>
+				</div>
+			</div>
+		</ThreadPrimitive.Empty>
+	)
+}
+
+function ThreadScrollToBottom() {
+	return (
+		<ThreadPrimitive.ScrollToBottom asChild>
+			<TooltipIconButton
+				tooltip="Scroll to bottom"
+				variant="outline"
+				className="aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible dark:bg-background dark:hover:bg-accent"
+			>
+				<ArrowDownIcon />
+			</TooltipIconButton>
+		</ThreadPrimitive.ScrollToBottom>
+	)
+}
+
+function Composer() {
+	const { initialText: replyText, setInitialText } = useChatSidebar()
+	return (
+		<div className="aui-composer-wrapper sticky bottom-0 mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 overflow-visible rounded-t-3xl bg-background pb-4 md:pb-6">
+			<ThreadScrollToBottom />
+			<ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col rounded-3xl border border-border bg-muted px-1 pt-2 shadow-[0_9px_9px_0px_rgba(0,0,0,0.01),0_2px_5px_0px_rgba(0,0,0,0.06)] dark:border-muted-foreground/15">
+				<ComposerAttachments />
+				{replyText && (
+					<div className="aui-composer-reply group relative mx-2.5 mb-2 mt-0.5 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.03] via-primary/[0.02] to-transparent backdrop-blur-[2px] shadow-[0_1px_3px_0px_rgba(0,0,0,0.02),0_0_0_1px_rgba(0,0,0,0.01)] transition-all duration-200 hover:border-primary/30 hover:shadow-[0_2px_8px_0px_rgba(0,0,0,0.04),0_0_0_1px_rgba(0,0,0,0.02)] dark:border-primary/15 dark:from-primary/[0.06] dark:via-primary/[0.04] dark:to-transparent dark:shadow-[0_1px_3px_0px_rgba(0,0,0,0.1),0_0_0_1px_rgba(255,255,255,0.02)] dark:hover:border-primary/25 dark:hover:shadow-[0_2px_8px_0px_rgba(0,0,0,0.15),0_0_0_1px_rgba(255,255,255,0.04)]">
+						<div className="flex items-start gap-3 px-4 py-3">
+							<blockquote className="relative flex-1 min-w-0 pl-3.5 text-[0.8125rem] leading-[1.55] text-foreground/75 dark:text-foreground/70 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2.5px] before:rounded-full before:bg-gradient-to-b before:from-primary/50 before:via-primary/30 before:to-primary/10 dark:before:from-primary/40 dark:before:via-primary/25 dark:before:to-primary/5">
+								<span className="block max-h-[4.65rem] overflow-hidden whitespace-pre-wrap break-words [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">
+									{replyText}
+								</span>
+							</blockquote>
+							<button
+								type="button"
+								className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground/50 opacity-0 transition-all duration-200 hover:bg-primary/8 hover:text-primary/70 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 group-hover:opacity-100 dark:hover:bg-primary/12 dark:hover:text-primary/60"
+								onClick={() => {
+									setInitialText("")
+									logger.info("cleared selection quote")
+								}}
+								aria-label="Clear selection quote"
+							>
+								<X className="h-3.5 w-3.5" />
+							</button>
+						</div>
+					</div>
+				)}
+				<ComposerPrimitive.Input
+					placeholder="Send a message..."
+					className="aui-composer-input mb-1 max-h-32 min-h-16 w-full resize-none bg-transparent px-3.5 pt-1.5 pb-3 text-base outline-none placeholder:text-muted-foreground focus:outline-primary"
+					rows={1}
+					autoFocus
+					aria-label="Message input"
+					spellCheck="true"
+				/>
+				<ComposerAction />
+			</ComposerPrimitive.Root>
+		</div>
 	)
 }
 

@@ -1,9 +1,11 @@
 import { Sparkles } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { useChatSidebar } from "@/features/assistant/contexts/chatSidebarContext"
+import logger from "@/lib/logger"
 
 /**
  * Minimal floating toolbar that appears near selected text.
- * Reads handlers from the closest element carrying data-selection-zone.
+ * Prefers a custom zone handler if provided, falls back to opening chat.
  */
 export function TextSelectionTooltip() {
 	const [isOpen, setIsOpen] = useState(false)
@@ -12,6 +14,7 @@ export function TextSelectionTooltip() {
 	const selectionTimeoutRef = useRef(null)
 	const handlerRef = useRef(null)
 	const selectedTextRef = useRef("")
+	const { openChat } = useChatSidebar()
 
 	useEffect(() => {
 		const updateTooltip = () => {
@@ -27,35 +30,36 @@ export function TextSelectionTooltip() {
 			const anchorNode = selection.anchorNode
 			const element = anchorNode?.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode
 			const selectionZone = element?.closest?.("[data-selection-zone]")
-			const askAiHandler = selectionZone?.__selectionHandlers?.onAskAI
+			const askAiHandler = selectionZone?.__selectionHandlers?.onAskAI || openChat
 
 			if (!askAiHandler) {
-				setIsOpen(false)
-				return
-			}
-
-			try {
-				const range = selection.getRangeAt(0)
-				const rect = range.getBoundingClientRect()
-				const tooltipWidth = 152
-				const tooltipHeight = 44
-				const padding = 10
-
-				const rawX = rect.left + rect.width / 2 - tooltipWidth / 2
-				const x = Math.max(padding, Math.min(rawX, window.innerWidth - tooltipWidth - padding))
-				let y = rect.top - tooltipHeight - padding
-				if (y < padding) {
-					y = rect.bottom + padding
-				}
-
-				selectedTextRef.current = text
-				handlerRef.current = askAiHandler
-				setPosition({ x, y })
-				setIsOpen(true)
-			} catch (_error) {
 				handlerRef.current = null
-				selectedTextRef.current = ""
 				setIsOpen(false)
+			} else {
+				try {
+					const range = selection.getRangeAt(0)
+					const rect = range.getBoundingClientRect()
+					const tooltipWidth = 152
+					const tooltipHeight = 44
+					const padding = 10
+
+					const rawX = rect.left + rect.width / 2 - tooltipWidth / 2
+					const x = Math.max(padding, Math.min(rawX, window.innerWidth - tooltipWidth - padding))
+					let y = rect.top - tooltipHeight - padding
+					if (y < padding) {
+						y = rect.bottom + padding
+					}
+
+					selectedTextRef.current = text
+					handlerRef.current = askAiHandler
+					setPosition({ x, y })
+					setIsOpen(true)
+				} catch (error) {
+					logger.error("updateTooltip failed", error)
+					handlerRef.current = null
+					selectedTextRef.current = ""
+					setIsOpen(false)
+				}
 			}
 		}
 
@@ -93,18 +97,22 @@ export function TextSelectionTooltip() {
 			document.removeEventListener("mousedown", handleClickOutside)
 			clearSelectionTimeout()
 		}
-	}, [])
+	}, [openChat])
 
 	if (!isOpen || !handlerRef.current) {
 		return null
 	}
 
 	const handleAskAiClick = () => {
-		handlerRef.current?.(selectedTextRef.current)
-		handlerRef.current = null
-		selectedTextRef.current = ""
-		setIsOpen(false)
-		window.getSelection()?.removeAllRanges()
+		try {
+			handlerRef.current?.(selectedTextRef.current)
+			logger.info("ask-ai from tooltip", { length: selectedTextRef.current.length })
+		} finally {
+			handlerRef.current = null
+			selectedTextRef.current = ""
+			setIsOpen(false)
+			window.getSelection()?.removeAllRanges()
+		}
 	}
 
 	return (

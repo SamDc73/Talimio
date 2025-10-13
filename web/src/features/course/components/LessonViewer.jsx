@@ -1,6 +1,6 @@
 import { ArrowLeft, CheckCircle, RotateCcw } from "lucide-react"
+import { useRef } from "react"
 import { Button } from "@/components/button"
-import { useTextSelectionTooltip } from "@/hooks/useTextSelectionTooltip"
 import { cn } from "@/lib/utils"
 import { ContentRenderer } from "./ContentRenderer"
 
@@ -8,10 +8,7 @@ import { ContentRenderer } from "./ContentRenderer"
  * Simplified lesson viewer component
  */
 export function LessonViewer({ lesson, isLoading, error, onBack, onMarkComplete, onRegenerate, isDarkMode = false }) {
-	// Set up text selection handlers for lessons
-	const { containerRef } = useTextSelectionTooltip((_text) => {
-		// Add AI functionality here in the future
-	})
+	const containerRef = useRef(null)
 
 	// Loading state
 	if (isLoading) {
@@ -62,7 +59,7 @@ export function LessonViewer({ lesson, isLoading, error, onBack, onMarkComplete,
 	}
 
 	return (
-		<div ref={containerRef} className="h-[calc(100vh-4rem)] overflow-y-auto w-full" data-lesson-selection-zone="true">
+		<div ref={containerRef} className="h-[calc(100vh-4rem)] overflow-y-auto w-full" data-selection-zone="true">
 			<div className="max-w-4xl w-full mx-auto px-4 flex justify-center">
 				<div
 					className={cn(
@@ -127,7 +124,11 @@ export function LessonViewer({ lesson, isLoading, error, onBack, onMarkComplete,
 							isDarkMode ? "prose-invert prose-emerald" : "prose-emerald"
 						)}
 					>
-						<ContentRenderer content={lesson.md_source || lesson.content} lessonId={lesson.id} courseId={lesson.course_id} />
+						<ContentRenderer
+							content={lesson.md_source || lesson.content}
+							lessonId={lesson.id}
+							courseId={lesson.course_id}
+						/>
 					</div>
 				</div>
 			</div>

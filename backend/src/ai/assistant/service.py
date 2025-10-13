@@ -142,29 +142,65 @@ async def _build_messages(request: ChatRequest, user_id: UUID) -> list[dict[str,
 
 
 
+def _extract_leading_blockquote(text: str) -> str:
+    """Return leading Markdown blockquote content (without the '>').
+
+    Only reads contiguous leading lines that begin with '>' (optionally preceded by spaces).
+    Strips a single '>' and a following space if present.
+    """
+    try:
+        lines = text.splitlines()
+        out: list[str] = []
+        for line in lines:
+            i = 0
+            # skip leading spaces
+            while i < len(line) and line[i] == " ":
+                i += 1
+            if i < len(line) and line[i] == ">":
+                i += 1
+                if i < len(line) and line[i] == " ":
+                    i += 1
+                out.append(line[i:])
+                continue
+            break
+        return "\n".join(out).strip()
+    except Exception:
+        return ""
+
+
 async def _get_rag_context(request: ChatRequest, user_id: UUID) -> list:
-    """Get semantic search results for any context type."""
+    """Get semantic search results for any context type.
+
+    Uses the user's quoted selection (if present) as the primary query, falling back to the full message.
+    """
     if not request.context_id:
         return []
+
+    # Prefer leading blockquote as query for better retrieval relevance
+    query_text = _extract_leading_blockquote(request.message) or request.message
 
     try:
         if request.context_type == "course":
             from src.ai.rag.service import RAGService
             from src.database.session import async_session_maker
 
-            logger.info(f"Searching for course documents with course_id: {request.context_id}, query: {request.message[:50]}...")
+            logger.info(
+                "Searching for course documents with course_id: %s, query: %s...",
+                request.context_id,
+                (query_text[:50] + ("..." if len(query_text) > 50 else "")),
+            )
 
             rag_service = RAGService()
             async with async_session_maker() as session:
                 results = await rag_service.search_roadmap_documents(
                     session=session,
                     course_id=request.context_id,
-                    query=request.message,
+                    query=query_text,
                     top_k=5,
                 )
-                logger.info(f"Retrieved {len(results)} RAG results for course {request.context_id}")
+                logger.info("Retrieved %d RAG results for course %s", len(results), request.context_id)
                 if results:
-                    logger.debug(f"First result preview: {results[0].content[:100]}...")
+                    logger.debug("First result preview: %s", results[0].content[:100])
                 return results
 
         elif request.context_type in ("book", "video"):
@@ -195,13 +231,19 @@ async def _get_rag_context(request: ChatRequest, user_id: UUID) -> list:
                 if not resource:
                     return []
 
-                return await rag.search(session, doc_type=request.context_type, query=request.message, limit=5, doc_id=resource.id)
+                return await rag.search(
+                    session,
+                    doc_type=request.context_type,
+                    query=query_text,
+                    limit=5,
+                    doc_id=resource.id,
+                )
 
         else:
             return []
 
     except Exception:
-        logger.exception(f"RAG search failed for {request.context_type}_id: {request.context_id}")
+        logger.exception("RAG search failed for %s_id: %s", request.context_type, request.context_id)
         return []
 
 

@@ -110,14 +110,11 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 		}
 	}, [assistantSidebarPinned, isOpen, localWidth, isMobile])
 
-	// Focus management
+	// Focus only; text is injected in AssistantThread via composer runtime
 	useEffect(() => {
 		const input = document.querySelector(".aui-composer-input")
-		if (isOpen) {
-			input?.focus()
-		} else {
-			input?.blur()
-		}
+		if (isOpen) input?.focus()
+		else input?.blur()
 	}, [isOpen])
 
 	// Toggle pin with transition

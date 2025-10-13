@@ -4,12 +4,17 @@ import { ChatSidebarContext } from "./chatSidebarContext"
 
 export function ChatSidebarProvider({ children }) {
 	const [isOpen, setIsOpen] = useState(false)
+	const [initialText, setInitialText] = useState("")
 
-	const openChat = () => setIsOpen(true)
+	const openChat = (text = "") => {
+		setInitialText(text)
+		setIsOpen(true)
+	}
 	const closeChat = () => setIsOpen(false)
 	const toggleChat = () => setIsOpen((v) => !v)
 
-	const value = { isOpen, openChat, closeChat, toggleChat }
+	// Expose initialText to allow runtime/UI to read/clear selection context
+	const value = { isOpen, openChat, closeChat, toggleChat, initialText, setInitialText }
 
 	return (
 		<ChatSidebarContext.Provider value={value}>
