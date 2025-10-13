@@ -4,8 +4,6 @@ import { useEffect, useImperativeHandle, useRef, useState } from "react"
 
 // 2. External libraries
 import { ErrorBoundary } from "react-error-boundary"
-import { HighlightToolbar } from "@/components/HighlightToolbar"
-import { useWebHighlighter } from "@/hooks/useWebHighlighter"
 import { cn } from "@/lib/utils"
 import { getVideoTranscript } from "@/services/videosService"
 import { useVideoTranscriptSync } from "./hooks/useVideoTranscriptSync"
@@ -201,12 +199,6 @@ export function VideoTranscript({ videoId, videoElement, youtubePlayerRef, onSee
 	const transcriptRef = useRef(null)
 	const scrollTimeoutRef = useRef(null)
 
-	// Initialize highlighting for video transcripts
-	const { highlights, deleteHighlight, toggleHighlights } = useWebHighlighter("video", videoId, {
-		enabled: !!transcript && !!videoId,
-		containerSelector: ".transcript-virtualized-container",
-	})
-
 	// Fetch transcript when component mounts
 	useEffect(() => {
 		const loadTranscript = async () => {
@@ -337,8 +329,6 @@ export function VideoTranscript({ videoId, videoElement, youtubePlayerRef, onSee
 				onSegmentClick={handleSegmentClick}
 				containerHeight={450} // Increased height for tab view
 			/>
-			{/* Highlight toolbar for managing selected highlights */}
-			<HighlightToolbar highlights={highlights} onDelete={deleteHighlight} />
 		</div>
 	)
 }

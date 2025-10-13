@@ -28,13 +28,6 @@
 	}
 }
 
-/* Text Highlighting Styles - Base definition, extended in highlights.css */
-.text-highlight {
-	/* Now using amber palette - defined in highlights.css */
-	cursor: pointer;
-	transition: background-color 0.2s;
-}
-
 /* Layout */
 html,
 body,

@@ -3,7 +3,6 @@ import { useEffect } from "react"
 import { Navigate, Route, Routes, useParams } from "react-router-dom"
 import CourseLayout from "./components/CourseLayout"
 import ProtectedRoute from "./components/ProtectedRoute"
-import { GlobalHighlightDeletionTooltip } from "./components/ui/GlobalHighlightDeletionTooltip"
 import { TextSelectionTooltip } from "./components/ui/TextSelectionTooltip"
 import { TooltipProvider } from "./components/ui/tooltip"
 import { AuthProvider } from "./contexts/AuthContext"
@@ -70,102 +69,101 @@ function AppContent() {
 
 	return (
 		<TooltipProvider>
-				<Routes>
-					{/* Auth route */}
-					<Route path="/auth" element={isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />} />
+			<Routes>
+				{/* Auth route */}
+				<Route path="/auth" element={isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />} />
 
-					{/* Course routes with persistent layout */}
-					<Route
-						path="/course/:courseId"
-						element={
-							<ProtectedRoute>
-								<CourseLayout />
-							</ProtectedRoute>
-						}
-					>
-						{/* Nested routes that use the CourseLayout */}
-						<Route index element={<CourseRoutes />} />
-						<Route path="lesson/:lessonId" element={<CourseRoutes />} />
-					</Route>
+				{/* Course routes with persistent layout */}
+				<Route
+					path="/course/:courseId"
+					element={
+						<ProtectedRoute>
+							<CourseLayout />
+						</ProtectedRoute>
+					}
+				>
+					{/* Nested routes that use the CourseLayout */}
+					<Route index element={<CourseRoutes />} />
+					<Route path="lesson/:lessonId" element={<CourseRoutes />} />
+				</Route>
 
-					{/* Standalone lesson route also uses CourseLayout */}
-					<Route
-						path="/lesson/:lessonId"
-						element={
-							<ProtectedRoute>
-								<CourseLayout />
-							</ProtectedRoute>
-						}
-					>
-						<Route index element={<CourseRoutes />} />
-					</Route>
+				{/* Standalone lesson route also uses CourseLayout */}
+				<Route
+					path="/lesson/:lessonId"
+					element={
+						<ProtectedRoute>
+							<CourseLayout />
+						</ProtectedRoute>
+					}
+				>
+					<Route index element={<CourseRoutes />} />
+				</Route>
 
-					{/* Course preview - doesn't use persistent layout */}
-					<Route
-						path="/course/preview/:courseId"
-						element={
-							<ProtectedRoute>
-								<CoursePreviewPage />
-							</ProtectedRoute>
-						}
-					/>
+				{/* Course preview - doesn't use persistent layout */}
+				<Route
+					path="/course/preview/:courseId"
+					element={
+						<ProtectedRoute>
+							<CoursePreviewPage />
+						</ProtectedRoute>
+					}
+				/>
 
-					{/* Home page */}
-					<Route
-						path="/"
-						element={
-							<ProtectedRoute>
-								<HomePage />
-							</ProtectedRoute>
-						}
-					/>
+				{/* Home page */}
+				<Route
+					path="/"
+					element={
+						<ProtectedRoute>
+							<HomePage />
+						</ProtectedRoute>
+					}
+				/>
 
-						{/* Roadmap routes */}
-					<Route
-						path="/roadmap/preview/:roadmapId"
-						element={
-							<ProtectedRoute>
-								<RoadmapPreviewPage />
-							</ProtectedRoute>
-						}
-					/>
-					<Route
-						path="/roadmap/:roadmapId/lesson/:lessonId"
-						element={
-							<ProtectedRoute>
-								<RoadmapPageWrapper />
-							</ProtectedRoute>
-						}
-					/>
-					<Route
-						path="/roadmap/:roadmapId"
-						element={
-							<ProtectedRoute>
-								<RoadmapPageWrapper />
-							</ProtectedRoute>
-						}
-					/>
+				{/* Roadmap routes */}
+				<Route
+					path="/roadmap/preview/:roadmapId"
+					element={
+						<ProtectedRoute>
+							<RoadmapPreviewPage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/roadmap/:roadmapId/lesson/:lessonId"
+					element={
+						<ProtectedRoute>
+							<RoadmapPageWrapper />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/roadmap/:roadmapId"
+					element={
+						<ProtectedRoute>
+							<RoadmapPageWrapper />
+						</ProtectedRoute>
+					}
+				/>
 
-					{/* Other content routes */}
-					<Route
-						path="/books/:bookId"
-						element={
-							<ProtectedRoute>
-								<BookViewer />
-							</ProtectedRoute>
-						}
-					/>
-					<Route
-						path="/videos/:videoId"
-						element={
-							<ProtectedRoute>
-								<VideoViewer />
-							</ProtectedRoute>
-						}
-					/>
-				</Routes>
-				<TextSelectionTooltip />
-				<GlobalHighlightDeletionTooltip />
+				{/* Other content routes */}
+				<Route
+					path="/books/:bookId"
+					element={
+						<ProtectedRoute>
+							<BookViewer />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/videos/:videoId"
+					element={
+						<ProtectedRoute>
+							<VideoViewer />
+						</ProtectedRoute>
+					}
+				/>
+			</Routes>
+			<TextSelectionTooltip />
 		</TooltipProvider>
 	)
 }
