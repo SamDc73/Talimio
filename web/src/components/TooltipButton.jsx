@@ -1,7 +1,6 @@
 import { forwardRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
 
 /**
  * TooltipButton - A button with sexy, subtle tooltip that appears on hover
@@ -22,50 +21,31 @@ const TooltipButton = forwardRef(function TooltipButton(
 	},
 	ref
 ) {
+	const button = (
+		<Button ref={ref} className={className} asChild={asChild} variant={variant} size={size} {...buttonProps}>
+			{children}
+		</Button>
+	)
+
 	if (disableTooltip || !tooltipContent) {
-		return (
-			<Button ref={ref} className={className} asChild={asChild} variant={variant} size={size} {...buttonProps}>
-				{children}
-			</Button>
-		)
+		return button
 	}
 
-	const isDisabled = buttonProps.disabled
+	const triggerChild = buttonProps.disabled ? <span className="inline-block">{button}</span> : button
 
-	return (
-		<TooltipProvider delayDuration={tooltipDelayDuration}>
-			<Tooltip>
-				<TooltipTrigger asChild>
-					{isDisabled ? (
-						<span className="inline-block">
-							<Button
-								ref={ref}
-								className={cn(className)}
-								asChild={asChild}
-								variant={variant}
-								size={size}
-								{...buttonProps}
-							>
-								{children}
-							</Button>
-						</span>
-					) : (
-						<Button
-							ref={ref}
-							className={cn(className)}
-							asChild={asChild}
-							variant={variant}
-							size={size}
-							{...buttonProps}
-						>
-							{children}
-						</Button>
-					)}
-				</TooltipTrigger>
-				<TooltipContent side={tooltipSide}>{tooltipContent}</TooltipContent>
-			</Tooltip>
-		</TooltipProvider>
+	const tooltip = (
+		<Tooltip>
+			<TooltipTrigger asChild>{triggerChild}</TooltipTrigger>
+			<TooltipContent side={tooltipSide}>{tooltipContent}</TooltipContent>
+		</Tooltip>
 	)
+
+	const providerProps = {}
+	if (typeof tooltipDelayDuration === "number") {
+		providerProps.delayDuration = tooltipDelayDuration
+	}
+
+	return <TooltipProvider {...providerProps}>{tooltip}</TooltipProvider>
 })
 
 TooltipButton.displayName = "TooltipButton"

@@ -4,8 +4,7 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom"
 import CourseLayout from "./components/CourseLayout"
 import ProtectedRoute from "./components/ProtectedRoute"
 import { GlobalHighlightDeletionTooltip } from "./components/ui/GlobalHighlightDeletionTooltip"
-import { GlobalTextSelectionTooltip } from "./components/ui/GlobalTextSelectionTooltip"
-import { TextSelectionProvider } from "./components/ui/text-selection-utils"
+import { TextSelectionTooltip } from "./components/ui/TextSelectionTooltip"
 import { TooltipProvider } from "./components/ui/tooltip"
 import { AuthProvider } from "./contexts/AuthContext"
 import { ProgressProvider } from "./contexts/ProgressContext"
@@ -71,7 +70,6 @@ function AppContent() {
 
 	return (
 		<TooltipProvider>
-			<TextSelectionProvider>
 				<Routes>
 					{/* Auth route */}
 					<Route path="/auth" element={isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />} />
@@ -122,7 +120,7 @@ function AppContent() {
 						}
 					/>
 
-					{/* Roadmap routes */}
+						{/* Roadmap routes */}
 					<Route
 						path="/roadmap/preview/:roadmapId"
 						element={
@@ -166,9 +164,8 @@ function AppContent() {
 						}
 					/>
 				</Routes>
-				<GlobalTextSelectionTooltip />
+				<TextSelectionTooltip />
 				<GlobalHighlightDeletionTooltip />
-			</TextSelectionProvider>
 		</TooltipProvider>
 	)
 }

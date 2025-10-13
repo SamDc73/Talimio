@@ -3,16 +3,16 @@ import { useEffect, useRef, useState } from "react"
 
 /**
  * Global highlight deletion tooltip that appears when a highlight is clicked.
- * Features the same glassmorphism design as GlobalTextSelectionTooltip.
+ * Features the same glassmorphism design as the selection tooltip.
  *
  * This is a singleton component - only one should exist in the app.
  */
 export function GlobalHighlightDeletionTooltip() {
 	const [isOpen, setIsOpen] = useState(false)
-	const [highlightId, setHighlightId] = useState(null)
-	const [deleteHandler, setDeleteHandler] = useState(null)
 	const [position, setPosition] = useState({ x: 0, y: 0 })
 	const tooltipRef = useRef(null)
+	const highlightIdRef = useRef(null)
+	const deleteHandlerRef = useRef(null)
 
 	useEffect(() => {
 		const handleHighlightClick = (event) => {
@@ -20,8 +20,8 @@ export function GlobalHighlightDeletionTooltip() {
 			const { detail } = event
 			if (!detail?.highlightId || !detail?.deleteHandler || !detail?.position) return
 
-			setHighlightId(detail.highlightId)
-			setDeleteHandler(() => detail.deleteHandler)
+			highlightIdRef.current = detail.highlightId
+			deleteHandlerRef.current = detail.deleteHandler
 
 			// Calculate tooltip position
 			const tooltipHeight = 50
@@ -37,11 +37,15 @@ export function GlobalHighlightDeletionTooltip() {
 
 		const handleClickOutside = (e) => {
 			if (tooltipRef.current && !tooltipRef.current.contains(e.target)) {
+				highlightIdRef.current = null
+				deleteHandlerRef.current = null
 				setIsOpen(false)
 			}
 		}
 
 		const handleHideTooltip = () => {
+			highlightIdRef.current = null
+			deleteHandlerRef.current = null
 			setIsOpen(false)
 		}
 
@@ -58,13 +62,15 @@ export function GlobalHighlightDeletionTooltip() {
 	}, [])
 
 	const handleDeleteClick = () => {
-		if (deleteHandler && highlightId) {
-			deleteHandler(highlightId)
+		if (deleteHandlerRef.current && highlightIdRef.current) {
+			deleteHandlerRef.current(highlightIdRef.current)
 		}
+		highlightIdRef.current = null
+		deleteHandlerRef.current = null
 		setIsOpen(false)
 	}
 
-	if (!isOpen || !deleteHandler) return null
+	if (!isOpen || !deleteHandlerRef.current) return null
 
 	return (
 		<div

@@ -9,14 +9,9 @@ import { ContentRenderer } from "./ContentRenderer"
  */
 export function LessonViewer({ lesson, isLoading, error, onBack, onMarkComplete, onRegenerate, isDarkMode = false }) {
 	// Set up text selection handlers for lessons
-	useTextSelectionTooltip(
-		(_text) => {
-			// Add highlight functionality here in the future
-		},
-		(_text) => {
-			// Add AI functionality here in the future
-		}
-	)
+	const { containerRef } = useTextSelectionTooltip((_text) => {
+		// Add AI functionality here in the future
+	})
 
 	// Loading state
 	if (isLoading) {
@@ -67,7 +62,7 @@ export function LessonViewer({ lesson, isLoading, error, onBack, onMarkComplete,
 	}
 
 	return (
-		<div className="h-[calc(100vh-4rem)] overflow-y-auto w-full">
+		<div ref={containerRef} className="h-[calc(100vh-4rem)] overflow-y-auto w-full" data-lesson-selection-zone="true">
 			<div className="max-w-4xl w-full mx-auto px-4 flex justify-center">
 				<div
 					className={cn(
