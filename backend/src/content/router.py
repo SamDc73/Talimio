@@ -142,9 +142,12 @@ async def test_books_endpoint(
         SELECT
             b.id::text,
             b.title,
-            COALESCE(bp.progress_percentage, 0) as progress
+            COALESCE(up.progress_percentage, 0) as progress
         FROM books b
-        LEFT JOIN book_progress bp ON b.id = bp.book_id AND bp.user_id = :user_id
+        LEFT JOIN user_progress up
+          ON up.content_id = b.id
+         AND up.user_id = :user_id
+         AND up.content_type = 'book'
         WHERE b.user_id = :user_id
         LIMIT 5
     """

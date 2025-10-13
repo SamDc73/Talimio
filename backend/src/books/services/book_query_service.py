@@ -4,13 +4,13 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-from src.books.models import Book, BookProgress
-from src.books.schemas import BookListResponse, BookResponse, BookWithProgress
+from src.books.models import Book
+from src.books.schemas import BookListResponse, BookProgressResponse, BookResponse, BookWithProgress
 from src.books.services.book_response_builder import BookResponseBuilder
+from src.progress.service import ProgressService
 
 
 logger = logging.getLogger(__name__)
@@ -108,9 +108,9 @@ class BookQueryService:
         -------
             BookWithProgress: Book data with progress or None if not found
         """
-        query = select(Book).options(selectinload(Book.progress_records)).where(
+        query = select(Book).where(
             Book.id == book_id,
-            Book.user_id == self.user_id  # Add ownership check
+            Book.user_id == self.user_id  # Ownership check
         )
         result = await self.session.execute(query)
         book = result.scalar_one_or_none()
@@ -118,14 +118,33 @@ class BookQueryService:
         if not book:
             return None
 
-        # Get progress for user
-        progress = None
-        for prog in book.progress_records:
-            if prog.user_id == self.user_id:
-                progress = prog
-                break
+        # Get unified progress for this book/user
+        progress_service = ProgressService(self.session)
+        unified = await progress_service.get_single_progress(self.user_id, book_id)
 
-        return BookResponseBuilder.build_book_with_progress(book, progress)
+        # Build response
+        book_with = BookResponseBuilder.build_book_with_progress(book, None)
+
+        if unified:
+            md = unified.metadata or {}
+            progress_response = BookProgressResponse(
+                id=unified.id,
+                book_id=book.id,
+                current_page=md.get("current_page", 1),
+                progress_percentage=unified.progress_percentage,
+                reading_time_minutes=md.get("reading_time_minutes", 0),
+                status=md.get("status", "not_started"),
+                notes=md.get("notes"),
+                bookmarks=md.get("bookmarks", []),
+                toc_progress=md.get("toc_progress", {}),
+                total_pages_read=md.get("total_pages_read", 0),
+                last_read_at=md.get("last_read_at"),
+                created_at=unified.created_at,
+                updated_at=unified.updated_at,
+            )
+            book_with.progress = progress_response
+
+        return book_with
 
     async def search_books(
         self,
@@ -209,17 +228,31 @@ class BookQueryService:
         -------
             List of recently read books
         """
-        query = (
-            select(Book)
-            .join(BookProgress, Book.id == BookProgress.book_id)
-            .where(BookProgress.user_id == self.user_id)
-            .where(BookProgress.last_read_at.is_not(None))
-            .order_by(BookProgress.last_read_at.desc())
-            .limit(limit)
+        # Fetch recently read book IDs from unified user_progress metadata
+        id_rows = await self.session.execute(
+            text(
+                """
+                SELECT content_id
+                FROM user_progress
+                WHERE user_id = :user_id
+                  AND content_type = 'book'
+                  AND (metadata->>'last_read_at') IS NOT NULL
+                ORDER BY (metadata->>'last_read_at')::timestamptz DESC NULLS LAST
+                LIMIT :limit
+                """
+            ),
+            {"user_id": str(self.user_id), "limit": int(limit)},
         )
+        ids = [row.content_id for row in id_rows]
 
-        result = await self.session.execute(query)
+        if not ids:
+            return []
+
+        # Load books and preserve order
+        result = await self.session.execute(select(Book).where(Book.id.in_(ids)))
         books = result.scalars().all()
+        order = {str(i): idx for idx, i in enumerate(ids)}
+        books.sort(key=lambda b: order.get(str(b.id), 1_000_000))
 
         return BookResponseBuilder.build_book_list(books)
 
@@ -239,37 +272,67 @@ class BookQueryService:
             List of books with specified status
         """
         # Map status to progress conditions
+        # Build status-based ID selection from user_progress
+        params = {"user_id": str(self.user_id)}
         if status == "not_started":
-            # No progress record exists or progress is 0
-            subquery = select(BookProgress.book_id).where(
-                BookProgress.user_id == self.user_id,
-                BookProgress.progress_percentage > 0,
+            id_sql = text(
+                """
+                SELECT b.id
+                FROM books b
+                WHERE b.user_id = :user_id
+                  AND NOT EXISTS (
+                    SELECT 1 FROM user_progress up
+                    WHERE up.user_id = :user_id
+                      AND up.content_type = 'book'
+                      AND up.content_id = b.id
+                      AND up.progress_percentage > 0
+                  )
+                """
             )
-            query = select(Book).where(Book.id.not_in(subquery))
         elif status == "completed":
-            # Progress is 100%
-            query = (
-                select(Book)
-                .join(BookProgress, Book.id == BookProgress.book_id)
-                .where(BookProgress.user_id == self.user_id)
-                .where(BookProgress.progress_percentage >= 100)
+            id_sql = text(
+                """
+                SELECT b.id
+                FROM books b
+                WHERE b.user_id = :user_id
+                  AND EXISTS (
+                    SELECT 1 FROM user_progress up
+                    WHERE up.user_id = :user_id
+                      AND up.content_type = 'book'
+                      AND up.content_id = b.id
+                      AND up.progress_percentage >= 100
+                  )
+                """
             )
         else:  # in_progress
-            # Progress exists and is between 1-99%
-            query = (
-                select(Book)
-                .join(BookProgress, Book.id == BookProgress.book_id)
-                .where(BookProgress.user_id == self.user_id)
-                .where(BookProgress.progress_percentage > 0)
-                .where(BookProgress.progress_percentage < 100)
+            id_sql = text(
+                """
+                SELECT b.id
+                FROM books b
+                WHERE b.user_id = :user_id
+                  AND EXISTS (
+                    SELECT 1 FROM user_progress up
+                    WHERE up.user_id = :user_id
+                      AND up.content_type = 'book'
+                      AND up.content_id = b.id
+                      AND up.progress_percentage > 0
+                      AND up.progress_percentage < 100
+                  )
+                """
             )
 
         if limit:
-            query = query.limit(limit)
+            id_sql = text(id_sql.text + " LIMIT :limit")
+            params["limit"] = int(limit)
 
-        result = await self.session.execute(query)
+        id_rows = await self.session.execute(id_sql, params)
+        ids = [row.id for row in id_rows]
+
+        if not ids:
+            return []
+
+        result = await self.session.execute(select(Book).where(Book.id.in_(ids)))
         books = result.scalars().all()
-
         return BookResponseBuilder.build_book_list(books)
 
     async def get_book_stats(self) -> dict[str, Any]:
@@ -284,28 +347,54 @@ class BookQueryService:
         total_result = await self.session.execute(total_query)
         total_books = total_result.scalar() or 0
 
-        # Books with progress
-        progress_query = select(func.count(func.distinct(BookProgress.book_id))).where(
-            BookProgress.user_id == self.user_id
-        )
-        progress_result = await self.session.execute(progress_query)
-        books_with_progress = progress_result.scalar() or 0
+        # Books with progress (from unified user_progress)
+        books_with_progress = (
+            await self.session.execute(
+                text(
+                    """
+                    SELECT COUNT(DISTINCT up.content_id)
+                    FROM user_progress up
+                    JOIN books b ON b.id = up.content_id
+                    WHERE up.user_id = :user_id AND up.content_type = 'book'
+                    """
+                ),
+                {"user_id": str(self.user_id)},
+            )
+        ).scalar() or 0
 
         # Completed books
-        completed_query = select(func.count(BookProgress.book_id)).where(
-            BookProgress.user_id == self.user_id,
-            BookProgress.progress_percentage >= 100,
-        )
-        completed_result = await self.session.execute(completed_query)
-        completed_books = completed_result.scalar() or 0
+        completed_books = (
+            await self.session.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM user_progress up
+                    JOIN books b ON b.id = up.content_id
+                    WHERE up.user_id = :user_id
+                      AND up.content_type = 'book'
+                      AND up.progress_percentage >= 100
+                    """
+                ),
+                {"user_id": str(self.user_id)},
+            )
+        ).scalar() or 0
 
-        # Average progress
-        avg_query = select(func.avg(BookProgress.progress_percentage)).where(
-            BookProgress.user_id == self.user_id,
-            BookProgress.progress_percentage > 0,
-        )
-        avg_result = await self.session.execute(avg_query)
-        avg_progress = avg_result.scalar() or 0
+        # Average progress across books with progress > 0
+        avg_progress = (
+            await self.session.execute(
+                text(
+                    """
+                    SELECT AVG(up.progress_percentage)
+                    FROM user_progress up
+                    JOIN books b ON b.id = up.content_id
+                    WHERE up.user_id = :user_id
+                      AND up.content_type = 'book'
+                      AND up.progress_percentage > 0
+                    """
+                ),
+                {"user_id": str(self.user_id)},
+            )
+        ).scalar() or 0
 
         return {
             "total_books": total_books,

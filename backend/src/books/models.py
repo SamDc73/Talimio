@@ -1,9 +1,9 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID  # noqa: N811
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database.base import Base
 
@@ -43,77 +43,4 @@ class Book(Base):
         onupdate=func.now(),
     )
 
-    # Relationships
-    progress_records: Mapped[list["BookProgress"]] = relationship(
-        "BookProgress",
-        back_populates="book",
-        cascade="all, delete-orphan",
-    )
-    chapters: Mapped[list["BookChapter"]] = relationship(
-        "BookChapter",
-        back_populates="book",
-        cascade="all, delete-orphan",
-    )
-
-
-class BookProgress(Base):
-    """Model for tracking reading progress."""
-
-    __tablename__ = "book_progress"
-
-    id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True, default=uuid4)
-    book_id: Mapped[UUID] = mapped_column(
-        PostgresUUID(as_uuid=True),
-        ForeignKey("books.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    user_id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), nullable=False, index=True)
-    current_page: Mapped[int] = mapped_column(Integer, default=1)
-    total_pages_read: Mapped[int] = mapped_column(Integer, default=0)
-    progress_percentage: Mapped[float] = mapped_column(Float, default=0.0)
-    reading_time_minutes: Mapped[int] = mapped_column(Integer, default=0)
-    last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    status: Mapped[str] = mapped_column(String(20), default="not_started")  # not_started, reading, completed, paused
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    bookmarks: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string of page numbers/locations
-    toc_progress: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, default=dict
-    )  # Maps section IDs to completion status
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
-
-    # Relationships
-    book: Mapped["Book"] = relationship("Book", back_populates="progress_records")
-
-
-class BookChapter(Base):
-    """Model for book chapters."""
-
-    __tablename__ = "book_chapters"
-
-    id: Mapped[UUID] = mapped_column(PostgresUUID(as_uuid=True), primary_key=True, default=uuid4)
-    book_id: Mapped[UUID] = mapped_column(
-        PostgresUUID(as_uuid=True),
-        ForeignKey("books.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    chapter_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    title: Mapped[str] = mapped_column(String(500), nullable=False)
-    start_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    end_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_started")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
-
-    # Relationships
-    book: Mapped["Book"] = relationship("Book", back_populates="chapters")
+    # No ORM chapter relationship; chapters are stored in `table_of_contents` JSON

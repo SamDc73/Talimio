@@ -68,20 +68,7 @@ async def create_tables() -> None:
         """)
         logger.info("Created books table")
 
-        # Create book_progress table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS book_progress (
-                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                book_id UUID NOT NULL REFERENCES books(id) ON DELETE CASCADE,
-                user_id UUID NOT NULL,
-                current_page INTEGER DEFAULT 1,
-                toc_progress JSONB DEFAULT '{}'::jsonb,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(book_id, user_id)
-            );
-        """)
-        logger.info("Created book_progress table")
+        # Removed: legacy book_progress table (unified on user_progress)
 
         # Create roadmaps table
         await conn.execute("""
@@ -134,21 +121,21 @@ async def create_tables() -> None:
         """)
         logger.info("Created courses table")
 
-        # Create course_progress table
+        # Create unified user_progress table (replaces per-content progress tables)
         await conn.execute("""
-            CREATE TABLE IF NOT EXISTS course_progress (
+            CREATE TABLE IF NOT EXISTS user_progress (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
                 user_id UUID NOT NULL,
-                completed_lessons JSONB DEFAULT '[]'::jsonb,
-                quiz_scores JSONB DEFAULT '{}'::jsonb,
-                last_accessed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                content_id UUID NOT NULL,
+                content_type VARCHAR(20) NOT NULL CHECK (content_type IN ('book','video','course')),
+                progress_percentage REAL NOT NULL DEFAULT 0,
+                metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(course_id, user_id)
+                UNIQUE(user_id, content_id)
             );
         """)
-        logger.info("Created course_progress table")
+        logger.info("Created user_progress table")
 
         # Create users table (minimal structure for now)
         await conn.execute("""
@@ -181,11 +168,14 @@ async def create_tables() -> None:
         # Create indexes for better query performance
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_user_id ON videos(user_id);")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_books_user_id ON books(user_id);")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_book_progress_user_id ON book_progress(user_id);")
+        # Removed: legacy book_progress index (unified on user_progress)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_roadmaps_user_id ON roadmaps(user_id);")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_course_prompts_user_id ON course_prompts(user_id);")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_courses_user_id ON courses(user_id);")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_course_progress_user_id ON course_progress(user_id);")
+        # Indexes for unified user_progress table
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_progress_user_id ON user_progress(user_id);")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_progress_user_type ON user_progress(user_id, content_type);")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_progress_content ON user_progress(content_id);")
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_ai_custom_instructions_user_id ON ai_custom_instructions(user_id);"
         )

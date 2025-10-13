@@ -105,26 +105,6 @@ class Lesson(Base):
     )
 
 
-# Progress Model - matches actual database schema
-class LessonProgress(Base):
-    """Model for lesson progress tracking."""
-
-    __tablename__ = "progress"
-
-    id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    course_id: Mapped[str] = mapped_column(String)  # Actually stores module_id - varchar in DB
-    lesson_id: Mapped[str | None] = mapped_column(String, nullable=True)  # varchar in DB
-    status: Mapped[str] = mapped_column(String(50), default="not_started")
-    user_id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True))  # Fixed: Use UUID type to match database
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
-    )
 
 
 # Document Management Models for RAG - from working backup
@@ -174,7 +154,6 @@ __all__ = [
     "CourseDocument",
     "CourseModule",
     "Lesson",
-    "LessonProgress",
     "Node",
     "Roadmap",
     "RoadmapDocument",

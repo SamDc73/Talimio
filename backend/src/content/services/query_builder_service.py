@@ -38,7 +38,11 @@ class QueryBuilderService:
                 needs_user_id = True
 
         if not content_type or content_type == ContentType.COURSE:
-            queries.append(QueryBuilderService._get_roadmap_query(search, include_archived, user_id))
+            queries.append(
+                QueryBuilderService.get_roadmap_query(
+                    search, archived_only=False, include_archived=include_archived, user_id=user_id
+                )
+            )
             if user_id:
                 needs_user_id = True
 
@@ -68,7 +72,7 @@ class QueryBuilderService:
                 'youtube' as type,
                 COALESCE(v.updated_at, v.created_at) as last_accessed,
                 v.created_at,
-                v.tags,
+                COALESCE(v.tags, '[]') as tags,
                 v.channel as extra1,
                 v.thumbnail_url as extra2,
                 0 as progress,
@@ -121,7 +125,7 @@ class QueryBuilderService:
                 'book' as type,
                 COALESCE(b.updated_at, b.created_at) as last_accessed,
                 b.created_at,
-                b.tags,
+                COALESCE(b.tags, '[]') as tags,
                 b.author as extra1,
                 '' as extra2,
                 0 as progress,
@@ -153,15 +157,9 @@ class QueryBuilderService:
 
         return query
 
-    @staticmethod
-    def _get_roadmap_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
-        """Get SQL query for roadmaps."""
-        return QueryBuilderService.get_roadmaps_query(
-            search, archived_only=False, include_archived=include_archived, user_id=user_id
-        )
 
     @staticmethod
-    def get_roadmaps_query(
+    def get_roadmap_query(
         search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: UUID | None = None
     ) -> str:
         """Get SQL query for roadmaps WITHOUT progress (optimized for performance)."""
@@ -178,13 +176,14 @@ class QueryBuilderService:
                 '' as extra1,
                 '' as extra2,
                 0 as progress,
-                -- Total lessons (leaf nodes)
-                (SELECT COUNT(*) FROM nodes WHERE roadmap_id = r.id AND parent_id IS NOT NULL) as count1,
-                0 as count2,
+                -- Total counts from materialized view (precomputed)
+                COALESCE(rs.node_count, 0) as count1,
+                COALESCE(rs.module_count, 0) as count2,
                 COALESCE(r.archived, false) as archived,
                 NULL::text as toc_progress,
                 NULL::text as table_of_contents
             FROM roadmaps r
+            LEFT JOIN public.roadmap_stats rs ON rs.roadmap_id = r.id
         """
 
         # Build WHERE clause

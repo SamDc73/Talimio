@@ -35,7 +35,7 @@ from .auth.middleware import AuthErrorMiddleware, AuthInjectionMiddleware
 from .auth.router import router as auth_router
 
 # Import models to register them with SQLAlchemy - MUST be after database.base import
-from .books.models import Book, BookProgress  # noqa: F401
+from .books.models import Book  # noqa: F401
 from .books.router import router as books_router
 
 # Setup logging
@@ -44,7 +44,6 @@ from .config.settings import get_settings
 from .content.router import router as content_router
 from .courses.models import (  # noqa: F401
     Lesson,
-    LessonProgress as Progress,
     Node,
     Roadmap,
     RoadmapDocument,

@@ -3,9 +3,8 @@
 import json
 import logging
 
-from src.books.models import Book, BookChapter, BookProgress
+from src.books.models import Book
 from src.books.schemas import (
-    BookChapterResponse,
     BookProgressResponse,
     BookResponse,
     BookWithProgress,
@@ -63,13 +62,11 @@ class BookResponseBuilder:
         )
 
     @staticmethod
-    def build_book_with_progress(book: Book, progress: BookProgress | None = None) -> BookWithProgress:
+    def build_book_with_progress(book: Book, progress: BookProgressResponse | None = None) -> BookWithProgress:
         """Convert Book model to BookWithProgress with optional progress."""
         book_response = BookResponseBuilder.build_book_response(book)
 
-        progress_response = None
-        if progress:
-            progress_response = BookProgressResponse.model_validate(progress)
+        progress_response = progress if progress else None
 
         return BookWithProgress(
             id=book_response.id,
@@ -95,19 +92,9 @@ class BookResponseBuilder:
         )
 
     @staticmethod
-    def build_chapter_response(chapter: BookChapter) -> BookChapterResponse:
-        """Convert BookChapter model to BookChapterResponse."""
-        return BookChapterResponse.model_validate(chapter)
-
-    @staticmethod
     def build_book_list(books: list[Book]) -> list[BookResponse]:
         """Convert list of Book models to list of BookResponse."""
         return [BookResponseBuilder.build_book_response(book) for book in books]
-
-    @staticmethod
-    def build_chapter_list(chapters: list[BookChapter]) -> list[BookChapterResponse]:
-        """Convert list of BookChapter models to list of BookChapterResponse."""
-        return [BookResponseBuilder.build_chapter_response(chapter) for chapter in chapters]
 
     @staticmethod
     def _convert_toc_to_schema(toc_data: list[dict]) -> list[TableOfContentsItem]:
