@@ -121,7 +121,7 @@ async def get_course(
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CourseResponse:
     """Get a specific course by ID."""
-    result = await facade.get_course_with_progress(course_id, auth.user_id)
+    result = await facade.get_course(course_id, auth.user_id)
 
     if not result.get("success"):
         from fastapi import HTTPException
@@ -260,7 +260,7 @@ async def execute_code(
     setup_commands: list[str] = []
     if request.course_id:
         try:
-            result = await facade.get_course_with_progress(request.course_id, auth.user_id)
+            result = await facade.get_course(request.course_id, auth.user_id)
             if result.get("success") and "course" in result:
                 course = result["course"]
                 setup_commands = course.setup_commands or []

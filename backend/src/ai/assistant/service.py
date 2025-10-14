@@ -347,7 +347,7 @@ async def _course_context(resource_id: UUID, context_meta: dict[str, Any]) -> Co
     lesson_id = context_meta.get("lesson_id")
 
     course_service = CoursesFacade()
-    result = await course_service.get_course_with_progress(resource_id, user_id)
+    result = await course_service.get_course(resource_id, user_id)
 
     if not result.get("success") or not result.get("course"):
         return None

@@ -107,8 +107,8 @@ async def list_books(
     """List all books with pagination and optional filtering."""
     try:
         # Initialize facade with user context
-        facade = BooksFacade(auth.session, auth.user_id)
-        result = await facade.get_user_books(include_progress=True)
+        facade = BooksFacade()
+        result = await facade.get_user_books(auth.user_id, include_progress=True)
 
         if not result.get("success"):
             raise HTTPException(
@@ -156,9 +156,9 @@ async def list_books(
 async def get_book_endpoint(book_id: UUID, auth: CurrentAuth) -> BookWithProgress:
     """Get book details with progress information."""
     try:
-        facade = BooksFacade(auth.session, auth.user_id)
+        facade = BooksFacade()
         # Facade returns a fully built BookWithProgress
-        return await facade.get_book(book_id)
+        return await facade.get_book(book_id, auth.user_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
@@ -265,9 +265,9 @@ async def create_book_endpoint(
         }
 
         # Upload book through facade
-        facade = BooksFacade(auth.session, auth.user_id)
+        facade = BooksFacade()
         result = await facade.upload_book(
-            file_path=file_path, title=final_title, metadata=book_metadata
+            user_id=auth.user_id, file_path=file_path, title=final_title, metadata=book_metadata
         )
 
         if not result.get("success"):
@@ -302,8 +302,8 @@ async def update_book_endpoint(book_id: UUID, book_data: BookUpdate, auth: Curre
         # Convert Pydantic model to dict
         update_dict = book_data.model_dump(exclude_unset=True)
 
-        facade = BooksFacade(auth.session, auth.user_id)
-        result = await facade.update_book(book_id, update_dict)
+        facade = BooksFacade()
+        result = await facade.update_book(book_id, auth.user_id, update_dict)
 
         if not result.get("success"):
             raise HTTPException(
@@ -323,9 +323,8 @@ async def update_book_endpoint(book_id: UUID, book_data: BookUpdate, auth: Curre
 async def delete_book_endpoint(book_id: UUID, auth: CurrentAuth) -> None:
     """Delete a book."""
     try:
-        facade = BooksFacade(auth.session, auth.user_id)
-        await facade.delete_book(auth.session, book_id, auth.user_id)
-        await auth.session.commit()
+        facade = BooksFacade()
+        await facade.delete_book(book_id, auth.user_id)
     except ValueError as e:
         # Book not found
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -350,8 +349,8 @@ async def update_book_progress_endpoint(
         # Convert progress data to dict for facade
         progress_dict = _build_progress_dict(progress_data)
 
-        facade = BooksFacade(auth.session, auth.user_id)
-        result = await facade.update_book_progress(book_id, progress_dict)
+        facade = BooksFacade()
+        result = await facade.update_progress(book_id, auth.user_id, progress_dict)
 
         if not result.get("success"):
             raise HTTPException(
@@ -567,8 +566,8 @@ async def get_book_chapters_endpoint(book_id: UUID, auth: CurrentAuth) -> list[d
     Returns the table of contents structure, not database chapter records.
     """
     try:
-        facade = BooksFacade(auth.session, auth.user_id)
-        result = await facade.get_book_chapters(book_id)
+        facade = BooksFacade()
+        result = await facade.get_book_chapters(book_id, auth.user_id)
 
         if not result.get("success"):
             # Check if it's a "not found" error
@@ -597,8 +596,8 @@ async def update_book_chapter_status_endpoint(
     try:
         # Use mark_chapter_complete on the facade
         completed = status_data.status == "completed"
-        facade = BooksFacade(auth.session, auth.user_id)
-        result = await facade.mark_chapter_complete(book_id, str(chapter_id), completed)
+        facade = BooksFacade()
+        result = await facade.mark_chapter_complete(book_id, auth.user_id, str(chapter_id), completed)
 
         if not result.get("success"):
             raise HTTPException(

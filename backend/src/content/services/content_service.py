@@ -173,8 +173,8 @@ class ContentService:
 
         try:
             if content_type == ContentType.BOOK:
-                books_facade = BooksFacade(session, user_id)
-                await books_facade.delete_book(session, UUID(content_id), user_id)
+                books_facade = BooksFacade()
+                await books_facade.delete_book(UUID(content_id), user_id)
             elif content_type == ContentType.YOUTUBE:
                 video_service = VideoService()
                 await video_service.delete_video(session, content_id, user_id)

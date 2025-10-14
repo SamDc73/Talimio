@@ -42,9 +42,9 @@ class CoursesFacade:
 
         Implements ContentFacade interface for consistent cross-module API.
         """
-        return await self.get_course_with_progress(content_id, user_id)
+        return await self.get_course(content_id, user_id)
 
-    async def get_course_with_progress(self, course_id: UUID, user_id: UUID) -> dict[str, Any]:
+    async def get_course(self, course_id: UUID, user_id: UUID) -> dict[str, Any]:
         """
         Get complete course information with progress.
 

@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID
 
 from .service import VideoService
-from .services.video_progress_tracker import VideoProgressTracker
+from .services.video_progress_service import VideoProgressService
 
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ class VideosFacade:
     def __init__(self) -> None:
         # Internal services - not exposed to outside modules
         self._video_service = VideoService()
-        self._progress_service = VideoProgressTracker()  # Implements ProgressTracker protocol
+        self._progress_service = VideoProgressService()  # Implements ProgressTracker protocol
 
     async def get_content_with_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
         """
@@ -34,9 +34,9 @@ class VideosFacade:
 
         Implements ContentFacade interface for consistent cross-module API.
         """
-        return await self.get_video_with_progress(content_id, user_id)
+        return await self.get_video(content_id, user_id)
 
-    async def get_video_with_progress(self, video_id: UUID, user_id: UUID) -> dict[str, Any]:
+    async def get_video(self, video_id: UUID, user_id: UUID) -> dict[str, Any]:
         """
         Get complete video information with progress.
 
@@ -205,16 +205,6 @@ class VideosFacade:
             logger.exception(f"Error getting chapters for video {video_id}: {e}")
             return {"error": "Failed to get chapters", "success": False}
 
-    async def mark_chapter_complete(self, video_id: UUID, user_id: UUID, chapter_id: str) -> dict[str, Any]:
-        """Mark a video chapter as completed."""
-        try:
-            result = await self._progress_service.mark_chapter_complete(video_id, user_id, chapter_id)
-
-            return {"result": result, "success": True}
-
-        except Exception as e:
-            logger.exception(f"Error marking chapter complete for video {video_id}: {e}")
-            return {"error": "Failed to mark chapter complete", "success": False}
 
     # Transcript operation (delegates to video service)
     async def get_video_transcript(self, video_id: UUID, user_id: UUID, url: str) -> str:

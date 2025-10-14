@@ -1,4 +1,4 @@
-"""Video progress tracker implementing the ProgressTracker protocol.
+"""Video progress service implementing the ProgressTracker protocol.
 
 This provides a simplified interface for progress tracking that doesn't
 depend on UserContext or session management.
@@ -21,8 +21,8 @@ from src.videos.models import Video
 logger = logging.getLogger(__name__)
 
 
-class VideoProgressTracker(ProgressTracker):
-    """Simplified progress tracker for videos that implements the ProgressTracker protocol."""
+class VideoProgressService(ProgressTracker):
+    """Simplified progress service for videos that implements the ProgressTracker protocol."""
 
     async def get_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
         """Get progress data for specific video and user."""
@@ -41,16 +41,6 @@ class VideoProgressTracker(ProgressTracker):
             completion_percentage = progress_data.progress_percentage
             last_position = metadata.get("last_position", 0)
 
-            # If we need to calculate percentage based on position/duration
-            if completion_percentage == 0 and last_position > 0:
-                video_query = select(Video).where(Video.id == content_id)
-                video_result = await session.execute(video_query)
-                video = video_result.scalar_one_or_none()
-
-                if video and video.duration and video.duration > 0:
-                    # Calculate time-based progress
-                    time_based_percentage = min((last_position / video.duration) * 100, 100.0)
-                    completion_percentage = time_based_percentage
 
             return {
                 "id": progress_data.id,
@@ -98,22 +88,11 @@ class VideoProgressTracker(ProgressTracker):
             if "completed_chapters" in progress_data:
                 metadata["completed_chapters"] = progress_data["completed_chapters"]
 
-            # Calculate completion percentage
-            # If completion_percentage is explicitly provided, use it
+            # Calculate completion percentage (simplified)
             if "completion_percentage" in progress_data and progress_data["completion_percentage"] is not None:
                 completion_percentage = progress_data["completion_percentage"]
             else:
-                # Calculate time-based percentage if we have position and duration
-                last_position = metadata.get("last_position", 0)
-                if video.duration and video.duration > 0 and last_position > 0:
-                    time_based_percentage = min((last_position / video.duration) * 100, 100.0)
-                    completion_percentage = time_based_percentage
-
-                    # If we have chapter-based progress, use the higher value
-                    if current_progress and current_progress.progress_percentage:
-                        completion_percentage = max(completion_percentage, current_progress.progress_percentage)
-                else:
-                    completion_percentage = current_progress.progress_percentage if current_progress else 0
+                completion_percentage = current_progress.progress_percentage if current_progress else 0
 
             # Update using unified progress service
             progress_update = ProgressUpdate(progress_percentage=completion_percentage, metadata=metadata)
@@ -177,25 +156,3 @@ class VideoProgressTracker(ProgressTracker):
 
             return settings
 
-    async def mark_chapter_complete(self, content_id: UUID, user_id: UUID, chapter_id: str) -> dict[str, Any]:
-        """Mark a chapter as complete."""
-        async with async_session_maker() as session:
-            progress_service = ProgressService(session)
-            current_progress = await progress_service.get_single_progress(user_id, content_id)
-
-            metadata = current_progress.metadata.copy() if current_progress else {"content_type": "video"}
-            completed_chapters = metadata.get("completed_chapters", [])
-
-            if chapter_id not in completed_chapters:
-                completed_chapters.append(chapter_id)
-                metadata["completed_chapters"] = completed_chapters
-
-                # Update progress with new metadata
-                progress_update = ProgressUpdate(
-                    progress_percentage=current_progress.progress_percentage if current_progress else 0,
-                    metadata=metadata,
-                )
-
-                await progress_service.update_progress(user_id, content_id, "video", progress_update)
-
-            return {"success": True, "completed_chapters": completed_chapters}

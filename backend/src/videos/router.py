@@ -254,7 +254,7 @@ async def get_video_details(
         # Get progress
         try:
             from src.videos.facade import videos_facade
-            progress_result = await videos_facade.get_video_with_progress(UUID(video_id), auth.user_id)
+            progress_result = await videos_facade.get_video(UUID(video_id), auth.user_id)
             progress = progress_result.get("progress") if progress_result.get("success") else None
         except Exception:
             progress = None
