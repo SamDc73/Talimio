@@ -4,8 +4,8 @@ import { useEffect, useImperativeHandle, useRef, useState } from "react"
 
 // 2. External libraries
 import { ErrorBoundary } from "react-error-boundary"
+import { getVideoTranscript } from "@/api/videosApi"
 import { cn } from "@/lib/utils"
-import { getVideoTranscript } from "@/services/videosService"
 import { useVideoTranscriptSync } from "./hooks/useVideoTranscriptSync"
 // 3. Internal absolute imports
 import "./video-overrides.css" // Only for third-party overrides

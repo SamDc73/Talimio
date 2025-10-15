@@ -13,7 +13,7 @@ import { useLessonPage } from "./hooks/useLessonPage"
  * Uses combined useLessonPage hook for all data and actions
  */
 export default function LessonPage() {
-	const { lessonId } = useParams()
+	const { courseId, lessonId } = useParams()
 	const [mode, setMode] = useState("outline")
 	const isOpen = useAppStore(selectSidebarOpen)
 
@@ -34,7 +34,7 @@ export default function LessonPage() {
 		handleLessonClick,
 		handleMarkComplete,
 		handleRegenerate,
-	} = useLessonPage(lessonId)
+	} = useLessonPage(courseId, lessonId)
 
 	if (isLoading) {
 		return (

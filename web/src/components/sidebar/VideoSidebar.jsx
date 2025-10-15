@@ -13,9 +13,9 @@ const formatTime = (seconds) => {
 }
 
 import { useEffect, useState } from "react"
-import { useVideoProgress } from "@/hooks/useVideoProgress"
+import { extractVideoChapters, getVideoChapters } from "@/api/videosApi"
+import { useVideoProgress } from "@/features/video-viewer/hooks/useVideoProgress"
 import logger from "@/lib/logger"
-import { extractVideoChapters, getVideoChapters } from "@/services/videosService"
 import CompletionCheckbox from "./CompletionCheckbox"
 import ProgressCircle from "./ProgressCircle"
 import ProgressIndicator from "./ProgressIndicator"

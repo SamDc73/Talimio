@@ -6,5 +6,5 @@
 // biome-ignore lint: disable
 export {}
 declare global {
-  const logger: typeof import('@/lib/logger')['default']
+	const logger: typeof import("@/lib/logger")["default"]
 }

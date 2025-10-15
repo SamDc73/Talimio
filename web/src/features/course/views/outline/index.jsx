@@ -1,5 +1,5 @@
-import { useCourseProgress } from "../../../../hooks/useCourseProgress"
-import { useCourseNavigation } from "../../../../utils/navigationUtils"
+import { useCourseProgress } from "@/features/course/hooks/useCourseProgress"
+import { useCourseNavigation } from "@/utils/navigationUtils"
 import OutlineNode from "../../components/navigation/OutlineNode"
 
 /**

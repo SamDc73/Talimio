@@ -50,16 +50,10 @@ export function useQuizSubmission() {
 
 			// Show feedback to user
 			if (data.next_lesson_adapted) {
-				console.log("Quiz submitted! Future lessons will be adapted based on your performance.")
-				console.log(`Focus areas: ${data.performance_summary?.weak_concepts?.join(", ") || "none identified"}`)
 			} else {
-				console.log("Quiz submitted successfully!")
-				console.log(`Score: ${data.performance_summary?.accuracy?.toFixed(1)}%`)
 			}
 		},
-		onError: (error) => {
-			console.error("Failed to submit quiz:", error.response?.data?.detail || "Please try again")
-		},
+		onError: (_error) => {},
 	})
 
 	return {

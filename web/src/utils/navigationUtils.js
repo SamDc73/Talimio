@@ -8,7 +8,7 @@
 import { useLocation, useNavigate } from "react-router-dom"
 
 /**
- * Generate course URL based on the simplified course structure
+ * Generate the canonical course URL with optional lesson segment.
  * @param {string} courseId - Course ID
  * @param {string} [lessonId] - Optional lesson ID
  * @returns {string} Course URL
@@ -16,9 +16,8 @@ import { useLocation, useNavigate } from "react-router-dom"
 export function generateCourseUrl(courseId, lessonId = null) {
 	if (!courseId) return "/"
 
-	// If lesson ID provided, use simplified lesson URL
 	if (lessonId) {
-		return `/lesson/${lessonId}`
+		return `/course/${courseId}/lesson/${lessonId}`
 	}
 
 	return `/course/${courseId}`
@@ -102,19 +101,7 @@ export function convertCourseToRoadmapUrl(courseUrl) {
  * @returns {Object} Navigation parameters
  */
 export function parseNavigationPath(pathname) {
-	// Parse simplified lesson URLs: /lesson/{lessonId}
-	const lessonMatch = pathname.match(/^\/lesson\/([^/]+)$/)
-	if (lessonMatch) {
-		return {
-			type: "lesson",
-			courseId: null, // Not in URL anymore
-			moduleId: null,
-			lessonId: lessonMatch[1],
-			isPreview: false,
-		}
-	}
-
-	// Parse course URLs (simplified: /course/{courseId}/lesson/{lessonId})
+	// Parse course URLs: /course/{courseId}/lesson/{lessonId?}
 	const courseMatch = pathname.match(/^\/course\/([^/]+)(?:\/lesson\/([^/]+))?$/)
 	if (courseMatch) {
 		return {
@@ -192,9 +179,11 @@ export function useCourseNavigation() {
 			navigate(generateCourseUrl(courseId))
 		},
 
-		goToLesson: (_courseId, lessonId) => {
-			// Use simplified lesson URL pattern
-			navigate(`/lesson/${lessonId}`)
+		goToLesson: (courseId, lessonId) => {
+			if (!courseId || !lessonId) {
+				return
+			}
+			navigate(generateCourseUrl(courseId, lessonId))
 		},
 
 		goToCoursePreview: (courseId) => {

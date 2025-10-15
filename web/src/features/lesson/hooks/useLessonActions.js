@@ -7,80 +7,95 @@ import { useLessonCompleteMutation, useLessonProgressMutation } from "./useLesso
  * Business logic actions for lessons
  * Following state management guide: "Model actions as events - business logic in hooks, not components"
  */
-export function useLessonActions() {
+export function useLessonActions(courseId) {
 	const navigate = useNavigate()
 	const { goToLesson } = useCourseNavigation()
-	const progressMutation = useLessonProgressMutation()
-	const completeMutation = useLessonCompleteMutation()
+	const progressMutation = useLessonProgressMutation(courseId)
+	const completeMutation = useLessonCompleteMutation(courseId)
 
 	// Action: Navigate back from lesson
-	const handleBack = useCallback(
-		(courseId) => {
-			if (courseId) {
-				// Navigate to the course page if we have a course ID
-				navigate(`/course/${courseId}`)
-			} else {
-				// Otherwise go back in history
-				window.history.back()
-			}
-		},
-		[navigate]
-	)
+	const handleBack = useCallback(() => {
+		if (courseId) {
+			// Navigate to the course page if we have a course ID
+			navigate(`/course/${courseId}`)
+			return
+		}
+
+		// Otherwise go back in history
+		window.history.back()
+	}, [courseId, navigate])
 
 	// Action: Navigate to another lesson
 	const handleLessonNavigation = useCallback(
-		(courseId, lessonId) => {
-			if (courseId) {
-				goToLesson(courseId, lessonId)
-			} else {
-				// Fallback to direct lesson navigation
-				navigate(`/lesson/${lessonId}`)
+		(lessonId, targetCourseId) => {
+			const courseToUse = targetCourseId ?? courseId
+			if (!courseToUse || !lessonId) {
+				return
 			}
+			goToLesson(courseToUse, lessonId)
 		},
-		[navigate, goToLesson]
+		[courseId, goToLesson]
 	)
 
 	// Action: Mark lesson as complete
 	const handleMarkComplete = useCallback(
-		(lessonId) => {
-			completeMutation.mutate(lessonId)
+		(lessonId, targetCourseId) => {
+			const courseToUse = targetCourseId ?? courseId
+			if (!courseToUse || !lessonId) {
+				return
+			}
+
+			completeMutation.mutate({ lessonId })
 
 			// Emit event for cross-component communication
 			// Following state management guide: "Event-Driven Updates"
 			window.dispatchEvent(
 				new CustomEvent("lessonComplete", {
-					detail: { lessonId, timestamp: new Date().toISOString() },
+					detail: { courseId: courseToUse, lessonId, timestamp: new Date().toISOString() },
 				})
 			)
 		},
-		[completeMutation]
+		[completeMutation, courseId]
 	)
 
 	// Action: Update lesson progress
 	const handleProgressUpdate = useCallback(
-		(lessonId, progressData) => {
-			progressMutation.mutate({ lessonId, progressData })
+		(lessonId, progress, targetCourseId) => {
+			const courseToUse = targetCourseId ?? courseId
+			if (!courseToUse || !lessonId) {
+				return
+			}
+
+			progressMutation.mutate({ lessonId, progress })
 
 			// Emit event for progress updates
 			window.dispatchEvent(
 				new CustomEvent("lessonProgressUpdate", {
-					detail: { lessonId, progressData },
+					detail: { courseId: courseToUse, lessonId, progress },
 				})
 			)
 		},
-		[progressMutation]
+		[courseId, progressMutation]
 	)
 
 	// Action: Regenerate lesson content
-	const handleRegenerate = useCallback((lessonId) => {
-		// This could trigger a mutation to regenerate content
-		// For now, we'll emit an event
-		window.dispatchEvent(
-			new CustomEvent("lessonRegenerate", {
-				detail: { lessonId },
-			})
-		)
-	}, [])
+	const handleRegenerate = useCallback(
+		(lessonId, targetCourseId) => {
+			const courseToUse = targetCourseId ?? courseId
+			if (!courseToUse || !lessonId) {
+				return
+			}
+
+			// This could trigger a mutation to regenerate content
+			// For now, we'll emit an event
+			window.dispatchEvent(
+				new CustomEvent("lessonRegenerate", {
+					detail: { courseId: courseToUse, lessonId },
+				})
+			)
+		},
+		[courseId]
+	)
 
 	return {
 		// Navigation actions

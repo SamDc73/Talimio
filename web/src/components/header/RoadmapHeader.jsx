@@ -1,4 +1,4 @@
-import { useCourseProgress } from "@/hooks/useCourseProgress"
+import { useCourseProgress } from "@/features/course/hooks/useCourseProgress"
 import useAppStore, { selectSidebarOpen, selectToggleSidebar } from "@/stores/useAppStore"
 import { CourseHeader } from "./CourseHeader"
 

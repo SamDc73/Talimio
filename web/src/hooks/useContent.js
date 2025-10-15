@@ -24,9 +24,7 @@ export function useContent() {
 					overdue: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0,
 				}))
 			)
-		} catch (_error) {
-			console.log("Error")
-		}
+		} catch (_error) {}
 		setIsLoading(false)
 	}, [])
 

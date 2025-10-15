@@ -4,7 +4,7 @@ export * from "./api/compatibilityApi"
 export * from "./api/courseApi"
 // Course API
 export { fetchLesson, fetchLessons, generateLesson } from "./api/lessonsApi"
-export * from "./api/progressApi"
+// Progress updates flow through the shared hooks/useProgress infrastructure; feature wrapper removed
 export { default as CoursePage } from "./CoursePage"
 export { ContentRenderer } from "./components/ContentRenderer"
 // Course components

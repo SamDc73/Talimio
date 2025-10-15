@@ -4,16 +4,16 @@
 
 import { Brain, ChevronLeft, Eye, RotateCcw, Save, Trash2, X } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
-import { Button } from "@/components/Button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/Dialog"
-import { Label } from "@/components/Label"
 import {
 	clearUserMemory,
 	deleteMemory,
 	getUserMemories,
 	getUserSettings,
 	updateCustomInstructions,
-} from "@/services/personalizationApi.js"
+} from "@/api/personalizationApi.js"
+import { Button } from "@/components/Button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/Dialog"
+import { Label } from "@/components/Label"
 
 export function PersonalizationDialog({ open, onOpenChange }) {
 	const [isLoading, setIsLoading] = useState(false)

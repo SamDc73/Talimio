@@ -366,26 +366,3 @@ class CoursesFacade:
             logger.exception("Error getting lessons for course %s", course_id)
             return {"error": "Failed to get lessons", "success": False}
 
-    # Lesson-specific operations for router compatibility
-    async def get_lesson_simplified(
-        self, course_id: UUID, lesson_id: UUID, generate: bool = False, user_id: UUID | None = None
-    ) -> Any:
-        """Get a specific lesson by course and lesson ID.
-
-        Passes user_id through to ensure authenticated generation and user isolation.
-        """
-        try:
-            from src.courses.services.lesson_service import LessonService
-            from src.database.session import async_session_maker
-
-            async with async_session_maker() as session:
-                if not user_id:
-                    from fastapi import HTTPException
-
-                    raise HTTPException(status_code=401, detail="User authentication required")
-                lesson_service = LessonService(session, user_id)
-                return await lesson_service.get_lesson(course_id, lesson_id, generate)
-
-        except Exception:
-            logger.exception("Error getting lesson %s for course %s", lesson_id, course_id)
-            raise

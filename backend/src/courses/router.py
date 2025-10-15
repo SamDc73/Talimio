@@ -162,7 +162,7 @@ async def get_lesson(
     generate: Annotated[bool, Query(description="Auto-generate if lesson doesn't exist")] = False,
 ) -> LessonResponse:
     """Get a specific lesson by course and lesson ID."""
-    return await lesson_service.get_lesson(course_id, lesson_id, generate)
+    return await lesson_service.get_lesson(course_id, lesson_id, force_refresh=generate)
 
 
 # NOTE: Quiz submission removed - quizzes are part of lesson content and handled via lesson progress updates

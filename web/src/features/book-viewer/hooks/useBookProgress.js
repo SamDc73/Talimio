@@ -1,6 +1,6 @@
 import { useRef } from "react"
 
-import { useProgress, useUpdateProgress } from "./useProgress"
+import { useProgress, useUpdateProgress } from "@/hooks/useProgress"
 
 /**
  * Adapter hook for backward compatibility with book progress
@@ -24,6 +24,8 @@ export function useBookProgress(bookId) {
 	const tocProgress = rawMetadata.toc_progress || rawMetadata.completedChapters || {}
 	const currentPage = rawMetadata.current_page || 0
 	const totalPages = rawMetadata.total_pages || 0
+	const totalChaptersFromMetadata =
+		rawMetadata.total_chapters || rawMetadata.totalChapters || Object.keys(tocProgress).length
 	const zoomLevel = rawMetadata.zoom_level || 100
 
 	// Helper to calculate progress from TOC (only counts leaf chapters)
@@ -66,7 +68,11 @@ export function useBookProgress(bookId) {
 			}
 
 			// Calculate new progress based on completed chapters
-			const totalChapters = totalChaptersOverride || rawMetadata.totalChapters || Object.keys(newTocProgress).length
+			const totalChapters =
+				totalChaptersOverride ??
+				rawMetadata.total_chapters ??
+				rawMetadata.totalChapters ??
+				Object.keys(newTocProgress).length
 			const newProgress = calculateProgressFromToc(newTocProgress, totalChapters)
 
 			await updateProgress.mutateAsync({
@@ -78,7 +84,7 @@ export function useBookProgress(bookId) {
 					current_page: currentPage,
 					total_pages: totalPages,
 					zoom_level: zoomLevel,
-					totalChapters: totalChapters,
+					total_chapters: totalChapters,
 				},
 			})
 		},
@@ -91,7 +97,11 @@ export function useBookProgress(bookId) {
 			})
 
 			// Calculate new progress based on completed chapters
-			const totalChapters = totalChaptersOverride || rawMetadata.totalChapters || Object.keys(newTocProgress).length
+			const totalChapters =
+				totalChaptersOverride ??
+				rawMetadata.total_chapters ??
+				rawMetadata.totalChapters ??
+				Object.keys(newTocProgress).length
 			const newProgress = calculateProgressFromToc(newTocProgress, totalChapters)
 
 			await updateProgress.mutateAsync({
@@ -103,7 +113,7 @@ export function useBookProgress(bookId) {
 					current_page: currentPage,
 					total_pages: totalPages,
 					zoom_level: zoomLevel,
-					totalChapters: totalChapters,
+					total_chapters: totalChapters,
 				},
 			})
 		},
@@ -117,6 +127,7 @@ export function useBookProgress(bookId) {
 					current_page: currentPage,
 					total_pages: totalPages,
 					zoom_level: zoomLevel,
+					total_chapters: totalChaptersFromMetadata,
 					...metadata,
 				},
 			}),
@@ -131,6 +142,7 @@ export function useBookProgress(bookId) {
 					current_page: currentPage,
 					total_pages: totalPages,
 					zoom_level: zoomLevel,
+					total_chapters: totalChaptersFromMetadata,
 					...metadata,
 				},
 			}),

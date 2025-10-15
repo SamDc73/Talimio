@@ -7,15 +7,15 @@ import { api } from "../../../lib/apiClient.js"
  * Fetch a specific lesson by lesson ID
  * Uses centralized API client with deduplication for identical requests
  */
-export async function fetchLesson(courseId, lessonId) {
+export async function fetchLesson(courseId, lessonId, { generate = false } = {}) {
 	if (!courseId || !lessonId) {
 		throw new Error("Course ID and Lesson ID are required")
 	}
 
 	// Use centralized API client with automatic deduplication
 	// Multiple concurrent calls to the same lesson will share the same promise
-	const endpoint = `/courses/${courseId}/lessons/${lessonId}?generate=true`
-	return api.get(endpoint)
+	const query = generate ? "?generate=true" : ""
+	return api.get(`/courses/${courseId}/lessons/${lessonId}${query}`)
 }
 
 /**
@@ -40,4 +40,8 @@ export async function generateLesson(courseId, moduleId) {
 
 	// Use centralized API client (POST requests are not deduplicated)
 	return api.post(`/courses/${courseId}/modules/${moduleId}/lessons`)
+}
+
+export function regenerateLesson(courseId, lessonId) {
+	return fetchLesson(courseId, lessonId, { generate: true })
 }

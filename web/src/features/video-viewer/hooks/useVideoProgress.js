@@ -1,6 +1,6 @@
 import { useRef } from "react"
 
-import { useProgress, useUpdateProgress } from "./useProgress"
+import { useProgress, useUpdateProgress } from "@/hooks/useProgress"
 
 /**
  * Adapter hook for backward compatibility with video progress
@@ -38,7 +38,7 @@ export function useVideoProgress(videoId) {
 		}
 	}
 
-	const totalChapters = rawMetadata.totalChapters || rawMetadata.total_chapters || 0
+	const totalChapters = rawMetadata.total_chapters || rawMetadata.totalChapters || 0
 
 	// Check if a specific chapter is completed
 	const isCompleted = (chapterId) => {
@@ -54,7 +54,7 @@ export function useVideoProgress(videoId) {
 		}
 
 		// Use override if provided (from VideoSidebar which knows the actual chapter count)
-		const actualTotalChapters = totalChaptersOverride || totalChapters || Object.keys(completedChapters).length
+		const actualTotalChapters = totalChaptersOverride ?? totalChapters ?? Object.keys(newCompletedChapters).length
 
 		// Calculate progress based on completed chapters
 		let newProgress = currentProgress
@@ -69,9 +69,8 @@ export function useVideoProgress(videoId) {
 			progress: newProgress,
 			metadata: {
 				content_type: "video",
-				// Persist using camelCase keys for harmony across frontend
-				completedChapters: newCompletedChapters,
-				totalChapters: actualTotalChapters,
+				completed_chapters: newCompletedChapters,
+				total_chapters: actualTotalChapters,
 			},
 		})
 
@@ -86,8 +85,8 @@ export function useVideoProgress(videoId) {
 			progress: currentProgress,
 			metadata: {
 				content_type: "video",
-				completedChapters,
-				totalChapters: newTotalChapters,
+				completed_chapters: completedChapters,
+				total_chapters: newTotalChapters,
 			},
 		})
 	}
@@ -115,6 +114,8 @@ export function useVideoProgress(videoId) {
 				progress,
 				metadata: {
 					content_type: "video",
+					completed_chapters: completedChapters,
+					total_chapters: totalChapters,
 					...metadata,
 				},
 			}),
@@ -125,6 +126,8 @@ export function useVideoProgress(videoId) {
 				progress,
 				metadata: {
 					content_type: "video",
+					completed_chapters: completedChapters,
+					total_chapters: totalChapters,
 					...metadata,
 				},
 			}),

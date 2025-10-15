@@ -8,14 +8,65 @@
  * @param {string} contentId - ID of the content
  * @param {Object} progressData - Progress data to send
  */
-export function dispatchProgressUpdate(contentType, contentId, progressData) {
-	const eventName = `${contentType}ProgressUpdate`
+export function dispatchProgressUpdate(contentType, contentId, progressData = {}) {
+	if (typeof window === "undefined" || !contentId) {
+		return
+	}
+
+	const toSnakeCase = (key) => key.replace(/([A-Z])/g, "_$1").toLowerCase()
+
+	const resolveProgressValue = () => {
+		if (typeof progressData.progress === "number") {
+			return progressData.progress
+		}
+
+		if (typeof progressData.percentage === "number") {
+			return progressData.percentage
+		}
+
+		if (typeof progressData.progress_percentage === "number") {
+			return progressData.progress_percentage
+		}
+
+		const stats = progressData.progressStats || {}
+		if (typeof stats.percentage === "number") {
+			return stats.percentage
+		}
+
+		return undefined
+	}
+
+	const metadataSource =
+		progressData.metadata && typeof progressData.metadata === "object"
+			? progressData.metadata
+			: progressData.progressStats && typeof progressData.progressStats === "object"
+				? progressData.progressStats.metadata || {}
+				: {}
+
+	const normalizedMetadata = {}
+	Object.entries(metadataSource).forEach(([key, value]) => {
+		if (value === undefined) {
+			return
+		}
+
+		const normalizedKey = key.includes("_") ? key : toSnakeCase(key)
+		normalizedMetadata[normalizedKey] = value
+	})
+
+	if (!normalizedMetadata.content_type && contentType) {
+		normalizedMetadata.content_type = contentType
+	}
+
+	if (progressData.refresh) {
+		normalizedMetadata.refresh = true
+	}
 
 	window.dispatchEvent(
-		new CustomEvent(eventName, {
+		new CustomEvent("progressUpdated", {
 			detail: {
-				[`${contentType}Id`]: contentId,
-				...progressData,
+				contentId,
+				progress: resolveProgressValue(),
+				metadata: normalizedMetadata,
 			},
 		})
 	)
@@ -27,15 +78,7 @@ export function dispatchProgressUpdate(contentType, contentId, progressData) {
  * @param {string} contentId - ID of the content
  */
 export function dispatchProgressRefresh(contentType, contentId) {
-	const eventName = `${contentType}ProgressRefresh`
-
-	window.dispatchEvent(
-		new CustomEvent(eventName, {
-			detail: {
-				[`${contentType}Id`]: contentId,
-			},
-		})
-	)
+	dispatchProgressUpdate(contentType, contentId, { refresh: true })
 }
 
 /**
@@ -61,9 +104,7 @@ export function calculateProgressFromItems(items) {
  * @param {string} title - Error title
  * @param {string} description - Error description
  */
-export function logError(title, description) {
-	console.error(`${title}: ${description}`)
-}
+export function logError(_title, _description) {}
 
 /**
  * Log sync error with consistent messaging

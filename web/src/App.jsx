@@ -87,18 +87,6 @@ function AppContent() {
 					<Route path="lesson/:lessonId" element={<CourseRoutes />} />
 				</Route>
 
-				{/* Standalone lesson route also uses CourseLayout */}
-				<Route
-					path="/lesson/:lessonId"
-					element={
-						<ProtectedRoute>
-							<CourseLayout />
-						</ProtectedRoute>
-					}
-				>
-					<Route index element={<CourseRoutes />} />
-				</Route>
-
 				{/* Course preview - doesn't use persistent layout */}
 				<Route
 					path="/course/preview/:courseId"

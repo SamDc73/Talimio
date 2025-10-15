@@ -28,6 +28,22 @@ const DEFAULT_AUTH_STATE = {
 	user: null,
 }
 
+const dispatchProgressUpdated = (contentId, progressValue, metadata = {}) => {
+	if (typeof window === "undefined" || !contentId) {
+		return
+	}
+
+	window.dispatchEvent(
+		new CustomEvent("progressUpdated", {
+			detail: {
+				contentId,
+				progress: progressValue,
+				metadata,
+			},
+		})
+	)
+}
+
 /**
  * Main application store with all state slices
  * Single source of truth for client-side state
@@ -67,21 +83,33 @@ const useAppStore = create(
 
 				// Set book progress
 				setBookProgress: (bookId, progress) => {
+					const nextProgress = {
+						...progress,
+						lastUpdated: Date.now(),
+					}
+
 					set((state) => {
-						state.books.progress[bookId] = {
-							...progress,
-							lastUpdated: Date.now(),
-						}
+						state.books.progress[bookId] = nextProgress
 					})
 
-					// Emit custom event for components listening to book progress changes
-					if (typeof window !== "undefined") {
-						window.dispatchEvent(
-							new CustomEvent("bookProgressUpdate", {
-								detail: { bookId, progressStats: progress },
-							})
-						)
+					const metadata = {
+						content_type: "book",
+						toc_progress: nextProgress.items || {},
+						total_chapters: nextProgress.totalItems ?? Object.keys(nextProgress.items || {}).length,
+						completed_chapters_count: nextProgress.completedItems ?? 0,
 					}
+
+					if (nextProgress.currentPage !== undefined) {
+						metadata.current_page = nextProgress.currentPage
+					}
+					if (nextProgress.totalPages !== undefined) {
+						metadata.total_pages = nextProgress.totalPages
+					}
+					if (nextProgress.zoomLevel !== undefined) {
+						metadata.zoom_level = nextProgress.zoomLevel
+					}
+
+					dispatchProgressUpdated(bookId, nextProgress.percentage ?? 0, metadata)
 				},
 
 				// Toggle book item completion (chapters)
@@ -119,12 +147,15 @@ const useAppStore = create(
 						state.books.progress[bookId] = newProgress
 					})
 
-					// Dispatch browser event for dashboard sync
-					window.dispatchEvent(
-						new CustomEvent("bookProgressUpdate", {
-							detail: { bookId, progressStats: newProgress },
-						})
-					)
+					// Dispatch unified progress event for dashboard sync
+					const metadata = {
+						content_type: "book",
+						toc_progress: newProgress.items || {},
+						total_chapters: newProgress.totalItems ?? Object.keys(newProgress.items || {}).length,
+						completed_chapters_count: newProgress.completedItems ?? 0,
+					}
+
+					dispatchProgressUpdated(bookId, newProgress.percentage ?? 0, metadata)
 				},
 
 				// Batch update book items
@@ -162,12 +193,15 @@ const useAppStore = create(
 						state.books.progress[bookId] = newProgress
 					})
 
-					// Dispatch browser event
-					window.dispatchEvent(
-						new CustomEvent("bookProgressUpdate", {
-							detail: { bookId, progressStats: newProgress },
-						})
-					)
+					// Dispatch unified progress event
+					const metadata = {
+						content_type: "book",
+						toc_progress: newProgress.items || {},
+						total_chapters: newProgress.totalItems ?? Object.keys(newProgress.items || {}).length,
+						completed_chapters_count: newProgress.completedItems ?? 0,
+					}
+
+					dispatchProgressUpdated(bookId, newProgress.percentage ?? 0, metadata)
 				},
 
 				// Set book loading state
@@ -426,21 +460,30 @@ const useAppStore = create(
 				setVideoProgress: (videoId, progress) => {
 					// Track this as a local update to prevent echo
 
+					const nextProgress = {
+						...progress,
+						lastUpdated: Date.now(),
+					}
+
 					set((state) => {
-						state.videos.progress[videoId] = {
-							...progress,
-							lastUpdated: Date.now(),
-						}
+						state.videos.progress[videoId] = nextProgress
 					})
 
-					// Emit custom event for components listening to video progress changes
-					if (typeof window !== "undefined") {
-						window.dispatchEvent(
-							new CustomEvent("videoProgressUpdate", {
-								detail: { videoId, progress },
-							})
-						)
+					const metadata = {
+						content_type: "video",
+						completed_chapters: nextProgress.items || {},
+						total_chapters: nextProgress.totalItems ?? Object.keys(nextProgress.items || {}).length,
+						completed_chapters_count: nextProgress.completedItems ?? 0,
 					}
+
+					if (nextProgress.lastPosition !== undefined) {
+						metadata.position = nextProgress.lastPosition
+					}
+					if (nextProgress.duration !== undefined) {
+						metadata.duration = nextProgress.duration
+					}
+
+					dispatchProgressUpdated(videoId, nextProgress.percentage ?? 0, metadata)
 				},
 
 				// Toggle video item completion (chapters)
@@ -478,12 +521,15 @@ const useAppStore = create(
 						state.videos.progress[videoId] = newProgress
 					})
 
-					// Dispatch browser event for dashboard sync
-					window.dispatchEvent(
-						new CustomEvent("videoProgressUpdate", {
-							detail: { videoId, progress: newProgress },
-						})
-					)
+					// Dispatch unified progress event for dashboard sync
+					const metadata = {
+						content_type: "video",
+						completed_chapters: newProgress.items || {},
+						total_chapters: newProgress.totalItems ?? Object.keys(newProgress.items || {}).length,
+						completed_chapters_count: newProgress.completedItems ?? 0,
+					}
+
+					dispatchProgressUpdated(videoId, newProgress.percentage ?? 0, metadata)
 				},
 
 				// Batch update video items
@@ -521,12 +567,15 @@ const useAppStore = create(
 						state.videos.progress[videoId] = newProgress
 					})
 
-					// Dispatch browser event
-					window.dispatchEvent(
-						new CustomEvent("videoProgressUpdate", {
-							detail: { videoId, progress: newProgress },
-						})
-					)
+					// Dispatch unified progress event
+					const metadata = {
+						content_type: "video",
+						completed_chapters: newProgress.items || {},
+						total_chapters: newProgress.totalItems ?? Object.keys(newProgress.items || {}).length,
+						completed_chapters_count: newProgress.completedItems ?? 0,
+					}
+
+					dispatchProgressUpdated(videoId, newProgress.percentage ?? 0, metadata)
 				},
 
 				// Set video loading state
@@ -575,13 +624,14 @@ const useAppStore = create(
 
 				// Video progress update (used by VideoViewer)
 				updateVideoProgress: (videoId, progressData) => {
-					// Track this as a local update to prevent echo
+					const position = progressData.position ?? progressData.lastPosition ?? 0
+					const percentage = progressData.percentage || 0
 
 					// Update playback state
 					set((state) => {
 						state.videos.playbackState[videoId] = {
 							...state.videos.playbackState[videoId],
-							currentTime: progressData.lastPosition || 0,
+							currentTime: position,
 							lastUpdated: Date.now(),
 						}
 					})
@@ -589,25 +639,25 @@ const useAppStore = create(
 					// Sync to API with proper format
 					syncToAPI("videos", videoId, {
 						progress: {
-							lastPosition: progressData.lastPosition || 0,
-							completionPercentage: progressData.percentage || 0,
+							lastPosition: position,
+							completionPercentage: percentage,
 						},
 					})
 
-					// Also dispatch event for real-time updates
-					window.dispatchEvent(
-						new CustomEvent("videoProgressUpdate", {
-							detail: {
-								videoId,
-								progressStats: {
-									percentage: progressData.percentage || 0,
-									// Keep other progress data if available
-									completed_items: get().videos.progress[videoId]?.completedItems || 0,
-									total_items: get().videos.progress[videoId]?.totalItems || 0,
-								},
-							},
-						})
-					)
+					// Also dispatch unified event for real-time updates
+					const storedVideoProgress = get().videos.progress[videoId] || {}
+					const duration = progressData.duration ?? storedVideoProgress.duration ?? 0
+
+					const metadata = {
+						content_type: "video",
+						position,
+						duration,
+						completed_chapters: storedVideoProgress.items || {},
+						total_chapters: storedVideoProgress.totalItems ?? Object.keys(storedVideoProgress.items || {}).length,
+						completed_chapters_count: storedVideoProgress.completedItems ?? 0,
+					}
+
+					dispatchProgressUpdated(videoId, percentage, metadata)
 				},
 
 				// ========== PREFERENCES SLICE ==========
@@ -745,22 +795,34 @@ const useAppStore = create(
 				// ========== COURSE ACTIONS ==========
 
 				setCourseProgress: (courseId, progress) => {
-					// Track this as a local update to prevent echo
+					const nextProgress = {
+						...progress,
+						lastUpdated: Date.now(),
+					}
 
 					set((state) => {
-						state.courses.progress[courseId] = {
-							...progress,
-							lastUpdated: Date.now(),
-						}
+						state.courses.progress[courseId] = nextProgress
 					})
 
-					if (typeof window !== "undefined") {
-						window.dispatchEvent(
-							new CustomEvent("courseProgressUpdate", {
-								detail: { courseId, progressStats: progress },
-							})
-						)
+					const completedFromArray = Array.isArray(nextProgress.completedLessons)
+						? nextProgress.completedLessons.map((lesson) => String(lesson))
+						: []
+					const completedFromItems = Object.entries(nextProgress.items || {})
+						.filter(([, value]) => Boolean(value))
+						.map(([lessonId]) => String(lessonId))
+					const completedLessons = completedFromArray.length > 0 ? completedFromArray : completedFromItems
+
+					const metadata = {
+						content_type: "course",
+						completed_lessons: Array.from(new Set(completedLessons)),
+						total_lessons: nextProgress.totalItems ?? completedLessons.length ?? 0,
 					}
+
+					if (nextProgress.currentLessonId !== undefined && nextProgress.currentLessonId !== null) {
+						metadata.current_lesson_id = String(nextProgress.currentLessonId)
+					}
+
+					dispatchProgressUpdated(courseId, nextProgress.percentage ?? 0, metadata)
 				},
 
 				toggleCourseItem: (courseId, lessonId) => {
@@ -793,11 +855,18 @@ const useAppStore = create(
 						state.courses.progress[courseId] = newProgress
 					})
 
-					window.dispatchEvent(
-						new CustomEvent("courseProgressUpdate", {
-							detail: { courseId, progressStats: newProgress },
-						})
-					)
+					const completedLessons = Object.entries(newProgress.items || {})
+						.filter(([, value]) => Boolean(value))
+						.map(([id]) => String(id))
+
+					const metadata = {
+						content_type: "course",
+						completed_lessons: completedLessons,
+						total_lessons: newProgress.totalItems ?? completedLessons.length ?? 0,
+						current_lesson_id: String(lessonId),
+					}
+
+					dispatchProgressUpdated(courseId, newProgress.percentage ?? 0, metadata)
 				},
 
 				// Batch update course items
@@ -809,13 +878,11 @@ const useAppStore = create(
 						items: {},
 					}
 
-					// Apply all updates
 					const newItems = { ...progress.items }
 					for (const { itemId, completed } of updates) {
 						newItems[itemId] = completed
 					}
 
-					// Calculate new progress
 					const completedItems = Object.values(newItems).filter(Boolean).length
 					const percentage = progress.totalItems > 0 ? Math.round((completedItems / progress.totalItems) * 100) : 0
 
@@ -828,19 +895,21 @@ const useAppStore = create(
 						// clientId: getClientId(), // Track which client made the change - TODO: implement getClientId
 					}
 
-					// Track this as a local update to prevent echo
-
-					// Update state
 					set((state) => {
 						state.courses.progress[courseId] = newProgress
 					})
 
-					// Dispatch browser event
-					window.dispatchEvent(
-						new CustomEvent("courseProgressUpdate", {
-							detail: { courseId, progressStats: newProgress },
-						})
-					)
+					const completedLessons = Object.entries(newProgress.items || {})
+						.filter(([, value]) => Boolean(value))
+						.map(([id]) => String(id))
+
+					const metadata = {
+						content_type: "course",
+						completed_lessons: completedLessons,
+						total_lessons: newProgress.totalItems ?? completedLessons.length ?? 0,
+					}
+
+					dispatchProgressUpdated(courseId, newProgress.percentage ?? 0, metadata)
 				},
 
 				// Set course loading state
@@ -883,14 +952,11 @@ const useAppStore = create(
 						delete state.courses.progress[courseId]
 					})
 
-					// Emit event to notify components to refetch
-					if (typeof window !== "undefined") {
-						window.dispatchEvent(
-							new CustomEvent("courseProgressRefresh", {
-								detail: { courseId },
-							})
-						)
-					}
+					// Emit unified event to notify components to refetch
+					dispatchProgressUpdated(courseId, undefined, {
+						content_type: "course",
+						refresh: true,
+					})
 				},
 
 				// ========== GLOBAL ACTIONS ==========

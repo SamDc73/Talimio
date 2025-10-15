@@ -5,33 +5,6 @@ import { api } from "@/lib/apiClient"
 // Maximum batch size for progress fetching
 const MAX_BATCH_SIZE = 100
 
-// Helper to get local progress from localStorage
-function getLocalProgress(ids) {
-	try {
-		const stored = localStorage.getItem("progress-fallback")
-		if (stored) {
-			const allProgress = JSON.parse(stored)
-			return ids.reduce((acc, id) => {
-				if (allProgress[id] !== undefined) {
-					acc[id] = allProgress[id]
-				}
-				return acc
-			}, {})
-		}
-	} catch (_error) {}
-	return {}
-}
-
-// Helper to save progress to localStorage
-function saveLocalProgress(contentId, progress) {
-	try {
-		const stored = localStorage.getItem("progress-fallback") || "{}"
-		const allProgress = JSON.parse(stored)
-		allProgress[contentId] = progress
-		localStorage.setItem("progress-fallback", JSON.stringify(allProgress))
-	} catch (_error) {}
-}
-
 /**
  * Batch progress fetching with size limits
  */
@@ -88,10 +61,7 @@ export function useProgress(contentIds) {
 		// Error recovery with retry
 		retry: 3,
 		retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-		onError: (_error) => {
-			// Return last known progress from localStorage
-			return getLocalProgress(contentIds)
-		},
+		onError: (_error) => {},
 	})
 
 	// Process data for stable references
@@ -168,9 +138,6 @@ export function useUpdateProgress() {
 				})
 			)
 
-			// Save to localStorage for offline fallback
-			saveLocalProgress(contentId, { progress_percentage: progress, metadata })
-
 			// Return context with snapshot
 			return { previousProgress, contentId }
 		},
@@ -179,7 +146,6 @@ export function useUpdateProgress() {
 			if (context?.previousProgress) {
 				queryClient.setQueriesData({ queryKey: ["progress"], exact: false }, context.previousProgress)
 			}
-			console.log("Error")
 		},
 		onSettled: (_data, _error, variables) => {
 			// Always refetch after mutation

@@ -205,8 +205,7 @@ function buildEndpoint(resourceType, resourceId, data) {
 
 		case "courses":
 			if (data.lessonStatus) {
-				// For courses, we need to use the updateLessonStatus endpoint
-				// This is handled by progressService.js already, so we'll skip API sync
+				// Lesson progress sync flows through the unified progress service; skip duplicate API sync
 				return null
 			}
 			// Ignore other course sync attempts

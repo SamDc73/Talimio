@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { UserAvatarMenu } from "@/components/header/MainHeader"
 import { TooltipButton } from "@/components/TooltipButton"
 import { useChatSidebar } from "@/features/assistant/contexts/chatSidebarContext"
-import { useVideoProgress } from "@/hooks/useVideoProgress"
+import { useVideoProgress } from "@/features/video-viewer/hooks/useVideoProgress"
 import { formatProgressText } from "@/utils/progressUtils"
 
 export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {

@@ -2,13 +2,11 @@ import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from src.auth import CurrentAuth
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_service import ContentService
-from src.courses.facade import CoursesFacade
-from src.courses.schemas import LessonResponse
 from src.database.session import DbSession
 from src.middleware.security import api_rate_limit
 
@@ -19,12 +17,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/content", tags=["content"])
 
 
-def get_course_service(
-    _auth: CurrentAuth,
-    _session: DbSession,
-) -> CoursesFacade:
-    """Get course orchestrator service instance."""
-    return CoursesFacade()
 
 
 @router.get("")
@@ -157,48 +149,3 @@ async def test_books_endpoint(
 
     return {"books": books}
 
-
-@router.get("/lessons/{lesson_id}")
-async def get_lesson_by_id(
-    lesson_id: UUID,
-    course_service: Annotated[CoursesFacade, Depends(get_course_service)],
-    auth: CurrentAuth,
-    db: DbSession,
-    generate: Annotated[bool, Query(description="Auto-generate if lesson doesn't exist")] = False,
-) -> LessonResponse:
-    """
-    Get a lesson by ID alone (without requiring course ID).
-
-    This endpoint finds the lesson across all courses and returns it.
-    Useful for simplified /lesson/{uuid} routing.
-    """
-    # First, try to find which course this lesson belongs to
-    try:
-        # Query the database to find the course that contains this lesson
-        from sqlalchemy import text
-
-        query = text("""
-            SELECT course_id
-            FROM lessons
-            WHERE id = :lesson_id
-            LIMIT 1
-        """)
-
-        result = await db.execute(query, {"lesson_id": lesson_id})
-
-        row = result.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Lesson not found")
-
-        course_id = row[0]
-
-        # Now fetch the lesson using the existing simplified endpoint
-        return await course_service.get_lesson_simplified(course_id, lesson_id, generate, auth.user_id)
-
-    except HTTPException as e:
-        logger.exception(f"Error fetching lesson {lesson_id}: {e}")
-        # Re-raise HTTP exceptions (e.g., 401/404) instead of masking as 500
-        raise
-    except Exception as e:
-        logger.exception(f"Error fetching lesson {lesson_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch lesson") from e

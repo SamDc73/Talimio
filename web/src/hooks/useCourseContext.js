@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { useLocation } from "react-router-dom"
 import { useCourseData } from "@/features/course/hooks/useCourseData"
 import { useOutlineData } from "@/features/course/hooks/useOutlineData"
-import { fetchLessonById } from "@/features/lesson/api/lessonApi"
 
 /**
  * Hook to detect if we're in a course/lesson context and fetch necessary data.
@@ -13,49 +12,21 @@ export function useCourseContext() {
 	const [courseId, setCourseId] = useState(null)
 	const [lessonId, setLessonId] = useState(null)
 	const [mode, setMode] = useState("outline")
-	const lastFetchedLessonIdRef = useRef(null)
 
 	// Parse courseId and lessonId from URL
 	useEffect(() => {
 		const path = location.pathname
 
-		// Check for course routes: /course/:courseId
-		const courseMatch = path.match(/\/course\/([^/]+)/)
+		const courseMatch = path.match(/^\/course\/([^/]+)(?:\/lesson\/([^/]+))?$/)
 		if (courseMatch) {
-			const courseIdFromUrl = courseMatch[1]
-			setCourseId(courseIdFromUrl)
-			setLessonId(null) // Course route has no lesson
-			return
-		}
-
-		// Check for standalone lesson route: /lesson/:lessonId
-		const lessonMatch = path.match(/^\/lesson\/([^/]+)/)
-		if (lessonMatch) {
-			const lessonIdFromUrl = lessonMatch[1]
-			setLessonId(lessonIdFromUrl)
-
-			// Only fetch if we haven't already fetched this lesson
-			if (lastFetchedLessonIdRef.current !== lessonIdFromUrl) {
-				lastFetchedLessonIdRef.current = lessonIdFromUrl
-				fetchLessonById(lessonIdFromUrl)
-					.then((lesson) => {
-						const id = lesson?.roadmap_id || lesson?.course_id
-						if (id) {
-							setCourseId(id)
-						}
-					})
-					.catch((_error) => {
-						setCourseId(null)
-						setLessonId(null)
-					})
-			}
+			setCourseId(courseMatch[1])
+			setLessonId(courseMatch[2] ?? null)
 			return
 		}
 
 		// Not in course context - clear everything
 		setCourseId(null)
 		setLessonId(null)
-		lastFetchedLessonIdRef.current = null
 		setMode("outline")
 	}, [location.pathname])
 

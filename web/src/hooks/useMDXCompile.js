@@ -9,7 +9,6 @@ import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
 import { mdxCache } from "@/lib/mdx-cache"
 
-
 // MDX compilation options
 const mdxOptions = {
 	outputFormat: "function-body",

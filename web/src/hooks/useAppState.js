@@ -28,8 +28,6 @@ export const useAppState = () => {
 		setActiveRoadmap(null)
 		updatePreference("userPreferences", null)
 		setCurrentRoadmapId(null)
-
-		console.log("Reset Complete")
 	}, [setActiveRoadmap, updatePreference])
 
 	// Check for existing roadmap on mount

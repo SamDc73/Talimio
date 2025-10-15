@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { archiveContent, unarchiveContent } from "@/api/contentApi"
+import { deleteApi } from "@/api/deleteApi"
 import { processContentData } from "@/lib/api"
 import { api } from "@/lib/apiClient"
-import { archiveContent, unarchiveContent } from "@/services/contentService"
-import { deleteApi } from "@/services/deleteApi"
 
 /**
  * React Query hooks for content operations (following state-management.md)
@@ -106,26 +106,22 @@ export function useDeleteContent() {
 		},
 
 		// Rollback on error
-		onError: (err, _variables, context) => {
+		onError: (_err, _variables, context) => {
 			if (context?.previousContent) {
 				context.previousContent.forEach(([queryKey, data]) => {
 					queryClient.setQueryData(queryKey, data)
 				})
 			}
-
-			console.log("Delete Failed")
 		},
 
 		// Success notification
 		onSuccess: (data) => {
-			const getTypeLabel = (type) => {
+			const _getTypeLabel = (type) => {
 				if (type === "video") return "Video"
 				if (type === "book") return "Book"
 				if (type === "course" || type === "roadmap") return "Course"
 				return "Item"
 			}
-
-			console.log("Action completed")
 
 			// Emit event for other components
 			window.dispatchEvent(
@@ -184,20 +180,16 @@ export function useArchiveContent() {
 		},
 
 		// Rollback on error
-		onError: (err, variables, context) => {
+		onError: (_err, _variables, context) => {
 			if (context?.previousContent) {
 				context.previousContent.forEach(([queryKey, data]) => {
 					queryClient.setQueryData(queryKey, data)
 				})
 			}
-
-			console.log("Action completed")
 		},
 
 		// Success notification
 		onSuccess: ({ item, archive }) => {
-			console.log("Action completed")
-
 			// Emit event
 			window.dispatchEvent(
 				new CustomEvent(archive ? "contentArchived" : "contentUnarchived", {
@@ -268,14 +260,10 @@ export function useUpdateContentTags() {
 					queryClient.setQueryData(queryKey, data)
 				})
 			}
-
-			console.log("Update Failed")
 		},
 
 		// Success notification
-		onSuccess: () => {
-			console.log("Tags Updated")
-		},
+		onSuccess: () => {},
 	})
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { LessonViewer } from "@/features/course/components/LessonViewer"
 import { generateCourseUrl } from "@/utils/navigationUtils"
@@ -16,26 +16,30 @@ export default function LessonView({ courseId, lessonId }) {
 	const [error, setError] = useState(null)
 	const navigate = useNavigate()
 
-	useEffect(() => {
-		if (!courseId || !lessonId) return
+	const loadLesson = useCallback(
+		async ({ forceGenerate = false } = {}) => {
+			if (!courseId || !lessonId) {
+				return
+			}
 
-		const fetchLessonData = async () => {
 			setLoading(true)
 			setError(null)
 
 			try {
-				// Simple one-call API - backend handles find/generate logic
-				const lessonData = await fetchLesson(courseId, lessonId)
+				const lessonData = await fetchLesson(courseId, lessonId, { generate: forceGenerate })
 				setLesson(lessonData)
 			} catch (err) {
-				setError(err.message)
+				setError(err?.message || "Failed to load lesson")
 			} finally {
 				setLoading(false)
 			}
-		}
+		},
+		[courseId, lessonId]
+	)
 
-		fetchLessonData()
-	}, [courseId, lessonId])
+	useEffect(() => {
+		loadLesson()
+	}, [loadLesson])
 
 	const handleBack = () => {
 		// Navigate back to the course overview
@@ -45,7 +49,9 @@ export default function LessonView({ courseId, lessonId }) {
 
 	const handleMarkComplete = (_lessonId) => {}
 
-	const handleRegenerate = (_lessonId) => {}
+	const handleRegenerate = async (_lessonId) => {
+		await loadLesson({ forceGenerate: true })
+	}
 
 	return (
 		<LessonViewer

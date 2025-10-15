@@ -96,7 +96,6 @@ export function useApi(endpoint, options = {}) {
 				return // Don't set error state for aborted requests
 			}
 			setError(err)
-			console.log("API Error")
 			// Re-throw the error if the caller needs to handle it further
 			throw err
 		} finally {

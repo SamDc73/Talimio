@@ -30,13 +30,18 @@ class LessonService:
         self.session = session
         self.user_id = user_id
 
-    async def get_lesson(self, course_id: UUID, lesson_id: UUID, generate: bool = False) -> LessonResponse:
+    async def get_lesson(
+        self,
+        course_id: UUID,
+        lesson_id: UUID,
+        force_refresh: bool = False,
+    ) -> LessonResponse:
         """Get lesson with single query including user isolation.
 
         Args:
             course_id: Course UUID
             lesson_id: Lesson UUID
-            generate: Whether to generate content if missing
+            force_refresh: Whether to regenerate content even if it already exists
 
         Returns
         -------
@@ -69,9 +74,8 @@ class LessonService:
 
         lesson, course = row
 
-        # Only regenerate when explicitly requested via ?generate=true
-        if generate:
-            lesson = await self._generate_content_secure(lesson, course, force=True)
+        if force_refresh or not (lesson.content and lesson.content.strip()):
+            lesson = await self._generate_content_secure(lesson, course, force=force_refresh)
 
         module_id = _module_id(course.id, lesson.module_name)
 

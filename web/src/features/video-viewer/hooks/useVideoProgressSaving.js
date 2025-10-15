@@ -44,8 +44,8 @@ export function useVideoProgressSaving({ video, videoId, currentTime, duration, 
 					progress_percentage: duration > 0 ? Math.round((currentTime / duration) * 100) : 0,
 					metadata: {
 						content_type: "video",
-						lastPosition: Math.floor(currentTime),
-						duration: duration,
+						position: Math.floor(currentTime),
+						duration,
 					},
 				})
 				navigator.sendBeacon(`/api/v1/progress/${videoId}`, new Blob([data], { type: "application/json" }))

@@ -13,70 +13,37 @@ export function ProgressProvider({ children }) {
 	// Listen for progress updates from any source
 	useEffect(() => {
 		const handleProgressUpdate = (event) => {
-			const { contentId, progress } = event.detail
+			const detail = event?.detail || {}
+			const { contentId, progress, metadata } = detail
 
-			// Update React Query cache for all queries containing this contentId
+			if (!contentId) {
+				return
+			}
+
 			queryClient.setQueriesData({ queryKey: ["progress"], exact: false }, (old) => {
-				if (!old || typeof old !== "object") return old
+				const base = old && typeof old === "object" ? old : {}
+				const previousEntry = base[contentId]
+				const previousMetadata =
+					previousEntry && typeof previousEntry === "object" && !Array.isArray(previousEntry)
+						? previousEntry.metadata || {}
+						: {}
+				const resolvedProgress =
+					progress ?? (typeof previousEntry === "number" ? previousEntry : (previousEntry?.progress_percentage ?? 0))
+
 				return {
-					...old,
-					[contentId]: progress,
+					...base,
+					[contentId]: {
+						progress_percentage: resolvedProgress,
+						metadata: metadata ? { ...previousMetadata, ...metadata } : previousMetadata,
+					},
 				}
 			})
 		}
 
-		// Listen for legacy events from content types
-		const handleBookProgressUpdate = (event) => {
-			const { bookId, progressStats } = event.detail
-			handleProgressUpdate({
-				detail: {
-					contentId: bookId,
-					progress: progressStats?.percentage || 0,
-				},
-			})
-		}
-
-		const handleVideoProgressUpdate = (event) => {
-			const { videoId, progress, progressStats } = event.detail
-			const stats = progressStats || progress || {}
-
-			let progressPercentage = 0
-			if (stats.percentage !== undefined) {
-				progressPercentage = stats.percentage
-			} else if (stats.duration && stats.position) {
-				progressPercentage = (stats.position / stats.duration) * 100
-			}
-
-			handleProgressUpdate({
-				detail: {
-					contentId: videoId,
-					progress: progressPercentage,
-				},
-			})
-		}
-
-		const handleCourseProgressUpdate = (event) => {
-			const { courseId, progressStats } = event.detail
-			handleProgressUpdate({
-				detail: {
-					contentId: courseId,
-					progress: progressStats?.percentage || progressStats?.completion_percentage || 0,
-				},
-			})
-		}
-
-		// Add event listeners
 		window.addEventListener("progressUpdated", handleProgressUpdate)
-		window.addEventListener("bookProgressUpdate", handleBookProgressUpdate)
-		window.addEventListener("videoProgressUpdate", handleVideoProgressUpdate)
-		window.addEventListener("courseProgressUpdate", handleCourseProgressUpdate)
 
-		// Cleanup
 		return () => {
 			window.removeEventListener("progressUpdated", handleProgressUpdate)
-			window.removeEventListener("bookProgressUpdate", handleBookProgressUpdate)
-			window.removeEventListener("videoProgressUpdate", handleVideoProgressUpdate)
-			window.removeEventListener("courseProgressUpdate", handleCourseProgressUpdate)
 		}
 	}, [queryClient])
 

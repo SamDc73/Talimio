@@ -2,9 +2,9 @@
 
 import { CheckCircle } from "lucide-react"
 import { useLayoutEffect, useRef, useState } from "react"
+import { useCourseProgress } from "@/features/course/hooks/useCourseProgress"
 import { cn } from "@/lib/utils"
-import { useCourseProgress } from "../../../../hooks/useCourseProgress"
-import { useCourseNavigation } from "../../../../utils/navigationUtils"
+import { useCourseNavigation } from "@/utils/navigationUtils"
 
 // Helper function to find x position at given y coordinate on an SVG path
 const xAtY = (path, targetY) => {

@@ -1,6 +1,6 @@
 import { useRef } from "react"
 
-import { useProgress, useUpdateProgress } from "./useProgress"
+import { useProgress, useUpdateProgress } from "@/hooks/useProgress"
 
 /**
  * Adapter hook for backward compatibility with course progress
@@ -37,7 +37,7 @@ export function useCourseProgress(courseId) {
 	}
 
 	// Toggle lesson completion
-	const toggleCompletion = async (lessonId, totalLessonsOverride) => {
+	const toggleCompletion = async (lessonId) => {
 		const lessonIdStr = String(lessonId)
 		let newCompletedLessons
 
@@ -49,11 +49,8 @@ export function useCourseProgress(courseId) {
 			newCompletedLessons = [...completedLessonsArray, lessonIdStr]
 		}
 
-		// Use override if provided (from CourseSidebar which knows the actual lesson count)
-		const actualTotalLessons = totalLessonsOverride || totalLessons
-
 		// Calculate new progress based on completed lessons
-		const newProgress = calculateProgressFromLessons(newCompletedLessons, actualTotalLessons)
+		const newProgress = calculateProgressFromLessons(newCompletedLessons, totalLessons)
 
 		await updateProgress.mutateAsync({
 			contentId: courseId,
@@ -62,7 +59,7 @@ export function useCourseProgress(courseId) {
 				content_type: "course",
 				completed_lessons: newCompletedLessons,
 				current_lesson_id: lessonIdStr,
-				total_lessons: actualTotalLessons,
+				total_lessons: totalLessons,
 			},
 		})
 	}
