@@ -188,24 +188,24 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 
 			<SidebarNav>
 				{chapters.length === 0 ? (
-					<div className="text-center text-gray-100-foreground py-8 px-4">
+					<div className="py-8 px-4 text-center text-muted-foreground">
 						<Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
 						{isLoadingChapters ? (
 							<div>
 								<p className="text-sm font-medium">Loading chapters...</p>
-								<p className="text-xs mt-2 text-gray-100-foreground/80">Fetching video chapter data</p>
+								<p className="text-xs mt-2 text-muted-foreground/80">Fetching video chapter data</p>
 							</div>
 						) : (
 							<div>
 								<p className="text-sm font-medium">No chapters available</p>
-								<p className="text-xs mt-2 text-gray-100-foreground/80">This video doesn't have chapter markers</p>
+								<p className="text-xs mt-2 text-muted-foreground/80">This video doesn't have chapter markers</p>
 
 								{/* Extract chapters button */}
 								<button
 									type="button"
 									onClick={handleExtractChapters}
 									disabled={isExtracting}
-									className="mt-4 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 transition-colors"
+									className="mt-4 inline-flex items-center gap-2 rounded-lg bg-video px-4 py-2 text-sm font-medium text-video-foreground transition-colors hover:bg-video-accent/80 disabled:cursor-not-allowed disabled:opacity-50"
 								>
 									<Download className="w-4 h-4" />
 									{isExtracting ? "Extracting..." : "Extract Chapters"}
@@ -224,7 +224,7 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 								<div
 									key={chapter.id}
 									className={`rounded-2xl border ${
-										isActive ? "border-violet-200 bg-violet-50/50" : "border-gray-200 bg-white"
+										isActive ? "border-video/40 bg-video/5" : "border-border bg-card"
 									} shadow-sm overflow-hidden`}
 								>
 									<div className="flex items-center gap-3 px-4 py-3">
@@ -245,15 +245,13 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 											<div className="flex items-center gap-2 mb-1">
 												<span
 													className={`text-xs font-mono transition-colors ${
-														isActive
-															? "text-violet-600 font-semibold"
-															: "text-gray-100-foreground group-hover:text-violet-600"
+														isActive ? "text-video font-semibold" : "text-muted-foreground group-hover:text-video"
 													}`}
 												>
 													{chapter.timeStr}
 												</span>
 												{chapterCompleted && (
-													<span className="text-xs font-medium text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full">
+													<span className="text-xs font-medium text-video bg-video/15 px-2 py-0.5 rounded-full">
 														Done
 													</span>
 												)}
@@ -261,19 +259,19 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 											<h5
 												className={`text-sm font-semibold line-clamp-2 transition-colors ${
 													chapterCompleted
-														? "text-violet-700"
+														? "text-video"
 														: isActive
-															? "text-violet-600"
-															: "text-foreground group-hover:text-violet-600"
+															? "text-video"
+															: "text-foreground group-hover:text-video"
 												}`}
 											>
 												{chapter.title}
 											</h5>
 											{isActive && currentTime !== undefined && (
 												<div className="mt-2">
-													<div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+													<div className="h-1 bg-muted rounded-full overflow-hidden">
 														<div
-															className="h-full bg-violet-500 transition-all duration-300"
+															className="h-full bg-video transition-all duration-300"
 															style={{
 																width: `${Math.min(
 																	100,

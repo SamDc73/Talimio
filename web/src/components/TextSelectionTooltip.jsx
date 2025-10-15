@@ -129,10 +129,10 @@ export function TextSelectionTooltip() {
 			<button
 				type="button"
 				onClick={handleAskAiClick}
-				className="group flex items-center gap-2 rounded-full border border-emerald-100/80 bg-white/95 px-4 py-2 text-sm font-medium text-emerald-600 shadow-sm shadow-emerald-200/40 backdrop-blur transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:ring-offset-2 focus:ring-offset-white dark:border-emerald-900/40 dark:bg-zinc-900/95 dark:text-emerald-300 dark:shadow-emerald-900/30 dark:hover:shadow-lg dark:focus:ring-emerald-500 dark:focus:ring-offset-zinc-900"
+				className="group flex items-center gap-2 rounded-full border border-completed/15 bg-background/95 px-4 py-2 text-sm font-medium text-completed shadow-sm shadow-completed/20 backdrop-blur transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-completed/30 focus:ring-offset-2 focus:ring-offset-background dark:border-completed/30 dark:bg-zinc-900/95 dark:text-completed dark:shadow-completed/25 dark:hover:shadow-lg dark:focus:ring-completed/40 dark:focus:ring-offset-zinc-900"
 				title="Ask AI"
 			>
-				<span className="flex h-5 w-5 items-center justify-center text-emerald-500 transition-transform duration-150 group-hover:scale-105 dark:text-emerald-300">
+				<span className="flex h-5 w-5 items-center justify-center text-completed transition-transform duration-150 group-hover:scale-105 dark:text-completed">
 					<Sparkles className="h-4 w-4" />
 				</span>
 				<span className="tracking-wide">Ask AI</span>

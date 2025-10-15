@@ -44,7 +44,7 @@ export function BookHeader({
 			? Math.max(1, Math.min(totalPages, Math.round((progressPercentage / 100) * totalPages)))
 			: currentPage
 	return (
-		<header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
+		<header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/95 backdrop-blur-md shadow-sm">
 			<div className="container mx-auto px-4">
 				<div className="flex h-16 items-center">
 					{/* Logo Section */}
@@ -55,23 +55,23 @@ export function BookHeader({
 					</div>
 
 					{/* Divider */}
-					<div className="h-8 w-px bg-slate-200 mx-3" />
+					<div className="h-8 w-px bg-border mx-3" />
 
 					{/* Book Info Section */}
 					<div className="flex-1 min-w-0">
-						<h1 className="text-base font-semibold text-slate-800 truncate">{book?.title || "Loading..."}</h1>
+						<h1 className="text-base font-semibold text-foreground truncate">{book?.title || "Loading..."}</h1>
 						{book && (
 							<div className="flex items-center mt-1">
-								<div className="w-32 md:w-48 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+								<div className="w-32 md:w-48 bg-muted rounded-full h-1.5 overflow-hidden">
 									<div
-										className="h-full bg-gradient-to-r from-blue-400 to-blue-500 rounded-full transition-all duration-300"
+										className="h-full bg-gradient-to-r from-book to-book-accent rounded-full transition-all duration-300"
 										style={{ width: `${progressPercentage}%` }}
 									/>
 								</div>
-								<span className="ml-2 text-xs font-medium text-slate-600">
+								<span className="ml-2 text-xs font-medium text-muted-foreground">
 									{formatProgressText(progressPercentage)}
 								</span>
-								<span className="ml-3 text-xs text-slate-500">
+								<span className="ml-3 text-xs text-muted-foreground/80">
 									{totalPages > 0 && displayCurrentPage > 0
 										? `Page ${displayCurrentPage} of ${totalPages}`
 										: book.author || ""}
@@ -84,7 +84,7 @@ export function BookHeader({
 					<div className="flex items-center gap-2">
 						{/* Zoom Controls for PDF */}
 						{showZoomControls && (
-							<div className="flex items-center border border-gray-200 rounded-full h-8 px-1 bg-gray-100/50">
+							<div className="flex items-center h-8 rounded-full border border-border bg-muted/40 px-1">
 								<TooltipButton
 									variant="ghost"
 									size="icon"
@@ -94,7 +94,9 @@ export function BookHeader({
 								>
 									<span className="text-sm font-medium">-</span>
 								</TooltipButton>
-								<span className="px-2 text-xs font-medium text-slate-600 min-w-[3rem] text-center">{zoomLevel}%</span>
+								<span className="px-2 text-xs font-medium text-muted-foreground min-w-[3rem] text-center">
+									{zoomLevel}%
+								</span>
 								<TooltipButton
 									variant="ghost"
 									size="icon"
@@ -118,7 +120,7 @@ export function BookHeader({
 
 						{/* Font Size Controls for EPUB */}
 						{showFontControls && (
-							<div className="flex items-center border border-gray-200 rounded-full h-8 px-1 bg-gray-100/50">
+							<div className="flex items-center h-8 rounded-full border border-border bg-muted/40 px-1">
 								<TooltipButton
 									variant="ghost"
 									size="icon"
@@ -129,8 +131,10 @@ export function BookHeader({
 									<span className="text-sm font-medium">A-</span>
 								</TooltipButton>
 								<div className="px-2 flex items-center gap-1">
-									<Type className="h-3 w-3 text-slate-600" />
-									<span className="text-xs font-medium text-slate-600 min-w-[2.5rem] text-center">{fontSize}%</span>
+									<Type className="h-3 w-3 text-muted-foreground" />
+									<span className="text-xs font-medium text-muted-foreground min-w-[2.5rem] text-center">
+										{fontSize}%
+									</span>
 								</div>
 								<TooltipButton
 									variant="ghost"

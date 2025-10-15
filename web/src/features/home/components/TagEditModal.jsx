@@ -24,7 +24,6 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 			const tags = await fetchContentTags(contentType, contentId)
 			setCurrentTags(tags)
 		} catch (_error) {
-			console.log("Error")
 		} finally {
 			setIsLoading(false)
 		}
@@ -45,8 +44,6 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 			const tagNames = currentTags.map((tag) => tag.name)
 			await updateContentTags(contentType, contentId, tagNames)
 
-			console.log("Action completed")
-
 			// Notify parent component that tags were updated
 			if (onTagsUpdated) {
 				onTagsUpdated(contentId, contentType, tagNames)
@@ -54,7 +51,6 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 
 			onOpenChange(false)
 		} catch (_error) {
-			console.log("Error")
 		} finally {
 			setIsSaving(false)
 		}
@@ -79,25 +75,25 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 						<TagIcon className="h-5 w-5" />
 						Edit Tags
 					</DialogTitle>
-					{contentTitle && <p className="text-sm text-gray-600 mt-1">for "{contentTitle}"</p>}
+					{contentTitle && <p className="text-sm text-muted-foreground mt-1">for "{contentTitle}"</p>}
 				</DialogHeader>
 
 				<div className="space-y-4 py-4">
 					{isLoading ? (
 						<div className="flex items-center justify-center py-8">
 							<Loader2 className="h-6 w-6 animate-spin" />
-							<span className="ml-2 text-sm text-gray-600">Loading tags...</span>
+							<span className="ml-2 text-sm text-muted-foreground">Loading tags...</span>
 						</div>
 					) : (
 						<>
 							{/* Current tags display */}
 							{currentTags.length > 0 ? (
 								<div>
-									<div className="text-sm font-medium text-gray-700 mb-2 block">Current Tags</div>
+									<div className="text-sm font-medium text-foreground mb-2 block">Current Tags</div>
 									<TagList tags={currentTags} variant="default" size="medium" />
 								</div>
 							) : (
-								<div className="text-center py-4 text-gray-500">
+								<div className="text-center py-4 text-muted-foreground/80">
 									<div className="text-sm">This item has no tags yet</div>
 									<div className="text-xs mt-1">Start typing below to add tags</div>
 								</div>
@@ -105,7 +101,7 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 
 							{/* Tag input */}
 							<div>
-								<div className="text-sm font-medium text-gray-700 mb-2 block">
+								<div className="text-sm font-medium text-foreground mb-2 block">
 									{currentTags.length > 0 ? "Add/Remove Tags" : "Add Tags"}
 								</div>
 								<TagInput
@@ -118,7 +114,7 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 							</div>
 
 							{/* Helper text */}
-							<div className="text-xs text-gray-500 bg-gray-50 p-3 rounded">
+							<div className="text-xs text-muted-foreground/80 bg-muted/40 p-3 rounded">
 								<p>• Type to search existing tags or create new ones</p>
 								<p>• Press Enter to add a tag</p>
 								<p>• Click the X on a tag to remove it</p>

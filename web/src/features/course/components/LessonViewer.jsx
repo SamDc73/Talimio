@@ -64,7 +64,7 @@ export function LessonViewer({ lesson, isLoading, error, onBack, onMarkComplete,
 				<div
 					className={cn(
 						"w-full rounded-xl border shadow-sm flex flex-col my-8",
-						isDarkMode ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200"
+						isDarkMode ? "bg-zinc-900 border-zinc-800" : "bg-card border-zinc-200"
 					)}
 				>
 					{/* Header */}

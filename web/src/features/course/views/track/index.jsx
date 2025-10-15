@@ -272,7 +272,7 @@ export default function TrackView({ roadmapId, modules = [] }) {
 													moduleIndex % 2 === 0 ? "rotate-[-5deg]" : "rotate-[5deg]"
 												}`}
 											>
-												<div className="absolute inset-2 rounded-full bg-white flex items-center justify-center">
+												<div className="absolute inset-2 rounded-full bg-card flex items-center justify-center">
 													{module.status === "completed" ? (
 														<CheckCircle className="w-10 h-10 text-emerald-500" />
 													) : (
@@ -328,7 +328,7 @@ export default function TrackView({ roadmapId, modules = [] }) {
 																lessonWrapRefs.current[moduleIndex][lessonIndex] = el
 															}}
 															className={cn(
-																"relative bg-white border rounded-xl p-4 shadow-sm w-[calc(50%-20px)] hover:shadow-md hover:border-emerald-300 z-10 text-left",
+																"relative bg-card border rounded-xl p-4 shadow-sm w-[calc(50%-20px)] hover:shadow-md hover:border-emerald-300 z-10 text-left",
 																isCompleted(lesson.id) ? "border-emerald-300 bg-emerald-50/30" : "border-slate-200"
 															)}
 															onClick={() => handleLessonClick(module.id, lesson.id, lesson.title, lesson.description)}

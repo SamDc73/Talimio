@@ -227,12 +227,12 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 	// Show loading state
 	if (loading) {
 		return (
-			<div className="h-full flex items-center justify-center bg-white">
+			<div className="h-full flex items-center justify-center bg-background">
 				<div className="text-center">
 					<div className="mb-4">
 						<div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
 					</div>
-					<p className="text-gray-100-foreground">Loading EPUB...</p>
+					<p className="text-muted-foreground">Loading EPUB...</p>
 				</div>
 			</div>
 		)
@@ -241,10 +241,10 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 	// Show error state
 	if (error) {
 		return (
-			<div className="h-full flex items-center justify-center bg-white">
+			<div className="h-full flex items-center justify-center bg-background">
 				<div className="text-center max-w-md">
-					<h3 className="text-lg font-semibold text-red-500 mb-2">Failed to load EPUB</h3>
-					<p className="text-gray-100-foreground">{error}</p>
+					<h3 className="text-lg font-semibold text-destructive mb-2">Failed to load EPUB</h3>
+					<p className="text-muted-foreground">{error}</p>
 				</div>
 			</div>
 		)
@@ -256,9 +256,9 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 	}
 
 	return (
-		<div className="h-full bg-white epub-container">
+		<div className="h-full bg-background epub-container">
 			<div className="max-w-4xl mx-auto p-8 h-full">
-				<div className="bg-white rounded-lg shadow-sm h-full">
+				<div className="bg-card rounded-lg shadow-sm h-full">
 					<ReactReader
 						url={epubUrl}
 						location={location}

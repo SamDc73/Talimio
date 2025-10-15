@@ -167,8 +167,8 @@ function TagInput({
 
 			{/* Input field */}
 			<div className="relative">
-				<div className="flex items-center border border-gray-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
-					<Search className="ml-3 h-4 w-4 text-gray-400" />
+				<div className="flex items-center rounded-lg border border-input bg-card focus-within:border-ring focus-within:ring-2 focus-within:ring-ring">
+					<Search className="ml-3 h-4 w-4 text-muted-foreground" />
 					<input
 						ref={inputRef}
 						type="text"
@@ -179,7 +179,7 @@ function TagInput({
 						onKeyDown={handleKeyDown}
 						placeholder={selectedTags.length >= maxTags ? "Max tags reached" : placeholder}
 						disabled={disabled || selectedTags.length >= maxTags}
-						className="flex-1 px-3 py-2 bg-transparent border-none outline-none placeholder-gray-500 disabled:cursor-not-allowed disabled:opacity-50"
+						className="flex-1 px-3 py-2 bg-transparent border-none outline-none placeholder:text-muted-foreground/70 disabled:cursor-not-allowed disabled:opacity-50"
 					/>
 					{inputValue && (
 						<button
@@ -189,9 +189,9 @@ function TagInput({
 								setHighlightedIndex(-1)
 								inputRef.current?.focus()
 							}}
-							className="mr-2 p-1 hover:bg-gray-100 rounded"
+							className="mr-2 p-1 hover:bg-muted/40 rounded"
 						>
-							<X className="h-3 w-3 text-gray-400" />
+							<X className="h-3 w-3 text-muted-foreground" />
 						</button>
 					)}
 				</div>
@@ -200,11 +200,11 @@ function TagInput({
 				{isOpen && !disabled && (
 					<div
 						ref={dropdownRef}
-						className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto"
+						className="absolute top-full left-0 right-0 mt-1 rounded-lg border border-border bg-card shadow-lg z-50 max-h-64 overflow-y-auto"
 					>
 						{suggestions.length > 0 && (
 							<div className="p-2">
-								<div className="text-xs font-medium text-gray-500 mb-2">
+								<div className="text-xs font-medium text-muted-foreground mb-2">
 									{inputValue.trim() ? "Suggestions" : "Recent tags"}
 								</div>
 								{suggestions.map((tag, index) => (
@@ -212,12 +212,12 @@ function TagInput({
 										key={tag.id}
 										type="button"
 										onClick={() => handleTagSelect(tag)}
-										className={`w-full flex items-center gap-2 px-3 py-2 text-left rounded hover:bg-gray-50 ${
-											index === highlightedIndex ? "bg-blue-50 text-blue-700" : ""
+										className={`w-full flex items-center gap-2 px-3 py-2 text-left rounded hover:bg-muted/40 ${
+											index === highlightedIndex ? "bg-primary/10 text-primary" : ""
 										}`}
 									>
 										<Tag tag={tag} size="small" />
-										<span className="text-xs text-gray-500">{tag.usage_count} uses</span>
+										<span className="text-xs text-muted-foreground">{tag.usage_count} uses</span>
 									</button>
 								))}
 							</div>
@@ -225,16 +225,16 @@ function TagInput({
 
 						{/* Create new tag option */}
 						{allowCreate && inputValue.trim() && !wouldCreateDuplicate && (
-							<div className="border-t border-gray-100">
+							<div className="border-t border-border/60">
 								<button
 									type="button"
 									onClick={handleCreateTag}
 									disabled={loading.creating}
-									className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 ${
-										highlightedIndex === suggestions.length ? "bg-blue-50 text-blue-700" : ""
+									className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/40 ${
+										highlightedIndex === suggestions.length ? "bg-primary/10 text-primary" : ""
 									}`}
 								>
-									<Plus className="h-4 w-4 text-green-500" />
+									<Plus className="h-4 w-4 text-primary" />
 									<span>
 										Create "{inputValue.trim()}"{loading.creating && " (creating...)"}
 									</span>
@@ -244,7 +244,7 @@ function TagInput({
 
 						{/* No suggestions */}
 						{suggestions.length === 0 && (!allowCreate || !inputValue.trim() || wouldCreateDuplicate) && (
-							<div className="p-4 text-center text-gray-500 text-sm">
+							<div className="p-4 text-center text-muted-foreground text-sm">
 								{inputValue.trim() ? "No matching tags found" : "Start typing to search tags"}
 							</div>
 						)}
@@ -253,7 +253,7 @@ function TagInput({
 			</div>
 
 			{/* Helper text */}
-			<div className="mt-1 text-xs text-gray-500">
+			<div className="mt-1 text-xs text-muted-foreground">
 				{selectedTags.length}/{maxTags} tags selected
 				{allowCreate && " • Press Enter to create new tags"}
 			</div>

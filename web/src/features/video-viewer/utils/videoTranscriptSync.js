@@ -55,7 +55,8 @@ export class VideoTranscriptSync {
 
 			if (time >= this.startTimes[mid] && time <= this.endTimes[mid]) {
 				return mid
-			} else if (time < this.startTimes[mid]) {
+			}
+			if (time < this.startTimes[mid]) {
 				right = mid - 1
 			} else {
 				left = mid + 1
@@ -101,7 +102,8 @@ export class VideoTranscriptSync {
 
 			if (time >= this.startTimes[mid] && time <= this.endTimes[mid]) {
 				return mid
-			} else if (time < this.startTimes[mid]) {
+			}
+			if (time < this.startTimes[mid]) {
 				right = mid - 1
 			} else {
 				left = mid + 1

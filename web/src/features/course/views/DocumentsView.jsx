@@ -13,11 +13,12 @@ import { CheckCircle2, Plus, RefreshCw, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/Button"
 import { Card } from "@/components/Card"
-import { usePolling } from "../../../hooks/usePolling"
-import { useDocumentsService } from "../api/documentsApi"
 import DocumentList from "@/features/course/components/DocumentList"
 import { DocumentStatusSummary } from "@/features/course/components/DocumentStatusBadge"
 import DocumentUploadModal from "@/features/course/components/DocumentUploadModal"
+import logger from "@/lib/logger"
+import { usePolling } from "../../../hooks/usePolling"
+import { useDocumentsService } from "../api/documentsApi"
 
 const POLLING_INTERVAL = 5000 // 5 seconds
 
@@ -146,33 +147,50 @@ function DocumentsView({ courseId }) {
 			return {
 				status: "none",
 				message: "No documents uploaded",
-				color: "gray",
 			}
-		} else if (documentsProcessing) {
+		}
+
+		if (documentsProcessing) {
 			return {
 				status: "processing",
 				message: "Documents processing...",
-				color: "blue",
-			}
-		} else if (readyDocs === totalDocs) {
-			return { status: "ready", message: "RAG system ready", color: "green" }
-		} else {
-			return {
-				status: "partial",
-				message: `${readyDocs}/${totalDocs} documents ready`,
-				color: "orange",
 			}
 		}
-	}, [documents, documentsService, documentsProcessing])
+
+		if (readyDocs === totalDocs) {
+			return {
+				status: "ready",
+				message: "RAG system ready",
+			}
+		}
+
+		return {
+			status: "partial",
+			message: `${readyDocs}/${totalDocs} documents ready`,
+		}
+	}, [documents, documentsProcessing, documentsService])
+
+	const ragStatusIndicatorClass = useMemo(() => {
+		switch (ragStatus.status) {
+			case "ready":
+				return "bg-completed"
+			case "processing":
+				return "bg-upcoming animate-pulse"
+			case "partial":
+				return "bg-due-today"
+			default:
+				return "bg-muted-foreground/60"
+		}
+	}, [ragStatus.status])
 
 	return (
-		<div className="flex-1 flex flex-col h-full bg-gray-50">
+		<div className="flex-1 flex flex-col h-full bg-muted/20">
 			{/* Header */}
-			<div className="bg-white border-b border-gray-200 px-6 py-4">
+			<div className="bg-card border-b border-border px-6 py-4">
 				<div className="flex items-center justify-between">
 					<div>
-						<h1 className="text-xl font-semibold text-gray-900">Course Documents</h1>
-						<p className="text-sm text-gray-600 mt-1">
+						<h1 className="text-xl font-semibold text-foreground">Course Documents</h1>
+						<p className="text-sm text-muted-foreground mt-1">
 							Manage documents that enhance this course with RAG capabilities
 						</p>
 					</div>
@@ -199,32 +217,23 @@ function DocumentsView({ courseId }) {
 						<div className="p-4">
 							<div className="flex items-center justify-between">
 								<div className="flex items-center space-x-3">
-									<div
-										className={`w-3 h-3 rounded-full ${
-											ragStatus.color === "green"
-												? "bg-green-500"
-												: ragStatus.color === "blue"
-													? "bg-blue-500 animate-pulse"
-													: ragStatus.color === "orange"
-														? "bg-orange-500"
-														: "bg-gray-400"
-										}`}
-									/>
+									<div className={`w-3 h-3 rounded-full ${ragStatusIndicatorClass}`} />
+
 									<div>
-										<h3 className="text-sm font-medium text-gray-900">RAG Integration Status</h3>
-										<p className="text-sm text-gray-600">{ragStatus.message}</p>
+										<h3 className="text-sm font-medium text-foreground">RAG Integration Status</h3>
+										<p className="text-sm text-muted-foreground">{ragStatus.message}</p>
 									</div>
 								</div>
 
-								{ragStatus.status === "ready" && <CheckCircle2 className="w-5 h-5 text-green-500" />}
+								{ragStatus.status === "ready" && <CheckCircle2 className="w-5 h-5 text-completed" />}
 
 								{ragStatus.status === "processing" && (
-									<div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+									<div className="w-5 h-5 border-2 border-upcoming border-t-transparent rounded-full animate-spin" />
 								)}
 							</div>
 
 							{documents.length > 0 && (
-								<div className="mt-3 pt-3 border-t border-gray-200">
+								<div className="mt-3 pt-3 border-t border-border">
 									<DocumentStatusSummary documents={documents} />
 								</div>
 							)}
@@ -240,11 +249,11 @@ function DocumentsView({ courseId }) {
 						isLoading={isLoading}
 						emptyMessage={
 							<div className="text-center py-12">
-								<div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-									<Search className="w-8 h-8 text-gray-400" />
+								<div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+									<Search className="w-8 h-8 text-muted-foreground" />
 								</div>
-								<h3 className="text-lg font-medium text-gray-900 mb-2">No documents yet</h3>
-								<p className="text-gray-600 mb-6 max-w-md mx-auto">
+								<h3 className="text-lg font-medium text-foreground mb-2">No documents yet</h3>
+								<p className="text-muted-foreground mb-6 max-w-md mx-auto">
 									Upload documents to enable RAG-powered features like intelligent lesson generation and context-aware
 									assistant responses.
 								</p>
@@ -264,11 +273,11 @@ function DocumentsView({ courseId }) {
 					{documents.length === 0 && (
 						<Card>
 							<div className="p-6">
-								<h3 className="text-lg font-medium text-gray-900 mb-4">About Document-Enhanced Learning</h3>
+								<h3 className="text-lg font-medium text-foreground mb-4">About Document-Enhanced Learning</h3>
 								<div className="grid md:grid-cols-2 gap-6">
 									<div>
-										<h4 className="font-medium text-gray-900 mb-2">What you can upload:</h4>
-										<ul className="text-sm text-gray-600 space-y-1">
+										<h4 className="font-medium text-foreground mb-2">What you can upload:</h4>
+										<ul className="text-sm text-muted-foreground space-y-1">
 											<li>• PDF documents and research papers</li>
 											<li>• Web articles and documentation URLs</li>
 											<li>• Course materials and textbooks</li>
@@ -276,8 +285,8 @@ function DocumentsView({ courseId }) {
 										</ul>
 									</div>
 									<div>
-										<h4 className="font-medium text-gray-900 mb-2">RAG Benefits:</h4>
-										<ul className="text-sm text-gray-600 space-y-1">
+										<h4 className="font-medium text-foreground mb-2">RAG Benefits:</h4>
+										<ul className="text-sm text-muted-foreground space-y-1">
 											<li>• AI lessons generated from your content</li>
 											<li>• Assistant answers with document citations</li>
 											<li>• Personalized learning based on materials</li>

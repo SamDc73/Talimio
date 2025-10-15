@@ -18,32 +18,32 @@ function ExpandableSection({
 }) {
 	// Map variants to active border colors following the styling guide
 	const variantColors = {
-		default: "border-emerald-200 bg-emerald-50/50",
-		course: "border-teal-200 bg-teal-50/50", // Following styling guide
-		book: "border-blue-200 bg-blue-50/50",
-		video: "border-violet-200 bg-violet-50/50",
+		default: "border-border bg-card",
+		course: "border-course/40 bg-course/5",
+		book: "border-book/40 bg-book/5",
+		video: "border-video/40 bg-video/5",
 	}
 
 	const activeStyle = variantColors[variant] || variantColors.default
 	const chevronColor =
 		variant === "course"
-			? "text-teal-600"
+			? "text-course"
 			: variant === "book"
-				? "text-blue-600"
+				? "text-book"
 				: variant === "video"
-					? "text-violet-600"
-					: "text-emerald-600"
+					? "text-video"
+					: "text-primary"
 
 	return (
 		<div
 			className={`rounded-xl border ${
-				isActive ? activeStyle : "border-gray-200/60 bg-white"
-			} shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden ${className}`}
+				isActive ? activeStyle : "border-border bg-card"
+			} shadow-sm transition-shadow duration-200 hover:shadow-md overflow-hidden ${className}`}
 		>
 			<button
 				type="button"
-				className={`flex items-center gap-3 justify-between w-full px-4 py-3 text-left font-semibold text-sm text-foreground ${children && isExpanded ? "border-b border-gray-200/60" : ""} rounded-t-xl ${showExpandButton ? "cursor-pointer hover:bg-slate-50/50" : ""} transition-colors`}
-				style={{ background: isActive ? "transparent" : "#fff" }}
+				className={`flex items-center gap-3 justify-between w-full px-4 py-3 text-left font-semibold text-sm text-foreground ${children && isExpanded ? "border-b border-border/60" : ""} rounded-t-xl ${showExpandButton ? "cursor-pointer hover:bg-muted/60" : ""} transition-colors`}
+				style={{ background: isActive ? "transparent" : "var(--color-card)" }}
 				onClick={showExpandButton ? onToggle : undefined}
 				aria-expanded={showExpandButton ? isExpanded : undefined}
 			>
@@ -53,7 +53,7 @@ function ExpandableSection({
 				</div>
 				{showExpandButton && (
 					<ChevronRight
-						className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${
+						className={`w-4 h-4 text-muted-foreground/80 transition-transform duration-200 ${
 							isExpanded ? `rotate-90 ${chevronColor}` : "rotate-0"
 						}`}
 					/>

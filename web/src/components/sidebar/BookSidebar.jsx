@@ -315,7 +315,7 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 		return (
 			<SidebarContainer>
 				<div className="px-4 pt-20 pb-4">
-					<div className="text-center text-zinc-500 text-sm mt-8">
+					<div className="text-center text-muted-foreground text-sm mt-8">
 						<FileText className="w-12 h-12 mx-auto mb-4 text-zinc-300" />
 						<p>No table of contents available</p>
 						{!IsLoadingChapters && (
@@ -325,7 +325,7 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 									type="button"
 									onClick={handleExtractChapters}
 									disabled={IsExtracting}
-									className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+									className="mt-4 inline-flex items-center gap-2 rounded-lg bg-book px-4 py-2 text-sm text-book-foreground transition-colors hover:bg-book-accent/80 disabled:cursor-not-allowed disabled:opacity-50"
 								>
 									<FileText className="w-4 h-4" />
 									{IsExtracting ? "Extracting..." : "Extract Chapters"}
@@ -341,7 +341,9 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 	return (
 		<SidebarContainer>
 			<ProgressIndicator progress={overallProgress} variant="book" suffix="Read">
-				<span className="text-xs text-zinc-500">{book.totalPages ? `Page 1 of ${book.totalPages}` : "Page 1"}</span>
+				<span className="text-xs text-muted-foreground">
+					{book.totalPages ? `Page 1 of ${book.totalPages}` : "Page 1"}
+				</span>
 			</ProgressIndicator>
 
 			<SidebarNav>
@@ -358,7 +360,7 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 							<div
 								key={`chapter_${chapterIndex}_${chapter.id}`}
 								className={`rounded-2xl border ${
-									isActive ? "border-blue-200 bg-blue-50/50" : "border-gray-200 bg-white"
+									isActive ? "border-book/40 bg-book/5" : "border-border bg-card"
 								} shadow-sm overflow-hidden`}
 							>
 								<div className="flex items-center gap-3 px-4 py-3">
@@ -392,7 +394,7 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 						<div
 							key={`chapter_${chapterIndex}_${chapter.id}`}
 							className={`rounded-2xl border ${
-								isActive ? "border-blue-200 bg-blue-50/50" : "border-gray-200 bg-white"
+								isActive ? "border-book/40 bg-book/5" : "border-border bg-card"
 							} shadow-sm overflow-hidden`}
 						>
 							<div className="flex items-center gap-3 px-4 py-3">
@@ -414,14 +416,14 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 								>
 									<span className="line-clamp-2 text-sm font-semibold">{chapter.title}</span>
 									<ChevronRight
-										className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${
-											isExpanded ? "rotate-90 text-blue-600" : "rotate-0"
+										className={`w-4 h-4 text-muted-foreground/80 transition-transform duration-200 ${
+											isExpanded ? "rotate-90 text-book" : "rotate-0"
 										}`}
 									/>
 								</button>
 							</div>
 							{isExpanded && (
-								<div className="px-4 py-2 space-y-2 border-t border-gray-200">
+								<div className="px-4 py-2 space-y-2 border-t border-border">
 									<ol>
 										{chapter.children.map((section, sectionIndex) => {
 											const isSectionCompleted = isChapterCompleted(section.id)

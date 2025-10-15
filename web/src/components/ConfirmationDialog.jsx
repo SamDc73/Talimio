@@ -31,8 +31,8 @@ export function ConfirmationDialog({
 				<DialogHeader>
 					<div className="flex items-center gap-3">
 						{isDestructive && (
-							<div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
-								<AlertTriangle className="h-5 w-5 text-red-600" />
+							<div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
+								<AlertTriangle className="h-5 w-5 text-destructive" />
 							</div>
 						)}
 						<div className="text-left">
@@ -40,7 +40,7 @@ export function ConfirmationDialog({
 						</div>
 					</div>
 				</DialogHeader>
-				<DialogDescription className="text-sm text-gray-600 mt-2">
+				<DialogDescription className="text-sm text-muted-foreground mt-2">
 					{itemName ? (
 						<>
 							{description} <span className="font-medium">"{itemName}"</span> will be permanently removed.

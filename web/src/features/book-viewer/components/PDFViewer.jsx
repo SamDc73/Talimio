@@ -366,18 +366,18 @@ function PDFViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 
 	if (!url) {
 		return (
-			<div className="flex h-64 items-center justify-center rounded-lg bg-gray-50">
-				<p className="text-gray-600">No PDF URL provided</p>
+			<div className="flex h-64 items-center justify-center rounded-lg bg-muted/40">
+				<p className="text-muted-foreground">No PDF URL provided</p>
 			</div>
 		)
 	}
 
 	if (loadError) {
 		return (
-			<div className="flex h-64 items-center justify-center rounded-lg bg-gray-50">
+			<div className="flex h-64 items-center justify-center rounded-lg bg-muted/40">
 				<div className="text-center">
-					<p className="text-red-600 font-semibold">Failed to load PDF</p>
-					<p className="mt-2 text-xs text-red-500">{loadError}</p>
+					<p className="text-destructive font-semibold">Failed to load PDF</p>
+					<p className="mt-2 text-xs text-destructive/80">{loadError}</p>
 				</div>
 			</div>
 		)
@@ -385,22 +385,22 @@ function PDFViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 
 	if (!storeHydrated) {
 		return (
-			<div className="flex h-64 items-center justify-center rounded-lg bg-gray-50">
-				<p className="text-gray-600">Preparing reader…</p>
+			<div className="flex h-64 items-center justify-center rounded-lg bg-muted/40">
+				<p className="text-muted-foreground">Preparing reader…</p>
 			</div>
 		)
 	}
 
 	if (!pdfBlobUrl || engineLoading || !engine || plugins.length === 0) {
 		return (
-			<div className="flex h-64 items-center justify-center rounded-lg bg-gray-50">
-				<p className="text-gray-600">Loading PDF…</p>
+			<div className="flex h-64 items-center justify-center rounded-lg bg-muted/40">
+				<p className="text-muted-foreground">Loading PDF…</p>
 			</div>
 		)
 	}
 
 	return (
-		<div className="relative flex h-full flex-col overflow-auto bg-gray-100 py-8 dark:bg-gray-800">
+		<div className="relative flex h-full flex-col overflow-auto bg-muted py-8 dark:bg-background/80">
 			<EmbedPDF engine={engine} plugins={plugins}>
 				<GlobalPointerProvider>
 					<div className="flex h-full w-full justify-center">

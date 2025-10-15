@@ -1,6 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion"
 import { BookOpen, Plus, Sparkles, Youtube } from "lucide-react"
-import { Button } from "@/components/Button"
 import { TooltipButton } from "@/components/TooltipButton"
 
 export default function FABMenu({ isFabExpanded, onToggleExpanded, onGenerateRoadmap, onUploadBook, onAddYoutube }) {

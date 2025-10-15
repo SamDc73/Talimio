@@ -24,13 +24,9 @@ export function useContentHandlers({ filters, pinning, setContentItems, loadCont
 				level: "beginner",
 			})
 
-			// Generate course using search query
-			console.log("Action completed")
-
 			// Clear search after generating
 			filters.setSearchQuery("")
 		} catch (_error) {
-			console.log("Error")
 		} finally {
 			setIsGenerating(false)
 		}

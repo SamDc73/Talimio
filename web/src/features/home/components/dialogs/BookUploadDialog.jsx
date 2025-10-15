@@ -41,8 +41,6 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 			if (!response.ok) {
 				const errorData = await response.json()
 				if (response.status === 409) {
-					// Duplicate file error
-					console.log("Book Already Exists")
 				} else {
 					throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
 				}
@@ -50,8 +48,6 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 			}
 
 			const newBook = await response.json()
-
-			console.log("Action completed")
 
 			// Reset form
 			setSelectedFile(null)
@@ -64,7 +60,6 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 				onBookUploaded(newBook)
 			}
 		} catch (_error) {
-			console.log("Upload Failed")
 		} finally {
 			setIsUploadingBook(false)
 		}
@@ -83,7 +78,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 		<Sheet open={open} onOpenChange={handleClose}>
 			<SheetContent side="bottom" className="sm:max-w-lg mx-auto">
 				{isUploadingBook && (
-					<div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg">
+					<div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg">
 						<div className="flex flex-col items-center gap-4">
 							<div className="animate-spin rounded-full h-10 w-10 border-b-2 border-book" />
 							<p className="text-lg font-medium">Uploading your book...</p>

@@ -67,15 +67,15 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "" }) {
 
 	return (
 		<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-			<div className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full mx-4 shadow-xl">
+			<div className="bg-card rounded-lg max-w-lg w-full mx-4 shadow-xl">
 				{/* Header */}
-				<div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-					<h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Create New Course</h2>
+				<div className="flex items-center justify-between p-6 border-b border-border">
+					<h2 className="text-xl font-semibold text-foreground">Create New Course</h2>
 					<button
 						type="button"
 						onClick={handleClose}
 						disabled={isGenerating}
-						className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
+						className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
 					>
 						<X className="h-6 w-6" />
 					</button>
@@ -84,7 +84,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "" }) {
 				{/* Content */}
 				<form onSubmit={handleSubmit} className="p-6">
 					<div className="mb-4">
-						<label htmlFor="course-prompt" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+						<label htmlFor="course-prompt" className="block text-sm font-medium text-muted-foreground mb-2">
 							What would you like to learn?
 						</label>
 						<textarea
@@ -93,11 +93,11 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "" }) {
 							onChange={(e) => setPrompt(e.target.value)}
 							placeholder="Describe what you want to learn... (e.g., 'Learn React and build modern web applications')"
 							disabled={isGenerating}
-							className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-none disabled:opacity-50"
+							className="w-full px-3 py-2 border border-input bg-card text-foreground rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring resize-none disabled:opacity-50"
 							rows={4}
 							maxLength={500}
 						/>
-						<div className="text-right text-xs text-gray-500 mt-1">{prompt.length}/500 characters</div>
+						<div className="text-right text-xs text-muted-foreground mt-1">{prompt.length}/500 characters</div>
 					</div>
 
 					{/* Error Message */}

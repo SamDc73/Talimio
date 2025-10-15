@@ -27,9 +27,9 @@ export function InlineCitation({ citationNumber, document, excerpt, onClick, cla
 					className={`
               inline-flex items-center justify-center
               w-5 h-5 text-xs font-medium
-              bg-blue-100 hover:bg-blue-200 
-              text-blue-700 hover:text-blue-800
-              border border-blue-300 hover:border-blue-400
+              bg-course/15 hover:bg-course/20 
+              text-course hover:text-course
+              border border-course/30 hover:border-course/40
               rounded transition-colors cursor-pointer
               mx-0.5 align-super
               ${className}
@@ -43,14 +43,14 @@ export function InlineCitation({ citationNumber, document, excerpt, onClick, cla
 				<div className="space-y-2">
 					<div className="flex items-center space-x-2">
 						{document.document_type === "url" ? (
-							<Link2 className="w-4 h-4 text-green-500" />
+							<Link2 className="w-4 h-4 text-primary" />
 						) : (
-							<FileText className="w-4 h-4 text-blue-500" />
+							<FileText className="w-4 h-4 text-course" />
 						)}
 						<span className="text-sm font-medium truncate">{document.title}</span>
 					</div>
-					{excerpt && <p className="text-xs text-gray-600 line-clamp-3">"{excerpt}"</p>}
-					<p className="text-xs text-gray-500">Click to view full context</p>
+					{excerpt && <p className="text-xs text-muted-foreground line-clamp-3">"{excerpt}"</p>}
+					<p className="text-xs text-muted-foreground/80">Click to view full context</p>
 				</div>
 			</TooltipContent>
 		</Tooltip>
@@ -67,7 +67,7 @@ export function CitationCard({ citation, index, onViewDocument, onViewExcerpt, s
 		<Card className={`p-4 ${className}`}>
 			<div className="flex items-start space-x-3">
 				{/* Citation Number */}
-				<div className="flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-sm font-medium">
+				<div className="flex-shrink-0 w-6 h-6 rounded-full bg-course/15 text-course flex items-center justify-center text-sm font-medium">
 					{index + 1}
 				</div>
 
@@ -76,13 +76,13 @@ export function CitationCard({ citation, index, onViewDocument, onViewExcerpt, s
 					{/* Document Info */}
 					<div className="flex items-center space-x-2 mb-2">
 						{document.document_type === "url" ? (
-							<Link2 className="w-4 h-4 text-green-500" />
+							<Link2 className="w-4 h-4 text-primary" />
 						) : (
-							<FileText className="w-4 h-4 text-blue-500" />
+							<FileText className="w-4 h-4 text-course" />
 						)}
-						<h4 className="text-sm font-medium text-gray-900 truncate">{document.title}</h4>
+						<h4 className="text-sm font-medium text-foreground truncate">{document.title}</h4>
 						{similarity_score && (
-							<span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+							<span className="text-xs text-muted-foreground/80 bg-muted px-2 py-1 rounded">
 								{Math.round(similarity_score * 100)}% match
 							</span>
 						)}
@@ -90,13 +90,13 @@ export function CitationCard({ citation, index, onViewDocument, onViewExcerpt, s
 
 					{/* Excerpt */}
 					{excerpt && (
-						<blockquote className="text-sm text-gray-700 border-l-3 border-blue-200 pl-3 mb-3 italic">
+						<blockquote className="text-sm italic text-muted-foreground border-l-3 border-course/30 pl-3 mb-3">
 							"{excerpt}"
 						</blockquote>
 					)}
 
 					{/* Document Metadata */}
-					<div className="text-xs text-gray-500 space-y-1">
+					<div className="text-xs text-muted-foreground/80 space-y-1">
 						{document.document_type === "url" && document.source_url && (
 							<p className="truncate">Source: {document.source_url}</p>
 						)}
@@ -147,7 +147,7 @@ export function CitationSidebar({
     `}
 		>
 			{/* Toggle Button */}
-			<div className="flex-shrink-0 border-b border-gray-200 p-3">
+			<div className="flex-shrink-0 border-b border-border p-3">
 				<Button variant="ghost" size="sm" onClick={onToggle} className="w-full justify-between">
 					{isOpen ? (
 						<>
@@ -155,7 +155,7 @@ export function CitationSidebar({
 							<ChevronRight className="w-4 h-4 rotate-180" />
 						</>
 					) : (
-						<div className="w-4 h-4 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-medium">
+						<div className="w-4 h-4 rounded-full bg-course/15 text-course flex items-center justify-center text-xs font-medium">
 							{citations.length}
 						</div>
 					)}
@@ -167,8 +167,8 @@ export function CitationSidebar({
 				<div className="flex-1 overflow-y-auto p-3 space-y-3">
 					{citations.length === 0 ? (
 						<div className="text-center py-8">
-							<FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-							<p className="text-sm text-gray-500">No citations available</p>
+							<FileText className="w-8 h-8 text-muted-foreground/70 mx-auto mb-2" />
+							<p className="text-sm text-muted-foreground/80">No citations available</p>
 						</div>
 					) : (
 						citations.map((citation, index) => (
@@ -212,19 +212,19 @@ export function CitationModal({ citation, isOpen, onClose, onViewDocument }) {
 
 	return (
 		<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-			<div ref={modalRef} className="bg-white rounded-lg max-w-4xl w-full mx-4 shadow-xl max-h-[90vh] overflow-hidden">
+			<div ref={modalRef} className="bg-card rounded-lg max-w-4xl w-full mx-4 shadow-xl max-h-[90vh] overflow-hidden">
 				{/* Header */}
-				<div className="flex items-center justify-between p-6 border-b border-gray-200">
+				<div className="flex items-center justify-between p-6 border-b border-border">
 					<div className="flex items-center space-x-3">
 						{citationDocument.document_type === "url" ? (
-							<Link2 className="w-6 h-6 text-green-500" />
+							<Link2 className="w-6 h-6 text-primary" />
 						) : (
-							<FileText className="w-6 h-6 text-blue-500" />
+							<FileText className="w-6 h-6 text-course" />
 						)}
 						<div>
-							<h2 className="text-lg font-semibold text-gray-900">{citationDocument.title}</h2>
+							<h2 className="text-lg font-semibold text-foreground">{citationDocument.title}</h2>
 							{citationDocument.source_url && (
-								<p className="text-sm text-gray-600 truncate">{citationDocument.source_url}</p>
+								<p className="text-sm text-muted-foreground truncate">{citationDocument.source_url}</p>
 							)}
 						</div>
 					</div>
@@ -245,32 +245,32 @@ export function CitationModal({ citation, isOpen, onClose, onViewDocument }) {
 				{/* Content */}
 				<div className="p-6 overflow-y-auto max-h-[70vh]">
 					<div className="prose prose-sm max-w-none">
-						<h3 className="text-base font-medium text-gray-900 mb-4">Relevant Excerpt</h3>
+						<h3 className="text-base font-medium text-foreground mb-4">Relevant Excerpt</h3>
 
 						{excerpt ? (
-							<blockquote className="text-gray-700 border-l-4 border-blue-200 pl-4 py-2 bg-blue-50 rounded-r">
+							<blockquote className="rounded-r border-l-4 border-course/30 bg-course/5 pl-4 py-2 text-muted-foreground">
 								"{excerpt}"
 							</blockquote>
 						) : (
-							<p className="text-gray-500 italic">
+							<p className="text-muted-foreground/80 italic">
 								No specific excerpt available. This document was referenced in the context.
 							</p>
 						)}
 
 						{/* Document Metadata */}
-						<div className="mt-6 p-4 bg-gray-50 rounded-lg">
-							<h4 className="text-sm font-medium text-gray-900 mb-2">Document Information</h4>
+						<div className="mt-6 p-4 bg-muted/40 rounded-lg">
+							<h4 className="text-sm font-medium text-foreground mb-2">Document Information</h4>
 							<dl className="grid grid-cols-2 gap-2 text-sm">
-								<dt className="font-medium text-gray-600">Type:</dt>
-								<dd className="text-gray-900 capitalize">{citationDocument.document_type}</dd>
+								<dt className="font-medium text-muted-foreground">Type:</dt>
+								<dd className="text-foreground capitalize">{citationDocument.document_type}</dd>
 
-								<dt className="font-medium text-gray-600">Status:</dt>
-								<dd className="text-gray-900 capitalize">{citationDocument.status}</dd>
+								<dt className="font-medium text-muted-foreground">Status:</dt>
+								<dd className="text-foreground capitalize">{citationDocument.status}</dd>
 
 								{citationDocument.crawl_date && (
 									<>
-										<dt className="font-medium text-gray-600">Processed:</dt>
-										<dd className="text-gray-900">{new Date(citationDocument.crawl_date).toLocaleDateString()}</dd>
+										<dt className="font-medium text-muted-foreground">Processed:</dt>
+										<dd className="text-foreground">{new Date(citationDocument.crawl_date).toLocaleDateString()}</dd>
 									</>
 								)}
 							</dl>

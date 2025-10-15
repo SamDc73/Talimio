@@ -112,21 +112,21 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 
 					{/* Video metadata */}
 					{item.type === "video" && (
-						<p className="text-gray-100-foreground text-sm mb-4">
+						<p className="text-muted-foreground text-sm mb-4">
 							by {item.channel || "Unknown Channel"} • {formatDuration(item.duration)}
 						</p>
 					)}
 
 					{/* Book metadata */}
 					{item.type === "book" && (
-						<p className="text-gray-100-foreground text-sm mb-4">
+						<p className="text-muted-foreground text-sm mb-4">
 							by {item.author || "Unknown Author"} • {item.pageCount || "Unknown"} pages
 						</p>
 					)}
 
 					{/* Description for other types */}
 					{item.type !== "video" && item.type !== "book" && item.description && (
-						<p className="text-gray-100-foreground text-sm line-clamp-2 mb-4">{item.description}</p>
+						<p className="text-muted-foreground text-sm line-clamp-2 mb-4">{item.description}</p>
 					)}
 
 					<div className="flex flex-wrap items-center gap-2 mb-3">
@@ -134,16 +134,16 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 							<TagChip key={t} tag={t} contentType={item.type} />
 						))}
 						{item.tags?.length > 2 && (
-							<span className="inline-flex text-xs font-medium bg-gray-100 text-gray-100-foreground px-2 py-0.5 rounded">
+							<span className="inline-flex text-xs font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded">
 								+{item.tags.length - 2}
 							</span>
 						)}
 					</div>
 					<div>
-						<div className="flex justify-between text-xs text-gray-100-foreground mb-2">
+						<div className="flex justify-between text-xs text-muted-foreground mb-2">
 							<span>{Math.round(progressValue)}%</span>
 						</div>
-						<div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+						<div className="w-full bg-muted rounded-full h-2 overflow-hidden">
 							<div
 								style={{ width: `${progressValue}%` }}
 								className={`h-full bg-gradient-to-r ${V.grad} rounded-full transition-all duration-500`}
@@ -170,7 +170,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 												variant="ghost"
 												size="sm"
 												className={`justify-start flex items-center gap-2 ${
-													action === "Delete" ? "text-red-600 hover:bg-red-50" : ""
+													action === "Delete" ? "text-destructive hover:bg-destructive/10" : ""
 												}`}
 												onClick={(e) => {
 													e.stopPropagation()

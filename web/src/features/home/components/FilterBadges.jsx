@@ -30,13 +30,13 @@ export default function FilterBadges({
 			className="max-w-2xl mx-auto mb-8 flex flex-wrap items-center gap-2"
 		>
 			{activeFilter !== "all" && (
-				<Badge variant="outline" className="bg-white">
+				<Badge variant="outline" className="bg-card">
 					{getActiveFilterLabel()}
 					<Button
 						variant="ghost"
 						size="sm"
 						onClick={() => onFilterChange("all")}
-						className="h-4 w-4 p-0 ml-1 text-gray-100-foreground hover:text-gray-100-foreground"
+						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
 					>
 						<X className="h-3 w-3" />
 						<span className="sr-only">Remove filter</span>
@@ -45,13 +45,13 @@ export default function FilterBadges({
 			)}
 
 			{archiveFilter !== "active" && (
-				<Badge variant="outline" className="bg-white">
+				<Badge variant="outline" className="bg-card">
 					{archiveFilter === "archived" ? "Archived Content" : "All Content"}
 					<Button
 						variant="ghost"
 						size="sm"
 						onClick={() => onArchiveFilterChange("active")}
-						className="h-4 w-4 p-0 ml-1 text-gray-100-foreground hover:text-gray-100-foreground"
+						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
 					>
 						<X className="h-3 w-3" />
 						<span className="sr-only">Reset archive filter</span>
@@ -60,13 +60,13 @@ export default function FilterBadges({
 			)}
 
 			{activeSort !== "last-accessed" && (
-				<Badge variant="outline" className="bg-white">
+				<Badge variant="outline" className="bg-card">
 					Sorted by: {getActiveSortLabel()}
 					<Button
 						variant="ghost"
 						size="sm"
 						onClick={() => onSortChange("last-accessed")}
-						className="h-4 w-4 p-0 ml-1 text-gray-100-foreground hover:text-gray-100-foreground"
+						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
 					>
 						<X className="h-3 w-3" />
 						<span className="sr-only">Remove sort</span>
@@ -75,13 +75,13 @@ export default function FilterBadges({
 			)}
 
 			{sortDirection !== "desc" && (
-				<Badge variant="outline" className="bg-white">
+				<Badge variant="outline" className="bg-card">
 					{sortDirection === "asc" ? "Oldest First" : "Newest First"}
 					<Button
 						variant="ghost"
 						size="sm"
 						onClick={() => onSortDirectionChange("desc")}
-						className="h-4 w-4 p-0 ml-1 text-gray-100-foreground hover:text-gray-100-foreground"
+						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
 					>
 						<X className="h-3 w-3" />
 						<span className="sr-only">Remove sort direction</span>
@@ -90,13 +90,13 @@ export default function FilterBadges({
 			)}
 
 			{tagFilter && (
-				<Badge variant="outline" className="bg-white">
+				<Badge variant="outline" className="bg-card">
 					Tag: {tagFilter}
 					<Button
 						variant="ghost"
 						size="sm"
 						onClick={() => onTagFilterChange("")}
-						className="h-4 w-4 p-0 ml-1 text-gray-100-foreground hover:text-gray-100-foreground"
+						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
 					>
 						<X className="h-3 w-3" />
 						<span className="sr-only">Remove tag filter</span>
@@ -109,7 +109,7 @@ export default function FilterBadges({
 					variant="ghost"
 					size="sm"
 					onClick={onResetAll}
-					className="text-xs text-gray-100-foreground h-7 px-2 ml-auto"
+					className="text-xs text-muted-foreground h-7 px-2 ml-auto"
 				>
 					Reset All
 				</Button>

@@ -150,7 +150,7 @@ function DocumentList({
 			<Card className={className}>
 				<div className="p-6 text-center">
 					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4" />
-					<p className="text-gray-600">Loading documents...</p>
+					<p className="text-muted-foreground">Loading documents...</p>
 				</div>
 			</Card>
 		)
@@ -164,7 +164,7 @@ function DocumentList({
 				<div className="flex items-center justify-between">
 					<DocumentStatusSummary documents={documents} />
 					{documents.length > 0 && (
-						<span className="text-sm text-gray-500">
+						<span className="text-sm text-muted-foreground/80">
 							{filteredDocuments.length} of {documents.length} documents
 						</span>
 					)}
@@ -176,7 +176,7 @@ function DocumentList({
 						{/* Search */}
 						{showSearch && (
 							<div className="flex-1 relative">
-								<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+								<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground/70" />
 								<Input
 									type="text"
 									placeholder="Search documents..."
@@ -190,11 +190,11 @@ function DocumentList({
 						{/* Filter */}
 						{showFilter && (
 							<div className="flex items-center space-x-2">
-								<Filter className="w-4 h-4 text-gray-400" />
+								<Filter className="w-4 h-4 text-muted-foreground/70" />
 								<select
 									value={statusFilter}
 									onChange={(e) => setStatusFilter(e.target.value)}
-									className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+									className="px-3 py-2 border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
 								>
 									<option value="all">All Status</option>
 									<option value="ready">Ready</option>
@@ -212,8 +212,8 @@ function DocumentList({
 				<Card>
 					{searchTerm || statusFilter !== "all" ? (
 						<div className="p-8 text-center">
-							<FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-							<p className="text-gray-600 mb-2">No documents match your criteria</p>
+							<FileText className="w-12 h-12 text-muted-foreground/70 mx-auto mb-4" />
+							<p className="text-muted-foreground mb-2">No documents match your criteria</p>
 							<Button
 								variant="outline"
 								size="sm"
@@ -227,8 +227,8 @@ function DocumentList({
 						</div>
 					) : typeof emptyMessage === "string" ? (
 						<div className="p-8 text-center">
-							<FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-							<p className="text-gray-600 mb-2">{emptyMessage}</p>
+							<FileText className="w-12 h-12 text-muted-foreground/70 mx-auto mb-4" />
+							<p className="text-muted-foreground mb-2">{emptyMessage}</p>
 						</div>
 					) : (
 						emptyMessage
@@ -239,13 +239,13 @@ function DocumentList({
 					<div className="overflow-hidden">
 						{/* Sort Header */}
 						{showSorting && (
-							<div className="px-6 py-3 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-700">
+							<div className="px-6 py-3 bg-muted/40 border-b border-border text-sm font-medium text-foreground">
 								<div className="grid grid-cols-12 gap-4">
 									<div className="col-span-5">
 										<button
 											type="button"
 											onClick={() => handleSort("title")}
-											className="flex items-center space-x-1 hover:text-gray-900"
+											className="flex items-center space-x-1 hover:text-foreground"
 										>
 											<span>Document</span>
 											{getSortIcon("title")}
@@ -255,7 +255,7 @@ function DocumentList({
 										<button
 											type="button"
 											onClick={() => handleSort("document_type")}
-											className="flex items-center space-x-1 hover:text-gray-900"
+											className="flex items-center space-x-1 hover:text-foreground"
 										>
 											<span>Type</span>
 											{getSortIcon("document_type")}
@@ -265,7 +265,7 @@ function DocumentList({
 										<button
 											type="button"
 											onClick={() => handleSort("status")}
-											className="flex items-center space-x-1 hover:text-gray-900"
+											className="flex items-center space-x-1 hover:text-foreground"
 										>
 											<span>Status</span>
 											{getSortIcon("status")}
@@ -275,7 +275,7 @@ function DocumentList({
 										<button
 											type="button"
 											onClick={() => handleSort("created_at")}
-											className="flex items-center space-x-1 hover:text-gray-900"
+											className="flex items-center space-x-1 hover:text-foreground"
 										>
 											<span>Date</span>
 											{getSortIcon("created_at")}
@@ -287,23 +287,23 @@ function DocumentList({
 						)}
 
 						{/* Document Items */}
-						<div className="divide-y divide-gray-200">
+						<div className="divide-y divide-border">
 							{filteredDocuments.map((doc) => (
-								<div key={doc.id} className="px-6 py-4 hover:bg-gray-50">
+								<div key={doc.id} className="px-6 py-4 hover:bg-muted/40">
 									<div className="grid grid-cols-12 gap-4 items-center">
 										{/* Document Info */}
 										<div className="col-span-5">
 											<div className="flex items-center space-x-3">
 												<div className="flex-shrink-0">{getFileTypeIcon(doc)}</div>
 												<div className="min-w-0 flex-1">
-													<p className="text-sm font-medium text-gray-900 truncate">
+													<p className="text-sm font-medium text-foreground truncate">
 														{doc.title || "Untitled Document"}
 													</p>
 													{doc.document_type === "url" && doc.url && (
-														<p className="text-xs text-gray-500 truncate">{doc.url}</p>
+														<p className="text-xs text-muted-foreground/80 truncate">{doc.url}</p>
 													)}
 													{doc.file_path && doc.size && (
-														<p className="text-xs text-gray-500">{formatFileSize(doc.size)}</p>
+														<p className="text-xs text-muted-foreground/80">{formatFileSize(doc.size)}</p>
 													)}
 												</div>
 											</div>
@@ -311,7 +311,7 @@ function DocumentList({
 
 										{/* Type */}
 										<div className="col-span-2">
-											<span className="text-sm text-gray-600 capitalize">{doc.document_type || "Unknown"}</span>
+											<span className="text-sm text-muted-foreground capitalize">{doc.document_type || "Unknown"}</span>
 										</div>
 
 										{/* Status */}
@@ -321,7 +321,7 @@ function DocumentList({
 
 										{/* Date */}
 										<div className="col-span-2">
-											<div className="flex items-center text-sm text-gray-500">
+											<div className="flex items-center text-sm text-muted-foreground/80">
 												<Calendar className="w-4 h-4 mr-1" />
 												{formatDate(doc.created_at)}
 											</div>

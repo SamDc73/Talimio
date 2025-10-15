@@ -24,10 +24,10 @@ function Tag({
 
 	// Variant styles
 	const variantStyles = {
-		default: "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200",
-		removable: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100",
-		clickable: "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200 cursor-pointer",
-		selected: "bg-blue-100 text-blue-800 border-blue-300 ring-2 ring-blue-200",
+		default: "bg-muted text-muted-foreground border-border hover:bg-muted/80",
+		removable: "bg-primary/10 text-primary border-primary/20 hover:bg-primary/15",
+		clickable: "bg-muted text-muted-foreground border-border hover:bg-muted/80 cursor-pointer",
+		selected: "bg-primary/20 text-primary border-primary/30 ring-2 ring-primary/30",
 	}
 
 	// Get tag color if available
@@ -76,7 +76,7 @@ function Tag({
 				<button
 					type="button"
 					onClick={handleRemove}
-					className="ml-1 hover:bg-red-100 hover:text-red-600 rounded-full p-0.5 transition-colors"
+					className="ml-1 hover:bg-destructive/10 hover:text-destructive rounded-full p-0.5 transition-colors"
 					aria-label="Remove tag"
 				>
 					<X size={size === "small" ? 10 : size === "large" ? 16 : 12} />
@@ -118,7 +118,7 @@ export function TagList({
 					onRemove={onTagRemove}
 				/>
 			))}
-			{hiddenCount > 0 && <span className="text-xs text-gray-500 px-2 py-1">+{hiddenCount} more</span>}
+			{hiddenCount > 0 && <span className="text-xs text-muted-foreground px-2 py-1">+{hiddenCount} more</span>}
 		</div>
 	)
 }

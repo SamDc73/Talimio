@@ -244,31 +244,31 @@ function CourseCreationModal({
 
 	return (
 		<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-			<div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
+			<div className="bg-card rounded-lg max-w-2xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
 				{/* Header */}
-				<div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-					<h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Create New Course</h2>
+				<div className="flex items-center justify-between p-6 border-b border-border">
+					<h2 className="text-xl font-semibold text-foreground">Create New Course</h2>
 					<button
 						type="button"
 						onClick={handleClose}
 						disabled={isProcessing}
-						className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
+						className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
 					>
 						<X className="h-6 w-6" />
 					</button>
 				</div>
 
 				{/* Mode Selection */}
-				<div className="p-6 border-b border-gray-200 dark:border-gray-700">
-					<div className="grid grid-cols-3 gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
+				<div className="p-6 border-b border-border">
+					<div className="grid grid-cols-3 gap-1 bg-muted p-1 rounded-lg">
 						<button
 							type="button"
 							onClick={() => setCreationMode("prompt")}
 							disabled={isProcessing}
 							className={`flex items-center justify-center space-x-2 py-2 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-50 ${
 								creationMode === "prompt"
-									? "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm"
-									: "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+									? "bg-card text-foreground shadow-sm"
+									: "text-muted-foreground hover:text-foreground"
 							}`}
 						>
 							<Sparkles className="h-4 w-4" />
@@ -280,8 +280,8 @@ function CourseCreationModal({
 							disabled={isProcessing}
 							className={`flex items-center justify-center space-x-2 py-2 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-50 ${
 								creationMode === "document"
-									? "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm"
-									: "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+									? "bg-card text-foreground shadow-sm"
+									: "text-muted-foreground hover:text-foreground"
 							}`}
 						>
 							<Upload className="h-4 w-4" />
@@ -293,8 +293,8 @@ function CourseCreationModal({
 							disabled={isProcessing}
 							className={`flex items-center justify-center space-x-2 py-2 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-50 ${
 								creationMode === "rag"
-									? "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm"
-									: "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+									? "bg-card text-foreground shadow-sm"
+									: "text-muted-foreground hover:text-foreground"
 							}`}
 						>
 							<BookOpen className="h-4 w-4" />
@@ -308,10 +308,7 @@ function CourseCreationModal({
 					{creationMode === "prompt" ? (
 						<form onSubmit={handlePromptSubmit}>
 							<div className="mb-4">
-								<label
-									htmlFor="course-prompt"
-									className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-								>
+								<label htmlFor="course-prompt" className="block text-sm font-medium text-muted-foreground mb-2">
 									What would you like to learn?
 								</label>
 								<textarea
@@ -320,15 +317,15 @@ function CourseCreationModal({
 									onChange={(e) => setPrompt(e.target.value)}
 									placeholder="Describe what you want to learn... (e.g., 'Learn React and build modern web applications')"
 									disabled={isProcessing}
-									className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-none disabled:opacity-50"
+									className="w-full px-3 py-2 border border-input rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring dark:text-foreground resize-none disabled:opacity-50"
 									rows={4}
 									maxLength={500}
 									spellCheck="true"
 								/>
-								<div className="text-right text-xs text-gray-500 mt-1">{prompt.length}/500 characters</div>
+								<div className="text-right text-xs text-muted-foreground/80 mt-1">{prompt.length}/500 characters</div>
 							</div>
-							<div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
-								<p className="text-sm text-blue-700 dark:text-blue-300">
+							<div className="mb-6 p-3 bg-book/10 dark:bg-book/20 border border-book/30 dark:border-book/30 rounded-md">
+								<p className="text-sm text-book dark:text-book">
 									<strong>AI will create:</strong> A structured course with modules and lessons tailored to your
 									learning goals. You'll be able to customize it before starting.
 								</p>
@@ -337,28 +334,29 @@ function CourseCreationModal({
 					) : creationMode === "document" ? (
 						<form onSubmit={handleDocumentSubmit}>
 							<div className="mb-4">
-								<label
-									htmlFor="document-upload"
-									className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-								>
+								<label htmlFor="document-upload" className="block text-sm font-medium text-muted-foreground mb-2">
 									Upload Document
 								</label>
 								<div className="flex items-center justify-center w-full">
-									<label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:hover:border-gray-500">
+									<label className="flex flex-col items-center justify-center w-full h-32 border-2 border-input border-dashed rounded-lg cursor-pointer bg-muted/40 dark:hover:bg-background/80 hover:bg-muted/60 dark:border-input dark:hover:border-border/60">
 										<div className="flex flex-col items-center justify-center pt-5 pb-6">
 											{selectedFile ? (
 												<>
-													<FileText className="w-8 h-8 mb-2 text-blue-500" />
-													<p className="text-sm text-gray-600 dark:text-gray-400">{selectedFile.name}</p>
-													<p className="text-xs text-gray-500">({(selectedFile.size / 1024 / 1024).toFixed(1)} MB)</p>
+													<FileText className="w-8 h-8 mb-2 text-book" />
+													<p className="text-sm text-muted-foreground dark:text-muted-foreground/70">
+														{selectedFile.name}
+													</p>
+													<p className="text-xs text-muted-foreground/80">
+														({(selectedFile.size / 1024 / 1024).toFixed(1)} MB)
+													</p>
 												</>
 											) : (
 												<>
-													<Upload className="w-8 h-8 mb-2 text-gray-400" />
-													<p className="text-sm text-gray-600 dark:text-gray-400">
+													<Upload className="w-8 h-8 mb-2 text-muted-foreground/70" />
+													<p className="text-sm text-muted-foreground dark:text-muted-foreground/70">
 														<span className="font-semibold">Click to upload</span> or drag and drop
 													</p>
-													<p className="text-xs text-gray-500">PDF or EPUB files only</p>
+													<p className="text-xs text-muted-foreground/80">PDF or EPUB files only</p>
 												</>
 											)}
 										</div>
@@ -374,10 +372,7 @@ function CourseCreationModal({
 								</div>
 							</div>
 							<div className="mb-4">
-								<label
-									htmlFor="course-title"
-									className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-								>
+								<label htmlFor="course-title" className="block text-sm font-medium text-muted-foreground mb-2">
 									Course Title *
 								</label>
 								<input
@@ -387,15 +382,12 @@ function CourseCreationModal({
 									onChange={(e) => setCourseTitle(e.target.value)}
 									placeholder="Enter course title..."
 									disabled={isProcessing}
-									className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50"
+									className="w-full px-3 py-2 border border-input rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring dark:text-foreground disabled:opacity-50"
 									maxLength={200}
 								/>
 							</div>
 							<div className="mb-4">
-								<label
-									htmlFor="course-description"
-									className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-								>
+								<label htmlFor="course-description" className="block text-sm font-medium text-muted-foreground mb-2">
 									Course Description
 								</label>
 								<textarea
@@ -404,14 +396,14 @@ function CourseCreationModal({
 									onChange={(e) => setCourseDescription(e.target.value)}
 									placeholder="Brief description of the course content..."
 									disabled={isProcessing}
-									className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-none disabled:opacity-50"
+									className="w-full px-3 py-2 border border-input rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring dark:text-foreground resize-none disabled:opacity-50"
 									rows={3}
 									maxLength={500}
 									spellCheck="true"
 								/>
 							</div>
-							<div className="mb-6 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
-								<p className="text-sm text-green-700 dark:text-green-300">
+							<div className="mb-6 p-3 bg-completed/10 dark:bg-completed/20 border border-completed/30 dark:border-completed/30 rounded-md">
+								<p className="text-sm text-completed">
 									<strong>Document processing:</strong> Your document will be analyzed to create a structured course
 									with modules and lessons based on the content.
 								</p>
@@ -420,10 +412,7 @@ function CourseCreationModal({
 					) : (
 						<form onSubmit={handleRagSubmit}>
 							<div className="mb-6">
-								<label
-									htmlFor="document-uploader"
-									className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3"
-								>
+								<label htmlFor="document-uploader" className="block text-sm font-medium text-muted-foreground mb-3">
 									Course Documents
 								</label>
 								<DocumentUploader
@@ -441,10 +430,7 @@ function CourseCreationModal({
 								)}
 							</div>
 							<div className="mb-4">
-								<label
-									htmlFor="rag-course-title"
-									className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-								>
+								<label htmlFor="rag-course-title" className="block text-sm font-medium text-muted-foreground mb-2">
 									Course Title *
 								</label>
 								<input
@@ -454,14 +440,14 @@ function CourseCreationModal({
 									onChange={(e) => setRagCourseTitle(e.target.value)}
 									placeholder="Enter course title..."
 									disabled={isProcessing}
-									className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50"
+									className="w-full px-3 py-2 border border-input rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring dark:text-foreground disabled:opacity-50"
 									maxLength={200}
 								/>
 							</div>
 							<div className="mb-4">
 								<label
 									htmlFor="rag-course-description"
-									className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+									className="block text-sm font-medium text-muted-foreground mb-2"
 								>
 									Course Description (Optional)
 								</label>
@@ -471,17 +457,17 @@ function CourseCreationModal({
 									onChange={(e) => setRagCourseDescription(e.target.value)}
 									placeholder="Describe what the course should focus on, or leave blank to auto-generate from documents..."
 									disabled={isProcessing}
-									className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-none disabled:opacity-50"
+									className="w-full px-3 py-2 border border-input rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring dark:text-foreground resize-none disabled:opacity-50"
 									rows={3}
 									maxLength={500}
 									spellCheck="true"
 								/>
-								<div className="text-right text-xs text-gray-500 mt-1">
+								<div className="text-right text-xs text-muted-foreground/80 mt-1">
 									{ragCourseDescription.length}/500 characters
 								</div>
 							</div>
-							<div className="mb-6 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md">
-								<p className="text-sm text-purple-700 dark:text-purple-300">
+							<div className="mb-6 p-3 bg-video/10 dark:bg-video/20 border border-video/30 dark:border-video/30 rounded-md">
+								<p className="text-sm text-video">
 									<strong>RAG-Enhanced Course:</strong> Your documents will be processed and integrated into an
 									AI-powered course that can answer questions and generate lessons based on your content. Documents will
 									be automatically searchable during lessons and assistant conversations.
@@ -491,30 +477,28 @@ function CourseCreationModal({
 					)}
 
 					{isExtractingMetadata && (
-						<div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+						<div className="mb-4 p-3 bg-due-today/10 dark:bg-due-today/20 border border-due-today/30 dark:border-due-today/30 rounded-md">
 							<div className="flex items-center space-x-2">
-								<div className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin" />
-								<p className="text-sm text-yellow-700 dark:text-yellow-300">
-									Analyzing document and extracting metadata...
-								</p>
+								<div className="w-4 h-4 border-2 border-due-today border-t-transparent rounded-full animate-spin" />
+								<p className="text-sm text-due-today">Analyzing document and extracting metadata...</p>
 							</div>
 						</div>
 					)}
 
 					{isUploadingDocuments && (
-						<div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+						<div className="mb-4 p-3 bg-book/10 dark:bg-book/20 border border-book/30 dark:border-book/30 rounded-md">
 							<div className="flex items-center space-x-2">
-								<div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-								<p className="text-sm text-blue-700 dark:text-blue-300">Creating course and uploading documents...</p>
+								<div className="w-4 h-4 border-2 border-book border-t-transparent rounded-full animate-spin" />
+								<p className="text-sm text-book dark:text-book">Creating course and uploading documents...</p>
 							</div>
 						</div>
 					)}
 
 					{error && (
-						<div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+						<div className="mb-4 p-3 bg-destructive/10 dark:bg-destructive/20 border border-destructive dark:border-destructive rounded-md">
 							<div className="flex items-center space-x-2">
-								<AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-								<p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+								<AlertCircle className="h-4 w-4 text-destructive" />
+								<p className="text-sm text-destructive">{error}</p>
 							</div>
 						</div>
 					)}

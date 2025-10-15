@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useParams } from "react-router-dom"
 import RoadmapHeader from "@/components/header/RoadmapHeader"
 import { CourseSidebar } from "@/components/sidebar"
+import { cn } from "@/lib/utils"
 import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
 import { LessonViewer } from "../course/components/LessonViewer"
 import { useLessonPage } from "./hooks/useLessonPage"
@@ -15,6 +16,8 @@ export default function LessonPage() {
 	const { lessonId } = useParams()
 	const [mode, setMode] = useState("outline")
 	const isOpen = useAppStore(selectSidebarOpen)
+
+	const contentClasses = cn("flex flex-1 pt-16 pb-8 transition-all duration-300 ease-in-out", isOpen ? "ml-80" : "ml-0")
 
 	// Combined hook provides all data and actions
 	// Following state management guide: "Combine stores via custom hooks"
@@ -43,14 +46,14 @@ export default function LessonPage() {
 
 	if (hasError) {
 		return (
-			<div className="flex items-center justify-center h-screen">
+			<div className="flex h-screen items-center justify-center">
 				<div className="text-center">
-					<h2 className="text-xl font-semibold mb-2 text-red-600">Error Loading Lesson</h2>
-					<p className="text-gray-600 mb-4">{errorMessage}</p>
+					<h2 className="mb-2 text-xl font-semibold text-destructive">Error Loading Lesson</h2>
+					<p className="mb-4 text-muted-foreground">{errorMessage}</p>
 					<button
 						type="button"
 						onClick={handleBack}
-						className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+						className="rounded bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90"
 					>
 						Go Back
 					</button>
@@ -61,14 +64,14 @@ export default function LessonPage() {
 
 	if (!lesson) {
 		return (
-			<div className="flex items-center justify-center h-screen">
+			<div className="flex h-screen items-center justify-center">
 				<div className="text-center">
-					<h2 className="text-xl font-semibold mb-2">Lesson Not Found</h2>
-					<p className="text-gray-600 mb-4">The lesson you're looking for could not be found.</p>
+					<h2 className="mb-2 text-xl font-semibold">Lesson Not Found</h2>
+					<p className="mb-4 text-muted-foreground">The lesson you're looking for could not be found.</p>
 					<button
 						type="button"
 						onClick={handleBack}
-						className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+						className="rounded bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90"
 					>
 						Go Back
 					</button>
@@ -79,10 +82,7 @@ export default function LessonPage() {
 
 	// Render lesson page with same structure as CoursePage
 	return (
-		<div
-			className={`roadmap-container ${isOpen ? "sidebar-open" : "sidebar-closed"}`}
-			style={{ margin: 0, padding: 0 }}
-		>
+		<div className="flex min-h-screen flex-col bg-background">
 			<RoadmapHeader mode={mode} onModeChange={setMode} courseId={courseId} courseName={courseName} />
 
 			<div className="flex h-screen">
@@ -95,7 +95,7 @@ export default function LessonPage() {
 				/>
 
 				{/* Main lesson content */}
-				<div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
+				<div className={contentClasses}>
 					<LessonViewer
 						lesson={lesson}
 						onBack={handleBack}

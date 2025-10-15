@@ -1,5 +1,6 @@
 import CourseView from "@/features/course/CourseView"
 import { useCourseContext } from "@/hooks/useCourseContext"
+import { cn } from "@/lib/utils"
 import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
 import { useCourseNavigation } from "@/utils/navigationUtils"
 import RoadmapHeader from "./header/RoadmapHeader"
@@ -21,6 +22,8 @@ export default function CourseLayout() {
 		goToLesson(courseId, lessonId)
 	}
 
+	const contentClasses = cn("flex flex-1 pt-16 pb-8 transition-all duration-300 ease-in-out", isOpen ? "ml-80" : "ml-0")
+
 	if (isLoading) {
 		return (
 			<div className="flex items-center justify-center h-screen">
@@ -30,10 +33,7 @@ export default function CourseLayout() {
 	}
 
 	return (
-		<div
-			className={`roadmap-container ${isOpen ? "sidebar-open" : "sidebar-closed"}`}
-			style={{ margin: 0, padding: 0 }}
-		>
+		<div className="flex min-h-screen flex-col bg-background">
 			<RoadmapHeader mode={mode} onModeChange={setMode} courseId={courseId} courseName={courseName} />
 			<div className="flex h-screen">
 				<CourseSidebar
@@ -42,7 +42,7 @@ export default function CourseLayout() {
 					courseId={courseId}
 					activeLessonId={lessonId}
 				/>
-				<div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
+				<div className={contentClasses}>
 					{/* Render CourseView directly with proper props */}
 					<CourseView mode={mode} modules={modules} roadmapId={courseId} />
 				</div>

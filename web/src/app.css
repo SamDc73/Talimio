@@ -1,5 +1,6 @@
 /* Import Tailwind */
 @import "tailwindcss";
+@import "katex/dist/katex.min.css";
 
 /* Tailwind v4 @theme configuration */
 @theme {
@@ -40,37 +41,36 @@
 	--color-chart-5: oklch(0.72 0.17 52);
 
 	/* Content Type Colors */
-	--color-course: oklch(0.55 0.15 187); /* cyan */
-	--color-course-text: oklch(0.55 0.15 187);
-	--color-course-accent: oklch(0.64 0.14 186);
+	--color-course: oklch(0.802 0.134 209.45); /* cyan */
+	--color-course-text: oklch(0.802 0.134 209.45);
+	--color-course-accent: oklch(0.8282 0.1129 205.35);
 
-	--color-book: oklch(0.55 0.19 255); /* blue */
-	--color-book-text: oklch(0.55 0.19 255);
-	--color-book-accent: oklch(0.69 0.18 255);
+	--color-book: oklch(0.5449 0.2154 262.74); /* blue */
+	--color-book-text: oklch(0.5449 0.2154 262.74);
+	--color-book-accent: oklch(0.684 0.1538 264.01);
 
-	--color-video: oklch(0.66 0.18 287); /* violet */
-	--color-video-text: oklch(0.66 0.18 287);
-	--color-video-accent: oklch(0.77 0.15 287);
+	--color-video: oklch(0.6016 0.2214 292.23); /* violet */
+	--color-video-text: oklch(0.6016 0.2214 292.23);
+	--color-video-accent: oklch(0.7237 0.1518 296.22);
 
 	/* Status Colors */
-	--color-overdue: oklch(0.56 0.2 44); /* orange */
-	--color-overdue-text: oklch(0.45 0.19 42);
+	--color-overdue: oklch(0.641 0.1948 40.55); /* orange */
+	--color-overdue-text: oklch(0.5475 0.1732 38);
 
-	--color-due-today: oklch(0.57 0.17 82); /* amber */
-	--color-due-today-text: oklch(0.47 0.18 70);
+	--color-due-today: oklch(0.7858 0.1598 85.31); /* amber */
+	--color-due-today-text: oklch(0.6688 0.1588 57.96);
 
-	--color-upcoming: oklch(0.55 0.19 255); /* blue */
-	--color-upcoming-text: oklch(0.51 0.19 254);
+	--color-upcoming: oklch(0.5449 0.2154 262.74); /* blue */
+	--color-upcoming-text: oklch(0.4826 0.2557 265.51);
 
-	--color-completed: oklch(0.52 0.12 145); /* emerald */
-	--color-completed-text: oklch(0.42 0.13 145);
+	--color-completed: oklch(0.623 0.1688 149.18); /* emerald */
+	--color-completed-text: oklch(0.5507 0.1654 146.61);
 
-	--color-paused: oklch(0.65 0.02 218); /* slate */
-	--color-paused-text: oklch(0.45 0.02 218);
+	--color-paused: oklch(0.71 0.0348 256.79); /* slate */
+	--color-paused-text: oklch(0.4505 0.0371 256.83);
 
 	/* Typography */
 	--font-sans: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-	--font-display: "Comfortaa", var(--font-sans);
 
 	/* Border Radius */
 	--radius-sm: 0.125rem;
@@ -160,38 +160,84 @@
 	--leading-loose: 2;
 }
 
-/* Import theme and base styles */
-@import "./styles/theme.css";
-@import "./styles/base.css";
+/* Dark mode support and base styles */
 
-/* Import third-party styles */
-@import "katex/dist/katex.min.css";
-
-/* Auth animations */
-@keyframes slideUp {
-	from {
-		opacity: 0;
-		transform: translateY(20px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
+/* Dark mode support */
+html {
+	color-scheme: light;
 }
 
-@keyframes fadeIn {
-	from {
-		opacity: 0;
-	}
-	to {
-		opacity: 1;
-	}
+html.dark {
+	color-scheme: dark;
 }
 
-.animate-slideUp {
-	animation: slideUp 0.6s ease-out;
+/* Dark mode overrides for Tailwind v4 color variables */
+.dark {
+	/* Core Colors - Dark mode OKLCH values */
+	--color-background: oklch(0.17 0.05 249);
+	--color-foreground: oklch(0.98 0.01 210);
+
+	--color-card: oklch(0.17 0.05 249);
+	--color-card-foreground: oklch(0.98 0.01 210);
+
+	--color-popover: oklch(0.17 0.05 249);
+	--color-popover-foreground: oklch(0.98 0.01 210);
+
+	--color-primary: oklch(0.62 0.13 142);
+	--color-primary-foreground: oklch(0.23 0.05 145);
+
+	--color-secondary: oklch(0.28 0.04 249);
+	--color-secondary-foreground: oklch(0.98 0.01 210);
+
+	--color-muted: oklch(0.28 0.04 249);
+	--color-muted-foreground: oklch(0.65 0.02 218);
+
+	--color-accent: oklch(0.28 0.04 249);
+	--color-accent-foreground: oklch(0.98 0.01 210);
+
+	--color-destructive: oklch(0.45 0.15 25);
+	/* --color-destructive-foreground unchanged from light */
+
+	--color-border: oklch(0.28 0.04 249);
+	--color-input: oklch(0.28 0.04 249);
+	/* --color-ring unchanged from light */
+
+	/* Content Type Colors - Lighter versions for dark mode */
+	--color-course: oklch(0.8398 0.1177 207.34);
+	--color-course-text: oklch(0.8398 0.1177 207.34);
+	--color-course-accent: oklch(0.8833 0.0801 204.73);
+
+	--color-book: oklch(0.7835 0.1015 265);
+	--color-book-text: oklch(0.7835 0.1015 265);
+	--color-book-accent: oklch(0.8655 0.0611 265.54);
+
+	--color-video: oklch(0.8307 0.0909 298.16);
+	--color-video-text: oklch(0.8307 0.0909 298.16);
+	--color-video-accent: oklch(0.9031 0.051 299.08);
+
+	/* Status Colors - Dark mode versions */
+	--color-overdue: oklch(0.7224 0.1212 19.86);
+	--color-overdue-text: oklch(0.9137 0.033 17.08);
+
+	--color-due-today: oklch(0.8497 0.072 86.7);
+	--color-due-today-text: oklch(0.9656 0.0165 86.79);
+
+	--color-upcoming: oklch(0.7324 0.0976 261.33);
+	--color-upcoming-text: oklch(0.9199 0.0275 261.78);
+
+	--color-completed: oklch(0.8157 0.1055 133.4);
+	--color-completed-text: oklch(0.9318 0.0383 132.61);
+
+	/* --color-paused unchanged from light */
+	--color-paused-text: oklch(0.8791 0.0141 256.71);
 }
 
-.animate-fadeIn {
-	animation: fadeIn 0.3s ease-out;
+/* Layout */
+html,
+body,
+#root {
+	margin: 0;
+	padding: 0;
+	width: 100%;
+	overflow-x: hidden;
 }

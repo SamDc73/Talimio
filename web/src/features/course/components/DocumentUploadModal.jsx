@@ -128,15 +128,15 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 
 	return (
 		<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-			<div className="bg-white dark:bg-gray-800 rounded-lg max-w-3xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
+			<div className="bg-card rounded-lg max-w-3xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
 				{/* Header */}
-				<div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-					<h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Add Documents to Course</h2>
+				<div className="flex items-center justify-between p-6 border-b border-border">
+					<h2 className="text-xl font-semibold text-foreground">Add Documents to Course</h2>
 					<button
 						type="button"
 						onClick={handleClose}
 						disabled={isUploading}
-						className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
+						className="text-muted-foreground/70 hover:text-muted-foreground dark:hover:text-foreground transition-colors disabled:opacity-50"
 					>
 						<X className="h-6 w-6" />
 					</button>
@@ -158,11 +158,11 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 					{/* Upload Progress */}
 					{isUploading && documents.length > 0 && (
 						<div className="mb-6 space-y-3">
-							<h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Upload Progress</h3>
+							<h3 className="text-sm font-medium text-foreground">Upload Progress</h3>
 							{documents.map((doc) => (
-								<div key={doc.id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+								<div key={doc.id} className="bg-muted/40 dark:bg-background/70 rounded-lg p-3">
 									<div className="flex items-center justify-between mb-2">
-										<span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{doc.title}</span>
+										<span className="text-sm font-medium text-foreground truncate">{doc.title}</span>
 									</div>
 									<DocumentStatusProgress status={doc.status} />
 									{doc.error && <p className="text-xs text-red-600 mt-1">{doc.error}</p>}
@@ -217,7 +217,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 				</div>
 
 				{/* Actions */}
-				<div className="flex justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700">
+				<div className="flex justify-end space-x-3 p-6 border-t border-border">
 					<Button type="button" variant="outline" onClick={handleClose} disabled={isUploading}>
 						{allCompleted && hasSuccessfulDocuments ? "Close" : "Cancel"}
 					</Button>

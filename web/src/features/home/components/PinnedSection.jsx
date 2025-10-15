@@ -13,13 +13,14 @@ export default function PinnedSection({ pinnedItems, renderCard }) {
 				className="mb-8"
 			>
 				<div className="flex items-center gap-2 mb-4">
-					<Pin className="h-4 w-4 text-green-500" />
+					<Pin className="h-4 w-4 text-completed" />
+
 					<h2 className="text-xl font-semibold">Pinned</h2>
 				</div>
 				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 					<AnimatePresence mode="popLayout">{pinnedItems.map(renderCard)}</AnimatePresence>
 				</div>
-				<div className="border-b border-gray-200 my-8" />
+				<div className="border-b border-border my-8" />
 			</motion.section>
 		</AnimatePresence>
 	)

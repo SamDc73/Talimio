@@ -22,7 +22,7 @@ function DropdownMenuSubTrigger({ className, inset, children, ref, ...props }) {
 		<DropdownMenuPrimitive.SubTrigger
 			ref={ref}
 			className={cn(
-				"flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-muted data-[state=open]:bg-gray-100",
+				"flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-muted data-[state=open]:bg-muted/40",
 				inset && "pl-8",
 				className
 			)}
@@ -130,7 +130,7 @@ function DropdownMenuLabel({ className, inset, ref, ...props }) {
 
 function DropdownMenuSeparator({ className, ref, ...props }) {
 	return (
-		<DropdownMenuPrimitive.Separator ref={ref} className={cn("-mx-1 my-1 h-px bg-gray-100", className)} {...props} />
+		<DropdownMenuPrimitive.Separator ref={ref} className={cn("-mx-1 my-1 h-px bg-muted/40", className)} {...props} />
 	)
 }
 

@@ -12,7 +12,6 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 
 	const handleYoutubeAdd = async () => {
 		if (!youtubeUrl.trim() || (!youtubeUrl.includes("youtube.com") && !youtubeUrl.includes("youtu.be"))) {
-			console.log("Invalid URL")
 			return
 		}
 
@@ -21,8 +20,6 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 		setIsAddingVideo(true)
 		try {
 			const response = await createVideo(youtubeUrl)
-
-			console.log("Action completed")
 
 			// Reset form and close dialog
 			setYoutubeUrl("")
@@ -33,14 +30,12 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 				onVideoAdded(response)
 			}
 		} catch (error) {
-			let errorMessage = "Failed to add video. Please try again."
+			let _errorMessage = "Failed to add video. Please try again."
 			if (error.message?.includes("503")) {
-				errorMessage = "YouTube service is temporarily unavailable. Please try again in a few moments."
+				_errorMessage = "YouTube service is temporarily unavailable. Please try again in a few moments."
 			} else if (error.message?.includes("Invalid YouTube URL")) {
-				errorMessage = "The URL you entered is not a valid YouTube video URL."
+				_errorMessage = "The URL you entered is not a valid YouTube video URL."
 			}
-
-			console.log("Error")
 		} finally {
 			setIsAddingVideo(false)
 		}
@@ -57,7 +52,7 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 		<Sheet open={open} onOpenChange={handleClose}>
 			<SheetContent side="bottom" className="sm:max-w-lg mx-auto">
 				{isAddingVideo && (
-					<div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg">
+					<div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg">
 						<div className="flex flex-col items-center gap-4">
 							<div className="animate-spin rounded-full h-10 w-10 border-b-2 border-video" />
 							<p className="text-lg font-medium">Adding your video...</p>

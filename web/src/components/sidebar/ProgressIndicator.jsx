@@ -16,10 +16,10 @@ function ProgressIndicator({
 
 	// Map variants to pill colors following the styling guide
 	const variantStyles = {
-		default: "bg-emerald-50 text-emerald-700",
-		course: "bg-teal-50 text-teal-600", // Following styling guide
-		book: "bg-blue-50 text-blue-600",
-		video: "bg-violet-50 text-violet-600",
+		default: "bg-primary/10 text-primary",
+		course: "bg-course/10 text-course",
+		book: "bg-book/10 text-book",
+		video: "bg-video/10 text-video",
 	}
 
 	const styleClass = variantStyles[variant] || variantStyles.default

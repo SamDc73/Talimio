@@ -76,7 +76,7 @@ export function UserAvatarMenu() {
 						asChild
 					>
 						<button type="button" className="flex items-center justify-center">
-							<div className="h-8 w-8 rounded-full bg-white flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
+							<div className="h-8 w-8 rounded-full bg-card flex items-center justify-center overflow-hidden border border-border shadow-sm">
 								<div className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500 font-semibold text-sm">
 									{userInitials}
 								</div>
@@ -84,13 +84,13 @@ export function UserAvatarMenu() {
 						</button>
 					</TooltipButton>
 				</DropdownMenuTrigger>
-				<DropdownMenuContent className="w-56 border-gray-200" align="end" forceMount>
+				<DropdownMenuContent className="w-56 border-border" align="end" forceMount>
 					<DropdownMenuLabel className="font-normal">
 						<div className="flex flex-col space-y-1">
 							<p className="text-sm font-medium leading-none">
 								{user?.username || user?.email?.split("@")[0] || "User"}
 							</p>
-							<p className="text-xs leading-none text-gray-100-foreground">{user?.email || "Not logged in"}</p>
+							<p className="text-xs leading-none text-muted-foreground">{user?.email || "Not logged in"}</p>
 						</div>
 					</DropdownMenuLabel>
 					<DropdownMenuSeparator />
@@ -109,15 +109,15 @@ export function UserAvatarMenu() {
 						<div className="px-2 py-1.5">
 							<div className="flex items-center justify-between">
 								<span className="text-sm">Theme</span>
-								<div className="flex items-center gap-1 rounded-md border bg-gray-100 p-1">
+								<div className="flex items-center gap-1 rounded-md border bg-muted p-1">
 									<button
 										type="button"
 										onClick={() => setTheme("light")}
 										className={cn(
 											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
 											theme === "light"
-												? "bg-white text-foreground shadow-sm"
-												: "text-gray-100-foreground hover:text-foreground"
+												? "bg-card text-foreground shadow-sm"
+												: "text-muted-foreground hover:text-foreground"
 										)}
 										aria-label="Light theme"
 									>
@@ -129,8 +129,8 @@ export function UserAvatarMenu() {
 										className={cn(
 											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
 											theme === "dark"
-												? "bg-white text-foreground shadow-sm"
-												: "text-gray-100-foreground hover:text-foreground"
+												? "bg-card text-foreground shadow-sm"
+												: "text-muted-foreground hover:text-foreground"
 										)}
 										aria-label="Dark theme"
 									>
@@ -142,8 +142,8 @@ export function UserAvatarMenu() {
 										className={cn(
 											"inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs font-medium transition-colors",
 											theme === "system"
-												? "bg-white text-foreground shadow-sm"
-												: "text-gray-100-foreground hover:text-foreground"
+												? "bg-card text-foreground shadow-sm"
+												: "text-muted-foreground hover:text-foreground"
 										)}
 										aria-label="System theme"
 									>
@@ -242,8 +242,8 @@ export function MainHeader({ transparent = false, className }) {
 
 	// Determine header background style based on scroll and transparent prop
 	const headerBg = useMemo(() => {
-		if (!transparent) return "bg-white"
-		return scrolled ? "bg-white/95 backdrop-blur-md shadow-sm" : "bg-transparent"
+		if (!transparent) return "bg-background"
+		return scrolled ? "bg-background/95 backdrop-blur-md shadow-sm" : "bg-transparent"
 	}, [transparent, scrolled])
 
 	return (
@@ -274,7 +274,7 @@ export function MainHeader({ transparent = false, className }) {
 								<button
 									type="button"
 									onClick={() => setSearchOpen(false)}
-									className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-100-foreground hover:text-gray-100-foreground"
+									className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
 								>
 									<X className="h-4 w-4" />
 								</button>
@@ -291,7 +291,7 @@ export function MainHeader({ transparent = false, className }) {
 									variant="ghost"
 									size="icon"
 									onClick={() => setSearchOpen(true)}
-									className="h-10 w-10 rounded-full text-gray-100-foreground hover:bg-muted transition-all"
+									className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted transition-all"
 									tooltipContent="Search"
 								>
 									<Search className="h-5 w-5" />
@@ -302,7 +302,7 @@ export function MainHeader({ transparent = false, className }) {
 								variant="ghost"
 								size="icon"
 								onClick={toggleChat}
-								className="h-10 w-10 rounded-full text-gray-100-foreground hover:bg-muted transition-all"
+								className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted transition-all"
 								tooltipContent="Chat with AI"
 								tooltipSide="bottom"
 							>
@@ -319,7 +319,7 @@ export function MainHeader({ transparent = false, className }) {
 								<Button
 									variant="ghost"
 									size="icon"
-									className="md:hidden h-10 w-10 rounded-full text-gray-100-foreground hover:bg-muted ml-1"
+									className="md:hidden h-10 w-10 rounded-full text-muted-foreground hover:bg-muted ml-1"
 								>
 									<Menu className="h-5 w-5" />
 									<span className="sr-only">Toggle menu</span>

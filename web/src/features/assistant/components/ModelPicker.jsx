@@ -1,7 +1,7 @@
 import { Check, ChevronDown } from "lucide-react"
 import { useEffect, useMemo } from "react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/DropdownMenu"
 import { Button } from "@/components/Button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/DropdownMenu"
 import { useAssistantModelsQuery } from "@/features/assistant/api/useAssistantModelsQuery"
 import { useAssistantModel, useSetAssistantModel } from "@/features/assistant/hooks/assistant-store"
 import logger from "@/lib/logger"
@@ -37,26 +37,26 @@ export function ModelPicker({ className }) {
 					variant="ghost"
 					className={cn(
 						"h-9 px-3 gap-2 font-normal",
-						"text-sm text-gray-700 hover:text-gray-900",
-						"hover:bg-gray-50 transition-all duration-150",
-						"rounded-lg border border-gray-200",
+						"text-sm text-muted-foreground hover:text-foreground",
+						"hover:bg-muted/60 transition-all duration-150",
+						"rounded-lg border border-border",
 						className
 					)}
 				>
 					<span>{currentModel.displayName || currentModel.id}</span>
-					<ChevronDown className="h-4 w-4 text-gray-500" />
+					<ChevronDown className="h-4 w-4 text-muted-foreground" />
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
 				align="start"
-				className={cn("w-56 p-2", "bg-white/95 backdrop-blur-lg", "border border-gray-200 shadow-lg", "rounded-xl")}
+				className={cn("w-56 p-2", "bg-card/95 backdrop-blur-lg", "border border-border shadow-lg", "rounded-xl")}
 			>
 				{isLoading ? (
-					<DropdownMenuItem disabled className="text-gray-500 text-sm">
+					<DropdownMenuItem disabled className="text-muted-foreground text-sm">
 						Loading models...
 					</DropdownMenuItem>
 				) : isError ? (
-					<DropdownMenuItem disabled className="text-red-600 text-sm">
+					<DropdownMenuItem disabled className="text-destructive text-sm">
 						Failed to load models
 					</DropdownMenuItem>
 				) : models.length > 0 ? (
@@ -71,26 +71,28 @@ export function ModelPicker({ className }) {
 									"relative flex items-center justify-between",
 									"px-3 py-2.5 rounded-lg cursor-pointer",
 									"transition-all duration-150",
-									isSelected && "bg-gray-50",
-									!isSelected && "hover:bg-gray-50"
+									isSelected && "bg-muted/60",
+									!isSelected && "hover:bg-muted/60"
 								)}
 							>
 								<div className="flex items-center gap-3">
-									{isSelected && <Check className="h-4 w-4 text-gray-700 shrink-0" />}
+									{isSelected && <Check className="h-4 w-4 text-muted-foreground shrink-0" />}
 									<div className={cn("flex flex-col", !isSelected && "ml-7")}>
-										<span className={cn("text-sm", isSelected ? "text-gray-900 font-medium" : "text-gray-700")}>
+										<span
+											className={cn("text-sm", isSelected ? "text-foreground font-medium" : "text-muted-foreground")}
+										>
 											{model.displayName || model.id}
 										</span>
 									</div>
 								</div>
 								<div className="flex items-center gap-2">
-									{model.isDefault && <span className="text-xs text-gray-500">Default</span>}
+									{model.isDefault && <span className="text-xs text-muted-foreground">Default</span>}
 								</div>
 							</DropdownMenuItem>
 						)
 					})
 				) : (
-					<DropdownMenuItem disabled className="text-gray-500 text-sm">
+					<DropdownMenuItem disabled className="text-muted-foreground text-sm">
 						No models available
 					</DropdownMenuItem>
 				)}

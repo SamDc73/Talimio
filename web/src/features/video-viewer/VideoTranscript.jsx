@@ -116,11 +116,11 @@ function VirtualizedTranscriptList({ segments, activeIndex, onSegmentClick, cont
 					"flex items-center gap-3 px-6 py-2 pl-6",
 					"border-l-2 border-transparent cursor-pointer border-0 w-full text-left",
 					"transition-all duration-150 ease-in-out",
-					"bg-white select-text",
-					"hover:bg-gray-50",
-					"focus:outline-2 focus:outline-violet-600 focus:-outline-offset-2",
-					"focus-visible:outline-2 focus-visible:outline-violet-600 focus-visible:outline-offset-2",
-					isActive && ["border-l-violet-600 bg-violet-100", "font-medium"]
+					"bg-card select-text",
+					"hover:bg-muted/40",
+					"focus:outline-2 focus:outline-video focus:-outline-offset-2",
+					"focus-visible:outline-2 focus-visible:outline-video focus-visible:outline-offset-2",
+					isActive && ["border-l-video bg-video/10", "font-medium"]
 				)}
 				style={{
 					position: "absolute",
@@ -141,10 +141,10 @@ function VirtualizedTranscriptList({ segments, activeIndex, onSegmentClick, cont
 					className={cn(
 						"flex-shrink-0 text-[11px] font-semibold tabular-nums",
 						"min-w-[42px] px-1.5 py-0.5 rounded-md text-center",
-						"bg-violet-500/15 text-violet-600",
-						"hover:bg-violet-500/20",
+						"bg-video/15 text-video",
+						"hover:bg-video/20",
 						"select-none", // Make timestamp non-selectable
-						isActive && "text-violet-600 font-semibold"
+						isActive && "text-video font-semibold"
 					)}
 				>
 					{formatTime(segment.startTime)}
@@ -152,10 +152,10 @@ function VirtualizedTranscriptList({ segments, activeIndex, onSegmentClick, cont
 				<span
 					className={cn(
 						"flex-1 text-sm leading-normal",
-						"text-gray-900/85 break-words",
+						"text-foreground/85 break-words",
 						"transition-colors duration-150 select-text",
-						"hover:text-gray-900",
-						isActive && "text-gray-900 font-medium"
+						"hover:text-foreground",
+						isActive && "text-foreground font-medium"
 					)}
 				>
 					{segment.text}
@@ -167,7 +167,7 @@ function VirtualizedTranscriptList({ segments, activeIndex, onSegmentClick, cont
 	return (
 		<div
 			ref={containerRef}
-			className="transcript-virtualized-container relative overflow-auto bg-white"
+			className="transcript-virtualized-container relative overflow-auto bg-card"
 			style={{
 				height: containerHeight,
 				// Firefox-specific optimizations
@@ -293,10 +293,10 @@ export function VideoTranscript({ videoId, videoElement, youtubePlayerRef, onSee
 	if (loading) {
 		return (
 			<div className="p-12 text-center bg-transparent">
-				<div className="flex items-center justify-center gap-3 text-sm font-medium text-violet-600">
+				<div className="flex items-center justify-center gap-3 text-sm font-medium text-video">
 					<span className="relative flex h-5 w-5">
-						<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
-						<span className="relative inline-flex rounded-full h-5 w-5 bg-violet-500" />
+						<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-video/60 opacity-75" />
+						<span className="relative inline-flex rounded-full h-5 w-5 bg-video" />
 					</span>
 					Loading transcript...
 				</div>
@@ -307,7 +307,7 @@ export function VideoTranscript({ videoId, videoElement, youtubePlayerRef, onSee
 	if (error) {
 		return (
 			<div className="p-12 text-center bg-transparent">
-				<div className="text-sm font-medium text-red-500">{error}</div>
+				<div className="text-sm font-medium text-destructive">{error}</div>
 			</div>
 		)
 	}
@@ -315,13 +315,13 @@ export function VideoTranscript({ videoId, videoElement, youtubePlayerRef, onSee
 	if (!transcript?.segments || transcript.segments.length === 0) {
 		return (
 			<div className="p-12 text-center bg-transparent">
-				<div className="text-sm italic text-gray-100-foreground">No transcript available for this video</div>
+				<div className="text-sm italic text-muted-foreground">No transcript available for this video</div>
 			</div>
 		)
 	}
 
 	return (
-		<div className="relative overflow-hidden bg-white">
+		<div className="relative overflow-hidden bg-card">
 			<VirtualizedTranscriptList
 				ref={transcriptRef}
 				segments={transcript.segments}
@@ -336,10 +336,10 @@ export function VideoTranscript({ videoId, videoElement, youtubePlayerRef, onSee
 // Error fallback component following component-architecture.md patterns
 function TranscriptErrorFallback({ error, resetErrorBoundary }) {
 	return (
-		<div className="p-4 border border-red-500 rounded-md">
-			<h2 className="text-lg font-semibold text-red-500">Transcript Error</h2>
-			<pre className="mt-2 text-sm text-gray-100-foreground">{error.message}</pre>
-			<button onClick={resetErrorBoundary} className="mt-4 px-4 py-2 bg-green-500 text-white rounded" type="button">
+		<div className="p-4 border border-destructive rounded-md">
+			<h2 className="text-lg font-semibold text-destructive">Transcript Error</h2>
+			<pre className="mt-2 text-sm text-muted-foreground">{error.message}</pre>
+			<button onClick={resetErrorBoundary} className="mt-4 px-4 py-2 bg-primary text-white rounded" type="button">
 				Retry Loading Transcript
 			</button>
 		</div>

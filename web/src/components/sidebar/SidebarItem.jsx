@@ -23,10 +23,10 @@ function SidebarItem({
 	}
 	// Map variants to colors following the styling guide
 	const variantColors = {
-		default: "text-emerald-700",
-		course: "text-teal-600", // Following styling guide
-		book: "text-blue-600",
-		video: "text-violet-600",
+		default: "text-primary",
+		course: "text-course",
+		book: "text-book",
+		video: "text-video",
 	}
 
 	const activeColor = variantColors[variant] || variantColors.default

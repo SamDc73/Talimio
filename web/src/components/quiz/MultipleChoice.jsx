@@ -18,7 +18,7 @@ export function MultipleChoice({ question, options, correctAnswer, explanation }
 	const isCorrect = selectedAnswer === correctAnswer
 
 	return (
-		<div className="border-l-4 border-l-green-500/20 pl-6 my-8 bg-white/30 rounded-r-lg">
+		<div className="border-l-4 border-l-completed/20 pl-6 my-8 bg-background/30 rounded-r-lg">
 			<h4 className="mb-6 text-lg font-medium text-foreground">{question}</h4>
 
 			<div className="mb-6 space-y-2">
@@ -26,20 +26,20 @@ export function MultipleChoice({ question, options, correctAnswer, explanation }
 					const isCorrectOption = index === correctAnswer
 					const isSelected = index === selectedAnswer
 
-					let optionClasses = "bg-white border border-gray-200 hover:bg-muted/30"
+					let optionClasses = "bg-background border border-border hover:bg-muted/30"
 
 					if (showFeedback) {
 						if (isCorrectOption) {
 							optionClasses =
-								"bg-emerald-50 border-emerald-200 text-emerald-900 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-100"
+								"bg-completed/10 border-completed/30 text-completed dark:bg-completed/20 dark:border-completed/30 dark:text-completed"
 						} else if (isSelected) {
 							optionClasses =
-								"bg-red-50 border-red-200 text-red-900 dark:bg-red-900/20 dark:border-red-800 dark:text-red-100"
+								"bg-destructive/10 border-destructive text-destructive dark:bg-destructive/20 dark:border-destructive/30 dark:text-destructive"
 						} else {
-							optionClasses = "bg-gray-100/20 border-gray-200 text-gray-100-foreground"
+							optionClasses = "bg-muted/20 border-border text-muted-foreground"
 						}
 					} else if (isSelected) {
-						optionClasses = "bg-green-500/5 border-green-500/30 text-foreground"
+						optionClasses = "bg-completed/10 border-completed/30 text-foreground"
 					}
 
 					return (
@@ -56,11 +56,11 @@ export function MultipleChoice({ question, options, correctAnswer, explanation }
 								checked={selectedAnswer === index}
 								onChange={() => !showFeedback && setSelectedAnswer(index)}
 								disabled={showFeedback}
-								className="mt-1 text-primary focus:ring-primary focus:ring-2 focus:ring-offset-0 border-gray-400"
+								className="mt-1 text-primary focus:ring-ring focus:ring-2 focus:ring-offset-0 border-input"
 							/>
 							<span className="flex-1 text-sm leading-relaxed">{option}</span>
 							{showFeedback && isCorrectOption && (
-								<span className="text-emerald-700 dark:text-emerald-300 text-sm font-medium ml-2">✓</span>
+								<span className="text-completed dark:text-completed text-sm font-medium ml-2">✓</span>
 							)}
 						</label>
 					)
@@ -74,8 +74,8 @@ export function MultipleChoice({ question, options, correctAnswer, explanation }
 					disabled={selectedAnswer === null}
 					className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
 						selectedAnswer === null
-							? "bg-gray-100 text-gray-100-foreground cursor-not-allowed"
-							: "bg-green-500 text-white hover:bg-green-500/90"
+							? "bg-muted text-muted-foreground cursor-not-allowed"
+							: "bg-completed text-completed-text hover:bg-completed/90"
 					}`}
 				>
 					Submit Answer
@@ -83,21 +83,17 @@ export function MultipleChoice({ question, options, correctAnswer, explanation }
 			) : (
 				<div>
 					{explanation && (
-						<div className="p-4 mb-4 rounded-lg border border-gray-200 bg-gray-100/20">
-							<div
-								className={`text-sm font-medium mb-2 ${
-									isCorrect ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"
-								}`}
-							>
+						<div className="p-4 mb-4 rounded-lg border border-border bg-muted/20">
+							<div className={`text-sm font-medium mb-2 ${isCorrect ? "text-completed" : "text-destructive"}`}>
 								{isCorrect ? "✓ Correct" : "✗ Incorrect"}
 							</div>
-							<p className="text-sm leading-relaxed text-gray-100-foreground">{explanation}</p>
+							<p className="text-sm leading-relaxed text-muted-foreground">{explanation}</p>
 						</div>
 					)}
 					<button
 						type="button"
 						onClick={handleReset}
-						className="px-4 py-2 bg-gray-100 text-foreground hover:bg-gray-100/80 rounded-lg text-sm font-medium transition-colors"
+						className="px-4 py-2 bg-muted text-foreground hover:bg-muted/80 rounded-lg text-sm font-medium transition-colors"
 					>
 						Try Again
 					</button>

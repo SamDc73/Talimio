@@ -3,14 +3,14 @@ function TagChip({ tag, contentType }) {
 	const getTagClasses = (type) => {
 		switch (type) {
 			case "course":
-				return "bg-teal-50 text-teal-600"
+				return "bg-course/10 text-course"
 			case "book":
-				return "bg-blue-50 text-blue-600"
+				return "bg-book/10 text-book"
 			case "video":
 			case "youtube":
-				return "bg-violet-50 text-violet-600"
+				return "bg-video/10 text-video"
 			default:
-				return "bg-gray-100 text-gray-100-foreground"
+				return "bg-muted text-muted-foreground"
 		}
 	}
 

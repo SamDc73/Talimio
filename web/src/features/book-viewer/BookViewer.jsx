@@ -19,16 +19,16 @@ import PdfViewer from "./components/PDFViewer"
 function BookViewerStatus({ tone, title, description }) {
 	if (tone === "loading") {
 		return (
-			<div className="flex h-screen w-full items-center justify-center bg-white">
-				<div className="text-xl text-gray-500">{title}</div>
+			<div className="flex h-screen w-full items-center justify-center bg-background">
+				<div className="text-xl text-muted-foreground">{title}</div>
 			</div>
 		)
 	}
 
 	return (
-		<div className="flex h-screen w-full flex-col items-center justify-center bg-white px-8 text-center text-gray-900">
-			<h2 className="mb-4 text-2xl text-red-500">{title}</h2>
-			{description ? <p className="text-gray-500">{description}</p> : null}
+		<div className="flex h-screen w-full flex-col items-center justify-center bg-background px-8 text-center text-foreground">
+			<h2 className="mb-4 text-2xl text-destructive">{title}</h2>
+			{description ? <p className="text-muted-foreground">{description}</p> : null}
 		</div>
 	)
 }
@@ -127,7 +127,7 @@ function BookViewerContent() {
 	}
 
 	return (
-		<div className="flex h-screen bg-white">
+		<div className="flex h-screen bg-background">
 			<BookHeader
 				book={book}
 				bookId={bookId}

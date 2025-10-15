@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom"
 
 import RoadmapHeader from "@/components/header/RoadmapHeader"
 import { CourseSidebar } from "@/components/sidebar"
+import { cn } from "@/lib/utils"
 import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
 import { useCourseNavigation } from "../../utils/navigationUtils"
 import { useCourseData } from "./hooks/useCourseData"
@@ -26,6 +27,8 @@ function CoursePage({ roadmapId: propRoadmapId, ref: _ref }) {
 	const [mode, setMode] = useState("outline") // Default to outline view
 	const { goToLesson } = useCourseNavigation()
 
+	const contentClasses = cn("flex flex-1 pt-16 pb-8 transition-all duration-300 ease-in-out", isOpen ? "ml-80" : "ml-0")
+
 	const isLoading = roadmapLoading || modulesLoading
 	const courseName = roadmap?.title || "Course"
 
@@ -47,17 +50,14 @@ function CoursePage({ roadmapId: propRoadmapId, ref: _ref }) {
 			<div className="flex items-center justify-center h-screen">
 				<div className="text-center">
 					<h2 className="text-xl font-semibold mb-2">Course Not Found</h2>
-					<p className="text-gray-600 mb-4">No course ID provided.</p>
+					<p className="text-muted-foreground mb-4">No course ID provided.</p>
 				</div>
 			</div>
 		)
 	}
 
 	return (
-		<div
-			className={`roadmap-container ${isOpen ? "sidebar-open" : "sidebar-closed"}`}
-			style={{ margin: 0, padding: 0 }}
-		>
+		<div className="flex min-h-screen flex-col bg-background">
 			<RoadmapHeader mode={mode} onModeChange={setMode} courseId={roadmapId} courseName={courseName} />
 
 			<div className="flex h-screen">
@@ -65,20 +65,20 @@ function CoursePage({ roadmapId: propRoadmapId, ref: _ref }) {
 
 				{/* If viewing a lesson, show lesson view with same layout */}
 				{lessonId ? (
-					<div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
+					<div className={contentClasses}>
 						<LessonView courseId={roadmapId} lessonId={lessonId} />
 					</div>
 				) : /* Course overview views */
 				mode === "outline" ? (
-					<div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
+					<div className={contentClasses}>
 						<OutlineView roadmapId={roadmapId} modules={modules} />
 					</div>
 				) : mode === "track" ? (
-					<div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
+					<div className={contentClasses}>
 						<TrackView roadmapId={roadmapId} modules={modules} />
 					</div>
 				) : mode === "documents" ? (
-					<div className="flex flex-1 main-content transition-all duration-300 ease-in-out">
+					<div className={contentClasses}>
 						<DocumentsView courseId={roadmapId} />
 					</div>
 				) : null}

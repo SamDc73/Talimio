@@ -49,11 +49,11 @@ export default function ContentGrid({
 
 			{!isLoading && filteredAndSortedContent.length === 0 && (
 				<div className="text-center py-12">
-					<div className="inline-block bg-emerald-50 p-4 rounded-full mb-4">
-						<Check className="h-8 w-8 text-emerald-600" />
+					<div className="inline-block bg-completed/10 p-4 rounded-full mb-4">
+						<Check className="h-8 w-8 text-completed" />
 					</div>
-					<h3 className="text-xl font-display font-bold text-emerald-700 mb-2">All Caught Up!</h3>
-					<p className="text-gray-100-foreground">You've completed all your learning tasks. Great job!</p>
+					<h3 className="text-xl font-display font-bold text-completed mb-2">All Caught Up!</h3>
+					<p className="text-muted-foreground">You've completed all your learning tasks. Great job!</p>
 				</div>
 			)}
 		</>

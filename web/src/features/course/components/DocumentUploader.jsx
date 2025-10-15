@@ -228,13 +228,13 @@ function DocumentUploader({
 		switch (status) {
 			case "completed":
 			case "embedded":
-				return <CheckCircle2 className="w-4 h-4 text-green-500" />
+				return <CheckCircle2 className="h-4 w-4 text-primary" />
 			case "failed":
-				return <AlertCircle className="w-4 h-4 text-red-500" />
+				return <AlertCircle className="h-4 w-4 text-destructive" />
 			case "processing":
-				return <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+				return <div className="h-4 w-4 animate-spin rounded-full border-2 border-course border-t-transparent" />
 			default:
-				return <FileText className="w-4 h-4 text-gray-400" />
+				return <FileText className="h-4 w-4 text-muted-foreground" />
 		}
 	}
 
@@ -244,7 +244,7 @@ function DocumentUploader({
 			{showPreview && documents.length > 0 && (
 				<Card
 					ref={documentsRef}
-					className="border-green-200/60 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/10 dark:to-emerald-900/10 shadow-sm"
+					className="border-primary/30 bg-gradient-to-r from-primary/10 to-primary/5 dark:from-primary/10 dark:to-primary/5 shadow-sm"
 				>
 					<div className="p-5">
 						<div className="flex items-center justify-between mb-4">
@@ -265,7 +265,7 @@ function DocumentUploader({
 							{documents.map((doc, index) => (
 								<div
 									key={doc.id}
-									className="group flex items-center space-x-4 p-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-lg border border-white/50 dark:border-gray-700/50 hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm transition-all duration-200"
+									className="group flex items-center space-x-4 p-3 bg-background/80 dark:bg-background/80 backdrop-blur-sm rounded-lg border border-border/40 dark:border-border/40 hover:bg-card dark:hover:bg-background/80 hover:shadow-sm transition-all duration-200"
 									style={{ animationDelay: `${index * 50}ms` }}
 								>
 									<div className="flex-shrink-0 w-6 flex justify-center">{getStatusIcon(doc.status)}</div>
@@ -276,23 +276,25 @@ function DocumentUploader({
 											value={doc.title}
 											onChange={(e) => updateDocumentTitle(doc.id, e.target.value)}
 											disabled={disabled}
-											className="text-sm font-medium border-0 bg-transparent p-0 focus:ring-0 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 hover:bg-gray-50/50 dark:hover:bg-gray-700/50 rounded px-1 -mx-1 transition-colors"
+											className="text-sm font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground dark:text-foreground placeholder:text-muted-foreground/70 hover:bg-muted/60 dark:hover:bg-background/70 rounded px-1 -mx-1 transition-colors"
 											placeholder="Enter document title"
 										/>
 
 										<div className="flex items-center space-x-4 mt-1.5">
-											<span className="inline-flex items-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+											<span className="inline-flex items-center text-xs font-medium text-muted-foreground dark:text-muted-foreground/70 uppercase tracking-wide">
 												{doc.type}
 											</span>
 
 											{doc.type === "pdf" && doc.size && (
-												<span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
+												<span className="text-xs text-muted-foreground dark:text-muted-foreground/70 bg-muted dark:bg-background/70 px-2 py-0.5 rounded">
 													{formatFileSize(doc.size)}
 												</span>
 											)}
 
 											{doc.type === "url" && (
-												<span className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-48">{doc.url}</span>
+												<span className="text-xs text-muted-foreground dark:text-muted-foreground/70 truncate max-w-48">
+													{doc.url}
+												</span>
 											)}
 										</div>
 									</div>
@@ -303,7 +305,7 @@ function DocumentUploader({
 										size="sm"
 										onClick={() => removeDocument(doc.id)}
 										disabled={disabled}
-										className="flex-shrink-0 w-8 h-8 p-0 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all duration-200"
+										className="flex-shrink-0 w-8 h-8 p-0 text-muted-foreground/70 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all duration-200"
 									>
 										<X className="w-4 h-4" />
 									</Button>
@@ -322,11 +324,11 @@ function DocumentUploader({
 
 			{/* File Upload Area - Compact when documents exist */}
 			<Card
-				className={`border-dashed ${dragActive ? "border-blue-500 bg-blue-50" : "border-gray-300"} ${documents.length > 0 ? "border-gray-200" : ""}`}
+				className={`border-dashed ${dragActive ? "border-course bg-course/10" : "border-border"} ${documents.length > 0 ? "border-border" : ""}`}
 			>
 				<section
 					className={`${documents.length > 0 ? "p-4" : "p-6"} text-center transition-colors ${
-						disabled ? "opacity-50" : "hover:bg-gray-50"
+						disabled ? "opacity-50" : "hover:bg-muted/60"
 					}`}
 					aria-label="File upload area"
 					onDragEnter={handleDrag}
@@ -334,12 +336,14 @@ function DocumentUploader({
 					onDragOver={handleDrag}
 					onDrop={handleDrop}
 				>
-					<Upload className={`mx-auto ${documents.length > 0 ? "h-8 w-8" : "h-12 w-12"} text-gray-400 mb-2`} />
-					<p className={`${documents.length > 0 ? "text-base" : "text-lg"} font-medium text-gray-900 mb-2`}>
+					<Upload
+						className={`mx-auto ${documents.length > 0 ? "h-8 w-8" : "h-12 w-12"} text-muted-foreground/70 mb-2`}
+					/>
+					<p className={`${documents.length > 0 ? "text-base" : "text-lg"} font-medium text-foreground mb-2`}>
 						{documents.length > 0 ? "Add More PDFs" : "Upload PDF Documents"}
 					</p>
 					{documents.length === 0 && (
-						<p className="text-sm text-gray-600 mb-4">Drag and drop PDF files here, or click to browse</p>
+						<p className="text-sm text-muted-foreground mb-4">Drag and drop PDF files here, or click to browse</p>
 					)}
 					<Button
 						type="button"
@@ -365,9 +369,9 @@ function DocumentUploader({
 			</Card>
 
 			{/* URL Input - Compact when documents exist */}
-			<Card className={documents.length > 0 ? "border-gray-200" : ""}>
+			<Card className={documents.length > 0 ? "border-border" : ""}>
 				<div className={documents.length > 0 ? "p-3" : "p-4"}>
-					<Label className={`${documents.length > 0 ? "text-xs" : "text-sm"} font-medium text-gray-900 mb-3 block`}>
+					<Label className={`${documents.length > 0 ? "text-xs" : "text-sm"} font-medium text-foreground mb-3 block`}>
 						Add Article from URL
 					</Label>
 					<div className="space-y-3">
@@ -386,9 +390,9 @@ function DocumentUploader({
 								}}
 							/>
 							{urlTitle && (
-								<div className="flex items-center space-x-2 p-2 bg-gray-50 dark:bg-gray-800 rounded">
-									<FileText className="w-4 h-4 text-gray-500" />
-									<span className="text-sm text-gray-700 dark:text-gray-300 flex-1 truncate">{urlTitle}</span>
+								<div className="flex items-center space-x-2 p-2 bg-muted/40 dark:bg-background rounded">
+									<FileText className="w-4 h-4 text-muted-foreground" />
+									<span className="text-sm text-foreground dark:text-muted-foreground flex-1 truncate">{urlTitle}</span>
 								</div>
 							)}
 						</div>
@@ -411,7 +415,7 @@ function DocumentUploader({
 								</>
 							)}
 						</Button>
-						<p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+						<p className="text-xs text-muted-foreground dark:text-muted-foreground/70 text-center">
 							Title will be automatically extracted from the webpage
 						</p>
 					</div>

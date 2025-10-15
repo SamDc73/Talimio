@@ -106,7 +106,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 					"flex items-center justify-between p-4 transition-all border rounded-lg",
 					isCompleted
 						? "bg-emerald-50 border-emerald-100"
-						: "bg-white border-zinc-200 hover:border-emerald-200 hover:bg-emerald-50/30"
+						: "bg-card border-zinc-200 hover:border-emerald-200 hover:bg-emerald-50/30"
 				)}
 			>
 				<div className="flex items-center gap-3 flex-1 min-w-0">
@@ -119,7 +119,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 								toggleLessonCompletion(lesson.id, moduleId)
 							}
 						}}
-						className="transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 rounded-full"
+						className="transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-full"
 						aria-label={isCompleted ? "Mark as incomplete" : "Mark as complete"}
 					>
 						<LessonStatusIndicator isCompleted={isCompleted} indexStr={currentLessonIndexStr} />
@@ -189,7 +189,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 	}
 
 	return (
-		<div className="p-6 mb-8 bg-white border border-zinc-200 rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+		<div className="p-6 mb-8 bg-card border border-zinc-200 rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
 			<button
 				type="button"
 				className="flex items-center gap-2 mb-4 w-full text-left"
