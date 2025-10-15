@@ -70,6 +70,7 @@ class Lesson(BaseModel):
 
     title: str = Field(description="Title of the lesson")
     description: str = Field(description="Brief description of what the lesson covers")
+    content: str = Field(description="Full lesson content in Markdown/MDX format")
     module: str | None = Field(
         default=None, description="Optional module/section name for grouping"
     )
@@ -78,7 +79,7 @@ class Lesson(BaseModel):
 
 
 class CourseStructure(BaseModel):
-    """Model for the course/roadmap structure returned by AI."""
+    """Model for the course structure returned by AI."""
 
     title: str
     description: str

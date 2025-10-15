@@ -21,7 +21,8 @@ from uuid import UUID
 
 from src.ai.models import PlanAction
 from src.ai.service import get_ai_service
-from src.database.lesson_repository import LessonRepository
+from src.courses.models import Lesson
+from src.database.session import async_session_maker
 
 
 # Prefer AsyncSandbox; fall back if package layout differs
@@ -693,27 +694,27 @@ class CodeExecutionService:
             return
 
         try:
-            record = await LessonRepository.get_by_id(lesson_uuid)
-        except Exception:
-            logging.exception("Failed to load lesson for patch persistence lesson_id=%s", lesson_id)
-            return
+            async with async_session_maker() as session:
+                try:
+                    lesson = await session.get(Lesson, lesson_uuid)
+                    if lesson is None:
+                        logging.debug("Lesson not found for patch persistence lesson_id=%s", lesson_id)
+                        return
 
-        if not record:
-            logging.debug("Lesson not found for patch persistence lesson_id=%s", lesson_id)
-            return
+                    existing_content = lesson.content or ""
+                    updated_content = self._replace_source_with_patch(existing_content, original, replacement)
 
-        md_source = record.get("md_source") or ""
-        if original and original in md_source:
-            new_source = md_source.replace(original, replacement, 1)
-        elif not original:
-            new_source = replacement
-        else:
-            logging.debug("Original snippet not found in lesson md_source lesson_id=%s", lesson_id)
-            return
+                    if existing_content == updated_content:
+                        if original:
+                            logging.debug("Original snippet not found in lesson content lesson_id=%s", lesson_id)
+                        return
 
-        try:
-            await LessonRepository.update(lesson_uuid, {"md_source": new_source})
-            logging.info("Persisted AI patch to lesson lesson_id=%s", lesson_id)
+                    lesson.content = updated_content
+                    await session.commit()
+                    logging.info("Persisted AI patch to lesson lesson_id=%s", lesson_id)
+                except Exception:
+                    await session.rollback()
+                    raise
         except Exception:
             logging.exception("Failed to persist patch for lesson lesson_id=%s", lesson_id)
 async def _maybe_await(value: Any) -> Any:

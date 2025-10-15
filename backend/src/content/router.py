@@ -40,7 +40,7 @@ async def get_all_content(
     include_archived: Annotated[bool, Query(description="Include archived content")] = False,
 ) -> ContentListResponse:
     """
-    List all content across different types (videos, flashcards, books, roadmaps).
+    List all content across different types (videos, flashcards, books, courses).
 
     Returns a unified list of content items with consistent structure.
     Uses ultra-optimized single query with database-level sorting and pagination.
@@ -70,7 +70,7 @@ async def archive_content_endpoint(
     """
     Archive a content item by type and ID.
 
-    Supports: youtube (videos), flashcards, book, roadmap (courses)
+    Supports: youtube (videos), flashcards, book, course
     Requires authentication when Supabase auth is configured.
     """
     from src.content.services.content_archive_service import ContentArchiveService
@@ -93,7 +93,7 @@ async def unarchive_content_endpoint(
     """
     Unarchive a content item by type and ID.
 
-    Supports: youtube (videos), flashcards, book, roadmap (courses)
+    Supports: youtube (videos), flashcards, book, course
     Requires authentication when Supabase auth is configured.
     """
     from src.content.services.content_archive_service import ContentArchiveService
@@ -116,7 +116,7 @@ async def delete_content(
     """
     Delete a content item by type and ID.
 
-    Supports: youtube (videos), flashcards, book, roadmap (courses)
+    Supports: youtube (videos), flashcards, book, course
     Requires authentication when Supabase auth is configured.
     """
     content_service = ContentService(session=db)
@@ -178,8 +178,8 @@ async def get_lesson_by_id(
         from sqlalchemy import text
 
         query = text("""
-            SELECT roadmap_id
-            FROM nodes
+            SELECT course_id
+            FROM lessons
             WHERE id = :lesson_id
             LIMIT 1
         """)

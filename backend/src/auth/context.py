@@ -110,7 +110,7 @@ class UserContext:
         """
         # Map resource types to models (auth module is allowed to know domains)
         model_map = {
-            "course": "src.courses.models.Roadmap",
+            "course": "src.courses.models.Course",
             "book": "src.books.models.Book",
             "video": "src.videos.models.Video",
         }

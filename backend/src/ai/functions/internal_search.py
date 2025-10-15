@@ -12,7 +12,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
 from src.books.models import Book
-from src.courses.models import Roadmap
+from src.courses.models import Course
 from src.database.session import async_session_maker
 from src.videos.models import Video
 
@@ -22,30 +22,30 @@ from .registry import register_function
 logger = logging.getLogger(__name__)
 
 
-async def _search_roadmaps(session: Any, topic: str, user_id: UUID | None = None) -> list[dict[str, Any]]:
-    """Search for roadmaps/courses in the database."""
-    roadmap_query = select(Roadmap).options(selectinload(Roadmap.nodes))
+async def _search_courses(session: Any, topic: str, user_id: UUID | None = None) -> list[dict[str, Any]]:
+    """Search for courses in the database."""
+    course_query = select(Course).options(selectinload(Course.lessons))
 
-    # Build search conditions
-    search_conditions = [Roadmap.title.ilike(f"%{topic}%"), Roadmap.description.ilike(f"%{topic}%")]
+    course_query = course_query.where(
+        or_(Course.title.ilike(f"%{topic}%"), Course.description.ilike(f"%{topic}%"))
+    )
 
     if user_id:
-        search_conditions.append(Roadmap.user_id == user_id)
+        course_query = course_query.where(Course.user_id == user_id)
 
-    roadmap_query = roadmap_query.where(or_(*search_conditions))
-    roadmap_result = await session.execute(roadmap_query)
-    roadmaps = roadmap_result.scalars().all()
+    course_result = await session.execute(course_query)
+    courses = course_result.scalars().all()
 
     return [
         {
-            "id": str(roadmap.id),
-            "title": roadmap.title,
-            "description": roadmap.description,
-            "created_at": roadmap.created_at.isoformat() if roadmap.created_at else None,
-            "node_count": len(roadmap.nodes) if roadmap.nodes else 0,
+            "id": str(course.id),
+            "title": course.title,
+            "description": course.description,
+            "created_at": course.created_at.isoformat() if course.created_at else None,
+            "lesson_count": len(course.lessons) if course.lessons else 0,
             "type": "course",
         }
-        for roadmap in roadmaps
+        for course in courses
     ]
 
 
@@ -53,12 +53,10 @@ async def _search_books(session: Any, topic: str, user_id: UUID | None = None) -
     """Search for books in the database."""
     book_query = select(Book)
 
-    search_conditions = [Book.title.ilike(f"%{topic}%"), Book.author.ilike(f"%{topic}%")]
+    book_query = book_query.where(or_(Book.title.ilike(f"%{topic}%"), Book.author.ilike(f"%{topic}%")))
 
     if user_id:
-        search_conditions.append(Book.user_id == user_id)
-
-    book_query = book_query.where(or_(*search_conditions))
+        book_query = book_query.where(Book.user_id == user_id)
     book_result = await session.execute(book_query)
     books = book_result.scalars().all()
 
@@ -81,15 +79,12 @@ async def _search_videos(session: Any, topic: str, user_id: UUID | None = None) 
     """Search for videos in the database."""
     video_query = select(Video)
 
-    search_conditions = [
-        Video.title.ilike(f"%{topic}%"),
-        Video.description.ilike(f"%{topic}%"),
-    ]
+    video_query = video_query.where(
+        or_(Video.title.ilike(f"%{topic}%"), Video.description.ilike(f"%{topic}%"))
+    )
 
     if user_id:
-        search_conditions.append(Video.user_id == user_id)
-
-    video_query = video_query.where(or_(*search_conditions))
+        video_query = video_query.where(Video.user_id == user_id)
     video_result = await session.execute(video_query)
     videos = video_result.scalars().all()
 
@@ -143,9 +138,9 @@ async def search_internal_library(topic: str, content_type: str = "all", user_id
         results = {"courses": [], "books": [], "videos": [], "total_found": 0}
 
         async with async_session_maker() as session:
-            # Search roadmaps (courses)
+            # Search courses
             if content_type in ["all", "course"]:
-                results["courses"] = await _search_roadmaps(session, topic, user_id)
+                results["courses"] = await _search_courses(session, topic, user_id)
 
             # Search books
             if content_type in ["all", "book"]:

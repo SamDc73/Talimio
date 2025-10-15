@@ -20,8 +20,8 @@ def select_functions_for_task(task_type: str, _topic: str | None = None) -> list
     """Select appropriate functions based on task type."""
     import os
 
-    if task_type == "roadmap_creation":
-        # Always include all content discovery functions for roadmap creation
+    if task_type == "course_creation":
+        # Always include all content discovery functions for course creation
         return [
             "search_internal_library",
             "search_youtube_videos",
@@ -40,9 +40,9 @@ def select_functions_for_task(task_type: str, _topic: str | None = None) -> list
     return []
 
 
-def get_roadmap_functions(topic: str | None = None) -> list:
-    """Get all content discovery functions for roadmap creation."""
-    function_names = select_functions_for_task("roadmap_creation", topic)
+def get_course_functions(topic: str | None = None) -> list:
+    """Get all content discovery functions for course creation."""
+    function_names = select_functions_for_task("course_creation", topic)
     all_functions = get_function_schemas()
     return [f for f in all_functions if f["name"] in function_names]
 
@@ -62,7 +62,7 @@ __all__ = [
     "get_function_schemas",
     "get_lesson_functions",
     "get_registry_status",
-    "get_roadmap_functions",
+    "get_course_functions",
     "register_function",
     "select_functions_for_task",
 ]

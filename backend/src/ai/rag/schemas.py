@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class DocumentUpload(BaseModel):
@@ -19,7 +19,7 @@ class DocumentResponse(BaseModel):
     """Schema for document response."""
 
     id: int
-    course_id: uuid.UUID = Field(..., alias="roadmap_id")  # Maps to roadmap_id in DB
+    course_id: uuid.UUID
     document_type: str
     title: str
     file_path: str | None = None
@@ -32,6 +32,16 @@ class DocumentResponse(BaseModel):
     processed_at: datetime | None = None
     embedded_at: datetime | None = None
     status: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def mirror_source_url(cls, data: Any) -> Any:
+        """Ensure url mirrors source_url when missing."""
+        if isinstance(data, dict) and data.get("url") in (None, ""):
+            source_url = data.get("source_url")
+            if source_url:
+                data["url"] = source_url
+        return data
 
 
 class DocumentList(BaseModel):

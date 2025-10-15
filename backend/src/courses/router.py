@@ -1,16 +1,14 @@
 """Unified courses API router.
 
-This router provides the new unified course API structure that replaces
-the separated /roadmaps, /lessons, and /nodes endpoints.
+This router exposes the consolidated course API that replaces the legacy
+course and lesson routes.
 
 NOTE: This router has been fully migrated to use CoursesFacade.
-CourseOrchestratorService has been completely removed and replaced with
-CoursesFacade for all endpoints including lesson-specific operations.
+CoursesFacade now handles all endpoints including lesson-specific operations.
 """
 
+
 import logging
-import os
-import time
 from typing import Annotated
 from uuid import UUID
 
@@ -31,9 +29,11 @@ from src.courses.schemas import (
     MDXValidateResponse,
 )
 from src.courses.services.code_execution_service import CodeExecutionError, CodeExecutionService
+from src.courses.services.course_query_service import CourseQueryService
 from src.courses.services.lesson_service import LessonService
 from src.courses.services.mdx_service import mdx_service
 from src.database.session import get_db_session
+from src.middleware.security import ai_rate_limit
 
 
 router = APIRouter(
@@ -69,10 +69,11 @@ def get_code_execution_service() -> CodeExecutionService:
 async def create_course(
     request: CourseCreate,
     auth: CurrentAuth,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CourseResponse:
     """Create a new course using AI generation."""
-    result = await facade.create_course(request.model_dump(), auth.user_id)
+    result = await facade.create_course(request.model_dump(), auth.user_id, session=session)
     if not result.get("success"):
         from fastapi import HTTPException
 
@@ -84,44 +85,26 @@ async def create_course(
 @router.get("/")
 async def list_courses(
     auth: CurrentAuth,
-    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     per_page: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
     search: Annotated[str | None, Query(description="Search query")] = None,
 ) -> CourseListResponse:
-    """List courses with pagination and optional search."""
-    result = await facade.get_user_courses(auth.user_id, include_progress=True)
-
-    if not result.get("success"):
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=400, detail=result.get("error", "Failed to get courses"))
-
-    courses = result["courses"]
-
-    # Apply search filter if provided
-    if search:
-        search_result = await facade.search_courses(search, auth.user_id, {"limit": per_page})
-        if search_result.get("success"):
-            courses = search_result["results"]
-
-    # Simple pagination (could be improved)
-    start = (page - 1) * per_page
-    end = start + per_page
-    paginated_courses = courses[start:end]
-    total = len(courses)
-
-    return CourseListResponse(courses=paginated_courses, total=total, page=page, per_page=per_page)
+    """List courses with pagination and optional search (single source of truth)."""
+    qs = CourseQueryService(session)
+    courses, total = await qs.list_courses(page=page, per_page=per_page, search=search, user_id=auth.user_id)
+    return CourseListResponse(courses=courses, total=total, page=page, per_page=per_page)
 
 
 @router.get("/{course_id}")
 async def get_course(
     course_id: UUID,
     auth: CurrentAuth,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CourseResponse:
     """Get a specific course by ID."""
-    result = await facade.get_course(course_id, auth.user_id)
+    result = await facade.get_course(course_id, auth.user_id, session=session)
 
     if not result.get("success"):
         from fastapi import HTTPException
@@ -171,23 +154,6 @@ async def delete_course(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-# Full lesson access (with module_id for web app compatibility)
-@router.get("/{course_id}/modules/{module_id}/lessons/{lesson_id}")
-async def get_lesson_full_path(
-    course_id: UUID,
-    module_id: UUID,
-    lesson_id: UUID,
-    auth: CurrentAuth,
-    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
-    generate: Annotated[bool, Query(description="Auto-generate if lesson doesn't exist")] = False,
-) -> LessonResponse:
-    """Get a specific lesson by course, module, and lesson ID (full hierarchical route)."""
-    # Delegate to the existing lesson service - module_id is just for routing (unused)
-    _ = module_id  # Explicitly ignore unused parameter
-    return await facade.get_lesson_simplified(course_id, lesson_id, generate, auth.user_id)
-
-
-# Main lesson access endpoint with single query and user isolation
 @router.get("/{course_id}/lessons/{lesson_id}")
 async def get_lesson(
     course_id: UUID,
@@ -223,44 +189,25 @@ async def validate_mdx(request: MDXValidateRequest) -> MDXValidateResponse:
 
 
 # --- Code Execution (E2B) ---
-
-# very small in-memory per-user rate limiter (no over-engineering)
-_rate_state: dict[str, tuple[float, int]] = {}
-
-
-def _check_rate_limit(user_id: UUID) -> None:
-    limit = int(os.getenv("CODE_EXEC_RATE_LIMIT_PER_USER", "10"))
-    window = int(os.getenv("CODE_EXEC_RATE_LIMIT_WINDOW", "60"))
-    now = time.time()
-    key = str(user_id)
-    start, count = _rate_state.get(key, (now, 0))
-    if now - start > window:
-        _rate_state[key] = (now, 1)
-        return
-    if count + 1 > limit:
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please try again later.")
-    _rate_state[key] = (start, count + 1)
-
-
+@ai_rate_limit
 @router.post("/code/execute")
 async def execute_code(
     request: CodeExecuteRequest,
     auth: CurrentAuth,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
     svc: Annotated[CodeExecutionService, Depends(get_code_execution_service)],
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CodeExecuteResponse:
     """Execute a single code snippet via E2B sandbox.
 
-    Auth is required; rate limited per user; minimal logging/analytics.
+    Auth is required; minimal logging/analytics.
     Uses course-scoped sandboxes with setup_commands for fast execution.
     """
-    _check_rate_limit(auth.user_id)
-
     # Fetch setup_commands from course if course_id provided
     setup_commands: list[str] = []
     if request.course_id:
         try:
-            result = await facade.get_course(request.course_id, auth.user_id)
+            result = await facade.get_course(request.course_id, auth.user_id, session=session)
             if result.get("success") and "course" in result:
                 course = result["course"]
                 setup_commands = course.setup_commands or []

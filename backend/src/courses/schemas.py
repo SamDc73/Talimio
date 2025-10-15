@@ -32,6 +32,9 @@ class LessonResponse(LessonBase):
     id: UUID = Field(..., description="Lesson ID")
     course_id: UUID = Field(..., description="Course ID")
     module_id: UUID = Field(..., description="Module ID")
+    module_name: str | None = Field(None, description="Module grouping name")
+    module_order: int | None = Field(None, description="Module ordering value")
+    order: int = Field(..., description="Lesson order within module")
     content: str | None = Field(None, description="Lesson content (MDX format)")
     citations: list[LessonCitation] = Field(default_factory=list, description="Lesson citations")
     created_at: datetime = Field(..., description="Lesson creation timestamp")
@@ -39,7 +42,7 @@ class LessonResponse(LessonBase):
 
 
 class CourseBase(BaseModel):
-    """Base schema for courses (formerly roadmaps)."""
+    """Base schema for courses."""
 
     title: str = Field(..., description="Course title")
     description: str = Field("", description="Course description")
@@ -84,19 +87,13 @@ class CourseListResponse(BaseModel):
 
 
 class ModuleResponse(BaseModel):
-    """Schema for module responses."""
+    """Schema for synthesized module responses."""
 
     id: UUID = Field(..., description="Module ID")
     course_id: UUID = Field(..., description="Course ID")
     title: str = Field(..., description="Module title")
-    description: str | None = Field(None, description="Module description")
-    content: str | None = Field(None, description="Module content")
+    module_name: str | None = Field(None, description="Raw module name from lessons")
     order: int = Field(..., description="Module order")
-    status: str = Field(..., description="Module status")
-    completion_percentage: float = Field(..., description="Module completion percentage")
-    parent_id: UUID | None = Field(None, description="Parent module ID")
-    created_at: datetime = Field(..., description="Module creation timestamp")
-    updated_at: datetime = Field(..., description="Module last update timestamp")
     lessons: list["LessonResponse"] = Field(default_factory=list, description="Module lessons")
 
     model_config = ConfigDict(from_attributes=True)

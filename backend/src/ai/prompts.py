@@ -1,11 +1,11 @@
-"""Centralized prompt management for the Learning Roadmap application.
+"""Centralized prompt management for the Learning Courses application.
 
 All AI prompts are defined here for consistency and maintainability.
 """
 
 # Content Tagging Prompts
 CONTENT_TAGGING_PROMPT = """You are an expert educator and content classifier.
-Given the title and preview of educational content (book, video, or roadmap), generate 3-7 highly relevant subject-based tags with confidence scores.
+Given the title and preview of educational content (book, video, or course), generate 3-7 highly relevant subject-based tags with confidence scores.
 
 Rules:
 - Tags should be lowercase, hyphenated (e.g., "web-development", "machine-learning")
@@ -25,9 +25,9 @@ Example: [
 Title: {title}
 Preview: {preview}"""
 
-# Roadmap Generation Prompts
-ROADMAP_GENERATION_PROMPT = """
-You are CurriculumArchitect 9000, a world-renowned expert in educational curriculum design with decades of experience crafting learning pathways that have helped millions master new skills.
+# Course Generation Prompts
+COURSE_GENERATION_PROMPT = """
+You are CurriculumArchitect 9000, a world-renowned expert in educational curriculum design with decades of experience crafting learning experiences that have helped millions master new skills.
 
 Your expertise spans across:
 - Cognitive science and learning theory
@@ -36,80 +36,70 @@ Your expertise spans across:
 - Adaptive learning methodologies
 
 # Your Mission
-Create a comprehensive, expertly-structured learning roadmap that will guide learners from their current level to mastery.
+Create a comprehensive, expertly-structured learning course with COMPLETE lesson content for each lesson. Each lesson must be ready to teach immediately - not just an outline.
 
 # Input Parameters
 User's Learning Topic: {user_prompt}
 Additional Context: {description}
 
-# Requirements
+# CRITICAL REQUIREMENTS
 
-1. **Optimal Learning Sequence**: Structure topics in the most effective order for knowledge building
-2. **Comprehensive Coverage**: Include all essential topics while avoiding unnecessary complexity
-3. **Clear Prerequisites**: Each topic should build naturally on previous knowledge
-4. **Practical Focus**: Emphasize real-world applications and hands-on learning
+1. **Complete Lesson Content**: Every lesson MUST include full, detailed content in Markdown format (500-1500 words per lesson)
+2. **Optimal Learning Sequence**: Structure topics in the most effective order for knowledge building
+3. **Comprehensive Coverage**: Include all essential topics while avoiding unnecessary complexity
+4. **Clear Prerequisites**: Each topic should build naturally on previous knowledge
+5. **Practical Focus**: Emphasize real-world applications and hands-on learning
+
+# Lesson Content Guidelines
+
+Each lesson's `content` field must contain:
+- Clear explanations of concepts
+- Code examples in proper markdown code blocks (```language)
+- Practical applications and use cases
+- Progressive complexity building
+- Engaging, conversational tone
+- 500-1500 words of substantive teaching material
+
+Follow standard Markdown formatting:
+- Use ## for main headings (not #, as title is already displayed)
+- Use ### for subheadings
+- Use code blocks with language tags: ```python, ```javascript, etc.
+- Use bullet points and numbered lists for clarity
+- NO HTML tags, NO template variables like {variable_name}
+- NO unclosed backticks - every ` must have a closing `
 
 # Output Format
 
-```json
+Return a JSON object with this structure:
+
 {{
   "title": "Clear course title",
   "description": "What learners will achieve",
-  "setup_commands": ["apt-get update", "pip install numpy pandas matplotlib"],
-  "modules": [
-    {
-      "title": "Module name",
-      "description": "What will be learned",
-      "lessons": [
-        {{
-          "title": "Lesson name",
-{{ ... }}
-          "description": "Lesson content"
-        }}
-      ]
+  "setup_commands": ["pip install numpy pandas matplotlib"],
+  "lessons": [
+    {{
+      "title": "Lesson name",
+      "description": "Brief overview of what will be learned",
+      "content": "## Main Concept\\n\\nDetailed explanation here...\\n\\n```python\\ncode_example()\\n```\\n\\nMore explanation...",
+      "module": "Module name"
     }}
   ]
 }}
-```
 
 **setup_commands**: Optional list of commands to install dependencies for code execution in this course.
 - Include ONLY if the course introduces tools that are not already available in the default E2B sandbox
 - Prefer package managers: `pip install <pkg>`, `npm install <pkg>`, `apt-get install -y <pkg>`
 - Keep the list minimal—only essential dependencies
-- Leave empty `[]` for:
-    - Theory-only courses with no runnable code
-    - Languages already bundled in the default E2B sandbox: `python`, `javascript`, `typescript`, `r`, `java`, `bash`
-- If a course requires another language runtime or framework, note that it must be provisioned via a custom E2B sandbox template and avoid adding setup commands here
+- Leave empty `[]` for theory-only courses or courses using pre-installed languages (python, javascript, typescript, r, java, bash)
 
-# Example:
-```json
-{{
-  "title": "Python Programming Mastery",
-  "description": "Master Python from basics to advanced concepts",
-  "setup_commands": ["pip install numpy pandas matplotlib"],
-  "modules": [
-    {{
-      "title": "Introduction to Python",
-      "description": "Learn Python basics including syntax and control flow",
-      "lessons": [
-        {{
-          "title": "Python Syntax and Variables",
-          "description": "Master Python syntax rules and variable declaration"
-        }},
-        {{
-          "title": "Data Types and Structures",
-          "description": "Understand lists, dictionaries, tuples, and sets"
-        }}
-      ]
-    }}
-  ]
-}}
-```
-
-# Requirements
+# Course Structure Requirements
 - Create 3-5 modules with 3-7 lessons each
+- Group related lessons under the same module name
 - Titles should be clear and specific
-- Descriptions should state learning outcomes
+- Descriptions should state learning outcomes concisely
+- Content should be comprehensive and immediately usable
+
+Remember: This course will be used directly by learners. Every lesson must be complete, polished, and ready to teach!
 """
 
 
@@ -658,7 +648,7 @@ Talimio is a comprehensive learning platform that offers:
 - Video tutorials and educational content
 - PDF books and reading materials
 - Document uploads for analysis and learning (including resumes, articles, papers, etc.)
-- Learning roadmaps that guide skill development
+- Learning courses that guide skill development
 - Progress tracking and personalized recommendations
 - Flashcards for knowledge retention
 

@@ -41,7 +41,7 @@ class ContentTagsUpdate(BaseModel):
 class TagSuggestionRequest(BaseModel):
     """Request schema for tag suggestions."""
 
-    content_type: str = Field(..., pattern="^(book|video|roadmap)$")
+    content_type: str = Field(..., pattern="^(book|video|course)$")
     title: str = Field(..., min_length=1)
     content_preview: str = Field(..., min_length=1, max_length=5000)
 

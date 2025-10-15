@@ -40,7 +40,7 @@ class AIService:
         description: str = "",
         **_kwargs: Any,  # Accept additional kwargs like content_type
     ) -> CourseStructure:
-        """Generate a course roadmap."""
+        """Generate a course outline."""
         # Build prompt with topic and description
         user_prompt = topic
         if description:

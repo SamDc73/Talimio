@@ -1,43 +1,31 @@
-"""SQLAlchemy models for the unified courses API.
-
-This module contains all models related to courses, lessons, and document management.
-Based on the actual working roadmaps.bck models to match database schema.
-"""
+"""SQLAlchemy models for courses, lessons, and related documents."""
 
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import (
-    TIMESTAMP,
-    Boolean,
-    DateTime,
-    Float,
-    ForeignKey,
-    Integer,
-    String,
-    Text,
-)
+from sqlalchemy import TIMESTAMP, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as SA_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.base import Base
 
 
-# Main Course Model (formerly Roadmap) - matches actual database schema
 class Course(Base):
-    """Model for courses (formerly roadmaps)."""
+    """Map persisted courses."""
 
-    __tablename__ = "roadmaps"
+    __tablename__ = "courses"
 
     id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False)
-    tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of tags
-    setup_commands: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of setup commands
+    tags: Mapped[str | None] = mapped_column(Text, nullable=True)
+    setup_commands: Mapped[str | None] = mapped_column(Text, nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -46,56 +34,40 @@ class Course(Base):
         onupdate=lambda: datetime.now(UTC),
     )
 
-    # Relationships
-    nodes: Mapped[list["CourseModule"]] = relationship("CourseModule", back_populates="roadmap", cascade="all, delete-orphan")
-    documents: Mapped[list["CourseDocument"]] = relationship("CourseDocument", back_populates="roadmap", cascade="all, delete-orphan")
-
-
-# Course Module Model (formerly Node) - matches actual database schema
-class CourseModule(Base):
-    """Model for course modules (formerly nodes)."""
-
-    __tablename__ = "nodes"
-    __mapper_args__ = {
-        "confirm_deleted_rows": False  # Suppress warnings for hierarchical deletes
-    }
-
-    id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    roadmap_id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("roadmaps.id"))
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    content: Mapped[str | None] = mapped_column(Text, nullable=True)
-    order: Mapped[int] = mapped_column(Integer, default=0)
-    status: Mapped[str] = mapped_column(String(50), default="not_started")
-    completion_percentage: Mapped[float] = mapped_column(Float, default=0.0)
-    parent_id: Mapped[uuid.UUID | None] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("nodes.id", ondelete="CASCADE"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    lessons: Mapped[list["Lesson"]] = relationship(
+        "Lesson",
+        back_populates="course",
+        cascade="all, delete-orphan",
     )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
+    documents: Mapped[list["CourseDocument"]] = relationship(
+        "CourseDocument",
+        back_populates="course",
+        cascade="all, delete-orphan",
     )
 
-    # Relationships - keep original names
-    roadmap: Mapped["Course"] = relationship("Course", back_populates="nodes")
 
-
-# Lesson Model - simplified for now
 class Lesson(Base):
-    """Model for lessons."""
+    """Map persisted lessons."""
 
     __tablename__ = "lessons"
 
     id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    roadmap_id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("roadmaps.id"))
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        SA_UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    order: Mapped[int] = mapped_column(Integer, default=0)  # Keep consistent naming
+    order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    module_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    module_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -104,57 +76,35 @@ class Lesson(Base):
         onupdate=lambda: datetime.now(UTC),
     )
 
+    course: Mapped["Course"] = relationship("Course", back_populates="lessons")
 
 
-
-# Document Management Models for RAG - from working backup
 class CourseDocument(Base):
-    """Model for course documents (formerly RoadmapDocument)."""
+    """Map documents attached to courses."""
 
-    __tablename__ = "roadmap_documents"  # Actual database table name
+    __tablename__ = "course_documents"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     course_id: Mapped[uuid.UUID] = mapped_column(
-        SA_UUID, ForeignKey("roadmaps.id", ondelete="CASCADE"), name="roadmap_id"
-    )  # Maps to roadmap_id column
+        SA_UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     document_type: Mapped[str | None] = mapped_column(String(50))
     title: Mapped[str] = mapped_column(String(255))
     file_path: Mapped[str | None] = mapped_column(String(500))
-    url: Mapped[str | None] = mapped_column(String(500))
     source_url: Mapped[str | None] = mapped_column(String(500))
     crawl_date: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
-    content_hash: Mapped[str | None] = mapped_column(String(64))
-    parsed_content: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=lambda: datetime.now(UTC))
     processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     embedded_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
-    status: Mapped[str] = mapped_column(String(20), default="pending")  # 'pending', 'processing', 'embedded', 'failed'
+    status: Mapped[str] = mapped_column(String(20), default="pending")
 
-    # Relationships
-    roadmap: Mapped["Course"] = relationship(
-        "Course", back_populates="documents", foreign_keys="CourseDocument.course_id"
-    )
-
-    # Alias property for new naming convention
-    @property
-    def course(self) -> "Course":
-        """Alias for roadmap to support course naming."""
-        return self.roadmap
+    course: Mapped["Course"] = relationship("Course", back_populates="documents")
 
 
-# Create aliases for backward compatibility
-Roadmap = Course
-RoadmapDocument = CourseDocument
-Node = CourseModule
-
-
-# Re-export all models
 __all__ = [
     "Course",
     "CourseDocument",
-    "CourseModule",
     "Lesson",
-    "Node",
-    "Roadmap",
-    "RoadmapDocument",
 ]

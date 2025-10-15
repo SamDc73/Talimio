@@ -39,7 +39,7 @@ class QueryBuilderService:
 
         if not content_type or content_type == ContentType.COURSE:
             queries.append(
-                QueryBuilderService.get_roadmap_query(
+                QueryBuilderService.get_courses_query(
                     search, archived_only=False, include_archived=include_archived, user_id=user_id
                 )
             )
@@ -159,48 +159,53 @@ class QueryBuilderService:
 
 
     @staticmethod
-    def get_roadmap_query(
-        search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: UUID | None = None
+    def get_courses_query(
+        search: str | None,
+        archived_only: bool = False,
+        include_archived: bool = False,
+        user_id: UUID | None = None,
     ) -> str:
-        """Get SQL query for roadmaps WITHOUT progress (optimized for performance)."""
-        # No more progress JOINs or subqueries - progress is fetched separately
+        """Get SQL query for courses WITHOUT progress (optimized for performance)."""
         query = """
             SELECT
-                r.id::text,
-                r.title,
-                COALESCE(r.description, '') as description,
-                'roadmap' as type,
-                COALESCE(r.updated_at, r.created_at) as last_accessed,
-                r.created_at,
-                COALESCE(r.tags, '[]') as tags,
+                c.id::text,
+                c.title,
+                COALESCE(c.description, '') as description,
+                'course' as type,
+                COALESCE(c.updated_at, c.created_at) as last_accessed,
+                c.created_at,
+                COALESCE(c.tags, '[]') as tags,
                 '' as extra1,
                 '' as extra2,
                 0 as progress,
-                -- Total counts from materialized view (precomputed)
-                COALESCE(rs.node_count, 0) as count1,
-                COALESCE(rs.module_count, 0) as count2,
-                COALESCE(r.archived, false) as archived,
+                (
+                    SELECT COUNT(*)
+                    FROM lessons l
+                    WHERE l.course_id = c.id
+                ) as count1,
+                (
+                    SELECT COUNT(DISTINCT l.module_name)
+                    FROM lessons l
+                    WHERE l.course_id = c.id AND l.module_name IS NOT NULL
+                ) as count2,
+                COALESCE(c.archived, false) as archived,
                 NULL::text as toc_progress,
                 NULL::text as table_of_contents
-            FROM roadmaps r
-            LEFT JOIN public.roadmap_stats rs ON rs.roadmap_id = r.id
+            FROM courses c
         """
 
-        # Build WHERE clause
-        where_conditions = []
+        where_conditions: list[str] = []
 
-        # Filter by user_id since roadmaps are user-specific
         if user_id:
-            where_conditions.append("r.user_id = :user_id")
+            where_conditions.append("c.user_id = :user_id")
 
         if archived_only:
-            where_conditions.append("r.archived = true")
+            where_conditions.append("c.archived = true")
         elif not include_archived:
-            where_conditions.append("(r.archived = false OR r.archived IS NULL)")
-        # If include_archived is True, don't add any archive filter (show all)
+            where_conditions.append("(c.archived = false OR c.archived IS NULL)")
 
         if search:
-            where_conditions.append("(r.title ILIKE :search OR r.description ILIKE :search)")
+            where_conditions.append("(c.title ILIKE :search OR c.description ILIKE :search)")
 
         if where_conditions:
             query += " WHERE " + " AND ".join(where_conditions)

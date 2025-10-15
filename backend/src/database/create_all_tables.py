@@ -33,7 +33,7 @@ async def create_tables() -> None:
         # Create videos table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS videos (
-                uuid UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 title VARCHAR(500) NOT NULL,
                 description TEXT,
                 channel VARCHAR(200),
@@ -70,56 +70,56 @@ async def create_tables() -> None:
 
         # Removed: legacy book_progress table (unified on user_progress)
 
-        # Create roadmaps table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS roadmaps (
-                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                title VARCHAR(500) NOT NULL,
-                description TEXT,
-                tags JSONB DEFAULT '[]'::jsonb,
-                archived BOOLEAN DEFAULT FALSE,
-                user_id UUID NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        logger.info("Created roadmaps table")
-
-        # Create course_prompts table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS course_prompts (
-                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                roadmap_id UUID REFERENCES roadmaps(id) ON DELETE CASCADE,
-                title VARCHAR(500) NOT NULL,
-                description TEXT,
-                prompt TEXT NOT NULL,
-                preferences JSONB DEFAULT '{}'::jsonb,
-                user_id UUID NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        logger.info("Created course_prompts table")
-
-        # Create courses table
+        # Create courses table (canonical)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS courses (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                roadmap_id UUID REFERENCES roadmaps(id) ON DELETE CASCADE,
-                title VARCHAR(500) NOT NULL,
-                description TEXT,
-                modules JSONB DEFAULT '[]'::jsonb,
-                toc_tree JSONB DEFAULT '[]'::jsonb,
-                topic TEXT,
-                difficulty VARCHAR(50),
-                tags JSONB DEFAULT '[]'::jsonb,
-                archived BOOLEAN DEFAULT FALSE,
                 user_id UUID NOT NULL,
+                title VARCHAR(200) NOT NULL,
+                description TEXT,
+                tags TEXT,
+                setup_commands TEXT,
+                archived BOOLEAN NOT NULL DEFAULT FALSE,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         """)
         logger.info("Created courses table")
+
+        # Create lessons table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS lessons (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+                title VARCHAR(255) NOT NULL,
+                description TEXT,
+                content TEXT NOT NULL,
+                "order" INTEGER DEFAULT 0,
+                module_name TEXT,
+                module_order INTEGER,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        logger.info("Created lessons table")
+
+        # Create course_documents table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS course_documents (
+                id SERIAL PRIMARY KEY,
+                course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+                document_type VARCHAR(50),
+                title VARCHAR(255) NOT NULL,
+                file_path VARCHAR(500),
+                source_url VARCHAR(500),
+                crawl_date TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP WITH TIME ZONE,
+                embedded_at TIMESTAMP WITH TIME ZONE,
+                status VARCHAR(20) DEFAULT 'pending'
+            );
+        """)
+        logger.info("Created course_documents table")
 
         # Create unified user_progress table (replaces per-content progress tables)
         await conn.execute("""
@@ -168,10 +168,11 @@ async def create_tables() -> None:
         # Create indexes for better query performance
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_user_id ON videos(user_id);")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_books_user_id ON books(user_id);")
-        # Removed: legacy book_progress index (unified on user_progress)
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_roadmaps_user_id ON roadmaps(user_id);")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_course_prompts_user_id ON course_prompts(user_id);")
+        # Indexes for courses and lessons
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_courses_user_id ON courses(user_id);")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_lessons_course_id ON lessons(course_id);")
+        await conn.execute('CREATE INDEX IF NOT EXISTS idx_lessons_course_module_order ON lessons(course_id, module_order, "order");')
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_course_documents_course_id ON course_documents(course_id);")
         # Indexes for unified user_progress table
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_progress_user_id ON user_progress(user_id);")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_progress_user_type ON user_progress(user_id, content_type);")

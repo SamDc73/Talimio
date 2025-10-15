@@ -1,119 +1,77 @@
 """Course query service for read operations on courses."""
 
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select
 
-from src.courses.models import Node, Roadmap
+from src.courses.models import Course, Lesson
 from src.courses.schemas import CourseResponse
 from src.courses.services.course_response_builder import CourseResponseBuilder
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class CourseQueryService:
     """Service for querying course data."""
 
     def __init__(self, session: AsyncSession) -> None:
-        """Initialize the course query service.
-
-        Args:
-            session: Database session
-        """
         self.session = session
         self.response_builder = CourseResponseBuilder(session)
         self._logger = logging.getLogger(__name__)
 
     async def get_course(self, course_id: UUID, user_id: UUID) -> CourseResponse:
-        """Get a specific course by ID.
+        """Get a specific course by ID."""
+        course_query = select(Course).where(Course.id == course_id, Course.user_id == user_id)
+        course_result = await self.session.execute(course_query)
+        course = course_result.scalar_one_or_none()
 
-        Args:
-            course_id: Course ID
-            user_id: User ID for ownership check
-
-        Returns
-        -------
-            Course response
-
-        Raises
-        ------
-            HTTPException: If course not found
-        """
-        # Get the roadmap/course with user filtering
-        query = select(Roadmap).where(Roadmap.id == course_id, Roadmap.user_id == user_id)
-
-        result = await self.session.execute(query)
-        roadmap = result.scalar_one_or_none()
-
-        if not roadmap:
+        if not course:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
-        # Get modules and lessons
-        modules_query = (
-            select(Node)
-            .where(
-                Node.roadmap_id == course_id,
-                Node.parent_id.is_(None),  # Modules have no parent
-            )
-            .order_by(Node.order)
+        lessons_query = (
+            select(Lesson)
+            .where(Lesson.course_id == course_id)
+            .order_by(Lesson.module_order.is_(None), Lesson.module_order, Lesson.order)
         )
+        lessons_result = await self.session.execute(lessons_query)
+        lessons = lessons_result.scalars().all()
 
-        modules_result = await self.session.execute(modules_query)
-        modules = modules_result.scalars().all()
-
-        modules_data = []
-        for module in modules:
-            module_response = await self.response_builder.build_module_response(module, course_id)
-            modules_data.append(module_response)
-
-        return self.response_builder.build_course_response_from_roadmap(roadmap, modules_data)
+        return self.response_builder.build_course_response(course, lessons)
 
     async def list_courses(
-        self, page: int = 1, per_page: int = 20, search: str | None = None, user_id: UUID | None = None
+        self,
+        page: int = 1,
+        per_page: int = 20,
+        search: str | None = None,
+        user_id: UUID | None = None,
     ) -> tuple[list[CourseResponse], int]:
-        """List courses with pagination and optional search.
-
-        Args:
-            page: Page number (1-based)
-            per_page: Items per page
-            search: Optional search term
-            user_id: User ID for filtering (None returns empty list)
-
-        Returns
-        -------
-            Tuple of (courses list, total count)
-        """
+        """List courses with pagination and optional search."""
         if not user_id:
             return [], 0
 
         offset = (page - 1) * per_page
 
-        # Build query with user filtering
-        query = select(Roadmap).where(Roadmap.user_id == user_id)
-        count_query = select(func.count(Roadmap.id)).where(Roadmap.user_id == user_id)
+        base_query = select(Course).where(Course.user_id == user_id)
+        count_query = select(func.count(Course.id)).where(Course.user_id == user_id)
 
         if search:
-            search_filter = or_(Roadmap.title.ilike(f"%{search}%"), Roadmap.description.ilike(f"%{search}%"))
-            query = query.where(search_filter)
-            count_query = count_query.where(search_filter)
+            search_pattern = f"%{search}%"
+            base_query = base_query.where(Course.title.ilike(search_pattern) | Course.description.ilike(search_pattern))
+            count_query = count_query.where(Course.title.ilike(search_pattern) | Course.description.ilike(search_pattern))
 
-        # Get total count
         count_result = await self.session.execute(count_query)
-        total = count_result.scalar()
+        total = count_result.scalar() or 0
 
-        # Get paginated results
-        query = query.order_by(Roadmap.created_at.desc()).offset(offset).limit(per_page)
-        result = await self.session.execute(query)
-        roadmaps = result.scalars().all()
+        course_query = base_query.order_by(Course.created_at.desc()).offset(offset).limit(per_page)
+        course_result = await self.session.execute(course_query)
+        courses = course_result.scalars().all()
 
-        # Convert to responses (simplified, without modules for list view)
-        courses = [
-            self.response_builder.build_course_response_from_roadmap(
-                roadmap,
-                [],  # Empty modules for list view
-            )
-            for roadmap in roadmaps
-        ]
-
-        return courses, total
+        course_responses = self.response_builder.build_course_list(courses)
+        return course_responses, total

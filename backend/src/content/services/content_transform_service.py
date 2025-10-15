@@ -43,9 +43,7 @@ class ContentTransformService:
                 items.append(ContentTransformService._create_youtube_content(row))
             elif row.type == "book":
                 items.append(ContentTransformService._create_book_content(row))
-            elif row.type in ("roadmap", "course"):
-                # Handle both legacy "roadmap" and new "course" database records
-                # Always return CourseContent (which has type="course")
+            elif row.type == "course":
                 items.append(ContentTransformService._create_course_content(row))
         return items
 
@@ -118,19 +116,14 @@ class ContentTransformService:
             metadata=metadata,
         )
 
-        # Store table_of_contents as a private attribute for progress calculation
-        # Pydantic allows attributes starting with underscore
-        if hasattr(row, "table_of_contents"):
-            book_content._table_of_contents = row.table_of_contents  # noqa: SLF001
-
         return book_content
 
     @staticmethod
     def _create_course_content(row: Any) -> CourseContent:
-        """Create CourseContent from row data (handles both roadmap and course types)."""
+        """Create CourseContent from row data."""
         metadata = ContentMetadata(
-            ai_generated=True,  # Default for now
-            modules_count=None,  # Could be calculated from course structure
+            ai_generated=True,
+            modules_count=row.count2 or 0,
         )
 
         # Progress will be calculated later by the progress service

@@ -119,12 +119,15 @@ class RAGService:
             # Re-query to get a Row object that works with model_validate
             # This matches the pattern used in get_document() and get_documents()
             result = await auth.session.execute(
-                text("SELECT * FROM roadmap_documents WHERE id = :doc_id"),
+                text("SELECT * FROM course_documents WHERE id = :doc_id"),
                 {"doc_id": doc.id}
             )
             row = result.fetchone()
+            if row is None:
+                msg = f"Course document {doc.id} not found after creation"
+                raise HTTPException(status_code=404, detail=msg)
 
-            return DocumentResponse.model_validate(row._asdict())
+            return DocumentResponse.model_validate(dict(row._mapping))
 
         except Exception as e:
             await auth.session.rollback()
@@ -136,21 +139,21 @@ class RAGService:
         try:
             # Update status to processing
             await session.execute(
-                text("UPDATE roadmap_documents SET status = 'processing' WHERE id = :doc_id"),
+                text("UPDATE course_documents SET status = 'processing' WHERE id = :doc_id"),
                 {"doc_id": document_id},
             )
             await session.commit()
 
             # Get document
             result = await session.execute(
-                text("SELECT * FROM roadmap_documents WHERE id = :doc_id"), {"doc_id": document_id}
+                text("SELECT * FROM course_documents WHERE id = :doc_id"), {"doc_id": document_id}
             )
             doc_row = result.fetchone()
             if not doc_row:
                 msg = f"Document {document_id} not found"
                 raise ValueError(msg)
 
-            doc_dict = doc_row._asdict()
+            doc_dict = dict(doc_row._mapping)
 
             # Extract text using Unstructured parser
             text_content = ""
@@ -158,7 +161,7 @@ class RAGService:
                 # TODO: Parse URL with Unstructured
                 text_content, crawl_date = await self.document_processor.process_url_document(doc_dict["source_url"])
                 await session.execute(
-                    text("UPDATE roadmap_documents SET crawl_date = :crawl_date WHERE id = :doc_id"),
+                    text("UPDATE course_documents SET crawl_date = :crawl_date WHERE id = :doc_id"),
                     {"crawl_date": crawl_date, "doc_id": document_id},
                 )
             elif doc_dict["file_path"]:
@@ -196,7 +199,7 @@ class RAGService:
             # Update status to embedded
             await session.execute(
                 text("""
-                    UPDATE roadmap_documents
+                    UPDATE course_documents
                     SET status = 'embedded',
                         processed_at = NOW(),
                         embedded_at = NOW()
@@ -223,7 +226,7 @@ class RAGService:
         except Exception:
             logger.exception("Failed to process document %s", document_id)
             await session.execute(
-                text("UPDATE roadmap_documents SET status = 'failed' WHERE id = :doc_id"), {"doc_id": document_id}
+                text("UPDATE course_documents SET status = 'failed' WHERE id = :doc_id"), {"doc_id": document_id}
             )
             await session.commit()
             raise
@@ -237,7 +240,7 @@ class RAGService:
             with contextlib.suppress(Exception):
                 fp.unlink()
         await session.execute(
-            text("UPDATE roadmap_documents SET file_path = NULL WHERE id = :doc_id"),
+            text("UPDATE course_documents SET file_path = NULL WHERE id = :doc_id"),
             {"doc_id": document_id},
         )
         await session.commit()
@@ -428,8 +431,8 @@ class RAGService:
             # Get document metadata
             result = await session.execute(
                 text("""
-                    SELECT id, roadmap_id as course_id, title, document_type
-                    FROM roadmap_documents
+                    SELECT id, course_id as course_id, title, document_type
+                    FROM course_documents
                     WHERE id = :doc_id
                 """),
                 {"doc_id": document_id},
@@ -481,9 +484,9 @@ class RAGService:
     ) -> list[SearchResult]:
         """Search documents using AuthContext, ensuring user ownership."""
         await auth.validate_resource("course", course_id)
-        return await self.search_roadmap_documents(auth.session, course_id, query, top_k)
+        return await self.search_course_documents(auth.session, course_id, query, top_k)
 
-    async def search_roadmap_documents(
+    async def search_course_documents(
         self, session: AsyncSession, course_id: uuid.UUID, query: str, top_k: int | None = None
     ) -> list[SearchResult]:
         """Search course documents via unified VectorRAG.search with course_id filter."""
@@ -518,18 +521,18 @@ class RAGService:
 
         try:
             # Now we know the user owns the course, we can query its documents directly
-            # No need to join with roadmaps again since ownership is already verified
+            # No need to join with courses again since ownership is already verified
             result = await auth.session.execute(
                 text("""
-                    SELECT * FROM roadmap_documents
-                    WHERE roadmap_id = :course_id
+                    SELECT * FROM course_documents
+                    WHERE course_id = :course_id
                     ORDER BY created_at DESC
                     LIMIT :limit OFFSET :skip
                 """),
                 {"course_id": str(course_id), "limit": limit, "skip": skip},
             )
 
-            return [DocumentResponse.model_validate(row._asdict()) for row in result.fetchall()]
+            return [DocumentResponse.model_validate(dict(row._mapping)) for row in result.fetchall()]
         except Exception:
             logger.exception("Failed to get documents")
             # Return empty list instead of crashing
@@ -544,8 +547,8 @@ class RAGService:
             # Now we know the user owns the course, we can count its documents directly
             result = await auth.session.execute(
                 text("""
-                    SELECT COUNT(*) FROM roadmap_documents
-                    WHERE roadmap_id = :course_id
+                    SELECT COUNT(*) FROM course_documents
+                    WHERE course_id = :course_id
                 """),
                 {"course_id": str(course_id)},
             )
@@ -557,11 +560,11 @@ class RAGService:
     async def delete_document(self, auth: AuthContext, document_id: int) -> None:
         """Delete a document and its chunks, ensuring user ownership."""
         try:
-            # First get the document to find its roadmap_id
+            # First get the document to find its course_id
             result = await auth.session.execute(
                 text("""
-                    SELECT id, file_path, roadmap_id
-                    FROM roadmap_documents
+                    SELECT id, file_path, course_id
+                    FROM course_documents
                     WHERE id = :doc_id
                 """),
                 {"doc_id": document_id},
@@ -571,8 +574,8 @@ class RAGService:
             if not doc:
                 raise HTTPException(status_code=404, detail="Document not found")
 
-            # Verify user owns the course/roadmap that contains this document
-            await auth.validate_resource("course", doc.roadmap_id)
+            # Verify user owns the course that contains this document
+            await auth.validate_resource("course", doc.course_id)
 
             # Delete file from filesystem if it exists
             if doc.file_path:
@@ -590,12 +593,12 @@ class RAGService:
                 text("DELETE FROM rag_document_chunks WHERE doc_id = :doc_uuid AND doc_type = 'course'"),
                 {"doc_uuid": str(doc_uuid)},
             )
-            chunks_deleted = chunks_result.rowcount
+            chunks_deleted = int(getattr(chunks_result, "rowcount", 0) or 0)
             if chunks_deleted > 0:
                 logger.info(f"Deleted {chunks_deleted} RAG chunks for document {document_id}")
 
             # Delete document
-            await auth.session.execute(text("DELETE FROM roadmap_documents WHERE id = :doc_id"), {"doc_id": document_id})
+            await auth.session.execute(text("DELETE FROM course_documents WHERE id = :doc_id"), {"doc_id": document_id})
 
             await auth.session.commit()
             logger.info("Successfully deleted document %s", document_id)
@@ -611,7 +614,7 @@ class RAGService:
             # First get the document
             result = await auth.session.execute(
                 text("""
-                    SELECT * FROM roadmap_documents
+                    SELECT * FROM course_documents
                     WHERE id = :doc_id
                 """),
                 {"doc_id": document_id},
@@ -621,10 +624,10 @@ class RAGService:
             if not row:
                 raise HTTPException(status_code=404, detail="Document not found")
 
-            # Verify user owns the course/roadmap that contains this document
-            await auth.validate_resource("course", row.roadmap_id)
+            # Verify user owns the course that contains this document
+            await auth.validate_resource("course", row.course_id)
 
-            return DocumentResponse.model_validate(row._asdict())
+            return DocumentResponse.model_validate(dict(row._mapping))
         except HTTPException:
             raise
         except Exception as e:
@@ -665,7 +668,7 @@ class RAGService:
                 )
 
             await session.commit()
-            rowcount = result.rowcount
+            rowcount = int(getattr(result, "rowcount", 0) or 0)
 
             elapsed_time = time.time() - start_time
             logger.info(
@@ -709,7 +712,7 @@ class RAGService:
             )
 
             await session.commit()
-            rowcount = result.rowcount
+            rowcount = int(getattr(result, "rowcount", 0) or 0)
 
             elapsed_time = time.time() - start_time
             logger.info(

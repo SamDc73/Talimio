@@ -2,10 +2,11 @@
 
 import json
 import logging
+from typing import Any
 
 from sqlalchemy import select
 
-from src.courses.models import Course, CourseModule
+from src.courses.models import Course, Lesson
 from src.database.session import AsyncSession
 
 
@@ -37,16 +38,16 @@ class CourseProcessor:
             Dictionary with title and content_preview
         """
         try:
-            # Get course modules for more detailed content
-            result = await self.session.execute(
-                select(CourseModule).where(CourseModule.roadmap_id == course.id).order_by(CourseModule.order)
+            lessons_result = await self.session.execute(
+                select(Lesson)
+                .where(Lesson.course_id == course.id)
+                .order_by(Lesson.module_order.is_(None), Lesson.module_order, Lesson.order)
             )
-            modules = result.scalars().all()
+            lessons: list[Lesson] = list(lessons_result.scalars().all())
 
-            # Build comprehensive content preview
             content_preview = self._build_content_preview(
                 course=course,
-                modules=modules,
+                lessons=lessons,
             )
 
             return {
@@ -64,53 +65,73 @@ class CourseProcessor:
     def _build_content_preview(
         self,
         course: Course,
-        modules: list[CourseModule],
+        lessons: list[Lesson],
         max_length: int = 3000,
     ) -> str:
-        """Build comprehensive content preview for tagging.
-
-        Args:
-            course: Course model instance
-            modules: List of course modules
-            max_length: Maximum preview length
-
-        Returns
-        -------
-            Combined content preview
-        """
-        parts = []
+        """Build comprehensive content preview for tagging."""
+        parts: list[str] = []
 
         # Add course metadata
         self._add_course_metadata(course, parts)
 
-        # Add module information
-        if modules:
-            self._add_module_outline(modules, parts)
-            self._add_module_content_preview(modules, parts)
+        module_groups = self._group_lessons_by_module(lessons)
+        if module_groups:
+            self._add_module_outline(module_groups, parts)
+            self._add_module_content_preview(module_groups, parts)
 
-        # Combine and truncate
         preview = "\n\n".join(parts)
         return self._truncate_preview(preview, max_length)
 
-    def _add_course_metadata(self, course: Course, parts: list[str]) -> None:
-        """Add course metadata to preview parts.
+    def _group_lessons_by_module(self, lessons: list[Lesson]) -> list[dict[str, Any]]:
+        """Group lessons by module name while preserving ordering."""
+        groups: dict[str, dict[str, Any]] = {}
+        for index, lesson in enumerate(lessons):
+            module_name = lesson.module_name or "Lessons"
+            entry = groups.setdefault(
+                module_name,
+                {
+                    "order": lesson.module_order,
+                    "lessons": [],
+                    "first_index": index,
+                },
+            )
 
-        Args:
-            course: Course model instance
-            parts: List to append metadata to
-        """
+            if lesson.module_order is not None:
+                current_order = entry.get("order")
+                if current_order is None or lesson.module_order < current_order:
+                    entry["order"] = lesson.module_order
+
+            entry["lessons"].append(lesson)
+            entry["first_index"] = min(entry["first_index"], index)
+
+        sorted_groups = sorted(
+            (
+                {
+                    "name": name,
+                    "order": data.get("order"),
+                    "lessons": data["lessons"],
+                    "first_index": data["first_index"],
+                }
+                for name, data in groups.items()
+            ),
+            key=lambda item: (
+                item["order"] is None,
+                item["order"] if item["order"] is not None else item["first_index"],
+                item["first_index"],
+            ),
+        )
+
+        return sorted_groups
+
+    def _add_course_metadata(self, course: Course, parts: list[str]) -> None:
+        """Add course metadata to preview parts."""
         if course.description:
             parts.append(f"Description: {course.description}")
 
         self._add_existing_tags(course, parts)
 
     def _add_existing_tags(self, course: Course, parts: list[str]) -> None:
-        """Add existing tags to preview parts.
-
-        Args:
-            course: Course model instance
-            parts: List to append tags to
-        """
+        """Add existing tags to preview parts."""
         if course.tags:
             try:
                 existing_tags = json.loads(course.tags)
@@ -119,75 +140,51 @@ class CourseProcessor:
             except Exception as e:
                 logger.debug(f"Failed to parse existing tags: {e}")
 
-    def _add_module_outline(self, modules: list[CourseModule], parts: list[str]) -> None:
-        """Add module outline to preview parts.
+    def _add_module_outline(self, modules: list[dict[str, Any]], parts: list[str]) -> None:
+        """Add module outline to preview parts."""
+        if not modules:
+            return
 
-        Args:
-            modules: List of course modules
-            parts: List to append outline to
-        """
         parts.append("Course Outline:")
-        module_titles = []
+        outline_entries: list[str] = []
         for i, module in enumerate(modules[:20], 1):  # First 20 modules like ToC
-            module_titles.append(f"{i}. {module.title}")
+            outline_entries.append(
+                f"{i}. {module['name']} ({len(module['lessons'])} lessons)"
+            )
 
-        if module_titles:
-            parts.append("\n".join(module_titles))
+        if outline_entries:
+            parts.append("\n".join(outline_entries))
 
-    def _add_module_content_preview(self, modules: list[CourseModule], parts: list[str]) -> None:
-        """Add detailed module content preview.
+    def _add_module_content_preview(self, modules: list[dict[str, Any]], parts: list[str]) -> None:
+        """Add detailed module content preview."""
+        if not modules:
+            return
 
-        Args:
-            modules: List of course modules
-            parts: List to append content to
-        """
-        parts.append("\nContent Preview:")
-        for i, module in enumerate(modules[:5], 1):  # First 5 modules detailed content
-            if module.description or module.content:
-                parts.append(f"\nModule {i}: {module.title}")
-                self._add_module_details(module, parts)
+        parts.append("\nModule Highlights:")
+        for i, module in enumerate(modules[:5], 1):  # Provide detail for first 5 modules
+            module_name = module["name"]
+            parts.append(f"\nModule {i}: {module_name}")
 
-    def _add_module_details(self, module: CourseModule, parts: list[str]) -> None:
-        """Add module description and content details.
+            lessons = module["lessons"]
+            for lesson in lessons[:3]:  # Summarize first 3 lessons per module
+                summary = self._summarize_lesson(lesson)
+                parts.append(f"- {lesson.title}: {summary}")
 
-        Args:
-            module: Course module instance
-            parts: List to append details to
-        """
-        if module.description:
-            desc_preview = self._truncate_text(module.description, 300)
-            parts.append(f"Description: {desc_preview}")
-
-        if module.content:
-            content_preview = self._truncate_text(module.content, 500)
-            parts.append(f"Content: {content_preview}")
+    def _summarize_lesson(self, lesson: Lesson) -> str:
+        """Summarize a lesson's description/content for tagging."""
+        source = lesson.description or lesson.content or ""
+        if not source:
+            return "No additional details provided."
+        return self._truncate_text(source.strip(), 280)
 
     def _truncate_text(self, text: str, max_length: int) -> str:
-        """Truncate text to max length with ellipsis.
-
-        Args:
-            text: Text to truncate
-            max_length: Maximum length
-
-        Returns
-        -------
-            Truncated text
-        """
+        """Truncate text to max length with ellipsis."""
         if len(text) > max_length:
             return text[:max_length] + "..."
         return text
 
     def _truncate_preview(self, preview: str, max_length: int) -> str:
-        """Truncate preview to max length.
-
-        Args:
-            preview: Preview text
-            max_length: Maximum length
-
-        Returns
-        -------
-            Truncated preview
-        """
+        """Truncate preview to max length."""
         if len(preview) > max_length:
             return preview[:max_length] + "..."
         return preview
@@ -197,17 +194,7 @@ async def process_course_for_tagging(
     course_id: str,
     session: AsyncSession,
 ) -> dict[str, str] | None:
-    """Process a course to extract content for tagging.
-
-    Args:
-        course_id: ID of the course to process
-        session: Database session
-
-    Returns
-    -------
-        Dictionary with title and content_preview, or None if not found
-    """
-    # Get course from database
+    """Process a course to extract content for tagging."""
     result = await session.execute(
         select(Course).where(Course.id == course_id),
     )
@@ -217,6 +204,5 @@ async def process_course_for_tagging(
         logger.error(f"Course not found: {course_id}")
         return None
 
-    # Process course
     processor = CourseProcessor(session)
     return await processor.extract_content_for_tagging(course)

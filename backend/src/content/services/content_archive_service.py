@@ -24,7 +24,7 @@ class ContentArchiveService:
         table_map = {
             ContentType.BOOK: "books",
             ContentType.YOUTUBE: "videos",
-            ContentType.COURSE: "roadmaps",
+            ContentType.COURSE: "courses",
         }
 
         table_name = table_map.get(content_type)
@@ -51,7 +51,7 @@ class ContentArchiveService:
         result = await db.execute(
             text(query), {"content_id": content_id, "user_id": user_id, "archived_at": datetime.now(UTC)}
         )
-        affected_rows = result.rowcount
+        affected_rows = int(getattr(result, "rowcount", 0) or 0)
         await db.commit()
 
         logger.info(f"📊 Archive operation affected {affected_rows} rows")
@@ -68,7 +68,7 @@ class ContentArchiveService:
         table_map = {
             ContentType.BOOK: "books",
             ContentType.YOUTUBE: "videos",
-            ContentType.COURSE: "roadmaps",
+            ContentType.COURSE: "courses",
         }
 
         table_name = table_map.get(content_type)
@@ -93,7 +93,7 @@ class ContentArchiveService:
         logger.info(f"🔍 With params: content_id={content_id}, user_id={user_id}")
 
         result = await db.execute(text(query), {"content_id": content_id, "user_id": user_id})
-        affected_rows = result.rowcount
+        affected_rows = int(getattr(result, "rowcount", 0) or 0)
         await db.commit()
 
         logger.info(f"📊 Unarchive operation affected {affected_rows} rows")
@@ -132,7 +132,7 @@ class ContentArchiveService:
                     search, archived_only=True, user_id=current_user_id
                 )
             elif content_type == ContentType.COURSE:
-                combined_query = QueryBuilderService.get_roadmap_query(
+                combined_query = QueryBuilderService.get_courses_query(
                     search, archived_only=True, include_archived=False, user_id=current_user_id
                 )
             else:
@@ -145,7 +145,7 @@ class ContentArchiveService:
                 UNION ALL
                 {QueryBuilderService.get_books_query(search, archived_only=True, user_id=current_user_id)}
                 UNION ALL
-                {QueryBuilderService.get_roadmap_query(search, archived_only=True, include_archived=False, user_id=current_user_id)}
+                {QueryBuilderService.get_courses_query(search, archived_only=True, include_archived=False, user_id=current_user_id)}
             """
 
         async with async_session_maker() as session:

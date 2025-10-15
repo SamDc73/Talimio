@@ -192,7 +192,7 @@ async def _get_rag_context(request: ChatRequest, user_id: UUID) -> list:
 
             rag_service = RAGService()
             async with async_session_maker() as session:
-                results = await rag_service.search_roadmap_documents(
+                results = await rag_service.search_course_documents(
                     session=session,
                     course_id=request.context_id,
                     query=query_text,

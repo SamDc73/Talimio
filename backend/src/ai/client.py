@@ -18,7 +18,7 @@ from src.ai.prompts import (
     LESSON_GENERATION_PROMPT,
     MDX_ERROR_FIX_PROMPT,
     MEMORY_CONTEXT_SYSTEM_PROMPT,
-    ROADMAP_GENERATION_PROMPT,
+    COURSE_GENERATION_PROMPT,
 )
 from src.config.settings import get_settings
 
@@ -234,8 +234,8 @@ class LLMClient:
         response: Any,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],  # noqa: ARG002
-        temperature: float,
-        max_tokens: int,
+        temperature: float | None,
+        max_tokens: int | None,
         user_id: str | UUID | None,
     ) -> str:
         """Handle function calling responses."""
@@ -349,7 +349,7 @@ class LLMClient:
         """Generate a structured learning course using LiteLLM structured output (Pydantic)."""
         try:
             messages = [
-                {"role": "system", "content": ROADMAP_GENERATION_PROMPT},
+                {"role": "system", "content": COURSE_GENERATION_PROMPT},
                 {"role": "user", "content": user_prompt},
             ]
 
@@ -369,7 +369,7 @@ class LLMClient:
 
         except Exception as e:
             self._logger.exception("Error generating course structure")
-            msg = "Failed to generate roadmap content"
+            msg = "Failed to generate course outline"
             raise RuntimeError(msg) from e
 
     async def create_lesson(self, node_meta: dict[str, Any], auth: "AuthContext | None" = None) -> LessonContent:
@@ -413,24 +413,36 @@ class LLMClient:
             )
 
             # Prepare prompt
-            combined_content = content_info + rag_context
-            prompt = LESSON_GENERATION_PROMPT.replace("{content}", combined_content)
-            messages = [{"role": "user", "content": prompt}]
+            combined_content = (content_info + rag_context).strip()
+            if not combined_content:
+                combined_content = (
+                    f"Lesson Title: {title}\n"
+                    f"Lesson Topic: {metadata['node_description'] or title}"
+                )
+
+            system_prompt = LESSON_GENERATION_PROMPT.replace("{content}", combined_content)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Write the complete lesson titled \"{title}\" in Markdown,"
+                        " following every instruction in the system prompt."
+                    ),
+                },
+            ]
 
             # Generate lesson content
             settings = get_settings()
             response = await self.complete(
                 messages,
                 temperature=settings.ai_temperature_default,
+                max_tokens=settings.ai_max_tokens_default,
                 user_id=metadata.get("user_id"),
             )
 
             # Get content from response (litellm standard format)
-            content = response.choices[0].message.content
-
-            if not content or len(content.strip()) < 100:
-                msg = f"Generated content too short: {len(content)} chars"
-                raise ValueError(msg)
+            content = response.choices[0].message.content or ""
 
             # Validate and fix MDX - keep trying until valid (max 3 attempts)
             from src.courses.services.mdx_service import mdx_service

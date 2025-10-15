@@ -141,9 +141,9 @@ class ProgressService:
         if result.first():
             return "video"
 
-        # Check courses/roadmaps (uses id column which is UUID)
+        # Check courses (uses id column which is UUID)
         result = await self.session.execute(
-            text("SELECT 1 FROM roadmaps WHERE id = :content_id AND user_id = :user_id"),
+            text("SELECT 1 FROM courses WHERE id = :content_id AND user_id = :user_id"),
             {"content_id": str(content_id), "user_id": str(user_id)}
         )
         if result.first():

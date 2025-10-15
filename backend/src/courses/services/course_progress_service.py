@@ -49,7 +49,7 @@ class CourseProgressService(ProgressTracker):
                 }
 
             # Get total lessons count
-            lessons_query = select(Lesson).where(Lesson.roadmap_id == content_id)
+            lessons_query = select(Lesson).where(Lesson.course_id == content_id)
             lessons_result = await session.execute(lessons_query)
             lessons = lessons_result.scalars().all()
             total_lessons = len(lessons)
@@ -147,7 +147,7 @@ class CourseProgressService(ProgressTracker):
         # Get total lessons count
         total_lessons = 0
         if course:
-            lessons_query = select(Lesson).where(Lesson.roadmap_id == content_id)
+            lessons_query = select(Lesson).where(Lesson.course_id == content_id)
             lessons_result = await session.execute(lessons_query)
             lessons = lessons_result.scalars().all()
             total_lessons = len(lessons)
@@ -227,135 +227,7 @@ class CourseProgressService(ProgressTracker):
             "updated_at": updated.updated_at,
         }
 
-    async def mark_lesson_complete(
-        self, content_id: UUID, user_id: UUID, lesson_id: str, completed: bool = True
-    ) -> None:
-        """Mark a course lesson as complete or incomplete."""
-        async with async_session_maker() as session:
-            progress_service = ProgressService(session)
-            current_progress = await progress_service.get_single_progress(user_id, content_id)
 
-            # Get current metadata
-            metadata = current_progress.metadata if current_progress else {}
-            completed_lessons = metadata.get("completed_lessons", {})
-
-            # Update lesson status
-            if completed:
-                completed_lessons[lesson_id] = True
-            else:
-                completed_lessons.pop(lesson_id, None)
-
-            metadata["completed_lessons"] = completed_lessons
-
-            # Get total lessons for percentage calculation
-            total_lessons = metadata.get("total_lessons", 0)
-            if total_lessons == 0:
-                lessons_query = select(Lesson).where(Lesson.roadmap_id == content_id)
-                lessons_result = await session.execute(lessons_query)
-                lessons = lessons_result.scalars().all()
-                total_lessons = len(lessons)
-                metadata["total_lessons"] = total_lessons
-
-            # Recalculate completion percentage
-            completion_percentage = self._calculate_lesson_progress_percentage(completed_lessons, total_lessons)
-
-            # Update progress
-            progress_update = ProgressUpdate(progress_percentage=completion_percentage, metadata=metadata)
-            await progress_service.update_progress(user_id, content_id, "course", progress_update)
-
-    async def update_course_settings(self, content_id: UUID, user_id: UUID, settings: dict[str, Any]) -> dict[str, Any]:
-        """Update course-specific settings and preferences."""
-        async with async_session_maker() as session:
-            progress_service = ProgressService(session)
-            current_progress = await progress_service.get_single_progress(user_id, content_id)
-
-            if current_progress:
-                metadata = current_progress.metadata.copy() if current_progress.metadata else {}
-
-                # Update supported settings
-                supported_settings = ["pacing_preference", "current_lesson", "learning_patterns"]
-
-                for setting in supported_settings:
-                    if setting in settings:
-                        metadata[setting] = settings[setting]
-
-                progress_update = ProgressUpdate(
-                    progress_percentage=current_progress.progress_percentage, metadata=metadata
-                )
-
-                await progress_service.update_progress(user_id, content_id, "course", progress_update)
-
-            return settings
-
-    async def get_lesson_completion_stats(self, course_id: UUID, user_id: UUID) -> dict:
-        """Get detailed lesson completion statistics for a course."""
-        async with async_session_maker() as session:
-            # Get course
-            course_query = select(Course).where(Course.id == course_id)
-            course_result = await session.execute(course_query)
-            course = course_result.scalar_one_or_none()
-
-            if not course:
-                return {
-                    "total_lessons": 0,
-                    "completed_lessons": 0,
-                    "lesson_percentage": 0,
-                    "quiz_average_score": 0,
-                    "time_spent_minutes": 0,
-                    "learning_velocity": "normal",
-                }
-
-            # Get lessons for this course
-            lessons_query = select(Lesson).where(Lesson.roadmap_id == course_id)
-            lessons_result = await session.execute(lessons_query)
-            lessons = lessons_result.scalars().all()
-            total_lessons = len(lessons)
-
-            # Get progress from unified service
-            progress_service = ProgressService(session)
-            progress_data = await progress_service.get_single_progress(user_id, course_id)
-
-            if not progress_data or not progress_data.metadata:
-                return {
-                    "total_lessons": total_lessons,
-                    "completed_lessons": 0,
-                    "lesson_percentage": 0,
-                    "quiz_average_score": 0,
-                    "time_spent_minutes": 0,
-                    "learning_velocity": "normal",
-                }
-
-            metadata = progress_data.metadata
-            completed_lessons_dict = metadata.get("completed_lessons", {})
-            quiz_scores = metadata.get("quiz_scores", {})
-
-            # Calculate completion stats
-            completed_count = len([k for k, v in completed_lessons_dict.items() if v])
-            lesson_percentage = int((completed_count / total_lessons) * 100) if total_lessons > 0 else 0
-
-            # Calculate quiz statistics
-            quiz_average_score = 0
-            total_time_spent = 0
-
-            if quiz_scores:
-                total_score = sum(score_data.get("total_score", 0) for score_data in quiz_scores.values())
-                total_time_spent = sum(score_data.get("time_spent", 0) for score_data in quiz_scores.values())
-                quiz_average_score = total_score / len(quiz_scores) if quiz_scores else 0
-
-            # Determine learning velocity based on completion rate and quiz performance
-            learning_velocity = self._calculate_learning_velocity(
-                completed_count, total_lessons, quiz_average_score, total_time_spent
-            )
-
-            return {
-                "total_lessons": total_lessons,
-                "completed_lessons": completed_count,
-                "lesson_percentage": lesson_percentage,
-                "quiz_average_score": quiz_average_score,
-                "time_spent_minutes": total_time_spent // 60,  # Convert seconds to minutes
-                "learning_velocity": learning_velocity,
-                "pacing_preference": metadata.get("pacing_preference", "normal"),
-            }
 
     def _calculate_lesson_progress_percentage(self, completed_lessons: dict, total_lessons: int) -> float:
         """Calculate progress percentage based on completed lessons."""
@@ -407,19 +279,3 @@ class CourseProgressService(ProgressTracker):
 
         metadata["learning_patterns"] = learning_patterns
 
-    def _calculate_learning_velocity(
-        self, completed_lessons: int, total_lessons: int, avg_quiz_score: float, _time_spent_seconds: int
-    ) -> str:
-        """Calculate learning velocity based on completion rate and performance."""
-        if total_lessons == 0:
-            return "normal"
-
-        completion_rate = completed_lessons / total_lessons
-
-        # High completion rate + good scores = fast learner
-        if completion_rate > 0.7 and avg_quiz_score > 80:
-            return "fast"
-        # Low completion rate or poor scores = needs more time
-        if completion_rate < 0.3 or avg_quiz_score < 60:
-            return "slow"
-        return "normal"

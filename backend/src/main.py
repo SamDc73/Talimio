@@ -42,12 +42,7 @@ from .books.router import router as books_router
 from .config.logging import setup_logging
 from .config.settings import get_settings
 from .content.router import router as content_router
-from .courses.models import (  # noqa: F401
-    Lesson,
-    Node,
-    Roadmap,
-    RoadmapDocument,
-)
+from .courses.models import Course, CourseDocument, Lesson  # noqa: F401
 from .database.session import engine
 from .exceptions import ResourceNotFoundError, ValidationError as CustomValidationError
 from .highlights.models import Highlight  # noqa: F401
@@ -100,7 +95,6 @@ def _register_routers(app: FastAPI) -> None:
     from src.courses.router import router as courses_router
     app.include_router(courses_router)
 
-    # Legacy roadmaps API has been removed - all functionality moved to courses API
 
     app.include_router(tagging_router)
     app.include_router(user_router)
@@ -210,8 +204,8 @@ def create_app() -> FastAPI:
         raise
 
     app = FastAPI(
-        title="Learning Roadmap API",
-        description="API for managing learning roadmaps",
+        title="Learning Courses API",
+        description="API for managing learning courses",
         version="0.1.0",
         debug=settings.DEBUG,
         lifespan=lifespan if settings.ENVIRONMENT != "test" else None,

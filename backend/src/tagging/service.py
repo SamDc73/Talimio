@@ -96,7 +96,7 @@ class TaggingService:
 
         Args:
             content_id: ID of the content to tag
-            content_type: Type of content (book, video, roadmap)
+            content_type: Type of content (book, video, course)
             user_id: User ID for personalized tagging
             title: Title of the content
             content_preview: Preview text for tag generation
@@ -464,7 +464,7 @@ async def update_content_tags_json(
         await session.execute(
             update(Video).where(Video.id == content_id).values(tags=tags_json),
         )
-    elif content_type in {"course", "roadmap"}:
+    elif content_type == "course":
         from sqlalchemy import update
 
         from src.courses.models import Course

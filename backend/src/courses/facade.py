@@ -1,19 +1,21 @@
 """
 Courses Module Facade.
 
-Single entry point for all course/roadmap-related operations.
+Single entry point for all course-related operations.
 Coordinates internal course services and provides stable API for other modules.
 """
 
-import contextlib
-import json
 import logging
 from typing import Any
 from uuid import UUID
 
-from src.ai.service import get_ai_service
+from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from .schemas import CourseResponse
+from src.courses.models import Course
+from src.database.session import async_session_maker
+
 from .services.course_content_service import CourseContentService
 from .services.course_progress_service import CourseProgressService
 from .services.course_query_service import CourseQueryService
@@ -24,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 class CoursesFacade:
     """
-    Single entry point for all course/roadmap operations.
+    Single entry point for all course operations.
 
     Coordinates internal course services, publishes events, and provides
     stable API that won't break when internal implementation changes.
@@ -34,7 +36,6 @@ class CoursesFacade:
         # Don't initialize with sessions - create on-demand
         self._content_service = CourseContentService()  # New base service
         self._progress_service = CourseProgressService()  # Handles lesson progress tracking
-        self._ai_service = get_ai_service()
 
     async def get_content_with_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
         """
@@ -44,21 +45,27 @@ class CoursesFacade:
         """
         return await self.get_course(content_id, user_id)
 
-    async def get_course(self, course_id: UUID, user_id: UUID) -> dict[str, Any]:
+    async def get_course(
+        self,
+        course_id: UUID,
+        user_id: UUID,
+        session: AsyncSession | None = None,
+    ) -> dict[str, Any]:
         """
         Get complete course information with progress.
 
         Coordinates course service and progress service to provide comprehensive data.
         """
         try:
-            # Get course information using query service
-            from src.database.session import async_session_maker
-
-            async with async_session_maker() as session:
+            if session is not None:
                 query_service = CourseQueryService(session)
                 course_response = await query_service.get_course(course_id, user_id)
-                course = course_response.model_dump() if course_response else None
+            else:
+                async with async_session_maker() as query_session:
+                    query_service = CourseQueryService(query_session)
+                    course_response = await query_service.get_course(course_id, user_id)
 
+            course = course_response.model_dump() if course_response else None
             if not course:
                 return {"error": "Course not found", "success": False}
 
@@ -83,7 +90,12 @@ class CoursesFacade:
             logger.exception("Error getting course %s for user %s", course_id, user_id)
             return {"error": "Failed to retrieve course", "success": False}
 
-    async def create_course(self, course_data: dict[str, Any], user_id: UUID) -> dict[str, Any]:
+    async def create_course(
+        self,
+        course_data: dict[str, Any],
+        user_id: UUID,
+        session: AsyncSession | None = None,
+    ) -> dict[str, Any]:
         """
         Create new course entry.
 
@@ -91,26 +103,15 @@ class CoursesFacade:
         """
         try:
             # Use the content service which handles tags, progress, and AI processing
-            course = await self._content_service.create_course(course_data, user_id)
+            created_course = await self._content_service.create_course(course_data, user_id, session=session)
 
-            # Build CourseResponse from the created course
-            # Parse setup_commands from JSON string
-            setup_commands = []
-            if course.setup_commands:
-                with contextlib.suppress(Exception):
-                    setup_commands = json.loads(course.setup_commands)
-
-            course_response = CourseResponse.model_construct(
-                id=course.id,
-                title=course.title,
-                description=course.description,
-                tags=course.tags or "[]",
-                setup_commands=setup_commands,
-                archived=course.archived,
-                modules=[],  # Empty modules for newly created course
-                created_at=course.created_at,
-                updated_at=course.updated_at,
-            )
+            if session is not None:
+                query_service = CourseQueryService(session)
+                course_response = await query_service.get_course(created_course.id, user_id)
+            else:
+                async with async_session_maker() as query_session:
+                    query_service = CourseQueryService(query_session)
+                    course_response = await query_service.get_course(created_course.id, user_id)
 
             return {"course": course_response, "success": True}
 
@@ -121,7 +122,13 @@ class CoursesFacade:
     # NOTE: Auto-tagging removed - now handled by CourseContentService via BaseContentService pipeline
     # Tagging happens automatically during course creation/updates, no manual intervention needed
 
-    async def generate_ai_course(self, topic: str, preferences: dict[str, Any], user_id: UUID) -> dict[str, Any]:
+    async def generate_ai_course(
+        self,
+        topic: str,
+        preferences: dict[str, Any],
+        user_id: UUID,
+        session: AsyncSession | None = None,
+    ) -> dict[str, Any]:
         """
         Generate AI-powered course from topic.
 
@@ -133,9 +140,17 @@ class CoursesFacade:
             data["prompt"] = topic  # Use prompt field for AI generation
 
             # Use the content service which handles tags, progress, and AI processing automatically
-            course = await self._content_service.create_course(data, user_id)
+            course = await self._content_service.create_course(data, user_id, session=session)
 
-            return {"course": course, "success": True}
+            if session is not None:
+                query_service = CourseQueryService(session)
+                course_response = await query_service.get_course(course.id, user_id)
+            else:
+                async with async_session_maker() as query_session:
+                    query_service = CourseQueryService(query_session)
+                    course_response = await query_service.get_course(course.id, user_id)
+
+            return {"course": course_response, "success": True}
 
         except Exception as e:
             logger.exception(f"Error generating AI course {topic} for user {user_id}: {e}")
@@ -173,26 +188,11 @@ class CoursesFacade:
         """
         try:
             # Update through content service which handles tags and reprocessing
-            course = await self._content_service.update_course(course_id, update_data, user_id)
+            updated_course = await self._content_service.update_course(course_id, update_data, user_id)
 
-            setup_commands: list[str] = []
-            if course.setup_commands:
-                try:
-                    setup_commands = json.loads(course.setup_commands)
-                except Exception:
-                    logger.warning("Failed to parse setup_commands for course %s", course_id)
-
-            course_response = CourseResponse.model_construct(
-                id=course.id,
-                title=course.title,
-                description=course.description,
-                tags=course.tags or "[]",
-                setup_commands=setup_commands,
-                archived=course.archived,
-                modules=[],
-                created_at=course.created_at,
-                updated_at=course.updated_at,
-            )
+            async with async_session_maker() as session:
+                query_service = CourseQueryService(session)
+                course_response = await query_service.get_course(updated_course.id, user_id)
 
             return {"course": course_response, "success": True}
 
@@ -227,30 +227,18 @@ class CoursesFacade:
         Optionally includes progress information.
         """
         try:
-            from src.courses.services.course_response_builder import CourseResponseBuilder
-            from src.database.session import async_session_maker
-
             async with async_session_maker() as session:
-                # Fetch courses for this user
-                from sqlalchemy import select
-
-                from src.courses.models import Course
-
-                result = await session.execute(
-                    select(Course).where(Course.user_id == user_id).order_by(Course.created_at.desc())
+                query_service = CourseQueryService(session)
+                # Simple: grab first 1000; real pagination handled at router when needed
+                course_responses, _total = await query_service.list_courses(
+                    page=1, per_page=1000, search=None, user_id=user_id
                 )
-                courses = list(result.scalars().all())
 
-                # Convert to response objects for consistent schema
-                course_responses = CourseResponseBuilder.build_course_list(courses)
-
-                # Convert to dict format and optionally add progress
                 course_dicts: list[dict[str, Any]] = []
                 for cr in course_responses:
                     cd = cr.model_dump()
                     if include_progress:
                         try:
-                            # Get actual progress data from progress service
                             progress = await self._progress_service.get_progress(cr.id, user_id)
                             cd["progress"] = progress
                         except Exception as e:
@@ -277,10 +265,6 @@ class CoursesFacade:
         ------
             ValueError: If course not found or user doesn't own it
         """
-        from sqlalchemy import select
-
-        from src.courses.models import Course
-
         # Get course with user validation
         query = select(Course).where(Course.id == course_id, Course.user_id == user_id)
         result = await db.execute(query)
@@ -289,6 +273,50 @@ class CoursesFacade:
         if not course:
             msg = f"Course {course_id} not found"
             raise ValueError(msg)
+
+        # Delete unified progress (user_progress) for this user+course (no FK cascade exists)
+        try:
+            from sqlalchemy import text  # local import to avoid broad module import churn
+
+            await db.execute(
+                text(
+                    "DELETE FROM user_progress "
+                    "WHERE user_id = :user_id AND content_id = :content_id AND content_type = 'course'"
+                ),
+                {"user_id": str(user_id), "content_id": str(course_id)},
+            )
+            logger.info("Deleted progress for course", extra={"user_id": str(user_id), "course_id": str(course_id)})
+        except Exception as e:
+            # Log but don't fail course deletion
+            logger.warning(
+                "Failed to delete progress for course",
+                extra={"user_id": str(user_id), "course_id": str(course_id), "error": str(e)},
+            )
+
+        # Delete tag associations for this user+course (no FK cascade exists)
+        try:
+            from sqlalchemy import and_, delete  # local import to mirror books cleanup pattern
+
+            from src.tagging.models import TagAssociation
+
+            await db.execute(
+                delete(TagAssociation).where(
+                    and_(
+                        TagAssociation.content_id == course.id,
+                        TagAssociation.content_type == "course",
+                        TagAssociation.user_id == user_id,
+                    )
+                )
+            )
+            logger.info(
+                "Deleted tag associations for course",
+                extra={"user_id": str(user_id), "course_id": str(course_id)},
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to delete tag associations for course",
+                extra={"user_id": str(user_id), "course_id": str(course_id), "error": str(e)},
+            )
 
         # Delete the course (cascade handles related records)
         await db.delete(course)
@@ -308,50 +336,31 @@ class CoursesFacade:
         logger.info(f"Deleted course {course_id}")
 
     async def get_course_lessons(self, course_id: UUID, user_id: UUID) -> dict[str, Any]:
-        """Get course lessons/outline if available."""
+        """Get course lessons grouped by modules."""
         try:
-            # Get database session
-            from src.database.session import async_session_maker
-
-            async with async_session_maker() as session:
-                # Fetch course to read lessons structure
-                from sqlalchemy import select
-
-                from src.courses.models import Course
-
-                result = await session.execute(select(Course).where(Course.id == course_id, Course.user_id == user_id))
-                course = result.scalar_one_or_none()
-                if not course:
+            try:
+                async with async_session_maker() as session:
+                    query_service = CourseQueryService(session)
+                    course_response = await query_service.get_course(course_id, user_id)
+            except HTTPException as exc:
+                if exc.status_code == 404:
                     logger.info(f"Course {course_id} not found for user {user_id}")
                     return {"error": f"Course {course_id} not found", "success": False}
+                raise
 
-                lessons: list[dict] = []
-                if getattr(course, "lessons_outline", None):
-                    try:
-                        outline = json.loads(course.lessons_outline)  # type: ignore[arg-type]
-                        if isinstance(outline, list):
-                            lessons = outline
-                    except (json.JSONDecodeError, TypeError):
-                        lessons = []
+            progress = await self._progress_service.get_progress(course_id, user_id)
+            completed_lessons = progress.get("completed_lessons", {}) if isinstance(progress, dict) else {}
 
-                # Add progress information for each lesson
-                if lessons:
-                    try:
-                        # Get progress data to check lesson completion
-                        progress = await self._progress_service.get_progress(course_id, user_id)
-                        completed_lessons = progress.get("completed_lessons", {})
+            lessons_payload: list[dict[str, Any]] = []
+            for module in course_response.modules:
+                for lesson in module.lessons:
+                    lesson_dict = lesson.model_dump()
+                    lesson_dict["moduleTitle"] = module.title
+                    lesson_dict["moduleId"] = str(module.id)
+                    lesson_dict["completed"] = completed_lessons.get(str(lesson.id), False)
+                    lessons_payload.append(lesson_dict)
 
-                        # Mark lessons as completed or not based on actual progress
-                        for lesson in lessons:
-                            lesson_id = lesson.get("id", "")
-                            lesson["completed"] = completed_lessons.get(str(lesson_id), False)
-                    except Exception as e:
-                        logger.warning(f"Failed to get lesson progress for course {course_id}: {e}")
-                        # Fallback: mark all as not completed
-                        for lesson in lessons:
-                            lesson["completed"] = False
-
-                return {"lessons": lessons or [], "success": True}
+            return {"lessons": lessons_payload, "success": True}
 
         except Exception:
             logger.exception("Error getting lessons for course %s", course_id)
