@@ -1,4 +1,4 @@
-import { useCurrentContext } from "@/hooks/useCurrentContext"
+import { useCurrentContext } from "@/features/assistant/hooks/useCurrentContext"
 
 export const useContextualChat = () => {
 	const currentContext = useCurrentContext()

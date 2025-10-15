@@ -1,5 +1,5 @@
 import CourseView from "@/features/course/CourseView"
-import { useCourseContext } from "@/hooks/useCourseContext"
+import { useCourseContext } from "@/features/course/hooks/useCourseContext"
 import { cn } from "@/lib/utils"
 import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
 import { useCourseNavigation } from "@/utils/navigationUtils"

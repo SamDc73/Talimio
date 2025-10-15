@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import { useContentList, useInvalidateContent } from "@/hooks/useContentQueries"
+import { useContentList, useInvalidateContent } from "./useContentQueries"
 
 /**
  * Content Data Hook (using React Query per state-management.md)

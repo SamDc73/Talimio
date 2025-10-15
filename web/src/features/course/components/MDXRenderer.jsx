@@ -1,7 +1,7 @@
 import { MDXProvider } from "@mdx-js/react"
 import React from "react"
 import { FillInTheBlank, FreeForm, MultipleChoice } from "@/components/quiz/index.js"
-import { useMDXCompile } from "@/hooks/useMDXCompile"
+import { useMDXCompile } from "@/features/course/hooks/useMDXCompile"
 import ExecutableCodeBlock from "./ExecutableCodeBlock.jsx"
 
 // Static component overrides - defined once outside component

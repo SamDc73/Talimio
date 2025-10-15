@@ -1,7 +1,7 @@
 import { ChevronRight, FileText } from "lucide-react"
 import { useEffect, useState } from "react"
+import { useBookChaptersApi } from "@/features/book-viewer/hooks/useBookChaptersApi"
 import { useBookProgress } from "@/features/book-viewer/hooks/useBookProgress"
-import { useBookChaptersApi } from "@/hooks/useApiHelpers"
 import logger from "@/lib/logger"
 import CompletionCheckbox from "./CompletionCheckbox"
 import ProgressCircle from "./ProgressCircle"

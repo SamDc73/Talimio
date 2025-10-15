@@ -7,8 +7,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/Popover"
 import { Separator } from "@/components/Separator"
 import TagChip from "@/features/home/components/TagChip"
 import TagEditModal from "@/features/home/components/TagEditModal"
+import { useArchiveContent, useDeleteContent } from "@/features/home/hooks/useContentQueries"
 import { VARIANTS } from "@/features/home/utils/contentConstants"
-import { useArchiveContent, useDeleteContent } from "@/hooks/useContentQueries"
 
 function formatDuration(seconds) {
 	if (!seconds) return "Unknown duration"

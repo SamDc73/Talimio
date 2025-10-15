@@ -1,6 +1,6 @@
 import { useLocation } from "react-router-dom"
 
-import useAppStore from "../stores/useAppStore"
+import useAppStore from "@/stores/useAppStore"
 
 /**
  * Hook to detect current page context for the learning assistant

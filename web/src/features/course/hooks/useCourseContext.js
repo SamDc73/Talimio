@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { useLocation } from "react-router-dom"
-import { useCourseData } from "@/features/course/hooks/useCourseData"
-import { useOutlineData } from "@/features/course/hooks/useOutlineData"
+import { useCourseData } from "./useCourseData"
+import { useOutlineData } from "./useOutlineData"
 
 /**
  * Hook to detect if we're in a course/lesson context and fetch necessary data.

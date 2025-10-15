@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ReactReader } from "react-reader"
-import { useBookActions, useBookReadingState, useBookZoomLevel } from "@/hooks/book-hooks"
+import { useBookActions, useBookReadingState, useBookZoomLevel } from "../../hooks/useBookState"
 
 function EPUBViewer({ url, bookId, onProgressUpdate }) {
 	const [location, setLocation] = useState(null)

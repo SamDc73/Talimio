@@ -7,6 +7,7 @@ import rehypeSlug from "rehype-slug"
 import remarkEmoji from "remark-emoji"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
+import logger from "@/lib/logger"
 import { mdxCache } from "@/lib/mdx-cache"
 
 // MDX compilation options
@@ -42,11 +43,11 @@ const runtimeGlobals = {
 	JSON,
 	Object,
 	Array,
-	// Restricted console for debugging
-	console: {
-		log: console.log,
-		warn: console.warn,
-		error: console.error,
+	// Restricted logger for MDX runtime debugging (integrates with app logging)
+	logger: {
+		log: (...args) => logger.info("MDX", { args }),
+		warn: (...args) => logger.info("MDX Warning", { args }),
+		error: (...args) => logger.error("MDX Error", new Error(args.join(" "))),
 	},
 }
 

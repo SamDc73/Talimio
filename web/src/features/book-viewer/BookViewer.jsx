@@ -11,7 +11,7 @@ import {
 	useBookZoomLevel,
 	useSidebarOpen,
 	useToggleSidebar,
-} from "@/hooks/book-hooks"
+} from "../hooks/useBookState"
 import { booksApi } from "./api/booksApi"
 import EpubViewer from "./components/EPUBViewer"
 import PdfViewer from "./components/PDFViewer"
