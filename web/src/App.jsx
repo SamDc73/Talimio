@@ -11,11 +11,10 @@ import { ThemeProvider } from "./contexts/ThemeContext"
 import { ChatSidebarProvider } from "./features/assistant/contexts/ChatSidebarContext"
 import AuthPage from "./features/auth/AuthPage"
 import { BookViewer } from "./features/book-viewer"
+import CoursePage from "./features/course/CoursePage"
 import CoursePreviewPage from "./features/course/CoursePreviewPage"
 import CourseView from "./features/course/CourseView"
 import HomePage from "./features/home"
-import RoadmapPage from "./features/roadmap"
-import RoadmapPreviewPage from "./features/roadmap/RoadmapPreviewPage"
 import { VideoViewer } from "./features/video-viewer"
 import { useAuth } from "./hooks/useAuth"
 import useAppStore from "./stores/useAppStore"
@@ -32,14 +31,14 @@ const queryClient = new QueryClient({
 	},
 })
 
-function RoadmapPageWrapper() {
+function _RoadmapPageWrapper() {
 	const { roadmapId } = useParams()
 
 	if (!roadmapId) {
 		return <Navigate to="/" replace />
 	}
 
-	return <RoadmapPage roadmapId={roadmapId} />
+	return <CoursePage roadmapId={roadmapId} />
 }
 
 // Course routes wrapper - only loads when actually needed
@@ -107,31 +106,13 @@ function AppContent() {
 					}
 				/>
 
-				{/* Roadmap routes */}
-				<Route
-					path="/roadmap/preview/:roadmapId"
-					element={
-						<ProtectedRoute>
-							<RoadmapPreviewPage />
-						</ProtectedRoute>
-					}
-				/>
+				{/* Legacy roadmap routes - redirect to course routes */}
+				<Route path="/roadmap/preview/:courseId" element={<Navigate to="/course/preview/$courseId" replace />} />
 				<Route
 					path="/roadmap/:roadmapId/lesson/:lessonId"
-					element={
-						<ProtectedRoute>
-							<RoadmapPageWrapper />
-						</ProtectedRoute>
-					}
+					element={<Navigate to="/course/$roadmapId/lesson/$lessonId" replace />}
 				/>
-				<Route
-					path="/roadmap/:roadmapId"
-					element={
-						<ProtectedRoute>
-							<RoadmapPageWrapper />
-						</ProtectedRoute>
-					}
-				/>
+				<Route path="/roadmap/:roadmapId" element={<Navigate to="/course/$roadmapId" replace />} />
 
 				{/* Other content routes */}
 				<Route

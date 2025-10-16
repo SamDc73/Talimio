@@ -92,40 +92,6 @@ export function useCourseApi(courseId = null) {
 }
 
 /**
- * Hook for node operations
- * @param {string} nodeId - The node ID
- */
-export function useNodeApi(nodeId = null) {
-	const getNode = useApi("/nodes/{nodeId}")
-	const updateNode = useApi("/nodes/{nodeId}", { method: "PATCH" })
-	const updateStatus = useApi("/nodes/{nodeId}/status", { method: "PUT" })
-
-	return {
-		// Get node data
-		async fetchNode() {
-			if (!nodeId) throw new Error("Node ID required")
-			return await getNode.execute(null, { pathParams: { nodeId } })
-		},
-
-		// Update node
-		async updateNode(data) {
-			if (!nodeId) throw new Error("Node ID required")
-			return await updateNode.execute(data, { pathParams: { nodeId } })
-		},
-
-		// Update node status
-		async updateStatus(status) {
-			if (!nodeId) throw new Error("Node ID required")
-			return await updateStatus.execute({ status }, { pathParams: { nodeId } })
-		},
-
-		// Loading states
-		isLoading: getNode.isLoading || updateNode.isLoading || updateStatus.isLoading,
-		error: getNode.error || updateNode.error || updateStatus.error,
-	}
-}
-
-/**
  * Hook for course modules operations
  * @param {string} courseId - The course ID
  */

@@ -1,6 +1,5 @@
 // Course feature exports
 
-export * from "./api/compatibilityApi"
 export * from "./api/courseApi"
 // Course API
 export { fetchLesson, fetchLessons, generateLesson } from "./api/lessonsApi"

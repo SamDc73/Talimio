@@ -196,13 +196,6 @@ function buildEndpoint(resourceType, resourceId, data) {
 			return `${baseUrl}/user/preferences`
 		}
 
-		case "roadmaps":
-			if (data.nodeStatus) {
-				return `${baseUrl}/roadmaps/${resourceId}/nodes/${data.nodeStatus.nodeId}/status`
-			}
-			// Ignore other roadmap sync attempts
-			return null
-
 		case "courses":
 			if (data.lessonStatus) {
 				// Lesson progress sync flows through the unified progress service; skip duplicate API sync

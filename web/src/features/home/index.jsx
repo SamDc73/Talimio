@@ -7,6 +7,7 @@ import ErrorBoundary from "@/components/ErrorBoundary"
 
 import ContentCard from "@/components/ContentCard"
 import { MainHeader } from "@/components/header/MainHeader"
+import CoursePromptModal from "@/features/course/CoursePromptModal"
 import CelebrationOverlay from "@/features/home/components/CelebrationOverlay"
 import ContentGrid from "@/features/home/components/ContentGrid"
 import { DialogsContainer } from "@/features/home/components/dialogs/DialogsContainer"
@@ -23,7 +24,6 @@ import { useContentHandlers } from "@/features/home/hooks/useContentHandlers"
 import { useContentProgressSync } from "@/features/home/hooks/useContentProgressSync"
 import { useDialogStates } from "@/features/home/hooks/useDialogStates"
 import { usePinning } from "@/features/home/hooks/usePinning"
-import RoadmapPromptModal from "@/features/roadmap/RoadmapPromptModal"
 import { useProgress } from "@/hooks/useProgress"
 
 export default function HomePage() {
@@ -276,10 +276,10 @@ export default function HomePage() {
 
 					<DialogsContainer dialogs={dialogs} onBookUploaded={handleBookUploaded} onVideoAdded={handleVideoAdded} />
 
-					<RoadmapPromptModal
-						open={dialogs.showRoadmapModal}
-						onOpenChange={dialogs.setShowRoadmapModal}
-						onRoadmapCreated={handleRoadmapCreated}
+					<CoursePromptModal
+						isOpen={dialogs.showRoadmapModal}
+						onClose={dialogs.setShowRoadmapModal}
+						onSuccess={handleRoadmapCreated}
 					/>
 				</div>
 			</ErrorBoundary>

@@ -10,7 +10,7 @@ import { useCourseService } from "../api/courseApi"
  */
 export function useRoadmapData(courseId) {
 	const [roadmap, setRoadmap] = useState(null)
-	const [nodes, setNodes] = useState([])
+	const [modules, setModules] = useState([])
 	const [isLoading, setIsLoading] = useState(false)
 	const [error, setError] = useState(null)
 
@@ -29,51 +29,51 @@ export function useRoadmapData(courseId) {
 	}, [courseId, courseService.fetchCourse]) // Only depend on courseId
 
 	// Fetch modules with progress
-	const fetchNodes = useCallback(async () => {
+	const fetchModules = useCallback(async () => {
 		if (!courseId) {
-			setNodes([])
+			setModules([])
 			return
 		}
 		// Use course API
 		const moduleData = await courseService.fetchModules()
-		setNodes(moduleData || [])
+		setModules(moduleData || [])
 	}, [courseId, courseService.fetchModules]) // Only depend on courseId
 
 	// Update module status optimistically
-	const updateNode = useCallback(
-		async (nodeId, status) => {
+	const updateModule = useCallback(
+		async (moduleId, status) => {
 			// Optimistic update
-			setNodes((prev) =>
-				prev.map((node) =>
-					node.id === nodeId
+			setModules((prev) =>
+				prev.map((module) =>
+					module.id === moduleId
 						? {
-								...node,
+								...module,
 								status,
 								completionPercentage: status === "completed" ? 100 : status === "in_progress" ? 50 : 0,
 							}
-						: node
+						: module
 				)
 			)
 
 			try {
 				// Use course API
-				await courseService.updateModule(nodeId, { status })
+				await courseService.updateModule(moduleId, { status })
 				// Refetch to ensure consistency
-				await fetchNodes()
+				await fetchModules()
 			} catch (err) {
 				// Revert optimistic update on failure
-				await fetchNodes()
+				await fetchModules()
 				throw err
 			}
 		},
-		[fetchNodes, courseService.updateModule] // Only depend on fetchNodes, not courseService
+		[fetchModules, courseService.updateModule] // Only depend on fetchModules, not courseService
 	)
 
 	// Main data fetching effect
 	useEffect(() => {
 		if (!courseId) {
 			setRoadmap(null)
-			setNodes([])
+			setModules([])
 			return
 		}
 
@@ -81,33 +81,33 @@ export function useRoadmapData(courseId) {
 			setIsLoading(true)
 			setError(null)
 			try {
-				await Promise.all([fetchRoadmap(), fetchNodes()])
+				await Promise.all([fetchRoadmap(), fetchModules()])
 			} catch (err) {
 				setError(err.message || "Failed to load course data")
 				setRoadmap(null)
-				setNodes([])
+				setModules([])
 			} finally {
 				setIsLoading(false)
 			}
 		}
 
 		fetchData()
-	}, [courseId, fetchRoadmap, fetchNodes])
+	}, [courseId, fetchRoadmap, fetchModules])
 
 	// Calculate overall progress
 	const overallProgress =
-		nodes.length > 0 ? Math.round((nodes.filter((n) => n.status === "completed").length / nodes.length) * 100) : 0
+		modules.length > 0 ? Math.round((modules.filter((m) => m.status === "completed").length / modules.length) * 100) : 0
 
 	return {
 		roadmap,
-		nodes,
+		modules,
 		isLoading,
 		error,
 		overallProgress,
-		updateNode,
+		updateModule,
 		refresh: () => {
 			fetchRoadmap()
-			fetchNodes()
+			fetchModules()
 		},
 	}
 }

@@ -4,6 +4,9 @@ import { useParams } from "react-router-dom"
 import ErrorBoundary from "@/components/ErrorBoundary"
 import { BookHeader } from "@/components/header/BookHeader"
 import BookSidebar from "@/components/sidebar/BookSidebar"
+import { booksApi } from "./api/booksApi"
+import EpubViewer from "./components/EPUBViewer"
+import PdfViewer from "./components/PDFViewer"
 import {
 	useBookActions,
 	useBookCurrentPage,
@@ -11,10 +14,7 @@ import {
 	useBookZoomLevel,
 	useSidebarOpen,
 	useToggleSidebar,
-} from "../hooks/useBookState"
-import { booksApi } from "./api/booksApi"
-import EpubViewer from "./components/EPUBViewer"
-import PdfViewer from "./components/PDFViewer"
+} from "./hooks/useBookState"
 
 function BookViewerStatus({ tone, title, description }) {
 	if (tone === "loading") {

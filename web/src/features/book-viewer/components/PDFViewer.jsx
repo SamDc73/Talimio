@@ -13,7 +13,7 @@ import { SelectionLayer, SelectionPluginPackage } from "@embedpdf/plugin-selecti
 import { Viewport, ViewportPluginPackage } from "@embedpdf/plugin-viewport/react"
 import { useZoom, ZoomMode, ZoomPluginPackage } from "@embedpdf/plugin-zoom/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useBookActions, useBookReadingState, useBookStoreHydrated } from "../../hooks/useBookState"
+import { useBookActions, useBookReadingState, useBookStoreHydrated } from "../hooks/useBookState"
 
 function ViewerRuntime({
 	bookId,

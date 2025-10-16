@@ -17,8 +17,8 @@ import DocumentList from "@/features/course/components/DocumentList"
 import { DocumentStatusSummary } from "@/features/course/components/DocumentStatusBadge"
 import DocumentUploadModal from "@/features/course/components/DocumentUploadModal"
 import logger from "@/lib/logger"
-import { usePolling } from "../hooks/usePolling"
 import { useDocumentsService } from "../api/documentsApi"
+import { usePolling } from "../hooks/usePolling"
 
 const POLLING_INTERVAL = 5000 // 5 seconds
 
