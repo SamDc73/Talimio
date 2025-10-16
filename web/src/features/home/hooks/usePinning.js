@@ -10,14 +10,6 @@ export const usePinning = () => {
 		}))
 	}
 
-	const initializePins = (contentItems) => {
-		const initialPins = {}
-		for (const item of contentItems) {
-			if (!initialPins[item.type]) initialPins[item.type] = []
-		}
-		setPins(initialPins)
-	}
-
 	const removePinById = (itemId) => {
 		setPins((prevPins) => {
 			const newPins = { ...prevPins }
@@ -28,20 +20,17 @@ export const usePinning = () => {
 		})
 	}
 
-	const getPinnedItems = (filteredAndSortedContent) => {
-		return Object.entries(pins).flatMap(([type, ids]) =>
-			filteredAndSortedContent.filter((x) => x.type === type && ids.includes(x.id))
-		)
+	const getPinnedItems = (content) => {
+		return content.filter((item) => pins[item.type]?.includes(item.id))
 	}
 
-	const getUnpinnedItems = (filteredAndSortedContent) => {
-		return filteredAndSortedContent.filter((i) => !pins[i.type]?.includes(i.id))
+	const getUnpinnedItems = (content) => {
+		return content.filter((item) => !pins[item.type]?.includes(item.id))
 	}
 
 	return {
 		pins,
 		togglePin,
-		initializePins,
 		removePinById,
 		getPinnedItems,
 		getUnpinnedItems,

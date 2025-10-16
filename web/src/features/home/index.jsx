@@ -8,7 +8,6 @@ import ErrorBoundary from "@/components/ErrorBoundary"
 import ContentCard from "@/components/ContentCard"
 import { MainHeader } from "@/components/header/MainHeader"
 import CoursePromptModal from "@/features/course/CoursePromptModal"
-import CelebrationOverlay from "@/features/home/components/CelebrationOverlay"
 import ContentGrid from "@/features/home/components/ContentGrid"
 import { DialogsContainer } from "@/features/home/components/dialogs/DialogsContainer"
 import FabMenu from "@/features/home/components/FABMenu"
@@ -17,7 +16,6 @@ import PinnedSection from "@/features/home/components/PinnedSection"
 import SearchBar from "@/features/home/components/SearchBar"
 import SkeletonGrid from "@/features/home/components/SkeletonGrid"
 import WelcomeHeader from "@/features/home/components/WelcomeHeader"
-import { useCelebration } from "@/features/home/hooks/useCelebration"
 import { useContentData } from "@/features/home/hooks/useContentData"
 import { useContentFilters } from "@/features/home/hooks/useContentFilters"
 import { useContentHandlers } from "@/features/home/hooks/useContentHandlers"
@@ -35,7 +33,6 @@ export default function HomePage() {
 	// Use extracted hooks
 	const dialogs = useDialogStates()
 	const pinning = usePinning()
-	const celebration = useCelebration()
 	const filters = useContentFilters()
 
 	// Use content data hook
@@ -137,7 +134,6 @@ export default function HomePage() {
 
 	return (
 		<ErrorBoundary>
-			<CelebrationOverlay active={celebration.shouldShowCelebration(unpinned)} />
 			<ErrorBoundary>
 				<div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
 					<MainHeader transparent />
