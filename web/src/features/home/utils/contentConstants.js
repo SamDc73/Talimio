@@ -25,12 +25,6 @@ export const VARIANTS = {
 		badge: "bg-video/10 text-video",
 		grad: "from-video to-video-accent",
 	},
-	roadmap: {
-		label: "Course",
-		icon: Sparkles,
-		badge: "bg-course/10 text-course",
-		grad: "from-course to-course-accent",
-	},
 }
 
 export const STATES = [

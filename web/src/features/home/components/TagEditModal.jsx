@@ -1,5 +1,5 @@
 import { Loader2, Tag as TagIcon } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
@@ -18,7 +18,7 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 
 	const { fetchContentTags, updateContentTags, fetchUserTags, getContentTagObjects } = useTagStore()
 
-	const loadContentTags = async () => {
+	const loadContentTags = useCallback(async () => {
 		setIsLoading(true)
 		try {
 			const tags = await fetchContentTags(contentType, contentId)
@@ -27,7 +27,7 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 		} finally {
 			setIsLoading(false)
 		}
-	}
+	}, [contentType, contentId, fetchContentTags])
 
 	// Load content tags when modal opens
 	useEffect(() => {

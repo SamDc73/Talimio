@@ -11,7 +11,6 @@ const mapContentType = (type) => {
 		youtube: "youtube",
 		book: "book",
 		course: "course",
-		roadmap: "course",
 	}
 	return map[type] || type
 }

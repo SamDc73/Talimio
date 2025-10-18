@@ -27,7 +27,7 @@ export const useContentFilters = () => {
 			.filter((item) => {
 				// Apply content type filter
 				if (activeFilter === "all") return true
-				if (activeFilter === "course") return item.type === "course" || item.type === "roadmap"
+				if (activeFilter === "course") return item.type === "course"
 				return item.type === activeFilter
 			})
 			.filter((item) => {

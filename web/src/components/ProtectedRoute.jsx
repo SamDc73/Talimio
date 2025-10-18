@@ -3,8 +3,8 @@ import { Navigate } from "react-router-dom"
 
 import { useAuth } from "@/hooks/useAuth"
 
-function ProtectedRoute({ children, strict = false }) {
-	const { isAuthenticated, loading, authMode } = useAuth()
+function ProtectedRoute({ children }) {
+	const { isAuthenticated, loading } = useAuth()
 
 	// Show loading spinner while checking auth
 	if (loading) {
@@ -19,23 +19,12 @@ function ProtectedRoute({ children, strict = false }) {
 		)
 	}
 
-	// In strict mode or when auth is enabled, require authentication
-	const requiresAuth = strict || authMode === "supabase"
-
-	if (requiresAuth && !isAuthenticated) {
+	// Require authentication for protected routes (component usage implies protection)
+	if (!isAuthenticated) {
 		return <Navigate to="/auth" replace />
 	}
 
-	// In single-user mode (authMode === "none"), allow access even if isAuthenticated is false
-	// This handles the case where auth is disabled but we still want protection
-	if (authMode === "none") {
-		return children
-	}
-
-	if (isAuthenticated) {
-		return children
-	}
-	return <Navigate to="/auth" replace />
+	return children
 }
 
 export default ProtectedRoute

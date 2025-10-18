@@ -1,20 +1,14 @@
-import { createContext, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { api } from "@/lib/apiClient"
-import useAppStore from "@/stores/useAppStore"
 import { securityMonitor } from "@/utils/securityConfig"
-
-export const AuthContext = createContext({})
+import { AuthContext } from "./AuthContext.js"
 
 export function AuthProvider({ children }) {
 	const [user, setUser] = useState(null)
 	const [loading, setLoading] = useState(true)
 	const [isAuthenticated, setIsAuthenticated] = useState(false)
 	const [authMode, setAuthMode] = useState("none") // Default to single-user mode
-
-	// Get app store actions
-	const setAppUser = useAppStore((state) => state.setUser)
-	const clearAppUser = useAppStore((state) => state.clearUser)
 
 	// Inline auth check to avoid unstable function dependencies that cause infinite loops
 	// This pattern prevents React's strict dependency checking from triggering re-renders
@@ -40,7 +34,6 @@ export function AuthProvider({ children }) {
 				try {
 					const response = await api.get("/auth/me")
 					setUser(response)
-					setAppUser(response)
 					setIsAuthenticated(true)
 					setAuthMode("supabase")
 				} catch (authError) {
@@ -50,20 +43,17 @@ export function AuthProvider({ children }) {
 							const refreshResponse = await api.post("/auth/refresh")
 							if (refreshResponse?.user) {
 								setUser(refreshResponse.user)
-								setAppUser(refreshResponse.user)
 								setIsAuthenticated(true)
 								setAuthMode("supabase")
 								return
 							}
 						} catch (_refreshError) {}
 					}
-					clearAppUser()
 					setUser(null)
 					setIsAuthenticated(false)
 					setAuthMode("supabase")
 				}
 			} catch (_error) {
-				clearAppUser()
 				setUser(null)
 				setIsAuthenticated(false)
 				setAuthMode("supabase")
@@ -73,7 +63,7 @@ export function AuthProvider({ children }) {
 		}
 
 		performAuthCheck()
-	}, [clearAppUser, setAppUser])
+	}, [])
 
 	// User state updated - future real-time sync can be added here
 	useEffect(() => {
@@ -88,7 +78,6 @@ export function AuthProvider({ children }) {
 
 	useEffect(() => {
 		handleTokenExpirationRef.current = () => {
-			clearAppUser()
 			setUser(null)
 			setIsAuthenticated(false)
 
@@ -102,7 +91,7 @@ export function AuthProvider({ children }) {
 				}, 100)
 			}
 		}
-	}, [authMode, clearAppUser])
+	}, [authMode])
 
 	// Listen for token expiration events from API client
 	useEffect(() => {
@@ -132,13 +121,11 @@ export function AuthProvider({ children }) {
 					// Update user data if it changed
 					if (response.user) {
 						setUser(response.user)
-						setAppUser(response.user)
 					}
 				}
 			} catch (error) {
 				// If refresh fails, check auth again
 				if (error.status === 401) {
-					clearAppUser()
 					setUser(null)
 					setIsAuthenticated(false)
 				}
@@ -146,7 +133,7 @@ export function AuthProvider({ children }) {
 		}, refreshInterval)
 
 		return () => clearInterval(intervalId)
-	}, [isAuthenticated, authMode, setAppUser, clearAppUser])
+	}, [isAuthenticated, authMode])
 
 	const login = async (email, password) => {
 		// Check if auth is enabled
@@ -181,7 +168,6 @@ export function AuthProvider({ children }) {
 
 			// Update state (no token handling needed)
 			setUser(user)
-			setAppUser(user)
 			setIsAuthenticated(true)
 			setAuthMode("supabase")
 
@@ -231,7 +217,6 @@ export function AuthProvider({ children }) {
 			// No token handling needed - cookies are set by backend
 			// Update state
 			setUser(user)
-			setAppUser(user)
 			setIsAuthenticated(true)
 			setAuthMode("supabase")
 
@@ -251,7 +236,6 @@ export function AuthProvider({ children }) {
 		} catch (_error) {
 		} finally {
 			// Clear local state (cookies are cleared by server)
-			clearAppUser()
 			setUser(null)
 			setIsAuthenticated(false)
 		}
@@ -293,8 +277,5 @@ export function AuthProvider({ children }) {
 		// Removed checkAuth and handleTokenExpiration to prevent misuse
 	}
 
-	// Debug logging
-	useEffect(() => {}, [])
-
-	return <AuthContext value={value}>{children}</AuthContext>
+	return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

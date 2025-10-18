@@ -3,8 +3,6 @@
  */
 import { api } from "@/lib/apiClient"
 
-const _API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1"
-
 /**
  * Get a video by ID (with authentication)
  * @param {string} videoId - The ID of the video

@@ -1,27 +1,24 @@
-import { useRef } from "react"
-
 import { useProgress, useUpdateProgress } from "@/hooks/useProgress"
 
 /**
- * Adapter hook for backward compatibility with course progress
- * Maps the new unified progress API to the old course-specific interface
+ * Course progress hook backed by the unified progress API
  */
+
 export function useCourseProgress(courseId) {
 	const contentIds = courseId ? [courseId] : []
 
 	const progressQuery = useProgress(contentIds)
 	const updateProgress = useUpdateProgress()
 
-	// Use refs to store functions that don't need to trigger re-renders
-	const refetchRef = useRef(progressQuery.refetch)
-	refetchRef.current = progressQuery.refetch
-
-	// Get the current progress data from the map
+	// Current progress and normalized metadata
 	const currentProgress = progressQuery.data?.[courseId] || 0
 	const rawMetadata = progressQuery.metadata?.[courseId] || {}
 
 	// Extract values with defaults
-	const completedLessonsArray = rawMetadata.completed_lessons || []
+	let completedLessonsArray = rawMetadata.completed_lessons
+	if (!Array.isArray(completedLessonsArray)) {
+		completedLessonsArray = []
+	}
 	const currentLessonId = rawMetadata.current_lesson_id
 	const totalLessons = rawMetadata.total_lessons || 0
 
@@ -37,7 +34,7 @@ export function useCourseProgress(courseId) {
 	}
 
 	// Toggle lesson completion
-	const toggleCompletion = async (lessonId) => {
+	const toggleCompletion = async (lessonId, totalLessonsOverride) => {
 		const lessonIdStr = String(lessonId)
 		let newCompletedLessons
 
@@ -49,8 +46,13 @@ export function useCourseProgress(courseId) {
 			newCompletedLessons = [...completedLessonsArray, lessonIdStr]
 		}
 
+		// Determine total lessons with override fallback (match videos/books pattern)
+		const actualTotalLessons =
+			totalLessonsOverride ??
+			(typeof totalLessons === "number" && totalLessons > 0 ? totalLessons : newCompletedLessons.length)
+
 		// Calculate new progress based on completed lessons
-		const newProgress = calculateProgressFromLessons(newCompletedLessons, totalLessons)
+		const newProgress = calculateProgressFromLessons(newCompletedLessons, actualTotalLessons)
 
 		await updateProgress.mutateAsync({
 			contentId: courseId,
@@ -59,7 +61,7 @@ export function useCourseProgress(courseId) {
 				content_type: "course",
 				completed_lessons: newCompletedLessons,
 				current_lesson_id: lessonIdStr,
-				total_lessons: totalLessons,
+				total_lessons: actualTotalLessons,
 			},
 		})
 	}
@@ -67,7 +69,6 @@ export function useCourseProgress(courseId) {
 	return {
 		progress: {
 			percentage: currentProgress,
-			value: currentProgress, // Alias for compatibility
 		},
 		metadata: {
 			completedLessons: completedLessonsArray,
@@ -75,9 +76,8 @@ export function useCourseProgress(courseId) {
 			totalLessons,
 		},
 		isLoading: progressQuery.isLoading,
-		loading: progressQuery.isLoading, // Legacy alias
 		error: progressQuery.error,
-		refetch: () => refetchRef.current(),
+		refetch: progressQuery.refetch,
 		isCompleted,
 		toggleCompletion,
 		updateProgress: (progress, metadata = {}) =>
@@ -92,51 +92,5 @@ export function useCourseProgress(courseId) {
 					...metadata,
 				},
 			}),
-		// Legacy method names for compatibility
-		setProgress: (progress, metadata = {}) =>
-			updateProgress.mutate({
-				contentId: courseId,
-				progress,
-				metadata: {
-					content_type: "course",
-					completed_lessons: completedLessonsArray,
-					current_lesson_id: currentLessonId,
-					total_lessons: totalLessons,
-					...metadata,
-				},
-			}),
-	}
-}
-
-/**
- * Hook for updating course-specific metadata along with progress
- */
-export function useCourseProgressWithLessons(courseId) {
-	const updateProgress = useUpdateProgress()
-	const { progress, isLoading, error } = useCourseProgress(courseId)
-
-	const updateCourseProgress = (completedLessons, totalLessons) => {
-		const progressPercentage = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0
-
-		updateProgress.mutate({
-			contentId: courseId,
-			progress: progressPercentage,
-			metadata: {
-				content_type: "course",
-				completed_lessons: completedLessons,
-				total_lessons: totalLessons,
-			},
-		})
-	}
-
-	return {
-		progress: {
-			percentage: progress.percentage,
-			value: progress.percentage,
-		},
-		isLoading,
-		error,
-		updateCourseProgress,
-		updateLessons: (completed, total) => updateCourseProgress(completed, total),
 	}
 }

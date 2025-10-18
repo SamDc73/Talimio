@@ -1,5 +1,5 @@
 import { ChevronRight, FileText } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useBookChaptersApi } from "@/features/book-viewer/hooks/useBookChaptersApi"
 import { useBookProgress } from "@/features/book-viewer/hooks/useBookProgress"
 import logger from "@/lib/logger"
@@ -38,6 +38,12 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 
 	// Hook-based API for book chapters (use stable callbacks)
 	const { fetchChapters, extractChapters } = useBookChaptersApi(bookId)
+
+	// Keep a stable reference to fetchChapters to avoid effect dependency thrash
+	const fetchChaptersRef = useRef(fetchChapters)
+	useEffect(() => {
+		fetchChaptersRef.current = fetchChapters
+	}, [fetchChapters])
 
 	// Use the standardized hook with bookId prop
 	const { progress, toggleCompletion, isCompleted, batchUpdate, refetch } = useBookProgress(bookId)
@@ -198,7 +204,7 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 		async function loadChapters() {
 			SetIsLoadingChapters(true)
 			try {
-				const chapters = await fetchChapters()
+				const chapters = await fetchChaptersRef.current()
 				SetApiChapters(chapters || [])
 			} catch (error) {
 				// Don't log error if it's expected (404 when no chapters exist)
@@ -211,7 +217,7 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 		}
 
 		loadChapters()
-	}, [bookId, book?.tableOfContents?.length, fetchChapters])
+	}, [bookId, book?.tableOfContents?.length])
 
 	/**
 	 * Extract chapters using AI

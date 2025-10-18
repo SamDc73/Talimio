@@ -1,4 +1,4 @@
-import { SlidersHorizontal } from "lucide-react"
+import { ArrowUpDown, BookOpen, CalendarDays, Clock, FileText, Search, SlidersHorizontal, Youtube } from "lucide-react"
 
 import { Button } from "@/components/Button"
 import { Input } from "@/components/Input"
@@ -6,7 +6,6 @@ import { Label } from "@/components/Label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/Popover"
 import { RadioGroup, RadioGroupItem } from "@/components/RadioGroup"
 import { Separator } from "@/components/Separator"
-import { renderIcon } from "@/features/home/utils/iconMapping"
 
 function FilterPopover({
 	filterOptions,
@@ -22,6 +21,26 @@ function FilterPopover({
 	sortDirection,
 	toggleSortDirection,
 }) {
+	const getIcon = (iconName) => {
+		switch (iconName) {
+			case "Search":
+				return Search
+			case "BookOpen":
+				return BookOpen
+			case "Youtube":
+				return Youtube
+			case "FileText":
+				return FileText
+			case "Clock":
+				return Clock
+			case "CalendarDays":
+				return CalendarDays
+			case "ArrowUpDown":
+				return ArrowUpDown
+			default:
+				return Search
+		}
+	}
 	return (
 		<Popover>
 			<PopoverTrigger asChild>
@@ -39,7 +58,10 @@ function FilterPopover({
 								<div key={option.id} className="flex items-center space-x-2">
 									<RadioGroupItem value={option.id} id={`filter-${option.id}`} />
 									<Label htmlFor={`filter-${option.id}`} className="flex items-center cursor-pointer">
-										{renderIcon(option.icon)}
+										{(() => {
+											const Icon = getIcon(option.icon)
+											return <Icon className="h-4 w-4 mr-2" />
+										})()}
 										{option.label}
 									</Label>
 								</div>
@@ -99,7 +121,10 @@ function FilterPopover({
 								<div key={option.id} className="flex items-center space-x-2">
 									<RadioGroupItem value={option.id} id={`sort-${option.id}`} />
 									<Label htmlFor={`sort-${option.id}`} className="flex items-center cursor-pointer">
-										{renderIcon(option.icon)}
+										{(() => {
+											const Icon = getIcon(option.icon)
+											return <Icon className="h-4 w-4 mr-2" />
+										})()}
 										{option.label}
 									</Label>
 								</div>

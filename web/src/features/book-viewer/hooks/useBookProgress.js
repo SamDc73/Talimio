@@ -1,32 +1,25 @@
-import { useRef } from "react"
-
 import { useProgress, useUpdateProgress } from "@/hooks/useProgress"
 
 /**
- * Adapter hook for backward compatibility with book progress
- * Maps the new unified progress API to the old book-specific interface
+ * Book progress hook backed by the unified progress API
  */
+
 export function useBookProgress(bookId) {
 	const contentIds = bookId ? [bookId] : []
 
 	const progressQuery = useProgress(contentIds)
 	const updateProgress = useUpdateProgress()
 
-	// Use refs to store functions that don't need to trigger re-renders
-	const refetchRef = useRef(progressQuery.refetch)
-	refetchRef.current = progressQuery.refetch
-
-	// Get the current progress data from the map
+	// Current progress and normalized metadata
 	const currentProgress = progressQuery.data?.[bookId] || 0
 	const rawMetadata = progressQuery.metadata?.[bookId] || {}
 
-	// Extract values with defaults
-	const tocProgress = rawMetadata.toc_progress || rawMetadata.completedChapters || {}
+	// Extract values with defaults (snake_case only)
+	const tocProgress = rawMetadata.toc_progress || {}
 	const currentPage = rawMetadata.current_page || 0
 	const totalPages = rawMetadata.total_pages || 0
-	const totalChaptersFromMetadata =
-		rawMetadata.total_chapters || rawMetadata.totalChapters || Object.keys(tocProgress).length
-	const zoomLevel = rawMetadata.zoom_level || 100
+	const totalChaptersFromMetadata = rawMetadata.total_chapters || Object.keys(tocProgress).length
+	const zoomLevel = rawMetadata.zoom_level ?? 100
 
 	// Helper to calculate progress from TOC (only counts leaf chapters)
 	const calculateProgressFromToc = (tocProgress, totalChapters) => {
@@ -41,7 +34,6 @@ export function useBookProgress(bookId) {
 	return {
 		progress: {
 			percentage: currentProgress,
-			value: currentProgress, // Alias for compatibility
 		},
 		metadata: {
 			currentPage,
@@ -50,17 +42,12 @@ export function useBookProgress(bookId) {
 			tocProgress,
 		},
 		isLoading: progressQuery.isLoading,
-		loading: progressQuery.isLoading, // Legacy alias
 		error: progressQuery.error,
-		refetch: () => refetchRef.current(),
-		isCompleted: (chapterId) => {
-			const status = tocProgress[chapterId]
-			return status === true || status === "completed"
-		},
+		refetch: progressQuery.refetch,
+		isCompleted: (chapterId) => tocProgress[chapterId] === true,
 		toggleCompletion: async (chapterId, totalChaptersOverride) => {
-			const currentStatus = tocProgress[chapterId]
-			// Backend expects boolean values
-			const newStatus = !(currentStatus === true || currentStatus === "completed")
+			const currentStatus = tocProgress[chapterId] === true
+			const newStatus = !currentStatus
 
 			const newTocProgress = {
 				...tocProgress,
@@ -131,57 +118,5 @@ export function useBookProgress(bookId) {
 					...metadata,
 				},
 			}),
-		// Legacy method names for compatibility
-		setProgress: (progress, metadata = {}) =>
-			updateProgress.mutate({
-				contentId: bookId,
-				progress,
-				metadata: {
-					content_type: "book",
-					toc_progress: tocProgress,
-					current_page: currentPage,
-					total_pages: totalPages,
-					zoom_level: zoomLevel,
-					total_chapters: totalChaptersFromMetadata,
-					...metadata,
-				},
-			}),
-	}
-}
-
-/**
- * Hook for updating book-specific metadata along with progress
- */
-export function useBookProgressWithMetadata(bookId) {
-	const updateProgress = useUpdateProgress()
-	const { progress, isLoading, error } = useBookProgress(bookId)
-
-	const updateBookProgress = (currentPage, totalPages) => {
-		const progressPercentage = totalPages > 0 ? (currentPage / totalPages) * 100 : 0
-
-		updateProgress.mutate({
-			contentId: bookId,
-			progress: progressPercentage,
-			metadata: {
-				content_type: "book",
-				current_page: currentPage,
-				total_pages: totalPages,
-			},
-		})
-	}
-
-	const updatePage = (page, totalPages) => updateBookProgress(page, totalPages)
-
-	const progressObject = {
-		percentage: progress.percentage,
-		value: progress.percentage,
-	}
-
-	return {
-		progress: progressObject,
-		isLoading,
-		error,
-		updateBookProgress,
-		updatePage,
 	}
 }

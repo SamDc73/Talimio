@@ -1,11 +1,11 @@
 import { useState } from "react"
 import { useParams } from "react-router-dom"
 
-import RoadmapHeader from "@/components/header/RoadmapHeader"
+import { CourseHeader } from "@/components/header/CourseHeader"
 import { CourseSidebar } from "@/components/sidebar"
 import { cn } from "@/lib/utils"
-import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
-import { useCourseNavigation } from "../../utils/navigationUtils"
+import useAppStore, { selectSidebarOpen, selectToggleSidebar } from "@/stores/useAppStore"
+import { useCourseNavigation } from "@/utils/navigationUtils"
 import { useCourseData } from "./hooks/useCourseData"
 import { useOutlineData } from "./hooks/useOutlineData"
 import DocumentsView from "./views/DocumentsView"
@@ -17,24 +17,25 @@ import TrackView from "./views/track"
  * Main container component for the Course feature
  * Handles switching between different views and lesson display
  */
-function CoursePage({ roadmapId: propRoadmapId, ref: _ref }) {
-	const { courseId, lessonId } = useParams()
-	const roadmapId = propRoadmapId || courseId // Support both props and URL params
+function CoursePage({ courseId: propCourseId, ref: _ref }) {
+	const { courseId: routeCourseId, lessonId } = useParams()
+	const courseId = propCourseId ?? routeCourseId // Support both props and URL params
 
-	const { isLoading: roadmapLoading, roadmap } = useCourseData(roadmapId)
-	const { modules, isLoading: modulesLoading } = useOutlineData(roadmapId)
+	const { isLoading: courseLoading, course } = useCourseData(courseId)
+	const { modules, isLoading: modulesLoading } = useOutlineData(courseId)
 	const isOpen = useAppStore(selectSidebarOpen)
+	const toggleSidebar = useAppStore(selectToggleSidebar)
 	const [mode, setMode] = useState("outline") // Default to outline view
 	const { goToLesson } = useCourseNavigation()
 
 	const contentClasses = cn("flex flex-1 pt-16 pb-8 transition-all duration-300 ease-in-out", isOpen ? "ml-80" : "ml-0")
 
-	const isLoading = roadmapLoading || modulesLoading
-	const courseName = roadmap?.title || "Course"
+	const isLoading = courseLoading || modulesLoading
+	const courseName = course?.title || "Course"
 
 	// Handle lesson click navigation
-	const handleLessonClick = (clickedLessonId) => {
-		goToLesson(roadmapId, clickedLessonId)
+	const handleLessonClick = (_moduleId, clickedLessonId) => {
+		goToLesson(courseId, clickedLessonId)
 	}
 
 	if (isLoading) {
@@ -45,7 +46,7 @@ function CoursePage({ roadmapId: propRoadmapId, ref: _ref }) {
 		)
 	}
 
-	if (!roadmapId) {
+	if (!courseId) {
 		return (
 			<div className="flex items-center justify-center h-screen">
 				<div className="text-center">
@@ -58,28 +59,34 @@ function CoursePage({ roadmapId: propRoadmapId, ref: _ref }) {
 
 	return (
 		<div className="flex min-h-screen flex-col bg-background">
-			<RoadmapHeader mode={mode} onModeChange={setMode} courseId={roadmapId} courseName={courseName} />
+			<CourseHeader
+				mode={mode}
+				onModeChange={setMode}
+				courseId={courseId}
+				courseName={courseName}
+				isOpen={isOpen}
+				toggleSidebar={toggleSidebar}
+			/>
 
 			<div className="flex h-screen">
-				<CourseSidebar modules={modules || []} onLessonClick={handleLessonClick} courseId={roadmapId} />
+				<CourseSidebar modules={modules || []} onLessonClick={handleLessonClick} courseId={courseId} />
 
 				{/* If viewing a lesson, show lesson view with same layout */}
 				{lessonId ? (
 					<div className={contentClasses}>
-						<LessonView courseId={roadmapId} lessonId={lessonId} />
+						<LessonView courseId={courseId} lessonId={lessonId} />
 					</div>
-				) : /* Course overview views */
-				mode === "outline" ? (
+				) : mode === "outline" ? (
 					<div className={contentClasses}>
-						<OutlineView roadmapId={roadmapId} modules={modules} />
+						<OutlineView courseId={courseId} modules={modules} />
 					</div>
 				) : mode === "track" ? (
 					<div className={contentClasses}>
-						<TrackView roadmapId={roadmapId} modules={modules} />
+						<TrackView courseId={courseId} modules={modules} />
 					</div>
 				) : mode === "documents" ? (
 					<div className={contentClasses}>
-						<DocumentsView courseId={roadmapId} />
+						<DocumentsView courseId={courseId} />
 					</div>
 				) : null}
 			</div>

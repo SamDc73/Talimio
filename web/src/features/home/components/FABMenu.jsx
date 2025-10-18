@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { BookOpen, Plus, Sparkles, Youtube } from "lucide-react"
 import { TooltipButton } from "@/components/TooltipButton"
 
-export default function FABMenu({ isFabExpanded, onToggleExpanded, onGenerateRoadmap, onUploadBook, onAddYoutube }) {
+export default function FABMenu({ isFabExpanded, onToggleExpanded, onGenerateCourse, onUploadBook, onAddYoutube }) {
 	return (
 		<div className="fixed bottom-8 right-8 z-50">
 			<AnimatePresence>
@@ -18,7 +18,7 @@ export default function FABMenu({ isFabExpanded, onToggleExpanded, onGenerateRoa
 							variant="secondary"
 							className="rounded-full h-14 w-14 shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5 bg-course/10 hover:bg-course/20 border-course/20"
 							onClick={() => {
-								onGenerateRoadmap()
+								onGenerateCourse()
 								onToggleExpanded()
 							}}
 							tooltipContent="Generate Course"

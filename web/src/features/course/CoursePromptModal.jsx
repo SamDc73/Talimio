@@ -5,9 +5,13 @@
  * through the new unified course API structure.
  */
 
-import { X } from "lucide-react"
+import { motion } from "framer-motion"
+import { Sparkles } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/Button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
+import { Label } from "@/components/Label"
+import { cn } from "@/lib/utils"
 import { useCourseNavigation } from "../../utils/navigationUtils"
 import { useCourseService } from "./api/courseApi"
 
@@ -19,11 +23,21 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "" }) {
 	const courseService = useCourseService()
 	const { goToCoursePreview } = useCourseNavigation()
 
+	const resetForm = () => {
+		setPrompt("")
+		setError("")
+	}
+
+	const closeModal = () => {
+		resetForm()
+		onClose()
+	}
+
 	const handleSubmit = async (e) => {
 		e.preventDefault()
 
 		if (!prompt.trim()) {
-			setError("Please enter a description of what you want to learn")
+			setError("Please describe what you'd like to learn")
 			return
 		}
 
@@ -31,20 +45,16 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "" }) {
 		setError("")
 
 		try {
-			// Use the new unified course API
 			const response = await courseService.createCourse({
 				prompt: prompt.trim(),
 			})
 
 			if (response?.id) {
-				// Course created successfully
 				if (onSuccess) {
 					onSuccess(response)
 				}
-
-				// Navigate to course preview for customization
 				goToCoursePreview(response.id)
-				onClose()
+				closeModal()
 			} else {
 				throw new Error("Failed to create course - no response data")
 			}
@@ -55,85 +65,125 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "" }) {
 		}
 	}
 
-	const handleClose = () => {
-		if (!isGenerating) {
-			setPrompt("")
-			setError("")
-			onClose()
+	const handleOpenChange = (open) => {
+		if (!open && !isGenerating) {
+			closeModal()
 		}
 	}
 
-	if (!isOpen) return null
+	const examplePrompts = [
+		"Learn React and build modern web apps",
+		"Master Python for data science",
+		"Get started with machine learning",
+		"Learn JavaScript fundamentals",
+	]
 
 	return (
-		<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-			<div className="bg-card rounded-lg max-w-lg w-full mx-4 shadow-xl">
-				{/* Header */}
-				<div className="flex items-center justify-between p-6 border-b border-border">
-					<h2 className="text-xl font-semibold text-foreground">Create New Course</h2>
-					<button
-						type="button"
-						onClick={handleClose}
-						disabled={isGenerating}
-						className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-					>
-						<X className="h-6 w-6" />
-					</button>
-				</div>
+		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
+			<DialogContent className="sm:max-w-[540px] gap-6">
+				<DialogHeader className="space-y-3">
+					<div className="flex items-center gap-3">
+						<div className="p-2.5 bg-gradient-to-br from-[var(--color-course)]/90 to-[var(--color-course)] rounded-lg">
+							<Sparkles className="h-5 w-5 text-white" />
+						</div>
+						<DialogTitle className="text-2xl">Create Course</DialogTitle>
+					</div>
+				</DialogHeader>
 
-				{/* Content */}
-				<form onSubmit={handleSubmit} className="p-6">
-					<div className="mb-4">
-						<label htmlFor="course-prompt" className="block text-sm font-medium text-muted-foreground mb-2">
+				<form onSubmit={handleSubmit} className="space-y-6">
+					{/* Textarea Input */}
+					<div className="space-y-3">
+						<Label htmlFor="course-prompt" className="text-base">
 							What would you like to learn?
-						</label>
+						</Label>
 						<textarea
 							id="course-prompt"
 							value={prompt}
 							onChange={(e) => setPrompt(e.target.value)}
-							placeholder="Describe what you want to learn... (e.g., 'Learn React and build modern web applications')"
+							placeholder="Describe what you want to learn..."
 							disabled={isGenerating}
-							className="w-full px-3 py-2 border border-input bg-card text-foreground rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring resize-none disabled:opacity-50"
+							className={cn(
+								"w-full px-4 py-3 rounded-lg border border-border bg-background",
+								"text-sm leading-relaxed resize-none",
+								"focus:outline-none focus:ring-2 focus:ring-[var(--color-course)]/20 focus:border-[var(--color-course)]",
+								"placeholder:text-muted-foreground/60",
+								"transition-all duration-200",
+								"disabled:opacity-50 disabled:cursor-not-allowed"
+							)}
 							rows={4}
 							maxLength={500}
+							autoFocus
 						/>
-						<div className="text-right text-xs text-muted-foreground mt-1">{prompt.length}/500 characters</div>
+						<div className="flex items-center justify-between text-xs">
+							<span className="text-muted-foreground">Try one of the examples below</span>
+							<span className="text-muted-foreground/70">{prompt.length}/500</span>
+						</div>
+					</div>
+
+					{/* Example Prompts */}
+					<div className="space-y-2.5">
+						<div className="flex flex-wrap gap-2">
+							{examplePrompts.map((example) => (
+								<button
+									key={example}
+									type="button"
+									onClick={() => setPrompt(example)}
+									disabled={isGenerating}
+									className={cn(
+										"text-xs px-3.5 py-2 rounded-full",
+										"bg-secondary/60 hover:bg-secondary text-secondary-foreground",
+										"border border-border/40 hover:border-border",
+										"transition-all duration-200",
+										"disabled:opacity-50 disabled:cursor-not-allowed"
+									)}
+								>
+									{example}
+								</button>
+							))}
+						</div>
 					</div>
 
 					{/* Error Message */}
 					{error && (
-						<div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-							<p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-						</div>
+						<motion.div
+							initial={{ opacity: 0, y: -10 }}
+							animate={{ opacity: 1, y: 0 }}
+							className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg"
+						>
+							<p className="text-sm text-destructive">{error}</p>
+						</motion.div>
 					)}
 
-					{/* Info */}
-					<div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
-						<p className="text-sm text-blue-700 dark:text-blue-300">
-							<strong>AI will create:</strong> A structured course with modules and lessons tailored to your learning
-							goals. You'll be able to customize it before starting.
-						</p>
-					</div>
-
 					{/* Actions */}
-					<div className="flex justify-end space-x-3">
-						<Button type="button" variant="outline" onClick={handleClose} disabled={isGenerating}>
+					<div className="flex justify-end gap-3 pt-2">
+						<Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isGenerating}>
 							Cancel
 						</Button>
-						<Button type="submit" disabled={isGenerating || !prompt.trim()} className="min-w-[120px]">
+						<Button
+							type="submit"
+							disabled={isGenerating || !prompt.trim()}
+							className="min-w-[140px] bg-[var(--color-course)] hover:bg-[var(--color-course)]/90 text-white"
+						>
 							{isGenerating ? (
-								<div className="flex items-center space-x-2">
-									<div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+								<motion.div className="flex items-center gap-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+									<motion.div
+										className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
+										animate={{ rotate: 360 }}
+										transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+									/>
 									<span>Creating...</span>
-								</div>
+								</motion.div>
 							) : (
-								"Create Course"
+								<div className="flex items-center gap-2">
+									<Sparkles className="h-4 w-4" />
+									<span>Create Course</span>
+								</div>
 							)}
 						</Button>
 					</div>
 				</form>
-			</div>
-		</div>
+			</DialogContent>
+		</Dialog>
 	)
 }
 

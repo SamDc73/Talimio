@@ -13,7 +13,6 @@ function SearchBar({
 	onGenerateCourse,
 	onYoutubeAdd,
 	onSetMode,
-	onGenerateRoadmap,
 	// Filter props
 	filterOptions,
 	sortOptions,
@@ -108,12 +107,12 @@ function SearchBar({
 						) : (
 							<>
 								<Button
-									onClick={onGenerateRoadmap}
+									onClick={onGenerateCourse}
 									size="sm"
 									className="bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white flex items-center gap-1"
 								>
 									<Sparkles className="h-3.5 w-3.5" />
-									Generate Roadmap
+									Generate Course
 								</Button>
 								<div className="h-8 w-px bg-border" />
 								<FilterPopover

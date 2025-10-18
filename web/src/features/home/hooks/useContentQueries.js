@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { archiveContent, unarchiveContent } from "@/api/contentApi"
 import { deleteApi } from "@/api/deleteApi"
-import { processContentData } from "@/lib/api"
 import { api } from "@/lib/apiClient"
 
 /**
@@ -57,12 +56,25 @@ export function useContentList(filters = {}) {
 				}),
 			}))
 
-			// Process the data for filters and sorting
-			const processed = processContentData(data)
+			// Return processed data with filter and sort options
+			const filterOptions = [
+				{ id: "all", label: "All Content", icon: "Search" },
+				{ id: "course", label: "Courses", icon: "BookOpen" },
+				{ id: "video", label: "Videos", icon: "Youtube" },
+				{ id: "book", label: "Books", icon: "FileText" },
+			]
+
+			const sortOptions = [
+				{ id: "last-accessed", label: "Last Opened", icon: "Clock" },
+				{ id: "created", label: "Date Created", icon: "CalendarDays" },
+				{ id: "progress", label: "Progress", icon: "ArrowUpDown" },
+				{ id: "title", label: "Title", icon: "FileText" },
+			]
+
 			return {
-				items: processed.content,
-				filterOptions: processed.filterOptions,
-				sortOptions: processed.sortOptions,
+				items: data,
+				filterOptions,
+				sortOptions,
 			}
 		},
 		staleTime: 30 * 1000, // Data fresh for 30 seconds
@@ -119,7 +131,7 @@ export function useDeleteContent() {
 			const _getTypeLabel = (type) => {
 				if (type === "video") return "Video"
 				if (type === "book") return "Book"
-				if (type === "course" || type === "roadmap") return "Course"
+				if (type === "course") return "Course"
 				return "Item"
 			}
 

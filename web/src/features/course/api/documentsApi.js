@@ -13,7 +13,7 @@ import { useApi } from "../../../hooks/useApi"
 
 /**
  * Hook for document operations
- * @param {string} courseId - The course ID (roadmap_id in backend)
+ * @param {string} courseId
  */
 export function useDocumentsService(courseId = null) {
 	// Document endpoints

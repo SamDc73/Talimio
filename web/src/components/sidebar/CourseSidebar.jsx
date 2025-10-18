@@ -24,6 +24,20 @@ function CourseSidebar({ modules = [], onLessonClick, activeLessonId = null, cou
 
 	const progress = courseProgress?.percentage || 0
 
+	// Count total lessons across modules (including nested)
+	const countLessons = (items = []) => {
+		let total = 0
+		for (const item of items) {
+			total += 1
+			if (Array.isArray(item?.lessons) && item.lessons.length > 0) {
+				total += countLessons(item.lessons)
+			}
+		}
+		return total
+	}
+
+	const totalLessons = (modules || []).reduce((sum, m) => sum + countLessons(m?.lessons || []), 0)
+
 	return (
 		<SidebarContainer>
 			<ProgressIndicator progress={progress} variant="course" />
@@ -41,25 +55,26 @@ function CourseSidebar({ modules = [], onLessonClick, activeLessonId = null, cou
 							variant="course"
 						>
 							<ol>
-								{(module.lessons || []).map((lesson) => (
-									<SidebarItem
-										key={lesson.id}
-										title={lesson.title}
-										isActive={lesson.id === activeLessonId}
-										isCompleted={isCompleted(lesson.id)}
-										isLocked={lesson.status === "locked"}
-										onClick={() => onLessonClick?.(module.id, lesson.id)}
-										variant="course"
-										leftContent={
-											<CompletionCheckbox
-												isCompleted={isCompleted(lesson.id)}
-												isLocked={lesson.status === "locked"}
-												onClick={() => toggleCompletion(lesson.id)}
-												variant="course"
-											/>
-										}
-									/>
-								))}
+								{(module.lessons || []).map((lesson) => {
+									return (
+										<SidebarItem
+											key={lesson.id}
+											title={lesson.title}
+											isActive={lesson.id === activeLessonId}
+											isLocked={lesson.status === "locked"}
+											onClick={() => onLessonClick?.(module.id, lesson.id)}
+											variant="course"
+											leftContent={
+												<CompletionCheckbox
+													isCompleted={isCompleted(lesson.id)}
+													isLocked={lesson.status === "locked"}
+													onClick={() => toggleCompletion(lesson.id, totalLessons)}
+													variant="course"
+												/>
+											}
+										/>
+									)
+								})}
 							</ol>
 						</ExpandableSection>
 					)

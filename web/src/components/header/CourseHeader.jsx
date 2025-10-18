@@ -4,6 +4,7 @@ import { Link } from "react-router-dom"
 import { UserAvatarMenu } from "@/components/header/MainHeader"
 import { TooltipButton } from "@/components/TooltipButton"
 import { useChatSidebar } from "@/features/assistant/contexts/chatSidebarContext"
+import { useCourseProgress } from "@/features/course/hooks/useCourseProgress"
 import { cn } from "@/lib/utils"
 
 export function CourseHeader({
@@ -13,10 +14,15 @@ export function CourseHeader({
 	progress = 0,
 	isOpen = true,
 	toggleSidebar = () => {},
+	courseId,
 }) {
 	const { toggleChat } = useChatSidebar()
 
 	const [_showFullTitle, _setShowFullTitle] = useState(false)
+
+	// Compute progress from unified hook if courseId is provided
+	const { progress: courseProgress } = useCourseProgress(courseId)
+	const computedProgress = typeof courseProgress?.percentage === "number" ? courseProgress.percentage : progress
 
 	return (
 		<header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-b border-border shadow-sm">
@@ -39,10 +45,10 @@ export function CourseHeader({
 							<div className="w-32 md:w-48 bg-muted rounded-full h-1.5 overflow-hidden">
 								<div
 									className="h-full bg-gradient-to-r from-course to-course-accent rounded-full"
-									style={{ width: `${progress}%` }}
+									style={{ width: `${computedProgress}%` }}
 								/>
 							</div>
-							<span className="ml-2 text-xs font-medium text-muted-foreground">{progress}%</span>
+							<span className="ml-2 text-xs font-medium text-muted-foreground">{computedProgress}%</span>
 						</div>
 					</div>
 

@@ -11,7 +11,6 @@ import { VideoContentTabs } from "./VideoContentTabs"
 import { YouTubePlayer } from "./YouTubePlayer"
 
 import "./video-overrides.css" // Only for third-party overrides
-import { getVideoProgress } from "@/utils/progressUtils"
 
 /**
  * VideoViewer component with high-performance YouTube player and transcript sync
@@ -170,29 +169,29 @@ function VideoViewerContent() {
 			cc_load_policy: 0,
 			fs: 1,
 			playsinline: 1,
-			disablekb: 0,
 			start: Math.floor(video?.progress?.lastPosition || video?.lastPosition || 0), // Use initial saved position from video data
 		}),
 		[video?.progress?.lastPosition, video?.lastPosition]
 	)
 
 	// Calculate progress percentage
-	const timeBased = duration > 0 ? Math.round((currentTime / duration) * 100) : getVideoProgress(video)
+	const timeBased =
+		duration > 0
+			? Math.round((currentTime / duration) * 100)
+			: Math.round(video?.progress || video?.completionPercentage || 0)
 	const chapterBased = Math.round(chapterProgress?.percentage || 0)
 	const progressPercentage = Math.max(chapterBased, timeBased)
 
 	// Format duration helper
 	const formatDuration = (seconds) => {
-		if (!seconds || seconds === 0) return "0:00"
-
 		const hours = Math.floor(seconds / 3600)
 		const minutes = Math.floor((seconds % 3600) / 60)
 		const secs = Math.floor(seconds % 60)
 
 		if (hours > 0) {
-			return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+			return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
 		}
-		return `${minutes}:${secs.toString().padStart(2, "0")}`
+		return `${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
 	}
 
 	// Loading state

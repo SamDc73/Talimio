@@ -21,9 +21,10 @@ const prepareRequestOptions = (method, body, customOptions) => {
 		method,
 		headers: {
 			"Content-Type": "application/json",
-			// Add other default headers if needed (e.g., Authorization)
 			...headers,
 		},
+		// Always include cookies for auth-protected endpoints
+		credentials: "include",
 		...restOfCustomOptions,
 	}
 
@@ -42,7 +43,6 @@ const handleResponse = async (response) => {
 		try {
 			errorData = await response.json()
 		} catch (_e) {
-			// Handle cases where response body is not valid JSON
 			errorData = { message: response.statusText }
 		}
 		const error = new Error(`API Error: ${response.status} ${errorData?.message || response.statusText}`)
@@ -51,12 +51,11 @@ const handleResponse = async (response) => {
 		throw error
 	}
 
-	// Handle responses with no content
 	if (response.status === 204 || response.headers.get("content-length") === "0") {
-		return null // Or return an empty object/array based on context
+		return null
 	}
 
-	return response.json() // Assume JSON response otherwise
+	return response.json()
 }
 
 export function useApi(endpoint, options = {}) {
@@ -66,11 +65,9 @@ export function useApi(endpoint, options = {}) {
 	const abortControllerRef = useRef(null)
 
 	const execute = async (body = null, callOptions = {}) => {
-		// Combine hook options and call-specific options
 		const combinedOptions = { ...options, ...callOptions }
-		const { method = "GET", pathParams, ...fetchOptions } = combinedOptions
+		const { method = "GET", pathParams, queryParams, ...fetchOptions } = combinedOptions
 
-		// Abort previous request if it's still running
 		if (abortControllerRef.current) {
 			abortControllerRef.current.abort()
 		}
@@ -78,29 +75,32 @@ export function useApi(endpoint, options = {}) {
 
 		setIsLoading(true)
 		setError(null)
-		setData(null) // Reset data on new request
+		setData(null)
 
-		const url = buildUrl(endpoint, pathParams)
-		const requestOptions = prepareRequestOptions(method, body, {
-			...fetchOptions,
-			signal: abortControllerRef.current.signal,
-		})
+		let url = buildUrl(endpoint, pathParams)
+		if (queryParams && Object.keys(queryParams).length > 0) {
+			const qs = new URLSearchParams(queryParams).toString()
+			url += (url.includes("?") ? "&" : "?") + qs
+		}
 
 		try {
+			const requestOptions = prepareRequestOptions(method, body, {
+				...fetchOptions,
+				signal: abortControllerRef.current.signal,
+			})
 			const response = await fetch(url, requestOptions)
 			const responseData = await handleResponse(response)
 			setData(responseData)
 			return responseData
 		} catch (err) {
 			if (err.name === "AbortError") {
-				return // Don't set error state for aborted requests
+				return
 			}
 			setError(err)
-			// Re-throw the error if the caller needs to handle it further
 			throw err
 		} finally {
 			setIsLoading(false)
-			abortControllerRef.current = null // Clear the controller
+			abortControllerRef.current = null
 		}
 	}
 

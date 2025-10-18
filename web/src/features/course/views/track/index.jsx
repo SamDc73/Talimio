@@ -30,21 +30,21 @@ const xAtY = (path, targetY) => {
 }
 
 /**
- * TrackView renders a vertical learning path visualization of the roadmap
+ * TrackView renders a vertical learning path visualization of the course
  * @param {Object} props
- * @param {string} props.roadmapId - The ID of the roadmap to display.
+ * @param {string} props.courseId - The ID of the course to display.
  * @param {Array} props.modules - The modules data passed from parent component.
  * @returns {JSX.Element}
  */
-export default function TrackView({ roadmapId, modules = [] }) {
-	const { isCompleted } = useCourseProgress(roadmapId)
+export default function TrackView({ courseId, modules = [] }) {
+	const { isCompleted } = useCourseProgress(courseId)
 	const { goToLesson } = useCourseNavigation()
 
 	// Handle lesson click - navigate to lesson page
 	const handleLessonClick = async (_moduleId, lessonId, _lessonTitle, _lessonDescription) => {
 		try {
 			// Navigate to the lesson using the course page
-			goToLesson(roadmapId, lessonId)
+			goToLesson(courseId, lessonId)
 		} catch (_err) {}
 	}
 
@@ -172,6 +172,7 @@ export default function TrackView({ roadmapId, modules = [] }) {
 		}
 
 		// Font loading might affect layout - apply initial positions when fonts are ready
+		// eslint-disable-next-line promise/always-return
 		document.fonts?.ready.then(() => {
 			requestAnimationFrame(() => requestAnimationFrame(() => measure(true)))
 		})
@@ -191,7 +192,7 @@ export default function TrackView({ roadmapId, modules = [] }) {
 	if (!modules || modules.length === 0) {
 		return (
 			<div className="flex-1 min-h-screen flex flex-col items-center justify-center text-zinc-500">
-				<p>No track content available for this roadmap.</p>
+				<p>No track content available for this course.</p>
 			</div>
 		)
 	}

@@ -31,8 +31,12 @@ export function useContentProgressSync(setContentItems) {
 							return item
 						}
 
-						const nextProgress =
-							typeof progress === "number" ? progress : typeof item.progress === "number" ? item.progress : 0
+						let nextProgress = 0
+						if (typeof progress === "number") {
+							nextProgress = progress
+						} else if (typeof item.progress === "number") {
+							nextProgress = item.progress
+						}
 
 						const nextMetadata = metadata ? { ...(item.metadata || {}), ...metadata } : item.metadata
 

@@ -2,9 +2,6 @@ import { create } from "zustand"
 import { createJSONStorage, devtools, persist } from "zustand/middleware"
 import { immer } from "zustand/middleware/immer"
 
-// API sync utilities
-import { syncToAPI } from "../lib/apiSync.js"
-
 // Stable default objects to prevent infinite re-renders
 const DEFAULT_BOOK_PROGRESS = {
 	currentPage: 1,
@@ -22,10 +19,6 @@ const DEFAULT_VIDEO_PROGRESS = {
 	duration: 0,
 	playbackRate: 1,
 	volume: 1,
-}
-
-const DEFAULT_AUTH_STATE = {
-	user: null,
 }
 
 const dispatchProgressUpdated = (contentId, progressValue, metadata = {}) => {
@@ -53,17 +46,8 @@ const useAppStore = create(
 		persist(
 			immer((set, get) => ({
 				// Authentication state (only user, no token - using httpOnly cookies)
-				user: DEFAULT_AUTH_STATE.user,
 
 				// Authentication actions
-				setUser: (user) =>
-					set((state) => {
-						state.user = user
-					}),
-				clearUser: () =>
-					set((state) => {
-						state.user = null
-					}),
 				// ========== BOOKS SLICE ==========
 				books: {
 					// Book progress: bookId -> { percentage, totalItems, completedItems, items, lastUpdated }
@@ -224,7 +208,7 @@ const useAppStore = create(
 				},
 
 				// Reading state management (separate from progress)
-				updateBookReadingState: (bookId, readingState, skipSync = false) => {
+				updateBookReadingState: (bookId, readingState, _skipSync = false) => {
 					// Ensure bookId is valid
 					if (!bookId) {
 						return
@@ -257,14 +241,6 @@ const useAppStore = create(
 							lastUpdated: Date.now(),
 						}
 					})
-
-					const _newState = get().books.readingState[bookId]
-
-					// Sync to API with debounce (skip during initialization)
-					if (!skipSync) {
-						syncToAPI("books", bookId, { readingState })
-					} else {
-					}
 				},
 
 				getBookReadingState: (bookId) => {
@@ -279,8 +255,6 @@ const useAppStore = create(
 						state.books.readingState[bookId].zoomLevel = zoomLevel
 						state.books.readingState[bookId].lastUpdated = Date.now()
 					})
-					// Sync to API
-					syncToAPI("books", bookId, { readingState: { zoomLevel } })
 				},
 
 				// ========== EPUB SPECIFIC ACTIONS ==========
@@ -331,15 +305,6 @@ const useAppStore = create(
 							state.books.progress[bookId].lastUpdated = Date.now()
 						}
 					})
-
-					// Sync to API with both location and progress
-					const progressPercentage =
-						displayPercentage !== undefined ? get().calculateEpubProgress(displayPercentage) : undefined
-
-					syncToAPI("books", bookId, {
-						epubLocation: location,
-						progress: progressPercentage,
-					})
 				},
 
 				updateEpubFontSize: (bookId, fontSize) => {
@@ -351,10 +316,6 @@ const useAppStore = create(
 							state.books.readingState[bookId].epubState = {}
 						}
 						state.books.readingState[bookId].epubState.fontSize = fontSize
-					})
-					// Sync to API
-					syncToAPI("books", bookId, {
-						epubFontSize: fontSize,
 					})
 				},
 
@@ -614,8 +575,6 @@ const useAppStore = create(
 							lastUpdated: Date.now(),
 						}
 					})
-					// Sync to API with debounce
-					syncToAPI("videos", videoId, { playbackState })
 				},
 
 				getVideoPlaybackState: (videoId) => {
@@ -634,14 +593,6 @@ const useAppStore = create(
 							currentTime: position,
 							lastUpdated: Date.now(),
 						}
-					})
-
-					// Sync to API with proper format
-					syncToAPI("videos", videoId, {
-						progress: {
-							lastPosition: position,
-							completionPercentage: percentage,
-						},
 					})
 
 					// Also dispatch unified event for real-time updates
@@ -666,7 +617,6 @@ const useAppStore = create(
 					language: "en",
 					autoPlayVideos: true,
 					defaultZoomLevel: 1,
-					sidebarCollapsed: false,
 					// User preferences
 					userPreferences: null,
 					// UI preferences
@@ -682,13 +632,18 @@ const useAppStore = create(
 					set((state) => {
 						state.preferences[key] = value
 					})
-					// Sync preferences to API
-					syncToAPI("preferences", "user", { [key]: value })
 				},
 
 				toggleTheme: () => {
 					const current = get().preferences.theme
-					const next = current === "light" ? "dark" : current === "dark" ? "system" : "light"
+					let next
+					if (current === "light") {
+						next = "dark"
+					} else if (current === "dark") {
+						next = "system"
+					} else {
+						next = "light"
+					}
 					get().updatePreference("theme", next)
 				},
 
@@ -720,7 +675,6 @@ const useAppStore = create(
 				// ========== UI SLICE ==========
 				ui: {
 					// Sidebar states
-					sidebarOpen: true,
 					activeSidebarSection: null,
 
 					// Modal/dialog states
@@ -1006,7 +960,7 @@ const useAppStore = create(
 				},
 			})),
 			{
-				name: "learning-roadmap-storage",
+				name: "talimio-storage",
 				storage: createJSONStorage(() => localStorage),
 				partialize: (state) => ({
 					// Only persist what's needed across sessions
@@ -1028,7 +982,6 @@ const useAppStore = create(
 						// Don't persist: loading, error (ephemeral)
 					},
 					preferences: state.preferences,
-					user: state.user,
 					// Don't persist tokens - using httpOnly cookies
 				}),
 				version: 4, // Increment version to trigger migration

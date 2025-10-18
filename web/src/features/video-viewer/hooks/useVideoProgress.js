@@ -1,10 +1,7 @@
-import { useRef } from "react"
-
 import { useProgress, useUpdateProgress } from "@/hooks/useProgress"
 
 /**
- * Adapter hook for backward compatibility with video progress
- * Maps the new unified progress API to the old video-specific interface
+ * Video progress hook backed by the unified progress API
  */
 export function useVideoProgress(videoId) {
 	const contentIds = videoId ? [videoId] : []
@@ -12,33 +9,13 @@ export function useVideoProgress(videoId) {
 	const progressQuery = useProgress(contentIds)
 	const updateProgress = useUpdateProgress()
 
-	// Use refs to store functions that don't need to trigger re-renders
-	const refetchRef = useRef(progressQuery.refetch)
-	refetchRef.current = progressQuery.refetch
-
-	// Get the current progress data from the map
+	// Current progress and normalized metadata
 	const currentProgress = progressQuery.data?.[videoId] || 0
 	const rawMetadata = progressQuery.metadata?.[videoId] || {}
 
-	// Extract values with defaults (support both camelCase and snake_case like books)
-	// Normalize completedChapters to a boolean map regardless of backend shape
-	let completedChapters = {}
-	if (rawMetadata.completedChapters && typeof rawMetadata.completedChapters === "object") {
-		completedChapters = rawMetadata.completedChapters
-	} else if (rawMetadata.completed_chapters) {
-		const cc = rawMetadata.completed_chapters
-		if (Array.isArray(cc)) {
-			// Convert list of IDs to boolean map
-			completedChapters = cc.reduce((acc, id) => {
-				acc[id] = true
-				return acc
-			}, {})
-		} else if (typeof cc === "object") {
-			completedChapters = cc
-		}
-	}
-
-	const totalChapters = rawMetadata.total_chapters || rawMetadata.totalChapters || 0
+	// Extract values with defaults (snake_case only)
+	const completedChapters = (typeof rawMetadata.completed_chapters === "object" && rawMetadata.completed_chapters) || {}
+	const totalChapters = rawMetadata.total_chapters || 0
 
 	// Check if a specific chapter is completed
 	const isCompleted = (chapterId) => {
@@ -73,54 +50,22 @@ export function useVideoProgress(videoId) {
 				total_chapters: actualTotalChapters,
 			},
 		})
-
-		// Return the new state for immediate UI update
-		return !currentCompleted
-	}
-
-	// Method to set total chapters (needed for progress calculation)
-	const setTotalChapters = async (newTotalChapters) => {
-		await updateProgress.mutateAsync({
-			contentId: videoId,
-			progress: currentProgress,
-			metadata: {
-				content_type: "video",
-				completed_chapters: completedChapters,
-				total_chapters: newTotalChapters,
-			},
-		})
 	}
 
 	return {
 		progress: {
 			percentage: currentProgress,
-			value: currentProgress, // Alias for compatibility
 		},
 		metadata: {
 			completedChapters,
 			totalChapters,
 		},
 		isLoading: progressQuery.isLoading,
-		loading: progressQuery.isLoading, // Legacy alias
 		error: progressQuery.error,
-		refetch: () => refetchRef.current(),
+		refetch: progressQuery.refetch,
 		isCompleted,
 		toggleCompletion,
-		setTotalChapters,
-		completedChapters, // Legacy direct access
 		updateProgress: (progress, metadata = {}) =>
-			updateProgress.mutate({
-				contentId: videoId,
-				progress,
-				metadata: {
-					content_type: "video",
-					completed_chapters: completedChapters,
-					total_chapters: totalChapters,
-					...metadata,
-				},
-			}),
-		// Legacy method names for compatibility
-		setProgress: (progress, metadata = {}) =>
 			updateProgress.mutate({
 				contentId: videoId,
 				progress,
@@ -135,7 +80,7 @@ export function useVideoProgress(videoId) {
 }
 
 /**
- * Hook for updating video-specific metadata along with progress
+ * Hook for updating video-specific time-based progress metadata
  */
 export function useVideoProgressWithPosition(videoId) {
 	const updateProgress = useUpdateProgress()
@@ -158,11 +103,9 @@ export function useVideoProgressWithPosition(videoId) {
 	return {
 		progress: {
 			percentage: progress.percentage,
-			value: progress.percentage,
 		},
 		isLoading,
 		error,
 		updateVideoProgress,
-		updatePosition: updateVideoProgress, // Use the same function
 	}
 }

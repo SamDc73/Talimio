@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { LessonViewer } from "@/features/course/components/LessonViewer"
+import { fetchLesson } from "@/features/lesson/api/lessonApi"
 import { generateCourseUrl } from "@/utils/navigationUtils"
-import { fetchLesson } from "../api/lessonsApi"
-
-const _BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1"
 
 /**
  * Lesson viewer with beautiful design and MDX support

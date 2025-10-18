@@ -13,7 +13,6 @@ export function ThemeProvider({ children }) {
 	// Get theme state and actions from Zustand store with proper selectors
 	const theme = useAppStore((state) => state.preferences?.theme ?? "light")
 	const updatePreference = useAppStore((state) => state.updatePreference)
-	const toggleTheme = useAppStore((state) => state.toggleTheme)
 
 	/**
 	 * Initialize theme on mount
@@ -58,19 +57,6 @@ export function ThemeProvider({ children }) {
 		return () => mediaQuery.removeListener(handleChange)
 	}, [theme])
 
-	// Calculate resolved theme
-	const resolvedTheme = (() => {
-		if (typeof window === "undefined") return theme
-		if (theme === "system") {
-			try {
-				return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
-			} catch (_e) {
-				return "light"
-			}
-		}
-		return theme
-	})()
-
 	/**
 	 * Provide context value
 	 */
@@ -83,20 +69,16 @@ export function ThemeProvider({ children }) {
 			}
 			updatePreference("theme", newTheme)
 		},
-		toggleTheme,
-		// Keep the raw theme value for UI display
-		rawTheme: theme,
-		// Provide the resolved theme for components that need it
-		resolvedTheme,
 	}
 
-	return <ThemeContext value={contextValue}>{children}</ThemeContext>
+	return <ThemeContext.Provider value={contextValue}>{children}</ThemeContext.Provider>
 }
 
 /**
  * Hook to access theme context
  * @throws {Error} If used outside of ThemeProvider
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTheme() {
 	const context = useContext(ThemeContext)
 	if (context === undefined) {

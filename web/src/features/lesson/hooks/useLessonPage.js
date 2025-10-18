@@ -15,12 +15,12 @@ export function useLessonPage(courseId, lessonId) {
 	// Server state via React Query
 	const { data: lesson, isLoading: lessonLoading, error: lessonError } = useLessonData(courseId, lessonId)
 
-	// Allow lesson data to refine the courseId if needed
-	const resolvedCourseId = courseId ?? lesson?.roadmap_id ?? lesson?.course_id ?? null
+	// Resolve effective courseId using lesson payload fallback (course_id only)
+	const resolvedCourseId = courseId ?? lesson?.course_id ?? null
 
 	// Dependent queries - only fetch when we have courseId
 	// Following state management guide: "Dependent queries - only fetch when ready"
-	const { isLoading: roadmapLoading, roadmap } = useCourseData(resolvedCourseId)
+	const { isLoading: courseLoading, course } = useCourseData(resolvedCourseId)
 	const { modules, isLoading: modulesLoading } = useOutlineData(resolvedCourseId)
 
 	// Business logic actions
@@ -31,10 +31,10 @@ export function useLessonPage(courseId, lessonId) {
 	const computedState = useMemo(
 		() => ({
 			// Loading states
-			isDataLoading: lessonLoading || roadmapLoading || modulesLoading,
+			isDataLoading: lessonLoading || courseLoading || modulesLoading,
 
 			// Course information
-			courseName: roadmap?.title || "Course",
+			courseName: course?.title || "Course",
 
 			// Navigation handlers with pre-bound courseId
 			handleBack: () => actions.handleBack(),
@@ -48,7 +48,7 @@ export function useLessonPage(courseId, lessonId) {
 			hasError: !!lessonError,
 			errorMessage: lessonError?.message || "Failed to load lesson",
 		}),
-		[lessonLoading, roadmapLoading, modulesLoading, roadmap?.title, actions, lessonId, lessonError]
+		[lessonLoading, courseLoading, modulesLoading, course?.title, actions, lessonId, lessonError]
 	)
 
 	return {

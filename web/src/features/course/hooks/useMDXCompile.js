@@ -8,7 +8,6 @@ import remarkEmoji from "remark-emoji"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
 import logger from "@/lib/logger"
-import { mdxCache } from "@/lib/mdx-cache"
 
 // MDX compilation options
 const mdxOptions = {
@@ -134,82 +133,52 @@ export function useMDXCompile(content) {
 		// Preprocess the content to fix common issues
 		const processedContent = preprocessMDXContent(content)
 
-		// Check cache first (use processed content as key)
-		if (mdxCache.has(processedContent)) {
-			const cachedComponent = mdxCache.get(processedContent)
-			setComponent(() => cachedComponent)
-			setError(null)
-			setIsLoading(false)
-			return
-		}
-
-		// Check if already compiling
-		if (mdxCache.isCompiling(processedContent)) {
-			const compilingPromise = mdxCache.getCompiling(processedContent)
-			compilingPromise
-				.then((result) => {
-					if (!cancelled) {
-						setComponent(() => result)
-						setError(null)
-						setIsLoading(false)
-					}
-					return result
-				})
-				.catch((err) => {
-					if (!cancelled) {
-						setError(err.message || "Failed to compile MDX content")
-						setComponent(null)
-						setIsLoading(false)
-					}
-				})
-			return
-		}
-
 		// Compile MDX
 		const compileMdx = async () => {
 			setIsLoading(true)
 
-			const compilationPromise = (async () => {
-				try {
-					// Compile MDX to JavaScript (use preprocessed content)
-					const compiledCode = await compile(processedContent, mdxOptions)
+			try {
+				// Compile MDX to JavaScript (use preprocessed content)
+				const compiledCode = await compile(processedContent, mdxOptions)
 
-					// Prepare code with React in scope
-					const rawCode = String(compiledCode)
-					const codeWithReact = `
-						const { React, useState, useEffect, useRef } = arguments[0];
-						${rawCode}
-					`
+				// Prepare code with React in scope
+				const rawCode = String(compiledCode)
+				const codeWithReact = `
+					const { React, useState, useEffect, useRef } = arguments[0];
+					${rawCode}
+				`
 
-					// Run the compiled code
-					const mdxModule = await run(codeWithReact, {
-						...runtimeGlobals,
-						baseUrl: import.meta.url,
-					})
+				// Run the compiled code
+				const mdxModule = await run(codeWithReact, {
+					...runtimeGlobals,
+					baseUrl: import.meta.url,
+				})
 
-					// Create a simple wrapper component
-					const MdxComponent = (props) => {
-						const ContentComponent = mdxModule.default
+				// Create a simple wrapper component
+				const MdxComponent = (props) => {
+					const ContentComponent = mdxModule.default
 
-						// Merge any exported components with the provided components
-						const components = { ...props.components }
-						for (const [key, value] of Object.entries(mdxModule)) {
-							if (key !== "default" && typeof value === "function") {
-								components[key] = value
-							}
+					// Merge any exported components with the provided components
+					const components = { ...props.components }
+					for (const [key, value] of Object.entries(mdxModule)) {
+						if (key !== "default" && typeof value === "function") {
+							components[key] = value
 						}
-
-						return React.createElement(ContentComponent, {
-							...props,
-							components,
-						})
 					}
 
-					// Cache the component (use processedContent as key)
-					mdxCache.set(processedContent, MdxComponent)
+					return React.createElement(ContentComponent, {
+						...props,
+						components,
+					})
+				}
 
-					return MdxComponent
-				} catch (err) {
+				if (!cancelled) {
+					setComponent(() => MdxComponent)
+					setError(null)
+					setIsLoading(false)
+				}
+			} catch (err) {
+				if (!cancelled) {
 					// Simple error handling
 					let errorMessage = "Failed to compile MDX content"
 
@@ -222,36 +191,11 @@ export function useMDXCompile(content) {
 						}
 					}
 
-					// Clear from compiling cache on error
-					mdxCache.compiling.delete(mdxCache.getKey(processedContent))
-
-					if (process.env.NODE_ENV === "development") {
-					}
-
-					throw new Error(errorMessage)
+					setError(errorMessage)
+					setComponent(null)
+					setIsLoading(false)
 				}
-			})()
-
-			// Store the compilation promise
-			mdxCache.setCompiling(processedContent, compilationPromise)
-
-			// Handle the promise
-			compilationPromise
-				.then((compiledComponent) => {
-					if (!cancelled) {
-						setComponent(() => compiledComponent)
-						setError(null)
-						setIsLoading(false)
-					}
-					return compiledComponent
-				})
-				.catch((err) => {
-					if (!cancelled) {
-						setError(err.message || "Failed to compile MDX content")
-						setComponent(null)
-						setIsLoading(false)
-					}
-				})
+			}
 		}
 
 		compileMdx()

@@ -39,6 +39,7 @@ export function TextSelectionTooltip() {
 				try {
 					const range = selection.getRangeAt(0)
 					const rect = range.getBoundingClientRect()
+
 					const tooltipWidth = 152
 					const tooltipHeight = 44
 					const padding = 10
@@ -90,7 +91,6 @@ export function TextSelectionTooltip() {
 		document.addEventListener("mouseup", handleMouseUp)
 		document.addEventListener("selectionchange", handleSelectionChange)
 		document.addEventListener("mousedown", handleClickOutside)
-
 		return () => {
 			document.removeEventListener("mouseup", handleMouseUp)
 			document.removeEventListener("selectionchange", handleSelectionChange)
@@ -118,12 +118,7 @@ export function TextSelectionTooltip() {
 	return (
 		<div
 			ref={tooltipRef}
-			style={{
-				position: "fixed",
-				left: position.x,
-				top: position.y,
-				zIndex: 9999,
-			}}
+			style={{ position: "fixed", left: position.x, top: position.y, zIndex: 9999 }}
 			className="animate-in fade-in zoom-in-95 duration-150"
 		>
 			<button

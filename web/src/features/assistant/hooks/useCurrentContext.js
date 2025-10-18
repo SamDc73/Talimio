@@ -43,7 +43,7 @@ export function useCurrentContext() {
 	}
 
 	// course/:courseId or course/preview/:courseId or courses/:courseId
-	else if (segments[0] === "course" || segments[0] === "courses" || segments[0] === "roadmap") {
+	else if (segments[0] === "course" || segments[0] === "courses") {
 		let courseId = null
 		let lessonId = null
 
@@ -61,12 +61,6 @@ export function useCurrentContext() {
 				}
 			}
 		} else if (segments[0] === "courses") {
-			courseId = segments[1] || null
-			if (segments[2] === "lesson" && segments[3]) {
-				lessonId = segments[3]
-			}
-		} else if (segments[0] === "roadmap") {
-			// Treat roadmap as course for assistant context
 			courseId = segments[1] || null
 			if (segments[2] === "lesson" && segments[3]) {
 				lessonId = segments[3]

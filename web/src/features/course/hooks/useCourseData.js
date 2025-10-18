@@ -2,20 +2,20 @@ import { useQuery } from "@tanstack/react-query"
 import { useCourseService } from "../api/courseApi"
 
 /**
- * Simple hook to fetch course data (replaces useRoadmapState)
+ * Simple hook to fetch course data
  * This hook provides basic course information without flow/graph functionality
  *
  * @param {string} courseId - The course ID to fetch
- * @returns {Object} - Object containing roadmap data and loading state
+ * @returns {Object} - Object containing course data and loading state
  */
 export function useCourseData(courseId) {
 	const courseService = useCourseService(courseId)
 
 	const {
-		data: roadmap,
+		data: course,
 		isLoading,
 		error,
-		refetch: initializeRoadmap,
+		refetch: initializeCourse,
 	} = useQuery({
 		queryKey: ["course", courseId],
 		queryFn: async () => {
@@ -27,9 +27,9 @@ export function useCourseData(courseId) {
 	})
 
 	return {
-		roadmap,
+		course,
 		isLoading,
 		error,
-		initializeRoadmap,
+		initializeCourse,
 	}
 }

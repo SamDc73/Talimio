@@ -1,10 +1,10 @@
+import CourseHeader from "@/components/header/CourseHeader"
+import { CourseSidebar } from "@/components/sidebar"
 import CourseView from "@/features/course/CourseView"
 import { useCourseContext } from "@/features/course/hooks/useCourseContext"
 import { cn } from "@/lib/utils"
 import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
 import { useCourseNavigation } from "@/utils/navigationUtils"
-import RoadmapHeader from "./header/RoadmapHeader"
-import { CourseSidebar } from "./sidebar"
 
 /**
  * Layout component for course/lesson pages.
@@ -34,7 +34,7 @@ export default function CourseLayout() {
 
 	return (
 		<div className="flex min-h-screen flex-col bg-background">
-			<RoadmapHeader mode={mode} onModeChange={setMode} courseId={courseId} courseName={courseName} />
+			<CourseHeader mode={mode} onModeChange={setMode} courseId={courseId} courseName={courseName} />
 			<div className="flex h-screen">
 				<CourseSidebar
 					modules={modules || []}
@@ -44,7 +44,7 @@ export default function CourseLayout() {
 				/>
 				<div className={contentClasses}>
 					{/* Render CourseView directly with proper props */}
-					<CourseView mode={mode} modules={modules} roadmapId={courseId} />
+					<CourseView mode={mode} modules={modules} courseId={courseId} />
 				</div>
 			</div>
 			{/* ChatSidebar is globally mounted in App.jsx */}

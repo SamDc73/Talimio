@@ -20,7 +20,6 @@ export const deleteApi = {
 			youtube: "youtube",
 			book: "book",
 			course: "course",
-			roadmap: "course",
 		}
 
 		const contentType = contentTypeMap[itemType] || itemType

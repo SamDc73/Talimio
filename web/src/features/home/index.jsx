@@ -5,9 +5,9 @@ import ErrorBoundary from "@/components/ErrorBoundary"
 
 // Radix UI component initialization
 
-import ContentCard from "@/components/ContentCard"
 import { MainHeader } from "@/components/header/MainHeader"
 import CoursePromptModal from "@/features/course/CoursePromptModal"
+import ContentCard from "@/features/home/components/ContentCard"
 import ContentGrid from "@/features/home/components/ContentGrid"
 import { DialogsContainer } from "@/features/home/components/dialogs/DialogsContainer"
 import FabMenu from "@/features/home/components/FABMenu"
@@ -62,8 +62,7 @@ export default function HomePage() {
 
 	// Use content handlers hook
 	const {
-		handleGenerateCourse,
-		handleRoadmapCreated,
+		handleCourseCreated,
 		handleCardClick,
 		handleDeleteItem,
 		handleArchiveItem,
@@ -146,7 +145,7 @@ export default function HomePage() {
 							isGenerateMode={filters.isGenerateMode}
 							isYoutubeMode={filters.isYoutubeMode}
 							isGenerating={isGenerating}
-							onGenerateCourse={handleGenerateCourse}
+							onGenerateCourse={() => dialogs.setShowCourseModal(true)}
 							onYoutubeAdd={(query) => {
 								dialogs.setYoutubeUrl(query)
 								dialogs.setShowYoutubeDialog(true)
@@ -163,7 +162,6 @@ export default function HomePage() {
 									filters.setIsYoutubeMode(false)
 								}
 							}}
-							onGenerateRoadmap={() => dialogs.setShowRoadmapModal(true)}
 							// Filter props
 							filterOptions={filterOptions}
 							sortOptions={sortOptions}
@@ -255,15 +253,7 @@ export default function HomePage() {
 					<FabMenu
 						isFabExpanded={isFabExpanded}
 						onToggleExpanded={() => setIsFabExpanded(!isFabExpanded)}
-						onGenerateCourse={() => {
-							filters.setIsGenerateMode(true)
-							// Focus on search input after a short delay
-							setTimeout(() => {
-								const searchInput = document.querySelector('input[type="text"]')
-								if (searchInput) searchInput.focus()
-							}, 100)
-						}}
-						onGenerateRoadmap={() => dialogs.setShowRoadmapModal(true)}
+						onGenerateCourse={() => dialogs.setShowCourseModal(true)}
 						onUploadBook={() => {
 							dialogs.setShowUploadDialog(true)
 						}}
@@ -273,9 +263,9 @@ export default function HomePage() {
 					<DialogsContainer dialogs={dialogs} onBookUploaded={handleBookUploaded} onVideoAdded={handleVideoAdded} />
 
 					<CoursePromptModal
-						isOpen={dialogs.showRoadmapModal}
-						onClose={dialogs.setShowRoadmapModal}
-						onSuccess={handleRoadmapCreated}
+						isOpen={dialogs.showCourseModal}
+						onClose={() => dialogs.setShowCourseModal(false)}
+						onSuccess={handleCourseCreated}
 					/>
 				</div>
 			</ErrorBoundary>

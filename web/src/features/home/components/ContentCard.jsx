@@ -30,18 +30,21 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 	const deleteContentMutation = useDeleteContent()
 	const archiveContentMutation = useArchiveContent()
 
-	const V = VARIANTS[item.type]
-
 	// Use unified API progress data - extract percentage from progress object
 	const progressValue =
 		typeof item.progress === "object" && item.progress !== null ? (item.progress.percentage ?? 0) : item.progress || 0
 
-	// Debug log for progress
-	if (item.type === "video" || item.type === "book") {
-	}
-
 	const handleDeleteClick = () => {
 		setShowDeleteConfirm(true)
+	}
+
+	const getActionLabel = (action) => {
+		if (action === "Pin") return pinned ? "Unpin" : "Pin"
+		if (action === "Archive") {
+			if (archiveContentMutation.isPending) return "Processing..."
+			return item.archived ? "Unarchive" : "Archive"
+		}
+		return action
 	}
 
 	const handleConfirmDelete = () => {
@@ -50,13 +53,13 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 
 		// Use React Query mutation (handles optimistic update, backend call, notifications)
 		deleteContentMutation.mutate({
-			itemId: item.id || item.uuid,
+			itemId: item.id,
 			itemType: item.type,
 		})
 
-		// Notify parent if needed (for legacy compatibility)
+		// Notify parent if provided (e.g., to clear pins)
 		if (onDelete) {
-			onDelete(item.id || item.uuid, item.type)
+			onDelete(item.id, item.type)
 		}
 	}
 
@@ -70,9 +73,9 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 			archive: !item.archived,
 		})
 
-		// Notify parent if needed (for legacy compatibility)
+		// Notify parent if provided
 		if (onArchive) {
-			onArchive(item.id || item.uuid, item.type, !item.archived)
+			onArchive(item.id, item.type, !item.archived)
 		}
 	}
 
@@ -101,9 +104,19 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 				{pinned && <div className="absolute top-0 left-6 w-6 h-1 bg-green-500 rounded-b-full" />}
 				<div className="p-6 flex flex-col justify-between h-full">
 					<div className="flex justify-between items-start mb-4">
-						<div className={`${V.badge} text-xs font-medium px-3 py-1 rounded-full flex items-center gap-2`}>
-							<V.icon className="h-3 w-3" />
-							<span>{V.label}</span>
+						<div
+							className={`${VARIANTS[item.type].badge} text-xs font-medium px-3 py-1 rounded-full flex items-center gap-2`}
+						>
+							{(() => {
+								const V = VARIANTS[item.type]
+								const Icon = V.icon
+								return (
+									<>
+										<Icon className="h-3 w-3" />
+										<span>{V.label}</span>
+									</>
+								)
+							})()}
 						</div>
 					</div>
 					<h3 className="text-xl font-display font-bold text-foreground hover:underline line-clamp-2 mb-1">
@@ -146,7 +159,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 						<div className="w-full bg-muted rounded-full h-2 overflow-hidden">
 							<div
 								style={{ width: `${progressValue}%` }}
-								className={`h-full bg-gradient-to-r ${V.grad} rounded-full transition-all duration-500`}
+								className={`h-full bg-gradient-to-r ${VARIANTS[item.type].grad} rounded-full transition-all duration-500`}
 							/>
 						</div>
 					</div>
@@ -169,9 +182,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 												key={action}
 												variant="ghost"
 												size="sm"
-												className={`justify-start flex items-center gap-2 ${
-													action === "Delete" ? "text-destructive hover:bg-destructive/10" : ""
-												}`}
+												className={`justify-start flex items-center gap-2 ${action === "Delete" ? "text-destructive hover:bg-destructive/10" : ""}`}
 												onClick={(e) => {
 													e.stopPropagation()
 													if (action === "Pin") onTogglePin()
@@ -185,17 +196,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 												{action === "Edit Tags" && <Tag className="h-4 w-4" />}
 												{action === "Archive" && <Archive className="h-4 w-4" />}
 												{action === "Delete" && <X className="h-4 w-4" />}
-												{action === "Pin"
-													? pinned
-														? "Unpin"
-														: "Pin"
-													: action === "Archive"
-														? archiveContentMutation.isPending
-															? "Processing..."
-															: item.archived
-																? "Unarchive"
-																: "Archive"
-														: action}
+												{getActionLabel(action)}
 											</Button>
 										)
 									)}
@@ -219,7 +220,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 				open={showTagEditModal}
 				onOpenChange={setShowTagEditModal}
 				contentType={item.type}
-				contentId={item.id || item.uuid}
+				contentId={item.id}
 				contentTitle={item.title}
 				onTagsUpdated={onTagsUpdated}
 			/>

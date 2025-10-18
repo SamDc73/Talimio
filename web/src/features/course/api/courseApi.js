@@ -2,7 +2,7 @@
  * Course Service - Unified API client for the new course endpoints
  *
  * This service provides access to the unified course API that replaces
- * the separated roadmap/lesson/node endpoints with a cohesive structure:
+ * the separated course/lesson endpoints with a cohesive structure:
  *
  * Courses → Modules → Lessons
  */
@@ -15,8 +15,8 @@ import { useApi } from "../../../hooks/useApi"
  */
 export function useCourseService(courseId = null) {
 	// Course endpoints
-	const createCourse = useApi("/courses", { method: "POST" })
-	const getCourses = useApi("/courses")
+	const createCourse = useApi("/courses/", { method: "POST" })
+	const getCourses = useApi("/courses/")
 	const getCourse = useApi("/courses/{courseId}")
 	const updateCourse = useApi("/courses/{courseId}", { method: "PATCH" })
 

@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useParams } from "react-router-dom"
-import RoadmapHeader from "@/components/header/RoadmapHeader"
+import { CourseHeader } from "@/components/header/CourseHeader"
 import { CourseSidebar } from "@/components/sidebar"
 import { cn } from "@/lib/utils"
 import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
@@ -13,7 +13,7 @@ import { useLessonPage } from "./hooks/useLessonPage"
  * Uses combined useLessonPage hook for all data and actions
  */
 export default function LessonPage() {
-	const { courseId, lessonId } = useParams()
+	const { courseId: routeCourseId, lessonId } = useParams()
 	const [mode, setMode] = useState("outline")
 	const isOpen = useAppStore(selectSidebarOpen)
 
@@ -34,7 +34,7 @@ export default function LessonPage() {
 		handleLessonClick,
 		handleMarkComplete,
 		handleRegenerate,
-	} = useLessonPage(courseId, lessonId)
+	} = useLessonPage(routeCourseId, lessonId)
 
 	if (isLoading) {
 		return (
@@ -83,7 +83,7 @@ export default function LessonPage() {
 	// Render lesson page with same structure as CoursePage
 	return (
 		<div className="flex min-h-screen flex-col bg-background">
-			<RoadmapHeader mode={mode} onModeChange={setMode} courseId={courseId} courseName={courseName} />
+			<CourseHeader mode={mode} onModeChange={setMode} courseId={courseId} courseName={courseName} />
 
 			<div className="flex h-screen">
 				{/* Always show sidebar with modules data - same as CoursePage */}

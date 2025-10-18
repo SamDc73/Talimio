@@ -32,8 +32,8 @@ export function useContentHandlers({ filters, pinning, setContentItems, loadCont
 		}
 	}
 
-	// Event handler: user created roadmap
-	const handleRoadmapCreated = async (_newRoadmap) => {
+	// Event handler: user created course
+	const handleCourseCreated = async (_newCourse) => {
 		// Just trigger data refresh - let React Query handle the fetching
 		await loadContentData()
 		// Toast moved to store action or mutation onSuccess
@@ -41,8 +41,8 @@ export function useContentHandlers({ filters, pinning, setContentItems, loadCont
 
 	const handleCardClick = (item) => {
 		// Navigate to the appropriate page based on item type
-		if (item.type === "course" || item.type === "roadmap") {
-			// Use the new course routes for both course and roadmap types
+		if (item.type === "course") {
+			// Use the new course routes for both course and course types
 			navigate(`/course/${item.id}`)
 		} else if (item.type === "video") {
 			navigate(`/videos/${item.id}`)
@@ -100,7 +100,7 @@ export function useContentHandlers({ filters, pinning, setContentItems, loadCont
 
 	return {
 		handleGenerateCourse,
-		handleRoadmapCreated,
+		handleCourseCreated,
 		handleCardClick,
 		handleDeleteItem,
 		handleArchiveItem,

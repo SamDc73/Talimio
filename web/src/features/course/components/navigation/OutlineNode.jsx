@@ -93,13 +93,12 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 					buttonStyle
 				)}
 			>
-				{isCompleted ? "View" : "Start"}
 				<ArrowRight className="w-4 h-4" />
 			</button>
 		)
 	}
 
-	function LessonContent({ lesson, isCompleted, currentLessonIndexStr, idx, onLessonClick, moduleId }) {
+	function LessonContent({ lesson, isCompleted, currentLessonIndexStr, idx, onLessonClick }) {
 		return (
 			<div
 				className={cn(
@@ -112,13 +111,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 				<div className="flex items-center gap-3 flex-1 min-w-0">
 					<button
 						type="button"
-						onClick={(e) => {
-							e.preventDefault()
-							e.stopPropagation()
-							if (toggleLessonCompletion) {
-								toggleLessonCompletion(lesson.id, moduleId)
-							}
-						}}
+						onClick={() => toggleLessonCompletion?.(lesson.id)}
 						className="transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-full"
 						aria-label={isCompleted ? "Mark as incomplete" : "Mark as complete"}
 					>
@@ -129,12 +122,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 						{lesson.description && <span className="text-sm text-zinc-500 truncate">{lesson.description}</span>}
 					</div>
 				</div>
-				<LessonActionButton
-					isCompleted={isCompleted}
-					onClick={() => {
-						onLessonClick?.(idx, lesson.id)
-					}}
-				/>
+				<LessonActionButton isCompleted={isCompleted} onClick={() => onLessonClick?.(idx, lesson.id)} />
 			</div>
 		)
 	}
@@ -154,7 +142,6 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 					currentLessonIndexStr={currentLessonIndexStr}
 					idx={idx}
 					onLessonClick={onLessonClick}
-					moduleId={moduleId}
 				/>
 
 				{hasNestedLessons && (

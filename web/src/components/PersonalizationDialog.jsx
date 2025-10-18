@@ -3,7 +3,7 @@
  */
 
 import { Brain, ChevronLeft, Eye, RotateCcw, Save, Trash2, X } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
 	clearUserMemory,
 	deleteMemory,
@@ -21,22 +21,26 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 	const [isClearing, setIsClearing] = useState(false)
 	const [instructions, setInstructions] = useState("")
 	const [memoryCount, setMemoryCount] = useState(0)
-	const [hasChanges, setHasChanges] = useState(false)
 	const [originalInstructions, setOriginalInstructions] = useState("")
 	const [showMemories, setShowMemories] = useState(false)
 	const [memories, setMemories] = useState([])
 	const [isLoadingMemories, setIsLoadingMemories] = useState(false)
+	// Track if we've loaded settings at least once to avoid showing spinner on subsequent opens
+	const hasLoadedRef = useRef(false)
 
 	const loadUserSettings = useCallback(async () => {
-		setIsLoading(true)
+		// Only show the blocking loader on first ever load
+		const firstLoad = !hasLoadedRef.current
+		if (firstLoad) setIsLoading(true)
 		try {
 			const settings = await getUserSettings()
 			setInstructions(settings.custom_instructions || "")
 			setOriginalInstructions(settings.custom_instructions || "")
 			setMemoryCount(settings.memory_count || 0)
+			hasLoadedRef.current = true
 		} catch (_error) {
 		} finally {
-			setIsLoading(false)
+			if (firstLoad) setIsLoading(false)
 		}
 	}, [])
 
@@ -47,10 +51,8 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		}
 	}, [open, loadUserSettings])
 
-	// Track changes
-	useEffect(() => {
-		setHasChanges(instructions !== originalInstructions)
-	}, [instructions, originalInstructions])
+	// Derive hasChanges inline per guidelines (no effect/state)
+	const hasChanges = instructions !== originalInstructions
 
 	const handleSave = async () => {
 		setIsSaving(true)
@@ -86,6 +88,12 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 	const handleViewMemories = async () => {
 		if (showMemories) {
 			setShowMemories(false)
+			return
+		}
+
+		// If we've already loaded memories, show them immediately
+		if (Array.isArray(memories) && memories.length > 0) {
+			setShowMemories(true)
 			return
 		}
 
