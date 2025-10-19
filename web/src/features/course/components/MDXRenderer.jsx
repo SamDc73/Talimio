@@ -146,7 +146,7 @@ export function MDXRenderer({ content, lessonId, courseId }) {
 
 	if (isLoading) {
 		return (
-			<div className="text-muted-foreground/80 p-4 text-center">
+			<div className="text-muted-foreground/80 p-4 text-center" data-askai-exclude="true">
 				<div className="animate-pulse">Loading content...</div>
 			</div>
 		)

@@ -321,7 +321,7 @@ export function VideoTranscript({ videoId, videoElement, youtubePlayerRef, onSee
 	}
 
 	return (
-		<div className="relative overflow-hidden bg-card">
+		<div className="relative overflow-hidden bg-card" data-selection-zone="true">
 			<VirtualizedTranscriptList
 				ref={transcriptRef}
 				segments={transcript.segments}

@@ -1,6 +1,7 @@
 import { createPluginRegistration } from "@embedpdf/core"
 import { EmbedPDF } from "@embedpdf/core/react"
 import { usePdfiumEngine } from "@embedpdf/engines/react"
+import { ignore } from "@embedpdf/models"
 import {
 	GlobalPointerProvider,
 	InteractionManagerPluginPackage,
@@ -9,9 +10,10 @@ import {
 import { LoaderPluginPackage } from "@embedpdf/plugin-loader/react"
 import { RenderLayer, RenderPluginPackage } from "@embedpdf/plugin-render/react"
 import { Scroller, ScrollPluginPackage, useScroll } from "@embedpdf/plugin-scroll/react"
-import { SelectionLayer, SelectionPluginPackage } from "@embedpdf/plugin-selection/react"
+import { SelectionLayer, SelectionPluginPackage, useSelectionCapability } from "@embedpdf/plugin-selection/react"
 import { Viewport, ViewportPluginPackage } from "@embedpdf/plugin-viewport/react"
-import { useZoom, ZoomMode, ZoomPluginPackage } from "@embedpdf/plugin-zoom/react"
+import { ZoomMode } from "@embedpdf/plugin-zoom"
+import { useZoom, ZoomPluginPackage } from "@embedpdf/plugin-zoom/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useBookActions, useBookReadingState, useBookStoreHydrated } from "../hooks/useBookState"
 
@@ -20,153 +22,100 @@ function ViewerRuntime({
 	registerApi,
 	getBookReadingState,
 	updateBookReadingState,
-	hasRestoredPage,
-	onMarkPageRestored,
+	hasRestoredPage: HasRestoredPage,
+	onMarkPageRestored: OnMarkPageRestored,
 }) {
+	const pageCtxRef = useRef(new Map()) // pageIndex -> { el: HTMLElement, scale: number }
+	const { provides: selection } = useSelectionCapability()
+	const zoomRestoredRef = useRef(false)
+
+	// Runtime selection bridge + zoom/page persistence
 	const { provides: scrollProvides, state: scrollState } = useScroll()
 	const { provides: zoomProvides, state: zoomState } = useZoom()
 	const currentZoomLevel = zoomState?.currentZoomLevel
-	const hasAppliedStoredZoomRef = useRef(false)
-	const pendingRestoreTargetRef = useRef(null)
 
+	// Expose a narrow API for header controls
 	useEffect(() => {
-		if (!scrollProvides || !bookId) {
-			return undefined
+		if (!registerApi) return
+		const api = {
+			zoomIn: () => zoomProvides?.zoomIn?.(),
+			zoomOut: () => zoomProvides?.zoomOut?.(),
+			fitToScreen: () => zoomProvides?.requestZoom?.(ZoomMode.FitPage),
+			goToPage: (pageNumber) => scrollProvides?.scrollToPage?.({ pageNumber }),
 		}
+		registerApi(api)
+		// Intentionally no cleanup to avoid clearing API when parent callback identity changes
+	}, [registerApi, zoomProvides, scrollProvides])
 
-		return scrollProvides.onPageChange(({ pageNumber, totalPages }) => {
-			const currentState = getBookReadingState(bookId)
-
-			if (!hasRestoredPage) {
-				if (pendingRestoreTargetRef.current && pageNumber === pendingRestoreTargetRef.current) {
-					pendingRestoreTargetRef.current = null
-					onMarkPageRestored()
-				}
-				if (pendingRestoreTargetRef.current && pageNumber !== pendingRestoreTargetRef.current) {
-					return
-				}
-				if (!pendingRestoreTargetRef.current && currentState?.currentPage && currentState.currentPage !== pageNumber) {
-					return
-				}
-			}
-
-			if (currentState?.currentPage !== pageNumber) {
-				updateBookReadingState(bookId, { currentPage: pageNumber, totalPages })
-			}
-		})
-	}, [bookId, getBookReadingState, hasRestoredPage, onMarkPageRestored, scrollProvides, updateBookReadingState])
-
+	// Persist zoom changes using EmbedPDF Zoom state (fractional value, e.g. 1.0 = 100%)
 	useEffect(() => {
-		if (!scrollProvides || hasRestoredPage || !bookId || !scrollState?.totalPages) {
-			return
-		}
+		if (typeof currentZoomLevel !== "number" || !Number.isFinite(currentZoomLevel)) return
+		// Avoid persisting initial plugin auto/default zoom before restoration completes
+		if (!HasRestoredPage) return
+		const pct = Math.round(currentZoomLevel * 100)
+		const rs = getBookReadingState?.(bookId)
+		const requestedLevel = zoomState?.zoomLevel
+		const zoomMode = typeof requestedLevel === "string" ? requestedLevel : null
+		if (rs?.zoomLevel === pct && (rs?.zoomMode ?? null) === zoomMode) return
+		updateBookReadingState?.(bookId, { zoomLevel: pct, zoomMode })
+	}, [bookId, currentZoomLevel, zoomState?.zoomLevel, HasRestoredPage, getBookReadingState, updateBookReadingState])
 
-		const readingState = getBookReadingState(bookId)
-		const targetPage = readingState?.currentPage
-		if (!targetPage || targetPage <= 0) {
-			return
-		}
-
-		if (targetPage > scrollState.totalPages) {
-			pendingRestoreTargetRef.current = targetPage
-			return
-		}
-
-		if (scrollState.currentPage === targetPage) {
-			pendingRestoreTargetRef.current = null
-			onMarkPageRestored()
-			return
-		}
-
-		if (pendingRestoreTargetRef.current !== targetPage) {
-			pendingRestoreTargetRef.current = targetPage
-		}
-
-		scrollProvides.scrollToPage({ pageNumber: targetPage, behavior: "instant" })
+	// Persist current page and total pages when scroll state updates
+	useEffect(() => {
+		const page = scrollState?.currentPage
+		const total = scrollState?.totalPages
+		// Require valid values
+		if (!bookId || !total || !page) return
+		// Avoid clobbering saved state before restoration
+		if (!HasRestoredPage) return
+		const rs = getBookReadingState?.(bookId)
+		if (rs?.currentPage === page && rs?.totalPages === total) return
+		updateBookReadingState?.(bookId, { currentPage: page, totalPages: total })
 	}, [
 		bookId,
+		scrollState?.currentPage,
+		scrollState?.totalPages,
+		HasRestoredPage,
 		getBookReadingState,
-		hasRestoredPage,
-		onMarkPageRestored,
-		scrollProvides,
-		scrollState.currentPage,
-		scrollState.totalPages,
+		updateBookReadingState,
 	])
 
+	// Restore persisted page once when document metrics are ready
 	useEffect(() => {
-		if (!scrollProvides || hasRestoredPage) {
-			return
+		if (!scrollProvides) return
+		const total = scrollState?.totalPages
+		if (!total || total <= 0) return
+		if (HasRestoredPage) return
+		const savedPage = getBookReadingState?.(bookId)?.currentPage
+		if (typeof savedPage === "number" && savedPage > 0) {
+			scrollProvides.scrollToPage?.({ pageNumber: savedPage, behavior: "instant" })
 		}
-		const off = scrollProvides.onLayoutReady?.(() => {
-			const target = pendingRestoreTargetRef.current
-			if (!target) return
-			scrollProvides.scrollToPage({ pageNumber: target, behavior: "instant" })
-		})
-		return () => off?.()
-	}, [scrollProvides, hasRestoredPage])
+		// Whether or not we scrolled, mark restored so persistence can start
+		OnMarkPageRestored?.()
+	}, [scrollProvides, scrollState?.totalPages, HasRestoredPage, OnMarkPageRestored, bookId, getBookReadingState])
 
+	// Restore persisted zoom once zoom state is known
 	useEffect(() => {
-		if (!registerApi || !scrollProvides || !zoomProvides) {
-			return
-		}
-		registerApi({
-			goToPage: (pageNumber) => {
-				scrollProvides.scrollToPage({ pageNumber })
-			},
-			fitToScreen: () => zoomProvides.requestZoom(ZoomMode.FitWidth),
-			getCurrentPage: () => scrollProvides.getCurrentPage?.() ?? 1,
-			getTotalPages: () => scrollProvides.getTotalPages?.() ?? 0,
-			zoomIn: zoomProvides.zoomIn,
-			zoomOut: zoomProvides.zoomOut,
-		})
-	}, [registerApi, scrollProvides, zoomProvides])
-
-	useEffect(() => {
-		if (!bookId || currentZoomLevel === undefined) {
-			return
-		}
-		const storedZoom = getBookReadingState(bookId)?.zoomLevel
-		const currentPct = Math.round(currentZoomLevel * 100)
-
-		// During initialization, never overwrite a stored zoom with a different initial value.
-		if (!hasAppliedStoredZoomRef.current) {
-			if (typeof storedZoom === "number" && storedZoom > 0) {
-				if (storedZoom !== currentPct) {
-					return
-				}
-				// already at stored zoom; allow future persisting
-				hasAppliedStoredZoomRef.current = true
-			} else {
-				// no stored zoom; allow persisting from now on
-				hasAppliedStoredZoomRef.current = true
+		if (!zoomProvides) return
+		const current = zoomState?.currentZoomLevel
+		if (typeof current !== "number" || !Number.isFinite(current)) return
+		// Avoid clobbering saved zoom before restoration
+		if (!HasRestoredPage) return
+		if (zoomRestoredRef.current) return
+		const saved = getBookReadingState?.(bookId)
+		const savedMode = saved?.zoomMode
+		const savedZoomPct = saved?.zoomLevel
+		if (typeof savedMode === "string" && savedMode) {
+			zoomProvides.requestZoom?.(savedMode)
+		} else if (typeof savedZoomPct === "number" && savedZoomPct > 0) {
+			const savedLevel = savedZoomPct / 100
+			if (Math.abs(savedLevel - current) > 0.001) {
+				zoomProvides.requestZoom?.(savedLevel)
 			}
 		}
-
-		// If not marked applied yet, do nothing
-		if (!hasAppliedStoredZoomRef.current) {
-			return
-		}
-
-		// Avoid redundant writes
-		if (typeof storedZoom === "number" && storedZoom === currentPct) {
-			return
-		}
-
-		const toPersist = currentPct
-		updateBookReadingState(bookId, { zoomLevel: toPersist })
-	}, [bookId, currentZoomLevel, updateBookReadingState, getBookReadingState])
-
-	useEffect(() => {
-		// Wait for zoom system to initialize (currentZoomLevel becomes defined)
-		if (!bookId || !zoomProvides || hasAppliedStoredZoomRef.current || currentZoomLevel === undefined) {
-			return
-		}
-		const storedZoom = getBookReadingState(bookId)?.zoomLevel
-		if (typeof storedZoom === "number" && storedZoom > 0) {
-			zoomProvides.requestZoom(storedZoom / 100)
-		}
-		hasAppliedStoredZoomRef.current = true
-	}, [bookId, getBookReadingState, zoomProvides, currentZoomLevel])
+		// Mark zoom restored so subsequent user zooms do not trigger a restore loop
+		zoomRestoredRef.current = true
+	}, [zoomProvides, zoomState?.currentZoomLevel, HasRestoredPage, bookId, getBookReadingState])
 
 	const renderPage = useCallback(
 		({ width, height, pageIndex, scale, rotation }) => (
@@ -176,6 +125,13 @@ function ViewerRuntime({
 					width,
 					height,
 					position: "relative",
+				}}
+				ref={(el) => {
+					if (el) {
+						pageCtxRef.current.set(pageIndex, { el, scale })
+					} else {
+						pageCtxRef.current.delete(pageIndex)
+					}
 				}}
 			>
 				<PagePointerProvider
@@ -193,6 +149,40 @@ function ViewerRuntime({
 		[]
 	)
 
+	// When a PDF selection ends, dispatch a simple event with selected text and a window clientRect
+	useEffect(() => {
+		if (!selection) return
+
+		return selection.onEndSelection(() => {
+			// Get the selected text (array of lines)
+			const textTask = selection.getSelectedText()
+			textTask.wait((lines) => {
+				const text = Array.isArray(lines) ? lines.join("\n") : String(lines || "")
+
+				// Get bounding rects for pages and pick the first non-empty
+				const rects = selection.getBoundingRects?.() || []
+				const first = rects.find(Boolean)
+				if (!first) return
+				const ctx = pageCtxRef.current.get(first.page)
+				if (!ctx || !ctx.el || !ctx.scale) return
+
+				const pageBox = ctx.el.getBoundingClientRect()
+				const r = first.rect
+				const scale = ctx.scale
+				const clientRect = {
+					left: pageBox.left + r.origin.x * scale,
+					top: pageBox.top + r.origin.y * scale,
+					right: pageBox.left + (r.origin.x + r.size.width) * scale,
+					bottom: pageBox.top + (r.origin.y + r.size.height) * scale,
+					width: r.size.width * scale,
+					height: r.size.height * scale,
+				}
+
+				document.dispatchEvent(new CustomEvent("talimio-pdf-selection", { detail: { text, clientRect } }))
+			}, ignore)
+		})
+	}, [selection])
+
 	return (
 		<Viewport className="h-full w-full">
 			<Scroller renderPage={renderPage} />
@@ -208,15 +198,18 @@ function PDFViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 	const previousSourceRef = useRef({ url: null, bookId: null })
 	const blobUrlRef = useRef(null)
 	const initialZoomLevelRef = useRef(null)
+	const initialZoomModeRef = useRef(null)
 	const initialPageRef = useRef(null)
 
-	// Zustand store access via custom hooks (persistent state)
+	// Engine and store
+	const { engine, isLoading: engineLoading } = usePdfiumEngine()
 	const readingState = useBookReadingState(bookId)
 	const { updateBookReadingState } = useBookActions()
 	const storeHydrated = useBookStoreHydrated()
 
-	// Capture initial snapshots at render time (before plugin creation) to reduce flicker
+	// Capture initial snapshots at render time (before plugin creation) to avoid flicker
 	if (
+		storeHydrated &&
 		initialZoomLevelRef.current === null &&
 		typeof readingState?.zoomLevel === "number" &&
 		readingState.zoomLevel > 0
@@ -224,19 +217,53 @@ function PDFViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 		initialZoomLevelRef.current = readingState.zoomLevel
 	}
 	if (
+		storeHydrated &&
+		initialZoomModeRef.current === null &&
+		typeof readingState?.zoomMode === "string" &&
+		readingState.zoomMode
+	) {
+		initialZoomModeRef.current = readingState.zoomMode
+	}
+	if (
+		storeHydrated &&
 		initialPageRef.current === null &&
+		storeHydrated &&
 		typeof readingState?.currentPage === "number" &&
 		readingState.currentPage > 0
 	) {
 		initialPageRef.current = readingState.currentPage
 	}
 
-	const { engine, isLoading: engineLoading } = usePdfiumEngine()
-
+	// Mark restored page flag once runtime confirms
 	const markPageRestored = useCallback(() => {
 		setHasRestoredPage(true)
 	}, [])
 
+	// Reset page restoration when source changes
+	useEffect(() => {
+		const hasSourceChanged = previousSourceRef.current.url !== url || previousSourceRef.current.bookId !== bookId
+		if (hasSourceChanged) {
+			setHasRestoredPage(false)
+			previousSourceRef.current = { url, bookId }
+		}
+	}, [url, bookId])
+
+	// Optionally restore persisted zoom/page once store is hydrated
+	useEffect(() => {
+		if (!storeHydrated) return
+		if (initialZoomLevelRef.current === null) {
+			const z = readingState?.zoomLevel
+			if (typeof z === "number" && z > 0) initialZoomLevelRef.current = z
+		}
+		if (initialZoomModeRef.current === null) {
+			const m = readingState?.zoomMode
+			if (typeof m === "string" && m) initialZoomModeRef.current = m
+		}
+		if (initialPageRef.current === null) {
+			const p = readingState?.currentPage
+			if (typeof p === "number" && p > 0) initialPageRef.current = p
+		}
+	}, [storeHydrated, readingState?.zoomLevel, readingState?.zoomMode, readingState?.currentPage])
 	// Fetch PDF and create blob URL (EmbedPDF needs blob URL for auth endpoints)
 	useEffect(() => {
 		if (!url) {
@@ -254,23 +281,13 @@ function PDFViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 		const fetchPdf = async () => {
 			try {
 				setLoadError(null)
-				// Fetch from authenticated endpoint (cookies sent automatically)
 				const response = await fetch(url, { credentials: "include" })
-
 				if (!response.ok) {
 					throw new Error(`Failed to load PDF: ${response.status}`)
 				}
-
 				const blob = await response.blob()
-
-				if (cancelled) {
-					return
-				}
-
-				// Create blob URL for EmbedPDF
-				if (blobUrlRef.current) {
-					URL.revokeObjectURL(blobUrlRef.current)
-				}
+				if (cancelled) return
+				if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
 				const blobUrl = URL.createObjectURL(blob)
 				blobUrlRef.current = blobUrl
 				setPdfBlobUrl(blobUrl)
@@ -283,7 +300,6 @@ function PDFViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 		}
 
 		fetchPdf()
-
 		return () => {
 			cancelled = true
 		}
@@ -298,48 +314,19 @@ function PDFViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 		}
 	}, [])
 
-	// Reset page restoration when source changes
-	useEffect(() => {
-		const hasSourceChanged = previousSourceRef.current.url !== url || previousSourceRef.current.bookId !== bookId
-		if (hasSourceChanged) {
-			setHasRestoredPage(false)
-			previousSourceRef.current = { url, bookId }
-		}
-	}, [url, bookId])
-
-	// Capture initial persisted zoom once (avoid plugin re-instantiation on zoom changes)
-	useEffect(() => {
-		if (!storeHydrated) return
-		if (initialZoomLevelRef.current === null) {
-			const z = readingState?.zoomLevel
-			if (typeof z === "number" && z > 0) {
-				initialZoomLevelRef.current = z
-			}
-		}
-	}, [storeHydrated, readingState?.zoomLevel])
-
-	// Capture initial persisted page once for ScrollPlugin.initialPage
-	useEffect(() => {
-		if (!storeHydrated) return
-		if (initialPageRef.current === null) {
-			const p = readingState?.currentPage
-			if (typeof p === "number" && p > 0) {
-				initialPageRef.current = p
-			}
-		}
-	}, [storeHydrated, readingState?.currentPage])
-
 	const plugins = useMemo(() => {
 		if (!pdfBlobUrl) {
 			return []
 		}
 
 		const documentId = bookId ? `book-${bookId}` : "pdf-document"
-		// Prefer saved zoom for initial load to avoid flicker; fall back to Automatic
-		const initialZoomLevel =
-			typeof initialZoomLevelRef.current === "number" && initialZoomLevelRef.current > 0
-				? initialZoomLevelRef.current / 100
-				: ZoomMode.Automatic
+		// Prefer saved zoomMode (Automatic/FitPage/FitWidth). If absent, use saved numeric zoom; else Automatic.
+		const defaultZoom =
+			typeof initialZoomModeRef.current === "string" && initialZoomModeRef.current
+				? initialZoomModeRef.current
+				: typeof initialZoomLevelRef.current === "number" && initialZoomLevelRef.current > 0
+					? initialZoomLevelRef.current / 100
+					: ZoomMode.Automatic
 		return [
 			createPluginRegistration(LoaderPluginPackage, {
 				loadingOptions: {
@@ -357,7 +344,7 @@ function PDFViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 			}),
 			createPluginRegistration(RenderPluginPackage),
 			createPluginRegistration(ZoomPluginPackage, {
-				defaultZoomLevel: initialZoomLevel,
+				defaultZoomLevel: defaultZoom,
 			}),
 			createPluginRegistration(InteractionManagerPluginPackage),
 			createPluginRegistration(SelectionPluginPackage),
@@ -403,7 +390,7 @@ function PDFViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 		<div className="relative flex h-full flex-col overflow-auto bg-muted py-8 dark:bg-background/80">
 			<EmbedPDF engine={engine} plugins={plugins}>
 				<GlobalPointerProvider>
-					<div className="flex h-full w-full justify-center">
+					<div className="flex h-full w-full justify-center" data-selection-zone="true">
 						<ViewerRuntime
 							bookId={bookId}
 							registerApi={registerApi}

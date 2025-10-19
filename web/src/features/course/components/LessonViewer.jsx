@@ -59,7 +59,7 @@ export function LessonViewer({ lesson, isLoading, error, onBack, onMarkComplete,
 	}
 
 	return (
-		<div ref={containerRef} className="h-[calc(100vh-4rem)] overflow-y-auto w-full" data-selection-zone="true">
+		<div ref={containerRef} className="h-[calc(100vh-4rem)] overflow-y-auto w-full">
 			<div className="max-w-4xl w-full mx-auto px-4 flex justify-center">
 				<div
 					className={cn(
@@ -123,6 +123,7 @@ export function LessonViewer({ lesson, isLoading, error, onBack, onMarkComplete,
 							"p-6 md:p-8 prose prose-lg max-w-none",
 							isDarkMode ? "prose-invert prose-emerald" : "prose-emerald"
 						)}
+						data-selection-zone="true"
 					>
 						<ContentRenderer
 							content={lesson.md_source || lesson.content}

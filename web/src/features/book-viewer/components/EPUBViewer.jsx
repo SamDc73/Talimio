@@ -11,6 +11,9 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState(null)
 
+	// Container to find the iframe rendered by ReactReader
+	const containerRef = useRef(null)
+
 	// Zustand reading state for initial EPUB location
 	const readingState = useBookReadingState(bookId)
 
@@ -94,6 +97,69 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 
 			// Disable keyboard navigation
 			if (rendition) {
+				// Define selection handler once, independent of container availability
+				const handleSelected = (cfiRange, contents) => {
+					try {
+						const sel = contents?.window?.getSelection?.()
+						// Prefer epub.js rendition range/text for stability
+						let textFromCfi = null
+						let rangeFromCfi = null
+						try {
+							rangeFromCfi = rendition?.getRange?.(cfiRange) || null
+							textFromCfi = rangeFromCfi?.toString?.() || null
+						} catch {}
+						const selectionText = sel?.toString?.().trim()
+						const text = (textFromCfi || selectionText || "").trim()
+						const range = rangeFromCfi || (sel?.rangeCount ? sel.getRangeAt(0) : null)
+						// Build a robust union from individual client rects to match lesson feel
+						let r = null
+						try {
+							const rawRects = range?.getClientRects?.() || []
+							const rects = Array.from(rawRects).filter((rr) => rr && rr.width > 0 && rr.height > 0)
+							if (rects.length > 0) {
+								let minLeft = rects[0].left
+								let maxRight = rects[0].right
+								let minTop = rects[0].top
+								const firstHeight = rects[0].height
+								for (let i = 1; i < rects.length; i++) {
+									const rr = rects[i]
+									if (rr.left < minLeft) minLeft = rr.left
+									if (rr.right > maxRight) maxRight = rr.right
+									if (rr.top < minTop) minTop = rr.top
+								}
+								r = {
+									left: minLeft,
+									right: maxRight,
+									top: minTop,
+									bottom: minTop + firstHeight,
+									width: maxRight - minLeft,
+									height: firstHeight,
+								}
+							} else {
+								r = range ? range.getBoundingClientRect() : null
+							}
+						} catch {
+							r = range ? range.getBoundingClientRect() : null
+						}
+						const iframeEl = contents?.document?.defaultView?.frameElement || contents?.iframe
+						const iframeRect = iframeEl?.getBoundingClientRect?.()
+
+						if (!text || !r || !iframeRect) return
+						const clientRect = {
+							left: iframeRect.left + r.left,
+							right: iframeRect.left + r.right,
+							top: iframeRect.top + r.top,
+							bottom: iframeRect.top + r.bottom,
+							width: r.width,
+							height: r.height,
+						}
+
+						document.dispatchEvent(new CustomEvent("talimio-iframe-selection", { detail: { text, clientRect } }))
+					} catch {
+						// ignore
+					}
+				}
+
 				// Override navigation methods
 				rendition.prev = () => {} // Disable prev navigation
 				rendition.next = () => {} // Disable next navigation
@@ -105,6 +171,8 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 					container.removeEventListener("keydown", rendition.handleKeyPress)
 					container.removeEventListener("keyup", rendition.handleKeyPress)
 				}
+				rendition.on("selected", handleSelected)
+				rendition.__askaiDetach = () => rendition.off?.("selected", handleSelected)
 			}
 
 			// Navigation is now hidden via the styles prop in ReactReader
@@ -126,6 +194,82 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 			applyFontSize()
 		}
 	}, [applyFontSize, firstRenderDone])
+
+	// Bridge selections from EPUB iframe(s) to top-level tooltip
+	useEffect(() => {
+		if (!containerRef.current) return
+
+		const attached = new Set()
+		const attachToIframe = (iframe) => {
+			if (!iframe || attached.has(iframe)) return
+			try {
+				const iw = iframe.contentWindow
+				const idoc = iw?.document
+				if (!iw || !idoc) return
+
+				const handler = () => {
+					try {
+						const sel = iw.getSelection()
+						const text = sel?.toString().trim()
+						if (!text) return
+						const range = sel.getRangeAt(0)
+						const r = range.getBoundingClientRect()
+						const iframeRect = iframe.getBoundingClientRect()
+						const rect = {
+							left: iframeRect.left + r.left,
+							right: iframeRect.left + r.right,
+							top: iframeRect.top + r.top,
+							bottom: iframeRect.top + r.bottom,
+							width: r.width,
+							height: r.height,
+						}
+						document.dispatchEvent(new CustomEvent("talimio-iframe-selection", { detail: { text, clientRect: rect } }))
+					} catch {
+						// ignore
+					}
+				}
+
+				idoc.addEventListener("mouseup", handler)
+				idoc.addEventListener("selectionchange", handler)
+				attached.add(iframe)
+				iframe.__askaiDetach = () => {
+					idoc.removeEventListener("mouseup", handler)
+					idoc.removeEventListener("selectionchange", handler)
+				}
+			} catch {
+				// ignore cross-origin or timing issues
+			}
+		}
+
+		// Attach to any existing iframes inside the reader
+		containerRef.current.querySelectorAll("iframe").forEach(attachToIframe)
+
+		// Observe the reader container for new iframes
+		const mo = new MutationObserver((mutations) => {
+			for (const m of mutations) {
+				for (const n of m.addedNodes) {
+					if (n.nodeType === 1) {
+						if (n.tagName === "IFRAME") attachToIframe(n)
+						if (n.querySelectorAll) n.querySelectorAll("iframe").forEach(attachToIframe)
+					}
+				}
+			}
+		})
+		mo.observe(containerRef.current, { childList: true, subtree: true })
+
+		return () => {
+			mo.disconnect()
+			attached.forEach((iframe) => {
+				try {
+					iframe.__askaiDetach?.()
+				} catch {
+					// ignore
+				}
+			})
+			attached.clear()
+		}
+		// Intentionally run once: MutationObserver captures dynamic iframe changes
+	}, [])
 
 	// Hide navigation elements via CSS injection (cleanest workaround for react-reader's hardcoded arrows)
 	useEffect(() => {
@@ -256,7 +400,7 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 	}
 
 	return (
-		<div className="h-full bg-background epub-container">
+		<div ref={containerRef} className="h-full bg-background epub-container" data-selection-zone="true">
 			<div className="max-w-4xl mx-auto p-8 h-full">
 				<div className="bg-card rounded-lg shadow-sm h-full">
 					<ReactReader
@@ -273,7 +417,7 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 							restore: false,
 							width: "100%",
 							height: "100%",
-							allowScriptedContent: false,
+							allowScriptedContent: true,
 						}}
 						epubInitOptions={{
 							openAs: "epub",

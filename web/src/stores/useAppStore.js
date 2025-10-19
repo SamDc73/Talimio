@@ -220,6 +220,8 @@ const useAppStore = create(
 					const hasChanged =
 						!currentState ||
 						(readingState.currentPage !== undefined && readingState.currentPage !== currentState.currentPage) ||
+						(readingState.totalPages !== undefined && readingState.totalPages !== currentState.totalPages) ||
+						(readingState.zoomMode !== undefined && readingState.zoomMode !== currentState.zoomMode) ||
 						(readingState.zoomLevel !== undefined && readingState.zoomLevel !== currentState.zoomLevel) ||
 						(readingState.scrollPosition !== undefined &&
 							(readingState.scrollPosition.x !== currentState.scrollPosition?.x ||

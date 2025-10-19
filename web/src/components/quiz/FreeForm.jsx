@@ -18,7 +18,7 @@ export function FreeForm({ question, sampleAnswer, minLength = 50 }) {
 	const remainingChars = Math.max(0, minLength - userAnswer.length)
 
 	return (
-		<div className="border-l-4 border-l-completed/20 pl-6 my-8 bg-background/30 rounded-r-lg">
+		<div className="border-l-4 border-l-completed/20 pl-6 my-8 bg-background/30 rounded-r-lg" data-askai-exclude="true">
 			<h4 className="mb-6 text-lg font-medium text-foreground">{question}</h4>
 
 			<div className="mb-6">
