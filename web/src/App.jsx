@@ -78,7 +78,7 @@ function App() {
 						{/* Catch all - redirect to home */}
 						<Route path="*" element={<Navigate to="/" replace />} />
 					</Routes>
-					{/* Global selection tooltip (opens assistant with selected text) */}
+					{/* Global selection tooltip*/}
 					<TextSelectionTooltip />
 				</ChatSidebarProvider>
 			</ThemeProvider>

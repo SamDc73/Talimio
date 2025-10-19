@@ -5,6 +5,8 @@ import { ChatSidebarContext } from "./chatSidebarContext"
 export function ChatSidebarProvider({ children }) {
 	const [isOpen, setIsOpen] = useState(false)
 	const [initialText, setInitialText] = useState("")
+	// Store a one-time quote to attach to the very next user message
+	const [pendingQuote, setPendingQuote] = useState("")
 
 	const openChat = (text = "") => {
 		setInitialText(text)
@@ -14,7 +16,23 @@ export function ChatSidebarProvider({ children }) {
 	const toggleChat = () => setIsOpen((v) => !v)
 
 	// Expose initialText to allow runtime/UI to read/clear selection context
-	const value = { isOpen, openChat, closeChat, toggleChat, initialText, setInitialText }
+	const claimPendingQuote = () => {
+		const q = pendingQuote || initialText || ""
+		if (pendingQuote) setPendingQuote("")
+		return q
+	}
+
+	const value = {
+		isOpen,
+		openChat,
+		closeChat,
+		toggleChat,
+		initialText,
+		setInitialText,
+		// quote handoff for next sent message
+		setPendingQuote,
+		claimPendingQuote,
+	}
 
 	return (
 		<ChatSidebarContext.Provider value={value}>
