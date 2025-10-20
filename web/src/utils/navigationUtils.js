@@ -17,17 +17,6 @@ export function generateCourseUrl(courseId, lessonId = null) {
 }
 
 /**
- * Generate preview URL for courses
- * @param {string} courseId - Course ID
- * @returns {string} Preview URL
- */
-function generatePreviewUrl(courseId) {
-	if (!courseId) return "/"
-
-	return `/course/preview/${courseId}`
-}
-
-/**
  * Hook for course-aware navigation
  */
 export function useCourseNavigation() {
@@ -42,11 +31,6 @@ export function useCourseNavigation() {
 		goToLesson: (courseId, lessonId) => {
 			if (!courseId || !lessonId) return
 			navigate(generateCourseUrl(courseId, lessonId))
-		},
-
-		goToCoursePreview: (courseId) => {
-			if (!courseId) return
-			navigate(generatePreviewUrl(courseId))
 		},
 	}
 }

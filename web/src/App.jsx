@@ -7,7 +7,6 @@ import { ChatSidebarProvider } from "@/features/assistant/contexts/ChatSidebarCo
 import AuthPage from "@/features/auth/AuthPage"
 import { BookViewer } from "@/features/book-viewer"
 import CoursePage from "@/features/course/CoursePage"
-import CoursePreviewPage from "@/features/course/CoursePreviewPage"
 import HomePage from "@/features/home"
 import LessonPage from "@/features/lesson/LessonPage"
 import { VideoViewer } from "@/features/video-viewer"
@@ -45,14 +44,6 @@ function App() {
 							element={
 								<ProtectedRoute>
 									<LessonPage />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path="/course/preview/:courseId"
-							element={
-								<ProtectedRoute>
-									<CoursePreviewPage />
 								</ProtectedRoute>
 							}
 						/>

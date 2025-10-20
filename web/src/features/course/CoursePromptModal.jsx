@@ -21,7 +21,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "" }) {
 	const [error, setError] = useState("")
 
 	const courseService = useCourseService()
-	const { goToCoursePreview } = useCourseNavigation()
+	const { goToCourse } = useCourseNavigation()
 
 	const resetForm = () => {
 		setPrompt("")
@@ -53,7 +53,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "" }) {
 				if (onSuccess) {
 					onSuccess(response)
 				}
-				goToCoursePreview(response.id)
+				goToCourse(response.id)
 				closeModal()
 			} else {
 				throw new Error("Failed to create course - no response data")
