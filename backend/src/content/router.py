@@ -17,8 +17,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/content", tags=["content"])
 
 
-
-
 @router.get("")
 async def get_all_content(
     _request: Request,
@@ -32,7 +30,7 @@ async def get_all_content(
     include_archived: Annotated[bool, Query(description="Include archived content")] = False,
 ) -> ContentListResponse:
     """
-    List all content across different types (videos, flashcards, books, courses).
+    List all content across different types (videos, books, courses).
 
     Returns a unified list of content items with consistent structure.
     Uses ultra-optimized single query with database-level sorting and pagination.
@@ -59,12 +57,7 @@ async def archive_content_endpoint(
     auth: CurrentAuth,
     db: DbSession,
 ) -> None:
-    """
-    Archive a content item by type and ID.
-
-    Supports: youtube (videos), flashcards, book, course
-    Requires authentication when Supabase auth is configured.
-    """
+    """Archive a content item by type and ID."""
     from src.content.services.content_archive_service import ContentArchiveService
 
     try:
@@ -82,12 +75,7 @@ async def unarchive_content_endpoint(
     auth: CurrentAuth,
     db: DbSession,
 ) -> None:
-    """
-    Unarchive a content item by type and ID.
-
-    Supports: youtube (videos), flashcards, book, course
-    Requires authentication when Supabase auth is configured.
-    """
+    """Unarchive a content item by type and ID."""
     from src.content.services.content_archive_service import ContentArchiveService
 
     try:
@@ -105,12 +93,7 @@ async def delete_content(
     auth: CurrentAuth,
     db: DbSession,
 ) -> None:
-    """
-    Delete a content item by type and ID.
-
-    Supports: youtube (videos), flashcards, book, course
-    Requires authentication when Supabase auth is configured.
-    """
+    """Delete a content item by type and ID."""
     content_service = ContentService(session=db)
     try:
         await content_service.delete_content(
@@ -148,4 +131,3 @@ async def test_books_endpoint(
     books = [{"id": row[0], "title": row[1], "progress": row[2]} for row in result]
 
     return {"books": books}
-

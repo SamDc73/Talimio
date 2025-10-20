@@ -682,7 +682,6 @@ Talimio is a comprehensive learning platform that offers:
 - Document uploads for analysis and learning (including resumes, articles, papers, etc.)
 - Learning courses that guide skill development
 - Progress tracking and personalized recommendations
-- Flashcards for knowledge retention
 
 # Interaction Guidelines
 
