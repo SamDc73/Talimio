@@ -12,13 +12,14 @@ if TYPE_CHECKING:
 import litellm
 from pydantic import BaseModel
 
-from src.ai.models import CourseStructure, ExecutionPlan, LessonContent
+from src.ai.models import CourseStructure, ExecutionPlan, LessonContent, SelfAssessmentQuiz
 from src.ai.prompts import (
+    COURSE_GENERATION_PROMPT,
     E2B_EXECUTION_SYSTEM_PROMPT,
     LESSON_GENERATION_PROMPT,
     MDX_ERROR_FIX_PROMPT,
     MEMORY_CONTEXT_SYSTEM_PROMPT,
-    COURSE_GENERATION_PROMPT,
+    SELF_ASSESSMENT_QUESTIONS_PROMPT,
 )
 from src.config.settings import get_settings
 
@@ -86,7 +87,7 @@ class LLMClient:
             msg = f"Model completion failed: {e}"
             raise RuntimeError(msg) from e
 
-    async def get_completion(  # noqa: C901
+    async def get_completion(
         self,
         messages: list[dict[str, Any]],
         response_model: type[BaseModel] | None = None,
@@ -372,6 +373,54 @@ class LLMClient:
             msg = "Failed to generate course outline"
             raise RuntimeError(msg) from e
 
+    async def generate_self_assessment_questions(
+        self,
+        *,
+        topic: str,
+        level: str | None = None,
+        user_id: str | UUID | None = None,
+    ) -> SelfAssessmentQuiz:
+        """Generate optional self-assessment questions for a course topic."""
+        normalized_topic = topic.strip()
+        if not normalized_topic:
+            msg = "Topic must not be empty"
+            raise ValueError(msg)
+
+        level_text = level.strip() if level else "unspecified"
+
+        try:
+            messages = [
+                {
+                    "role": "system",
+                    "content": SELF_ASSESSMENT_QUESTIONS_PROMPT.format(
+                        topic=normalized_topic,
+                        level=level_text,
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": "Draft optional multiple-choice self-assessment questions to personalize the course.",
+                },
+            ]
+
+            result = await self.get_completion(
+                messages,
+                response_model=SelfAssessmentQuiz,
+                temperature=0.4,
+                user_id=user_id,
+            )
+
+            if not isinstance(result, SelfAssessmentQuiz):
+                msg = "Expected SelfAssessmentQuiz from structured output"
+                raise TypeError(msg)
+
+            return result
+
+        except Exception as error:
+            self._logger.exception("Error generating self-assessment questions")
+            msg = "Failed to generate self-assessment questions"
+            raise RuntimeError(msg) from error
+
     async def create_lesson(self, node_meta: dict[str, Any], auth: "AuthContext | None" = None) -> LessonContent:
         """Generate lesson content.
 
@@ -426,7 +475,7 @@ class LLMClient:
                 {
                     "role": "user",
                     "content": (
-                        f"Write the complete lesson titled \"{title}\" in Markdown,"
+                        f'Write the complete lesson titled "{title}" in Markdown,'
                         " following every instruction in the system prompt."
                     ),
                 },

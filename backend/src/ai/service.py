@@ -11,7 +11,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from src.ai.client import LLMClient
-from src.ai.models import CourseStructure, ExecutionPlan
+from src.ai.models import CourseStructure, ExecutionPlan, SelfAssessmentQuiz
 from src.ai.prompts import (
     ASSISTANT_CHAT_SYSTEM_PROMPT,
 )
@@ -50,6 +50,26 @@ class AIService:
             user_prompt=user_prompt,
             user_id=str(user_id)
         )
+
+    async def generate_self_assessment(
+        self,
+        *,
+        topic: str,
+        level: str | None,
+        user_id: UUID,
+    ) -> SelfAssessmentQuiz:
+        """Generate optional self-assessment questions for the given topic."""
+        try:
+            return await self._llm_client.generate_self_assessment_questions(
+                topic=topic,
+                level=level,
+                user_id=str(user_id),
+            )
+        except ValueError:
+            raise
+        except Exception:
+            logger.exception("Failed to generate self-assessment for topic '%s'", topic)
+            raise
 
     # General operations
     async def assistant_chat(

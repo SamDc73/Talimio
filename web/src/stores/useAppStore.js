@@ -619,6 +619,7 @@ const useAppStore = create(
 					language: "en",
 					autoPlayVideos: true,
 					defaultZoomLevel: 1,
+					selfAssessmentEnabled: false,
 					// User preferences
 					userPreferences: null,
 					// UI preferences
@@ -647,6 +648,12 @@ const useAppStore = create(
 						next = "light"
 					}
 					get().updatePreference("theme", next)
+				},
+
+				setSelfAssessmentEnabled: (enabled) => {
+					set((state) => {
+						state.preferences.selfAssessmentEnabled = Boolean(enabled)
+					})
 				},
 
 				// Assistant preference actions
@@ -1139,5 +1146,7 @@ export const selectVideoPlaybackState = (videoId) => (state) => state.videos.pla
 export const selectAssistantSidebarPinned = (state) => state.preferences.assistantSidebarPinned
 export const selectAssistantModel = (state) => state.preferences.assistantModel
 export const selectAssistantPreferences = (state) => state.getAssistantPreferences()
+export const selectSelfAssessmentEnabled = (state) => state.preferences.selfAssessmentEnabled
+export const selectSetSelfAssessmentEnabled = (state) => state.setSelfAssessmentEnabled
 
 export default useAppStore

@@ -105,6 +105,70 @@ class CourseStructure(BaseModel):
         return []
 
 
+class SelfAssessmentQuestion(BaseModel):
+    """Single-select self-assessment question."""
+
+    type: Literal["single_select"] = Field(description="Question presentation type")
+    question: str = Field(description="Learner-facing question text")
+    options: list[str] = Field(description="Selectable options")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("question")
+    @classmethod
+    def _validate_question(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            msg = "Question must not be empty"
+            raise ValueError(msg)
+        return text
+
+    @field_validator("options", mode="before")
+    @classmethod
+    def _normalize_options(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(option).strip() for option in value if str(option).strip()]
+        return [str(value).strip()]
+
+    @field_validator("options")
+    @classmethod
+    def _validate_options(cls, value: list[str]) -> list[str]:
+        if len(value) < 3 or len(value) > 5:
+            msg = "Options must contain between 3 and 5 entries"
+            raise ValueError(msg)
+        return value
+
+
+class SelfAssessmentQuiz(BaseModel):
+    """Structured payload for self-assessment questions."""
+
+    questions: list[SelfAssessmentQuestion] = Field(description="Collection of self-assessment questions")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("questions", mode="before")
+    @classmethod
+    def _normalize_questions(cls, value: Any) -> list[Any]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    @field_validator("questions")
+    @classmethod
+    def _validate_questions(cls, value: list[SelfAssessmentQuestion]) -> list[SelfAssessmentQuestion]:
+        filtered = [question for question in value if question.options]
+        if not filtered:
+            msg = "At least one question is required"
+            raise ValueError(msg)
+        if len(filtered) > 10:
+            return filtered[:10]
+        return filtered
+
+
 class LessonContent(BaseModel):
     """Model for lesson content returned by AI."""
 

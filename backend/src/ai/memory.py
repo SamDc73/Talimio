@@ -12,9 +12,9 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from mem0 import AsyncMemory
 from mem0.configs.base import MemoryConfig
 
-from mem0 import AsyncMemory
 from src.config import env
 from src.config.settings import get_settings
 

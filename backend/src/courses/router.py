@@ -15,6 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai.service import AIService, get_ai_service
 from src.auth import CurrentAuth
 from src.courses.facade import CoursesFacade
 from src.courses.schemas import (
@@ -27,6 +28,8 @@ from src.courses.schemas import (
     LessonResponse,
     MDXValidateRequest,
     MDXValidateResponse,
+    SelfAssessmentRequest,
+    SelfAssessmentResponse,
 )
 from src.courses.services.code_execution_service import CodeExecutionError, CodeExecutionService
 from src.courses.services.course_query_service import CourseQueryService
@@ -64,7 +67,46 @@ def get_code_execution_service() -> CodeExecutionService:
     return CodeExecutionService()
 
 
+def get_ai_service_dependency() -> AIService:
+    """Provide AI service singleton for dependency injection."""
+    return get_ai_service()
+
+
 # Course operations
+@router.post("/self-assessment/questions")
+async def generate_self_assessment_questions(
+    request: SelfAssessmentRequest,
+    auth: CurrentAuth,
+    ai_service: Annotated[AIService, Depends(get_ai_service_dependency)],
+) -> SelfAssessmentResponse:
+    """Return optional self-assessment questions for course personalization."""
+    topic = request.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=422, detail="Topic must not be empty")
+
+    level = request.level.strip() if request.level and request.level.strip() else None
+
+    try:
+        quiz = await ai_service.generate_self_assessment(
+            topic=topic,
+            level=level,
+            user_id=auth.user_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        logger.exception(
+            "SELF_ASSESSMENT_GENERATION_FAILED",
+            extra={
+                "user_id": str(auth.user_id),
+                "topic": topic,
+            },
+        )
+        raise HTTPException(status_code=502, detail="Failed to generate self-assessment questions") from error
+
+    return SelfAssessmentResponse.model_validate(quiz.model_dump())
+
+
 @router.post("/")
 async def create_course(
     request: CourseCreate,

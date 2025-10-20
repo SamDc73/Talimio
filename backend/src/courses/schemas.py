@@ -1,7 +1,7 @@
 """Pydantic schemas for the unified courses API."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -55,6 +55,33 @@ class CourseCreate(BaseModel):
     """Schema for creating a new course."""
 
     prompt: str = Field(..., min_length=1, description="AI prompt for course generation")
+
+
+class SelfAssessmentRequest(BaseModel):
+    """Request payload for generating self-assessment questions."""
+
+    topic: str = Field(..., min_length=1, description="Course topic for personalization")
+    level: str | None = Field(None, description="Optional learner experience level or confidence band")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SelfAssessmentQuestionPayload(BaseModel):
+    """Single-select question suitable for MultipleChoice component."""
+
+    type: Literal["single_select"] = Field(..., description="Question presentation type")
+    question: str = Field(..., min_length=1, description="Learner-facing question text")
+    options: list[str] = Field(..., min_length=3, max_length=5, description="Candidate answers")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SelfAssessmentResponse(BaseModel):
+    """Response containing generated self-assessment questions."""
+
+    questions: list[SelfAssessmentQuestionPayload] = Field(default_factory=list, description="Generated self-assessment questions")
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class CourseUpdate(BaseModel):

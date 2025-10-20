@@ -19,6 +19,7 @@ export function useCourseService(courseId = null) {
 	const getCourses = useApi("/courses/")
 	const getCourse = useApi("/courses/{courseId}")
 	const updateCourse = useApi("/courses/{courseId}", { method: "PATCH" })
+	const selfAssessmentQuestions = useApi("/courses/self-assessment/questions", { method: "POST" })
 
 	// Lesson endpoints
 	const getLessons = useApi("/courses/{courseId}/lessons")
@@ -49,6 +50,10 @@ export function useCourseService(courseId = null) {
 		 */
 		async createCourse(courseData) {
 			return await createCourse.execute(courseData)
+		},
+
+		async fetchSelfAssessmentQuestions(payload) {
+			return await selfAssessmentQuestions.execute(payload)
 		},
 
 		/**

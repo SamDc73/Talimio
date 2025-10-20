@@ -57,12 +57,12 @@ def get_lesson_functions(topic: str | None = None) -> list:
 __all__ = [
     "clear_registry",
     "execute_function",
+    "get_course_functions",
     "get_function_info",
     "get_function_names",
     "get_function_schemas",
     "get_lesson_functions",
     "get_registry_status",
-    "get_course_functions",
     "register_function",
     "select_functions_for_task",
 ]

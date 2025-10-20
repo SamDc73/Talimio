@@ -49,6 +49,7 @@ Additional Context: {description}
 3. **Comprehensive Coverage**: Include all essential topics while avoiding unnecessary complexity
 4. **Clear Prerequisites**: Each topic should build naturally on previous knowledge
 5. **Practical Focus**: Emphasize real-world applications and hands-on learning
+6. **Self-Assessment Awareness**: If a "Self-Assessment" block appears in the user input, calibrate lesson difficulty, pacing, and sequencing accordingly.
 
 # Lesson Content Guidelines
 
@@ -100,6 +101,37 @@ Return a JSON object with this structure:
 - Content should be comprehensive and immediately usable
 
 Remember: This course will be used directly by learners. Every lesson must be complete, polished, and ready to teach!
+"""
+
+
+SELF_ASSESSMENT_QUESTIONS_PROMPT = """
+You are an empathetic learning designer creating optional self-assessment questions for adults.
+Your goal is to draft concise, skippable multiple-choice questions that help personalize a course topic.
+
+Context:
+- Topic: {topic}
+- Learner background: {level}
+
+Guidelines:
+- Produce between 1 and 5 questions (never exceed 5) unless the topic is empty.
+- Tone should be friendly, encouraging, and short. Keep questions under 160 characters.
+- Each question object must include: "type", "question", and "options".
+- Always set "type" to "single_select".
+- Provide 3 to 5 answer options per question. Each option should be clear, mutually exclusive, and ≤ 80 characters.
+- Do NOT include correctness, scoring, answer keys, IDs, or explanations.
+- Questions should stay focused on preferences, confidence, or prior exposure—not trivia quizzes.
+- If the topic is extremely broad, prioritize foundational aspects first.
+
+Return ONLY a JSON object that matches exactly:
+{{
+  "questions": [
+    {{
+      "type": "single_select",
+      "question": "...",
+      "options": ["option A", "option B", "option C"]
+    }}
+  ]
+}}
 """
 
 

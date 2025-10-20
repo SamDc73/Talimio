@@ -1,21 +1,67 @@
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
-export function MultipleChoice({ question, options, correctAnswer, explanation }) {
-	const [selectedAnswer, setSelectedAnswer] = useState(null)
+export function MultipleChoice({
+	question,
+	options,
+	correctAnswer,
+	explanation,
+	onSelect,
+	selectedIndex,
+	submitLabel = "Submit Answer",
+}) {
+	const isSurveyMode = typeof correctAnswer !== "number"
+
+	const isControlled = typeof selectedIndex === "number" || selectedIndex === null
+	const [internalSelected, setInternalSelected] = useState(selectedIndex ?? null)
 	const [showFeedback, setShowFeedback] = useState(false)
 
+	useEffect(() => {
+		if (!isControlled) {
+			return
+		}
+		setInternalSelected(selectedIndex ?? null)
+	}, [isControlled, selectedIndex])
+
+	useEffect(() => {
+		if (isSurveyMode && showFeedback) {
+			setShowFeedback(false)
+		}
+	}, [isSurveyMode, showFeedback])
+
+	const effectiveSelected = isControlled ? (selectedIndex ?? null) : internalSelected
+	const handleOptionChange = (index) => {
+		if (!isSurveyMode && showFeedback) {
+			return
+		}
+
+		if (!isControlled) {
+			setInternalSelected(index)
+		}
+
+		onSelect?.(index)
+	}
+
 	const handleSubmit = () => {
-		if (selectedAnswer !== null) {
+		if (effectiveSelected !== null) {
 			setShowFeedback(true)
 		}
 	}
 
 	const handleReset = () => {
-		setSelectedAnswer(null)
+		if (!isControlled) {
+			setInternalSelected(null)
+		}
 		setShowFeedback(false)
+		onSelect?.(null)
 	}
 
-	const isCorrect = selectedAnswer === correctAnswer
+	const hasFeedback = !isSurveyMode && showFeedback
+	const isCorrect = useMemo(() => {
+		if (isSurveyMode || effectiveSelected === null) {
+			return false
+		}
+		return effectiveSelected === correctAnswer
+	}, [correctAnswer, effectiveSelected, isSurveyMode])
 
 	return (
 		<div className="border-l-4 border-l-completed/20 pl-6 my-8 bg-background/30 rounded-r-lg" data-askai-exclude="true">
@@ -23,12 +69,12 @@ export function MultipleChoice({ question, options, correctAnswer, explanation }
 
 			<div className="mb-6 space-y-2">
 				{options.map((option, index) => {
-					const isCorrectOption = index === correctAnswer
-					const isSelected = index === selectedAnswer
+					const isCorrectOption = !isSurveyMode && index === correctAnswer
+					const isSelected = index === effectiveSelected
 
 					let optionClasses = "bg-background border border-border hover:bg-muted/30"
 
-					if (showFeedback) {
+					if (hasFeedback) {
 						if (isCorrectOption) {
 							optionClasses =
 								"bg-completed/10 border-completed/30 text-completed dark:bg-completed/20 dark:border-completed/30 dark:text-completed"
@@ -46,20 +92,20 @@ export function MultipleChoice({ question, options, correctAnswer, explanation }
 						<label
 							key={`option-${index}-${option.slice(0, 10)}`}
 							className={`flex items-start gap-3 p-4 rounded-lg transition-all cursor-pointer ${optionClasses} ${
-								showFeedback ? "cursor-default" : ""
+								hasFeedback ? "cursor-default" : ""
 							}`}
 						>
 							<input
 								type="radio"
 								name={`quiz-${question}`}
 								value={index}
-								checked={selectedAnswer === index}
-								onChange={() => !showFeedback && setSelectedAnswer(index)}
-								disabled={showFeedback}
+								checked={isSelected}
+								onChange={() => handleOptionChange(index)}
+								disabled={hasFeedback}
 								className="mt-1 text-primary focus:ring-ring focus:ring-2 focus:ring-offset-0 border-input"
 							/>
 							<span className="flex-1 text-sm leading-relaxed">{option}</span>
-							{showFeedback && isCorrectOption && (
+							{hasFeedback && isCorrectOption && (
 								<span className="text-completed dark:text-completed text-sm font-medium ml-2">✓</span>
 							)}
 						</label>
@@ -67,38 +113,40 @@ export function MultipleChoice({ question, options, correctAnswer, explanation }
 				})}
 			</div>
 
-			{!showFeedback ? (
-				<button
-					type="button"
-					onClick={handleSubmit}
-					disabled={selectedAnswer === null}
-					className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-						selectedAnswer === null
-							? "bg-muted text-muted-foreground cursor-not-allowed"
-							: "bg-completed text-completed-text hover:bg-completed/90"
-					}`}
-				>
-					Submit Answer
-				</button>
-			) : (
-				<div>
-					{explanation && (
-						<div className="p-4 mb-4 rounded-lg border border-border bg-muted/20">
-							<div className={`text-sm font-medium mb-2 ${isCorrect ? "text-completed" : "text-destructive"}`}>
-								{isCorrect ? "✓ Correct" : "✗ Incorrect"}
+			{!isSurveyMode ? (
+				hasFeedback ? (
+					<div>
+						{explanation && (
+							<div className="p-4 mb-4 rounded-lg border border-border bg-muted/20">
+								<div className={`text-sm font-medium mb-2 ${isCorrect ? "text-completed" : "text-destructive"}`}>
+									{isCorrect ? "✓ Correct" : "✗ Incorrect"}
+								</div>
+								<p className="text-sm leading-relaxed text-muted-foreground">{explanation}</p>
 							</div>
-							<p className="text-sm leading-relaxed text-muted-foreground">{explanation}</p>
-						</div>
-					)}
+						)}
+						<button
+							type="button"
+							onClick={handleReset}
+							className="px-4 py-2 bg-muted text-foreground hover:bg-muted/80 rounded-lg text-sm font-medium transition-colors"
+						>
+							Try Again
+						</button>
+					</div>
+				) : (
 					<button
 						type="button"
-						onClick={handleReset}
-						className="px-4 py-2 bg-muted text-foreground hover:bg-muted/80 rounded-lg text-sm font-medium transition-colors"
+						onClick={handleSubmit}
+						disabled={effectiveSelected === null}
+						className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+							effectiveSelected === null
+								? "bg-muted text-muted-foreground cursor-not-allowed"
+								: "bg-completed text-completed-text hover:bg-completed/90"
+						}`}
 					>
-						Try Again
+						{submitLabel}
 					</button>
-				</div>
-			)}
+				)
+			) : null}
 		</div>
 	)
 }

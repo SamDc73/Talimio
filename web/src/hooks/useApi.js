@@ -63,8 +63,10 @@ export function useApi(endpoint, options = {}) {
 	const [isLoading, setIsLoading] = useState(false)
 	const [error, setError] = useState(null)
 	const abortControllerRef = useRef(null)
+	const requestIdRef = useRef(0)
 
 	const execute = async (body = null, callOptions = {}) => {
+		const myId = ++requestIdRef.current
 		const combinedOptions = { ...options, ...callOptions }
 		const { method = "GET", pathParams, queryParams, ...fetchOptions } = combinedOptions
 
@@ -90,16 +92,23 @@ export function useApi(endpoint, options = {}) {
 			})
 			const response = await fetch(url, requestOptions)
 			const responseData = await handleResponse(response)
-			setData(responseData)
+			// Only the latest request updates state
+			if (requestIdRef.current === myId) {
+				setData(responseData)
+			}
 			return responseData
 		} catch (err) {
 			if (err.name === "AbortError") {
 				return
 			}
-			setError(err)
+			if (requestIdRef.current === myId) {
+				setError(err)
+			}
 			throw err
 		} finally {
-			setIsLoading(false)
+			if (requestIdRef.current === myId) {
+				setIsLoading(false)
+			}
 			abortControllerRef.current = null
 		}
 	}

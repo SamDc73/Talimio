@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { BrowserRouter } from "react-router-dom"
-
+import { TooltipProvider } from "@/components/Tooltip"
 import App from "./App"
 import ErrorBoundary from "./components/ErrorBoundary"
 
@@ -23,7 +23,9 @@ try {
 			<ErrorBoundary>
 				<QueryClientProvider client={queryClient}>
 					<BrowserRouter>
-						<App />
+						<TooltipProvider>
+							<App />
+						</TooltipProvider>
 					</BrowserRouter>
 				</QueryClientProvider>
 			</ErrorBoundary>
