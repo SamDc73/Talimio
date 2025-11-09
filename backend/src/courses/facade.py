@@ -181,11 +181,7 @@ class CoursesFacade:
             return {"error": f"Failed to update progress: {e!s}", "success": False}
 
     async def update_course(self, course_id: UUID, user_id: UUID, update_data: dict[str, Any]) -> dict[str, Any]:
-        """
-        Update course metadata.
-
-        Updates course information and coordinates any needed reprocessing.
-        """
+        """Update course metadata."""
         try:
             # Update through content service which handles tags and reprocessing
             updated_course = await self._content_service.update_course(course_id, update_data, user_id)
@@ -199,6 +195,7 @@ class CoursesFacade:
         except Exception:
             logger.exception("Error updating course %s", course_id)
             return {"error": "Failed to update course", "success": False}
+
 
     async def search_courses(self, query: str, user_id: UUID, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         """

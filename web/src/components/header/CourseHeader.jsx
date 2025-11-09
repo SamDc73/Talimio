@@ -15,14 +15,24 @@ export function CourseHeader({
 	isOpen = true,
 	toggleSidebar = () => {},
 	courseId,
+	adaptiveEnabled = false,
 }) {
 	const { toggleChat } = useChatSidebar()
 
 	const [_showFullTitle, _setShowFullTitle] = useState(false)
 
-	// Compute progress from unified hook if courseId is provided
+	// Prefer adaptive progress (from concept frontier) when enabled; otherwise fallback to lesson-based progress
 	const { progress: courseProgress } = useCourseProgress(courseId)
-	const computedProgress = typeof courseProgress?.percentage === "number" ? courseProgress.percentage : progress
+	const computedProgressRaw =
+		adaptiveEnabled && typeof progress === "number"
+			? progress
+			: typeof courseProgress?.percentage === "number"
+				? courseProgress.percentage
+				: progress
+	const computedProgress = Math.max(
+		0,
+		Math.min(100, Math.round(Number.isFinite(computedProgressRaw) ? computedProgressRaw : 0))
+	)
 
 	return (
 		<header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-b border-border shadow-sm">

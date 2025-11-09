@@ -106,7 +106,9 @@ async def _startup_validation() -> None:
     """Validate configurations on startup."""
     # Validate RAG configuration if configured
     try:
-        from src.ai.rag.config import rag_config
+        from src.ai.rag.config import RAGConfig
+
+        rag_config = RAGConfig()
 
         # RAGConfig with Pydantic validates itself on instantiation
         if rag_config.embedding_model:
@@ -166,8 +168,8 @@ async def _shutdown_cleanup() -> None:
 
     # Cleanup memory wrapper connections first (this was the root cause!)
     try:
-        from src.ai.memory import cleanup_memory_wrapper
-        await cleanup_memory_wrapper()
+        from src.ai.memory import cleanup_memory_client
+        await cleanup_memory_client()
         logger.info("Memory wrapper cleaned up successfully")
     except Exception as e:
         logger.warning(f"Error cleaning up memory wrapper: {e}")

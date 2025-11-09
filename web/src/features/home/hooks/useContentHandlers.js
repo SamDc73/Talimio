@@ -33,10 +33,16 @@ export function useContentHandlers({ filters, pinning, setContentItems, loadCont
 	}
 
 	// Event handler: user created course
-	const handleCourseCreated = async (_newCourse) => {
-		// Just trigger data refresh - let React Query handle the fetching
-		await loadContentData()
-		// Toast moved to store action or mutation onSuccess
+	const handleCourseCreated = async (newCourse) => {
+		// Navigate to the course page immediately, then refresh content in background
+		try {
+			const courseId = newCourse?.id || newCourse?.course?.id || newCourse?.uuid
+			if (courseId) {
+				navigate(`/course/${courseId}`)
+			}
+		} finally {
+			await loadContentData()
+		}
 	}
 
 	const handleCardClick = (item) => {

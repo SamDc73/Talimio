@@ -1,11 +1,11 @@
-import CourseHeader from "@/components/header/CourseHeader"
+import FullPageLoader from "@/components/FullPageLoader"
+import { CourseHeader } from "@/components/header/CourseHeader"
 import { CourseSidebar } from "@/components/sidebar"
 import CourseView from "@/features/course/CourseView"
 import { useCourseContext } from "@/features/course/hooks/useCourseContext"
 import { cn } from "@/lib/utils"
 import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
 import { useCourseNavigation } from "@/utils/navigationUtils"
-
 /**
  * Layout component for course/lesson pages.
  * Provides persistent header and sidebar that don't unmount during navigation.
@@ -25,11 +25,7 @@ export default function CourseLayout() {
 	const contentClasses = cn("flex flex-1 pt-16 pb-8 transition-all duration-300 ease-in-out", isOpen ? "ml-80" : "ml-0")
 
 	if (isLoading) {
-		return (
-			<div className="flex items-center justify-center h-screen">
-				<div className="text-lg">Loading...</div>
-			</div>
-		)
+		return <FullPageLoader />
 	}
 
 	return (

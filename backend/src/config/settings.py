@@ -41,6 +41,29 @@ class Settings(BaseSettings):
     RAG_VIDEO_MEDIUM_DURATION_THRESHOLD: int = 1800  # 30 minutes
     RAG_VIDEO_LONG_DURATION_CHUNK: int = 300  # 5 minutes in seconds for long videos
 
+    # Adaptive Learning Configuration
+    ADAPTIVE_SIMILARITY_THRESHOLD: float = 0.78  # Threshold for concept similarity detection
+    ADAPTIVE_UNLOCK_MASTERY_THRESHOLD: float = 0.5  # Mastery level to unlock prerequisites (aligned with LECTOR initial mastery band)
+    ADAPTIVE_CONFUSION_LAMBDA: float = 0.3  # Weight for confusion risk in scheduling
+    ADAPTIVE_RISK_RECENT_K: int = 3  # Number of recent concepts to consider for sigma context
+    ADAPTIVE_CONFUSION_FALLBACK: bool = True  # Enable embedding-based fallback for confusion detection
+
+    # Learning Algorithm Parameters
+    LEARNING_DELTA_CORRECT: float = 0.18  # Mastery increase for correct answers
+    LEARNING_DELTA_INCORRECT: float = -0.25  # Mastery decrease for incorrect answers
+    LATENCY_PENALTY_MAX: float = 0.12  # Maximum latency penalty
+    LATENCY_PENALTY_MULTIPLIER: float = 10000.0  # Latency penalty calculation divisor
+    REVIEW_INTERVALS_BY_RATING: dict[int, int] = {
+        1: 5,    # 5 minutes for rating 1
+        2: 60,   # 1 hour for rating 2
+        3: 240,  # 4 hours for rating 3
+        4: 360,  # 6 hours for rating 4
+    }
+    EXPOSURE_MULTIPLIER: float = 0.2  # Softer exposure-based interval adjustment
+    DURATION_ADJUSTMENT_MIN: float = 0.6  # Minimum duration-based adjustment factor
+    DURATION_ADJUSTMENT_MAX: float = 1.2  # Maximum duration-based adjustment factor
+    DURATION_BASE_MS: int = 90000  # Base duration for adjustment calculations (90 seconds)
+
     # Feature flags for gradual rollout
     USE_MODULE_FACADES: bool = True  # Enable new facade pattern
 

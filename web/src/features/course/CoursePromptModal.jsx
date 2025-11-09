@@ -4,7 +4,7 @@
 
 import { AnimatePresence, motion } from "framer-motion"
 import { HelpCircle, Loader2, Sparkles } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
@@ -12,7 +12,6 @@ import { Label } from "@/components/Label"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/Tooltip"
 import { cn } from "@/lib/utils"
 import useAppStore, { selectSelfAssessmentEnabled, selectSetSelfAssessmentEnabled } from "@/stores/useAppStore"
-import { useCourseNavigation } from "../../utils/navigationUtils"
 import { useCourseService } from "./api/courseApi"
 import SelfAssessmentDialog from "./SelfAssessmentDialog"
 
@@ -61,17 +60,21 @@ function buildFinalPrompt(basePrompt, summaryBlock) {
 	return `${trimmedPrompt}\n\n${summaryBlock}`
 }
 
-function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "" }) {
+function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", defaultAdaptiveEnabled = false }) {
 	const [prompt, setPrompt] = useState(defaultPrompt)
 	const [activeStep, setActiveStep] = useState(MODAL_STEPS.PROMPT)
 	const [isGenerating, setIsGenerating] = useState(false)
 	const [error, setError] = useState("")
+	const [adaptiveEnabled, setAdaptiveEnabled] = useState(() => Boolean(defaultAdaptiveEnabled))
 
 	const courseService = useCourseService()
-	const { goToCourse } = useCourseNavigation()
 
 	const selfAssessmentEnabled = useAppStore(selectSelfAssessmentEnabled) ?? false
 	const setSelfAssessmentEnabled = useAppStore(selectSetSelfAssessmentEnabled)
+
+	useEffect(() => {
+		setAdaptiveEnabled(Boolean(defaultAdaptiveEnabled))
+	}, [defaultAdaptiveEnabled])
 
 	const shouldRunSelfAssessment = useMemo(() => {
 		return selfAssessmentEnabled
@@ -80,6 +83,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "" }) {
 	const resetForm = () => {
 		setPrompt("")
 		setError("")
+		setAdaptiveEnabled(Boolean(defaultAdaptiveEnabled))
 		setActiveStep(MODAL_STEPS.PROMPT)
 	}
 
@@ -100,6 +104,11 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "" }) {
 	const handleToggleSelfAssessment = (event) => {
 		const { checked } = event.target
 		setSelfAssessmentEnabled(checked)
+	}
+
+	const handleToggleAdaptive = (event) => {
+		const { checked } = event.target
+		setAdaptiveEnabled(checked)
 	}
 
 	const handlePromptSubmit = async (event) => {
@@ -143,13 +152,15 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "" }) {
 		setError("")
 
 		try {
-			const response = await courseService.createCourse({ prompt: finalPrompt })
+			const response = await courseService.createCourse({
+				prompt: finalPrompt,
+				adaptive_enabled: adaptiveEnabled,
+			})
 
 			if (response?.id) {
 				if (onSuccess) {
 					onSuccess(response)
 				}
-				goToCourse(response.id)
 				closeModal(true)
 				return
 			}
@@ -232,41 +243,79 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "" }) {
 					</div>
 				</div>
 
-				<label
-					htmlFor="enable-self-assessment"
-					className={cn(
-						"flex items-center gap-2.5 px-1 py-0.5 -mx-1 rounded-md",
-						"transition-colors duration-150",
-						"cursor-pointer hover:bg-muted/40",
-						isGenerating && "opacity-50 cursor-not-allowed"
-					)}
-				>
-					<input
-						type="checkbox"
-						id="enable-self-assessment"
-						checked={selfAssessmentEnabled}
-						onChange={handleToggleSelfAssessment}
-						disabled={isGenerating}
-						className="h-4 w-4 rounded border-border text-[var(--color-course)] focus:ring-2 focus:ring-[var(--color-course)]/20 focus:ring-offset-0 transition-all"
-					/>
-					<span className="text-sm text-foreground select-none">Self-assessment</span>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<button
-								type="button"
-								onClick={(e) => e.preventDefault()}
-								disabled={isGenerating}
-								className="ml-0.5 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-								aria-label="Self-assessment information"
-							>
-								<HelpCircle className="h-3.5 w-3.5" />
-							</button>
-						</TooltipTrigger>
-						<TooltipContent side="top" className="text-xs">
-							{tooltipCopy}
-						</TooltipContent>
-					</Tooltip>
-				</label>
+				<div className="space-y-2 py-3">
+					<label
+						htmlFor="enable-adaptive-mode"
+						className={cn(
+							"flex items-center gap-2.5 px-1 py-2 -mx-1 rounded-md",
+							"transition-colors duration-150",
+							"cursor-pointer hover:bg-muted/40",
+							isGenerating && "opacity-50 cursor-not-allowed"
+						)}
+					>
+						<input
+							type="checkbox"
+							id="enable-adaptive-mode"
+							checked={adaptiveEnabled}
+							onChange={handleToggleAdaptive}
+							disabled={isGenerating}
+							className="h-4 w-4 rounded border-border text-[var(--color-course)] focus:ring-2 focus:ring-[var(--color-course)]/20 focus:ring-offset-0 transition-all"
+						/>
+						<span className="text-sm text-foreground select-none">Adaptive mode</span>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<button
+									type="button"
+									onClick={(e) => e.preventDefault()}
+									disabled={isGenerating}
+									className="ml-0.5 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+									aria-label="Adaptive mode information"
+								>
+									<HelpCircle className="h-3.5 w-3.5" />
+								</button>
+							</TooltipTrigger>
+							<TooltipContent side="top" className="text-xs">
+								Enable spaced reviews and concept graphs tailored to each learner.
+							</TooltipContent>
+						</Tooltip>
+					</label>
+
+					<label
+						htmlFor="enable-self-assessment"
+						className={cn(
+							"flex items-center gap-2.5 px-1 py-2 -mx-1 rounded-md",
+							"transition-colors duration-150",
+							"cursor-pointer hover:bg-muted/40",
+							isGenerating && "opacity-50 cursor-not-allowed"
+						)}
+					>
+						<input
+							type="checkbox"
+							id="enable-self-assessment"
+							checked={selfAssessmentEnabled}
+							onChange={handleToggleSelfAssessment}
+							disabled={isGenerating}
+							className="h-4 w-4 rounded border-border text-[var(--color-course)] focus:ring-2 focus:ring-[var(--color-course)]/20 focus:ring-offset-0 transition-all"
+						/>
+						<span className="text-sm text-foreground select-none">Self-assessment</span>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<button
+									type="button"
+									onClick={(e) => e.preventDefault()}
+									disabled={isGenerating}
+									className="ml-0.5 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+									aria-label="Self-assessment information"
+								>
+									<HelpCircle className="h-3.5 w-3.5" />
+								</button>
+							</TooltipTrigger>
+							<TooltipContent side="top" className="text-xs">
+								{tooltipCopy}
+							</TooltipContent>
+						</Tooltip>
+					</label>
+				</div>
 
 				{error ? (
 					<div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">

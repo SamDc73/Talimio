@@ -17,6 +17,11 @@ import { catppuccinLatte, catppuccinLatteColors } from "./catppuccinTheme"
 
 const LANG_EXT_CACHE = new Map()
 
+// CodeMirror repeatedly resets its internal scroller on mount; disable browser anchoring to avoid loops.
+const disableScrollAnchoringTheme = EditorView.theme({
+	".cm-scroller": { overflowAnchor: "none" },
+})
+
 const CODEMIRROR_ALIASES = {
 	js: "javascript",
 	ts: "typescript",
@@ -120,7 +125,10 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 		}
 	}, [editorLanguage])
 
-	const editorExtensions = useMemo(() => [catppuccinLatte, ...languageExtensions], [languageExtensions])
+	const editorExtensions = useMemo(
+		() => [disableScrollAnchoringTheme, catppuccinLatte, ...languageExtensions],
+		[languageExtensions]
+	)
 
 	// Exact border shade from Catppuccin Latte to keep container/header borders in perfect sync
 	const borderHex = catppuccinLatteColors.surface1.hex

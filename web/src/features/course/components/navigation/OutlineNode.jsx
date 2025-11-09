@@ -1,4 +1,4 @@
-import { ArrowRight, CheckCircle } from "lucide-react"
+import { CheckCircle, ChevronRight, Circle } from "lucide-react"
 import { useState } from "react"
 
 const cn = (...classes) => classes.filter(Boolean).join(" ")
@@ -56,73 +56,41 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 	const progress = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0
 	const isModuleCompleted = progress === 100 && totalLessons > 0
 
-	function LessonStatusIndicator({ isCompleted, indexStr }) {
+	function LessonStatusIndicator({ isCompleted, indexStr: _indexStr }) {
+		// Show a proper empty circle when not completed to match the old outline's spirit
 		if (isCompleted) {
 			return <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
 		}
-
-		return (
-			<div
-				className={cn(
-					"flex items-center justify-center w-5 h-5 rounded-full text-xs font-medium shrink-0",
-					"bg-zinc-100 text-zinc-700"
-				)}
-			>
-				{indexStr}
-			</div>
-		)
+		return <Circle className="w-5 h-5 text-zinc-400 shrink-0" />
 	}
 
-	function LessonActionButton({ isCompleted, onClick }) {
-		const buttonStyle = isCompleted
-			? "text-white bg-emerald-500 hover:bg-emerald-600"
-			: "text-emerald-700 bg-emerald-100 hover:bg-emerald-200"
-
-		return (
-			<button
-				type="button"
-				onClick={(e) => {
-					e.preventDefault()
-					e.stopPropagation()
-					if (onClick) {
-						onClick()
-					}
-				}}
-				className={cn(
-					"flex items-center gap-1 px-3 py-1.5 text-sm font-medium transition-colors rounded-md shrink-0 ml-2",
-					buttonStyle
-				)}
-			>
-				<ArrowRight className="w-4 h-4" />
-			</button>
-		)
-	}
+	// Removed the separate action button; the whole row is clickable now with a subtle chevron indicator
 
 	function LessonContent({ lesson, isCompleted, currentLessonIndexStr, idx, onLessonClick }) {
+		const containerClasses = cn(
+			"group flex items-center gap-3 rounded-2xl border border-transparent px-4 py-3 md:px-5 md:py-3.5 transition-colors",
+			isCompleted ? "border-emerald-200 bg-emerald-50/80" : "hover:border-emerald-200 hover:bg-emerald-50/40"
+		)
+		const titleClasses = cn("truncate text-sm font-medium", isCompleted ? "text-muted-foreground" : "text-foreground")
+
 		return (
-			<div
-				className={cn(
-					"flex items-center justify-between p-4 transition-all border rounded-lg",
-					isCompleted
-						? "bg-emerald-50 border-emerald-100"
-						: "bg-card border-zinc-200 hover:border-emerald-200 hover:bg-emerald-50/30"
-				)}
-			>
-				<div className="flex items-center gap-3 flex-1 min-w-0">
-					<button
-						type="button"
-						onClick={() => toggleLessonCompletion?.(lesson.id)}
-						className="transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-full"
-						aria-label={isCompleted ? "Mark as incomplete" : "Mark as complete"}
-					>
-						<LessonStatusIndicator isCompleted={isCompleted} indexStr={currentLessonIndexStr} />
-					</button>
-					<div className="flex flex-col min-w-0">
-						<span className={cn("font-medium truncate", "text-zinc-800")}>{lesson.title}</span>
-						{lesson.description && <span className="text-sm text-zinc-500 truncate">{lesson.description}</span>}
-					</div>
-				</div>
-				<LessonActionButton isCompleted={isCompleted} onClick={() => onLessonClick?.(idx, lesson.id)} />
+			<div className={containerClasses}>
+				<button
+					type="button"
+					onClick={() => toggleLessonCompletion?.(lesson.id)}
+					className="rounded-full border border-transparent p-0.5 transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
+					aria-label={isCompleted ? "Mark as incomplete" : "Mark as complete"}
+				>
+					<LessonStatusIndicator isCompleted={isCompleted} indexStr={currentLessonIndexStr} />
+				</button>
+				<button
+					type="button"
+					onClick={() => onLessonClick?.(idx, lesson.id)}
+					className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
+				>
+					<span className={titleClasses}>{lesson.title}</span>
+					<ChevronRight className="h-4 w-4 text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100" />
+				</button>
 			</div>
 		)
 	}
@@ -132,10 +100,10 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 		const isCompleted = isItemCompleted(lesson)
 		const lessonKey = lesson.id ?? `${moduleId}-lesson-${depth}-${idx}`
 		const hasNestedLessons = lesson.lessons?.length > 0
-		const depthClass = depth > 0 ? "ml-6 mt-3 border-l-2 border-emerald-100/50 pl-4 pt-3" : "mt-3"
+		const depthClass = depth > 0 ? "ml-5 mt-3 border-l border-emerald-100/60 pl-4 pt-3" : "mt-3"
 
 		return (
-			<div key={lessonKey} className={`space-y-3 ${depthClass}`}>
+			<div key={lessonKey} className={`space-y-2.5 ${depthClass}`}>
 				<LessonContent
 					lesson={lesson}
 					isCompleted={isCompleted}
@@ -176,40 +144,42 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 	}
 
 	return (
-		<div className="p-6 mb-8 bg-card border border-zinc-200 rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+		<div className="relative overflow-hidden rounded-3xl border border-border/70 bg-card/95 p-5 md:p-6 lg:p-7 shadow-sm transition-shadow hover:shadow-md">
 			<button
 				type="button"
-				className="flex items-center gap-2 mb-4 w-full text-left"
+				className="mb-5 flex w-full items-center gap-3 text-left md:gap-4"
 				onClick={() => setExpanded((e) => !e)}
 				aria-expanded={expanded}
 				aria-controls={`module-content-${moduleId}`}
 			>
 				<div
 					className={cn(
-						"flex items-center justify-center w-7 h-7 rounded-full text-xs font-medium transition-all duration-300 shrink-0",
-						isModuleCompleted ? "bg-emerald-500 text-white hover:bg-emerald-600" : "bg-zinc-100 text-zinc-700"
+						"flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-medium transition-all duration-300",
+						isModuleCompleted
+							? "border-emerald-300 bg-emerald-50 text-emerald-700"
+							: "border-border/70 bg-muted/60 text-muted-foreground"
 					)}
 				>
-					{isModuleCompleted ? <CheckCircle className="w-4 h-4" /> : index + 1}
+					{isModuleCompleted ? <CheckCircle className="h-4 w-4" /> : index + 1}
 				</div>
 
-				<h2 className="text-xl font-semibold text-zinc-900 flex-1 truncate" title={module.title}>
+				<h2 className="flex-1 truncate text-lg font-semibold text-foreground md:text-xl" title={module.title}>
 					{module.title}
 				</h2>
 				{isModuleCompleted && (
-					<span className="ml-auto px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800 rounded-full shrink-0">
+					<span className="ml-auto rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
 						Completed
 					</span>
 				)}
 			</button>
 
-			<div className="flex items-center gap-2 mb-4">
-				<div className="text-xs text-zinc-500">
+			<div className="mb-5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+				<div>
 					{completedLessons} of {totalLessons} lessons completed
 				</div>
-				<div className="flex-1 h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+				<div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted/40 md:h-2">
 					<div
-						className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+						className="h-full rounded-full bg-emerald-500 transition-all duration-500"
 						style={{ width: `${progress}%` }}
 					/>
 				</div>
@@ -218,13 +188,13 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 			<div
 				id={`module-content-${moduleId}`}
 				className={cn(
-					"transition-all duration-300 ease-in-out overflow-hidden",
+					"overflow-hidden transition-all duration-300 ease-in-out",
 					expanded ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0"
 				)}
 				style={{ transitionProperty: "max-height, opacity" }}
 			>
 				{expanded && (
-					<div className="space-y-3">
+					<div className="space-y-2.5">
 						<LessonList lessons={module.lessons || []} onLessonClick={onLessonClick} moduleId={module.id} />
 					</div>
 				)}

@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, HTTPException, Response, status
 
 from src.auth import CurrentAuth
+from src.courses.services.course_progress_service import CourseProgressService
 from src.middleware.security import limiter
 
 from .models import (
@@ -45,11 +46,24 @@ async def get_batch_progress(
     service = ProgressService(auth.session)
     progress_data = await service.get_batch_progress(auth.user_id, request.content_ids)
 
-    # Convert to ProgressData objects
-    progress_map = {
+    # Start with DB results
+    progress_map: dict[str, ProgressData] = {
         content_id: ProgressData(progress_percentage=data["progress_percentage"], metadata=data["metadata"])
         for content_id, data in progress_data.items()
     }
+
+    # For courses, override with canonical adaptive calculation
+    cps = CourseProgressService()
+    for cid in request.content_ids:
+        ctype = await service.get_content_type(cid, auth.user_id)
+        if ctype == "course":
+            computed = await cps.get_progress(cid, auth.user_id)
+            # Drop completion_percentage from metadata
+            meta = {k: v for k, v in computed.items() if k != "completion_percentage"}
+            progress_map[str(cid)] = ProgressData(
+                progress_percentage=computed.get("completion_percentage", 0.0),
+                metadata=meta,
+            )
 
     return BatchProgressResponse(progress=progress_map)
 
@@ -61,28 +75,43 @@ async def get_single_progress(
 ) -> ProgressResponse:
     """Get progress for a single content item."""
     service = ProgressService(auth.session)
+
+    # Determine content type first to unify behavior
+    content_type = await service.get_content_type(content_id, auth.user_id)
+    if not content_type:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Content {content_id} not found or access denied",
+        )
+
+    # For courses, compute canonical adaptive progress from concept mastery
+    if content_type == "course":
+        # Fetch row only to reuse timestamps if present
+        row = await service.get_single_progress(auth.user_id, content_id)
+        computed = await CourseProgressService().get_progress(content_id, auth.user_id)
+        metadata = {k: v for k, v in computed.items() if k != "completion_percentage"}
+        return ProgressResponse(
+            id=row.id if row else uuid4(),
+            content_id=content_id,
+            content_type="course",
+            progress_percentage=computed.get("completion_percentage", 0.0),
+            metadata=metadata,
+            created_at=row.created_at if row else None,
+            updated_at=row.updated_at if row else None,
+        )
+
+    # Non-course: return stored row or virtual default
     progress = await service.get_single_progress(auth.user_id, content_id)
-
     if not progress:
-        # Check if content exists and get its type
-        content_type = await service.get_content_type(content_id, auth.user_id)
-        if not content_type:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Content {content_id} not found or access denied",
-            )
-
-        # Return virtual progress (no DB write)
         return ProgressResponse(
             id=uuid4(),
             content_id=content_id,
-            content_type=content_type,  # Use actual type, not default "book"
+            content_type=content_type,
             progress_percentage=0.0,
             metadata={},
             created_at=None,
             updated_at=None,
         )
-
     return progress
 
 

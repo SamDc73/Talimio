@@ -1,7 +1,9 @@
-import { useState } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { useEffect, useState } from "react"
 import { useParams } from "react-router-dom"
 import { CourseHeader } from "@/components/header/CourseHeader"
 import { CourseSidebar } from "@/components/sidebar"
+import { useCourseService } from "@/features/course/api/courseApi"
 import { cn } from "@/lib/utils"
 import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
 import { LessonViewer } from "../course/components/LessonViewer"
@@ -15,6 +17,7 @@ import { useLessonPage } from "./hooks/useLessonPage"
 export default function LessonPage() {
 	const { courseId: routeCourseId, lessonId } = useParams()
 	const [mode, setMode] = useState("outline")
+	const [lastAdaptiveProgressPct, setLastAdaptiveProgressPct] = useState(undefined)
 	const isOpen = useAppStore(selectSidebarOpen)
 
 	const contentClasses = cn("flex flex-1 pt-16 pb-8 transition-all duration-300 ease-in-out", isOpen ? "ml-80" : "ml-0")
@@ -30,11 +33,29 @@ export default function LessonPage() {
 		hasError,
 		errorMessage,
 		courseName,
+		isAdaptiveCourse,
 		handleBack,
 		handleLessonClick,
 		handleMarkComplete,
 		handleRegenerate,
 	} = useLessonPage(routeCourseId, lessonId)
+
+	// Adaptive progress (avgMastery) for header/sidebar consistency
+	const courseService = useCourseService(courseId)
+	const { data: frontierData } = useQuery({
+		queryKey: ["course", courseId, "adaptive-concepts"],
+		queryFn: async () => await courseService.fetchConceptFrontier(),
+		enabled: Boolean(courseId) && isAdaptiveCourse,
+		staleTime: 30 * 1000,
+		refetchOnWindowFocus: false,
+	})
+	const adaptiveProgressPct =
+		typeof frontierData?.avgMastery === "number" ? Math.round(frontierData.avgMastery * 100) : undefined
+	useEffect(() => {
+		if (typeof adaptiveProgressPct === "number") {
+			setLastAdaptiveProgressPct(adaptiveProgressPct)
+		}
+	}, [adaptiveProgressPct])
 
 	if (isLoading) {
 		return (
@@ -83,7 +104,14 @@ export default function LessonPage() {
 	// Render lesson page with same structure as CoursePage
 	return (
 		<div className="flex min-h-screen flex-col bg-background">
-			<CourseHeader mode={mode} onModeChange={setMode} courseId={courseId} courseName={courseName} />
+			<CourseHeader
+				mode={mode}
+				onModeChange={setMode}
+				courseId={courseId}
+				courseName={courseName}
+				adaptiveEnabled={isAdaptiveCourse}
+				progress={typeof adaptiveProgressPct === "number" ? adaptiveProgressPct : lastAdaptiveProgressPct}
+			/>
 
 			<div className="flex h-screen">
 				{/* Always show sidebar with modules data - same as CoursePage */}
@@ -91,7 +119,9 @@ export default function LessonPage() {
 					modules={modules}
 					onLessonClick={handleLessonClick}
 					courseId={courseId}
-					currentLessonId={lessonId}
+					activeLessonId={lessonId}
+					adaptiveEnabled={isAdaptiveCourse}
+					adaptiveProgressPct={typeof adaptiveProgressPct === "number" ? adaptiveProgressPct : lastAdaptiveProgressPct}
 				/>
 
 				{/* Main lesson content */}
@@ -103,6 +133,8 @@ export default function LessonPage() {
 						error={error}
 						onMarkComplete={handleMarkComplete}
 						onRegenerate={handleRegenerate}
+						courseId={courseId}
+						adaptiveEnabled={isAdaptiveCourse}
 					/>
 				</div>
 			</div>

@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from "react"
 import { useProgress, useUpdateProgress } from "@/hooks/useProgress"
 
 /**
@@ -28,6 +29,25 @@ export function useCourseProgress(courseId) {
 		return Math.round((completedLessons.length / totalLessons) * 100)
 	}
 
+	const baseMetadata = useMemo(
+		() => ({
+			content_type: "course",
+			completed_lessons: completedLessonsArray,
+			current_lesson_id: currentLessonId,
+			total_lessons: totalLessons,
+		}),
+		[completedLessonsArray, currentLessonId, totalLessons]
+	)
+
+	const buildMetadataPayload = useCallback(
+		(extra = {}) => ({
+			...rawMetadata,
+			...baseMetadata,
+			...extra,
+		}),
+		[baseMetadata, rawMetadata]
+	)
+
 	// Check if a specific lesson is completed
 	const isCompleted = (lessonId) => {
 		return completedLessonsArray.includes(String(lessonId))
@@ -57,14 +77,24 @@ export function useCourseProgress(courseId) {
 		await updateProgress.mutateAsync({
 			contentId: courseId,
 			progress: newProgress,
-			metadata: {
-				content_type: "course",
+			metadata: buildMetadataPayload({
 				completed_lessons: newCompletedLessons,
 				current_lesson_id: lessonIdStr,
 				total_lessons: actualTotalLessons,
-			},
+			}),
 		})
 	}
+
+	const updateProgressAsync = useCallback(
+		async (progress, metadata = {}) => {
+			await updateProgress.mutateAsync({
+				contentId: courseId,
+				progress,
+				metadata: buildMetadataPayload(metadata),
+			})
+		},
+		[buildMetadataPayload, courseId, updateProgress]
+	)
 
 	return {
 		progress: {
@@ -75,22 +105,18 @@ export function useCourseProgress(courseId) {
 			currentLessonId,
 			totalLessons,
 		},
+		rawMetadata,
 		isLoading: progressQuery.isLoading,
 		error: progressQuery.error,
 		refetch: progressQuery.refetch,
 		isCompleted,
 		toggleCompletion,
+		updateProgressAsync,
 		updateProgress: (progress, metadata = {}) =>
 			updateProgress.mutate({
 				contentId: courseId,
 				progress,
-				metadata: {
-					content_type: "course",
-					completed_lessons: completedLessonsArray,
-					current_lesson_id: currentLessonId,
-					total_lessons: totalLessons,
-					...metadata,
-				},
+				metadata: buildMetadataPayload(metadata),
 			}),
 	}
 }

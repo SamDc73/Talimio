@@ -11,9 +11,10 @@ from uuid import UUID
 from sqlalchemy import select
 
 from src.ai.client import LLMClient
-from src.ai.models import CourseStructure, ExecutionPlan, SelfAssessmentQuiz
+from src.ai.models import AdaptiveCoursePlan, CourseStructure, ExecutionPlan, SelfAssessmentQuiz
 from src.ai.prompts import (
     ASSISTANT_CHAT_SYSTEM_PROMPT,
+    COURSE_GENERATION_PROMPT,
 )
 from src.ai.rag.embeddings import VectorRAG
 from src.ai.rag.service import RAGService
@@ -38,17 +39,39 @@ class AIService:
         user_id: UUID,
         topic: str,
         description: str = "",
-        **_kwargs: Any,  # Accept additional kwargs like content_type
+        **_kwargs: Any,
     ) -> CourseStructure:
         """Generate a course outline."""
-        # Build prompt with topic and description
         user_prompt = topic
         if description:
             user_prompt += f"\n\nAdditional details: {description}"
 
         return await self._llm_client.generate_course_structure(
             user_prompt=user_prompt,
-            user_id=str(user_id)
+            user_id=str(user_id),
+            system_prompt=COURSE_GENERATION_PROMPT,
+        )
+
+    async def generate_adaptive_course_from_prompt(
+        self,
+        *,
+        user_id: UUID,
+        user_goal: str,
+        self_assessment_context: str | None = None,
+        max_nodes: int = 32,
+        max_prereqs: int = 3,
+        max_layers: int = 12,
+        max_lessons: int = 96,
+    ) -> AdaptiveCoursePlan:
+        """Generate the unified adaptive course payload."""
+        return await self._llm_client.generate_adaptive_course_from_prompt(
+            user_goal=user_goal,
+            self_assessment_context=self_assessment_context,
+            max_nodes=max_nodes,
+            max_prereqs=max_prereqs,
+            max_layers=max_layers,
+            max_lessons=max_lessons,
+            user_id=str(user_id),
         )
 
     async def generate_self_assessment(

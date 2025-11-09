@@ -50,8 +50,8 @@ class ProgressResponse(BaseModel):
     content_type: ContentType
     progress_percentage: float
     metadata: dict[str, Any]
-    updated_at: datetime
-    created_at: datetime
+    updated_at: datetime | None = None
+    created_at: datetime | None = None
 
 
 class BatchProgressRequest(BaseModel):

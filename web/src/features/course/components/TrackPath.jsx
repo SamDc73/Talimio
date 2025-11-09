@@ -1,6 +1,6 @@
 "use client"
 
-import { CheckCircle } from "lucide-react"
+import { CheckCircle, Lock } from "lucide-react"
 import { useLayoutEffect, useRef, useState } from "react"
 import { useCourseProgress } from "@/features/course/hooks/useCourseProgress"
 import { cn } from "@/lib/utils"
@@ -30,13 +30,13 @@ const xAtY = (path, targetY) => {
 }
 
 /**
- * TrackView renders a vertical learning path visualization of the course
+ * TrackPath renders the vertical learning path visualization for a course.
  * @param {Object} props
  * @param {string} props.courseId - The ID of the course to display.
- * @param {Array} props.modules - The modules data passed from parent component.
+ * @param {Array} props.modules - The modules data passed from the parent component.
  * @returns {JSX.Element}
  */
-export default function TrackView({ courseId, modules = [] }) {
+export default function TrackPath({ courseId, modules = [], availableLessonIds }) {
 	const { isCompleted } = useCourseProgress(courseId)
 	const { goToLesson } = useCourseNavigation()
 
@@ -185,22 +185,15 @@ export default function TrackView({ courseId, modules = [] }) {
 			ro.disconnect()
 			window.removeEventListener("resize", handleResize)
 		}
-	}, [initialPositioningDone]) // Add modules as dependency to trigger recalculation when data changes
-
-	// Handle empty state
-
-	if (!modules || modules.length === 0) {
-		return (
-			<div className="flex-1 min-h-screen flex flex-col items-center justify-center text-zinc-500">
-				<p>No track content available for this course.</p>
-			</div>
-		)
-	}
+	}, [initialPositioningDone])
 
 	// Note: Lesson viewing is now handled by CoursePage via navigation
 
+	// Normalize available ids set for quick lookups (undefined => no locking)
+	const availableSet = Array.isArray(availableLessonIds) ? new Set(availableLessonIds.map((v) => String(v))) : null
+
 	return (
-		<div className="flex-1 min-h-screen flex flex-col p-4 md:p-6 lg:p-8">
+		<div key={`track-${modules.length}`} className="flex-1 min-h-screen flex flex-col p-4 md:p-6 lg:p-8">
 			<div className="flex-1 max-w-2xl mx-auto w-full flex flex-col">
 				{/* Duolingo-style vertical learning path */}
 				<div className="flex-1 relative">
@@ -285,16 +278,23 @@ export default function TrackView({ courseId, modules = [] }) {
 											</div>
 										</div>
 
-										{/* Module title */}
-										<div
-											className={cn(
-												"relative max-w-[220px] min-w-[180px] pointer-events-none",
-												moduleIndex % 2 === 0 ? "text-left" : "text-right"
-											)}
-										>
-											<h3 className="text-xl font-bold text-slate-800 leading-snug">{module.title}</h3>
-											<p className="text-slate-500 text-sm mt-1 leading-tight">{module.description}</p>
-										</div>
+										{/* Module title (only when provided by backend) */}
+										{((typeof module.title === "string" && module.title.trim()) ||
+											(typeof module.description === "string" && module.description.trim())) && (
+											<div
+												className={cn(
+													"relative max-w-[220px] min-w-[180px] pointer-events-none",
+													moduleIndex % 2 === 0 ? "text-left" : "text-right"
+												)}
+											>
+												{module.title ? (
+													<h3 className="text-xl font-bold text-slate-800 leading-snug">{module.title}</h3>
+												) : null}
+												{module.description ? (
+													<p className="text-slate-500 text-sm mt-1 leading-tight">{module.description}</p>
+												) : null}
+											</div>
+										)}
 									</div>
 								</div>
 
@@ -322,38 +322,56 @@ export default function TrackView({ courseId, modules = [] }) {
 														/>
 
 														{/* Lesson card */}
-														<button
-															type="button"
-															ref={(el) => {
-																if (!lessonWrapRefs.current[moduleIndex]) lessonWrapRefs.current[moduleIndex] = []
-																lessonWrapRefs.current[moduleIndex][lessonIndex] = el
-															}}
-															className={cn(
-																"relative bg-card border rounded-xl p-4 shadow-sm w-[calc(50%-20px)] hover:shadow-md hover:border-emerald-300 z-10 text-left",
-																isCompleted(lesson.id) ? "border-emerald-300 bg-emerald-50/30" : "border-slate-200"
-															)}
-															onClick={() => handleLessonClick(module.id, lesson.id, lesson.title, lesson.description)}
-															aria-label={`Open lesson: ${lesson.title}`}
-														>
-															<div className="flex items-center gap-3 mb-2">
-																<div
+														{(() => {
+															const completed = isCompleted(lesson.id)
+															const locked = availableSet ? !completed && !availableSet.has(String(lesson.id)) : false
+															return (
+																<button
+																	type="button"
+																	ref={(el) => {
+																		if (!lessonWrapRefs.current[moduleIndex]) lessonWrapRefs.current[moduleIndex] = []
+																		lessonWrapRefs.current[moduleIndex][lessonIndex] = el
+																	}}
 																	className={cn(
-																		"w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-																		isCompleted(lesson.id)
-																			? "bg-emerald-100 text-emerald-600"
-																			: "bg-slate-100 text-slate-600"
+																		"relative bg-card border rounded-xl p-4 shadow-sm w-[calc(50%-20px)] z-10 text-left",
+																		completed
+																			? "border-emerald-300 bg-emerald-50/30"
+																			: locked
+																				? "border-slate-200 opacity-60"
+																				: "border-slate-200 hover:shadow-md hover:border-emerald-300"
 																	)}
+																	onClick={() => {
+																		if (locked) return
+																		handleLessonClick(module.id, lesson.id, lesson.title, lesson.description)
+																	}}
+																	aria-label={`Open lesson: ${lesson.title}`}
+																	aria-disabled={locked}
 																>
-																	{isCompleted(lesson.id) ? (
-																		<CheckCircle className="w-4 h-4" />
-																	) : (
-																		<span className="text-sm font-medium">{lessonIndex + 1}</span>
-																	)}
-																</div>
-																<h4 className="font-medium text-slate-800 text-sm">{lesson.title}</h4>
-															</div>
-															<p className="text-xs text-slate-500 ml-11">{lesson.description}</p>
-														</button>
+																	<div className="flex items-center gap-3 mb-2">
+																		<div
+																			className={cn(
+																				"w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
+																				completed ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-600"
+																			)}
+																		>
+																			{completed ? (
+																				<CheckCircle className="w-4 h-4" />
+																			) : (
+																				<span className="text-sm font-medium">{lessonIndex + 1}</span>
+																			)}
+																		</div>
+																		<h4 className="font-medium text-slate-800 text-sm">{lesson.title}</h4>
+																	</div>
+																	<p className="text-xs text-slate-500 ml-11">{lesson.description}</p>
+
+																	{locked ? (
+																		<span className="absolute right-2 top-2 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white/80 p-1">
+																			<Lock className="h-3.5 w-3.5 text-slate-500" />
+																		</span>
+																	) : null}
+																</button>
+															)
+														})()}
 													</div>
 												))}
 										</div>

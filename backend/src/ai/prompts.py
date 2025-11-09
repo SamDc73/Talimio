@@ -3,6 +3,9 @@
 All AI prompts are defined here for consistency and maintainability.
 """
 
+from string import Template
+
+
 # Content Tagging Prompts
 CONTENT_TAGGING_PROMPT = """You are an expert educator and content classifier.
 Given the title and preview of educational content (book, video, or course), generate 3-7 highly relevant subject-based tags with confidence scores.
@@ -36,7 +39,7 @@ Your expertise spans across:
 - Adaptive learning methodologies
 
 # Your Mission
-Create a comprehensive, expertly-structured learning course with COMPLETE lesson content for each lesson. Each lesson must be ready to teach immediately - not just an outline.
+Create a comprehensive, expertly-structured learning course outline (modules and lessons with titles and short descriptions). Do NOT generate full lesson content here; content will be generated on demand when a learner opens a lesson.
 
 # Input Parameters
 User's Learning Topic: {user_prompt}
@@ -44,64 +47,117 @@ Additional Context: {description}
 
 # CRITICAL REQUIREMENTS
 
-1. **Complete Lesson Content**: Every lesson MUST include full, detailed content in Markdown format (500-1500 words per lesson)
+1. **Outline Only**: Return modules and lessons with titles and brief descriptions. Do NOT include full lesson content.
 2. **Optimal Learning Sequence**: Structure topics in the most effective order for knowledge building
 3. **Comprehensive Coverage**: Include all essential topics while avoiding unnecessary complexity
 4. **Clear Prerequisites**: Each topic should build naturally on previous knowledge
 5. **Practical Focus**: Emphasize real-world applications and hands-on learning
 6. **Self-Assessment Awareness**: If a "Self-Assessment" block appears in the user input, calibrate lesson difficulty, pacing, and sequencing accordingly.
 
-# Lesson Content Guidelines
+# Lesson Outline Guidelines
 
-Each lesson's `content` field must contain:
-- Clear explanations of concepts
-- Code examples in proper markdown code blocks (```language)
-- Practical applications and use cases
-- Progressive complexity building
-- Engaging, conversational tone
-- 500-1500 words of substantive teaching material
+For each lesson object, include:
+- `title`: Clear lesson name
+- `description`: One or two sentences of what will be learned
+- `module`: Module name to group lessons
 
-Follow standard Markdown formatting:
-- Use ## for main headings (not #, as title is already displayed)
-- Use ### for subheadings
-- Use code blocks with language tags: ```python, ```javascript, etc.
-- Use bullet points and numbered lists for clarity
-- NO HTML tags, NO template variables like {variable_name}
-- NO unclosed backticks - every ` must have a closing `
+Do NOT include a `content` field. Content will be generated at lesson open time.
 
 # Output Format
 
-Return a JSON object with this structure:
-
-{{
-  "title": "Clear course title",
-  "description": "What learners will achieve",
-  "setup_commands": ["pip install numpy pandas matplotlib"],
+Return ONLY a JSON object with this structure (no markdown fences or commentary):
+{
+  "course": {
+    "slug": "kebab-case-course-title",
+    "title": "Clear course title",
+    "description": "What learners will achieve",
+    "setup_commands": ["pip install numpy pandas"]
+  },
+  "ai_outline_meta": {
+    "scope": "1-2 sentences describing the course scope",
+    "moduleGoals": {
+      "Module Name": ["Outcome 1", "Outcome 2"]
+    }
+  },
   "lessons": [
-    {{
+    {
+      "slug": "module-lesson-name",
       "title": "Lesson name",
       "description": "Brief overview of what will be learned",
-      "content": "## Main Concept\\n\\nDetailed explanation here...\\n\\n```python\\ncode_example()\\n```\\n\\nMore explanation...",
-      "module": "Module name"
-    }}
+      "module": "Module name",
+      "objective": "Outcome phrasing",
+      "prereq_slugs": ["earlier-lesson-slug"]
+    }
   ]
-}}
+}
 
-**setup_commands**: Optional list of commands to install dependencies for code execution in this course.
-- Include ONLY if the course introduces tools that are not already available in the default E2B sandbox
-- Prefer package managers: `pip install <pkg>`, `npm install <pkg>`, `apt-get install -y <pkg>`
-- Keep the list minimal—only essential dependencies
-- Leave empty `[]` for theory-only courses or courses using pre-installed languages (python, javascript, typescript, r, java, bash)
+Generation Rules
+----------------
+- Every slug MUST be lowercase kebab-case (use hyphens, no spaces). Ensure lesson slugs are unique within the course.
+- `course.slug` should be derived from the topic.
+- `setup_commands` must always be present (may be empty) and list shell commands needed for the sandbox.
+- `ai_outline_meta.scope` and `moduleGoals` must always exist (use empty strings/arrays only if absolutely no data is available).
+- `moduleGoals` should cover every module referenced by the lessons array.
+- Lessons should appear in optimal learning order; include `prereq_slugs` when a lesson builds on earlier lessons.
+- Never include a `content` field. Lesson content is generated later on demand.
 
-# Course Structure Requirements
-- Create 3-5 modules with 3-7 lessons each
-- Group related lessons under the same module name
-- Titles should be clear and specific
-- Descriptions should state learning outcomes concisely
-- Content should be comprehensive and immediately usable
-
-Remember: This course will be used directly by learners. Every lesson must be complete, polished, and ready to teach!
+Output strictly the described JSON structure. No additional commentary, markdown fences, or trailing text.
 """
+
+ADAPTIVE_COURSE_GENERATION_PROMPT = Template("""
+You are Talimio's ConceptFlow Architect responsible for producing the adaptive payload consumed by the ConceptFlow + LECTOR pipeline.
+
+## Learner Brief
+- Goal: ${user_goal}
+- Self-assessment summary: ${self_assessment_context}
+
+## Output JSON Contract
+Return ONLY a JSON object with this top-level shape:
+{
+  "course": {...},
+  "ai_outline_meta": {...},
+  "lessons": [...]
+}
+
+### course
+- Provide `slug` in lowercase kebab-case, `title`, and `setup_commands` (array of shell commands, may be empty but must exist).
+
+### ai_outline_meta
+- Always include the following keys (use empty arrays/dicts if nothing to report): scope, conceptGraph, moduleGoals, confusorCandidates, policies, semanticNeighbors, similarityMeta, conceptTags, diagnosticBlueprint, skipPolicy.
+
+#### conceptGraph requirements
+- `nodes`: ≤ ${max_nodes} entries with ONLY `slug`, `title`, and `initialMastery` (float 0-1 or null when unknown).
+- `edges`: Each entry must include `sourceSlug` and `prereqSlug`. Respect the ${max_prereqs} prereq limit per node.
+- `layers`: Ordered tiers that cover every node slug exactly once and contain ≤ ${max_layers} total tiers.
+- `confusors`: List of objects with `slug` plus a `confusors` array of { "slug": "...", "risk": value }. Risk must be between 0.0 and 1.0 and every `slug` must EXACTLY match a conceptGraph node slug (reuse the same string; do not invent variants).
+
+- `moduleGoals`: Map module titles to concrete learning outcomes.
+- `confusorCandidates`: Highlight especially risky pairs using objects with `a`, `b`, and `note`.
+- Populate `policies`, `semanticNeighbors`, `similarityMeta`, `conceptTags`, `diagnosticBlueprint`, and `skipPolicy` with concise, actionable guidance even if brief.
+
+### lessons
+- Limit to ${max_lessons} entries.
+- Generate exactly one lesson per conceptGraph node. Lesson `slug` MUST match its concept slug (1:1 mapping) and reuse the identical lowercase kebab-case string.
+- Each lesson object must include: `slug`, `title`, `description`, `objective` (actionable learning statement), and `prereq_slugs` referencing lesson slugs for dependencies.
+- `title`/`description` should mirror the concept’s framing so downstream systems can display them without additional normalization.
+
+## Adaptive Behavior Rules
+- Use the self-assessment summary to calibrate scope, skip mastered basics, and prioritize weak areas.
+- Reserve `initialMastery >= 0.6` only for fundamentals the learner explicitly claims as strong; set all other dependent/advanced concepts in the 0.3–0.45 range so they begin gated and unlock through practice. Ensure at least 40% of concepts fall below the current unlock threshold to keep progression meaningful.
+- Set `initialMastery` between 0.3 and 0.7 unless evidence justifies higher/lower confidence; use null only when impossible to estimate.
+- Front-load prerequisites and scaffold toward advanced goals; align module goals and skip policies with this sequence.
+- Confusors should capture terminology collisions, conceptual overlaps, or workflow confusions with calibrated `risk` values.
+
+## Validation
+- conceptGraph.nodes count ≤ ${max_nodes}.
+- Every reference in edges, confusors, lessons, and prereq_slugs must point to an existing concept slug.
+- Lesson count MUST equal conceptGraph.nodes count.
+- Slugs are lowercase kebab-case strings and must be reused verbatim everywhere they appear (nodes, lessons, confusors, prereq_slugs).
+- Provide at least one setup command when special tooling is required; otherwise return an empty array.
+- Always include a descriptive `scope` summarizing what the learner will accomplish.
+
+Respond with the JSON object ONLY. No markdown fences, explanations, or trailing commentary.
+""")
 
 
 SELF_ASSESSMENT_QUESTIONS_PROMPT = """
@@ -135,7 +191,6 @@ Return ONLY a JSON object that matches exactly:
 """
 
 
-# `Lesson` Generation Prompts
 LESSON_GENERATION_PROMPT = """You are an expert educator creating lesson content for the following topic: {content}
 
 **CRITICAL: DO NOT repeat the lesson title as a heading at the start of your content.** The lesson title is already displayed by the UI. You should still use headings (##, ###) to structure your content, but don't start with a # heading that repeats the lesson title.

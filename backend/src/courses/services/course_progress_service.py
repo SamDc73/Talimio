@@ -10,9 +10,9 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 
-from src.courses.models import Course, Lesson
+from src.courses.models import Course, CourseConcept, Lesson, UserConceptState
 from src.database.session import async_session_maker
 from src.progress.models import ProgressUpdate
 from src.progress.protocols import ProgressTracker
@@ -48,16 +48,64 @@ class CourseProgressService(ProgressTracker):
                     "pacing_preference": "normal",
                 }
 
-            # Get total lessons count
+            # Determine total units for progress
+            # Standard: number of lessons. Adaptive: number of concepts assigned to course.
             lessons_query = select(Lesson).where(Lesson.course_id == content_id)
             lessons_result = await session.execute(lessons_query)
             lessons = lessons_result.scalars().all()
             total_lessons = len(lessons)
 
+            if course.adaptive_enabled:
+                # COUNT concepts for adaptive courses
+                concept_count = await session.scalar(
+                    select(func.count()).select_from(CourseConcept).where(CourseConcept.course_id == content_id)
+                )
+                total_concepts = int(concept_count or 0)
+                if total_concepts > 0:
+                    total_lessons = total_concepts
+
+                # Compute avg mastery over assigned concepts (missing state = 0.0)
+                avg_mastery_stmt = (
+                    select(func.avg(func.coalesce(UserConceptState.s_mastery, 0.0)))
+                    .select_from(
+                        CourseConcept.__table__.outerjoin(
+                            UserConceptState.__table__,
+                            and_(
+                                UserConceptState.concept_id == CourseConcept.concept_id,
+                                UserConceptState.user_id == user_id,
+                            ),
+                        )
+                    )
+                    .where(CourseConcept.course_id == content_id)
+                )
+                avg_mastery = await session.scalar(avg_mastery_stmt)
+                progress_percentage = round(float(avg_mastery or 0.0) * 100.0, 2)
+
+                # Current lesson fallback (use stored metadata if present; else first lesson)
+                metadata = (progress_data.metadata if progress_data else {}) or {}
+                current_lesson = metadata.get("current_lesson") or metadata.get("current_lesson_id") or (
+                    lessons[0].id if lessons else ""
+                )
+
+                return {
+                    "completion_percentage": progress_percentage,
+                    "completed_lessons": metadata.get("completed_lessons", []),
+                    "current_lesson": current_lesson,
+                    "total_lessons": total_lessons,
+                    "quiz_scores": metadata.get("quiz_scores", {}),
+                    "learning_patterns": metadata.get("learning_patterns", {}),
+                    "concept_review_stats": metadata.get("concept_review_stats", {}),
+                    "last_reviewed_concept": metadata.get("last_reviewed_concept"),
+                    "last_reviewed_rating": metadata.get("last_reviewed_rating"),
+                    "last_review_duration_ms": metadata.get("last_review_duration_ms"),
+                    "last_reviewed_at": metadata.get("last_reviewed_at"),
+                    "last_next_review_at": metadata.get("last_next_review_at"),
+                }
+
             if not progress_data:
                 return {
                     "completion_percentage": 0,
-                    "completed_lessons": {},
+                    "completed_lessons": [],
                     "current_lesson": lessons[0].id if lessons else "",
                     "total_lessons": total_lessons,
                     "quiz_scores": {},
@@ -68,23 +116,33 @@ class CourseProgressService(ProgressTracker):
                     "updated_at": None,
                 }
 
-            # Extract metadata with course-specific defaults
+            # Extract metadata with course-specific defaults (non-adaptive path)
             metadata = progress_data.metadata or {}
-            completed_lessons = metadata.get("completed_lessons", {})
+
+            # Normalize completed_lessons to a list of lesson IDs
+            raw_completed = metadata.get("completed_lessons", []) or []
+            if isinstance(raw_completed, dict):
+                completed_list = [lid for lid, flag in raw_completed.items() if flag]
+            elif isinstance(raw_completed, list):
+                completed_list = list({str(x) for x in raw_completed})
+            else:
+                completed_list = []
 
             # Calculate progress percentage from completed lessons
             progress_percentage = progress_data.progress_percentage or 0
-            if total_lessons > 0 and completed_lessons and progress_percentage == 0:
+            if total_lessons > 0 and completed_list and progress_percentage == 0:
                 try:
-                    progress_percentage = self._calculate_lesson_progress_percentage(completed_lessons, total_lessons)
+                    progress_percentage = self._calculate_lesson_progress_percentage_dictsafe(completed_list, total_lessons)
                 except Exception as e:
                     logger.warning(f"Failed to calculate course progress percentage: {e}")
                     progress_percentage = 0
 
             return {
                 "completion_percentage": progress_percentage,
-                "completed_lessons": completed_lessons,
-                "current_lesson": metadata.get("current_lesson", lessons[0].id if lessons else ""),
+                "completed_lessons": completed_list,
+                "current_lesson": metadata.get("current_lesson")
+                or metadata.get("current_lesson_id")
+                or (lessons[0].id if lessons else ""),
                 "total_lessons": total_lessons,
                 "quiz_scores": metadata.get("quiz_scores", {}),
                 "learning_patterns": metadata.get("learning_patterns", {}),
@@ -121,6 +179,8 @@ class CourseProgressService(ProgressTracker):
             )
             await self._process_quiz_results(metadata, progress_data)
             self._process_settings_updates(metadata, progress_data)
+            self._update_concept_review_stats(metadata, progress_data)
+            self._update_recent_review_metadata(metadata, progress_data)
 
             # Explicit completion percentage override
             if "completion_percentage" in progress_data and progress_data["completion_percentage"] is not None:
@@ -144,37 +204,58 @@ class CourseProgressService(ProgressTracker):
         course_result = await session.execute(course_query)
         course = course_result.scalar_one_or_none()
 
-        # Get total lessons count
+        # Get total lessons/concepts count
         total_lessons = 0
         if course:
+            # Default to lesson count
             lessons_query = select(Lesson).where(Lesson.course_id == content_id)
             lessons_result = await session.execute(lessons_query)
             lessons = lessons_result.scalars().all()
             total_lessons = len(lessons)
+
+            # For adaptive courses, use assigned concept count as the unit of progress
+            if course.adaptive_enabled:
+                concept_count = await session.scalar(
+                    select(func.count()).select_from(CourseConcept).where(CourseConcept.course_id == content_id)
+                )
+                if concept_count and int(concept_count) > 0:
+                    total_lessons = int(concept_count)
 
         return current_progress, course, total_lessons
 
     async def _process_lesson_completion(
         self, metadata: dict, progress_data: dict, completion_percentage: float, total_lessons: int
     ) -> float:
-        """Process lesson completion updates."""
+        """Process lesson completion updates (stores a list of completed lesson ids)."""
         if "lesson_completed" not in progress_data:
             return completion_percentage
 
         lesson_id = progress_data.get("lesson_id")
         is_completed = progress_data["lesson_completed"]
 
+        # Normalize existing value to a set
+        raw_completed = metadata.get("completed_lessons", []) or []
+        if isinstance(raw_completed, dict):
+            completed_set = {str(lid) for lid, flag in raw_completed.items() if flag}
+        elif isinstance(raw_completed, list):
+            completed_set = {str(x) for x in raw_completed}
+        else:
+            completed_set = set()
+
         if lesson_id:
-            completed_lessons = metadata.get("completed_lessons", {})
+            lid = str(lesson_id)
             if is_completed:
-                completed_lessons[lesson_id] = True
+                completed_set.add(lid)
             else:
-                completed_lessons.pop(lesson_id, None)
+                completed_set.discard(lid)
 
-            metadata["completed_lessons"] = completed_lessons
+        # Persist back as a list (canonical form)
+        completed_list = sorted(completed_set)
+        metadata["completed_lessons"] = completed_list
 
-            # Recalculate completion percentage
-            completion_percentage = self._calculate_lesson_progress_percentage(completed_lessons, total_lessons)
+        # Recalculate completion percentage for non-adaptive courses only
+        if total_lessons > 0:
+            completion_percentage = self._calculate_lesson_progress_percentage_dictsafe(completed_list, total_lessons)
 
         return completion_percentage
 
@@ -211,15 +292,74 @@ class CourseProgressService(ProgressTracker):
         if "pacing_preference" in progress_data:
             metadata["pacing_preference"] = progress_data["pacing_preference"]
 
+    def _update_concept_review_stats(self, metadata: dict, progress_data: dict) -> None:
+        """Merge per-concept review telemetry into metadata."""
+        incoming = progress_data.get("concept_review_stats")
+        if not incoming:
+            return
+
+        existing = metadata.get("concept_review_stats") or {}
+        for concept_id, concept_payload in incoming.items():
+            current_stats = existing.get(concept_id, {})
+            rating_counts = current_stats.get("ratingCounts", {"1": 0, "2": 0, "3": 0, "4": 0})
+            for rating_key, count in concept_payload.get("ratingCounts", {}).items():
+                rating_counts[rating_key] = int(rating_counts.get(rating_key, 0)) + int(count)
+            current_stats["ratingCounts"] = rating_counts
+
+            current_stats["totalDurationMs"] = int(current_stats.get("totalDurationMs", 0)) + int(
+                concept_payload.get("totalDurationMs", 0)
+            )
+
+            for key in (
+                "lastRating",
+                "lastDurationMs",
+                "lastReviewedAt",
+                "lastNextReviewAt",
+                "mastery",
+                "exposures",
+            ):
+                if key in concept_payload and concept_payload[key] is not None:
+                    current_stats[key] = concept_payload[key]
+
+            existing[concept_id] = current_stats
+
+        metadata["concept_review_stats"] = existing
+
+    def _update_recent_review_metadata(self, metadata: dict, progress_data: dict) -> None:
+        """Persist surface-level metadata about the latest review."""
+        for key in (
+            "last_reviewed_concept",
+            "last_reviewed_rating",
+            "last_review_duration_ms",
+            "last_reviewed_at",
+            "last_next_review_at",
+        ):
+            if key in progress_data and progress_data[key] is not None:
+                metadata[key] = progress_data[key]
+
     def _format_progress_response(self, updated: Any, metadata: dict, total_lessons: int, _course: Any) -> dict:
         """Format the progress response."""
+        completed_lessons = metadata.get("completed_lessons", [])
+        if isinstance(completed_lessons, dict):
+            completed_lessons = [str(lid) for lid, flag in completed_lessons.items() if flag]
+        elif isinstance(completed_lessons, (set, tuple)):
+            completed_lessons = [str(lid) for lid in completed_lessons]
+        else:
+            completed_lessons = [str(lid) for lid in completed_lessons] if isinstance(completed_lessons, list) else []
+
         return {
             "completion_percentage": updated.progress_percentage,
-            "completed_lessons": metadata.get("completed_lessons", {}),
+            "completed_lessons": completed_lessons,
             "current_lesson": metadata.get("current_lesson", ""),
             "total_lessons": total_lessons,
             "quiz_scores": metadata.get("quiz_scores", {}),
             "learning_patterns": metadata.get("learning_patterns", {}),
+            "concept_review_stats": metadata.get("concept_review_stats", {}),
+            "last_reviewed_concept": metadata.get("last_reviewed_concept"),
+            "last_reviewed_rating": metadata.get("last_reviewed_rating"),
+            "last_review_duration_ms": metadata.get("last_review_duration_ms"),
+            "last_reviewed_at": metadata.get("last_reviewed_at"),
+            "last_next_review_at": metadata.get("last_next_review_at"),
             "difficulty_preference": metadata.get("difficulty_preference", "beginner"),
             "pacing_preference": metadata.get("pacing_preference", "normal"),
             "last_accessed_at": updated.updated_at,
@@ -229,16 +369,15 @@ class CourseProgressService(ProgressTracker):
 
 
 
-    def _calculate_lesson_progress_percentage(self, completed_lessons: dict, total_lessons: int) -> float:
-        """Calculate progress percentage based on completed lessons."""
+    def _calculate_lesson_progress_percentage_dictsafe(self, completed_lessons: list[str], total_lessons: int) -> float:
+        """Calculate progress percentage based on completed lessons (list form)."""
         if total_lessons == 0:
             return 0.0
 
-        completed_count = len([k for k, v in completed_lessons.items() if v])
+        completed_count = len(completed_lessons)
         percentage = (completed_count / total_lessons) * 100
-
         logger.info(f"📚 Course progress: {completed_count}/{total_lessons} lessons = {percentage:.1f}%")
-        return min(percentage, 100.0)
+        return min(round(percentage, 2), 100.0)
 
     def _update_learning_patterns(self, metadata: dict, _lesson_id: str, quiz_results: dict) -> None:
         """Update learning patterns based on quiz performance."""

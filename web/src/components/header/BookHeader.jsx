@@ -1,5 +1,4 @@
 import { Maximize, MessageSquare, PanelLeft, Type } from "lucide-react"
-// No useEffect needed
 import { Link } from "react-router-dom"
 import { UserAvatarMenu } from "@/components/header/MainHeader"
 import { TooltipButton } from "@/components/TooltipButton"
@@ -25,7 +24,6 @@ export function BookHeader({
 	const { toggleChat } = useChatSidebar()
 
 	// Use the bookId passed from parent component (BookViewer) which knows the URL param
-	// This ensures consistency across all components
 	const isEpub = (book?.fileType?.toLowerCase?.() || "") === "epub"
 	const currentPage = useAppStore((state) => state.books?.readingState?.[bookId]?.currentPage || 1)
 	const storedTotalPages = useAppStore((state) => state.books?.readingState?.[bookId]?.totalPages)

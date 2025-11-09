@@ -113,7 +113,7 @@ class CodeExecutionService:
     """AI-powered E2B execution service - handles any language autonomously."""
 
     # In-memory session cache: key -> (created_time, sandbox)
-    _sessions: dict[str, tuple[float, object]] = {}
+    _sessions: dict[str, tuple[float, Any]] = {}
     # In-memory plan cache: cache_key -> ExecutionPlan (simple dict, no Redis)
     _plan_cache: dict[str, Any] = {}
     # Course setup tracking: course_id -> bool
@@ -144,8 +144,13 @@ class CodeExecutionService:
             try:
                 _created, sbx = self._sessions.pop(k)
                 # Best effort async close
-                if hasattr(sbx, "close"):
-                    await _maybe_await(sbx.close())
+                closer = getattr(sbx, "close", None)
+                if callable(closer):
+                    await _maybe_await(closer())
+                else:
+                    acloser = getattr(sbx, "aclose", None)
+                    if callable(acloser):
+                        await _maybe_await(acloser())
             except Exception:
                 logging.exception("Failed to close sandbox for key %s", k)
 
@@ -359,9 +364,15 @@ class CodeExecutionService:
 
     async def _reset_session(self, key: str) -> None:
         _created, sbx = self._sessions.pop(key, (None, None))
-        if sbx and hasattr(sbx, "close"):
+        if sbx:
             try:
-                await _maybe_await(sbx.close())
+                closer = getattr(sbx, "close", None)
+                if callable(closer):
+                    await _maybe_await(closer())
+                else:
+                    acloser = getattr(sbx, "aclose", None)
+                    if callable(acloser):
+                        await _maybe_await(acloser())
             except Exception:
                 logging.exception("Failed to close sandbox during reset key=%s", key)
 

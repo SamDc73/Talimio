@@ -12,8 +12,9 @@ if TYPE_CHECKING:
 import litellm
 from pydantic import BaseModel
 
-from src.ai.models import CourseStructure, ExecutionPlan, LessonContent, SelfAssessmentQuiz
+from src.ai.models import AdaptiveCoursePlan, CourseStructure, ExecutionPlan, LessonContent, SelfAssessmentQuiz
 from src.ai.prompts import (
+    ADAPTIVE_COURSE_GENERATION_PROMPT,
     COURSE_GENERATION_PROMPT,
     E2B_EXECUTION_SYSTEM_PROMPT,
     LESSON_GENERATION_PROMPT,
@@ -80,7 +81,7 @@ class LLMClient:
             if stream:
                 kwargs["stream"] = stream
 
-            return await litellm.acompletion(**kwargs)
+            return await asyncio.wait_for(litellm.acompletion(**kwargs), timeout=settings.ai_request_timeout)
 
         except Exception as e:
             self._logger.exception("Error in model completion")
@@ -124,13 +125,17 @@ class LLMClient:
                         "response_model": response_model,
                         "temperature": temperature if temperature is not None else settings.ai_temperature_default,
                         "max_retries": 3,  # Add retries for resilience
+                        "timeout": settings.ai_request_timeout,
                     }
 
                     # Only add max_tokens if explicitly provided
                     if max_tokens is not None:
                         instructor_kwargs["max_tokens"] = max_tokens
 
-                    result = await client.chat.completions.create(**instructor_kwargs)
+                    result = await asyncio.wait_for(
+                        client.chat.completions.create(**instructor_kwargs),
+                        timeout=settings.ai_request_timeout,
+                    )
 
                     # Save conversation to memory (non-blocking)
                     if user_id and result:
@@ -346,11 +351,18 @@ class LLMClient:
             self._logger.warning(f"Failed to get RAG context for course {course_id}: {e}")
             return ""
 
-    async def generate_course_structure(self, user_prompt: str, user_id: str | UUID | None = None) -> CourseStructure:
+    async def generate_course_structure(
+        self,
+        user_prompt: str,
+        user_id: str | UUID | None = None,
+        *,
+        system_prompt: str | None = None,
+    ) -> CourseStructure:
         """Generate a structured learning course using LiteLLM structured output (Pydantic)."""
         try:
+            prompt = system_prompt or COURSE_GENERATION_PROMPT
             messages = [
-                {"role": "system", "content": COURSE_GENERATION_PROMPT},
+                {"role": "system", "content": prompt},
                 {"role": "user", "content": user_prompt},
             ]
 
@@ -372,6 +384,92 @@ class LLMClient:
             self._logger.exception("Error generating course structure")
             msg = "Failed to generate course outline"
             raise RuntimeError(msg) from e
+
+    async def generate_adaptive_course_from_prompt(
+        self,
+        *,
+        user_goal: str,
+        self_assessment_context: str | None = None,
+        max_nodes: int = 32,
+        max_prereqs: int = 3,
+        max_layers: int = 12,
+        max_lessons: int = 96,
+        user_id: str | UUID | None = None,
+    ) -> AdaptiveCoursePlan:
+        """Generate the unified adaptive course payload used by ConceptFlow."""
+        goal_text = user_goal.strip()
+        if not goal_text:
+            msg = "User goal must not be empty"
+            raise ValueError(msg)
+
+        assessment_block = (
+            self_assessment_context.strip() if self_assessment_context else "No self-assessment provided."
+        )
+        system_prompt = ADAPTIVE_COURSE_GENERATION_PROMPT.substitute(
+            user_goal=goal_text,
+            self_assessment_context=assessment_block,
+            max_nodes=max_nodes,
+            max_prereqs=max_prereqs,
+            max_layers=max_layers,
+            max_lessons=max_lessons,
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": "Produce the adaptive course plan JSON exactly as specified.",
+            },
+        ]
+
+        class _LiteLLMCompletionFilter(logging.Filter):
+            """Filter to suppress duplicate LiteLLM completion logs for this call."""
+
+            def __init__(self) -> None:
+                super().__init__()
+                self._seen: set[str] = set()
+
+            def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+                name = record.name.lower()
+                if name != "litellm":
+                    return True
+                message = record.getMessage()
+                if "LiteLLM completion()" not in message:
+                    return True
+                if message in self._seen:
+                    return False
+                self._seen.add(message)
+                return True
+
+        log_filter = _LiteLLMCompletionFilter()
+        target_loggers = [logging.getLogger("LiteLLM"), logging.getLogger("litellm")]
+        for target in target_loggers:
+            target.addFilter(log_filter)
+
+        try:
+            result = await self.get_completion(
+                messages,
+                response_model=AdaptiveCoursePlan,
+                temperature=0.2,
+                user_id=user_id,
+            )
+
+            if not isinstance(result, AdaptiveCoursePlan):
+                msg = "Adaptive course structured response failed"
+                raise TypeError(msg)
+
+            return result
+
+        except Exception as e:
+            self._logger.exception("Error generating adaptive course plan")
+            msg = "Failed to generate adaptive course plan"
+            raise RuntimeError(msg) from e
+        finally:
+            for target in target_loggers:
+                try:
+                    target.removeFilter(log_filter)
+                except ValueError:
+                    continue
 
     async def generate_self_assessment_questions(
         self,
@@ -455,14 +553,26 @@ class LLMClient:
             content_info = "## Course Information\n" + "\n".join(context_parts) + "\n\n" if context_parts else ""
 
             rag_context = await self._get_rag_context(
-                metadata["course_id"],
-                metadata["node_title"],
-                metadata["node_description"],
+                metadata.get("course_id"),
+                metadata.get("node_title") or "",
+                metadata.get("node_description") or "",
                 auth,
             )
 
+            # Inject target concept context for adaptive mode (single-concept lessons)
+            target = node_meta.get("target_concept") or {}
+            target_section = ""
+            if isinstance(target, dict) and (target.get("name") or target.get("description")):
+                t_name = str(target.get("name", "")).strip()
+                t_desc = str(target.get("description", "")).strip()
+                t_mastery = target.get("mastery")
+                lines = ["## Target Concept", f"Name: {t_name}" if t_name else None, f"Description: {t_desc}" if t_desc else None]
+                if isinstance(t_mastery, (int, float)):
+                    lines.append(f"Current mastery: {float(t_mastery):.2f}")
+                target_section = "\n".join([ln for ln in lines if ln]) + "\n\n"
+
             # Prepare prompt
-            combined_content = (content_info + rag_context).strip()
+            combined_content = (content_info + target_section + rag_context).strip()
             if not combined_content:
                 combined_content = (
                     f"Lesson Title: {title}\n"

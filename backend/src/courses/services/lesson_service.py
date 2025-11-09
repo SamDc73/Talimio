@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastapi import HTTPException
-from sqlalchemy import or_, select, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.client import LLMClient
@@ -74,7 +74,7 @@ class LessonService:
 
         lesson, course = row
 
-        if force_refresh or not (lesson.content and lesson.content.strip()):
+        if force_refresh or lesson.content == "":
             lesson = await self._generate_content_secure(lesson, course, force=force_refresh)
 
         module_id = _module_id(course.id, lesson.module_name)
@@ -96,8 +96,8 @@ class LessonService:
         )
 
     async def _generate_content_secure(self, lesson: Lesson, course: Course, force: bool = False) -> Lesson:
-        """Generate content with conditional update to prevent concurrent writes."""
-        if not force and lesson.content and lesson.content.strip():
+        """Generate content for a lesson on demand."""
+        if not force and lesson.content != "":
             return lesson
 
         context = {
@@ -125,7 +125,7 @@ class LessonService:
 
             conditions = [Lesson.id == lesson.id]
             if not force:
-                conditions.append(or_(Lesson.content.is_(None), Lesson.content == ""))
+                conditions.append(Lesson.content == "")
 
             update_stmt = (
                 update(Lesson)

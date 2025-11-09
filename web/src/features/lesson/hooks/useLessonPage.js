@@ -26,6 +26,16 @@ export function useLessonPage(courseId, lessonId) {
 	// Business logic actions
 	const actions = useLessonActions(resolvedCourseId)
 
+	const adaptiveFlags = [
+		course?.adaptiveEnabled,
+		course?.adaptive_enabled,
+		lesson?.adaptiveEnabled,
+		lesson?.adaptive_enabled,
+		lesson?.course?.adaptiveEnabled,
+		lesson?.course?.adaptive_enabled,
+	]
+	const isAdaptiveCourse = adaptiveFlags.some((flag) => flag === true)
+
 	// Computed values - don't store derived state
 	// Following state management guide: "Computed Values Outside Store"
 	const computedState = useMemo(
@@ -35,6 +45,7 @@ export function useLessonPage(courseId, lessonId) {
 
 			// Course information
 			courseName: course?.title || "Course",
+			isAdaptiveCourse,
 
 			// Navigation handlers with pre-bound courseId
 			handleBack: () => actions.handleBack(),
@@ -48,7 +59,7 @@ export function useLessonPage(courseId, lessonId) {
 			hasError: !!lessonError,
 			errorMessage: lessonError?.message || "Failed to load lesson",
 		}),
-		[lessonLoading, courseLoading, modulesLoading, course?.title, actions, lessonId, lessonError]
+		[lessonLoading, courseLoading, modulesLoading, course?.title, actions, lessonId, lessonError, isAdaptiveCourse]
 	)
 
 	return {

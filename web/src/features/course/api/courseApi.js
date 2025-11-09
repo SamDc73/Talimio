@@ -20,6 +20,9 @@ export function useCourseService(courseId = null) {
 	const getCourse = useApi("/courses/{courseId}")
 	const updateCourse = useApi("/courses/{courseId}", { method: "PATCH" })
 	const selfAssessmentQuestions = useApi("/courses/self-assessment/questions", { method: "POST" })
+	const getConceptFrontier = useApi("/courses/{courseId}/concepts")
+	const submitReviewsEndpoint = useApi("/courses/{courseId}/lessons/{lessonId}/reviews", { method: "POST" })
+	const getConceptNextReview = useApi("/courses/{courseId}/concepts/{conceptId}/next-review")
 
 	// Lesson endpoints
 	const getLessons = useApi("/courses/{courseId}/lessons")
@@ -35,11 +38,6 @@ export function useCourseService(courseId = null) {
 		method: "DELETE",
 	})
 
-	// Progress endpoints
-	const getCourseProgress = useApi("/courses/{courseId}/progress")
-	const updateLessonStatus = useApi("/courses/{courseId}/lessons/{lessonId}/status", { method: "PATCH" })
-	const getLessonStatus = useApi("/courses/{courseId}/lessons/{lessonId}/status")
-
 	return {
 		// ========== COURSE OPERATIONS ==========
 
@@ -54,6 +52,16 @@ export function useCourseService(courseId = null) {
 
 		async fetchSelfAssessmentQuestions(payload) {
 			return await selfAssessmentQuestions.execute(payload)
+		},
+
+		/**
+		 * Fetch adaptive concept frontier and review queue
+		 */
+		async fetchConceptFrontier() {
+			if (!courseId) {
+				throw new Error("Course ID required")
+			}
+			return await getConceptFrontier.execute(null, { pathParams: { courseId } })
 		},
 
 		/**
@@ -212,42 +220,32 @@ export function useCourseService(courseId = null) {
 			})
 		},
 
+		/**
+		 * Submit adaptive lesson reviews
+		 */
+		async submitLessonReviews(lessonId, reviews) {
+			if (!courseId || !lessonId) {
+				throw new Error("Course ID and Lesson ID required")
+			}
+			if (!Array.isArray(reviews) || reviews.length === 0) {
+				throw new Error("At least one review is required")
+			}
+			return await submitReviewsEndpoint.execute({ reviews }, { pathParams: { courseId, lessonId } })
+		},
+
+		/**
+		 * Retrieve next review info for a concept
+		 */
+		async fetchConceptNextReview(conceptId) {
+			if (!courseId || !conceptId) {
+				throw new Error("Course ID and Concept ID required")
+			}
+			return await getConceptNextReview.execute(null, {
+				pathParams: { courseId, conceptId },
+			})
+		},
+
 		// ========== PROGRESS OPERATIONS ==========
-
-		/**
-		 * Get overall progress for a course
-		 */
-		async fetchCourseProgress() {
-			if (!courseId) throw new Error("Course ID required")
-			return await getCourseProgress.execute(null, {
-				pathParams: { courseId },
-			})
-		},
-
-		/**
-		 * Update lesson status
-		 * @param {string} lessonId - Lesson ID
-		 * @param {string} status - New status (not_started, in_progress, done)
-		 */
-		async updateLessonStatus(lessonId, status) {
-			if (!courseId || !lessonId) {
-				throw new Error("Course ID and Lesson ID required")
-			}
-			return await updateLessonStatus.execute({ status }, { pathParams: { courseId, lessonId } })
-		},
-
-		/**
-		 * Get lesson status
-		 * @param {string} lessonId - Lesson ID
-		 */
-		async fetchLessonStatus(lessonId) {
-			if (!courseId || !lessonId) {
-				throw new Error("Course ID and Lesson ID required")
-			}
-			return await getLessonStatus.execute(null, {
-				pathParams: { courseId, lessonId },
-			})
-		},
 
 		// ========== LOADING STATES AND ERRORS ==========
 
@@ -260,15 +258,15 @@ export function useCourseService(courseId = null) {
 				getCourses.isLoading ||
 				getCourse.isLoading ||
 				updateCourse.isLoading ||
+				getConceptFrontier.isLoading ||
 				getLessons.isLoading ||
 				getLesson.isLoading ||
 				generateLesson.isLoading ||
 				regenerateLesson.isLoading ||
 				updateLesson.isLoading ||
 				deleteLesson.isLoading ||
-				getCourseProgress.isLoading ||
-				updateLessonStatus.isLoading ||
-				getLessonStatus.isLoading
+				submitReviewsEndpoint.isLoading ||
+				getConceptNextReview.isLoading
 			)
 		},
 
@@ -281,15 +279,15 @@ export function useCourseService(courseId = null) {
 				getCourses.error ||
 				getCourse.error ||
 				updateCourse.error ||
+				getConceptFrontier.error ||
 				getLessons.error ||
 				getLesson.error ||
 				generateLesson.error ||
 				regenerateLesson.error ||
 				updateLesson.error ||
 				deleteLesson.error ||
-				getCourseProgress.error ||
-				updateLessonStatus.error ||
-				getLessonStatus.error
+				submitReviewsEndpoint.error ||
+				getConceptNextReview.error
 			)
 		},
 	}
