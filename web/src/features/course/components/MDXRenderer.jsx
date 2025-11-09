@@ -1,17 +1,12 @@
 import { MDXProvider } from "@mdx-js/react"
-import React from "react"
-import { FillInTheBlank, FreeForm, MultipleChoice } from "@/components/quiz/index.js"
+import { FillInTheBlank } from "@/components/quiz/FillInTheBlank.jsx"
+import { FreeForm } from "@/components/quiz/FreeForm.jsx"
+import { MultipleChoice } from "@/components/quiz/MultipleChoice.jsx"
 import { useMDXCompile } from "@/features/course/hooks/useMDXCompile"
 import ExecutableCodeBlock from "./ExecutableCodeBlock.jsx"
 
 // Static component overrides - defined once outside component
 const MDX_COMPONENTS = {
-	// Provide React and hooks for interactive components
-	React: React,
-	useState: React.useState,
-	useEffect: React.useEffect,
-	useRef: React.useRef,
-
 	// Quiz components
 	MultipleChoice: MultipleChoice,
 	FillInTheBlank: FillInTheBlank,

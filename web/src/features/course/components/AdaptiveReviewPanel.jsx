@@ -62,8 +62,6 @@ export function AdaptiveReviewPanel({
 
 	const isAdaptiveActive = adaptive?.enabled || adaptiveEnabledProp
 	const conceptId = activeConcept?.conceptId ?? null
-	const conceptTitle = activeConcept?.title || "Practice feedback for this lesson"
-	const conceptSummary = activeConcept?.description || null
 
 	useEffect(() => {
 		if (!isAdaptiveActive || !conceptId || hasLoggedPrompt) {
@@ -126,10 +124,11 @@ export function AdaptiveReviewPanel({
 
 	return (
 		<section className={cn("rounded-xl border border-border/60 bg-muted/40 backdrop-blur-sm", className)}>
-			<div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+			<div className="flex items-center justify-between gap-3 border-b border-border/60 px-5 py-4">
 				<div>
-					<p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Adaptive checkpoint</p>
-					<p className="text-sm text-foreground">Tell us how this concept felt</p>
+					<p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+						Tell us how this concept felt
+					</p>
 				</div>
 				<span className="flex items-center gap-1 rounded-full bg-[var(--color-course)]/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-course)]">
 					<Zap className="h-3.5 w-3.5" aria-hidden="true" />
@@ -137,10 +136,7 @@ export function AdaptiveReviewPanel({
 				</span>
 			</div>
 
-			<div className="space-y-4 px-4 py-5">
-				{conceptTitle ? <h3 className="text-base font-semibold text-foreground">{conceptTitle}</h3> : null}
-				{conceptSummary ? <p className="text-sm leading-relaxed text-muted-foreground">{conceptSummary}</p> : null}
-
+			<div className="space-y-4 px-5 py-6">
 				<div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
 					{RATING_OPTIONS.map((option) => (
 						<Button

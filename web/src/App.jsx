@@ -5,11 +5,11 @@ import { AuthProvider } from "@/contexts/AuthProvider.jsx"
 import { ThemeProvider } from "@/contexts/ThemeContext"
 import { ChatSidebarProvider } from "@/features/assistant/contexts/ChatSidebarContext"
 import AuthPage from "@/features/auth/AuthPage"
-import { BookViewer } from "@/features/book-viewer"
+import BookViewer from "@/features/book-viewer/BookViewer"
 import CoursePage from "@/features/course/CoursePage"
 import HomePage from "@/features/home"
 import LessonPage from "@/features/lesson/LessonPage"
-import { VideoViewer } from "@/features/video-viewer"
+import { VideoViewer } from "@/features/video-viewer/VideoViewer"
 
 function App() {
 	return (

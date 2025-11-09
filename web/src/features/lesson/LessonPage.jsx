@@ -134,6 +134,8 @@ export default function LessonPage() {
 						onMarkComplete={handleMarkComplete}
 						onRegenerate={handleRegenerate}
 						courseId={courseId}
+						modules={modules}
+						onLessonNavigate={handleLessonClick}
 						adaptiveEnabled={isAdaptiveCourse}
 					/>
 				</div>

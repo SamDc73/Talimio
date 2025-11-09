@@ -3,7 +3,7 @@ import { useEffect, useState } from "react"
 import { useParams } from "react-router-dom"
 
 import { CourseHeader } from "@/components/header/CourseHeader"
-import { CourseSidebar } from "@/components/sidebar"
+import CourseSidebar from "@/components/sidebar/CourseSidebar"
 import { cn } from "@/lib/utils"
 import useAppStore, { selectSidebarOpen, selectToggleSidebar } from "@/stores/useAppStore"
 import { useCourseNavigation } from "@/utils/navigationUtils"
@@ -11,7 +11,6 @@ import { useCourseService } from "./api/courseApi"
 import { useCourseData } from "./hooks/useCourseData"
 import { useOutlineData } from "./hooks/useOutlineData"
 import DocumentsView from "./views/DocumentsView"
-import LessonView from "./views/LessonView"
 import OutlineView from "./views/OutlineView"
 import TrackView from "./views/TrackView"
 
@@ -20,7 +19,7 @@ import TrackView from "./views/TrackView"
  * Handles switching between different views and lesson display
  */
 function CoursePage({ courseId: propCourseId, ref: _ref }) {
-	const { courseId: routeCourseId, lessonId } = useParams()
+	const { courseId: routeCourseId } = useParams()
 	const courseId = propCourseId ?? routeCourseId // Support both props and URL params
 
 	const { isLoading: courseLoading, course } = useCourseData(courseId)
@@ -107,15 +106,12 @@ function CoursePage({ courseId: propCourseId, ref: _ref }) {
 					modules={moduleList}
 					onLessonClick={handleLessonClick}
 					courseId={courseId}
-					activeLessonId={lessonId}
 					adaptiveEnabled={isAdaptiveCourse}
 					adaptiveProgressPct={typeof adaptiveProgressPct === "number" ? adaptiveProgressPct : lastAdaptiveProgressPct}
 				/>
 
 				<div className={contentClasses}>
-					{lessonId ? (
-						<LessonView courseId={courseId} lessonId={lessonId} />
-					) : mode === "documents" ? (
+					{mode === "documents" ? (
 						<DocumentsView courseId={courseId} />
 					) : mode === "track" ? (
 						<TrackView courseId={courseId} modules={moduleList} adaptiveEnabled={isAdaptiveCourse} />
