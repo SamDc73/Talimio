@@ -10,6 +10,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 
+from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_COURSE_PLANNER
 from src.ai.client import LLMClient
 from src.ai.models import AdaptiveCoursePlan, CourseStructure, ExecutionPlan, SelfAssessmentQuiz
 from src.ai.prompts import (
@@ -31,7 +32,8 @@ class AIService:
 
     def __init__(self) -> None:
         self._rag_service = RAGService()
-        self._llm_client = LLMClient(rag_service=self._rag_service)
+        self._course_llm = LLMClient(rag_service=self._rag_service, agent_id=AGENT_ID_COURSE_PLANNER)
+        self._assistant_llm = LLMClient(agent_id=AGENT_ID_ASSISTANT)
 
     # Course operations
     async def course_generate(
@@ -46,7 +48,7 @@ class AIService:
         if description:
             user_prompt += f"\n\nAdditional details: {description}"
 
-        return await self._llm_client.generate_course_structure(
+        return await self._course_llm.generate_course_structure(
             user_prompt=user_prompt,
             user_id=str(user_id),
             system_prompt=COURSE_GENERATION_PROMPT,
@@ -64,7 +66,7 @@ class AIService:
         max_lessons: int = 96,
     ) -> AdaptiveCoursePlan:
         """Generate the unified adaptive course payload."""
-        return await self._llm_client.generate_adaptive_course_from_prompt(
+        return await self._course_llm.generate_adaptive_course_from_prompt(
             user_goal=user_goal,
             self_assessment_context=self_assessment_context,
             max_nodes=max_nodes,
@@ -83,7 +85,7 @@ class AIService:
     ) -> SelfAssessmentQuiz:
         """Generate optional self-assessment questions for the given topic."""
         try:
-            return await self._llm_client.generate_self_assessment_questions(
+            return await self._course_llm.generate_self_assessment_questions(
                 topic=topic,
                 level=level,
                 user_id=str(user_id),
@@ -123,7 +125,7 @@ class AIService:
         messages.append({"role": "user", "content": message})
 
         # Use completion with user context
-        response = await self._llm_client.get_completion(
+        response = await self._assistant_llm.get_completion(
             messages=messages,
             user_id=str(user_id),
             format_json=False
@@ -143,7 +145,7 @@ class AIService:
         user_id: str | UUID | None = None,
     ) -> ExecutionPlan:
         """Generate a sandbox execution plan for code execution."""
-        return await self._llm_client.generate_execution_plan(
+        return await self._assistant_llm.generate_execution_plan(
             language=language,
             source_code=source_code,
             stderr=stderr,

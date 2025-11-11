@@ -25,6 +25,22 @@ logger = logging.getLogger(__name__)
 _memory_client: AsyncMemory | None = None
 
 
+def _resolve_embedding_dims() -> int:
+    """Return configured embedding dimension with validation."""
+    raw_value = env("MEMORY_EMBEDDING_OUTPUT_DIM", "1536")
+    try:
+        dims = int(raw_value)
+    except (TypeError, ValueError) as exc:
+        msg = "MEMORY_EMBEDDING_OUTPUT_DIM must be an integer"
+        raise ValueError(msg) from exc
+
+    if dims <= 0:
+        msg = "MEMORY_EMBEDDING_OUTPUT_DIM must be positive"
+        raise ValueError(msg)
+
+    return dims
+
+
 def _get_memory_config() -> dict[str, Any]:
     """Build mem0 configuration from environment."""
     settings = get_settings()
@@ -41,7 +57,7 @@ def _get_memory_config() -> dict[str, Any]:
 
     # Extract model names (mem0 doesn't need provider prefix)
     embed_model = env("MEMORY_EMBEDDING_MODEL").split("/")[-1]
-    embedding_dims = int(env("MEMORY_EMBEDDING_OUTPUT_DIM"))
+    embedding_dims = _resolve_embedding_dims()
 
     return {
         "vector_store": {
@@ -89,21 +105,33 @@ async def get_memory_client() -> AsyncMemory:
     return _memory_client
 
 
-async def add_memory(user_id: UUID, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+async def add_memory(
+    user_id: UUID,
+    content: str,
+    metadata: dict[str, Any] | None = None,
+    *,
+    agent_id: str | None = None,
+    run_id: str | None = None,
+) -> dict[str, Any]:
     """Add memory for a user."""
     try:
         client = await get_memory_client()
 
         # Prepare metadata
-        if metadata is None:
-            metadata = {}
-        metadata["user_id"] = str(user_id)
+        metadata_payload = dict(metadata or {})
+        metadata_payload["user_id"] = str(user_id)
+        if agent_id:
+            metadata_payload.setdefault("agent_id", agent_id)
+        if run_id:
+            metadata_payload.setdefault("run_id", run_id)
 
         # Add memory using mem0's async method
         result = await client.add(
             messages=[{"role": "user", "content": content}],
             user_id=str(user_id),
-            metadata=metadata
+            agent_id=agent_id,
+            run_id=run_id,
+            metadata=metadata_payload,
         )
 
         logger.debug(f"Added memory for user {user_id}")
@@ -114,13 +142,21 @@ async def add_memory(user_id: UUID, content: str, metadata: dict[str, Any] | Non
         return {}  # Don't break the flow
 
 
-async def get_memories(user_id: UUID, limit: int = 100) -> list[dict[str, Any]]:
+async def get_memories(
+    user_id: UUID,
+    limit: int = 100,
+    *,
+    agent_id: str | None = None,
+    run_id: str | None = None,
+) -> list[dict[str, Any]]:
     """Get all memories for a user."""
     try:
         client = await get_memory_client()
         results = await client.get_all(
             user_id=str(user_id),
-            limit=limit
+            agent_id=agent_id,
+            run_id=run_id,
+            limit=limit,
         )
 
         if isinstance(results, dict):
@@ -133,21 +169,29 @@ async def get_memories(user_id: UUID, limit: int = 100) -> list[dict[str, Any]]:
 
 
 async def search_memories(
-    user_id: UUID, query: str, limit: int = 5, threshold: float | None = None
+    user_id: UUID,
+    query: str,
+    limit: int = 5,
+    threshold: float | None = None,
+    *,
+    agent_id: str | None = None,
+    run_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Search memories for a user."""
     # Handle empty queries
     if not query or not query.strip():
         logger.debug(f"Empty query, using get_memories for user {user_id}")
-        return await get_memories(user_id, limit)
+        return await get_memories(user_id, limit, agent_id=agent_id, run_id=run_id)
 
     try:
         client = await get_memory_client()
         results = await client.search(
             query=query,
             user_id=str(user_id),
+            agent_id=agent_id,
+            run_id=run_id,
             limit=limit,
-            threshold=threshold
+            threshold=threshold,
         )
 
         if isinstance(results, dict):
@@ -184,3 +228,8 @@ async def cleanup_memory_client() -> None:
             logger.info("Memory client reference cleared")
         except Exception as e:
             logger.warning(f"Error during memory cleanup: {e}")
+
+
+async def warm_memory_client() -> None:
+    """Initialize the AsyncMemory client so the first request skips cold start."""
+    await get_memory_client()

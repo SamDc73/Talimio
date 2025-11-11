@@ -10,6 +10,7 @@ from src.auth.config import DEFAULT_USER_ID
 
 # Import all models to register them with Base metadata
 from src.books.models import *  # noqa: F403
+from src.config import env
 from src.courses.models import *  # noqa: F403
 from src.tagging.models import *  # noqa: F403
 from src.user.models import *  # noqa: F403
@@ -60,6 +61,10 @@ async def init_database(db_engine: AsyncEngine) -> None:
         logger.info("Ensuring default user exists...")
         await _ensure_default_user(conn)
 
+        # 4. Ensure mem0 vector store indexes exist
+        logger.info("Ensuring mem0 vector indexes exist...")
+        await _ensure_vector_indexes(conn)
+
         logger.info("Database initialization completed successfully")
 
 
@@ -103,6 +108,50 @@ async def _ensure_default_user(conn: AsyncConnection) -> None:
             logger.info("Users table doesn't exist yet, will be created by SQLAlchemy")
     except Exception as e:
         logger.warning(f"Could not create default user (non-critical for single-user mode): {e}")
+
+
+async def _ensure_vector_indexes(conn: AsyncConnection) -> None:
+    """Ensure mem0 learning_memories table and HNSW index exist."""
+    dims_value = env("MEMORY_EMBEDDING_OUTPUT_DIM", 1536)
+    try:
+        embedding_dims = int(dims_value) if dims_value is not None else 1536
+    except (TypeError, ValueError):
+        embedding_dims = 1536
+    if embedding_dims <= 0:
+        embedding_dims = 1536
+
+    try:
+        # Mirrors mem0's pgvector schema (Context7: /mem0ai/mem0 components/vectordbs/dbs/pgvector)
+        await conn.execute(
+            text(
+                f"""
+                CREATE TABLE IF NOT EXISTS public.learning_memories (
+                    id UUID PRIMARY KEY,
+                    vector vector({embedding_dims}),
+                    payload JSONB
+                )
+                """
+            )
+        )
+
+        # Remove legacy indexes so the dedicated lm_vec_cos index stays canonical
+        for idx_name in ("learning_memories_hnsw_idx", "learning_memories_diskann_idx"):
+            await conn.execute(text(f"DROP INDEX IF EXISTS public.{idx_name}"))
+
+        await conn.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS lm_vec_cos
+                ON public.learning_memories
+                USING hnsw (vector vector_cosine_ops)
+                """
+            )
+        )
+        await conn.execute(text("ANALYZE public.learning_memories"))
+        logger.info("Mem0 learning_memories table and HNSW index verified")
+    except Exception as exc:  # pragma: no cover - database specific
+        logger.exception(f"Failed to ensure mem0 vector indexes: {exc}")
+        raise
 
 
 async def main() -> None:

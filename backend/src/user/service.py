@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai import AGENT_ID_ASSISTANT
 from src.ai.memory import add_memory, delete_memory, get_memories
 from src.user.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
@@ -172,6 +173,7 @@ async def update_custom_instructions(
                         "instructions_length": len(instructions),
                         "timestamp": "now",
                     },
+                    agent_id=AGENT_ID_ASSISTANT,
                 )
             except Exception as e:
                 logger.warning(f"Failed to log instruction update in memory: {e}")
@@ -186,12 +188,13 @@ async def update_custom_instructions(
         return CustomInstructionsResponse(instructions=instructions, updated=False)
 
 
-async def get_user_memories(user_id: UUID) -> list[dict]:
+async def get_user_memories(user_id: UUID, agent_id: str | None = None) -> list[dict]:
     """
-    Get all memories for a user.
+    Get memories for a user, optionally filtered to a specific agent scope.
 
     Args:
         user_id: Unique identifier for the user
+        agent_id: Limit results to memories created by a specific agent (optional)
 
     Returns
     -------
@@ -199,7 +202,7 @@ async def get_user_memories(user_id: UUID) -> list[dict]:
     """
     try:
         # Get all memories using direct function
-        memories = await get_memories(user_id, limit=1000)
+        memories = await get_memories(user_id, limit=1000, agent_id=agent_id)
 
         # Format memories for web app consumption
         formatted_memories = []

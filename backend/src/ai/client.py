@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 import litellm
 from pydantic import BaseModel
 
+from src.ai import AGENT_ID_DEFAULT
 from src.ai.models import AdaptiveCoursePlan, CourseStructure, ExecutionPlan, LessonContent, SelfAssessmentQuiz
 from src.ai.prompts import (
     ADAPTIVE_COURSE_GENERATION_PROMPT,
@@ -28,15 +29,17 @@ from src.config.settings import get_settings
 class LLMClient:
     """Manages LLM completion requests with memory integration and RAG support."""
 
-    def __init__(self, rag_service: Any | None = None) -> None:
+    def __init__(self, rag_service: Any | None = None, agent_id: str = AGENT_ID_DEFAULT) -> None:
         """Initialize LLMClient.
 
         Args:
             rag_service: Optional RAGService instance for dependency injection.
                         If not provided, RAG functionality will be skipped or create a new instance.
+            agent_id: Logical identifier for the caller so memories can be scoped per module.
         """
         self._logger = logging.getLogger(__name__)
         self._rag_service = rag_service
+        self._agent_id = agent_id
 
     async def complete(
         self,
@@ -204,12 +207,24 @@ class LLMClient:
         """Inject user memory context into the conversation."""
         try:
             # Get user memory
-            from src.ai.memory import get_memories
+            from src.ai.memory import search_memories
 
             # Normalize user_id to UUID
             normalized_user_id: UUID = user_id if isinstance(user_id, UUID) else UUID(str(user_id))
 
-            memories = await get_memories(user_id=normalized_user_id, limit=10)
+            query_text = self._build_memory_query(messages)
+            if not query_text:
+                return messages
+
+            run_id, has_run_scope = self._get_run_scope_state()
+            run_filter = run_id if has_run_scope else None
+            memories = await search_memories(
+                user_id=normalized_user_id,
+                query=query_text,
+                limit=6,
+                agent_id=self._agent_id,
+                run_id=run_filter,
+            )
 
             if not memories:
                 return messages
@@ -234,6 +249,47 @@ class LLMClient:
         except Exception as e:
             self._logger.warning(f"Failed to inject memory for user {user_id}: {e}")
             return messages
+
+    def _build_memory_query(self, messages: list[dict[str, Any]]) -> str | None:
+        """Return the most recent user utterance to drive mem0 vector search."""
+        for message in reversed(messages):
+            if message.get("role") != "user":
+                continue
+            content = message.get("content")
+            if isinstance(content, str):
+                normalized = content.strip()
+                if normalized:
+                    return normalized
+        return None
+
+    def _get_trace_context(self) -> Any | None:
+        """Return the active diagnostics trace if available."""
+        try:
+            from src.diagnostics.trace import get_trace
+        except Exception:
+            return None
+        return get_trace()
+
+    def _get_run_scope_state(self) -> tuple[str | None, bool]:
+        """Return the current run identifier and whether this agent already saved memories."""
+        trace = self._get_trace_context()
+        if trace is None:
+            return None, False
+        has_scope = getattr(trace, "has_memory_scope", None)
+        if callable(has_scope):
+            return trace.id, bool(has_scope(self._agent_id))
+        return trace.id, False
+
+    def _mark_run_scope(self, run_id: str | None) -> None:
+        """Mark that this agent persisted memories for the current run."""
+        if not run_id:
+            return
+        trace = self._get_trace_context()
+        if trace is None:
+            return
+        mark_scope = getattr(trace, "mark_memory_scope", None)
+        if callable(mark_scope):
+            mark_scope(self._agent_id)
 
     async def _handle_function_calling(
         self,
@@ -719,11 +775,23 @@ class LLMClient:
             # Combine into conversation format
             conversation = f"User: {user_message}\nAssistant: {ai_response}"
 
+            normalized_user_id = UUID(str(user_id)) if isinstance(user_id, str) else user_id
+            run_id, _ = self._get_run_scope_state()
+            metadata = {
+                "agent_id": self._agent_id,
+            }
+            if run_id:
+                metadata["run_id"] = run_id
+
             # Let mem0 handle everything - extraction, deduplication, relevance filtering
             await add_memory(
-                user_id=UUID(str(user_id)) if isinstance(user_id, str) else user_id,
-                content=conversation
+                user_id=normalized_user_id,
+                content=conversation,
+                agent_id=self._agent_id,
+                run_id=run_id,
+                metadata=metadata,
             )
+            self._mark_run_scope(run_id)
 
         except Exception as e:
             # Never fail the main request due to memory issues

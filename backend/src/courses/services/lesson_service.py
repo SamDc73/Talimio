@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.client import LLMClient
 from src.auth.context import AuthContext
 from src.courses.models import Course, Lesson
@@ -119,7 +120,7 @@ class LessonService:
             )
 
             auth = AuthContext(self.user_id, self.session)
-            llm_client = LLMClient()
+            llm_client = LLMClient(agent_id=AGENT_ID_LESSON_WRITER)
             lesson_content = await llm_client.create_lesson(context, auth)
             content = lesson_content.body
 

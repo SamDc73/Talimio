@@ -11,6 +11,7 @@ import fitz  # PyMuPDF
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from src.ai import AGENT_ID_ASSISTANT
 from src.ai.client import LLMClient
 from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT
 from src.books.models import Book
@@ -54,7 +55,7 @@ async def chat_with_assistant(
         messages = await _build_messages(request, user_id)
 
         # Stream the response
-        llm_client = LLMClient()
+        llm_client = LLMClient(agent_id=AGENT_ID_ASSISTANT)
         response = await llm_client.complete(
             messages=messages,
             stream=True,
