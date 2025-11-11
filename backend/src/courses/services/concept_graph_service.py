@@ -9,6 +9,7 @@ from typing import TypedDict
 from uuid import UUID
 
 from sqlalchemy import and_, select, text
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -97,6 +98,27 @@ class ConceptGraphService:
             logger.debug("Prerequisite already exists for concept %s -> %s", concept_id, prereq_id)
             msg = "Prerequisite already exists"
             raise ValueError(msg) from error
+
+    async def add_prerequisites_bulk(self, edges: Sequence[tuple[UUID, UUID]]) -> int:
+        """Insert prerequisite edges in bulk, ignoring duplicates."""
+        unique_edges: list[dict[str, UUID]] = []
+        seen: set[tuple[UUID, UUID]] = set()
+
+        for concept_id, prereq_id in edges:
+            if concept_id == prereq_id:
+                continue
+            pair = (concept_id, prereq_id)
+            if pair in seen:
+                continue
+            seen.add(pair)
+            unique_edges.append({"concept_id": concept_id, "prereq_id": prereq_id})
+
+        if not unique_edges:
+            return 0
+
+        stmt = insert(ConceptPrerequisite).values(unique_edges).on_conflict_do_nothing()
+        await self._session.execute(stmt)
+        return len(unique_edges)
 
     async def get_frontier(self, *, user_id: UUID, course_id: UUID) -> list[FrontierEntry]:
         """Return unlocked concepts for the learner."""

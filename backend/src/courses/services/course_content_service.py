@@ -292,7 +292,7 @@ class CourseContentService:
         modules: list[dict[str, Any]],
     ) -> int:
         """Insert lessons for a course based on normalized module payload."""
-        lesson_count = 0
+        lesson_rows: list[dict[str, Any]] = []
         timestamp = datetime.now(UTC)
 
         for module_index, module in enumerate(modules):
@@ -348,11 +348,14 @@ class CourseContentService:
                 if lesson_uuid is not None:
                     lesson_kwargs["id"] = lesson_uuid
 
-                lesson = Lesson(**lesson_kwargs)
-                session.add(lesson)
-                lesson_count += 1
+                lesson_rows.append(lesson_kwargs)
 
-        return lesson_count
+        if not lesson_rows:
+            return 0
+
+        stmt = insert(Lesson).values(lesson_rows)
+        await session.execute(stmt)
+        return len(lesson_rows)
 
     def _normalize_modules_payload(
         self,
@@ -452,6 +455,7 @@ class CourseContentService:
             confusor_pair_count,
         )
 
+        edge_pairs: list[tuple[UUID, UUID]] = []
         for edge in concept_graph.edges:
             source_slug = _canonical_slug(edge.source_slug)
             prereq_slug = _canonical_slug(edge.prereq_slug)
@@ -464,7 +468,14 @@ class CourseContentService:
                     edge.prereq_slug,
                 )
                 continue
-            await graph_service.add_prerequisite(concept_id=dependent.id, prereq_id=prerequisite.id)
+            edge_pairs.append((dependent.id, prerequisite.id))
+
+        inserted_edges = await graph_service.add_prerequisites_bulk(edge_pairs)
+        logger.info(
+            "Adaptive concept graph inserted %d prerequisite edges for course %s",
+            inserted_edges,
+            course.id,
+        )
 
         return concept_lookup
 
