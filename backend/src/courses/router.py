@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -136,11 +136,17 @@ async def generate_self_assessment_questions(
 async def create_course(
     request: CourseCreate,
     auth: CurrentAuth,
+    background_tasks: BackgroundTasks,
     session: Annotated[AsyncSession, Depends(get_db_session)],
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CourseResponse:
     """Create a new course using AI generation."""
-    result = await facade.create_course(request.model_dump(), auth.user_id, session=session)
+    result = await facade.create_course(
+        request.model_dump(),
+        auth.user_id,
+        session=session,
+        background_tasks=background_tasks,
+    )
     if not result.get("success"):
         from fastapi import HTTPException
 

@@ -9,7 +9,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -95,6 +95,7 @@ class CoursesFacade:
         course_data: dict[str, Any],
         user_id: UUID,
         session: AsyncSession | None = None,
+        background_tasks: BackgroundTasks | None = None,
     ) -> dict[str, Any]:
         """
         Create new course entry.
@@ -103,7 +104,12 @@ class CoursesFacade:
         """
         try:
             # Use the content service which handles tags, progress, and AI processing
-            created_course = await self._content_service.create_course(course_data, user_id, session=session)
+            created_course = await self._content_service.create_course(
+                course_data,
+                user_id,
+                session=session,
+                background_tasks=background_tasks,
+            )
 
             if session is not None:
                 query_service = CourseQueryService(session)
@@ -128,6 +134,7 @@ class CoursesFacade:
         preferences: dict[str, Any],
         user_id: UUID,
         session: AsyncSession | None = None,
+        background_tasks: BackgroundTasks | None = None,
     ) -> dict[str, Any]:
         """
         Generate AI-powered course from topic.
@@ -140,7 +147,12 @@ class CoursesFacade:
             data["prompt"] = topic  # Use prompt field for AI generation
 
             # Use the content service which handles tags, progress, and AI processing automatically
-            course = await self._content_service.create_course(data, user_id, session=session)
+            course = await self._content_service.create_course(
+                data,
+                user_id,
+                session=session,
+                background_tasks=background_tasks,
+            )
 
             if session is not None:
                 query_service = CourseQueryService(session)

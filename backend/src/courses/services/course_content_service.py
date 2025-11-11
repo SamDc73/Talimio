@@ -28,6 +28,7 @@ from .concept_graph_service import ConceptGraphService  # type: ignore[import]
 
 
 if TYPE_CHECKING:
+    from fastapi import BackgroundTasks
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -58,21 +59,34 @@ class CourseContentService:
         data: dict[str, Any],
         user_id: UUID,
         session: AsyncSession | None = None,
+        background_tasks: BackgroundTasks | None = None,
     ) -> Course:
         """Create a new course and populate its lessons."""
         working_session = session or self.session
 
         if working_session is not None:
-            return await self._create_course_with_session(working_session, data, user_id)
+            return await self._create_course_with_session(
+                working_session,
+                data,
+                user_id,
+                background_tasks=background_tasks,
+            )
 
         async with async_session_maker() as managed_session:
-            return await self._create_course_with_session(managed_session, data, user_id)
+            return await self._create_course_with_session(
+                managed_session,
+                data,
+                user_id,
+                background_tasks=background_tasks,
+            )
 
     async def _create_course_with_session(
         self,
         session: AsyncSession,
         data: dict[str, Any],
         user_id: UUID,
+        *,
+        background_tasks: BackgroundTasks | None = None,
     ) -> Course:
         """Create a course using the provided session."""
         session_data = dict(data)
@@ -145,7 +159,10 @@ class CourseContentService:
         await session.refresh(course)
 
         try:
-            await self._auto_tag_course(session, course, user_id)
+            if background_tasks is not None:
+                self._schedule_background_tagging(background_tasks, course.id, user_id)
+            else:
+                await self._auto_tag_course(session, course, user_id)
         except Exception as exc:
             logger.warning("Automatic tagging failed for course %s: %s", course.id, exc)
 
@@ -158,6 +175,27 @@ class CourseContentService:
         )
 
         return course
+
+    def _schedule_background_tagging(
+        self,
+        background_tasks: BackgroundTasks,
+        course_id: UUID,
+        user_id: UUID,
+    ) -> None:
+        """Enqueue background tagging so the request can return immediately."""
+        background_tasks.add_task(self._run_background_auto_tagging, course_id, user_id)
+
+    async def _run_background_auto_tagging(self, course_id: UUID, user_id: UUID) -> None:
+        """Run auto-tagging in a new session after the response is sent."""
+        try:
+            async with async_session_maker() as tagging_session:
+                course = await tagging_session.get(Course, course_id)
+                if course is None:
+                    logger.warning("Skipping auto-tagging for missing course %s", course_id)
+                    return
+                await self._auto_tag_course(tagging_session, course, user_id)
+        except Exception as exc:  # pragma: no cover - background tasks are best-effort
+            logger.exception("Background tagging task failed for course %s: %s", course_id, exc)
 
     async def update_course(
         self,
