@@ -6,12 +6,11 @@ import os
 from typing import Any
 from uuid import UUID
 
-import instructor
-import litellm
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai.client import LLMClient
 from src.ai.prompts import CONTENT_TAGGING_PROMPT
 
 from .models import Tag, TagAssociation
@@ -22,12 +21,10 @@ logger = logging.getLogger(__name__)
 
 
 class TaggedContent(BaseModel):
-    """Response model for Instructor - ensures valid structured output."""
+    """Structured tagging response enforced by LiteLLM json mode."""
 
     tags: list[TagWithConfidence] = Field(
-        description="List of tags with confidence scores",
-        min_items=1,
-        max_items=10,
+        ..., description="List of tags with confidence scores", min_length=1, max_length=10
     )
 
 
@@ -41,48 +38,39 @@ class TaggingService:
             session: Database session
         """
         self.session = session
+        self._llm_client = LLMClient()
 
-    async def _generate_tags_llm(self, title: str, content_preview: str) -> list[dict]:
-        """Generate tags using Instructor + LiteLLM.
-
-        Instructor handles:
-        - Automatic retries on validation failures
-        - JSON parsing and validation
-        - Structured output guarantee
-        - Error recovery
-        """
-        # Check if model is configured
+    async def _generate_tags_llm(self, title: str, content_preview: str) -> list[dict[str, Any]]:
+        """Generate tags using LiteLLM structured outputs (Instructor fallback handled upstream)."""
         model = os.getenv("TAGGING_LLM_MODEL")
         if not model:
             logger.warning("TAGGING_LLM_MODEL not set in environment, skipping tag generation")
             return []
-        try:
-            # Create instructor client with litellm's async completion function
-            client = instructor.from_litellm(litellm.acompletion)
-        except Exception as e:
-            logger.exception(f"Failed to create instructor client: {e}")
-            return []
+
+        messages = [
+            {"role": "system", "content": CONTENT_TAGGING_PROMPT},
+            {"role": "user", "content": f"Title: {title}\n\nContent: {content_preview}"},
+        ]
 
         try:
-            # Use the client with proper method
-            result = await client.chat.completions.create(
-                model=model,
-                response_model=TaggedContent,  # Instructor validates this
-                messages=[
-                    {"role": "system", "content": CONTENT_TAGGING_PROMPT},
-                    {"role": "user", "content": f"Title: {title}\n\nContent: {content_preview}"},
-                ],
+            result = await self._llm_client.get_completion(
+                messages,
+                response_model=TaggedContent,
                 temperature=0,
-                max_retries=3,  # Instructor retries on validation failure
+                user_id=None,
+                model=model,
             )
-
-            # Instructor guarantees result.tags is valid List[TagWithConfidence]
-            # No need for try/except on JSON parsing or validation
-            return [{"tag": tag.tag, "confidence": tag.confidence} for tag in result.tags]
-        except Exception as e:
-            # Catch all exceptions
-            logger.exception(f"Error generating tags: {e}")
+        except Exception as exc:
+            logger.exception("Error generating tags via LiteLLM: %s", exc)
             return []
+
+        if not isinstance(result, TaggedContent):
+            logger.warning(
+                "Tagging LLM returned unexpected payload type %s", type(result).__name__
+            )
+            return []
+
+        return [{"tag": tag.tag, "confidence": float(tag.confidence)} for tag in result.tags]
 
     async def tag_content(
         self,
@@ -106,7 +94,7 @@ class TaggingService:
             List of generated tag names
         """
         try:
-            # Generate tags with confidence using Instructor + LiteLLM
+            # Generate tags with confidence using the standard LiteLLM path
             tags_with_confidence = await self._generate_tags_llm(title, content_preview)
 
             # Extract tag names
@@ -476,10 +464,3 @@ async def update_content_tags_json(
     await session.flush()
 
 
-# Removed apply_automatic_tagging and apply_automatic_tagging_to_course functions
-# These have been replaced with direct TaggingService usage in each service
-# following the video tagging pattern for consistency
-
-
-# _build_content_preview function removed - content preview is now built inline
-# in each service following the consistent pattern
