@@ -24,8 +24,8 @@ def _coerce_slug_list(values: Any, *, field: str) -> list[str]:
     if isinstance(values, str):
         values = [values]
     if not isinstance(values, list):
-        msg = f"{field} must be a list of slugs"
-        raise ValueError(msg)
+        msg = f"{field} must be provided as a list of slugs"
+        raise TypeError(msg)
     return [_coerce_slug(item, field=field) for item in values if str(item or "").strip()]
 
 
@@ -207,6 +207,40 @@ class CourseStructure(BaseModel):
         }
 
 
+class LessonOutlineSchema(BaseModel):
+    """Strict schema used for LiteLLM course outline responses."""
+
+    slug: str
+    title: str
+    description: str
+    module: str
+    objective: str
+    prereq_slugs: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CourseOutlineInfoSchema(BaseModel):
+    """Strict course metadata schema for LiteLLM."""
+
+    slug: str
+    title: str
+    description: str
+    setup_commands: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CourseStructureSchema(BaseModel):
+    """Strict outline schema passed to LiteLLM json_mode."""
+
+    course: CourseOutlineInfoSchema
+    ai_outline_meta: dict[str, Any] = Field(default_factory=dict)
+    lessons: list[LessonOutlineSchema]
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class AdaptiveCourseMeta(BaseModel):
     """Minimal course metadata emitted by adaptive course planning."""
 
@@ -382,6 +416,23 @@ class AdaptiveOutlineMeta(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
+    @field_validator("module_goals", mode="before")
+    @classmethod
+    def _normalize_module_goals(cls, value: Any) -> dict[str, list[str]]:
+        if not isinstance(value, dict):
+            return {}
+        normalized: dict[str, list[str]] = {}
+        for module, goals in value.items():
+            if isinstance(goals, str):
+                item = goals.strip()
+                normalized[module] = [item] if item else []
+                continue
+            if isinstance(goals, list):
+                normalized[module] = [str(goal).strip() for goal in goals if str(goal).strip()]
+                continue
+            normalized[module] = []
+        return normalized
+
 
 class AdaptiveCoursePlan(BaseModel):
     """Full adaptive course generation payload."""
@@ -406,6 +457,18 @@ class AdaptiveCoursePlan(BaseModel):
         """Return the tag list for a concept slug, if any."""
         normalized = _coerce_slug(slug, field="Concept tag slug")
         return self.ai_outline_meta.concept_tags.get(normalized, [])
+
+
+class AdaptiveOutlineMetaSchema(AdaptiveOutlineMeta):
+    """Relaxed adaptive meta schema for LiteLLM."""
+
+    module_goals: dict[str, list[str] | str] = Field(default_factory=dict, alias="moduleGoals")
+
+
+class AdaptiveCoursePlanSchema(AdaptiveCoursePlan):
+    """Strict adaptive course schema passed to LiteLLM."""
+
+    ai_outline_meta: AdaptiveOutlineMetaSchema
 
 
 class ConceptNode(BaseModel):

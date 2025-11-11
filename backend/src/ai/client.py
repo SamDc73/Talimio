@@ -1,4 +1,6 @@
 import asyncio
+import importlib
+import copy
 import json
 import logging
 import re
@@ -13,7 +15,22 @@ import litellm
 from pydantic import BaseModel
 
 from src.ai import AGENT_ID_DEFAULT
-from src.ai.models import AdaptiveCoursePlan, CourseStructure, ExecutionPlan, LessonContent, SelfAssessmentQuiz
+from src.ai.models import (
+    AdaptiveCoursePlan,
+    AdaptiveCoursePlanSchema,
+    CourseStructure,
+    CourseStructureSchema,
+    ExecutionPlan,
+    LessonContent,
+    SelfAssessmentQuiz,
+)
+
+
+SCHEMA_OVERRIDES: dict[type[BaseModel], type[BaseModel]] = {
+    CourseStructure: CourseStructureSchema,
+    AdaptiveCoursePlan: AdaptiveCoursePlanSchema,
+}
+
 from src.ai.prompts import (
     ADAPTIVE_COURSE_GENERATION_PROMPT,
     COURSE_GENERATION_PROMPT,
@@ -109,49 +126,47 @@ class LLMClient:
             if user_id:
                 messages = await self._inject_memory_into_messages(messages, user_id)
 
-            # Handle structured output - use instructor with native async litellm
+            # Handle structured output via LiteLLM json schema with Instructor fallback
             if response_model:
                 settings = get_settings()
                 request_model = model or settings.primary_llm_model
-
-                import instructor
-                from litellm import acompletion
+                schema_model = SCHEMA_OVERRIDES.get(response_model, response_model)
 
                 try:
-                    # Create instructor client from async litellm
-                    client = instructor.from_litellm(acompletion)
-
-                    # Build kwargs for instructor
-                    instructor_kwargs = {
-                        "model": request_model,
-                        "messages": messages,
-                        "response_model": response_model,
-                        "temperature": temperature if temperature is not None else settings.ai_temperature_default,
-                        "max_retries": 3,  # Add retries for resilience
-                        "timeout": settings.ai_request_timeout,
-                    }
-
-                    # Only add max_tokens if explicitly provided
-                    if max_tokens is not None:
-                        instructor_kwargs["max_tokens"] = max_tokens
-
-                    result = await asyncio.wait_for(
-                        client.chat.completions.create(**instructor_kwargs),
-                        timeout=settings.ai_request_timeout,
+                    schema_instance = await self._complete_with_litellm_schema(
+                        messages=messages,
+                        schema_model=schema_model,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        user_id=user_id,
+                        model=request_model,
+                    )
+                    if schema_model is response_model:
+                        result = schema_instance
+                    else:
+                        result = response_model(**schema_instance.model_dump())
+                except Exception:
+                    self._logger.warning(
+                        "LiteLLM structured output failed on model %s; falling back to Instructor",
+                        request_model,
+                        exc_info=True,
+                    )
+                    result = await self._complete_with_instructor(
+                        messages=messages,
+                        response_model=response_model,
+                        temperature=temperature,
+                        temperature_default=settings.ai_temperature_default,
+                        max_tokens=max_tokens,
+                        model=request_model,
+                        request_timeout=settings.ai_request_timeout,
                     )
 
-                    # Save conversation to memory (non-blocking)
-                    if user_id and result:
-                        asyncio.create_task(  # noqa: RUF006
-                            self._save_conversation_to_memory(user_id, messages, result)
-                        )
+                if user_id and result:
+                    asyncio.create_task(  # noqa: RUF006
+                        self._save_conversation_to_memory(user_id, messages, result)
+                    )
 
-                    return result
-
-                except Exception as api_error:
-                    self._logger.exception(f"Instructor+litellm call failed: {api_error}")
-                    msg = f"Failed to generate structured completion: {api_error}"
-                    raise RuntimeError(msg) from api_error
+                return result
 
             # Handle function calling
             if tools:
@@ -200,6 +215,186 @@ class LLMClient:
             self._logger.exception("Error in get_completion")
             msg = f"Completion failed: {e}"
             raise RuntimeError(msg) from e
+
+    async def _complete_with_litellm_schema(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        schema_model: type[BaseModel],
+        temperature: float | None,
+        max_tokens: int | None,
+        user_id: str | UUID | None,
+        model: str,
+    ) -> BaseModel:
+        last_error: Exception | None = None
+        for attempt in range(2):
+            response = await self.complete(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                user_id=user_id,
+                response_format=self._build_response_format(schema_model),
+                model=model,
+            )
+            try:
+                return self._coerce_response_model(response, schema_model)
+            except Exception as parse_error:
+                last_error = parse_error
+                self._logger.warning(
+                    "Structured response validation failed on attempt %s: %s",
+                    attempt + 1,
+                    parse_error,
+                )
+        if last_error is None:
+            msg = "Structured response validation failed"
+            raise RuntimeError(msg)
+        raise last_error
+
+    async def _complete_with_instructor(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        response_model: type[BaseModel],
+        temperature: float | None,
+        temperature_default: float,
+        max_tokens: int | None,
+        model: str,
+        request_timeout: int,
+    ) -> BaseModel:
+        import instructor
+        from litellm import acompletion
+
+        client = instructor.from_litellm(acompletion)
+        instructor_kwargs = {
+            "model": model,
+            "messages": messages,
+            "response_model": response_model,
+            "temperature": temperature if temperature is not None else temperature_default,
+            "max_retries": 3,
+            "timeout": request_timeout,
+        }
+        if max_tokens is not None:
+            instructor_kwargs["max_tokens"] = max_tokens
+
+        return await asyncio.wait_for(
+            client.chat.completions.create(**instructor_kwargs),
+            timeout=request_timeout,
+        )
+
+    def _build_response_format(self, response_model: type[BaseModel]) -> dict[str, Any]:
+        schema = copy.deepcopy(response_model.model_json_schema())
+        self._normalize_json_schema(schema)
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": response_model.__name__,
+                "schema": schema,
+            },
+        }
+
+    def _normalize_json_schema(self, node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+
+        definitions = node.get("$defs") or node.get("definitions")
+        if isinstance(definitions, dict):
+            for child in definitions.values():
+                self._normalize_json_schema(child)
+
+        props = node.get("properties")
+        if isinstance(props, dict) and props:
+            node["required"] = list(props.keys())
+            if "additionalProperties" not in node:
+                node["additionalProperties"] = False
+            for child in props.values():
+                self._normalize_json_schema(child)
+
+        items = node.get("items")
+        if isinstance(items, dict):
+            self._normalize_json_schema(items)
+        elif isinstance(items, list):
+            for child in items:
+                self._normalize_json_schema(child)
+
+        for key in ("allOf", "anyOf", "oneOf"):
+            variants = node.get(key)
+            if isinstance(variants, list):
+                for child in variants:
+                    self._normalize_json_schema(child)
+
+    def _coerce_response_model(
+        self,
+        raw_response: Any,
+        response_model: type[BaseModel],
+    ) -> BaseModel:
+        model_instance = self._try_convert_payload(raw_response, response_model)
+        if model_instance is not None:
+            return model_instance
+
+        choices = getattr(raw_response, "choices", None)
+        if choices:
+            first_choice = choices[0]
+            message = getattr(first_choice, "message", None)
+            if message is not None:
+                parsed_candidate = getattr(message, "parsed", None)
+                parsed_result = self._try_convert_payload(parsed_candidate, response_model)
+                if parsed_result is not None:
+                    return parsed_result
+                content_candidate = getattr(message, "content", None)
+                parsed_result = self._try_convert_payload(content_candidate, response_model)
+                if parsed_result is not None:
+                    return parsed_result
+
+        msg = f"Unable to coerce structured response into {response_model.__name__}"
+        raise TypeError(msg)
+
+    def _try_convert_payload(
+        self,
+        payload: Any,
+        response_model: type[BaseModel],
+    ) -> BaseModel | None:
+        if payload is None:
+            return None
+
+        converted: BaseModel | None = None
+
+        if isinstance(payload, response_model):
+            converted = payload
+        elif isinstance(payload, BaseModel):
+            converted = self._safe_model_construct(response_model, payload.model_dump())
+        elif isinstance(payload, dict):
+            converted = self._safe_model_construct(response_model, payload)
+        elif isinstance(payload, list):
+            text_parts = [
+                item["text"]
+                for item in payload
+                if isinstance(item, dict)
+                and item.get("type") == "text"
+                and isinstance(item.get("text"), str)
+            ]
+            if text_parts:
+                converted = self._try_convert_payload("".join(text_parts), response_model)
+        elif isinstance(payload, str):
+            content = payload.strip()
+            if content:
+                try:
+                    decoded = json.loads(content)
+                except json.JSONDecodeError:
+                    decoded = None
+                if isinstance(decoded, dict):
+                    converted = self._safe_model_construct(response_model, decoded)
+
+        return converted
+
+    def _safe_model_construct(
+        self,
+        response_model: type[BaseModel],
+        data: dict[str, Any],
+    ) -> BaseModel | None:
+        try:
+            return response_model(**data)
+        except Exception:
+            return None
 
     async def _inject_memory_into_messages(
         self, messages: list[dict[str, Any]], user_id: str | UUID
@@ -265,10 +460,13 @@ class LLMClient:
     def _get_trace_context(self) -> Any | None:
         """Return the active diagnostics trace if available."""
         try:
-            from src.diagnostics.trace import get_trace
-        except Exception:
+            trace_module = importlib.import_module("src.diagnostics.trace")
+        except ModuleNotFoundError:
             return None
-        return get_trace()
+        get_trace = getattr(trace_module, "get_trace", None)
+        if callable(get_trace):
+            return get_trace()
+        return None
 
     def _get_run_scope_state(self) -> tuple[str | None, bool]:
         """Return the current run identifier and whether this agent already saved memories."""
