@@ -65,6 +65,10 @@ class VectorRAG:
         embeddings = await self._embed_texts([text])
         return embeddings[0]
 
+    async def generate_embeddings(self, texts: Sequence[str]) -> list[list[float]]:
+        """Generate embeddings for a batch of texts."""
+        return await self._embed_texts(texts)
+
     async def store_document_chunks_with_embeddings(
         self,
         session: AsyncSession,

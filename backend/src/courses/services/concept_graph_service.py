@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from typing import TypedDict
 from uuid import UUID
 
-from sqlalchemy import and_, select, text
+from sqlalchemy import and_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +27,16 @@ _SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
 def _slugify(value: str) -> str:
     normalized = _SLUG_PATTERN.sub("-", value.lower()).strip("-")
     return normalized or "concept"
+
+
+def _compose_embedding_text(name: str, description: str) -> str:
+    normalized_name = (name or "").strip()
+    normalized_description = (description or "").strip()
+    if not normalized_description:
+        return normalized_name
+    if not normalized_name:
+        return normalized_description
+    return f"{normalized_name}\n\n{normalized_description}"
 
 
 class FrontierEntry(TypedDict):
@@ -55,17 +65,21 @@ class ConceptGraphService:
         description: str,
         slug: str | None = None,
         difficulty: int | None = None,
+        generate_embedding: bool = True,
     ) -> Concept:
-        """Create a concept node with embedding."""
+        """Create a concept node with optional embedding generation."""
         slug_base = _slugify(slug or name)
         unique_slug = await self._ensure_unique_slug(slug_base)
 
         embedding: list[float] | None = None
-        try:
-            embedding_text = f"{name.strip()}\n\n{description.strip()}"
-            embedding = await self._vector.generate_embedding(embedding_text)
-        except Exception:
-            logger.warning("Failed to generate concept embedding for %s", name, exc_info=True)
+        if generate_embedding:
+            try:
+                embedding_text = _compose_embedding_text(name, description)
+                embedding = await self._vector.generate_embedding(embedding_text)
+            except Exception:
+                logger.warning("Failed to generate concept embedding for %s", name, exc_info=True)
+        else:
+            logger.debug("Deferring embedding generation for concept '%s'", name)
 
         concept = Concept(
             domain=domain,
@@ -119,6 +133,48 @@ class ConceptGraphService:
         stmt = insert(ConceptPrerequisite).values(unique_edges).on_conflict_do_nothing()
         await self._session.execute(stmt)
         return len(unique_edges)
+
+    async def backfill_embeddings_for_course(self, course_id: UUID) -> int:
+        """Generate embeddings for all concepts in a course that lack vectors."""
+        result = await self._session.execute(
+            select(Concept.id, Concept.name, Concept.description)
+            .join(CourseConcept, CourseConcept.concept_id == Concept.id)
+            .where(CourseConcept.course_id == course_id, Concept.embedding.is_(None))
+            .order_by(Concept.created_at)
+        )
+        rows = result.all()
+        concepts = [
+            {
+                "id": row.id,
+                "name": row.name,
+                "description": row.description,
+            }
+            for row in rows
+        ]
+        if not concepts:
+            return 0
+
+        batch_size = max(self._vector.batch_size, 1)
+        total_updated = 0
+        for start in range(0, len(concepts), batch_size):
+            batch = concepts[start : start + batch_size]
+            texts = [_compose_embedding_text(item["name"], item["description"]) for item in batch]
+            embeddings = await self._vector.generate_embeddings(texts)
+            for item, embedding in zip(batch, embeddings, strict=True):
+                await self._session.execute(
+                    update(Concept)
+                    .where(Concept.id == item["id"])
+                    .values(embedding=embedding)
+                )
+            total_updated += len(batch)
+
+        await self._session.flush()
+        logger.info(
+            "Backfilled %s concept embeddings for course %s",
+            total_updated,
+            course_id,
+        )
+        return total_updated
 
     async def get_frontier(self, *, user_id: UUID, course_id: UUID) -> list[FrontierEntry]:
         """Return unlocked concepts for the learner."""

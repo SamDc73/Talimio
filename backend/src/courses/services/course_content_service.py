@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy import select
@@ -45,6 +46,14 @@ _SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
 def _canonical_slug(value: str) -> str:
     text = (value or "").strip().lower()
     return _SLUG_PATTERN.sub("-", text).strip("-")
+
+
+@dataclass(slots=True)
+class AdaptiveConceptBuildResult:
+    """Container for adaptive concept seeding results."""
+
+    concept_lookup: dict[str, Concept]
+    deferred_concept_ids: list[UUID] = field(default_factory=list)
 
 
 class CourseContentService:
@@ -90,66 +99,35 @@ class CourseContentService:
     ) -> Course:
         """Create a course using the provided session."""
         session_data = dict(data)
-        is_adaptive = bool(session_data.get("adaptive_enabled"))
-
-        adaptive_plan: AdaptiveCoursePlan | None = None
-
         prompt = session_data.pop("prompt", None)
-        if is_adaptive:
-            goal_source = prompt or session_data.get("title") or ""
-            clean_goal, assessment_context = self._split_goal_and_assessment(goal_source)
-            goal_payload = clean_goal or goal_source
-            if not goal_payload:
-                goal_payload = "Adaptive course outline"
-            adaptive_plan = await self.ai_service.generate_adaptive_course_from_prompt(
-                user_id=user_id,
-                user_goal=goal_payload,
-                self_assessment_context=assessment_context,
-                max_nodes=ADAPTIVE_MAX_NODES,
-                max_prereqs=ADAPTIVE_MAX_PREREQS,
-                max_layers=ADAPTIVE_MAX_LAYERS,
-                max_lessons=ADAPTIVE_MAX_LESSONS,
-            )
-            session_data["title"] = adaptive_plan.course.title
-            session_data["description"] = adaptive_plan.ai_outline_meta.scope
-            session_data["setup_commands"] = adaptive_plan.course.setup_commands
-        elif prompt:
-            generated = await self._generate_course_from_prompt(
-                prompt,
-                user_id,
-            )
-            session_data.update(generated)
+        is_adaptive = bool(session_data.get("adaptive_enabled"))
+        defer_embeddings = background_tasks is not None
+
+        adaptive_plan = await self._build_adaptive_plan(
+            is_adaptive=is_adaptive,
+            prompt=prompt,
+            session_data=session_data,
+            user_id=user_id,
+        )
 
         modules_payload = session_data.pop("modules", [])
         lessons_payload = session_data.pop("lessons", [])
 
-        if "tags" in session_data and session_data["tags"] is not None:
-            session_data["tags"] = self._ensure_json_string(session_data["tags"])
-
-        if "setup_commands" in session_data and session_data["setup_commands"] is not None:
-            session_data["setup_commands"] = self._ensure_json_string(session_data["setup_commands"])
+        self._serialize_payload_fields(session_data)
 
         course = Course(user_id=user_id, **session_data)
         session.add(course)
 
         try:
             await session.flush()
-
-            if is_adaptive and adaptive_plan is not None:
-                concept_lookup = await self._create_adaptive_concepts(
-                    session=session,
-                    course=course,
-                    plan=adaptive_plan,
-                )
-                adaptive_modules = self._build_adaptive_modules_payload(
-                    course=course,
-                    plan=adaptive_plan,
-                    concept_lookup=concept_lookup,
-                )
-                normalized_modules = self._normalize_modules_payload(adaptive_modules, [])
-            else:
-                normalized_modules = self._normalize_modules_payload(modules_payload, lessons_payload)
-
+            normalized_modules, deferred_embedding_ids = await self._prepare_course_modules(
+                session=session,
+                course=course,
+                adaptive_plan=adaptive_plan,
+                modules_payload=modules_payload,
+                lessons_payload=lessons_payload,
+                defer_embeddings=defer_embeddings,
+            )
             inserted_lessons = await self._insert_lessons(session, course.id, normalized_modules)
             await session.commit()
         except Exception:
@@ -158,13 +136,13 @@ class CourseContentService:
 
         await session.refresh(course)
 
-        try:
-            if background_tasks is not None:
-                self._schedule_background_tagging(background_tasks, course.id, user_id)
-            else:
-                await self._auto_tag_course(session, course, user_id)
-        except Exception as exc:
-            logger.warning("Automatic tagging failed for course %s: %s", course.id, exc)
+        await self._handle_post_creation(
+            session=session,
+            course=course,
+            user_id=user_id,
+            deferred_embedding_ids=deferred_embedding_ids,
+            background_tasks=background_tasks,
+        )
 
         module_count = sum(1 for module in normalized_modules if module.get("title"))
         logger.info(
@@ -175,6 +153,122 @@ class CourseContentService:
         )
 
         return course
+
+    async def _build_adaptive_plan(
+        self,
+        *,
+        is_adaptive: bool,
+        prompt: str | None,
+        session_data: dict[str, Any],
+        user_id: UUID,
+    ) -> AdaptiveCoursePlan | None:
+        """Populate session data via adaptive or prompt-based generation."""
+        if not is_adaptive:
+            if prompt:
+                generated = await self._generate_course_from_prompt(prompt, user_id)
+                session_data.update(generated)
+            return None
+
+        goal_source = prompt or session_data.get("title") or ""
+        clean_goal, assessment_context = self._split_goal_and_assessment(goal_source)
+        goal_payload = clean_goal or goal_source or "Adaptive course outline"
+        adaptive_plan = await self.ai_service.generate_adaptive_course_from_prompt(
+            user_id=user_id,
+            user_goal=goal_payload,
+            self_assessment_context=assessment_context,
+            max_nodes=ADAPTIVE_MAX_NODES,
+            max_prereqs=ADAPTIVE_MAX_PREREQS,
+            max_layers=ADAPTIVE_MAX_LAYERS,
+            max_lessons=ADAPTIVE_MAX_LESSONS,
+        )
+        session_data["title"] = adaptive_plan.course.title
+        session_data["description"] = adaptive_plan.ai_outline_meta.scope
+        session_data["setup_commands"] = adaptive_plan.course.setup_commands
+        return adaptive_plan
+
+    def _serialize_payload_fields(self, session_data: dict[str, Any]) -> None:
+        """Ensure optional payload collections are stored as JSON strings."""
+        for key in ("tags", "setup_commands"):
+            value = session_data.get(key)
+            if value is not None:
+                session_data[key] = self._ensure_json_string(value)
+
+    async def _prepare_course_modules(
+        self,
+        *,
+        session: AsyncSession,
+        course: Course,
+        adaptive_plan: AdaptiveCoursePlan | None,
+        modules_payload: list[Any],
+        lessons_payload: list[Any],
+        defer_embeddings: bool,
+    ) -> tuple[list[dict[str, Any]], list[UUID]]:
+        """Return normalized modules and any deferred concept ids."""
+        if adaptive_plan is None:
+            normalized = self._normalize_modules_payload(modules_payload, lessons_payload)
+            return (normalized, [])
+
+        adaptive_result = await self._create_adaptive_concepts(
+            session=session,
+            course=course,
+            plan=adaptive_plan,
+            defer_embeddings=defer_embeddings,
+        )
+        adaptive_modules = self._build_adaptive_modules_payload(
+            course=course,
+            plan=adaptive_plan,
+            concept_lookup=adaptive_result.concept_lookup,
+        )
+        normalized_modules = self._normalize_modules_payload(adaptive_modules, [])
+        return (normalized_modules, adaptive_result.deferred_concept_ids)
+
+    async def _handle_post_creation(
+        self,
+        *,
+        session: AsyncSession,
+        course: Course,
+        user_id: UUID,
+        deferred_embedding_ids: list[UUID],
+        background_tasks: BackgroundTasks | None,
+    ) -> None:
+        """Kick off background work for embeddings and tagging."""
+        if deferred_embedding_ids:
+            if background_tasks is not None:
+                self._schedule_background_embeddings(background_tasks, course.id)
+            else:
+                graph_service = ConceptGraphService(session)
+                await graph_service.backfill_embeddings_for_course(course.id)
+
+        try:
+            if background_tasks is not None:
+                self._schedule_background_tagging(background_tasks, course.id, user_id)
+            else:
+                await self._auto_tag_course(session, course, user_id)
+        except Exception as exc:  # pragma: no cover - best-effort logging only
+            logger.warning("Automatic tagging failed for course %s: %s", course.id, exc)
+
+    def _schedule_background_embeddings(
+        self,
+        background_tasks: BackgroundTasks,
+        course_id: UUID,
+    ) -> None:
+        """Enqueue background embedding generation so the response can return immediately."""
+        background_tasks.add_task(self._run_background_embeddings, course_id)
+
+    async def _run_background_embeddings(self, course_id: UUID) -> None:
+        """Generate embeddings for any concepts that were deferred."""
+        try:
+            async with async_session_maker() as embedding_session:
+                graph_service = ConceptGraphService(embedding_session)
+                updated = await graph_service.backfill_embeddings_for_course(course_id)
+                await embedding_session.commit()
+                logger.info(
+                    "Background embedding task backfilled %s concepts for course %s",
+                    updated,
+                    course_id,
+                )
+        except Exception as exc:  # pragma: no cover - best-effort background task
+            logger.exception("Background embedding task failed for course %s: %s", course_id, exc)
 
     def _schedule_background_tagging(
         self,
@@ -240,13 +334,13 @@ class CourseContentService:
             error_msg = f"Course {course_id} not found"
             raise ValueError(error_msg)
 
-        for field, value in data.items():
+        for attr, value in data.items():
             if value is None:
                 continue
-            if field in {"tags", "setup_commands"}:
-                setattr(course, field, self._ensure_json_string(value))
+            if attr in {"tags", "setup_commands"}:
+                setattr(course, attr, self._ensure_json_string(value))
                 continue
-            setattr(course, field, value)
+            setattr(course, attr, value)
 
         course.updated_at = datetime.now(UTC)
 
@@ -394,7 +488,8 @@ class CourseContentService:
         session: AsyncSession,
         course: Course,
         plan: AdaptiveCoursePlan,
-    ) -> dict[str, Concept]:
+        defer_embeddings: bool,
+    ) -> AdaptiveConceptBuildResult:
         """Persist adaptive concept metadata derived from a precomputed plan and return a slug map."""
         graph_service = ConceptGraphService(session)
         concept_graph = plan.ai_outline_meta.concept_graph
@@ -402,7 +497,9 @@ class CourseContentService:
         layer_lookup = plan.layer_index()
         concept_lookup: dict[str, Concept] = {}
         state_rows: list[dict[str, Any]] = []
+        course_concept_rows: list[dict[str, Any]] = []
         concept_order: list[str] = []
+        deferred_concept_ids: list[UUID] = []
 
         for index, node in enumerate(concept_graph.nodes):
             slug_source = node.slug or node.title
@@ -424,8 +521,17 @@ class CourseContentService:
                 description=description,
                 slug=slug_text,
                 difficulty=difficulty,
+                generate_embedding=not defer_embeddings,
             )
-            session.add(CourseConcept(course_id=course.id, concept_id=concept.id, order_hint=index))
+            if defer_embeddings:
+                deferred_concept_ids.append(concept.id)
+            course_concept_rows.append(
+                {
+                    "course_id": course.id,
+                    "concept_id": concept.id,
+                    "order_hint": index,
+                }
+            )
             concept_lookup[slug_text] = concept
             concept_order.append(slug_text)
 
@@ -437,6 +543,14 @@ class CourseContentService:
                         "s_mastery": float(node.initial_mastery),
                     }
                 )
+
+        if course_concept_rows:
+            concept_stmt = (
+                insert(CourseConcept)
+                .values(course_concept_rows)
+                .on_conflict_do_nothing()
+            )
+            await session.execute(concept_stmt.execution_options(insertmanyvalues_page_size=250))
 
         await session.flush()
 
@@ -477,7 +591,10 @@ class CourseContentService:
             course.id,
         )
 
-        return concept_lookup
+        return AdaptiveConceptBuildResult(
+            concept_lookup=concept_lookup,
+            deferred_concept_ids=deferred_concept_ids,
+        )
 
     async def _seed_owner_states(
         self,
@@ -715,7 +832,11 @@ class CourseContentService:
             prereq_slugs = getattr(lesson, "prereq_slugs", None)
             if prereq_slugs is None and isinstance(lesson, dict):
                 prereq_slugs = lesson.get("prereq_slugs")
-            module_entry["lessons"].append(
+            lessons_list = cast("list[dict[str, Any]]", module_entry.setdefault("lessons", []))
+            if not isinstance(lessons_list, list):
+                lessons_list = []
+                module_entry["lessons"] = lessons_list
+            lessons_list.append(
                 {
                     "title": title,
                     "description": description,
