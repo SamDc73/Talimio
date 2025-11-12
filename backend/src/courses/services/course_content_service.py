@@ -10,18 +10,15 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import DateTime, Float, Integer, bindparam, select, text
+from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID, insert
 
 from src.ai.models import AdaptiveCoursePlan
 from src.ai.service import AIService
 from src.courses.models import (
     Concept,
-    ConceptSimilarity,
     Course,
-    CourseConcept,
     Lesson,
-    UserConceptState,
 )
 from src.database.session import async_session_maker
 
@@ -238,6 +235,7 @@ class CourseContentService:
             else:
                 graph_service = ConceptGraphService(session)
                 await graph_service.backfill_embeddings_for_course(course.id)
+                await session.commit()
 
         try:
             if background_tasks is not None:
@@ -544,13 +542,7 @@ class CourseContentService:
                     }
                 )
 
-        if course_concept_rows:
-            concept_stmt = (
-                insert(CourseConcept)
-                .values(course_concept_rows)
-                .on_conflict_do_nothing()
-            )
-            await session.execute(concept_stmt.execution_options(insertmanyvalues_page_size=250))
+        await self._insert_course_concepts(session=session, rows=course_concept_rows)
 
         await session.flush()
 
@@ -596,6 +588,45 @@ class CourseContentService:
             deferred_concept_ids=deferred_concept_ids,
         )
 
+    async def _insert_course_concepts(
+        self,
+        *,
+        session: AsyncSession,
+        rows: list[dict[str, Any]],
+    ) -> None:
+        if not rows:
+            return
+
+        course_ids = [item["course_id"] for item in rows]
+        concept_ids = [item["concept_id"] for item in rows]
+        order_hints = [cast("int | None", item.get("order_hint")) for item in rows]
+
+        stmt = text(
+            """
+            INSERT INTO course_concepts (course_id, concept_id, order_hint)
+            SELECT *
+            FROM UNNEST(
+                :course_ids,
+                :concept_ids,
+                :order_hints
+            )
+            ON CONFLICT DO NOTHING
+            """
+        ).bindparams(
+            bindparam("course_ids", type_=ARRAY(PGUUID(as_uuid=True))),
+            bindparam("concept_ids", type_=ARRAY(PGUUID(as_uuid=True))),
+            bindparam("order_hints", type_=ARRAY(Integer())),
+        )
+
+        await session.execute(
+            stmt,
+            {
+                "course_ids": course_ids,
+                "concept_ids": concept_ids,
+                "order_hints": order_hints,
+            },
+        )
+
     async def _seed_owner_states(
         self,
         *,
@@ -604,8 +635,35 @@ class CourseContentService:
     ) -> int:
         if not state_rows:
             return 0
-        state_stmt = insert(UserConceptState).values(state_rows).on_conflict_do_nothing()
-        await session.execute(state_stmt)
+
+        user_ids = [item["user_id"] for item in state_rows]
+        concept_ids = [item["concept_id"] for item in state_rows]
+        mastery_scores = [float(item["s_mastery"]) for item in state_rows]
+
+        state_stmt = text(
+            """
+            INSERT INTO user_concept_state (user_id, concept_id, s_mastery)
+            SELECT *
+            FROM UNNEST(
+                :user_ids,
+                :concept_ids,
+                :mastery_scores
+            )
+            ON CONFLICT DO NOTHING
+            """
+        ).bindparams(
+            bindparam("user_ids", type_=ARRAY(PGUUID(as_uuid=True))),
+            bindparam("concept_ids", type_=ARRAY(PGUUID(as_uuid=True))),
+            bindparam("mastery_scores", type_=ARRAY(Float())),
+        )
+        await session.execute(
+            state_stmt,
+            {
+                "user_ids": user_ids,
+                "concept_ids": concept_ids,
+                "mastery_scores": mastery_scores,
+            },
+        )
         return len(state_rows)
 
     async def _persist_confusors(
@@ -647,22 +705,38 @@ class CourseContentService:
             return 0
 
         now = datetime.now(UTC)
-        stmt = (
-            insert(ConceptSimilarity)
-            .values(
-                [
-                    {
-                        "concept_a_id": pair[0],
-                        "concept_b_id": pair[1],
-                        "similarity": similarity,
-                        "computed_at": now,
-                    }
-                    for pair, similarity in confusor_pairs.items()
-                ]
+        concept_a_ids = [pair[0] for pair in confusor_pairs]
+        concept_b_ids = [pair[1] for pair in confusor_pairs]
+        similarities = [float(confusor_pairs[pair]) for pair in confusor_pairs]
+        timestamps = [now for _ in confusor_pairs]
+
+        stmt = text(
+            """
+            INSERT INTO concept_similarities (concept_a_id, concept_b_id, similarity, computed_at)
+            SELECT *
+            FROM UNNEST(
+                :concept_a_ids,
+                :concept_b_ids,
+                :similarities,
+                :timestamps
             )
-            .on_conflict_do_nothing()
+            ON CONFLICT DO NOTHING
+            """
+        ).bindparams(
+            bindparam("concept_a_ids", type_=ARRAY(PGUUID(as_uuid=True))),
+            bindparam("concept_b_ids", type_=ARRAY(PGUUID(as_uuid=True))),
+            bindparam("similarities", type_=ARRAY(Float())),
+            bindparam("timestamps", type_=ARRAY(DateTime(timezone=True))),
         )
-        await session.execute(stmt)
+        await session.execute(
+            stmt,
+            {
+                "concept_a_ids": concept_a_ids,
+                "concept_b_ids": concept_b_ids,
+                "similarities": similarities,
+                "timestamps": timestamps,
+            },
+        )
         return len(confusor_pairs)
 
     def _build_adaptive_modules_payload(

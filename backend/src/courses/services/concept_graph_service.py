@@ -8,8 +8,9 @@ from collections.abc import Sequence
 from typing import TypedDict
 from uuid import UUID
 
-from sqlalchemy import and_, select, text, update
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import and_, bindparam, select, text, update
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -130,8 +131,30 @@ class ConceptGraphService:
         if not unique_edges:
             return 0
 
-        stmt = insert(ConceptPrerequisite).values(unique_edges).on_conflict_do_nothing()
-        await self._session.execute(stmt)
+        concept_ids = [entry["concept_id"] for entry in unique_edges]
+        prereq_ids = [entry["prereq_id"] for entry in unique_edges]
+
+        stmt = text(
+            """
+            INSERT INTO concept_prerequisites (concept_id, prereq_id)
+            SELECT *
+            FROM UNNEST(
+                :concept_ids,
+                :prereq_ids
+            )
+            ON CONFLICT DO NOTHING
+            """
+        ).bindparams(
+            bindparam("concept_ids", type_=ARRAY(PGUUID(as_uuid=True))),
+            bindparam("prereq_ids", type_=ARRAY(PGUUID(as_uuid=True))),
+        )
+        await self._session.execute(
+            stmt,
+            {
+                "concept_ids": concept_ids,
+                "prereq_ids": prereq_ids,
+            },
+        )
         return len(unique_edges)
 
     async def backfill_embeddings_for_course(self, course_id: UUID) -> int:
