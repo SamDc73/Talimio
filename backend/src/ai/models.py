@@ -98,24 +98,11 @@ class Lesson(BaseModel):
         default=None,
         description="Optional module/section name for grouping",
     )
-    content: str | None = Field(
-        default=None,
-        description="Optional pre-generated lesson content (typically blank for outline-only runs)",
-    )
-    objective: str | None = Field(
-        default=None,
-        description="Optional learning objective for the lesson",
-    )
     slug: str | None = Field(default=None, description="Optional lesson slug reference")
-    prereq_slugs: list[str] = Field(
-        default_factory=list,
-        alias="prereq_slugs",
-        description="Optional prerequisite lesson slugs",
-    )
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    @field_validator("title", "description", "module", "objective", mode="before")
+    @field_validator("title", "description", "module", mode="before")
     @classmethod
     def _normalize_text(cls, value: Any, info: ValidationInfo) -> str | None:
         if value is None:
@@ -132,11 +119,6 @@ class Lesson(BaseModel):
         if value is None or str(value).strip() == "":
             return None
         return _coerce_slug(value, field="Lesson slug")
-
-    @field_validator("prereq_slugs", mode="before")
-    @classmethod
-    def _normalize_prereqs(cls, value: Any) -> list[str]:
-        return _coerce_slug_list(value, field="Lesson prerequisite slug")
 
 
 class CourseOutlineInfo(BaseModel):
@@ -182,7 +164,6 @@ class CourseStructure(BaseModel):
     """Model for the course structure returned by AI."""
 
     course: CourseOutlineInfo
-    ai_outline_meta: dict[str, Any] = Field(default_factory=dict)
     lessons: list[Lesson]
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
@@ -203,7 +184,6 @@ class CourseStructure(BaseModel):
                 "slug": data.get("slug"),
             },
             "lessons": data.get("lessons", []),
-            "ai_outline_meta": data.get("ai_outline_meta", {}),
         }
 
 
@@ -213,9 +193,7 @@ class LessonOutlineSchema(BaseModel):
     slug: str
     title: str
     description: str
-    module: str
-    objective: str
-    prereq_slugs: list[str] = Field(default_factory=list)
+    module: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -235,7 +213,6 @@ class CourseStructureSchema(BaseModel):
     """Strict outline schema passed to LiteLLM json_mode."""
 
     course: CourseOutlineInfoSchema
-    ai_outline_meta: dict[str, Any] = Field(default_factory=dict)
     lessons: list[LessonOutlineSchema]
 
     model_config = ConfigDict(extra="forbid")
@@ -255,10 +232,9 @@ class AdaptiveLessonPlan(BaseModel):
     """Lesson planning payload aligned with adaptive concept assignments."""
 
     slug: str
-    objective: str
     title: str | None = None
     description: str | None = None
-    prereq_slugs: list[str] = Field(default_factory=list)
+    module: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -267,15 +243,6 @@ class AdaptiveLessonPlan(BaseModel):
     def _normalize_slug(cls, value: Any) -> str:
         return _coerce_slug(value, field="Lesson slug")
 
-    @field_validator("objective", mode="before")
-    @classmethod
-    def _normalize_objective(cls, value: Any) -> str:
-        text = str(value or "").strip()
-        if not text:
-            msg = "Lesson objective must not be empty"
-            raise ValueError(msg)
-        return text
-
     @field_validator("title", "description", mode="before")
     @classmethod
     def _strip_optional_text(cls, value: Any) -> str | None:
@@ -283,11 +250,6 @@ class AdaptiveLessonPlan(BaseModel):
             return None
         text = str(value).strip()
         return text or None
-
-    @field_validator("prereq_slugs", mode="before")
-    @classmethod
-    def _normalize_prereqs(cls, value: Any) -> list[str]:
-        return _coerce_slug_list(value, field="Lesson prerequisite slug")
 
 
 class AdaptiveConceptNode(BaseModel):
@@ -401,36 +363,28 @@ class AdaptiveConceptGraph(BaseModel):
 
 
 class AdaptiveOutlineMeta(BaseModel):
-    """Extended outline metadata accompanying adaptive courses."""
+    """Outline metadata required for adaptive courses."""
 
     scope: str
     concept_graph: AdaptiveConceptGraph = Field(alias="conceptGraph")
-    module_goals: dict[str, list[str]] = Field(default_factory=dict, alias="moduleGoals")
-    confusor_candidates: list[ConfusorCandidate] = Field(default_factory=list, alias="confusorCandidates")
-    policies: dict[str, Any] = Field(default_factory=dict)
-    semantic_neighbors: dict[str, list[str]] = Field(default_factory=dict, alias="semanticNeighbors")
-    similarity_meta: dict[str, Any] = Field(default_factory=dict, alias="similarityMeta")
     concept_tags: dict[str, list[str]] = Field(default_factory=dict, alias="conceptTags")
-    diagnostic_blueprint: dict[str, Any] = Field(default_factory=dict, alias="diagnosticBlueprint")
-    skip_policy: dict[str, Any] = Field(default_factory=dict, alias="skipPolicy")
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
-    @field_validator("module_goals", mode="before")
+    @field_validator("concept_tags", mode="before")
     @classmethod
-    def _normalize_module_goals(cls, value: Any) -> dict[str, list[str]]:
+    def _normalize_concept_tags(cls, value: Any) -> dict[str, list[str]]:
         if not isinstance(value, dict):
             return {}
         normalized: dict[str, list[str]] = {}
-        for module, goals in value.items():
-            if isinstance(goals, str):
-                item = goals.strip()
-                normalized[module] = [item] if item else []
-                continue
-            if isinstance(goals, list):
-                normalized[module] = [str(goal).strip() for goal in goals if str(goal).strip()]
-                continue
-            normalized[module] = []
+        for key, raw in value.items():
+            if isinstance(raw, list):
+                normalized[key] = [str(entry).strip() for entry in raw if str(entry).strip()]
+            elif isinstance(raw, str):
+                stripped = raw.strip()
+                normalized[key] = [stripped] if stripped else []
+            else:
+                normalized[key] = []
         return normalized
 
 
@@ -459,16 +413,24 @@ class AdaptiveCoursePlan(BaseModel):
         return self.ai_outline_meta.concept_tags.get(normalized, [])
 
 
-class AdaptiveOutlineMetaSchema(AdaptiveOutlineMeta):
-    """Relaxed adaptive meta schema for LiteLLM."""
+class AdaptiveOutlineMetaSchema(BaseModel):
+    """Relaxed adaptive meta schema for LiteLLM validation."""
 
-    module_goals: dict[str, list[str] | str] = Field(default_factory=dict, alias="moduleGoals")
+    scope: str
+    concept_graph: AdaptiveConceptGraph = Field(alias="conceptGraph")
+    concept_tags: dict[str, list[str] | str | bool | None] = Field(default_factory=dict, alias="conceptTags")
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
 
-class AdaptiveCoursePlanSchema(AdaptiveCoursePlan):
-    """Strict adaptive course schema passed to LiteLLM."""
+class AdaptiveCoursePlanSchema(BaseModel):
+    """Strict adaptive course schema passed to LiteLLM (more permissive inputs)."""
 
-    ai_outline_meta: AdaptiveOutlineMetaSchema
+    course: AdaptiveCourseMeta
+    ai_outline_meta: AdaptiveOutlineMetaSchema = Field(alias="ai_outline_meta")
+    lessons: list[AdaptiveLessonPlan]
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
 
 class ConceptNode(BaseModel):

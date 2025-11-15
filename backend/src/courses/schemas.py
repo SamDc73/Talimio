@@ -20,41 +20,29 @@ def _to_camel(string: str) -> str:
 _CAMEL_CONFIG = {"alias_generator": _to_camel, "populate_by_name": True}
 
 
-class LessonBase(BaseModel):
-    """Base schema for lessons."""
+class LessonSummary(BaseModel):
+    """Lightweight lesson representation for course outlines."""
 
-    html_cache: str | None = Field(None, description="Cached HTML content")
-    title: str | None = Field(None, description="Lesson title extracted from content")
+    id: UUID = Field(..., description="Lesson ID")
+    title: str = Field(..., description="Lesson title")
     description: str | None = Field(None, description="Lesson description")
+    order: int = Field(..., description="Lesson order within its module")
 
     model_config = ConfigDict(from_attributes=True, **_CAMEL_CONFIG)
 
 
-class LessonCitation(BaseModel):
-    """Schema for lesson citations."""
-
-    document_id: int = Field(..., description="Document ID")
-    document_title: str = Field(..., description="Document title")
-    similarity_score: float = Field(..., description="Similarity score")
-
-    model_config = ConfigDict(**_CAMEL_CONFIG)
-
-
-class LessonResponse(LessonBase):
-    """Schema for lesson responses."""
+class LessonDetailResponse(BaseModel):
+    """Schema for detailed lesson responses (content endpoint)."""
 
     id: UUID = Field(..., description="Lesson ID")
     course_id: UUID = Field(..., description="Course ID")
-    module_id: UUID = Field(..., description="Module ID")
-    module_name: str | None = Field(None, description="Module grouping name")
-    module_order: int | None = Field(None, description="Module ordering value")
-    order: int = Field(..., description="Lesson order within module")
+    title: str = Field(..., description="Lesson title")
+    description: str | None = Field(None, description="Lesson description")
     content: str | None = Field(None, description="Lesson content (MDX format)")
-    citations: list[LessonCitation] = Field(default_factory=list, description="Lesson citations")
-    created_at: datetime = Field(..., description="Lesson creation timestamp")
-    updated_at: datetime = Field(..., description="Lesson last update timestamp")
     concept_id: UUID | None = Field(None, description="Mapped concept ID for adaptive lessons")
     adaptive_enabled: bool | None = Field(None, description="Whether the parent course is adaptive")
+    created_at: datetime = Field(..., description="Lesson creation timestamp")
+    updated_at: datetime = Field(..., description="Lesson last update timestamp")
 
     model_config = ConfigDict(from_attributes=True, **_CAMEL_CONFIG)
 
@@ -103,7 +91,9 @@ class SelfAssessmentQuestionPayload(BaseModel):
 class SelfAssessmentResponse(BaseModel):
     """Response containing generated self-assessment questions."""
 
-    questions: list[SelfAssessmentQuestionPayload] = Field(default_factory=list, description="Generated self-assessment questions")
+    questions: list[SelfAssessmentQuestionPayload] = Field(
+        default_factory=list, description="Generated self-assessment questions"
+    )
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
@@ -124,11 +114,9 @@ class ModuleResponse(BaseModel):
     """Schema for synthesized module responses."""
 
     id: UUID = Field(..., description="Module ID")
-    course_id: UUID = Field(..., description="Course ID")
     title: str = Field(..., description="Module title")
-    module_name: str | None = Field(None, description="Raw module name from lessons")
-    order: int = Field(..., description="Module order")
-    lessons: list[LessonResponse] = Field(default_factory=list, description="Module lessons")
+    description: str | None = Field(None, description="Module description")
+    lessons: list[LessonSummary] = Field(default_factory=list, description="Module lessons")
 
     model_config = ConfigDict(from_attributes=True, **_CAMEL_CONFIG)
 

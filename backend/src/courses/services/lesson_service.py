@@ -2,7 +2,8 @@
 
 import logging
 from datetime import UTC, datetime
-from uuid import NAMESPACE_URL, UUID, uuid5
+from typing import Any, cast
+from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy import select, update
@@ -12,12 +13,7 @@ from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.client import LLMClient
 from src.auth.context import AuthContext
 from src.courses.models import Course, Lesson
-from src.courses.schemas import LessonResponse
-
-
-def _module_id(course_id: UUID, module_name: str | None) -> UUID:
-    module_key = module_name or "default"
-    return uuid5(NAMESPACE_URL, f"course-module:{course_id}:{module_key}")
+from src.courses.schemas import LessonDetailResponse
 
 
 logger = logging.getLogger(__name__)
@@ -36,7 +32,7 @@ class LessonService:
         course_id: UUID,
         lesson_id: UUID,
         force_refresh: bool = False,
-    ) -> LessonResponse:
+    ) -> LessonDetailResponse:
         """Get lesson with single query including user isolation.
 
         Args:
@@ -46,7 +42,7 @@ class LessonService:
 
         Returns
         -------
-            LessonResponse containing lesson data
+            LessonDetailResponse containing lesson data
 
         Raises
         ------
@@ -78,20 +74,16 @@ class LessonService:
         if force_refresh or lesson.content == "":
             lesson = await self._generate_content_secure(lesson, course, force=force_refresh)
 
-        module_id = _module_id(course.id, lesson.module_name)
+        concept_id_value = getattr(cast("Any", lesson), "concept_id", None)
 
-        return LessonResponse(
+        return LessonDetailResponse(
             id=lesson.id,
             course_id=course.id,
-            module_id=module_id,
-            module_name=lesson.module_name,
-            module_order=lesson.module_order,
-            order=lesson.order,
             title=lesson.title,
             description=lesson.description,
             content=lesson.content,
-            html_cache=None,
-            citations=[],
+            concept_id=concept_id_value,
+            adaptive_enabled=course.adaptive_enabled,
             created_at=lesson.created_at,
             updated_at=lesson.updated_at,
         )
@@ -128,11 +120,7 @@ class LessonService:
             if not force:
                 conditions.append(Lesson.content == "")
 
-            update_stmt = (
-                update(Lesson)
-                .where(*conditions)
-                .values(content=content, updated_at=datetime.now(UTC))
-            )
+            update_stmt = update(Lesson).where(*conditions).values(content=content, updated_at=datetime.now(UTC))
 
             update_result = await self.session.execute(update_stmt)
             updated_rows = getattr(update_result, "rowcount", None)
@@ -174,7 +162,8 @@ class LessonService:
                 "Unexpected error generating lesson content",
                 extra={"user_id": str(self.user_id), "lesson_id": str(lesson.id)},
             )
-            raise HTTPException(status_code=500, detail="An unexpected error occurred while generating lesson content") from exc
+            raise HTTPException(
+                status_code=500, detail="An unexpected error occurred while generating lesson content"
+            ) from exc
 
         return lesson
-

@@ -61,8 +61,6 @@ For each lesson object, include:
 - `description`: One or two sentences of what will be learned
 - `module`: Module name to group lessons
 
-Do NOT include a `content` field. Content will be generated at lesson open time.
-
 # Output Format
 
 Return ONLY a JSON object with this structure (no markdown fences or commentary):
@@ -73,20 +71,12 @@ Return ONLY a JSON object with this structure (no markdown fences or commentary)
     "description": "What learners will achieve",
     "setup_commands": ["pip install numpy pandas"]
   },
-  "ai_outline_meta": {
-    "scope": "1-2 sentences describing the course scope",
-    "moduleGoals": {
-      "Module Name": ["Outcome 1", "Outcome 2"]
-    }
-  },
   "lessons": [
     {
       "slug": "module-lesson-name",
       "title": "Lesson name",
       "description": "Brief overview of what will be learned",
-      "module": "Module name",
-      "objective": "Outcome phrasing",
-      "prereq_slugs": ["earlier-lesson-slug"]
+      "module": "Module name"
     }
   ]
 }
@@ -96,10 +86,7 @@ Generation Rules
 - Every slug MUST be lowercase kebab-case (use hyphens, no spaces). Ensure lesson slugs are unique within the course.
 - `course.slug` should be derived from the topic.
 - `setup_commands` must always be present (may be empty) and list shell commands needed for the sandbox.
-- `ai_outline_meta.scope` and `moduleGoals` must always exist (use empty strings/arrays only if absolutely no data is available).
-- `moduleGoals` should cover every module referenced by the lessons array.
-- Lessons should appear in optimal learning order; include `prereq_slugs` when a lesson builds on earlier lessons.
-- Never include a `content` field. Lesson content is generated later on demand.
+- Lessons should appear in optimal learning order. Do NOT include objectives, prerequisites, or lesson content.
 
 Output strictly the described JSON structure. No additional commentary, markdown fences, or trailing text.
 """
@@ -123,7 +110,9 @@ Return ONLY a JSON object with this top-level shape:
 - Provide `slug` in lowercase kebab-case, `title`, and `setup_commands` (array of shell commands, may be empty but must exist).
 
 ### ai_outline_meta
-- Always include the following keys (use empty arrays/dicts if nothing to report): scope, conceptGraph, moduleGoals, confusorCandidates, policies, semanticNeighbors, similarityMeta, conceptTags, diagnosticBlueprint, skipPolicy.
+- Include only the keys needed by ConceptFlow: `scope`, `conceptGraph`, and `conceptTags`.
+- `scope`: 1-2 sentences describing the adaptive track.
+- `conceptTags`: Map each concept slug to a short list of human-readable tags (can be empty lists).
 
 #### conceptGraph requirements
 - `nodes`: ≤ ${max_nodes} entries with ONLY `slug`, `title`, and `initialMastery` (float 0-1 or null when unknown).
@@ -131,28 +120,24 @@ Return ONLY a JSON object with this top-level shape:
 - `layers`: Ordered tiers that cover every node slug exactly once and contain ≤ ${max_layers} total tiers.
 - `confusors`: List of objects with `slug` plus a `confusors` array of { "slug": "...", "risk": value }. Risk must be between 0.0 and 1.0 and every `slug` must EXACTLY match a conceptGraph node slug (reuse the same string; do not invent variants).
 
-- `moduleGoals`: Map module titles to concrete learning outcomes.
-- `confusorCandidates`: Highlight especially risky pairs using objects with `a`, `b`, and `note`.
-- Populate `policies`, `semanticNeighbors`, `similarityMeta`, `conceptTags`, `diagnosticBlueprint`, and `skipPolicy` with concise, actionable guidance even if brief.
-
 ### lessons
 - Limit to ${max_lessons} entries.
 - Generate exactly one lesson per conceptGraph node. Lesson `slug` MUST match its concept slug (1:1 mapping) and reuse the identical lowercase kebab-case string.
-- Each lesson object must include: `slug`, `title`, `description`, `objective` (actionable learning statement), and `prereq_slugs` referencing lesson slugs for dependencies.
-- `title`/`description` should mirror the concept’s framing so downstream systems can display them without additional normalization.
+- Each lesson object must include: `slug`, `title`, `description`, and `module` (use the module or track name if applicable). Do NOT include objectives or prereq lists.
+- `title`/`description` should mirror the concept's framing so downstream systems can display them without additional normalization.
 
 ## Adaptive Behavior Rules
 - Use the self-assessment summary to calibrate scope, skip mastered basics, and prioritize weak areas.
-- Reserve `initialMastery >= 0.6` only for fundamentals the learner explicitly claims as strong; set all other dependent/advanced concepts in the 0.3–0.45 range so they begin gated and unlock through practice. Ensure at least 40% of concepts fall below the current unlock threshold to keep progression meaningful.
+- Reserve `initialMastery >= 0.6` only for fundamentals the learner explicitly claims as strong; set all other dependent/advanced concepts in the 0.3-0.45 range so they begin gated and unlock through practice. Ensure at least 40% of concepts fall below the current unlock threshold to keep progression meaningful.
 - Set `initialMastery` between 0.3 and 0.7 unless evidence justifies higher/lower confidence; use null only when impossible to estimate.
 - Front-load prerequisites and scaffold toward advanced goals; align module goals and skip policies with this sequence.
 - Confusors should capture terminology collisions, conceptual overlaps, or workflow confusions with calibrated `risk` values.
 
 ## Validation
 - conceptGraph.nodes count ≤ ${max_nodes}.
-- Every reference in edges, confusors, lessons, and prereq_slugs must point to an existing concept slug.
+- Every reference in edges, confusors, and lessons must point to an existing concept slug.
 - Lesson count MUST equal conceptGraph.nodes count.
-- Slugs are lowercase kebab-case strings and must be reused verbatim everywhere they appear (nodes, lessons, confusors, prereq_slugs).
+- Slugs are lowercase kebab-case strings and must be reused verbatim everywhere they appear (nodes, lessons, confusors).
 - Provide at least one setup command when special tooling is required; otherwise return an empty array.
 - Always include a descriptive `scope` summarizing what the learner will accomplish.
 

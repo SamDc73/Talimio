@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     """Application settings - only define what needs validation."""
 
     # Critical configs that need validation/type conversion
-    DATABASE_URL: str  # Required, validated
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/talimio"
     DEBUG: bool = False
     API_PORT: int = 8080
     ENVIRONMENT: str = "development"  # "development", "production"
@@ -46,7 +46,6 @@ class Settings(BaseSettings):
     ADAPTIVE_UNLOCK_MASTERY_THRESHOLD: float = 0.5  # Mastery level to unlock prerequisites (aligned with LECTOR initial mastery band)
     ADAPTIVE_CONFUSION_LAMBDA: float = 0.3  # Weight for confusion risk in scheduling
     ADAPTIVE_RISK_RECENT_K: int = 3  # Number of recent concepts to consider for sigma context
-    ADAPTIVE_CONFUSION_FALLBACK: bool = True  # Enable embedding-based fallback for confusion detection
 
     # Learning Algorithm Parameters
     LEARNING_DELTA_CORRECT: float = 0.18  # Mastery increase for correct answers
@@ -100,34 +99,15 @@ class Settings(BaseSettings):
     # AI Model Configuration
     def get_model_list(self) -> list[dict]:
         """Get the model list configuration for litellm.Router."""
-        import os
-
-        # Get primary model and any fallbacks from environment
-        primary_model = os.getenv("PRIMARY_LLM_MODEL", "gpt-4o-mini")
-        fallback_models_str = os.getenv("FALLBACK_LLM_MODELS", "")
-        fallback_models = [m.strip() for m in fallback_models_str.split(",") if m.strip()] if fallback_models_str else []
-
-        # Build model list - primary model first
-        model_list = [
+        primary_model = self.primary_llm_model
+        return [
             {
-                "model_name": "primary",  # Internal router name
+                "model_name": "primary",
                 "litellm_params": {
                     "model": primary_model,
-                    # LiteLLM automatically picks up API keys from environment
-                }
+                },
             }
         ]
-
-        # Add fallback models if configured
-        for i, fallback_model in enumerate(fallback_models):
-            model_list.append({
-                "model_name": f"fallback-{i + 1}",
-                "litellm_params": {
-                    "model": fallback_model,
-                }
-            })
-
-        return model_list
 
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.local"),

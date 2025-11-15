@@ -402,7 +402,7 @@ class CourseContentService:
 
                 title = payload.get("title") or f"Lesson {lesson_index + 1}"
                 description = payload.get("description") or ""
-                content = payload.get("content") or payload.get("body") or payload.get("markdown") or ""
+                content = ""
                 order_value = payload.get("order")
                 lesson_order = int(order_value) if isinstance(order_value, int) else lesson_index
 
@@ -410,7 +410,9 @@ class CourseContentService:
                 lesson_uuid: UUID | None = None
                 if lesson_id_value is not None:
                     try:
-                        lesson_uuid = lesson_id_value if isinstance(lesson_id_value, UUID) else UUID(str(lesson_id_value))
+                        lesson_uuid = (
+                            lesson_id_value if isinstance(lesson_id_value, UUID) else UUID(str(lesson_id_value))
+                        )
                     except (TypeError, ValueError):
                         logger.warning(
                             "Ignoring invalid lesson id override %s for course %s",
@@ -424,7 +426,9 @@ class CourseContentService:
                     try:
                         lesson_uuid = uuid5(NAMESPACE_URL, f"outline-lesson:{course_id}:{slug_text}")
                     except Exception:  # pragma: no cover - uuid5 should not fail, but guard anyway
-                        logger.warning("Failed to derive deterministic id from slug %s for course %s", slug_value, course_id)
+                        logger.warning(
+                            "Failed to derive deterministic id from slug %s for course %s", slug_value, course_id
+                        )
 
                 lesson_kwargs: dict[str, Any] = {
                     "course_id": course_id,
@@ -791,10 +795,7 @@ class CourseContentService:
                 {
                     "id": lesson_id,
                     "title": lesson_plan.title or concept.name,
-                    "description": lesson_plan.description
-                    or lesson_plan.objective
-                    or concept.description,
-                    "content": "",
+                    "description": lesson_plan.description or concept.description,
                     "order": index,
                 }
             )
@@ -811,7 +812,6 @@ class CourseContentService:
                     "id": lesson_id,
                     "title": concept.name,
                     "description": concept.description,
-                    "content": "",
                     "order": order_cursor,
                 }
             )
@@ -848,28 +848,7 @@ class CourseContentService:
         text = str(raw_value).strip()
         return text or None
 
-    def _module_description_from_goals(self, module_name: str | None, module_goals: Any) -> str | None:
-        if not module_name or not isinstance(module_goals, dict):
-            return None
-        candidate = module_goals.get(module_name)
-        if candidate is None:
-            lowered = module_name.lower()
-            for key, value in module_goals.items():
-                if isinstance(key, str) and key.lower() == lowered:
-                    candidate = value
-                    break
-        if candidate is None:
-            return None
-        if isinstance(candidate, str):
-            text = candidate.strip()
-            return text or None
-        if isinstance(candidate, list):
-            parts = [str(item).strip() for item in candidate if str(item).strip()]
-            if parts:
-                return " • ".join(parts)
-        return None
-
-    def _build_modules_from_outline(self, lessons: list[Any], module_goals: Any) -> list[dict[str, Any]]:
+    def _build_modules_from_outline(self, lessons: list[Any]) -> list[dict[str, Any]]:
         if not lessons:
             return []
         module_map: dict[str, dict[str, Any]] = {}
@@ -893,19 +872,13 @@ class CourseContentService:
             if module_entry is None:
                 module_entry = {
                     "title": module_name,
-                    "description": self._module_description_from_goals(module_name, module_goals),
+                    "description": None,
                     "lessons": [],
                 }
                 module_map[module_key] = module_entry
-            raw_content = getattr(lesson, "content", None)
-            if raw_content is None and isinstance(lesson, dict):
-                raw_content = lesson.get("content") or lesson.get("body") or lesson.get("markdown")
             lesson_slug = getattr(lesson, "slug", None)
             if lesson_slug is None and isinstance(lesson, dict):
                 lesson_slug = lesson.get("slug")
-            prereq_slugs = getattr(lesson, "prereq_slugs", None)
-            if prereq_slugs is None and isinstance(lesson, dict):
-                prereq_slugs = lesson.get("prereq_slugs")
             lessons_list = cast("list[dict[str, Any]]", module_entry.setdefault("lessons", []))
             if not isinstance(lessons_list, list):
                 lessons_list = []
@@ -914,9 +887,7 @@ class CourseContentService:
                 {
                     "title": title,
                     "description": description,
-                    "content": raw_content or "",
                     "slug": lesson_slug,
-                    "prereq_slugs": prereq_slugs if isinstance(prereq_slugs, list) else [],
                 }
             )
         return list(module_map.values())
@@ -952,18 +923,9 @@ class CourseContentService:
             raise RuntimeError(error_msg)
 
         title = course_meta.title
-        description = (
-            course_meta.description
-            or (ai_result.ai_outline_meta or {}).get("scope")
-            or f"A course about {prompt}"
-        )
-        module_goals = {}
-        if isinstance(ai_result.ai_outline_meta, dict):
-            raw_module_goals = ai_result.ai_outline_meta.get("moduleGoals")
-            if isinstance(raw_module_goals, dict):
-                module_goals = raw_module_goals
+        description = course_meta.description or f"A course about {prompt}"
 
-        modules = self._build_modules_from_outline(list(ai_result.lessons or []), module_goals)
+        modules = self._build_modules_from_outline(list(ai_result.lessons or []))
         if not modules:
             logger.warning("AI generated no lessons for prompt '%s'", prompt)
 

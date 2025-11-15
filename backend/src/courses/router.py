@@ -7,7 +7,6 @@ NOTE: This router has been fully migrated to use CoursesFacade.
 CoursesFacade now handles all endpoints including lesson-specific operations.
 """
 
-
 import logging
 from datetime import UTC, datetime
 from typing import Annotated, Any, cast
@@ -29,7 +28,7 @@ from src.courses.schemas import (
     CourseResponse,
     CourseUpdate,
     FrontierResponse,
-    LessonResponse,
+    LessonDetailResponse,
     MDXValidateRequest,
     MDXValidateResponse,
     NextReviewResponse,
@@ -61,6 +60,7 @@ router = APIRouter(
 
 # Local logger for analytics
 logger = logging.getLogger(__name__)
+
 
 def get_courses_facade() -> CoursesFacade:
     """Get courses facade instance."""
@@ -233,7 +233,7 @@ async def get_lesson(
     lesson_id: UUID,
     lesson_service: Annotated[LessonService, Depends(get_lesson_service)],
     generate: Annotated[bool, Query(description="Auto-generate if lesson doesn't exist")] = False,
-) -> LessonResponse:
+) -> LessonDetailResponse:
     """Get a specific lesson by course and lesson ID."""
     return await lesson_service.get_lesson(course_id, lesson_id, force_refresh=generate)
 

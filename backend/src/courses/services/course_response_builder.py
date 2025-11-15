@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from src.courses.models import Course, Lesson
-from src.courses.schemas import CourseResponse, LessonResponse, ModuleResponse
+from src.courses.schemas import CourseResponse, LessonSummary, ModuleResponse
 
 
 # Local, zero-dependency module id: stable UUIDv5 from name
@@ -46,8 +46,7 @@ class CourseResponseBuilder:
 
     def build_course_response(self, course: Course, lessons: Iterable[Lesson]) -> CourseResponse:
         """Build a course response grouping lessons into virtual modules."""
-        lesson_responses = [self._build_lesson_response(lesson) for lesson in lessons]
-        modules = self._group_lessons_into_modules(course.id, lesson_responses)
+        modules = self._group_lessons_into_modules(course, lessons)
 
         setup_commands: list[str] = []
         if course.setup_commands:
@@ -95,9 +94,13 @@ class CourseResponseBuilder:
             )
         return responses
 
-    def _group_lessons_into_modules(self, course_id: UUID, lessons: list[LessonResponse]) -> list[ModuleResponse]:
+    def _group_lessons_into_modules(
+        self,
+        course: Course,
+        lessons: Iterable[Lesson],
+    ) -> list[ModuleResponse]:
         """Group lessons by module name and order them appropriately."""
-        grouped: dict[tuple[str | None, int | None], list[LessonResponse]] = defaultdict(list)
+        grouped: dict[tuple[str | None, int | None], list[Lesson]] = defaultdict(list)
         for lesson in lessons:
             key = (lesson.module_name, lesson.module_order)
             grouped[key].append(lesson)
@@ -112,42 +115,30 @@ class CourseResponseBuilder:
             ),
         )
 
-        for index, ((module_name, module_order), module_lessons) in enumerate(sorted_groups):
-            module_lessons.sort(
-                key=lambda lesson_response: (lesson_response.order, lesson_response.title or "")
+        for (module_name, _), module_lessons in sorted_groups:
+            ordered_lessons = sorted(
+                module_lessons,
+                key=lambda lesson_model: (lesson_model.order, lesson_model.title or ""),
             )
-            module_id = compute_module_id(course_id, module_name)
+            module_id = compute_module_id(course.id, module_name)
             title = module_name or "Lessons"
-            order_value = module_order if module_order is not None else index
 
             modules.append(
                 ModuleResponse(
                     id=module_id,
-                    course_id=course_id,
                     title=title,
-                    module_name=module_name,
-                    order=order_value,
-                    lessons=module_lessons,
+                    description=None,
+                    lessons=[self._map_lesson_summary(lesson_model) for lesson_model in ordered_lessons],
                 )
             )
 
         return modules
 
-    def _build_lesson_response(self, lesson: Lesson) -> LessonResponse:
-        """Build a lesson response from a lesson model."""
-        module_id = compute_module_id(lesson.course_id, lesson.module_name)
-        return LessonResponse(
+    def _map_lesson_summary(self, lesson: Lesson) -> LessonSummary:
+        """Map a Lesson ORM object to a lightweight summary."""
+        return LessonSummary(
             id=lesson.id,
-            course_id=lesson.course_id,
-            module_id=module_id,
             title=lesson.title,
             description=lesson.description,
-            content=lesson.content,
-            html_cache=None,
-            citations=[],
-            created_at=lesson.created_at,
-            updated_at=lesson.updated_at,
-            module_name=lesson.module_name,
-            module_order=lesson.module_order,
             order=lesson.order,
         )

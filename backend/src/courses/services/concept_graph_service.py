@@ -9,8 +9,7 @@ from typing import TypedDict
 from uuid import UUID
 
 from sqlalchemy import and_, bindparam, select, text, update
-from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
