@@ -235,14 +235,29 @@ class CourseContentService:
             else:
                 graph_service = ConceptGraphService(session)
                 await graph_service.backfill_embeddings_for_course(course.id)
+                # Compute embedding-based confusors immediately when running inline
+                try:
+                    _ = await graph_service.recompute_embedding_confusors_for_course(course.id)
+                except Exception as exc:
+                    logger.warning("Inline confusor recompute failed for course %s: %s", course.id, exc)
                 await session.commit()
+        # No deferred embeddings: concepts were embedded on creation; compute confusors.
+        elif background_tasks is not None:
+            self._schedule_background_confusors(background_tasks, course.id)
+        else:
+            try:
+                graph_service = ConceptGraphService(session)
+                _ = await graph_service.recompute_embedding_confusors_for_course(course.id)
+                await session.commit()
+            except Exception as exc:
+                logger.warning("Confusor recompute failed for course %s: %s", course.id, exc)
 
         try:
             if background_tasks is not None:
                 self._schedule_background_tagging(background_tasks, course.id, user_id)
             else:
                 await self._auto_tag_course(session, course, user_id)
-        except Exception as exc:  # pragma: no cover - best-effort logging only
+        except Exception as exc:
             logger.warning("Automatic tagging failed for course %s: %s", course.id, exc)
 
     def _schedule_background_embeddings(
@@ -254,19 +269,57 @@ class CourseContentService:
         background_tasks.add_task(self._run_background_embeddings, course_id)
 
     async def _run_background_embeddings(self, course_id: UUID) -> None:
-        """Generate embeddings for any concepts that were deferred."""
+        """Generate embeddings for any concepts that were deferred and compute confusors.
+
+        Runs both steps in a single background task to ensure confusor computation
+        sees finalized embeddings.
+        """
         try:
             async with async_session_maker() as embedding_session:
                 graph_service = ConceptGraphService(embedding_session)
                 updated = await graph_service.backfill_embeddings_for_course(course_id)
+                # Immediately compute embedding-based confusors for the course
+                try:
+                    pairs = await graph_service.recompute_embedding_confusors_for_course(course_id)
+                except Exception as conf_exc:  # best-effort: log and continue
+                    logger.exception("Confusor recompute failed for course %s: %s", course_id, conf_exc)
+                    pairs = 0
                 await embedding_session.commit()
                 logger.info(
-                    "Background embedding task backfilled %s concepts for course %s",
+                    "Background embedding task backfilled %s concepts and computed %s confusor pairs for course %s",
                     updated,
+                    pairs,
                     course_id,
                 )
         except Exception as exc:  # pragma: no cover - best-effort background task
             logger.exception("Background embedding task failed for course %s: %s", course_id, exc)
+
+    def _schedule_background_confusors(
+        self,
+        background_tasks: BackgroundTasks,
+        course_id: UUID,
+    ) -> None:
+        """Enqueue confusor recomputation when embeddings already exist."""
+        background_tasks.add_task(self._run_background_confusors, course_id)
+
+    async def _run_background_confusors(self, course_id: UUID) -> None:
+        """Compute embedding-based confusors without re-embedding concepts."""
+        try:
+            async with async_session_maker() as conf_session:
+                graph_service = ConceptGraphService(conf_session)
+                try:
+                    pairs = await graph_service.recompute_embedding_confusors_for_course(course_id)
+                except Exception as conf_exc:  # best-effort: log and continue
+                    logger.exception("Confusor recompute failed for course %s: %s", course_id, conf_exc)
+                    pairs = 0
+                await conf_session.commit()
+                logger.info(
+                    "Background confusor task computed %s confusor pairs for course %s",
+                    pairs,
+                    course_id,
+                )
+        except Exception as exc:  # pragma: no cover - best-effort background task
+            logger.exception("Background confusor task failed for course %s: %s", course_id, exc)
 
     def _schedule_background_tagging(
         self,
@@ -286,7 +339,7 @@ class CourseContentService:
                     logger.warning("Skipping auto-tagging for missing course %s", course_id)
                     return
                 await self._auto_tag_course(tagging_session, course, user_id)
-        except Exception as exc:  # pragma: no cover - background tasks are best-effort
+        except Exception as exc:
             logger.exception("Background tagging task failed for course %s: %s", course_id, exc)
 
     async def update_course(
@@ -704,7 +757,8 @@ class CourseContentService:
                     confusor_pairs[ordered] = risk_value
 
         if not confusor_pairs:
-            # TODO(pgvector-fallback): derive similarity pairs from embeddings when the LLM omits confusors.
+            # No pairs provided by the LLM; embedding-based confusors are computed post-creation
+            # by ConceptGraphService.recompute_embedding_confusors_for_course().
             logger.debug("No LLM confusors provided for adaptive course %s", course_id)
             return 0
 

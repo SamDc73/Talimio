@@ -1,14 +1,12 @@
 """Concept graph service providing DAG operations."""
 
-
-
 import logging
 import re
 from collections.abc import Sequence
 from typing import TypedDict
 from uuid import UUID
 
-from sqlalchemy import and_, bindparam, select, text, update
+from sqlalchemy import DateTime, Float, and_, bindparam, select, text, update
 from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -183,11 +181,7 @@ class ConceptGraphService:
             texts = [_compose_embedding_text(item["name"], item["description"]) for item in batch]
             embeddings = await self._vector.generate_embeddings(texts)
             for item, embedding in zip(batch, embeddings, strict=True):
-                await self._session.execute(
-                    update(Concept)
-                    .where(Concept.id == item["id"])
-                    .values(embedding=embedding)
-                )
+                await self._session.execute(update(Concept).where(Concept.id == item["id"]).values(embedding=embedding))
             total_updated += len(batch)
 
         await self._session.flush()
@@ -220,8 +214,9 @@ class ConceptGraphService:
         concepts = [(row[0], row[1]) for row in records]
         concept_ids = [concept.id for concept, _ in concepts]
         prereq_rows = await self._session.execute(
-            select(ConceptPrerequisite.concept_id, ConceptPrerequisite.prereq_id)
-            .where(ConceptPrerequisite.concept_id.in_(concept_ids))
+            select(ConceptPrerequisite.concept_id, ConceptPrerequisite.prereq_id).where(
+                ConceptPrerequisite.concept_id.in_(concept_ids)
+            )
         )
         prereq_map: dict[UUID, set[UUID]] = {}
         for child_id, prereq_id in prereq_rows:
@@ -234,8 +229,10 @@ class ConceptGraphService:
             unlocked = True
             for prereq in prereqs:
                 prereq_state = state_lookup.get(prereq)
-                if prereq_state is None or (prereq_state.s_mastery is None) or (
-                    float(prereq_state.s_mastery) < self._unlock_threshold
+                if (
+                    prereq_state is None
+                    or (prereq_state.s_mastery is None)
+                    or (float(prereq_state.s_mastery) < self._unlock_threshold)
                 ):
                     unlocked = False
                     break
@@ -272,8 +269,6 @@ class ConceptGraphService:
         result = await self._session.execute(query, {"concept_id": str(concept_id)})
         return [UUID(row[0]) for row in result]
 
-
-
     async def _ensure_unique_slug(self, base_slug: str) -> str:
         candidate = base_slug
         suffix = 1
@@ -308,4 +303,121 @@ class ConceptGraphService:
             msg = "Adding prerequisite would create a cycle"
             raise ValueError(msg)
 
+    async def recompute_embedding_confusors_for_course(self, course_id: UUID) -> int:  # noqa: C901, PLR0915
+        """Compute and upsert concept similarities for a course using embeddings only.
 
+        This computes cosine similarity for all concept pairs in the course where both
+        concepts have non-empty embeddings, then upserts symmetric pairs into
+        concept_similarities with the ordered (a,b) key. Pairs below the configured
+        ADAPTIVE_SIMILARITY_THRESHOLD are ignored.
+
+        Returns
+        -------
+        int
+            Number of pairs written (inserted or updated).
+        """
+        settings = get_settings()
+        try:
+            threshold = float(getattr(settings, "ADAPTIVE_SIMILARITY_THRESHOLD", 0.78))
+        except (TypeError, ValueError):
+            threshold = 0.78
+
+        result = await self._session.execute(
+            select(Concept.id, Concept.embedding)
+            .join(CourseConcept, CourseConcept.concept_id == Concept.id)
+            .where(CourseConcept.course_id == course_id)
+        )
+        rows = result.all()
+        concepts: list[tuple[UUID, list[float] | None]] = []
+        for cid, emb in rows:
+            try:
+                concepts.append((UUID(str(cid)), list(emb) if emb is not None else None))
+            except Exception:
+                concepts.append((UUID(str(cid)), None))
+
+        def _cosine(a: list[float], b: list[float]) -> float | None:
+            if not a or not b:
+                return None
+            n = min(len(a), len(b))
+            if n == 0:
+                return None
+            dot = 0.0
+            an = 0.0
+            bn = 0.0
+            for i in range(n):
+                av = float(a[i])
+                bv = float(b[i])
+                dot += av * bv
+                an += av * av
+                bn += bv * bv
+            if an <= 0.0 or bn <= 0.0:
+                return None
+            # Cosine value clamped to [0,1]
+            import math
+
+            sim = dot / (math.sqrt(an) * math.sqrt(bn))
+            if sim < 0.0:
+                return 0.0
+            if sim > 1.0:
+                return 1.0
+            return sim
+
+        pairs_a: list[UUID] = []
+        pairs_b: list[UUID] = []
+        sims: list[float] = []
+
+        for i in range(len(concepts)):
+            id_a, emb_a = concepts[i]
+            if emb_a is None:
+                continue
+            for j in range(i + 1, len(concepts)):
+                id_b, emb_b = concepts[j]
+                if emb_b is None:
+                    continue
+                sim = _cosine(emb_a, emb_b)
+                if sim is None or sim < threshold:
+                    continue
+                a_id, b_id = (id_a, id_b) if str(id_a) < str(id_b) else (id_b, id_a)
+                pairs_a.append(a_id)
+                pairs_b.append(b_id)
+                sims.append(float(sim))
+
+        if not pairs_a:
+            return 0
+
+        from datetime import UTC, datetime as _dt
+
+        now = _dt.now(UTC)
+        timestamps = [now for _ in sims]
+
+        stmt = text(
+            """
+            INSERT INTO concept_similarities (concept_a_id, concept_b_id, similarity, computed_at)
+            SELECT u1.a, u2.b, u3.s, u4.ts
+            FROM UNNEST(:concept_a_ids) WITH ORDINALITY AS u1(a, idx)
+            JOIN UNNEST(:concept_b_ids) WITH ORDINALITY AS u2(b, idx) USING (idx)
+            JOIN UNNEST(:similarities) WITH ORDINALITY AS u3(s, idx) USING (idx)
+            JOIN UNNEST(:timestamps) WITH ORDINALITY AS u4(ts, idx) USING (idx)
+            ON CONFLICT (concept_a_id, concept_b_id)
+            DO UPDATE SET
+                similarity = EXCLUDED.similarity,
+                computed_at = EXCLUDED.computed_at
+            """
+        ).bindparams(
+            bindparam("concept_a_ids", type_=ARRAY(PGUUID(as_uuid=True))),
+            bindparam("concept_b_ids", type_=ARRAY(PGUUID(as_uuid=True))),
+            bindparam("similarities", type_=ARRAY(Float())),
+            bindparam("timestamps", type_=ARRAY(DateTime(timezone=True))),
+        )
+        await self._session.execute(
+            stmt,
+            {
+                "concept_a_ids": pairs_a,
+                "concept_b_ids": pairs_b,
+                "similarities": sims,
+                "timestamps": timestamps,
+            },
+        )
+
+        await self._session.flush()
+        return len(sims)

@@ -125,11 +125,7 @@ class AIService:
         messages.append({"role": "user", "content": message})
 
         # Use completion with user context
-        response = await self._assistant_llm.get_completion(
-            messages=messages,
-            user_id=str(user_id),
-            format_json=False
-        )
+        response = await self._assistant_llm.get_completion(messages=messages, user_id=str(user_id), format_json=False)
 
         return str(response)
 

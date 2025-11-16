@@ -1,6 +1,6 @@
 import asyncio
-import importlib
 import copy
+import importlib
 import json
 import logging
 import re
@@ -368,9 +368,7 @@ class LLMClient:
             text_parts = [
                 item["text"]
                 for item in payload
-                if isinstance(item, dict)
-                and item.get("type") == "text"
-                and isinstance(item.get("text"), str)
+                if isinstance(item, dict) and item.get("type") == "text" and isinstance(item.get("text"), str)
             ]
             if text_parts:
                 converted = self._try_convert_payload("".join(text_parts), response_model)
@@ -580,6 +578,7 @@ class LLMClient:
                 rag_service = self._rag_service
             else:
                 from src.ai.rag.service import RAGService
+
                 rag_service = RAGService()
 
             if not auth:
@@ -659,9 +658,12 @@ class LLMClient:
         assessment_block = (
             self_assessment_context.strip() if self_assessment_context else "No self-assessment provided."
         )
+
+        # LLM-first: no heuristic scaffold; keep prompt lean
         system_prompt = ADAPTIVE_COURSE_GENERATION_PROMPT.substitute(
             user_goal=goal_text,
             self_assessment_context=assessment_block,
+            scaffold_hints="",
             max_nodes=max_nodes,
             max_prereqs=max_prereqs,
             max_layers=max_layers,
@@ -820,7 +822,11 @@ class LLMClient:
                 t_name = str(target.get("name", "")).strip()
                 t_desc = str(target.get("description", "")).strip()
                 t_mastery = target.get("mastery")
-                lines = ["## Target Concept", f"Name: {t_name}" if t_name else None, f"Description: {t_desc}" if t_desc else None]
+                lines = [
+                    "## Target Concept",
+                    f"Name: {t_name}" if t_name else None,
+                    f"Description: {t_desc}" if t_desc else None,
+                ]
                 if isinstance(t_mastery, (int, float)):
                     lines.append(f"Current mastery: {float(t_mastery):.2f}")
                 target_section = "\n".join([ln for ln in lines if ln]) + "\n\n"
@@ -828,10 +834,7 @@ class LLMClient:
             # Prepare prompt
             combined_content = (content_info + target_section + rag_context).strip()
             if not combined_content:
-                combined_content = (
-                    f"Lesson Title: {title}\n"
-                    f"Lesson Topic: {metadata['node_description'] or title}"
-                )
+                combined_content = f"Lesson Title: {title}\nLesson Topic: {metadata['node_description'] or title}"
 
             system_prompt = LESSON_GENERATION_PROMPT.replace("{content}", combined_content)
             messages = [

@@ -1,12 +1,9 @@
 """LECTOR scheduling service implementing semantic-aware spaced repetition.
 
-TODO(pgvector-fallback): When concept_similarities is empty or missing pairs,
-compute semantic risk sigma from embeddings (pgvector) as a fallback. Map cosine
-similarity to risk in [0,1] with ADAPTIVE_SIMILARITY_THRESHOLD gating.
-Stick to LLM-only first (MVP); add embedding fallback later.
+Embedding-based confusors are computed and persisted at course creation (or
+immediately after backfilling embeddings). The scheduler reads ConceptSimilarity
+and does not compute on-the-fly fallback from embeddings.
 """
-
-
 
 import logging
 from collections.abc import Sequence
@@ -95,7 +92,6 @@ class LectorSchedulerService:
         sensitivity = self._semantic_sensitivity(entry["state"])
         priority = (1.0 - mastery) - (self._confusion_lambda * sensitivity * sigma_value)
         return (-priority, identifier)
-
 
     def _mastery_value(self, state: UserConceptState | None) -> float:
         """Extract mastery value from user concept state."""
