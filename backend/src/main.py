@@ -1,16 +1,7 @@
-import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from pathlib import Path
-
-from dotenv import load_dotenv
-
-
-# Load .env FIRST before any other imports that might need env vars
-BACKEND_DIR = Path(__file__).parent.parent
-ENV_PATH = BACKEND_DIR / ".env"
-load_dotenv(ENV_PATH)
+from typing import Any, cast
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +13,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import DatabaseError, IntegrityError, OperationalError
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
+from starlette.responses import Response
 
 from .ai.assistant.router import router as assistant_router
 from .ai.rag.router import router as rag_router
@@ -33,19 +25,16 @@ from .auth.exceptions import (
 )
 from .auth.middleware import AuthErrorMiddleware, AuthInjectionMiddleware
 from .auth.router import router as auth_router
-
-# Import models to register them with SQLAlchemy - MUST be after database.base import
-from .books.models import Book  # noqa: F401
 from .books.router import router as books_router
 
 # Setup logging
 from .config.logging import setup_logging
 from .config.settings import get_settings
 from .content.router import router as content_router
-from .courses.models import Course, CourseDocument, Lesson  # noqa: F401
+from .courses.router import router as courses_router
+from .database.migrate import apply_migrations
 from .database.session import engine
 from .exceptions import ResourceNotFoundError, ValidationError as CustomValidationError
-from .highlights.models import Highlight  # noqa: F401
 from .highlights.router import router as highlights_router
 from .middleware.error_handlers import (
     AuthorizationError,
@@ -64,13 +53,8 @@ from .middleware.error_handlers import (
 )
 from .middleware.security import SimpleSecurityMiddleware, limiter
 from .progress.router import router as progress_router
-from .tagging.models import Tag, TagAssociation  # noqa: F401
 from .tagging.router import router as tagging_router
-
-# Auth models moved to user.models - import for SQLAlchemy registration
-from .user.models import User, UserPreferences  # noqa: F401
 from .user.router import router as user_router
-from .videos.models import Video  # noqa: F401
 from .videos.router import router as videos_router
 
 
@@ -78,123 +62,146 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
-
-
-
 def _register_routers(app: FastAPI) -> None:
     """Register all application routers."""
-    # Note: Auth router removed - using new auth manager system
-    app.include_router(assistant_router)
-    app.include_router(books_router)
-    app.include_router(content_router)
-    app.include_router(highlights_router)  # Highlights for books, videos, courses
-    app.include_router(progress_router)  # Unified progress tracking
-    app.include_router(rag_router)  # RAG system
+    routers = [
+        assistant_router,
+        books_router,
+        content_router,
+        highlights_router,
+        progress_router,
+        rag_router,
+        courses_router,
+        tagging_router,
+        user_router,
+        videos_router,
+        auth_router,
+    ]
 
-    # Course management - new unified API
-    from src.courses.router import router as courses_router
-    app.include_router(courses_router)
+    for router in routers:
+        app.include_router(router)
 
 
-    app.include_router(tagging_router)
-    app.include_router(user_router)
-    app.include_router(videos_router)
-    app.include_router(auth_router)
-
-
-async def _startup_validation() -> None:
-    """Validate configurations on startup."""
-    # Validate RAG configuration if configured
+async def _startup() -> None:
+    """Perform lightweight startup checks and initialization."""
     try:
         from src.ai.rag.config import RAGConfig
 
         rag_config = RAGConfig()
-
-        # RAGConfig with Pydantic validates itself on instantiation
         if rag_config.embedding_model:
-            logger.info("RAG configuration validated successfully")
-        else:
-            logger.info("RAG not configured - skipping RAG initialization")
-    except ValueError as e:
-        logger.exception(f"Invalid RAG configuration: {e}")
+            logger.info("RAG configuration loaded")
+    except Exception:
+        logger.exception("Failed to load RAG configuration")
         raise
 
-    # Validate authentication configuration
     try:
         from src.auth.validation import validate_auth_on_startup
 
         validate_auth_on_startup()
-    except Exception as e:
-        logger.exception(f"Auth configuration validation failed: {e}")
+    except Exception:
+        logger.exception("Auth configuration validation failed")
         raise
 
+    try:
+        await apply_migrations(engine)
+        logger.info("Database migrations applied")
+    except Exception:
+        logger.exception("Database migrations failed")
+        raise
 
-async def _startup_database() -> None:
-    """Initialize database with retry logic."""
-    max_retries = 5
-    retry_delay = 1  # seconds
+    try:
+        from src.ai.memory import warm_memory_client
 
-    for attempt in range(max_retries):
-        try:
-            # Initialize database with extensions and create all tables
-            from src.database.init import init_database
-
-            await init_database(engine)
-            logger.info("Database initialization completed successfully")
-
-            break  # Success - exit the retry loop
-
-        except OperationalError:
-            if attempt == max_retries - 1:  # Last attempt
-                logger.exception("Startup failed after %d attempts", max_retries)
-                raise
-
-            logger.warning(
-                "Database connection attempt %d failed, retrying in %ds...",
-                attempt + 1,
-                retry_delay,
-            )
-            await asyncio.sleep(retry_delay)
-            retry_delay *= 2  # Exponential backoff
-
-        except Exception:
-            logger.exception("Startup failed with unexpected error")
-            raise
+        await warm_memory_client()
+        logger.info("AsyncMemory client warmed")
+    except Exception:
+        logger.warning("AsyncMemory client warm-up failed", exc_info=True)
 
 
-async def _shutdown_cleanup() -> None:
-    """Clean up resources on shutdown."""
-    logger.info("Starting graceful shutdown...")
-
-    # Cleanup memory wrapper connections first (this was the root cause!)
+async def _shutdown() -> None:
+    """Release resources on shutdown."""
     try:
         from src.ai.memory import cleanup_memory_client
-        await cleanup_memory_client()
-        logger.info("Memory wrapper cleaned up successfully")
-    except Exception as e:
-        logger.warning(f"Error cleaning up memory wrapper: {e}")
 
-    # Close database engine and all connections
+        await cleanup_memory_client()
+        logger.info("Memory wrapper cleaned up")
+    except Exception:
+        logger.warning("Error cleaning up memory wrapper", exc_info=True)
+
     try:
         await engine.dispose()
-        logger.info("Database engine disposed successfully")
-    except Exception as e:
-        logger.warning(f"Error disposing database engine: {e}")
-
-    logger.info("Shutdown complete")
+        logger.info("Database engine disposed")
+    except Exception:
+        logger.warning("Error disposing database engine", exc_info=True)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events."""
-    # Startup
-    await _startup_validation()
-    await _startup_database()
-
+    await _startup()
     yield
+    await _shutdown()
 
-    # Shutdown
-    await _shutdown_cleanup()
+
+def _configure_middlewares(app: FastAPI, settings: Any) -> None:
+    """Register built-in middlewares and rate limiting."""
+    app.add_middleware(
+        cast("Any", CORSMiddleware),
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    app.add_middleware(cast("Any", GZipMiddleware), minimum_size=1000)
+    app.add_middleware(
+        cast("Any", SessionMiddleware),
+        secret_key=settings.SECRET_KEY,
+        https_only=settings.ENVIRONMENT == "production",
+    )
+    app.add_middleware(cast("Any", SimpleSecurityMiddleware))
+    app.add_middleware(cast("Any", AuthErrorMiddleware))
+    app.state.limiter = limiter
+    # Rate limit handler for RateLimitExceeded is registered in create_app()
+    app.add_middleware(cast("Any", AuthInjectionMiddleware))
+
+
+def _register_exception_handlers(app: FastAPI) -> None:
+    """Attach all exception handlers to app."""
+
+    async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Response:
+        return _rate_limit_exceeded_handler(request, exc)
+
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
+
+    async def resource_not_found_handler(_request: Request, exc: ResourceNotFoundError) -> JSONResponse:
+        return format_error_response(
+            category=ErrorCategory.RESOURCE_NOT_FOUND,
+            code=ErrorCode.NOT_FOUND,
+            detail=str(exc),
+            status_code=404,
+            suggestions=["The requested resource does not exist"],
+        )
+
+    app.add_exception_handler(ResourceNotFoundError, resource_not_found_handler)
+
+    for exc_type in (
+        AuthenticationError,
+        InvalidTokenError,
+        TokenExpiredError,
+        InvalidCredentialsError,
+    ):
+        app.add_exception_handler(exc_type, handle_authentication_errors)
+
+    app.add_exception_handler(AuthorizationError, handle_authorization_errors)
+
+    for exc_type in (ValidationError, CustomValidationError):
+        app.add_exception_handler(exc_type, handle_validation_errors)
+
+    for exc_type in (IntegrityError, DatabaseError, OperationalError):
+        app.add_exception_handler(exc_type, handle_database_errors)
+
+    app.add_exception_handler(ExternalServiceError, handle_external_service_errors)
+    app.add_exception_handler(RateLimitError, handle_rate_limit_errors)
 
 
 def create_app() -> FastAPI:
@@ -213,107 +220,11 @@ def create_app() -> FastAPI:
         lifespan=lifespan if settings.ENVIRONMENT != "test" else None,
     )
 
-    # Add CORS middleware
-    # Note: When allow_credentials=True, allow_origins cannot be ["*"]
-    # Use explicit dev origins to support cookie-based auth via Vite proxy.
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Middleware and rate limiting
+    _configure_middlewares(app, settings)
 
-    # Add gzip compression middleware
-    app.add_middleware(GZipMiddleware, minimum_size=1000)
-
-    # Add session middleware for cookie handling
-    app.add_middleware(
-        SessionMiddleware,
-        secret_key=settings.SECRET_KEY,
-        https_only=settings.ENVIRONMENT == "production",
-    )
-
-    # Add security middleware (headers + basic protection)
-    app.add_middleware(SimpleSecurityMiddleware)
-
-    # Add auth error handling middleware
-    app.add_middleware(AuthErrorMiddleware)
-
-    # Add rate limiting
-    app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-    # Auth middleware registration (moved to src.auth.middleware)
-    app.add_middleware(AuthInjectionMiddleware)
-
-    # Add exception handlers
-    @app.exception_handler(ResourceNotFoundError)
-    async def resource_not_found_handler(
-        _request: Request,
-        exc: ResourceNotFoundError,
-    ) -> JSONResponse:
-        return format_error_response(
-            category=ErrorCategory.RESOURCE_NOT_FOUND,
-            code=ErrorCode.NOT_FOUND,
-            detail=str(exc),
-            status_code=404,
-            suggestions=["The requested resource does not exist"],
-        )
-
-    # Authentication errors (401)
-    @app.exception_handler(AuthenticationError)
-    async def auth_error_handler(request: Request, exc: AuthenticationError) -> JSONResponse:
-        return await handle_authentication_errors(request, exc)
-
-    @app.exception_handler(InvalidTokenError)
-    async def invalid_token_handler(request: Request, exc: InvalidTokenError) -> JSONResponse:
-        return await handle_authentication_errors(request, exc)
-
-    @app.exception_handler(TokenExpiredError)
-    async def token_expired_handler(request: Request, exc: TokenExpiredError) -> JSONResponse:
-        return await handle_authentication_errors(request, exc)
-
-    @app.exception_handler(InvalidCredentialsError)
-    async def invalid_credentials_handler(request: Request, exc: InvalidCredentialsError) -> JSONResponse:
-        return await handle_authentication_errors(request, exc)
-
-    # Authorization errors (403)
-    @app.exception_handler(AuthorizationError)
-    async def authorization_error_handler(request: Request, exc: AuthorizationError) -> JSONResponse:
-        return await handle_authorization_errors(request, exc)
-
-    # Validation errors (400/422)
-    @app.exception_handler(ValidationError)
-    async def pydantic_validation_handler(request: Request, exc: ValidationError) -> JSONResponse:
-        return await handle_validation_errors(request, exc)
-
-    @app.exception_handler(CustomValidationError)
-    async def custom_validation_handler(request: Request, exc: CustomValidationError) -> JSONResponse:
-        return await handle_validation_errors(request, exc)
-
-    # Database errors
-    @app.exception_handler(IntegrityError)
-    async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
-        return await handle_database_errors(request, exc)
-
-    @app.exception_handler(DatabaseError)
-    async def database_error_handler(request: Request, exc: DatabaseError) -> JSONResponse:
-        return await handle_database_errors(request, exc)
-
-    @app.exception_handler(OperationalError)
-    async def operational_error_handler(request: Request, exc: OperationalError) -> JSONResponse:
-        return await handle_database_errors(request, exc)
-
-    # External service errors (503)
-    @app.exception_handler(ExternalServiceError)
-    async def external_service_handler(request: Request, exc: ExternalServiceError) -> JSONResponse:
-        return await handle_external_service_errors(request, exc)
-
-    # Rate limit errors (429)
-    @app.exception_handler(RateLimitError)
-    async def rate_limit_handler(request: Request, exc: RateLimitError) -> JSONResponse:
-        return await handle_rate_limit_errors(request, exc)
+    # Exception handlers
+    _register_exception_handlers(app)
 
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:

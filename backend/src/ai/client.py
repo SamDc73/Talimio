@@ -1,6 +1,5 @@
 import asyncio
 import copy
-import importlib
 import json
 import logging
 import re
@@ -409,14 +408,11 @@ class LLMClient:
             if not query_text:
                 return messages
 
-            run_id, has_run_scope = self._get_run_scope_state()
-            run_filter = run_id if has_run_scope else None
             memories = await search_memories(
                 user_id=normalized_user_id,
                 query=query_text,
                 limit=6,
                 agent_id=self._agent_id,
-                run_id=run_filter,
             )
 
             if not memories:
@@ -454,38 +450,6 @@ class LLMClient:
                 if normalized:
                     return normalized
         return None
-
-    def _get_trace_context(self) -> Any | None:
-        """Return the active diagnostics trace if available."""
-        try:
-            trace_module = importlib.import_module("src.diagnostics.trace")
-        except ModuleNotFoundError:
-            return None
-        get_trace = getattr(trace_module, "get_trace", None)
-        if callable(get_trace):
-            return get_trace()
-        return None
-
-    def _get_run_scope_state(self) -> tuple[str | None, bool]:
-        """Return the current run identifier and whether this agent already saved memories."""
-        trace = self._get_trace_context()
-        if trace is None:
-            return None, False
-        has_scope = getattr(trace, "has_memory_scope", None)
-        if callable(has_scope):
-            return trace.id, bool(has_scope(self._agent_id))
-        return trace.id, False
-
-    def _mark_run_scope(self, run_id: str | None) -> None:
-        """Mark that this agent persisted memories for the current run."""
-        if not run_id:
-            return
-        trace = self._get_trace_context()
-        if trace is None:
-            return
-        mark_scope = getattr(trace, "mark_memory_scope", None)
-        if callable(mark_scope):
-            mark_scope(self._agent_id)
 
     async def _handle_function_calling(
         self,
@@ -977,22 +941,17 @@ class LLMClient:
             conversation = f"User: {user_message}\nAssistant: {ai_response}"
 
             normalized_user_id = UUID(str(user_id)) if isinstance(user_id, str) else user_id
-            run_id, _ = self._get_run_scope_state()
             metadata = {
                 "agent_id": self._agent_id,
             }
-            if run_id:
-                metadata["run_id"] = run_id
 
             # Let mem0 handle everything - extraction, deduplication, relevance filtering
             await add_memory(
                 user_id=normalized_user_id,
                 content=conversation,
                 agent_id=self._agent_id,
-                run_id=run_id,
                 metadata=metadata,
             )
-            self._mark_run_scope(run_id)
 
         except Exception as e:
             # Never fail the main request due to memory issues
