@@ -11,6 +11,12 @@ class Paginator:
     """Helper class for handling pagination."""
 
     def __init__(self, page: int = 1, limit: int = 10) -> None:
+        if page < 1:
+            msg = "page must be >= 1"
+            raise ValueError(msg)
+        if limit <= 0:
+            msg = "limit must be > 0"
+            raise ValueError(msg)
         self.page = page
         self.limit = limit
         self.offset = (page - 1) * limit
