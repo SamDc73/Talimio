@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"  # "development", "production"
     SECRET_KEY: str = "your-secret-key-change-in-production"  # For session middleware  # noqa: S105
 
+    # Database config kept minimal for Supabase session pooler
+
     # Auth settings
     AUTH_DISABLED: bool = False
     AUTH_PROVIDER: str = "none"  # "none" (single-user mode) or "supabase" (multi-user mode)
