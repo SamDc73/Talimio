@@ -5,9 +5,10 @@ import logging
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.courses.models import Course, Lesson
-from src.database.session import AsyncSession
+from src.database.session import DbSession
 
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 class CourseProcessor:
     """Processor for extracting course content for tagging."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: DbSession | AsyncSession) -> None:
         """Initialize course processor.
 
         Args:
@@ -104,7 +105,7 @@ class CourseProcessor:
             entry["lessons"].append(lesson)
             entry["first_index"] = min(entry["first_index"], index)
 
-        sorted_groups = sorted(
+        return sorted(
             (
                 {
                     "name": name,
@@ -121,7 +122,6 @@ class CourseProcessor:
             ),
         )
 
-        return sorted_groups
 
     def _add_course_metadata(self, course: Course, parts: list[str]) -> None:
         """Add course metadata to preview parts."""
@@ -192,7 +192,7 @@ class CourseProcessor:
 
 async def process_course_for_tagging(
     course_id: str,
-    session: AsyncSession,
+    session: DbSession | AsyncSession,
 ) -> dict[str, str] | None:
     """Process a course to extract content for tagging."""
     result = await session.execute(
