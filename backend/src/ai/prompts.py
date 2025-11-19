@@ -18,12 +18,14 @@ Rules:
 - Only include tags that are directly related to the content
 - Confidence should be between 0.0 and 1.0
 
-Respond with only a JSON array of objects with 'tag' and 'confidence' fields.
-Example: [
-    {{"tag": "python", "confidence": 0.95}},
-    {{"tag": "machine-learning", "confidence": 0.85}},
-    {{"tag": "tensorflow", "confidence": 0.7}}
-]
+Return ONLY a JSON object with this exact structure (no markdown fences or commentary):
+{
+  "tags": [
+    {"tag": "python", "confidence": 0.95},
+    {"tag": "machine-learning", "confidence": 0.85},
+    {"tag": "tensorflow", "confidence": 0.7}
+  ]
+}
 
 Title: {title}
 Preview: {preview}"""
