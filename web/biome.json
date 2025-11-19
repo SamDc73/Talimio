@@ -1,0 +1,238 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.0.6/schema.json",
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true
+	},
+	"formatter": {
+		"enabled": true,
+		"formatWithErrors": false,
+		"indentStyle": "tab",
+		"indentWidth": 2,
+		"lineWidth": 120
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+			"a11y": {
+				"recommended": true
+			},
+			"suspicious": {
+				"noArrayIndexKey": "error",
+				"noConsole": "warn",
+				"noEmptyBlockStatements": "off",
+				"noExplicitAny": "off",
+				"noReactSpecificProps": "off",
+				"noCommentText": "warn",
+				"noDoubleEquals": "error",
+				"noRedeclare": "error",
+				"noVar": "error",
+				"useStrictMode": "warn"
+			},
+			"style": {
+				"useConst": "error",
+				"noNonNullAssertion": "off",
+				"useTemplate": "error",
+				"useShorthandFunctionType": "error",
+				"noDefaultExport": "off",
+				"noNestedTernary": "off",
+				"noParameterAssign": "error",
+				"useNamingConvention": {
+					"level": "error",
+					"options": {
+						"strictCase": false,
+						"conventions": [
+							{
+								"selector": {
+									"kind": "function"
+								},
+								"formats": ["camelCase", "PascalCase"]
+							},
+							{
+								"selector": {
+									"kind": "variable"
+								},
+								"formats": ["camelCase", "PascalCase", "CONSTANT_CASE"]
+							},
+							{
+								"selector": {
+									"kind": "const",
+									"scope": "global"
+								},
+								"formats": ["CONSTANT_CASE", "camelCase", "PascalCase"]
+							},
+							{
+								"selector": {
+									"kind": "typeLike"
+								},
+								"formats": ["PascalCase"]
+							},
+							{
+								"selector": {
+									"kind": "objectLiteralProperty"
+								},
+								"formats": ["camelCase", "PascalCase", "CONSTANT_CASE", "snake_case"]
+							},
+							{
+								"selector": {
+									"kind": "classMember"
+								},
+								"formats": ["camelCase"]
+							},
+							{
+								"selector": {
+									"kind": "functionParameter"
+								},
+								"formats": ["camelCase"]
+							},
+							{
+								"selector": {
+									"kind": "enum"
+								},
+								"formats": ["PascalCase", "CONSTANT_CASE"]
+							}
+						]
+					}
+				},
+				"noRestrictedImports": {
+					"level": "error",
+					"options": {
+						"paths": {
+							"react": {
+								"importNames": ["PureComponent", "createFactory", "PropTypes", "createClass", "findDOMNode"],
+								"message": "React 19 deprecated/removed APIs. PureComponent (use function components), createFactory (use JSX), PropTypes (use TypeScript), createClass (use function components), findDOMNode (use refs)."
+							},
+							"react-dom": {
+								"importNames": ["render", "hydrate", "unmountComponentAtNode", "findDOMNode"],
+								"message": "React 19 removed legacy ReactDOM APIs. Use createRoot().render(), hydrateRoot(), root.unmount(), and refs instead of findDOMNode."
+							},
+							"react-dom/server": {
+								"importNames": ["renderToString", "renderToStaticMarkup"],
+								"message": "Consider migrating to React 19's new server rendering APIs for better performance."
+							},
+							"react-dom/test-utils": {
+								"importNames": ["*"],
+								"message": "react-dom/test-utils is deprecated in React 19. Use @testing-library/react for modern testing."
+							},
+							"react-test-renderer": {
+								"importNames": ["*"],
+								"message": "react-test-renderer is deprecated in React 19. Use @testing-library/react for modern testing."
+							},
+							"prop-types": "PropTypes are removed from React 19. Use TypeScript or another type-checking solution instead."
+						}
+					}
+				},
+				"useAsConstAssertion": "error",
+				"useDefaultParameterLast": "error",
+				"useEnumInitializers": "error",
+				"useSelfClosingElements": "error",
+				"useSingleVarDeclarator": "error",
+				"noUnusedTemplateLiteral": "error",
+				"useNumberNamespace": "error",
+				"noInferrableTypes": "error",
+				"noUselessElse": "error"
+			},
+			"correctness": {
+				"useExhaustiveDependencies": {
+					"level": "warn",
+					"options": {
+						"hooks": [
+							{
+								"name": "useEffect",
+								"closureIndex": 0,
+								"dependenciesIndex": 1
+							},
+							{
+								"name": "useLayoutEffect",
+								"closureIndex": 0,
+								"dependenciesIndex": 1
+							},
+							{
+								"name": "useCallback",
+								"closureIndex": 0,
+								"dependenciesIndex": 1
+							},
+							{
+								"name": "useMemo",
+								"closureIndex": 0,
+								"dependenciesIndex": 1
+							}
+						]
+					}
+				},
+				"noUnusedImports": "error",
+				"noUnusedVariables": "error",
+				"useJsxKeyInIterable": "error",
+				"useHookAtTopLevel": "error",
+				"noUndeclaredVariables": "error",
+				"noInvalidConstructorSuper": "error",
+				"useYield": "error",
+				"noChildrenProp": "error",
+				"noVoidElementsWithChildren": "error"
+			},
+			"complexity": {
+				"noBannedTypes": "error",
+				"noUselessFragments": "warn",
+				"noExcessiveCognitiveComplexity": "off",
+				"noForEach": "off",
+				"noUselessTernary": "error"
+			},
+			"performance": {
+				"noAccumulatingSpread": "error"
+			},
+			"nursery": {
+				"useSortedClasses": "off"
+			}
+		}
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "double",
+			"jsxQuoteStyle": "double",
+			"semicolons": "asNeeded",
+			"trailingCommas": "es5",
+			"arrowParentheses": "always"
+		}
+	},
+	"json": {
+		"formatter": {
+			"enabled": true
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["**/*.js", "**/*.jsx"],
+			"linter": {
+				"rules": {
+					"nursery": {
+						"useSortedClasses": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["**/telemetry.js", "**/telemetry-*.js", "**/lib/telemetry/**"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noConsole": "off"
+					}
+				}
+			}
+		}
+	],
+	"files": {
+		"ignoreUnknown": false,
+		"experimentalScannerIgnores": [
+			"dist",
+			"coverage",
+			"node_modules",
+			"build",
+			"pdf.worker.min.js",
+			"pdf.worker.min.mjs",
+			"migrations"
+		]
+	}
+}
