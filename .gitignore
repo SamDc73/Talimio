@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+venv/
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+dist-ssr
+.vite-cache/
+
+# Logs
+logs
+*.log
+pnpm-debug.log*
+lerna-debug.log*
+
+# IDEs and Editors
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+backend/.env.test
+
+# Compiled output
+dist/
+build/
+
+# Tool-specific files
+backend/monkeytype.sqlite3
+
+# Added by Task Master AI
+dev-debug.log
+# Dependency directories
+# Environment variables
+# Editor directories and files
+.idea
+.vscode
+*.sw?
+# OS specific
+# Task files
+tasks.json
+tasks/
+# Build output
+dist
+public/pdf.worker.min.js
+.serena/cache/
