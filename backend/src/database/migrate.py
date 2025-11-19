@@ -36,6 +36,62 @@ def _read_sql(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _parse_dotenv(path: Path) -> dict[str, str]:
+    """Parse a simple KEY=VALUE .env file into a dict.
+
+    - Ignores lines starting with '#'
+    - Trims surrounding quotes for values
+    - Does not support export/variable expansion (keep it minimal and safe)
+    """
+    result: dict[str, str] = {}
+    try:
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            key = key.strip()
+            val = val.strip().strip("'\"")
+            if key:
+                result[key] = val
+    except FileNotFoundError:
+        pass
+    except Exception:
+        logger.debug("Failed parsing dotenv at %s", path, exc_info=True)
+    return result
+
+
+def _interpolate_env(sql: str) -> str:
+    """Replace known ${VAR} placeholders in SQL with env values.
+
+    Currently supports:
+    - ${RAG_EMBEDDING_OUTPUT_DIM} (default "768")
+    - ${MEMORY_EMBEDDING_OUTPUT_DIM} (default "1536")
+
+    Reads from process env first; if absent, attempts backend/.env relative to this file.
+    Falls back to safe defaults if the values are missing or invalid.
+    """
+    # Read from process env
+    rag_dim = os.getenv("RAG_EMBEDDING_OUTPUT_DIM")
+    mem_dim = os.getenv("MEMORY_EMBEDDING_OUTPUT_DIM")
+
+    # If missing, try backend/.env (two levels up from src/database)
+    if not rag_dim or not mem_dim:
+        backend_root = Path(__file__).resolve().parents[2]
+        dotenv_path = backend_root / ".env"
+        env_map = _parse_dotenv(dotenv_path) if dotenv_path.exists() else {}
+        rag_dim = rag_dim or env_map.get("RAG_EMBEDDING_OUTPUT_DIM")
+        mem_dim = mem_dim or env_map.get("MEMORY_EMBEDDING_OUTPUT_DIM")
+
+    # Sanitize to numeric strings; fall back to defaults on invalid values
+    rag_dim = rag_dim if isinstance(rag_dim, str) and rag_dim.isdigit() else "768"
+    mem_dim = mem_dim if isinstance(mem_dim, str) and mem_dim.isdigit() else "1536"
+
+    return sql.replace("${RAG_EMBEDDING_OUTPUT_DIM}", rag_dim).replace("${MEMORY_EMBEDDING_OUTPUT_DIM}", mem_dim)
+
+
 def _sorted_sql_files(directory: Path) -> list[Path]:
     return sorted(file for file in directory.iterdir() if file.suffix == ".sql")
 
@@ -119,13 +175,11 @@ async def apply_migrations(db_engine: AsyncEngine | None = None) -> None:
                     if path.name in applied:
                         continue
 
-                    sql_content = _read_sql(path)
+                    sql_content = _interpolate_env(_read_sql(path))
                     autocommit = _is_autocommit(sql_content)
 
                     if autocommit:
-                        async with engine.execution_options(
-                            isolation_level="AUTOCOMMIT"
-                        ).connect() as auto_conn:
+                        async with engine.execution_options(isolation_level="AUTOCOMMIT").connect() as auto_conn:
                             await auto_conn.exec_driver_sql(sql_content)
                     else:
                         async with conn.begin():
