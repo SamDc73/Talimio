@@ -267,7 +267,7 @@ async def create_book_endpoint(
         # Upload book through facade
         facade = BooksFacade()
         result = await facade.upload_book(
-            user_id=auth.user_id, file_path=file_path, title=final_title, metadata=book_metadata
+            user_id=auth.user_id, file_path=file_path, title=final_title, metadata=book_metadata, session=auth.session
         )
 
         if not result.get("success"):
@@ -316,20 +316,6 @@ async def update_book_endpoint(book_id: UUID, book_data: BookUpdate, auth: Curre
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
         logger.exception(f"Error updating book {book_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
-
-
-@router.delete("/{book_id}")
-async def delete_book_endpoint(book_id: UUID, auth: CurrentAuth) -> None:
-    """Delete a book."""
-    try:
-        facade = BooksFacade()
-        await facade.delete_book(book_id, auth.user_id)
-    except ValueError as e:
-        # Book not found
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except Exception as e:
-        logger.exception(f"Error deleting book {book_id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
@@ -489,9 +475,7 @@ async def _handle_range_request(
 
 
 @router.get("/{book_id}/content", response_model=None)
-async def stream_book_content(
-    book_id: UUID, request: Request, auth: CurrentAuth
-) -> StreamingResponse | FileResponse:
+async def stream_book_content(book_id: UUID, request: Request, auth: CurrentAuth) -> StreamingResponse | FileResponse:
     """Stream book PDF content through backend to avoid CORS issues.
 
     This endpoint acts as a proxy, fetching the book from storage and

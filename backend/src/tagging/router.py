@@ -24,7 +24,7 @@ from .service import TaggingService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/tags", tags=["tags"])
+router = APIRouter(prefix="/api/v1/tags", tags=["tags"])
 
 
 async def get_tagging_service(

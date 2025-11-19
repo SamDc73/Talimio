@@ -10,10 +10,8 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import BackgroundTasks, HTTPException
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.courses.models import Course
 from src.database.session import async_session_maker
 
 from .services.course_content_service import CourseContentService
@@ -261,88 +259,7 @@ class CoursesFacade:
             logger.exception(f"Error getting courses for user {user_id}: {e}")
             return {"error": f"Failed to get courses: {e!s}", "success": False}
 
-    async def delete_course(self, db: Any, course_id: UUID, user_id: UUID) -> None:
-        """
-        Delete a course.
 
-        Args:
-            db: Database session
-            course_id: Course ID to delete
-            user_id: User ID for ownership validation
-
-        Raises
-        ------
-            ValueError: If course not found or user doesn't own it
-        """
-        # Get course with user validation
-        query = select(Course).where(Course.id == course_id, Course.user_id == user_id)
-        result = await db.execute(query)
-        course = result.scalar_one_or_none()
-
-        if not course:
-            msg = f"Course {course_id} not found"
-            raise ValueError(msg)
-
-        # Delete unified progress (user_progress) for this user+course (no FK cascade exists)
-        try:
-            from sqlalchemy import text  # local import to avoid broad module import churn
-
-            await db.execute(
-                text(
-                    "DELETE FROM user_progress "
-                    "WHERE user_id = :user_id AND content_id = :content_id AND content_type = 'course'"
-                ),
-                {"user_id": str(user_id), "content_id": str(course_id)},
-            )
-            logger.info("Deleted progress for course", extra={"user_id": str(user_id), "course_id": str(course_id)})
-        except Exception as e:
-            # Log but don't fail course deletion
-            logger.warning(
-                "Failed to delete progress for course",
-                extra={"user_id": str(user_id), "course_id": str(course_id), "error": str(e)},
-            )
-
-        # Delete tag associations for this user+course (no FK cascade exists)
-        try:
-            from sqlalchemy import and_, delete  # local import to mirror books cleanup pattern
-
-            from src.tagging.models import TagAssociation
-
-            await db.execute(
-                delete(TagAssociation).where(
-                    and_(
-                        TagAssociation.content_id == course.id,
-                        TagAssociation.content_type == "course",
-                        TagAssociation.user_id == user_id,
-                    )
-                )
-            )
-            logger.info(
-                "Deleted tag associations for course",
-                extra={"user_id": str(user_id), "course_id": str(course_id)},
-            )
-        except Exception as e:
-            logger.warning(
-                "Failed to delete tag associations for course",
-                extra={"user_id": str(user_id), "course_id": str(course_id), "error": str(e)},
-            )
-
-        # Delete the course (cascade handles related records)
-        await db.delete(course)
-        # Note: Commit is handled by the caller (content_service)
-
-        # Delete RAG chunks (best-effort, will be done after caller commits)
-        try:
-            from src.ai.rag.service import RAGService
-
-            chunks_deleted = await RAGService.delete_chunks_by_course_id(db, str(course_id))
-            if chunks_deleted > 0:
-                logger.info(f"Deleted {chunks_deleted} RAG chunks for course {course_id}")
-        except Exception as e:
-            # Log but don't fail - this is best-effort cleanup
-            logger.warning(f"Could not delete RAG chunks for course {course_id}: {e}")
-
-        logger.info(f"Deleted course {course_id}")
 
     async def get_course_lessons(self, course_id: UUID, user_id: UUID) -> dict[str, Any]:
         """Get course lessons grouped by modules."""

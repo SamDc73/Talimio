@@ -98,24 +98,6 @@ async def update_video(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
-@router.delete("/{video_id}")
-# @api_rate_limit  # TODO: Enable rate limiting with request parameter
-async def delete_video(
-    video_id: str,
-    auth: CurrentAuth,
-) -> None:
-    """Delete a video."""
-    try:
-        await video_service.delete_video(db=auth.session, video_id=video_id, user_id=auth.user_id)
-        await auth.session.commit()
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except Exception as e:
-        logger.exception(f"Error deleting video {video_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
-
-
-
 
 
 @router.get("/{video_id}/chapters")

@@ -473,18 +473,6 @@ class VideoService:
 
 
 
-    async def delete_video(self, db: AsyncSession, video_id: str, user_id: UUID) -> None:
-        """Delete a video."""
-        # Get video with user validation (optimized single query)
-        video = await self._get_user_video(db, video_id, user_id)
-
-        # Delete RAG chunks first
-        from src.ai.rag.service import RAGService
-
-        await RAGService.delete_chunks_by_doc_id(db, str(video.id), doc_type="video")
-
-        await db.delete(video)
-        # Note: Commit is handled by the caller (content_service)
 
     async def fetch_video_info(self, url: str) -> dict[str, Any]:
         """Fetch video information using yt-dlp."""

@@ -88,16 +88,28 @@ async def unarchive_content_endpoint(
 @api_rate_limit
 async def delete_content(
     request: Request,  # noqa: ARG001
-    content_type: ContentType,
+    content_type: str,
     content_id: str,
     auth: CurrentAuth,
     db: DbSession,
 ) -> None:
-    """Delete a content item by type and ID."""
+    """Delete a content item by type and ID.
+
+    Accepts both 'youtube' and 'video' for videos.
+    """
+    # Map alias 'video' to ContentType.YOUTUBE
+    ct_value = content_type.lower()
+    if ct_value == "video":
+        mapped_type = ContentType.YOUTUBE
+    elif ct_value in (ContentType.YOUTUBE.value, ContentType.BOOK.value, ContentType.COURSE.value):
+        mapped_type = ContentType(ct_value)
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported content type: {content_type}")
+
     content_service = ContentService(session=db)
     try:
         await content_service.delete_content(
-            content_type=content_type,
+            content_type=mapped_type,
             content_id=content_id,
             user_id=auth.user_id,
         )
