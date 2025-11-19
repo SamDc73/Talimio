@@ -25,6 +25,11 @@ logger = logging.getLogger(__name__)
 _memory_client: AsyncMemory | None = None
 
 
+def _memory_is_configured() -> bool:
+    """Return True if required MEMORY_* vars are set."""
+    return bool(env("MEMORY_LLM_MODEL") and env("MEMORY_EMBEDDING_MODEL"))
+
+
 def _resolve_embedding_dims() -> int:
     """Return configured embedding dimension with validation."""
     raw_value = env("MEMORY_EMBEDDING_OUTPUT_DIM", "1536")
@@ -93,6 +98,10 @@ async def get_memory_client() -> AsyncMemory:
     global _memory_client  # noqa: PLW0603
 
     if _memory_client is None:
+        if not _memory_is_configured():
+            # Memory explicitly disabled via missing config; do nothing
+            msg = "Memory disabled (MEMORY_* not set)"
+            raise RuntimeError(msg)
         try:
             config = _get_memory_config()
             mem0_config = MemoryConfig(**config)
@@ -114,6 +123,8 @@ async def add_memory(
     run_id: str | None = None,
 ) -> dict[str, Any]:
     """Add memory for a user."""
+    if not _memory_is_configured():
+        return {}
     try:
         client = await get_memory_client()
 
@@ -150,6 +161,8 @@ async def get_memories(
     run_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Get all memories for a user."""
+    if not _memory_is_configured():
+        return []
     try:
         client = await get_memory_client()
         results = await client.get_all(
@@ -178,6 +191,8 @@ async def search_memories(
     run_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Search memories for a user."""
+    if not _memory_is_configured():
+        return []
     # Handle empty queries
     if not query or not query.strip():
         logger.debug(f"Empty query, using get_memories for user {user_id}")
@@ -205,6 +220,8 @@ async def search_memories(
 
 async def delete_memory(user_id: UUID, memory_id: str) -> bool:
     """Delete a specific memory."""
+    if not _memory_is_configured():
+        return False
     try:
         client = await get_memory_client()
         await client.delete(memory_id)
@@ -232,4 +249,7 @@ async def cleanup_memory_client() -> None:
 
 async def warm_memory_client() -> None:
     """Initialize the AsyncMemory client so the first request skips cold start."""
+    if not _memory_is_configured():
+        logger.info("Memory disabled; skipping warm-up")
+        return
     await get_memory_client()

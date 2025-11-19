@@ -44,8 +44,13 @@ class TaggingService:
         """Generate tags using LiteLLM structured outputs (Instructor fallback handled upstream)."""
         model = os.getenv("TAGGING_LLM_MODEL")
         if not model:
-            logger.warning("TAGGING_LLM_MODEL not set in environment, skipping tag generation")
-            return []
+            try:
+                from src.config.settings import get_settings
+                model = get_settings().primary_llm_model
+                logger.info("TAGGING_LLM_MODEL not set; falling back to PRIMARY_LLM_MODEL: %s", model)
+            except Exception:
+                logger.warning("No TAGGING_LLM_MODEL and PRIMARY_LLM_MODEL unavailable; skipping tag generation")
+                return []
 
         messages = [
             {"role": "system", "content": CONTENT_TAGGING_PROMPT},
