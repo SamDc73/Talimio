@@ -7,7 +7,6 @@ import { defineConfig, loadEnv } from "vite"
 const Dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig(({ mode }) => {
-	// Load env file based on `mode` in the current working directory.
 	const env = loadEnv(mode, process.cwd(), "")
 
 	return {
@@ -16,21 +15,42 @@ export default defineConfig(({ mode }) => {
 			alias: {
 				"@": path.resolve(Dirname, "./src"),
 			},
+			dedupe: ["react", "react-dom"],
 		},
 		optimizeDeps: {
-			include: ["react-pdf", "pdfjs-dist", "react-window"],
-			exclude: ["pdfjs-dist/build/pdf.worker.min.mjs"],
-			esbuildOptions: {
-				target: "esnext",
-			},
+			include: ["three", "@react-three/fiber", "@react-three/drei", "@react-three/postprocessing", "postprocessing"],
 		},
 		build: {
+			// The PDF engine and app bundle are large; split vendor libs into separate chunks
+			chunkSizeWarningLimit: 3000,
 			rollupOptions: {
-				external: [/pdf\.worker\.min\.mjs$/],
+				output: {
+					manualChunks(id) {
+						if (!id.includes("node_modules")) return undefined
+						if (id.includes("@embedpdf") || id.includes("pdfium")) return "pdf"
+						if (id.includes("@uiw") || id.includes("@codemirror") || id.includes("codemirror")) return "codemirror"
+						if (id.includes("@assistant-ui")) return "assistant"
+						if (id.includes("@tanstack")) return "react-query"
+						if (id.includes("framer-motion")) return "framer-motion"
+						if (id.includes("katex") || id.includes("rehype-katex")) return "katex"
+						if (id.includes("@mdx-js") || id.includes("remark") || id.includes("rehype")) return "mdx"
+						if (id.includes("lucide-react")) return "icons"
+						if (id.includes("three") || id.includes("@react-three") || id.includes("postprocessing")) return "three"
+						if (id.includes("react-force-graph") || id.includes("reagraph") || id.includes("@cosmograph")) return "viz"
+						return undefined
+					},
+				},
 			},
 		},
 		server: {
 			port: Number.parseInt(env.VITE_DEV_SERVER_PORT || "5173"),
+			fs: {
+				allow: [".."],
+			},
+			watch: {
+				usePolling: true,
+				interval: 1000,
+			},
 			proxy: {
 				"/api": {
 					target: env.VITE_PROXY_TARGET || "http://localhost:8080",
@@ -38,21 +58,16 @@ export default defineConfig(({ mode }) => {
 					secure: false,
 					ws: true,
 					configure: (proxy, _options) => {
-						proxy.on("error", (err, _req, _res) => {
-							console.log("proxy error", err)
-						})
+						proxy.on("error", (_err, _req, _res) => {})
 						proxy.on("proxyReq", (proxyReq, req, _res) => {
 							// Forward cookies from the original request
 							if (req.headers.cookie) {
 								proxyReq.setHeader("Cookie", req.headers.cookie)
 							}
-							console.log("Proxying:", req.method, req.url, "with cookies:", req.headers.cookie?.substring(0, 50))
 						})
-						proxy.on("proxyRes", (proxyRes, req, _res) => {
-							console.log("Proxy response:", proxyRes.statusCode, req.url)
+						proxy.on("proxyRes", (proxyRes, _req, _res) => {
 							// Log set-cookie headers if present
 							if (proxyRes.headers["set-cookie"]) {
-								console.log("Setting cookies:", proxyRes.headers["set-cookie"])
 							}
 						})
 					},

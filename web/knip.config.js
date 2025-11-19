@@ -1,0 +1,32 @@
+export default {
+	entry: ["src/main.jsx"],
+	project: ["src/**/*.{js,jsx}"],
+	ignore: [
+		"node_modules/**",
+		"dist/**",
+		"build/**",
+		"coverage/**",
+		"public/**",
+		"src/**/*.test.{js,jsx}",
+		"src/**/*.spec.{js,jsx}",
+		"src/tests/**",
+		"**/*.d.ts",
+	],
+	ignoreDependencies: [
+		"@types/*",
+		"eslint*",
+		"prettier",
+		"biome",
+		"playwright",
+		"@vitejs/plugin-react",
+		"postcss",
+		"tailwindcss",
+		"autoprefixer",
+		"vite",
+	],
+	ignoreExportsUsedInFile: true,
+	vite: false, // Disable vite plugin that's causing issues
+	vitest: false,
+	eslint: false,
+	postcss: false,
+}
