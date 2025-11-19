@@ -44,8 +44,6 @@ class RAGService:
             self._document_processor = DocumentProcessor()
         return self._document_processor
 
-
-
     async def upload_document(
         self,
         auth: AuthContext,
@@ -78,12 +76,11 @@ class RAGService:
                 file_size_mb = len(file_content) / (1024 * 1024)
                 if file_size_mb > self.config.max_file_size_mb:
                     logger.warning(
-                        "File %s too large: %.2fMB > %dMB limit",
-                        filename, file_size_mb, self.config.max_file_size_mb
+                        "File %s too large: %.2fMB > %dMB limit", filename, file_size_mb, self.config.max_file_size_mb
                     )
                     raise HTTPException(
                         status_code=413,
-                        detail=f"File too large: {file_size_mb:.1f}MB exceeds {self.config.max_file_size_mb}MB limit"
+                        detail=f"File too large: {file_size_mb:.1f}MB exceeds {self.config.max_file_size_mb}MB limit",
                     )
 
                 from src.config.settings import get_settings
@@ -119,15 +116,14 @@ class RAGService:
             # Re-query to get a Row object that works with model_validate
             # This matches the pattern used in get_document() and get_documents()
             result = await auth.session.execute(
-                text("SELECT * FROM course_documents WHERE id = :doc_id"),
-                {"doc_id": doc.id}
+                text("SELECT * FROM course_documents WHERE id = :doc_id"), {"doc_id": doc.id}
             )
-            row = result.fetchone()
-            if row is None:
+            row_map = result.mappings().first()
+            if row_map is None:
                 msg = f"Course document {doc.id} not found after creation"
                 raise HTTPException(status_code=404, detail=msg)
 
-            return DocumentResponse.model_validate(dict(row._mapping))
+            return DocumentResponse.model_validate(row_map)
 
         except Exception as e:
             await auth.session.rollback()
@@ -148,12 +144,12 @@ class RAGService:
             result = await session.execute(
                 text("SELECT * FROM course_documents WHERE id = :doc_id"), {"doc_id": document_id}
             )
-            doc_row = result.fetchone()
-            if not doc_row:
+            row_map = result.mappings().first()
+            if row_map is None:
                 msg = f"Document {document_id} not found"
                 raise ValueError(msg)
 
-            doc_dict = dict(doc_row._mapping)
+            doc_dict = dict(row_map)
 
             # Extract text using Unstructured parser
             text_content = ""
@@ -231,7 +227,9 @@ class RAGService:
             await session.commit()
             raise
 
-    async def _cleanup_course_source_file(self, session: AsyncSession, document_id: int, file_path_str: str | None) -> None:
+    async def _cleanup_course_source_file(
+        self, session: AsyncSession, document_id: int, file_path_str: str | None
+    ) -> None:
         """Delete a local course document source file and clear file_path in DB."""
         if not file_path_str:
             return
@@ -285,9 +283,7 @@ class RAGService:
             file_bytes = await storage.download(book.file_path)
 
             # Parse via Unstructured using a secure temp file
-            with tempfile.NamedTemporaryFile(
-                delete=False, suffix=f".{(book.file_type or 'pdf').lower()}"
-            ) as temp_file:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{(book.file_type or 'pdf').lower()}") as temp_file:
                 temp_file.write(file_bytes)
                 temp_path = temp_file.name
             try:
@@ -305,6 +301,7 @@ class RAGService:
             # Store chunks
             if not hasattr(self, "_vector_rag"):
                 from src.ai.rag.embeddings import VectorRAG
+
                 self._vector_rag = VectorRAG()
 
             await self._vector_rag.store_document_chunks_with_embeddings(
@@ -532,7 +529,8 @@ class RAGService:
                 {"course_id": str(course_id), "limit": limit, "skip": skip},
             )
 
-            return [DocumentResponse.model_validate(dict(row._mapping)) for row in result.fetchall()]
+            rows = result.mappings().all()
+            return [DocumentResponse.model_validate(row_map) for row_map in rows]
         except Exception:
             logger.exception("Failed to get documents")
             # Return empty list instead of crashing
@@ -586,8 +584,6 @@ class RAGService:
                 except Exception as e:
                     logger.warning("Failed to delete file %s: %s", doc.file_path, e)
 
-            # Old document_chunks table has been removed - chunks are now in rag_document_chunks
-            # Delete from rag_document_chunks using the doc_uuid scheme
             doc_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"document_{document_id}")
             chunks_result = await auth.session.execute(
                 text("DELETE FROM rag_document_chunks WHERE doc_id = :doc_uuid AND doc_type = 'course'"),
@@ -619,15 +615,15 @@ class RAGService:
                 """),
                 {"doc_id": document_id},
             )
-            row = result.fetchone()
+            row_map = result.mappings().first()
 
-            if not row:
+            if row_map is None:
                 raise HTTPException(status_code=404, detail="Document not found")
 
             # Verify user owns the course that contains this document
-            await auth.validate_resource("course", row.course_id)
+            await auth.validate_resource("course", row_map["course_id"])
 
-            return DocumentResponse.model_validate(dict(row._mapping))
+            return DocumentResponse.model_validate(row_map)
         except HTTPException:
             raise
         except Exception as e:
@@ -653,8 +649,8 @@ class RAGService:
         start_time = time.time()
 
         try:
-            if doc_type == "book":
-                # For books, doc_id is the book_id directly
+            if doc_type in ("book", "video"):
+                # For books and videos, doc_id is the row ID directly
                 result = await session.execute(
                     text("DELETE FROM rag_document_chunks WHERE doc_id = :doc_id AND doc_type = :doc_type"),
                     {"doc_id": document_id, "doc_type": doc_type},
@@ -728,4 +724,30 @@ class RAGService:
             logger.exception("Error deleting RAG chunks for course %s", course_id)
             await session.rollback()
             # Don't raise - this is best-effort cleanup
+            return 0
+
+    @staticmethod
+    async def purge_for_content(
+        session: AsyncSession,
+        content_type: str,
+        content_id: str,
+    ) -> int:
+        """Unified RAG purge entrypoint for content delete.
+
+        - course: delete by metadata->>'course_id'
+        - book: delete by doc_id + doc_type='book'
+        - video/youtube: delete by doc_id + doc_type='video'
+        Returns number of chunks deleted (best-effort).
+        """
+        try:
+            t = content_type.lower()
+            if t == "course":
+                return await RAGService.delete_chunks_by_course_id(session, content_id)
+            if t == "book":
+                return await RAGService.delete_chunks_by_doc_id(session, content_id, doc_type="book")
+            if t in ("video", "youtube"):
+                return await RAGService.delete_chunks_by_doc_id(session, content_id, doc_type="video")
+            return 0
+        except Exception:
+            logger.exception("RAG purge failed for %s %s", content_type, content_id)
             return 0

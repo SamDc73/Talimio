@@ -12,7 +12,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, delete, select, text
+from sqlalchemy import select
 
 from src.books.models import Book
 from src.books.schemas import BookProgressResponse, BookResponse, BookWithProgress
@@ -132,7 +132,7 @@ class BooksFacade:
             raise
 
     async def upload_book(
-        self, user_id: UUID, file_path: str, title: str, metadata: dict[str, Any] | None = None
+        self, user_id: UUID, file_path: str, title: str, metadata: dict[str, Any] | None = None, *, session=None
     ) -> dict[str, Any]:
         """Upload book file to user's library."""
         try:
@@ -143,8 +143,8 @@ class BooksFacade:
             # Ensure RAG status set to pending for processing pipeline
             data.setdefault("rag_status", "pending")
 
-            # Create the book record via content service
-            book = await self._content_service.create_book(data, user_id)
+            # Create the book record via content service (prefer request session when provided)
+            book = await self._content_service.create_book(data, user_id, session=session)
 
             book_id = getattr(book, "id", None)
             total_pages = getattr(book, "total_pages", 0)
@@ -172,9 +172,7 @@ class BooksFacade:
             return {"book": book, "success": True}
 
         except Exception as e:
-            logger.exception(
-                "Error uploading book", extra={"user_id": str(user_id), "title": title, "error": str(e)}
-            )
+            logger.exception("Error uploading book", extra={"user_id": str(user_id), "title": title, "error": str(e)})
             return {"error": f"Failed to upload book: {e!s}", "success": False}
 
     async def _auto_tag_book(self, book_id: UUID, user_id: UUID) -> list[str]:
@@ -257,80 +255,6 @@ class BooksFacade:
                 "Error updating book", extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)}
             )
             return {"error": "Failed to update book", "success": False}
-
-    async def delete_book(self, book_id: UUID, user_id: UUID) -> None:
-        """Delete book and all related data."""
-        async with async_session_maker() as session:
-            # Get book with user validation
-            result = await session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
-            book = result.scalar_one_or_none()
-
-            if not book:
-                msg = f"Book {book_id} not found"
-                raise ValueError(msg)
-
-            # Delete storage object if present (unified for pdf/epub)
-            try:
-                if getattr(book, "file_path", None):
-                    from src.storage.factory import get_storage_provider  # lazy import to avoid cycles
-
-                    storage = get_storage_provider()
-                    await storage.delete(book.file_path)
-                    logger.info(
-                        "Book file deleted from storage",
-                        extra={"user_id": str(user_id), "book_id": str(book_id), "path": book.file_path},
-                    )
-            except Exception as e:
-                # Non-fatal: continue DB cleanup
-                logger.warning(
-                    "Failed to delete book file from storage",
-                    extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)},
-                )
-
-            # Delete RAG chunks first
-            from src.ai.rag.service import RAGService
-
-            await RAGService.delete_chunks_by_doc_id(session, str(book.id), doc_type="book")
-
-            # Delete unified progress (user_progress) for this user+book
-            try:
-                await session.execute(
-                    text("DELETE FROM user_progress WHERE user_id = :user_id AND content_id = :content_id"),
-                    {"user_id": str(user_id), "content_id": str(book.id)},
-                )
-                logger.info("Deleted progress for book", extra={"user_id": str(user_id), "book_id": str(book.id)})
-            except Exception as e:
-                logger.warning(
-                    "Failed to delete progress for book",
-                    extra={"user_id": str(user_id), "book_id": str(book.id), "error": str(e)},
-                )
-
-            # Delete tag associations for this user+book (no FK cascade exists)
-            try:
-                from src.tagging.models import TagAssociation
-
-                await session.execute(
-                    delete(TagAssociation).where(
-                        and_(
-                            TagAssociation.content_id == book.id,
-                            TagAssociation.content_type == "book",
-                            TagAssociation.user_id == user_id,
-                        )
-                    )
-                )
-                logger.info(
-                    "Deleted tag associations for book",
-                    extra={"user_id": str(user_id), "book_id": str(book.id)},
-                )
-            except Exception as e:
-                logger.warning(
-                    "Failed to delete tag associations for book",
-                    extra={"user_id": str(user_id), "book_id": str(book.id), "error": str(e)},
-                )
-
-            # Delete the book (cascade handles related records)
-            await session.delete(book)
-            await session.commit()
 
     async def get_user_books(self, user_id: UUID, include_progress: bool = True) -> dict[str, Any]:
         """Get all books for user. Optionally includes progress information."""

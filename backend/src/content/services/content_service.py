@@ -1,5 +1,6 @@
 """Main content service."""
 
+import contextlib
 import logging
 from typing import Any
 from uuid import UUID
@@ -62,9 +63,7 @@ class ContentService:
 
             combined_query = " UNION ALL ".join(f"({q})" for q in queries)
             total = await QueryBuilderService.get_total_count(session, combined_query, search_term, user_id)
-            rows = await self.get_paginated_results(
-                session, combined_query, search_term, page_size, offset, user_id
-            )
+            rows = await self.get_paginated_results(session, combined_query, search_term, page_size, offset, user_id)
             items = ContentTransformService.transform_rows_to_items(rows)
 
             # PERFORMANCE OPTIMIZATION: Progress calculations removed
@@ -99,9 +98,7 @@ class ContentService:
 
             combined_query = " UNION ALL ".join(f"({q})" for q in queries)
             total = await QueryBuilderService.get_total_count(session, combined_query, search_term, user_id)
-            rows = await self.get_paginated_results(
-                session, combined_query, search_term, page_size, offset, user_id
-            )
+            rows = await self.get_paginated_results(session, combined_query, search_term, page_size, offset, user_id)
             items = ContentTransformService.transform_rows_to_items(rows)
 
             # PERFORMANCE OPTIMIZATION: Progress calculations removed
@@ -152,18 +149,122 @@ class ContentService:
         result = await session.execute(text(final_query), params)
         return list(result.all())
 
+    async def _delete_book_file(self, row: Any) -> None:
+        """Best-effort deletion of stored file for books."""
+        if getattr(row, "file_path", None):
+            try:
+                from src.storage.factory import get_storage_provider
+
+                storage = get_storage_provider()
+                await storage.delete(row.file_path)
+            except Exception:
+                logger.exception("Non-fatal: failed to delete stored file for book")
+
+    async def _delete_course_document_files(self, session: AsyncSession, course_id: UUID) -> None:
+        """Delete any local source files for course documents.
+
+        Course reference docs (used for course RAG) are stored on the local filesystem
+        during upload/processing. We remove any lingering files here to guarantee
+        no leftovers after a hard delete.
+        """
+        try:
+            result = await session.execute(
+                text(
+                    """
+                    SELECT id, file_path FROM course_documents
+                    WHERE course_id = :course_id AND file_path IS NOT NULL
+                    """
+                ),
+                {"course_id": str(course_id)},
+            )
+            rows = result.fetchall()
+            for row in rows:
+                file_path = getattr(row, "file_path", None)
+                if not file_path:
+                    continue
+                # Best-effort local unlink; ignore failures
+                try:
+                    from pathlib import Path
+
+                    p = Path(file_path)
+                    if p.exists():
+                        p.unlink()
+                except Exception:
+                    logger.debug("Non-fatal: failed to delete course doc file %s", file_path)
+        except Exception:
+            # Don't block overall deletion if this best-effort cleanup fails
+            logger.debug("Course document file cleanup failed for course %s", course_id)
+
+    async def _prune_orphan_tags(self, session: AsyncSession) -> None:
+        """Remove Tag rows that are no longer referenced by any content.
+
+        Keeps the tag table tidy after hard deletes. Safe since tags are global and
+        only valuable when associated.
+        """
+        try:
+            await session.execute(
+                text("DELETE FROM tags t WHERE NOT EXISTS (SELECT 1 FROM tag_associations ta WHERE ta.tag_id = t.id)")
+            )
+        except Exception:
+            with contextlib.suppress(Exception):
+                await session.rollback()
+
+    def _get_model_and_doc_type(self, content_type: ContentType) -> tuple[Any, str]:
+        """Map content type to ORM model and doc_type string."""
+        from src.books.models import Book
+        from src.courses.models import Course
+        from src.videos.models import Video
+
+        mapping: dict[ContentType, tuple[Any, str]] = {
+            ContentType.BOOK: (Book, "book"),
+            ContentType.YOUTUBE: (Video, "video"),
+            ContentType.COURSE: (Course, "course"),
+        }
+        if content_type not in mapping:
+            msg = f"Unsupported content type: {content_type}"
+            raise ValueError(msg)
+        return mapping[content_type]
+
+    async def _delete_user_progress(self, session: AsyncSession, user_id: UUID, row_id: UUID) -> None:
+        """Delete user progress rows; tolerate absence."""
+        try:
+            await session.execute(
+                text("DELETE FROM user_progress WHERE user_id = :user_id AND content_id = :content_id"),
+                {"user_id": str(user_id), "content_id": str(row_id)},
+            )
+        except Exception:
+            with contextlib.suppress(Exception):
+                await session.rollback()
+
+    async def _delete_tag_associations(
+        self,
+        session: AsyncSession,
+        content_type: ContentType,
+        row_id: UUID,
+    ) -> None:
+        """Delete tag associations for this content regardless of user_id."""
+        from sqlalchemy import and_, delete
+
+        from src.tagging.models import TagAssociation
+
+        tag_type = "video" if content_type == ContentType.YOUTUBE else content_type.value
+        await session.execute(
+            delete(TagAssociation).where(
+                and_(
+                    TagAssociation.content_id == row_id,
+                    TagAssociation.content_type == tag_type,
+                )
+            )
+        )
+
     async def delete_content(
         self,
         content_type: ContentType,
         content_id: str,
         user_id: UUID,
     ) -> None:
-        """Delete content by type and ID using unified service pattern."""
-        from src.books.facade import BooksFacade
-        from src.courses.facade import CoursesFacade
-        from src.videos.service import VideoService
-
-        # Use provided session or create a new one
+        """Delete a content item and all related references."""
+        # Resolve session
         if self._session:
             session = self._session
             own_session = False
@@ -172,22 +273,33 @@ class ContentService:
             own_session = True
 
         try:
-            if content_type == ContentType.BOOK:
-                books_facade = BooksFacade()
-                await books_facade.delete_book(UUID(content_id), user_id)
-            elif content_type == ContentType.YOUTUBE:
-                video_service = VideoService()
-                await video_service.delete_video(session, content_id, user_id)
-            elif content_type == ContentType.COURSE:
-                courses_facade = CoursesFacade()
-                await courses_facade.delete_course(session, UUID(content_id), user_id)
-            else:
-                error_msg = f"Unsupported content type: {content_type}"
-                raise ValueError(error_msg)
+            model, _doc_type = self._get_model_and_doc_type(content_type)
 
-            # Always commit the deletion to persist changes
+            # Parse UUID and load row with ownership check
+            obj_id = UUID(content_id)
+            row = await session.get(model, obj_id)
+            if row is None or getattr(row, "user_id", None) != user_id:
+                msg = f"{content_type.value.capitalize()} {content_id} not found"
+                raise ValueError(msg)
+
+            # Remove RAG chunks and any stored files
+            from src.ai.rag.service import RAGService
+
+            await RAGService.purge_for_content(session, content_type.value, str(obj_id))
+            if content_type == ContentType.BOOK:
+                await self._delete_book_file(row)
+            elif content_type == ContentType.COURSE:
+                # Also remove any lingering uploaded course document source files
+                await self._delete_course_document_files(session, obj_id)
+
+            # Cross-module cleanup
+            await self._delete_user_progress(session, user_id, obj_id)
+            await self._delete_tag_associations(session, content_type, obj_id)
+            await self._prune_orphan_tags(session)
+
+            # Delete the content row and commit once
+            await session.delete(row)
             await session.commit()
         finally:
-            # Close session if we created it
             if own_session:
                 await session.__aexit__(None, None, None)
