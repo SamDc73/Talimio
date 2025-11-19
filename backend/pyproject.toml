@@ -1,11 +1,79 @@
 [project]
-name = "learning-roadmap"
+name = "Talimio"
 version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    # Core
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    # Database
+    "sqlalchemy>=2.0.0",
+    "psycopg[binary,pool]>=3.2.0",
+    # Settings & Validation
+    "pydantic[email]>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+    # Authentication
+    "pyjwt>=2.8.0",
+    "supabase>=2.0.0",
+    # AI
+    "litellm>=1.75.7",
+    "pgvector>=0.3.0",
+    "instructor>=1.7.0",
+    "mem0ai>=0.1.116",
+    "chonkie>=1.2.1",
+    "dspy>=3.0.3",
+    # Video
+    "yt-dlp>=2024.0.0",
+    # Document Processing
+    "pymupdf>=1.24.0",
+    "pdfminer-six>=20250506",
+    "python-docx>=1.0.0",
+    "pillow-heif>=1.1.0",
+    "python-multipart>=0.0.5",
+    "readabilipy>=0.2.0",
+    "markdownify>=0.11.0",
+    "beautifulsoup4>=4.12.0",
+    "requests>=2.31.0",
+    "goose3>=3.1.0",
+    "unstructured[epub,pdf]>=0.10.0",
+    # Markdown/MDX & Conversion
+    "mdxjs-py>=0.1.0a2",
+    "pypandoc-binary>=1.15",
+    # Rate limiting & Security
+    "slowapi>=0.1.9",
+    "itsdangerous>=2.2.0",
+    # Storage
+    "aioboto3>=15.1.0",
+    # Logging
+    "loguru>=0.7.3",
+    # Code Execution
+    "e2b-code-interpreter>=2.0.0",
+]
 
+[dependency-groups]
+dev = [
+    # Development tools
+    "uv>=0.4.0",
+    "ruff>=0.7.0",
+    "aiosqlite>=0.21.0",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.26.0",
+    "pytest-sugar>=1.0.0",
+    "httpx>=0.28.1",
+    "respx>=0.22.0",
+    "pytest-timeout>=2.4.0",
+]
 
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+
+[tool.ruff.format]
+quote-style = "double"
+line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = 80
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -36,7 +104,9 @@ ignore = [
     "FBT001",   # boolean-typed-positional-argument (often acceptable for internal APIs)
     "FBT002",   # boolean-default-positional-argument (often acceptable for internal APIs)
     "N815",     # variable should be lowercase (mixedCase in Pydantic models with aliases)
-    "E402"
+    "E402",     # module-import-not-at-top-of-file
+    "TC001",    # typing-only-first-party-import (we use from __future__ import annotations)
+    "TC003"     # typing-only-standard-library-import  (we use from __future__ import annotations)
 ]
 fixable = ["ALL"]
 
@@ -50,42 +120,33 @@ fixable = ["ALL"]
 convention = "numpy"
 
 [tool.ruff.lint.mccabe]
-max-complexity = 10
+max-complexity = 15
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
 lines-after-imports = 2
 
-[tool.ruff.format]
-quote-style = "double"
-line-ending = "auto"
-docstring-code-format = true
-docstring-code-line-length = 80
-
-
-[tool.mypy]
-# Essential settings only
-python_version = "3.11"
-ignore_missing_imports = true
-check_untyped_defs = true
-disable_error_code = ["misc"]
-plugins = [
-    "pydantic.mypy",
-]
-
-[[tool.mypy.overrides]]
-module = ["fastapi.*", "alembic.*"]
-ignore_missing_imports = true
-
+[tool.ruff.lint.pep8-naming]
+classmethod-decorators = ["classmethod", "pydantic.validator", "pydantic.root_validator"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["."]
-filterwarnings = [
-    "ignore::DeprecationWarning",
-    "ignore::UserWarning",
-]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--tb=short -v --failed-first"
+pythonpath = [".", "tests/fixtures"]
+markers = [
+    "smoke: Critical tests for quick validation",
+    "integration: Integration tests with database",
+    "e2e: End-to-end tests",
+    "single_user: Tests specific to single-user mode",
+    "multi_user: Tests specific to multi-user mode",
+    "performance: Performance benchmarks",
+]
+
 
 [tool.coverage.run]
 source = ["src"]
@@ -103,30 +164,7 @@ exclude_lines = [
     "if __name__ == .__main__.:",
 ]
 
-[tool.pyright]
-include = ["src"]
-exclude = ["**/node_modules",
-    "**/__pycache__",
-]
-useLibraryCodeForTypes = true
-reportMissingTypeStubs = false
-
-[dependency-groups]
-dev = [
-    "aiosqlite>=0.21.0",
-    "httpx>=0.28.1",
-    "pytest>=8.3.5",
-    "pytest-asyncio>=0.26.0",
-    "pytest-sugar>=1.0.0",
-]
-test = [
-    "playwright>=1.54.0",
-    "pytest-playwright>=0.7.0",
-]
-
 [tool.ty.rules]
-# Ty rules configuration (valid as of 2025)
-# Note: Ty is still in early development and has fewer rules than mypy
 invalid-assignment = "error"
 invalid-argument-type = "error"
 invalid-return-type = "error"
@@ -144,11 +182,6 @@ root = [".", "src"]
 [tool.ty.terminal]
 error-on-warning = false
 output-format = "full"
-
-[tool.ruff.lint.pep8-naming]
-classmethod-decorators = ["classmethod", "pydantic.validator", "pydantic.root_validator"]
-
-
 
 # Security scanning
 [tool.bandit]
