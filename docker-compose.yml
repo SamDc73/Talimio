@@ -1,0 +1,107 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: talimio_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: talimio
+      POSTGRES_USER: talimio
+      POSTGRES_PASSWORD: talimio
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U talimio -d talimio"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  backend:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm
+    container_name: talimio_backend
+    depends_on:
+      postgres:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+    working_dir: /app
+    command: >
+      /bin/sh -c "uv sync --frozen --no-dev &&
+                   exec uv run uvicorn src.main:app --host 0.0.0.0 --port 8080"
+    environment:
+      DATABASE_URL: postgresql+psycopg://talimio:talimio@postgres:5432/talimio
+      AUTH_PROVIDER: "none"
+      STORAGE_PROVIDER: "local"
+      LOCAL_STORAGE_PATH: /data/uploads
+      OLLAMA_API_BASE: http://ollama:11434
+      PRIMARY_LLM_MODEL: "ollama/gpt-oss:20b"
+      RAG_EMBEDDING_MODEL: "ollama/nomic-embed-text"
+      RAG_EMBEDDING_OUTPUT_DIM: "768"
+      # E2B_API_KEY: # required to have executable code blocks
+      # Memory system (mem0) explicit configuration
+      # MEMORY_LLM_MODEL: "ollama/gpt-oss:20b"
+      # MEMORY_EMBEDDING_MODEL: "openai/text-embedding-3-small" # this have to be openai model.
+      # MEMORY_EMBEDDING_OUTPUT_DIM: "1536"
+      # Optional provider keys (set if using cloud models)
+      # OPENAI_API_KEY: ""
+      # OPENROUTER_API_KEY: ""
+      # ANTHROPIC_API_KEY: ""
+      # GEMINI_API_KEY: ""
+      # DEEPSEEK_API_KEY: ""
+      # HUGGINGFACE_API_KEY: ""
+    volumes:
+      - ./backend:/app:Z
+      - backend-uploads:/data/uploads
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  frontend:
+    image: node:25-bookworm
+    container_name: talimio_frontend
+    depends_on:
+      - backend
+    working_dir: /app
+    command: >
+      /bin/sh -c "npm i -g pnpm@10 &&
+                   pnpm install --frozen-lockfile &&
+                   exec pnpm run dev --host 0.0.0.0 --port 5173"
+    environment:
+      VITE_DEV_SERVER_PORT: "5173"
+      VITE_ENABLE_AUTH: "false"
+      VITE_PROXY_TARGET: http://backend:8080
+      PNPM_HOME: /pnpm
+    volumes:
+      - ./web:/app:Z
+      - frontend-node-modules:/app/node_modules
+      - frontend-pnpm-store:/pnpm
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+
+  # Local LLM service (comment out if you don't need localAI)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    # GPU acceleration (optional)
+    gpus: "all"
+
+
+
+volumes:
+  postgres-data:
+  backend-uploads:
+  frontend-node-modules:
+  frontend-pnpm-store:
+  ollama-data:
