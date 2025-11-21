@@ -1,10 +1,12 @@
 # Talimio
 
-An all-in-one, AI-powered learning platform. Create custom courses, chat with your books and videos, highlight to make flashcards, and it adapts as you learn.
+An all-in-one, AI-powered learning platform. Create custom courses, chat with your books and videos, and it adapts as you learn.
 
 ## Quick Start (Docker Compose)
 
 Prerequisites: Docker and Docker Compose installed.
+
+Environment: All required .env values are defined directly in `docker-compose.yml`. You do not need `backend/.env`. To customize, edit the backend service `environment` block and optionally uncomment provider API keys.
 
 1. Clone the repo
 
@@ -13,73 +15,73 @@ git clone https://github.com/SamDc73/Talimio.git
 cd Talimio
 ```
 
-2. Prepare backend env
-
-```
-cp backend/.env.example backend/.env
-```
-
-3. Start the stack
+2. Start the stack
 
 ```
 docker compose up -d
 ```
 
-4. Open the apps
+3. Open the apps
 
 - Frontend: http://localhost:5173
 - API (FastAPI): http://localhost:8080
 
-5. Learn and have fun, and give feadback!
+4. Optional: Pull Ollama models (first run)
+
+- Skip if you use cloud LLMs and set provider keys in `docker-compose.yml`.
 
 ```
-docker compose down                 # stop
-# or remove data too (CAUTION)
-docker compose down -v              # stop and remove named volumes
+docker exec -it ollama ollama pull gpt-oss:20b
+docker exec -it ollama ollama pull nomic-embed-text
+```
+
+Note: To disable the local LLM, comment out the `ollama` service in `docker-compose.yml` and set `PRIMARY_LLM_MODEL` to a cloud model. Provide the relevant API key(s) in the same `environment` block.
+
+5. Stop/Update the stack
+
+```
+docker compose down
 # update later
 docker compose pull && docker compose up -d
 ```
 
-### Models (Ollama) and Auto‑Pull
-
-- Set models via env; any value starting with `ollama/` is auto‑pulled by the Ollama service at startup:
-  - `PRIMARY_LLM_MODEL=ollama/llama3.2:3b`
-  - `RAG_EMBEDDING_MODEL=ollama/nomic-embed-text`
-  - `MEMORY_LLM_MODEL=ollama/llama3.2:3b`
-  - `MEMORY_EMBEDDING_MODEL=openai/text-embedding-3-small` (requires `OPENAI_API_KEY` to use memory embeddings)
-  - `MEMORY_EMBEDDING_OUTPUT_DIM=1536`
-
-- Don’t want auto‑pull? First request will lazy‑pull the model (slower cold start), or pre‑pull manually:
-  - Docker:
-    - `docker compose exec talimio_ollama ollama pull llama3.2:3b`
-    - `docker compose exec talimio_ollama ollama pull nomic-embed-text`
-  - Or via HTTP API:
-    - `curl -s http://localhost:11434/api/pull -d '{"name":"llama3.2:3b"}'`
-    - `curl -s http://localhost:11434/api/pull -d '{"name":"nomic-embed-text"}'`
-
 ## Local Development (without Docker)
 
-Backend (Python 3.12+, uv):
+1. Clone the repo
+
+```
+git clone https://github.com/SamDc73/Talimio.git
+cd Talimio
+```
+
+2. Backend (Python 3.12+, uv):
 
 ```
 cd backend
 uv sync
+cp .env.example .env
 uv run uvicorn src.main:app --reload --port 8080
 ```
 
-Frontend (Node + pnpm):
+3. Frontend (Node + pnpm):
+
+- Now in a diffrent tab/window:
 
 ```
 cd web
+cp .env.example .env
 pnpm install
-pnpm dev   # http://localhost:5173
+pnpm dev
 ```
 
-The dev frontend proxies API calls to `http://localhost:8080` by default.
+4. Now you can open the apps:
+
+- Frontend: http://localhost:5173
+- API (FastAPI): http://localhost:8080
 
 ## Contributing
 
-Start tiny. Most merged PRs are under 50 lines and take 5–10 minutes. Small wins compound and we review those fastest.
+Any type of contribution is greatly apprietiated!
 
 ### First timer flow:
 
@@ -104,5 +106,4 @@ Start tiny. Most merged PRs are under 50 lines and take 5–10 minutes. Small wi
 
 ## Support
 
-Questions, help, or feedback? Join our Discord:
-https://discord.gg/YMCUFFjkCV
+Questions, help, or feedback? Join our [Discord](https://discord.gg/YMCUFFjkCV)
