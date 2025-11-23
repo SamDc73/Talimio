@@ -852,8 +852,8 @@ Output strictly as JSON conforming to the `ExecutionPlan` schema:
 - `summary`: short explanation of the plan (<= 2 sentences).
 - `files`: list of objects with `path`, `content`, and optional `executable` boolean.
 - `actions`: ordered list of steps. Each step MUST be one of:
-    - `{ "type": "command", "command": "...", "user": "sandbox" | "root" }`
-        - Use `user: "root"` only for package installs that require elevated permissions. Default to `sandbox` otherwise.
+    - `{ "type": "command", "command": "...", "user": "user" | "root" }`
+        - Use `user: "root"` only for package installs that require elevated permissions. Default to `user` otherwise.
     - `{ "type": "patch", "path": "...", "language": "python", "original": "...", "replacement": "...", "explanation": "why" }`
         - Only emit patch actions for code snippets ≤ 100 lines. The replacement must be runnable as-is and include any imports/constants it needs.
         - Preserve surrounding context so replacements succeed verbatim.
@@ -864,6 +864,7 @@ Output strictly as JSON conforming to the `ExecutionPlan` schema:
 - `environment`: map of env vars required by subsequent commands.
 
 Important formatting rules:
+- 'files' and 'actions' must be arrays of objects (not stringified JSON)
 - Commands must be raw strings without placeholders or comments.
 - Do not wrap commands in shell conditionals. Use separate commands instead (e.g., `test -f ... || touch ...`).
 - Use absolute or sensible relative paths (`/home/user/`, project directories under `/home/user/project`, etc.).

@@ -34,7 +34,7 @@ class PlanAction(BaseModel):
 
     type: Literal["command", "patch"] = Field(description="Action type")
     command: str | None = Field(default=None, description="Shell command to execute")
-    user: Literal["sandbox", "root"] | None = Field(
+    user: Literal["user", "root"] | None = Field(
         default=None,
         description="Sandbox user to execute command as",
     )
@@ -85,8 +85,8 @@ class PlanAction(BaseModel):
     @classmethod
     def _default_user(cls, value: str | None, info: ValidationInfo) -> str:
         if info.data.get("type") == "command":
-            return value or "sandbox"
-        return "sandbox"
+            return value or "user"
+        return "user"
 
 
 class Lesson(BaseModel):
