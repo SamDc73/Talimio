@@ -6,9 +6,13 @@ import { ThemeProvider } from "@/contexts/ThemeContext"
 import { ChatSidebarProvider } from "@/features/assistant/contexts/ChatSidebarContext"
 import AuthPage from "@/features/auth/AuthPage"
 import BookViewer from "@/features/book-viewer/BookViewer"
-import CoursePage from "@/features/course/CoursePage"
+import { CourseProvider } from "@/features/course/CourseContext.jsx"
+import CourseLayout from "@/features/course/components/CourseLayout.jsx"
+import DocumentsView from "@/features/course/views/DocumentsView.jsx"
+import OutlineView from "@/features/course/views/OutlineView.jsx"
+import TrackView from "@/features/course/views/TrackView.jsx"
 import HomePage from "@/features/home"
-import LessonPage from "@/features/lesson/LessonPage"
+import LessonContent from "@/features/lesson/LessonContent.jsx"
 import { VideoViewer } from "@/features/video-viewer/VideoViewer"
 
 function App() {
@@ -30,23 +34,24 @@ function App() {
 							}
 						/>
 
-						{/* Course routes */}
+						{/* Course routes (nested layout) */}
 						<Route
-							path="/course/:courseId"
+							path="/course/:courseId/*"
 							element={
 								<ProtectedRoute>
-									<CoursePage />
+									<CourseProvider>
+										<CourseLayout />
+									</CourseProvider>
 								</ProtectedRoute>
 							}
-						/>
-						<Route
-							path="/course/:courseId/lesson/:lessonId"
-							element={
-								<ProtectedRoute>
-									<LessonPage />
-								</ProtectedRoute>
-							}
-						/>
+						>
+							<Route index element={<OutlineView />} />
+							<Route path="track" element={<TrackView />} />
+							<Route path="documents" element={<DocumentsView />} />
+							<Route path="lesson/:lessonId" element={<LessonContent />} />
+							{/* Fallback: unknown nested path redirects to outline */}
+							<Route path="*" element={<Navigate to="." replace />} />
+						</Route>
 
 						{/* Content routes */}
 						<Route

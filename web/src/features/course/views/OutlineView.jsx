@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/Button"
 import { MasteryCircle } from "@/components/MasteryCircle"
 import { useCourseService } from "@/features/course/api/courseApi"
-
+import { useCourseContext } from "@/features/course/CourseContext.jsx"
 import OutlineNode from "@/features/course/components/navigation/OutlineNode.jsx"
 import { useCourseProgress } from "@/features/course/hooks/useCourseProgress"
 import { useCourseNavigation } from "@/utils/navigationUtils"
@@ -89,7 +89,9 @@ function BuildForecast(meta) {
 	}
 }
 
-function OutlineView({ courseId, modules = [], adaptiveEnabled = false }) {
+function OutlineView() {
+	const { courseId, modules, adaptiveEnabled } = useCourseContext()
+
 	const { isCompleted, metadata, rawMetadata, toggleCompletion } = useCourseProgress(courseId)
 	const { goToLesson } = useCourseNavigation()
 	const courseService = useCourseService(courseId)

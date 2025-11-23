@@ -13,6 +13,7 @@ import { CheckCircle2, Plus, RefreshCw, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/Button"
 import { Card } from "@/components/Card"
+import { useCourseContext } from "@/features/course/CourseContext.jsx"
 import DocumentList from "@/features/course/components/DocumentList"
 import { DocumentStatusSummary } from "@/features/course/components/DocumentStatusBadge"
 import DocumentUploadModal from "@/features/course/components/DocumentUploadModal"
@@ -22,12 +23,12 @@ import { usePolling } from "../hooks/usePolling"
 
 const POLLING_INTERVAL = 5000 // 5 seconds
 
-function DocumentsView({ courseId }) {
+function DocumentsView() {
+	const { courseId } = useCourseContext()
 	const [documents, setDocuments] = useState([])
 	const [isLoading, setIsLoading] = useState(true)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [showUploadModal, setShowUploadModal] = useState(false)
-	const [_selectedDocument, setSelectedDocument] = useState(null)
 
 	const documentsService = useDocumentsService(courseId)
 
@@ -125,7 +126,6 @@ function DocumentsView({ courseId }) {
 	}, [])
 
 	const handleViewDocument = useCallback((document) => {
-		setSelectedDocument(document)
 		logger.track("document_view_attempted", {
 			documentId: document.id,
 		})

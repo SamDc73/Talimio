@@ -1,46 +1,113 @@
+import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom"
+
 import FullPageLoader from "@/components/FullPageLoader"
 import { CourseHeader } from "@/components/header/CourseHeader"
-import { CourseSidebar } from "@/components/sidebar"
-import CourseView from "@/features/course/CourseView"
-import { useCourseContext } from "@/features/course/hooks/useCourseContext"
+import CourseSidebar from "@/components/sidebar/CourseSidebar.jsx"
+import { useCourseContext } from "@/features/course/CourseContext.jsx"
 import { cn } from "@/lib/utils"
-import useAppStore, { selectSidebarOpen } from "@/stores/useAppStore"
-import { useCourseNavigation } from "@/utils/navigationUtils"
+import useAppStore, { selectSidebarOpen, selectToggleSidebar } from "@/stores/useAppStore"
+
+function getModeFromPath(pathname, courseId) {
+	if (!courseId) {
+		return "outline"
+	}
+
+	const base = `/course/${courseId}`
+
+	if (pathname.startsWith(`${base}/track`)) {
+		return "track"
+	}
+
+	if (pathname.startsWith(`${base}/documents`)) {
+		return "documents"
+	}
+
+	// Lesson routes share the same header mode as outline
+	return "outline"
+}
+
 /**
  * Layout component for course/lesson pages.
  * Provides persistent header and sidebar that don't unmount during navigation.
  */
 export default function CourseLayout() {
 	const isOpen = useAppStore(selectSidebarOpen)
-	const { goToLesson } = useCourseNavigation()
+	const toggleSidebar = useAppStore(selectToggleSidebar)
+	const navigate = useNavigate()
+	const { pathname } = useLocation()
+	const { lessonId } = useParams()
 
 	// Course context is only loaded when this layout is rendered
-	const { courseId, lessonId, mode, setMode, courseName, modules, isLoading } = useCourseContext()
+	const { courseId, courseName, modules, adaptiveEnabled, adaptiveProgressPct, isLoading } = useCourseContext()
 
-	const handleLessonClick = (_moduleId, lessonId) => {
-		// The sidebar passes (moduleId, lessonId) but we only need lessonId for navigation
-		goToLesson(courseId, lessonId)
+	const mode = getModeFromPath(pathname, courseId)
+
+	const handleModeChange = (nextMode) => {
+		if (!courseId || nextMode === mode) {
+			return
+		}
+
+		if (nextMode === "track") {
+			navigate(`/course/${courseId}/track`)
+			return
+		}
+
+		if (nextMode === "documents") {
+			navigate(`/course/${courseId}/documents`)
+			return
+		}
+
+		// Default to outline
+		navigate(`/course/${courseId}`)
+	}
+
+	const handleLessonClick = (_moduleId, clickedLessonId) => {
+		if (!courseId || !clickedLessonId) {
+			return
+		}
+		navigate(`/course/${courseId}/lesson/${clickedLessonId}`)
 	}
 
 	const contentClasses = cn("flex flex-1 pt-16 pb-8 transition-all duration-300 ease-in-out", isOpen ? "ml-80" : "ml-0")
 
 	if (isLoading) {
-		return <FullPageLoader />
+		return <FullPageLoader message="Loading your course..." />
+	}
+
+	if (!courseId) {
+		return (
+			<div className="flex h-screen items-center justify-center">
+				<div className="text-center">
+					<h2 className="mb-2 text-xl font-semibold">Course Not Found</h2>
+					<p className="mb-4 text-muted-foreground">No course ID provided.</p>
+				</div>
+			</div>
+		)
 	}
 
 	return (
 		<div className="flex min-h-screen flex-col bg-background">
-			<CourseHeader mode={mode} onModeChange={setMode} courseId={courseId} courseName={courseName} />
+			<CourseHeader
+				mode={mode}
+				onModeChange={handleModeChange}
+				courseId={courseId}
+				courseName={courseName}
+				adaptiveEnabled={adaptiveEnabled}
+				progress={adaptiveProgressPct}
+				isOpen={isOpen}
+				toggleSidebar={toggleSidebar}
+			/>
 			<div className="flex h-screen">
 				<CourseSidebar
 					modules={modules || []}
 					onLessonClick={handleLessonClick}
 					courseId={courseId}
 					activeLessonId={lessonId}
+					adaptiveEnabled={adaptiveEnabled}
+					adaptiveProgressPct={adaptiveProgressPct}
 				/>
 				<div className={contentClasses}>
-					{/* Render CourseView directly with proper props */}
-					<CourseView mode={mode} modules={modules} courseId={courseId} />
+					<Outlet />
 				</div>
 			</div>
 			{/* ChatSidebar is globally mounted in App.jsx */}

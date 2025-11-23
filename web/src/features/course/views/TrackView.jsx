@@ -2,9 +2,12 @@ import { useQuery } from "@tanstack/react-query"
 import { Loader2 } from "lucide-react"
 import { useMemo } from "react"
 import { useCourseService } from "@/features/course/api/courseApi"
+import { useCourseContext } from "@/features/course/CourseContext.jsx"
 import TrackPath from "@/features/course/components/TrackPath"
 
-export default function TrackView({ courseId, modules = [], adaptiveEnabled = false }) {
+export default function TrackView() {
+	const { courseId, modules, adaptiveEnabled } = useCourseContext()
+
 	const courseService = useCourseService(courseId)
 
 	const { data, isLoading } = useQuery({
