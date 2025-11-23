@@ -34,9 +34,6 @@ export function useCourseService(courseId = null) {
 	const updateLesson = useApi("/courses/{courseId}/lessons/{lessonId}", {
 		method: "PATCH",
 	})
-	const deleteLesson = useApi("/courses/{courseId}/lessons/{lessonId}", {
-		method: "DELETE",
-	})
 
 	return {
 		// ========== COURSE OPERATIONS ==========
@@ -211,14 +208,6 @@ export function useCourseService(courseId = null) {
 		 * Delete a lesson
 		 * @param {string} lessonId - Lesson ID
 		 */
-		async deleteLesson(lessonId) {
-			if (!courseId || !lessonId) {
-				throw new Error("Course ID and Lesson ID required")
-			}
-			return await deleteLesson.execute(null, {
-				pathParams: { courseId, lessonId },
-			})
-		},
 
 		/**
 		 * Submit adaptive lesson reviews
@@ -264,7 +253,6 @@ export function useCourseService(courseId = null) {
 				generateLesson.isLoading ||
 				regenerateLesson.isLoading ||
 				updateLesson.isLoading ||
-				deleteLesson.isLoading ||
 				submitReviewsEndpoint.isLoading ||
 				getConceptNextReview.isLoading
 			)
@@ -285,7 +273,6 @@ export function useCourseService(courseId = null) {
 				generateLesson.error ||
 				regenerateLesson.error ||
 				updateLesson.error ||
-				deleteLesson.error ||
 				submitReviewsEndpoint.error ||
 				getConceptNextReview.error
 			)
