@@ -127,14 +127,18 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 				// Clear optimistic state on success
 				setOptimisticCompletions((prev) => {
 					const newState = { ...prev }
-					allIds.forEach((id) => delete newState[id])
+					allIds.forEach((id) => {
+						delete newState[id]
+					})
 					return newState
 				})
 			} catch (error) {
 				// Revert optimistic update on error
 				setOptimisticCompletions((prev) => {
 					const newState = { ...prev }
-					allIds.forEach((id) => delete newState[id])
+					allIds.forEach((id) => {
+						delete newState[id]
+					})
 					return newState
 				})
 				logger.error("Failed to toggle multiple chapter completions", error, {

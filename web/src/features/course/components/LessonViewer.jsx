@@ -105,7 +105,7 @@ export function LessonViewer({
 			<div className="max-w-4xl w-full mx-auto px-4 flex justify-center">
 				<div className="w-full rounded-lg border border-border bg-card shadow-sm flex flex-col my-8">
 					{/* Header */}
-						<div className="border-b border-border bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-6">
+					<div className="border-b border-border bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-6">
 						<div className="flex items-center justify-between mb-5">
 							<Button onClick={onBack} variant="secondary" size="sm">
 								<ArrowLeft className="w-4 h-4" />
@@ -169,7 +169,13 @@ export function LessonViewer({
 								)}
 
 								{nextLesson ? (
-									<Button type="button" variant="default" size="sm" onClick={() => onLessonNavigate(nextLesson.id)} className="ml-auto">
+									<Button
+										type="button"
+										variant="default"
+										size="sm"
+										onClick={() => onLessonNavigate(nextLesson.id)}
+										className="ml-auto"
+									>
 										Next Lesson
 										<ArrowRight className="w-4 h-4" />
 									</Button>
