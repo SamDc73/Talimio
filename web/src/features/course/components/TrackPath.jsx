@@ -187,7 +187,7 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 		}
 	}, [initialPositioningDone])
 
-	// Note: Lesson viewing is now handled by CoursePage via navigation
+	// Note: Lesson viewing is handled by the nested CourseLayout via routing
 
 	// Normalize available ids set for quick lookups (undefined => no locking)
 	const availableSet = Array.isArray(availableLessonIds) ? new Set(availableLessonIds.map((v) => String(v))) : null
