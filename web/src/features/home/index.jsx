@@ -9,7 +9,8 @@ import { MainHeader } from "@/components/header/MainHeader"
 import CoursePromptModal from "@/features/course/CoursePromptModal"
 import ContentCard from "@/features/home/components/ContentCard"
 import ContentGrid from "@/features/home/components/ContentGrid"
-import { DialogsContainer } from "@/features/home/components/dialogs/DialogsContainer"
+import { BookUploadDialog } from "@/features/home/components/dialogs/BookUploadDialog"
+import { YouTubeDialog } from "@/features/home/components/dialogs/YouTubeDialog"
 import FabMenu from "@/features/home/components/FABMenu"
 import FilterBadges from "@/features/home/components/FilterBadges"
 import PinnedSection from "@/features/home/components/PinnedSection"
@@ -260,7 +261,17 @@ export default function HomePage() {
 						onAddYoutube={() => dialogs.setShowYoutubeDialog(true)}
 					/>
 
-					<DialogsContainer dialogs={dialogs} onBookUploaded={handleBookUploaded} onVideoAdded={handleVideoAdded} />
+					<BookUploadDialog
+						open={dialogs.showUploadDialog}
+						onOpenChange={dialogs.setShowUploadDialog}
+						onBookUploaded={handleBookUploaded}
+					/>
+
+					<YouTubeDialog
+						open={dialogs.showYoutubeDialog}
+						onOpenChange={dialogs.setShowYoutubeDialog}
+						onVideoAdded={handleVideoAdded}
+					/>
 
 					<CoursePromptModal
 						isOpen={dialogs.showCourseModal}
