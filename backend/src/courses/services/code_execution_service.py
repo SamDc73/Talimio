@@ -44,7 +44,9 @@ try:  # pragma: no cover - available when SDK is installed
         CommandExitException,
     )
 except Exception:  # pragma: no cover - fallback when the SDK structure changes
-    AuthenticationException = InvalidArgumentException = NotEnoughSpaceException = RateLimitException = TimeoutException = SandboxException = Exception  # type: ignore[assignment]
+    AuthenticationException = InvalidArgumentException = NotEnoughSpaceException = RateLimitException = (
+        TimeoutException
+    ) = SandboxException = Exception  # type: ignore[assignment]
     CommandExitException = SandboxException  # type: ignore[assignment]
 
 # Trim noisy SDK logs by default; configurable via env
@@ -101,10 +103,7 @@ FAST_PATH_TEMPLATES = {
 FAST_PATH_INSTALLERS = {
     "go": [
         "apt-get update",
-        (
-            "DEBIAN_FRONTEND=noninteractive DEBCONF_NOWARNINGS=yes "
-            "apt-get install -y --no-install-recommends golang-go"
-        ),
+        ("DEBIAN_FRONTEND=noninteractive DEBCONF_NOWARNINGS=yes apt-get install -y --no-install-recommends golang-go"),
     ],
 }
 
@@ -167,7 +166,13 @@ class CodeExecutionService:
         # Create fresh sandbox
         # We allow internet access to enable on-demand installs later if desired.
         logging.info("Creating new E2B sandbox key=%s ttl=%s", key, self.sandbox_ttl)
-        sbx = await AsyncSandbox.create(timeout=self.sandbox_ttl)
+        try:
+            sbx = await AsyncSandbox.create(timeout=self.sandbox_ttl)
+        except Exception as exc:
+            # Retry once on transient network/loop cleanup issues
+            logging.warning("Sandbox create failed once for key=%s: %s; retrying", key, exc)
+            await asyncio.sleep(0.2)
+            sbx = await AsyncSandbox.create(timeout=self.sandbox_ttl)
         self._sessions[key] = (now, sbx)
         return sbx
 
@@ -572,17 +577,20 @@ class CodeExecutionService:
             normalized_command = command.strip()
             if not normalized_command:
                 continue
-            logging.info("Sandbox command user=%s cmd=%s", user or "sandbox", normalized_command)
+            run_user = user or "user"
+            logging.info("Sandbox command user=%s cmd=%s", run_user, normalized_command)
             try:
                 result = await sbx.commands.run(
                     cmd=normalized_command,
                     envs=envs or None,
                     timeout=240,
                     request_timeout=300,
-                    user=user,
+                    user=run_user,
                 )
             except CommandExitException as exc:  # type: ignore[misc]
-                stderr_chunks.append(exc.stderr)
+                stderr_text = getattr(exc, "stderr", "")
+                if stderr_text:
+                    stderr_chunks.append(stderr_text)
                 error_message = f"Command failed: {normalized_command}"
                 raise CodeExecutionError(
                     error_message,
@@ -728,6 +736,8 @@ class CodeExecutionService:
                     raise
         except Exception:
             logging.exception("Failed to persist patch for lesson lesson_id=%s", lesson_id)
+
+
 async def _maybe_await(value: Any) -> Any:
     if asyncio.iscoroutine(value):
         return await value
