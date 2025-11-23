@@ -1,87 +1,114 @@
+import { motion } from "framer-motion"
+import { Loader2, Youtube } from "lucide-react"
 import { useState } from "react"
+
 import { createVideo } from "@/api/videosApi"
 import { Button } from "@/components/Button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
 import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/Sheet"
 
 export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 	const [youtubeUrl, setYoutubeUrl] = useState("")
 	const [isAddingVideo, setIsAddingVideo] = useState(false)
 
-	const handleYoutubeAdd = async () => {
-		if (!youtubeUrl.trim() || (!youtubeUrl.includes("youtube.com") && !youtubeUrl.includes("youtu.be"))) {
-			return
-		}
+	const trimmedUrl = youtubeUrl.trim()
+	const isValidUrl = Boolean(trimmedUrl) && (trimmedUrl.includes("youtube.com") || trimmedUrl.includes("youtu.be"))
 
-		if (isAddingVideo) return // Prevent duplicate submissions
+	const handleOpenChange = (nextOpen) => {
+		if (!nextOpen) handleClose()
+	}
+
+	const handleClose = () => {
+		if (isAddingVideo) return
+		setYoutubeUrl("")
+		onOpenChange(false)
+	}
+
+	const handleYoutubeAdd = async () => {
+		if (!isValidUrl || isAddingVideo) return
 
 		setIsAddingVideo(true)
 		try {
 			const response = await createVideo(youtubeUrl)
 
-			// Reset form and close dialog
+			// Reset and close
 			setYoutubeUrl("")
 			onOpenChange(false)
 
-			// Notify parent
-			if (onVideoAdded) {
-				onVideoAdded(response)
-			}
-		} catch (error) {
-			let _errorMessage = "Failed to add video. Please try again."
-			if (error.message?.includes("503")) {
-				_errorMessage = "YouTube service is temporarily unavailable. Please try again in a few moments."
-			} else if (error.message?.includes("Invalid YouTube URL")) {
-				_errorMessage = "The URL you entered is not a valid YouTube video URL."
-			}
+			if (onVideoAdded) onVideoAdded(response)
+		} catch (_error) {
+			// Intentionally quiet – parent surfaces toast if needed
 		} finally {
 			setIsAddingVideo(false)
 		}
 	}
 
-	const handleClose = () => {
-		if (!isAddingVideo) {
-			setYoutubeUrl("")
-			onOpenChange(false)
-		}
-	}
-
 	return (
-		<Sheet open={open} onOpenChange={handleClose}>
-			<SheetContent side="bottom" className="sm:max-w-lg mx-auto">
-				{isAddingVideo && (
-					<div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg">
-						<div className="flex flex-col items-center gap-4">
-							<div className="animate-spin rounded-full h-10 w-10 border-b-2 border-video" />
-							<p className="text-lg font-medium">Adding your video...</p>
+		<Dialog open={open} onOpenChange={handleOpenChange}>
+			<DialogContent className="sm:max-w-[560px] gap-5">
+				<motion.div
+					aria-busy={isAddingVideo}
+					initial={{ opacity: 0, y: 8 }}
+					animate={{ opacity: 1, y: 0 }}
+					exit={{ opacity: 0, y: -8 }}
+					transition={{ duration: 0.18 }}
+					className="space-y-5"
+				>
+					<DialogHeader className="space-y-2">
+						<div className="flex items-center gap-3">
+							<div className="rounded-lg bg-gradient-to-br from-video/90 to-video p-2.5">
+								<Youtube className="h-5 w-5 text-white" />
+							</div>
+							<DialogTitle className="text-2xl">Add a YouTube Video</DialogTitle>
 						</div>
-					</div>
-				)}
-				<SheetHeader>
-					<SheetTitle>Add a YouTube Video</SheetTitle>
-					<SheetDescription>Paste a YouTube URL to start learning from it.</SheetDescription>
-				</SheetHeader>
-				<div className="py-4">
-					<div className="grid gap-2">
-						<Label htmlFor="youtube-url">YouTube URL</Label>
+					</DialogHeader>
+
+					<div className="space-y-2">
+						<Label htmlFor="youtube-url" className="text-base">
+							YouTube URL
+						</Label>
 						<Input
 							id="youtube-url"
+							type="url"
 							value={youtubeUrl}
 							onChange={(e) => setYoutubeUrl(e.target.value)}
 							placeholder="https://www.youtube.com/watch?v=..."
+							autoFocus
+							autoCapitalize="none"
+							autoCorrect="off"
+							spellCheck={false}
+							disabled={isAddingVideo}
+							className="focus:outline-none focus:ring-2 focus:ring-video/20 focus:border-video focus-visible:ring-video focus-visible:ring-offset-2"
 						/>
+						<p className="text-xs text-muted-foreground">Paste any YouTube video link.</p>
 					</div>
-				</div>
-				<SheetFooter>
-					<Button variant="outline" onClick={handleClose}>
-						Cancel
-					</Button>
-					<Button onClick={handleYoutubeAdd} disabled={!youtubeUrl.trim()}>
-						Add Video
-					</Button>
-				</SheetFooter>
-			</SheetContent>
-		</Sheet>
+
+					<div className="flex justify-end gap-2.5 pt-2.5">
+						<Button type="button" variant="outline" onClick={handleClose} disabled={isAddingVideo}>
+							Cancel
+						</Button>
+						<Button
+							type="button"
+							onClick={handleYoutubeAdd}
+							disabled={!isValidUrl || isAddingVideo}
+							className="min-w-[140px] bg-video hover:bg-video-accent text-white"
+						>
+							{isAddingVideo ? (
+								<div className="flex items-center gap-2">
+									<Loader2 className="h-4 w-4 animate-spin" />
+									<span>Adding…</span>
+								</div>
+							) : (
+								<div className="flex items-center gap-2">
+									<Youtube className="h-4 w-4" />
+									<span>Add Video</span>
+								</div>
+							)}
+						</Button>
+					</div>
+				</motion.div>
+			</DialogContent>
+		</Dialog>
 	)
 }

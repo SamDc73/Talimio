@@ -4,7 +4,7 @@
 
 import { AnimatePresence, motion } from "framer-motion"
 import { HelpCircle, Loader2, Sparkles } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useState } from "react"
 
 import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
@@ -72,14 +72,6 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	const selfAssessmentEnabled = useAppStore(selectSelfAssessmentEnabled) ?? false
 	const setSelfAssessmentEnabled = useAppStore(selectSetSelfAssessmentEnabled)
 
-	useEffect(() => {
-		setAdaptiveEnabled(Boolean(defaultAdaptiveEnabled))
-	}, [defaultAdaptiveEnabled])
-
-	const shouldRunSelfAssessment = useMemo(() => {
-		return selfAssessmentEnabled
-	}, [selfAssessmentEnabled])
-
 	const resetForm = () => {
 		setPrompt("")
 		setError("")
@@ -120,7 +112,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 			return
 		}
 
-		if (shouldRunSelfAssessment) {
+		if (selfAssessmentEnabled) {
 			setError("")
 			setActiveStep(MODAL_STEPS.SELF_ASSESSMENT)
 			return
@@ -178,13 +170,14 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	const promptStepContent = (
 		<motion.div
 			key="prompt-step"
+			aria-busy={isGenerating}
 			initial={{ opacity: 0, x: 16 }}
 			animate={{ opacity: 1, x: 0 }}
 			exit={{ opacity: 0, x: -16 }}
 			transition={{ duration: 0.2 }}
-			className="space-y-6"
+			className="space-y-5"
 		>
-			<DialogHeader className="space-y-3">
+			<DialogHeader className="space-y-2">
 				<div className="flex items-center gap-3">
 					<div className="p-2.5 bg-gradient-to-br from-[var(--color-course)]/90 to-[var(--color-course)] rounded-lg">
 						<Sparkles className="h-5 w-5 text-white" />
@@ -193,8 +186,8 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 				</div>
 			</DialogHeader>
 
-			<form onSubmit={handlePromptSubmit} className="space-y-6">
-				<div className="space-y-3">
+			<form onSubmit={handlePromptSubmit} className="space-y-5">
+				<div className="space-y-2">
 					<Label htmlFor="course-prompt" className="text-base">
 						What would you like to learn?
 					</Label>
@@ -205,7 +198,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 						placeholder="Describe what you want to learn..."
 						disabled={isGenerating}
 						className={cn(
-							"w-full px-4 py-3 rounded-lg border border-border bg-background",
+							"w-full px-3.5 py-2.5 rounded-lg border border-border bg-background",
 							"text-sm leading-relaxed resize-none",
 							"focus:outline-none focus:ring-2 focus:ring-[var(--color-course)]/20 focus:border-[var(--color-course)]",
 							"placeholder:text-muted-foreground/60",
@@ -221,7 +214,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 					</div>
 				</div>
 
-				<div className="space-y-2.5">
+				<div className="space-y-2">
 					<div className="flex flex-wrap gap-2">
 						{examplePrompts.map((example) => (
 							<button
@@ -230,7 +223,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 								onClick={() => setPrompt(example)}
 								disabled={isGenerating}
 								className={cn(
-									"text-xs px-3.5 py-2 rounded-full",
+									"text-xs px-3 py-1.5 rounded-full",
 									"bg-secondary/60 hover:bg-secondary text-secondary-foreground",
 									"border border-border/40 hover:border-border",
 									"transition-all duration-200",
@@ -243,11 +236,11 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 					</div>
 				</div>
 
-				<div className="space-y-2 py-3">
+				<div className="space-y-2 py-2.5">
 					<label
 						htmlFor="enable-adaptive-mode"
 						className={cn(
-							"flex items-center gap-2.5 px-1 py-2 -mx-1 rounded-md",
+							"flex items-center gap-2.5 px-1 py-1.5 -mx-1 rounded-md",
 							"transition-colors duration-150",
 							"cursor-pointer hover:bg-muted/40",
 							isGenerating && "opacity-50 cursor-not-allowed"
@@ -283,7 +276,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 					<label
 						htmlFor="enable-self-assessment"
 						className={cn(
-							"flex items-center gap-2.5 px-1 py-2 -mx-1 rounded-md",
+							"flex items-center gap-2.5 px-1 py-1.5 -mx-1 rounded-md",
 							"transition-colors duration-150",
 							"cursor-pointer hover:bg-muted/40",
 							isGenerating && "opacity-50 cursor-not-allowed"
@@ -318,12 +311,12 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 				</div>
 
 				{error ? (
-					<div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+					<div className="p-2.5 bg-destructive/10 border border-destructive/20 rounded-lg">
 						<p className="text-sm text-destructive">{error}</p>
 					</div>
 				) : null}
 
-				<div className="flex justify-end gap-3 pt-2">
+				<div className="flex justify-end gap-2.5 pt-2.5">
 					<Button type="button" variant="outline" onClick={closeModal} disabled={isGenerating}>
 						Cancel
 					</Button>
@@ -352,11 +345,12 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	const selfAssessmentStep = (
 		<motion.div
 			key="self-assessment-step"
+			aria-busy={isGenerating}
 			initial={{ opacity: 0, x: 16 }}
 			animate={{ opacity: 1, x: 0 }}
 			exit={{ opacity: 0, x: -16 }}
 			transition={{ duration: 0.2 }}
-			className="space-y-6"
+			className="space-y-5"
 		>
 			<SelfAssessmentDialog
 				topic={prompt.trim()}
@@ -371,7 +365,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 
 	return (
 		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
-			<DialogContent className="sm:max-w-[580px] gap-6">
+			<DialogContent className="sm:max-w-[560px] gap-5">
 				<AnimatePresence mode="wait">
 					{activeStep === MODAL_STEPS.PROMPT ? promptStepContent : selfAssessmentStep}
 				</AnimatePresence>
