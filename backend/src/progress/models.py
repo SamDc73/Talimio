@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 ContentType = Literal["book", "video", "course"]
@@ -57,7 +57,9 @@ class ProgressResponse(BaseModel):
 class BatchProgressRequest(BaseModel):
     """Request model for batch progress fetching."""
 
-    content_ids: list[UUID] = Field(..., max_length=100)
+    content_ids: list[UUID] = Field(..., max_length=100, alias="contentIds")
+
+    model_config = ConfigDict(populate_by_name=True)
 
     @field_validator("content_ids")
     @classmethod
@@ -69,8 +71,10 @@ class BatchProgressRequest(BaseModel):
 class ProgressData(BaseModel):
     """Progress data with metadata."""
 
-    progress_percentage: float
+    progress_percentage: float = Field(alias="progressPercentage")
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class BatchProgressResponse(BaseModel):

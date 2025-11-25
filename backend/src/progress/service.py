@@ -63,16 +63,7 @@ class ProgressService:
         if not row:
             return None
 
-        return ProgressResponse(
-            id=row.id,
-            user_id=row.user_id,
-            content_id=row.content_id,
-            content_type=row.content_type,
-            progress_percentage=row.progress_percentage,
-            metadata=row.metadata or {},
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        )
+        return self._row_to_progress_response(row)
 
     async def update_progress(
         self,
@@ -103,16 +94,11 @@ class ProgressService:
         row = result.first()
         await self.session.commit()
 
-        return ProgressResponse(
-            id=row.id,
-            user_id=row.user_id,
-            content_id=row.content_id,
-            content_type=row.content_type,
-            progress_percentage=row.progress_percentage,
-            metadata=row.metadata or {},
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        )
+        if row is None:
+            msg = "Progress upsert did not return a row"
+            raise RuntimeError(msg)
+
+        return self._row_to_progress_response(row)
 
     async def delete_progress(self, user_id: UUID, content_id: UUID) -> bool:
         """Delete progress for a content item."""
@@ -121,14 +107,39 @@ class ProgressService:
         )
 
         await self.session.commit()
-        return result.rowcount > 0
+        affected = getattr(result, "rowcount", 0)
+        return bool(affected and affected > 0)
+
+    @staticmethod
+    def _row_to_progress_response(row: Any) -> ProgressResponse:
+        """Convert a database row into a ProgressResponse."""
+        metadata = row.metadata
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                metadata = {}
+        elif metadata is None:
+            metadata = {}
+
+        payload = {
+            "id": row.id,
+            "content_id": row.content_id,
+            "content_type": row.content_type,
+            "progress_percentage": row.progress_percentage,
+            "metadata": metadata,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+
+        return ProgressResponse.model_validate(payload)
 
     async def get_content_type(self, content_id: UUID, user_id: UUID) -> ContentType | None:
         """Determine content type by checking which table contains the content AND user owns it."""
         # Check books (uses id column which is UUID)
         result = await self.session.execute(
             text("SELECT 1 FROM books WHERE id = :content_id AND user_id = :user_id"),
-            {"content_id": str(content_id), "user_id": str(user_id)}
+            {"content_id": str(content_id), "user_id": str(user_id)},
         )
         if result.first():
             return "book"
@@ -136,7 +147,7 @@ class ProgressService:
         # Check videos (uses id column which is UUID)
         result = await self.session.execute(
             text("SELECT 1 FROM videos WHERE id = :content_id AND user_id = :user_id"),
-            {"content_id": str(content_id), "user_id": str(user_id)}
+            {"content_id": str(content_id), "user_id": str(user_id)},
         )
         if result.first():
             return "video"
@@ -144,7 +155,7 @@ class ProgressService:
         # Check courses (uses id column which is UUID)
         result = await self.session.execute(
             text("SELECT 1 FROM courses WHERE id = :content_id AND user_id = :user_id"),
-            {"content_id": str(content_id), "user_id": str(user_id)}
+            {"content_id": str(content_id), "user_id": str(user_id)},
         )
         if result.first():
             return "course"

@@ -52,9 +52,20 @@ def _build_progress_dict(progress_data: BookProgressUpdate) -> dict:
     """Build progress dictionary from update request."""
     progress_dict = {}
 
+    if (
+        progress_data.total_pages is not None
+        and progress_data.current_page is not None
+        and progress_data.current_page > progress_data.total_pages
+    ):
+        msg = "current_page cannot exceed total_pages"
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=msg)
+
     # Map current_page to page for internal use
     if progress_data.current_page is not None:
         progress_dict["page"] = progress_data.current_page
+
+    if progress_data.total_pages is not None:
+        progress_dict["total_pages"] = progress_data.total_pages
 
     if progress_data.progress_percentage is not None:
         progress_dict["completion_percentage"] = progress_data.progress_percentage
@@ -75,25 +86,6 @@ def _build_progress_dict(progress_data: BookProgressUpdate) -> dict:
         progress_dict["reading_time_minutes"] = progress_data.reading_time_minutes
 
     return progress_dict
-
-
-def _convert_to_progress_response(progress: dict, book_id: UUID) -> BookProgressResponse:
-    """Convert progress dict to response format."""
-    return BookProgressResponse(
-        id=progress.get("id"),  # None if not yet saved to database
-        book_id=book_id,
-        current_page=progress.get("page", progress.get("current_page", 1)),
-        progress_percentage=progress.get("completion_percentage", 0),
-        total_pages_read=progress.get("total_pages_read", progress.get("page", 1)),
-        reading_time_minutes=progress.get("reading_time_minutes", 0),
-        status=progress.get("status", "not_started"),
-        notes=progress.get("notes"),
-        bookmarks=progress.get("bookmarks", []),
-        toc_progress=progress.get("toc_progress", {}),
-        last_read_at=progress.get("last_accessed_at", progress.get("last_read_at")),
-        created_at=progress.get("created_at"),  # None if not yet saved
-        updated_at=progress.get("updated_at"),  # None if not yet saved
-    )
 
 
 @router.get("")
@@ -345,7 +337,7 @@ async def update_book_progress_endpoint(
             )
 
         progress = result.get("progress", {})
-        return _convert_to_progress_response(progress, book_id)
+        return BookResponseBuilder.build_progress_response(progress, book_id)
     except HTTPException:
         raise
     except Exception as e:
@@ -410,13 +402,12 @@ async def get_book_presigned_url(book_id: UUID, auth: CurrentAuth) -> dict:
 
     # Get storage provider and presigned URL
     storage = get_storage_provider()
-    url = await storage.get_download_url(book.file_path, expires_in=3600)  # 1 hour expiry
+    url = await storage.get_download_url(book.file_path)
 
     return {
         "url": url,
         "expires_in": 3600,
         "content_type": "application/pdf" if book.file_type == "pdf" else "application/epub+zip",
-        "filename": f"{book.title}.{book.file_type}",
     }
 
 
@@ -590,17 +581,18 @@ async def update_book_chapter_status_endpoint(
             )
 
         # Return a chapter response with required fields
-        return BookChapterResponse(
-            id=chapter_id,
-            book_id=book_id,
-            chapter_number=1,  # This is just a placeholder since we're using TOC chapter IDs
-            title="Chapter",  # Placeholder title
-            start_page=None,
-            end_page=None,
-            status=status_data.status,
-            created_at=None,  # Not from database, just a status update response
-            updated_at=None,  # Not from database, just a status update response
-        )
+        chapter_payload: dict[str, Any] = {
+            "id": chapter_id,
+            "book_id": book_id,
+            "chapter_number": 1,  # Placeholder since TOC chapter IDs are non-numeric
+            "title": "Chapter",
+            "start_page": None,
+            "end_page": None,
+            "status": status_data.status,
+            "created_at": None,
+            "updated_at": None,
+        }
+        return BookChapterResponse.model_validate(chapter_payload)
     except HTTPException:
         raise
     except Exception as e:

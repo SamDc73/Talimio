@@ -1,6 +1,4 @@
-"""
-SQLAlchemy models for highlights feature.
-"""
+"""SQLAlchemy models for highlights feature."""
 
 from datetime import datetime
 from uuid import UUID

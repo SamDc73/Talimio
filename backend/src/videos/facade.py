@@ -75,42 +75,8 @@ class VideosFacade:
 
     # NOTE: create_content and create_video methods removed - router uses service directly
 
-    async def add_youtube_video(
-        self, youtube_url: str, user_id: UUID, metadata: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
-        """
-        Add YouTube video to user's library.
-
-        Handles YouTube URL processing and metadata extraction.
-        """
-        try:
-            # Process YouTube URL and extract metadata
-            video_data = await self._video_service.process_youtube_url(
-                youtube_url, user_id, additional_metadata=metadata or {}
-            )
-
-            if not video_data.get("success"):
-                return video_data
-
-            video_id = video_data["video"]["id"]
-
-            # Initialize progress tracking
-            await self._progress_service.initialize_progress(
-                video_id, user_id, total_duration=video_data["video"].get("duration", 0)
-            )
-
-            return video_data
-
-        except Exception as e:
-            logger.exception(f"Error adding YouTube video {youtube_url} for user {user_id}: {e}")
-            return {"error": "Failed to add YouTube video", "success": False}
-
     async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
-        """
-        Update video watching progress.
-
-        Implements ContentFacade interface.
-        """
+        """Update video watching progress via ContentFacade contract."""
         return await self.update_video_progress(content_id, user_id, progress_data)
 
     async def update_video_progress(
@@ -134,90 +100,5 @@ class VideosFacade:
             logger.exception(f"Error updating progress for video {video_id}: {e}")
             return {"error": "Failed to update progress", "success": False}
 
-    async def update_playback_settings(self, video_id: UUID, user_id: UUID, settings: dict[str, Any]) -> dict[str, Any]:
-        """Update video playback settings (speed, quality, etc.)."""
-        try:
-            # Update playback settings
-            updated_settings = await self._progress_service.update_playback_settings(video_id, user_id, settings)
-
-            return {"settings": updated_settings, "success": True}
-
-        except Exception as e:
-            logger.exception(f"Error updating playback settings for video {video_id}: {e}")
-            return {"error": "Failed to update settings", "success": False}
-
-    async def search_videos(self, query: str, user_id: UUID, filters: dict[str, Any] | None = None) -> dict[str, Any]:
-        """
-        Search user's videos.
-
-        Provides unified search across video content and metadata.
-        """
-        try:
-            results = await self._video_service.search_videos(query, user_id, filters or {})
-
-            return {"results": results, "success": True}
-
-        except Exception as e:
-            logger.exception(f"Error searching videos for user {user_id}: {e}")
-            return {"error": "Search failed", "success": False}
-
-    async def get_user_videos(self, user_id: UUID, include_progress: bool = True) -> dict[str, Any]:
-        """
-        Get all videos for user.
-
-        Optionally includes progress information.
-        """
-        try:
-            videos = await self._video_service.get_user_videos(user_id)
-
-            if include_progress:
-                # Add progress information to each video
-                for video in videos:
-                    progress = await self._progress_service.get_progress(video.id, user_id)
-                    video.progress = progress
-
-            return {"videos": videos, "success": True}
-
-        except Exception as e:
-            logger.exception(f"Error getting videos for user {user_id}: {e}")
-            return {"error": "Failed to get videos", "success": False}
-
-    async def get_video_chapters(self, video_id: UUID, user_id: UUID) -> dict[str, Any]:
-        """Get video chapters/segments if available."""
-        try:
-            # Get chapters - need to pass db session
-            from src.database.session import async_session_maker
-
-            async with async_session_maker() as session:
-                chapters = await self._video_service.get_video_chapters(session, str(video_id), user_id)
-
-            # Add progress information for each chapter
-            if chapters:
-                progress = await self._progress_service.get_progress(video_id, user_id)
-                completed_chapters = progress.get("completed_chapters", [])
-
-                for chapter in chapters:
-                    chapter["completed"] = chapter.get("id") in completed_chapters
-
-            return {"chapters": chapters or [], "success": True}
-
-        except Exception as e:
-            logger.exception(f"Error getting chapters for video {video_id}: {e}")
-            return {"error": "Failed to get chapters", "success": False}
-
-
-    # Transcript operation (delegates to video service)
-    async def get_video_transcript(self, video_id: UUID, user_id: UUID, url: str) -> str:
-        """Get or generate transcript for a video."""
-        try:
-            # The actual transcript is fetched from the video service, not AI
-            from src.database.session import async_session_maker
-            async with async_session_maker() as session:
-                return await self._video_service.get_transcript(session, str(video_id), user_id, url)
-        except Exception as e:
-            logger.exception(f"Error getting transcript for video {video_id}: {e}")
-            raise
-
-    # AI operations removed - videos don't need direct AI interaction anymore
 
 videos_facade = VideosFacade()

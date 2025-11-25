@@ -11,6 +11,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.courses.models import Course, CourseConcept, Lesson, UserConceptState
 from src.database.session import async_session_maker
@@ -25,9 +26,18 @@ logger = logging.getLogger(__name__)
 class CourseProgressService(ProgressTracker):
     """Progress service for courses with lesson-based progress tracking functionality."""
 
+    def __init__(self, session: AsyncSession | None = None) -> None:
+        """Initialize course progress service.
+
+        When a session is provided, reuse it instead of creating a new one so
+        progress calculations share the same database/transaction as callers.
+        """
+        self._session = session
+
     async def get_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
         """Get progress data for specific course and user."""
-        async with async_session_maker() as session:
+
+        async def _inner(session: AsyncSession) -> dict[str, Any]:
             progress_service = ProgressService(session)
             progress_data = await progress_service.get_single_progress(user_id, content_id)
 
@@ -83,8 +93,10 @@ class CourseProgressService(ProgressTracker):
 
                 # Current lesson fallback (use stored metadata if present; else first lesson)
                 metadata = (progress_data.metadata if progress_data else {}) or {}
-                current_lesson = metadata.get("current_lesson") or metadata.get("current_lesson_id") or (
-                    lessons[0].id if lessons else ""
+                current_lesson = (
+                    metadata.get("current_lesson")
+                    or metadata.get("current_lesson_id")
+                    or (lessons[0].id if lessons else "")
                 )
 
                 return {
@@ -132,7 +144,9 @@ class CourseProgressService(ProgressTracker):
             progress_percentage = progress_data.progress_percentage or 0
             if total_lessons > 0 and completed_list and progress_percentage == 0:
                 try:
-                    progress_percentage = self._calculate_lesson_progress_percentage_dictsafe(completed_list, total_lessons)
+                    progress_percentage = self._calculate_lesson_progress_percentage_dictsafe(
+                        completed_list, total_lessons
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to calculate course progress percentage: {e}")
                     progress_percentage = 0
@@ -148,6 +162,12 @@ class CourseProgressService(ProgressTracker):
                 "learning_patterns": metadata.get("learning_patterns", {}),
             }
 
+        if self._session is not None:
+            return await _inner(self._session)
+
+        async with async_session_maker() as session:
+            return await _inner(session)
+
     async def calculate_completion_percentage(self, content_id: UUID, user_id: UUID) -> float:
         """Calculate completion percentage (0.0 to 100.0)."""
         progress = await self.get_progress(content_id, user_id)
@@ -155,7 +175,8 @@ class CourseProgressService(ProgressTracker):
 
     async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update progress data for specific course and user."""
-        async with async_session_maker() as session:
+
+        async def _inner(session: AsyncSession) -> dict[str, Any]:
             progress_service = ProgressService(session)
 
             # Get current progress and validate course
@@ -192,6 +213,12 @@ class CourseProgressService(ProgressTracker):
 
             # Return updated progress in expected format
             return self._format_progress_response(updated, metadata, total_lessons, course)
+
+        if self._session is not None:
+            return await _inner(self._session)
+
+        async with async_session_maker() as session:
+            return await _inner(session)
 
     async def _get_progress_context(
         self, session: Any, progress_service: Any, user_id: UUID, content_id: UUID
@@ -367,8 +394,6 @@ class CourseProgressService(ProgressTracker):
             "updated_at": updated.updated_at,
         }
 
-
-
     def _calculate_lesson_progress_percentage_dictsafe(self, completed_lessons: list[str], total_lessons: int) -> float:
         """Calculate progress percentage based on completed lessons (list form)."""
         if total_lessons == 0:
@@ -417,4 +442,3 @@ class CourseProgressService(ProgressTracker):
                 learning_patterns["overall_performance"][key] = learning_patterns["overall_performance"][key][-10:]
 
         metadata["learning_patterns"] = learning_patterns
-

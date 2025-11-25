@@ -1,16 +1,15 @@
 """Book query service for complex database operations."""
 
 import logging
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book
-from src.books.schemas import BookListResponse, BookProgressResponse, BookResponse, BookWithProgress
+from src.books.schemas import BookListResponse, BookResponse
 from src.books.services.book_response_builder import BookResponseBuilder
-from src.progress.service import ProgressService
 
 
 logger = logging.getLogger(__name__)
@@ -86,7 +85,7 @@ class BookQueryService:
 
         # Execute query
         result = await self.session.execute(query)
-        books = result.scalars().all()
+        books = cast("list[Book]", result.scalars().all())
 
         # Convert to response objects
         book_responses = BookResponseBuilder.build_book_list(books)
@@ -97,91 +96,6 @@ class BookQueryService:
             page=page,
             pages=(total + per_page - 1) // per_page,
         )
-
-    async def get_book_with_progress(self, book_id: UUID) -> BookWithProgress | None:
-        """Get a book by ID with progress information.
-
-        Args:
-            book_id: Book ID
-
-        Returns
-        -------
-            BookWithProgress: Book data with progress or None if not found
-        """
-        query = select(Book).where(
-            Book.id == book_id,
-            Book.user_id == self.user_id  # Ownership check
-        )
-        result = await self.session.execute(query)
-        book = result.scalar_one_or_none()
-
-        if not book:
-            return None
-
-        # Get unified progress for this book/user
-        progress_service = ProgressService(self.session)
-        unified = await progress_service.get_single_progress(self.user_id, book_id)
-
-        # Build response
-        book_with = BookResponseBuilder.build_book_with_progress(book, None)
-
-        if unified:
-            md = unified.metadata or {}
-            progress_response = BookProgressResponse(
-                id=unified.id,
-                book_id=book.id,
-                current_page=md.get("current_page", 1),
-                progress_percentage=unified.progress_percentage,
-                reading_time_minutes=md.get("reading_time_minutes", 0),
-                status=md.get("status", "not_started"),
-                notes=md.get("notes"),
-                bookmarks=md.get("bookmarks", []),
-                toc_progress=md.get("toc_progress", {}),
-                total_pages_read=md.get("total_pages_read", 0),
-                last_read_at=md.get("last_read_at"),
-                created_at=unified.created_at,
-                updated_at=unified.updated_at,
-            )
-            book_with.progress = progress_response
-
-        return book_with
-
-    async def search_books(
-        self,
-        query_text: str,
-        limit: int = 20,
-        include_content: bool = False,
-    ) -> list[BookResponse]:
-        """Search books by text across multiple fields.
-
-        Args:
-            query_text: Search query
-            limit: Maximum number of results
-            include_content: Whether to search in book content (future feature)
-
-        Returns
-        -------
-            List of matching books
-        """
-        _ = include_content
-        search_term = f"%{query_text}%"
-
-        # Search across title, author, description, and tags
-        query = (
-            select(Book)
-            .where(
-                Book.title.ilike(search_term)
-                | Book.author.ilike(search_term)
-                | Book.description.ilike(search_term)
-                | Book.tags.ilike(search_term)
-            )
-            .limit(limit)
-        )
-
-        result = await self.session.execute(query)
-        books = result.scalars().all()
-
-        return BookResponseBuilder.build_book_list(books)
 
     async def get_books_by_tags(self, tags: list[str], operator: str = "AND") -> list[BookResponse]:
         """Get books that match specified tags.
@@ -214,7 +128,7 @@ class BookQueryService:
                 query = query.where(or_(*tag_conditions))
 
         result = await self.session.execute(query)
-        books = result.scalars().all()
+        books = cast("list[Book]", result.scalars().all())
 
         return BookResponseBuilder.build_book_list(books)
 
@@ -250,7 +164,7 @@ class BookQueryService:
 
         # Load books and preserve order
         result = await self.session.execute(select(Book).where(Book.id.in_(ids)))
-        books = result.scalars().all()
+        books = cast("list[Book]", result.scalars().all())
         order = {str(i): idx for idx, i in enumerate(ids)}
         books.sort(key=lambda b: order.get(str(b.id), 1_000_000))
 
@@ -273,7 +187,7 @@ class BookQueryService:
         """
         # Map status to progress conditions
         # Build status-based ID selection from user_progress
-        params = {"user_id": str(self.user_id)}
+        params: dict[str, Any] = {"user_id": str(self.user_id)}
         if status == "not_started":
             id_sql = text(
                 """
@@ -332,7 +246,7 @@ class BookQueryService:
             return []
 
         result = await self.session.execute(select(Book).where(Book.id.in_(ids)))
-        books = result.scalars().all()
+        books = cast("list[Book]", result.scalars().all())
         return BookResponseBuilder.build_book_list(books)
 
     async def get_book_stats(self) -> dict[str, Any]:

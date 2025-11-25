@@ -9,7 +9,7 @@ import json
 import logging
 from typing import Any
 
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 
 logger = logging.getLogger(__name__)
@@ -29,40 +29,48 @@ class PDFHighlightData(BaseModel):
     color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Hex color code")
     note: str | None = Field(None, max_length=5000, description="User note/comment")
 
-    @validator("position")
-    def validate_position(cls, v):
+    @field_validator("position")
+    @classmethod
+    def validate_position(cls, v: dict[str, Any]) -> dict[str, Any]:
         """Validate PDF position data structure."""
         if not isinstance(v, dict):
-            raise ValueError("Position must be a dictionary")
+            msg = "Position must be a dictionary"
+            raise TypeError(msg)
 
         # Required position fields for PDF
         required_fields = {"rects", "pageNumber"}
         if not all(field in v for field in required_fields):
-            raise ValueError(f"Position must contain fields: {required_fields}")
+            msg = f"Position must contain fields: {required_fields}"
+            raise ValueError(msg)
 
         # Validate rects array
         rects = v.get("rects", [])
         if not isinstance(rects, list) or not rects:
-            raise ValueError("Position rects must be a non-empty array")
+            msg = "Position rects must be a non-empty array"
+            raise ValueError(msg)
 
         # Validate each rect
         for i, rect in enumerate(rects):
             if not isinstance(rect, dict):
-                raise ValueError(f"Rect {i} must be a dictionary")
+                msg = f"Rect {i} must be a dictionary"
+                raise TypeError(msg)
 
             rect_fields = {"x1", "y1", "x2", "y2", "width", "height"}
             if not all(field in rect for field in rect_fields):
-                raise ValueError(f"Rect {i} must contain fields: {rect_fields}")
+                msg = f"Rect {i} must contain fields: {rect_fields}"
+                raise ValueError(msg)
 
             # Validate numeric values
             for field in rect_fields:
                 if not isinstance(rect[field], (int, float)) or rect[field] < 0:
-                    raise ValueError(f"Rect {i}.{field} must be a non-negative number")
+                    msg = f"Rect {i}.{field} must be a non-negative number"
+                    raise ValueError(msg)
 
         # Validate page number consistency
         page_num = v.get("pageNumber")
         if not isinstance(page_num, int) or page_num < 1:
-            raise ValueError("Position pageNumber must be a positive integer")
+            msg = "Position pageNumber must be a positive integer"
+            raise ValueError(msg)
 
         return v
 
@@ -83,12 +91,14 @@ class VideoHighlightData(BaseModel):
     transcript_index: int | None = Field(None, ge=0, description="Index in transcript array")
     speaker: str | None = Field(None, max_length=100, description="Speaker name if available")
 
-    @validator("end_time")
-    def validate_time_range(cls, v, values):
+    @field_validator("end_time")
+    @classmethod
+    def validate_time_range(cls, v: float, info: Any) -> float:
         """Ensure end_time is after start_time."""
-        start_time = values.get("start_time")
+        start_time = getattr(info, "data", {}).get("start_time")
         if start_time is not None and v <= start_time:
-            raise ValueError("end_time must be greater than start_time")
+            msg = "end_time must be greater than start_time"
+            raise ValueError(msg)
         return v
 
 
@@ -107,13 +117,16 @@ class EPUBHighlightData(BaseModel):
     chapter: str | None = Field(None, max_length=200, description="Chapter title or identifier")
     spine_index: int | None = Field(None, ge=0, description="Spine index in EPUB")
 
-    @validator("cfi")
-    def validate_cfi(cls, v):
+    @field_validator("cfi")
+    @classmethod
+    def validate_cfi(cls, v: str) -> str:
         """Validate EPUB CFI format."""
         if not v.startswith("epubcfi("):
-            raise ValueError("CFI must start with 'epubcfi('")
+            msg = "CFI must start with 'epubcfi('"
+            raise ValueError(msg)
         if not v.endswith(")"):
-            raise ValueError("CFI must end with ')'")
+            msg = "CFI must end with ')'"
+            raise ValueError(msg)
         return v
 
 
@@ -129,6 +142,8 @@ class GenericHighlightData(BaseModel):
 
     # Allow any additional fields for extensibility
     class Config:
+        """Permit arbitrary extra fields for flexibility."""
+
         extra = "allow"
 
 
@@ -165,13 +180,13 @@ def detect_highlight_type(data: dict[str, Any]) -> str:
     return "generic"
 
 
-def validate_highlight_data(data: dict[str, Any], content_type: str | None = None) -> dict[str, Any]:
+def validate_highlight_data(data: dict[str, Any], _content_type: str | None = None) -> dict[str, Any]:
     """
     Validate highlight data against appropriate schema.
 
     Args:
         data: Raw highlight data dictionary
-        content_type: Optional content type hint ('book', 'video', etc.)
+        _content_type: Optional content type hint ('book', 'video', etc.)
 
     Returns
     -------
@@ -181,7 +196,7 @@ def validate_highlight_data(data: dict[str, Any], content_type: str | None = Non
     ------
         ValidationError: If data doesn't match any valid schema
     """
-    # Auto-detect type if not provided or if content_type is too generic
+    # Auto-detect type if not provided or if _content_type is too generic
     detected_type = detect_highlight_type(data)
 
     # Map content types to validation schemas
@@ -192,7 +207,7 @@ def validate_highlight_data(data: dict[str, Any], content_type: str | None = Non
         "generic": GenericHighlightData,
     }
 
-    # Prefer detected type over content_type for validation
+    # Prefer detected type over _content_type for validation
     schema_class = schema_map.get(detected_type, GenericHighlightData)
 
     try:
@@ -200,37 +215,38 @@ def validate_highlight_data(data: dict[str, Any], content_type: str | None = Non
         validated_data = schema_class(**data)
 
         # Return as dictionary with type annotation
-        result = validated_data.dict()
+        result = validated_data.model_dump()
         result["_validation_type"] = detected_type
 
         logger.debug(f"Successfully validated {detected_type} highlight data")
         return result
 
     except ValidationError as e:
-        logger.error(f"Validation failed for {detected_type} highlight: {e}")
+        logger.exception(f"Validation failed for {detected_type} highlight: {e}")
 
         # If strict validation fails, try generic schema as fallback
         if detected_type != "generic":
             try:
                 logger.info("Attempting fallback to generic validation")
                 validated_data = GenericHighlightData(**data)
-                result = validated_data.dict()
+                result = validated_data.model_dump()
                 result["_validation_type"] = "generic"
                 return result
             except ValidationError:
                 pass
 
         # Re-raise the original validation error
-        raise ValidationError(f"Invalid highlight data: {e}") from e
+        msg = f"Invalid highlight data: {e}"
+        raise ValidationError(msg) from e
 
 
-def validate_json_highlight_data(json_data: str | dict[str, Any], content_type: str | None = None) -> dict[str, Any]:
+def validate_json_highlight_data(json_data: str | dict[str, Any], _content_type: str | None = None) -> dict[str, Any]:
     """
     Validate highlight data from JSON string or dictionary.
 
     Args:
         json_data: JSON string or dictionary containing highlight data
-        content_type: Optional content type hint
+        _content_type: Optional content type hint
 
     Returns
     -------
@@ -246,14 +262,16 @@ def validate_json_highlight_data(json_data: str | dict[str, Any], content_type: 
         try:
             data = json.loads(json_data)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON format: {e}") from e
+            msg = f"Invalid JSON format: {e}"
+            raise ValueError(msg) from e
     else:
         data = json_data
 
     if not isinstance(data, dict):
-        raise ValueError("Highlight data must be a JSON object")
+        msg = "Highlight data must be a JSON object"
+        raise TypeError(msg)
 
-    return validate_highlight_data(data, content_type)
+    return validate_highlight_data(data, _content_type)
 
 
 def get_validation_schema_for_type(highlight_type: str) -> type[BaseModel]:

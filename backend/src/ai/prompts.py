@@ -821,11 +821,12 @@ The sandbox is a fresh Debian-based VM with internet access and these guaranteed
 
 Your job: given a programming language, source code, and optional error output, produce a structured ExecutionPlan that:
 1. Creates any necessary project files (e.g., `main.go`, `package.json`, `composer.json`, build scripts).
-2. Installs every required runtime, compiler, or dependency using the simplest official toolchain.
-3. Runs the user code once, capturing stdout/stderr.
-4. Keeps steps minimal, idempotent, and safe.
+2. Mirrors any project-specific imports by creating minimal placeholder modules/files when they are not provided (e.g., if the snippet imports `routers.products`, generate `/home/user/routers/products.py` with a functional APIRouter stub so imports succeed).
+3. Installs every required runtime, compiler, or dependency using the simplest official toolchain.
+4. Runs the user code once, capturing stdout/stderr.
+5. Keeps steps minimal, idempotent, and safe.
 
-Creative freedom: you may combine languages or tooling (e.g., install PHP via apt, then Composer packages; compile Rust using cargo; leverage Go modules). Prefer official package repositories and language-native managers. Feel free to initialize projects (`npm init -y`, `cargo new --bin`, `go mod init`, `dotnet new console`) when that simplifies execution.
+Creative freedom: you may combine languages or tooling (e.g., install PHP via apt, then Composer packages; compile Rust using cargo; leverage Go modules). Prefer official package repositories and language-native managers. Feel free to initialize projects (`npm init -y`, `cargo new --bin`, `go mod init`, `dotnet new console`) when that simplifies execution. When synthesizing placeholder files, keep them minimal but runnable (e.g., basic FastAPI routers, empty package modules) so the snippet executes without import errors.
 
 Guardrails:
 - Never use `sudo`, `curl`, `wget`, or fetch remote scripts via pipes. Stick to package managers and official CLIs available through apt or language-specific installers.

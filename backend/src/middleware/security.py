@@ -1,6 +1,8 @@
 """Security middleware."""
 
-from collections.abc import Callable
+import os
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from fastapi import Request
 from fastapi.responses import Response
@@ -11,6 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 # Simple in-memory rate limiter (scales to 100k easily)
 limiter = Limiter(key_func=get_remote_address)
+DISABLE_RATE_LIMITS = os.getenv("ENVIRONMENT") == "test" or os.getenv("DISABLE_RATE_LIMITS") == "1"
 
 
 class SimpleSecurityMiddleware(BaseHTTPMiddleware):
@@ -44,12 +47,18 @@ api_rate_limit = limiter.limit("100/minute")  # General API calls
 
 
 def create_rate_limit_dependency(
-    limit_decorator: Callable[[Callable], Callable],
-):
+    limit_decorator: Callable[[Callable[..., Any]], Callable[..., Any]],
+) -> Callable[[Request], Awaitable[None]]:
     """Create rate limit dependencies from decorators.
 
     This allows applying rate limits at router level without modifying functions.
     """
+    if DISABLE_RATE_LIMITS:
+
+        async def no_rate_limit(_request: Request) -> None:
+            return
+
+        return no_rate_limit
 
     @limit_decorator
     async def rate_limited_dependency(request: Request) -> None:

@@ -34,12 +34,10 @@ class VideoHighlightService(HighlightInterface):
         highlight_data: dict[str, Any],
     ) -> HighlightResponse:
         """Create a new highlight for a video."""
-        # Verify user owns the video
         await self._verify_video_ownership(content_id, user_id)
 
-        # Validate highlight data before creating
         try:
-            validated_data = validate_highlight_data(highlight_data, content_type="video")
+            validated_data = validate_highlight_data(highlight_data, _content_type="video")
             logger.debug(
                 f"Validated highlight data for video {content_id}: type={validated_data.get('_validation_type')}"
             )
@@ -47,9 +45,11 @@ class VideoHighlightService(HighlightInterface):
             logger.warning(f"Invalid highlight data for video {content_id}: {e}")
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid highlight data: {e!s}") from e
 
-        # Create the highlight
         highlight = Highlight(
-            user_id=user_id, content_type="video", content_id=content_id, highlight_data=validated_data
+            user_id=user_id,
+            content_type="video",
+            content_id=content_id,
+            highlight_data=validated_data,
         )
 
         try:
@@ -84,15 +84,15 @@ class VideoHighlightService(HighlightInterface):
         user_id: UUID,
     ) -> list[HighlightResponse]:
         """Get all highlights for a video."""
-        # Verify ownership first
         await self._verify_video_ownership(content_id, user_id)
 
-        # Query highlights
         query = (
             select(Highlight)
             .where(
                 and_(
-                    Highlight.user_id == user_id, Highlight.content_type == "video", Highlight.content_id == content_id
+                    Highlight.user_id == user_id,
+                    Highlight.content_type == "video",
+                    Highlight.content_id == content_id,
                 )
             )
             .order_by(Highlight.created_at.desc())
@@ -127,7 +127,6 @@ class VideoHighlightService(HighlightInterface):
         highlight_data: dict[str, Any],
     ) -> HighlightResponse:
         """Update a highlight with ownership validation."""
-        # Get the highlight
         query = select(Highlight).where(and_(Highlight.id == highlight_id, Highlight.user_id == user_id))
 
         result = await self.session.execute(query)
@@ -136,9 +135,8 @@ class VideoHighlightService(HighlightInterface):
         if not highlight:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Highlight {highlight_id} not found")
 
-        # Validate highlight data before updating
         try:
-            validated_data = validate_highlight_data(highlight_data, content_type="video")
+            validated_data = validate_highlight_data(highlight_data, _content_type="video")
             logger.debug(
                 f"Validated highlight data for update {highlight_id}: type={validated_data.get('_validation_type')}"
             )
@@ -146,7 +144,6 @@ class VideoHighlightService(HighlightInterface):
             logger.warning(f"Invalid highlight data for update {highlight_id}: {e}")
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid highlight data: {e!s}") from e
 
-        # Update the highlight data
         highlight.highlight_data = validated_data
 
         try:
@@ -174,7 +171,6 @@ class VideoHighlightService(HighlightInterface):
         user_id: UUID,
     ) -> bool:
         """Delete a highlight with ownership validation."""
-        # Delete the highlight
         stmt = delete(Highlight).where(and_(Highlight.id == highlight_id, Highlight.user_id == user_id))
 
         try:
@@ -193,7 +189,8 @@ class VideoHighlightService(HighlightInterface):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"
             ) from e
 
-        if result.rowcount == 0:
+        affected = getattr(result, "rowcount", 0) or 0
+        if affected == 0:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Highlight {highlight_id} not found")
 
         logger.info(f"Deleted highlight {highlight_id}")

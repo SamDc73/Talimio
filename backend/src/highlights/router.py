@@ -1,6 +1,4 @@
-"""
-API router for highlights functionality.
-"""
+"""API router for highlights functionality."""
 
 import logging
 from uuid import UUID
@@ -20,7 +18,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["highlights"], dependencies=[Depends(create_rate_limit_dependency(api_rate_limit))])
 
 
-@router.get("/api/v1/books/{book_id}/highlights", response_model=list[HighlightResponse])
+@router.get("/api/v1/books/{book_id}/highlights")
 async def get_book_highlights(
     book_id: UUID,
     auth: CurrentAuth,
@@ -51,13 +49,13 @@ async def get_book_highlights(
             for h in highlights
         ]
     except Exception as e:
-        logger.error(f"Error fetching highlights for book {book_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch highlights")
+        logger.exception(f"Error fetching highlights for book {book_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch highlights"
+        ) from e
 
 
-@router.post(
-    "/api/v1/books/{book_id}/highlights", response_model=HighlightResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/api/v1/books/{book_id}/highlights", status_code=status.HTTP_201_CREATED)
 async def create_book_highlight(
     book_id: UUID,
     highlight_create: HighlightCreate,
@@ -87,9 +85,11 @@ async def create_book_highlight(
             updated_at=highlight.updated_at,
         )
     except Exception as e:
-        logger.error(f"Error creating highlight for book {book_id}: {e}")
+        logger.exception(f"Error creating highlight for book {book_id}: {e}")
         await auth.session.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create highlight")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create highlight"
+        ) from e
 
 
 @router.delete("/api/v1/highlights/{highlight_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -119,12 +119,14 @@ async def delete_highlight(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting highlight {highlight_id}: {e}")
+        logger.exception(f"Error deleting highlight {highlight_id}: {e}")
         await auth.session.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete highlight")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete highlight"
+        ) from e
 
 
-@router.put("/api/v1/highlights/{highlight_id}", response_model=HighlightResponse)
+@router.put("/api/v1/highlights/{highlight_id}")
 async def update_highlight(
     highlight_id: UUID,
     highlight_update: HighlightCreate,
@@ -164,6 +166,8 @@ async def update_highlight(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error updating highlight {highlight_id}: {e}")
+        logger.exception(f"Error updating highlight {highlight_id}: {e}")
         await auth.session.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update highlight")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update highlight"
+        ) from e

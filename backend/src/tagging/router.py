@@ -1,7 +1,8 @@
 """API endpoints for tagging operations."""
 
 import logging
-from typing import Annotated
+from collections.abc import Callable
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
@@ -62,7 +63,7 @@ def validate_content_type(content_type: str) -> str:
 
 
 # Content processor mapping
-async def get_content_processor(content_type: str):
+async def get_content_processor(content_type: str) -> Callable[..., Any]:
     """Get the appropriate content processor for the given type.
 
     Args:
