@@ -125,9 +125,11 @@ class BookProgressService(ProgressTracker):
                 book_result = await session.execute(book_query)
                 book = book_result.scalar_one_or_none()
 
-                if book and book.total_pages > 0:
-                    page_based_percentage = (progress_data["page"] / book.total_pages) * 100
-                    completion_percentage = min(page_based_percentage, 100.0)
+                if book:
+                    total_pages_value = book.total_pages or 0
+                    if total_pages_value > 0:
+                        page_based_percentage = (progress_data["page"] / total_pages_value) * 100
+                        completion_percentage = min(page_based_percentage, 100.0)
 
             if "completion_percentage" in progress_data and progress_data["completion_percentage"] is not None:
                 completion_percentage = progress_data["completion_percentage"]
@@ -192,6 +194,10 @@ class BookProgressService(ProgressTracker):
                 "updated_at": updated.updated_at,
             }
 
+    async def calculate_completion_percentage(self, content_id: UUID, user_id: UUID) -> float:
+        """Calculate completion percentage for a user's book progress."""
+        progress = await self.get_progress(content_id, user_id)
+        return float(progress.get("completion_percentage", 0.0))
 
     async def mark_chapter_complete(
         self, content_id: UUID, user_id: UUID, chapter_id: str, completed: bool = True
@@ -278,7 +284,12 @@ class BookProgressService(ProgressTracker):
                     return 0
 
         # Calculate progress percentage
-        percentage = self._calculate_toc_percentage(book, toc_progress)
+        safe_toc_progress: dict = toc_progress or {}
+        if not safe_toc_progress:
+            return 0
+
+        assert book is not None  # noqa: S101 - Ensured above
+        percentage = self._calculate_toc_percentage(book, safe_toc_progress)
 
         elapsed_ms = int((datetime.now(UTC) - start_time).total_seconds() * 1000)
         logger.info(

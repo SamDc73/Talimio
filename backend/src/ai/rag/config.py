@@ -1,8 +1,7 @@
 """RAG system configuration for LiteLLM + pgvector pipeline."""
 
-
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class RAGConfig(BaseSettings):
@@ -62,18 +61,12 @@ class RAGConfig(BaseSettings):
         description="Maximum file size in MB for document processing",
     )
 
-
-
-    class Config:
-        """Pydantic configuration."""
-
-        env_prefix = "RAG_"
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        env_prefix="RAG_",
+        env_file=".env",
+        extra="ignore",
+    )
 
 
 # Global configuration instance
 rag_config = RAGConfig()
-
-
-

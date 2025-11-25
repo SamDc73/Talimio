@@ -1,12 +1,10 @@
-"""
-Pydantic schemas for highlights feature.
-"""
+"""Pydantic schemas for highlights feature."""
 
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class HighlightCreate(BaseModel):
@@ -28,5 +26,4 @@ class HighlightResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

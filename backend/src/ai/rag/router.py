@@ -47,15 +47,12 @@ async def upload_document(
 
     # Only file uploads supported in MVP (no URL crawling)
     if not file:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File upload required"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File upload required")
 
     if document_type == "url":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="URL documents not supported in MVP. Please upload a file."
+            detail="URL documents not supported in MVP. Please upload a file.",
         )
 
     file_content = None
@@ -82,22 +79,19 @@ async def upload_document(
     except ValueError as e:
         # Validation errors
         logger.exception("Validation error uploading document: %s", str(e))
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except RuntimeError as e:
         # System errors (API failures, processing errors)
         logger.exception("System error uploading document: %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Document upload temporarily unavailable"
+            detail="Document upload temporarily unavailable",
         ) from e
-    except Exception as e:
+    except Exception as e:  # pragma: no cover - unexpected safety net
         logger.exception("Unexpected error uploading document")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to upload document"
+            detail="Failed to upload document",
         ) from e
 
 
@@ -109,7 +103,7 @@ async def list_documents(
     skip: int = 0,
     limit: int = 20,
 ) -> dict:
-    """List documents for a course - with proper error handling."""
+    """List documents for a course - with graceful failure handling."""
     # Validate course access via AuthContext
     await auth.validate_resource("course", course_id)
 
@@ -122,7 +116,7 @@ async def list_documents(
         result = DocumentList(documents=documents, total=total, page=skip // limit + 1, size=limit)
         return result.model_dump(by_alias=True)
 
-    except Exception:
+    except Exception:  # pragma: no cover - defensive logging
         # Log but don't crash - return empty list
         logger.exception("Error listing documents for course %s", course_id)
         result = DocumentList(documents=[], total=0, page=1, size=limit)
@@ -154,22 +148,19 @@ async def search_documents(
     except ValueError as e:
         # Validation errors
         logger.exception("Validation error searching documents: %s", str(e))
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except RuntimeError as e:
         # System errors (API failures, search errors)
         logger.exception("System error searching documents: %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Document search temporarily unavailable"
+            detail="Document search temporarily unavailable",
         ) from e
-    except Exception as e:
+    except Exception as e:  # pragma: no cover - unexpected safety net
         logger.exception("Unexpected error searching documents")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to search documents"
+            detail="Failed to search documents",
         ) from e
 
 
@@ -179,7 +170,7 @@ async def delete_document(
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
 ) -> dict:
-    """Delete a document."""
+    """Delete a document by id, enforcing ownership."""
     try:
         # Validate user owns the document and delete it
         await rag_service.delete_document(auth, document_id)
@@ -189,25 +180,25 @@ async def delete_document(
         )
         return result.model_dump(by_alias=True)
 
+    except HTTPException:
+        # Propagate explicit HTTP errors from the service (e.g., 404)
+        raise
     except ValueError as e:
         # Validation errors (e.g., document not found, not owned by user)
         logger.exception("Validation error deleting document: %s", str(e))
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RuntimeError as e:
         # System errors
         logger.exception("System error deleting document: %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Document deletion temporarily unavailable"
+            detail="Document deletion temporarily unavailable",
         ) from e
-    except Exception as e:
+    except Exception as e:  # pragma: no cover - unexpected safety net
         logger.exception("Unexpected error deleting document")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete document"
+            detail="Failed to delete document",
         ) from e
 
 
@@ -217,29 +208,29 @@ async def get_document(
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
 ) -> dict:
-    """Get document details."""
+    """Get document details by id, enforcing ownership."""
     try:
         result = await rag_service.get_document(auth, document_id)
         return result.model_dump(by_alias=True) if hasattr(result, "model_dump") else result
+    except HTTPException:
+        # Propagate explicit HTTP errors from the service (e.g., 404)
+        raise
     except ValueError as e:
-        # Validation errors (e.g., document not found)
+        # Validation errors (kept for backward compatibility if service raises ValueError)
         logger.exception("Validation error getting document: %s", str(e))
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RuntimeError as e:
         # System errors
         logger.exception("System error getting document: %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Document retrieval temporarily unavailable"
+            detail="Document retrieval temporarily unavailable",
         ) from e
-    except Exception as e:
+    except Exception as e:  # pragma: no cover - unexpected safety net
         logger.exception("Unexpected error getting document")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to get document"
+            detail="Failed to get document",
         ) from e
 
 

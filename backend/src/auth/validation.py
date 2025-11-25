@@ -17,7 +17,7 @@ class AuthConfigValidator:
     """Validates authentication configuration consistency."""
 
     @staticmethod
-    def validate_backend_config() -> dict[str, Any]:  # noqa: C901
+    def validate_backend_config() -> dict[str, Any]:
         """Validate backend authentication configuration.
 
         Returns

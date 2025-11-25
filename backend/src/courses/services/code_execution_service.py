@@ -11,6 +11,7 @@ Sandboxes are reused per user+course with configurable TTL for compute efficienc
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import logging
 import os
@@ -26,28 +27,42 @@ from src.database.session import async_session_maker
 
 
 # Prefer AsyncSandbox; fall back if package layout differs
-try:  # e2b-code-interpreter >= 2.x
-    from e2b_code_interpreter import AsyncSandbox  # type: ignore[import-untyped]
-except Exception:  # pragma: no cover - version differences
-    AsyncSandbox = None  # type: ignore[assignment]
+_AsyncSandbox: Any | None = None
+with contextlib.suppress(Exception):  # e2b-code-interpreter >= 2.x
+    from e2b_code_interpreter import AsyncSandbox as _ImportedAsyncSandbox
 
-try:  # pragma: no cover - available when SDK is installed
-    from e2b.exceptions import (  # type: ignore[import-untyped]
-        AuthenticationException,
-        InvalidArgumentException,
-        NotEnoughSpaceException,
-        RateLimitException,
-        SandboxException,
-        TimeoutException,
+    _AsyncSandbox = _ImportedAsyncSandbox
+
+AsyncSandbox: Any | None = _AsyncSandbox
+
+_AuthenticationException: type[Exception] = Exception
+_InvalidArgumentException: type[Exception] = Exception
+_NotEnoughSpaceException: type[Exception] = Exception
+_RateLimitException: type[Exception] = Exception
+_TimeoutException: type[Exception] = Exception
+_SandboxException: type[Exception] = Exception
+_CommandExitException: type[Exception] = Exception
+
+with contextlib.suppress(Exception):
+    from e2b.exceptions import (
+        AuthenticationException as _AuthenticationException,
+        InvalidArgumentException as _InvalidArgumentException,
+        NotEnoughSpaceException as _NotEnoughSpaceException,
+        RateLimitException as _RateLimitException,
+        SandboxException as _SandboxException,
+        TimeoutException as _TimeoutException,
     )
-    from e2b.sandbox.commands.command_handle import (  # type: ignore[import-untyped]
-        CommandExitException,
+    from e2b.sandbox.commands.command_handle import (
+        CommandExitException as _CommandExitException,
     )
-except Exception:  # pragma: no cover - fallback when the SDK structure changes
-    AuthenticationException = InvalidArgumentException = NotEnoughSpaceException = RateLimitException = (
-        TimeoutException
-    ) = SandboxException = Exception  # type: ignore[assignment]
-    CommandExitException = SandboxException  # type: ignore[assignment]
+
+AuthenticationException = _AuthenticationException
+InvalidArgumentException = _InvalidArgumentException
+NotEnoughSpaceException = _NotEnoughSpaceException
+RateLimitException = _RateLimitException
+TimeoutException = _TimeoutException
+SandboxException = _SandboxException
+CommandExitException = _CommandExitException
 
 # Trim noisy SDK logs by default; configurable via env
 E2B_SDK_LOG_LEVEL = os.getenv("E2B_SDK_LOG_LEVEL", "WARNING").upper()
@@ -273,22 +288,22 @@ class CodeExecutionService:
     async def _run_code_with_handling(self, sbx: Any, source_code: str, language: str) -> Any:
         try:
             return await self._run_code(sbx, source_code, language)
-        except TimeoutException as exc:  # type: ignore[misc]
+        except TimeoutException as exc:
             msg = "Execution timed out in the sandbox. Try simplifying the workload or increasing the timeout."
             raise CodeExecutionError(msg, status_code=504, error_code="timeout") from exc
-        except RateLimitException as exc:  # type: ignore[misc]
+        except RateLimitException as exc:
             msg = "Sandbox rate limit exceeded. Please wait before retrying your code."
             raise CodeExecutionError(msg, status_code=429, error_code="rate_limit") from exc
-        except InvalidArgumentException as exc:  # type: ignore[misc]
+        except InvalidArgumentException as exc:
             msg = "Invalid execution request sent to the sandbox. Check language and inputs."
             raise CodeExecutionError(msg, status_code=400, error_code="invalid_argument") from exc
-        except NotEnoughSpaceException as exc:  # type: ignore[misc]
+        except NotEnoughSpaceException as exc:
             msg = "The sandbox ran out of available space while executing the code."
             raise CodeExecutionError(msg, status_code=507, error_code="insufficient_storage") from exc
-        except AuthenticationException as exc:  # type: ignore[misc]
+        except AuthenticationException as exc:
             msg = "Sandbox authentication failed. Verify execution credentials."
             raise CodeExecutionError(msg, status_code=502, error_code="authentication") from exc
-        except SandboxException as exc:  # type: ignore[misc]
+        except SandboxException as exc:
             msg = "Sandbox returned an error while running the code."
             raise CodeExecutionError(msg, status_code=502, error_code="sandbox_error") from exc
 
@@ -560,6 +575,23 @@ class CodeExecutionService:
             memory=None,
         )
 
+    def _select_command_user(self, command: str, override: str | None) -> str:
+        if override:
+            return override
+        lowered = command.lower()
+        privileged_markers = (
+            "apt-get",
+            "apt ",
+            "dnf ",
+            "yum ",
+            "apk ",
+            "pacman",
+        )
+        for marker in privileged_markers:
+            if marker in lowered:
+                return "root"
+        return "user"
+
     async def _run_command_list(
         self,
         sbx: Any,
@@ -577,7 +609,7 @@ class CodeExecutionService:
             normalized_command = command.strip()
             if not normalized_command:
                 continue
-            run_user = user or "user"
+            run_user = self._select_command_user(normalized_command, user)
             logging.info("Sandbox command user=%s cmd=%s", run_user, normalized_command)
             try:
                 result = await sbx.commands.run(
@@ -587,7 +619,7 @@ class CodeExecutionService:
                     request_timeout=300,
                     user=run_user,
                 )
-            except CommandExitException as exc:  # type: ignore[misc]
+            except CommandExitException as exc:
                 stderr_text = getattr(exc, "stderr", "")
                 if stderr_text:
                     stderr_chunks.append(stderr_text)
@@ -597,7 +629,7 @@ class CodeExecutionService:
                     status_code=400,
                     error_code="command_failed",
                 ) from exc
-            except Exception as exc:  # pragma: no cover
+            except Exception as exc:
                 logging.exception("Command execution failed: %s", command)
                 error_message = f"Command execution failed: {normalized_command}"
                 raise CodeExecutionError(

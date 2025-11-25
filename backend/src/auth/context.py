@@ -4,6 +4,7 @@ This introduces a thin UserContext layer that pairs the authenticated user_id
 with an AsyncSession and exposes small ownership helpers. Feature modules should
 prefer passing `CurrentAuth` instead of separate user_id/session pairs over time.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Any, TypeVar
@@ -44,9 +45,7 @@ class UserContext:
         """
         if not hasattr(model, "user_id"):
             msg = f"Model {model.__name__} has no user_id attribute; implement explicit ownership logic"
-            raise NotImplementedError(
-                msg
-            )
+            raise NotImplementedError(msg)
 
         stmt = select(model).where(model.user_id == self.user_id)
         for key, value in filters.items():
@@ -71,16 +70,12 @@ class UserContext:
         """
         if not hasattr(model, "user_id"):
             msg = f"Model {model.__name__} has no user_id attribute; implement explicit ownership logic"
-            raise NotImplementedError(
-                msg
-            )
+            raise NotImplementedError(msg)
         if not hasattr(model, id_field):
             msg = f"{model.__name__} has no id field '{id_field}'"
             raise AttributeError(msg)
 
-        stmt = select(model).where(
-            getattr(model, id_field) == record_id, model.user_id == self.user_id
-        )
+        stmt = select(model).where(getattr(model, id_field) == record_id, model.user_id == self.user_id)
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
@@ -130,12 +125,14 @@ class UserContext:
 # New preferred names
 AuthContext = UserContext
 
+
 async def get_auth_context(
     user_id: Annotated[UUID, Depends(_get_user_id)],
     session: DbSession,
 ) -> AuthContext:
     """Build an AuthContext for the current request (preferred)."""
     return AuthContext(user_id=user_id, session=session)
+
 
 CurrentAuth = Annotated[AuthContext, Depends(get_auth_context)]
 

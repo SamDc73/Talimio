@@ -8,7 +8,7 @@ from typing import Any
 from uuid import UUID
 
 import fitz  # PyMuPDF
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 from src.ai import AGENT_ID_ASSISTANT
@@ -32,16 +32,10 @@ class ContextData(BaseModel):
     content: str
     source: str
 
-    class Config:
-        """Pydantic config for immutability."""
-
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
-async def chat_with_assistant(
-    request: ChatRequest,
-    user_id: UUID
-) -> AsyncGenerator[str, None]:
+async def chat_with_assistant(request: ChatRequest, user_id: UUID) -> AsyncGenerator[str, None]:
     """
     Stream chat responses with optional context.
 
@@ -109,7 +103,9 @@ async def _build_messages(request: ChatRequest, user_id: UUID) -> list[dict[str,
             # Simple suffix mapping for metadata
             suffix_map = {
                 "book": lambda meta: f"\n[page {meta.get('page')}]" if meta.get("page") is not None else "",
-                "video": lambda meta: f"\n[time {meta.get('start')}-{meta.get('end')}s]" if meta.get("start") is not None and meta.get("end") is not None else "",
+                "video": lambda meta: f"\n[time {meta.get('start')}-{meta.get('end')}s]"
+                if meta.get("start") is not None and meta.get("end") is not None
+                else "",
             }
 
             for r in top:
@@ -140,7 +136,6 @@ async def _build_messages(request: ChatRequest, user_id: UUID) -> list[dict[str,
     messages.append({"role": "user", "content": user_message})
 
     return messages
-
 
 
 def _extract_leading_blockquote(text: str) -> str:
@@ -217,6 +212,7 @@ async def _get_rag_context(request: ChatRequest, user_id: UUID) -> list:
 
             # Dynamic import to avoid circular imports
             import importlib
+
             module = importlib.import_module(module_name)
             model_class = getattr(module, model_name)
 
@@ -225,8 +221,7 @@ async def _get_rag_context(request: ChatRequest, user_id: UUID) -> list:
                 # Ownership check
                 resource = await session.scalar(
                     _select(model_class).where(
-                        model_class.id == _UUID(str(request.context_id)),
-                        model_class.user_id == user_id
+                        model_class.id == _UUID(str(request.context_id)), model_class.user_id == user_id
                     )
                 )
                 if not resource:
@@ -406,8 +401,6 @@ async def _course_context(resource_id: UUID, context_meta: dict[str, Any]) -> Co
         content="\n".join(parts),
         source=course.get("title", "Untitled Course"),
     )
-
-
 
 
 _HANDLERS = {

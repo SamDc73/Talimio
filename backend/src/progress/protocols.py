@@ -26,7 +26,7 @@ class ProgressTracker(Protocol):
 
 class ContentFacade(ABC):
     """Base class for content module facades.
-    
+
     Note: Each module should implement its own facade independently.
     This base class is provided for type hints and consistency only.
     """

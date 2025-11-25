@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     API_PORT: int = 8080
     ENVIRONMENT: str = "development"  # "development", "production"
+    PLATFORM_MODE: str = "oss"  # "oss" or "cloud"
     SECRET_KEY: str = "your-secret-key-change-in-production"  # For session middleware  # noqa: S105
 
     # Database config kept minimal for Supabase session pooler
@@ -45,7 +46,9 @@ class Settings(BaseSettings):
 
     # Adaptive Learning Configuration
     ADAPTIVE_SIMILARITY_THRESHOLD: float = 0.78  # Threshold for concept similarity detection
-    ADAPTIVE_UNLOCK_MASTERY_THRESHOLD: float = 0.5  # Mastery level to unlock prerequisites (aligned with LECTOR initial mastery band)
+    ADAPTIVE_UNLOCK_MASTERY_THRESHOLD: float = (
+        0.5  # Mastery level to unlock prerequisites (aligned with LECTOR initial mastery band)
+    )
     ADAPTIVE_CONFUSION_LAMBDA: float = 0.3  # Weight for confusion risk in scheduling
     ADAPTIVE_RISK_RECENT_K: int = 3  # Number of recent concepts to consider for sigma context
 
@@ -55,8 +58,8 @@ class Settings(BaseSettings):
     LATENCY_PENALTY_MAX: float = 0.12  # Maximum latency penalty
     LATENCY_PENALTY_MULTIPLIER: float = 10000.0  # Latency penalty calculation divisor
     REVIEW_INTERVALS_BY_RATING: dict[int, int] = {
-        1: 5,    # 5 minutes for rating 1
-        2: 60,   # 1 hour for rating 2
+        1: 5,  # 5 minutes for rating 1
+        2: 60,  # 1 hour for rating 2
         3: 240,  # 4 hours for rating 3
         4: 360,  # 6 hours for rating 4
     }
@@ -73,6 +76,7 @@ class Settings(BaseSettings):
     def primary_llm_model(self) -> str:
         """Get primary LLM model from environment - required configuration."""
         import os
+
         model = os.getenv("PRIMARY_LLM_MODEL")
         if not model:
             msg = "PRIMARY_LLM_MODEL environment variable is required"
@@ -83,6 +87,7 @@ class Settings(BaseSettings):
     def ai_request_timeout(self) -> int:
         """Get AI request timeout from environment."""
         import os
+
         # 5 minutes default for complex AI operations like lesson generation
         return int(os.getenv("AI_REQUEST_TIMEOUT", "300"))
 
@@ -90,12 +95,14 @@ class Settings(BaseSettings):
     def ai_max_tokens_default(self) -> int:
         """Get default max tokens for AI requests."""
         import os
+
         return int(os.getenv("AI_MAX_TOKENS_DEFAULT", "4000"))
 
     @property
     def ai_temperature_default(self) -> float:
         """Get default temperature for AI requests."""
         import os
+
         return float(os.getenv("AI_TEMPERATURE_DEFAULT", "0.7"))
 
     # AI Model Configuration

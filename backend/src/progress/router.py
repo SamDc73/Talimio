@@ -48,12 +48,12 @@ async def get_batch_progress(
 
     # Start with DB results
     progress_map: dict[str, ProgressData] = {
-        content_id: ProgressData(progress_percentage=data["progress_percentage"], metadata=data["metadata"])
+        content_id: ProgressData(progressPercentage=data["progress_percentage"], metadata=data["metadata"])
         for content_id, data in progress_data.items()
     }
 
     # For courses, override with canonical adaptive calculation
-    cps = CourseProgressService()
+    cps = CourseProgressService(auth.session)
     for cid in request.content_ids:
         ctype = await service.get_content_type(cid, auth.user_id)
         if ctype == "course":
@@ -61,7 +61,7 @@ async def get_batch_progress(
             # Drop completion_percentage from metadata
             meta = {k: v for k, v in computed.items() if k != "completion_percentage"}
             progress_map[str(cid)] = ProgressData(
-                progress_percentage=computed.get("completion_percentage", 0.0),
+                progressPercentage=computed.get("completion_percentage", 0.0),
                 metadata=meta,
             )
 
@@ -88,7 +88,7 @@ async def get_single_progress(
     if content_type == "course":
         # Fetch row only to reuse timestamps if present
         row = await service.get_single_progress(auth.user_id, content_id)
-        computed = await CourseProgressService().get_progress(content_id, auth.user_id)
+        computed = await CourseProgressService(auth.session).get_progress(content_id, auth.user_id)
         metadata = {k: v for k, v in computed.items() if k != "completion_percentage"}
         return ProgressResponse(
             id=row.id if row else uuid4(),
@@ -136,9 +136,7 @@ async def update_progress(
     # Update progress
     result = await service.update_progress(auth.user_id, content_id, content_type, progress)
 
-    logger.info(
-        f"Updated progress for user {auth.user_id}, content {content_id}: {progress.progress_percentage}%"
-    )
+    logger.info(f"Updated progress for user {auth.user_id}, content {content_id}: {progress.progress_percentage}%")
 
     return result
 

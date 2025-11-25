@@ -117,7 +117,10 @@ class BookProgressBase(BaseModel):
 class BookProgressUpdate(BaseModel):
     """Schema for updating book progress."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     current_page: int | None = Field(None, ge=1, alias="currentPage")
+    total_pages: int | None = Field(None, ge=1, alias="totalPages")
     progress_percentage: float | None = Field(None, ge=0.0, le=100.0, alias="progressPercentage")
     reading_time_minutes: int | None = Field(None, ge=0, alias="readingTimeMinutes")
     status: str | None = Field(None, pattern="^(not_started|reading|completed|paused)$")

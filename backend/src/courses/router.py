@@ -362,7 +362,7 @@ async def submit_adaptive_reviews(
             "concept_review_stats": concept_stats,
         }
         try:
-            progress_service = CourseProgressService()
+            progress_service = CourseProgressService(session)
             await progress_service.update_progress(course.id, auth.user_id, progress_payload)
         except Exception:  # pragma: no cover - diagnostic logging only
             logger.exception(

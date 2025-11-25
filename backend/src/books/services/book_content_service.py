@@ -3,9 +3,11 @@
 import json
 import logging
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book
 
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 class BookContentService:
     """Book service handling book-specific content operations (stateless)."""
 
-    async def create_book(self, data: dict, user_id: UUID, session=None) -> Book:
+    async def create_book(self, data: dict[str, Any], user_id: UUID, session: AsyncSession | None = None) -> Book:
         """Create a new book with user isolation.
 
         If a session is provided, use it; otherwise manage our own.
@@ -33,7 +35,7 @@ class BookContentService:
         # Use provided session
         return await self._create_with_session(session, data, user_id)
 
-    async def _create_with_session(self, session, data: dict, user_id: UUID) -> Book:
+    async def _create_with_session(self, session: AsyncSession, data: dict[str, Any], user_id: UUID) -> Book:
         existing_book: Book | None = None
         file_hash = data.get("file_hash")
         if file_hash:

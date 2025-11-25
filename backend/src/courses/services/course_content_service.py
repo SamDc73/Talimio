@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
@@ -132,10 +133,8 @@ class CourseContentService:
                 logger.debug("User ensure step for %s affected %s rows", user_id, getattr(res, "rowcount", None))
         except Exception:
             # Best-effort: if the users table is absent or other non-critical issues, continue
-            try:
+            with contextlib.suppress(Exception):
                 await session.rollback()
-            except Exception:
-                pass
             logger.debug("User pre-insert skipped or failed for %s", user_id, exc_info=True)
 
         course = Course(user_id=user_id, **session_data)
@@ -498,10 +497,8 @@ class CourseContentService:
             return tags
         except Exception as exc:
             # Always rollback before any further interaction with the session
-            try:
+            with contextlib.suppress(Exception):
                 await session.rollback()
-            except Exception:
-                pass
             logger.exception("Auto-tagging error for course %s: %s", course_id_str, exc)
             return []
 

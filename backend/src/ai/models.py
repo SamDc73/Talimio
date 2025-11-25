@@ -1,5 +1,6 @@
 """Pydantic models for AI-related data structures."""
 
+import json
 import re
 from typing import Any, Literal
 
@@ -662,6 +663,37 @@ class ExecutionPlan(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @staticmethod
+    def _decode_json_blob(value: Any) -> Any:
+        if isinstance(value, str):
+            candidate = value.strip()
+            if candidate.startswith(("{", "[")):
+                try:
+                    return json.loads(candidate)
+                except json.JSONDecodeError:
+                    return value
+        return value
+
+    @classmethod
+    def _normalize_sequence_input(cls, value: Any) -> list[Any]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            normalized: list[Any] = []
+            for entry in value:
+                decoded = cls._decode_json_blob(entry)
+                if isinstance(decoded, list):
+                    normalized.extend(decoded)
+                else:
+                    normalized.append(decoded)
+            return normalized
+        if isinstance(value, str):
+            decoded = cls._decode_json_blob(value)
+            if isinstance(decoded, list):
+                return decoded
+            return [decoded]
+        return [value]
+
     @field_validator("setup_commands", "install_commands", "run_commands", mode="before")
     @classmethod
     def _ensure_list(cls, value: Any) -> list[str]:
@@ -675,12 +707,21 @@ class ExecutionPlan(BaseModel):
 
     @field_validator("files", mode="before")
     @classmethod
-    def _ensure_files(cls, value: Any) -> list[Any]:
-        if value is None:
-            return []
-        if isinstance(value, list):
-            return value
-        return [value]
+    def _normalize_files(cls, value: Any) -> list[Any]:
+        normalized = cls._normalize_sequence_input(value)
+        files: list[Any] = []
+        for entry in normalized:
+            if isinstance(entry, dict):
+                files.append(entry)
+                continue
+            if isinstance(entry, str):
+                stripped = entry.strip()
+                if stripped:
+                    files.append({"path": stripped, "content": "", "executable": False})
+                continue
+            if entry is not None:
+                files.append(entry)
+        return files
 
     @field_validator("summary", "language")
     @classmethod
@@ -702,9 +743,18 @@ class ExecutionPlan(BaseModel):
 
     @field_validator("actions", mode="before")
     @classmethod
-    def _ensure_actions(cls, value: Any) -> list[Any]:
-        if value is None:
-            return []
-        if isinstance(value, list):
-            return value
-        return [value]
+    def _normalize_actions(cls, value: Any) -> list[Any]:
+        normalized = cls._normalize_sequence_input(value)
+        actions: list[Any] = []
+        for entry in normalized:
+            if isinstance(entry, dict):
+                actions.append(entry)
+                continue
+            if isinstance(entry, str):
+                stripped = entry.strip()
+                if stripped:
+                    actions.append({"type": "command", "command": stripped, "user": "user"})
+                continue
+            if entry is not None:
+                actions.append(entry)
+        return actions

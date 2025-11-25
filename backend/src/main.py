@@ -1,7 +1,7 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -56,6 +56,10 @@ from .progress.router import router as progress_router
 from .tagging.router import router as tagging_router
 from .user.router import router as user_router
 from .videos.router import router as videos_router
+
+
+if TYPE_CHECKING:
+    from starlette.types import ExceptionHandler
 
 
 setup_logging()
@@ -168,12 +172,12 @@ def _configure_middlewares(app: FastAPI, settings: Any) -> None:
 def _register_exception_handlers(app: FastAPI) -> None:
     """Attach all exception handlers to app."""
 
-    async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Response:
+    def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Response:
         return _rate_limit_exceeded_handler(request, exc)
 
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
+    app.add_exception_handler(RateLimitExceeded, cast("ExceptionHandler", _rate_limit_handler))
 
-    async def resource_not_found_handler(_request: Request, exc: ResourceNotFoundError) -> JSONResponse:
+    def resource_not_found_handler(_request: Request, exc: ResourceNotFoundError) -> JSONResponse:
         return format_error_response(
             category=ErrorCategory.RESOURCE_NOT_FOUND,
             code=ErrorCode.NOT_FOUND,
@@ -182,26 +186,29 @@ def _register_exception_handlers(app: FastAPI) -> None:
             suggestions=["The requested resource does not exist"],
         )
 
-    app.add_exception_handler(ResourceNotFoundError, resource_not_found_handler)
+    app.add_exception_handler(ResourceNotFoundError, cast("ExceptionHandler", resource_not_found_handler))
 
+    auth_handler = cast("ExceptionHandler", handle_authentication_errors)
     for exc_type in (
         AuthenticationError,
         InvalidTokenError,
         TokenExpiredError,
         InvalidCredentialsError,
     ):
-        app.add_exception_handler(exc_type, handle_authentication_errors)
+        app.add_exception_handler(exc_type, auth_handler)
 
-    app.add_exception_handler(AuthorizationError, handle_authorization_errors)
+    app.add_exception_handler(AuthorizationError, cast("ExceptionHandler", handle_authorization_errors))
 
+    validation_handler = cast("ExceptionHandler", handle_validation_errors)
     for exc_type in (ValidationError, CustomValidationError):
-        app.add_exception_handler(exc_type, handle_validation_errors)
+        app.add_exception_handler(exc_type, validation_handler)
 
+    database_handler = cast("ExceptionHandler", handle_database_errors)
     for exc_type in (IntegrityError, DatabaseError, OperationalError):
-        app.add_exception_handler(exc_type, handle_database_errors)
+        app.add_exception_handler(exc_type, database_handler)
 
-    app.add_exception_handler(ExternalServiceError, handle_external_service_errors)
-    app.add_exception_handler(RateLimitError, handle_rate_limit_errors)
+    app.add_exception_handler(ExternalServiceError, cast("ExceptionHandler", handle_external_service_errors))
+    app.add_exception_handler(RateLimitError, cast("ExceptionHandler", handle_rate_limit_errors))
 
 
 def create_app() -> FastAPI:

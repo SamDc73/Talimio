@@ -100,7 +100,7 @@ class ContentTransformService:
         # Progress will be calculated later by the progress service
         progress = _create_progress_data(percentage=row.progress or 0, completed_items=0, total_items=0)
 
-        book_content = BookContent(
+        return BookContent(
             id=row.id,
             title=row.title,
             description=row.description,
@@ -116,7 +116,6 @@ class ContentTransformService:
             metadata=metadata,
         )
 
-        return book_content
 
     @staticmethod
     def _create_course_content(row: Any) -> CourseContent:

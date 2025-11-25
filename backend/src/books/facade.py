@@ -9,17 +9,22 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import select
 
 from src.books.models import Book
-from src.books.schemas import BookProgressResponse, BookResponse, BookWithProgress
+from src.books.schemas import BookResponse, BookWithProgress
 from src.database.session import async_session_maker
 
 from .services.book_content_service import BookContentService
 from .services.book_progress_service import BookProgressService
+from .services.book_response_builder import BookResponseBuilder
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)
@@ -74,53 +79,11 @@ class BooksFacade:
                 msg = "Book not found"
                 raise ValueError(msg)
 
-            # Build base book response
-            base = BookResponse.model_validate(book)
-
             # Recalculate progress using the unified service (ToC-aware)
             prog = await self._progress_service.get_progress(book_id, user_id)
-            progress = (
-                BookProgressResponse(
-                    id=prog.get("id"),
-                    book_id=book_id,
-                    current_page=prog.get("page", prog.get("current_page", 1)),
-                    progress_percentage=prog.get("completion_percentage", 0.0),
-                    total_pages_read=prog.get("total_pages_read", prog.get("page", 1)),
-                    reading_time_minutes=prog.get("reading_time_minutes", 0),
-                    status=prog.get("status", "not_started"),
-                    notes=prog.get("notes"),
-                    bookmarks=prog.get("bookmarks", []),
-                    toc_progress=prog.get("toc_progress", {}),
-                    last_read_at=prog.get("last_accessed_at", prog.get("last_read_at")),
-                    created_at=prog.get("created_at"),
-                    updated_at=prog.get("updated_at"),
-                )
-                if prog
-                else None
-            )
+            progress = BookResponseBuilder.build_progress_response(prog, book_id) if prog else None
 
-            return BookWithProgress(
-                id=base.id,
-                title=base.title,
-                subtitle=base.subtitle,
-                author=base.author,
-                description=base.description,
-                isbn=base.isbn,
-                language=base.language,
-                publication_year=base.publication_year,
-                publisher=base.publisher,
-                tags=base.tags,
-                file_type=base.file_type,
-                file_path=base.file_path,
-                file_size=base.file_size,
-                total_pages=base.total_pages,
-                table_of_contents=base.table_of_contents,
-                rag_status=base.rag_status,
-                rag_processed_at=base.rag_processed_at,
-                created_at=base.created_at,
-                updated_at=base.updated_at,
-                progress=progress,
-            )
+            return BookResponseBuilder.build_book_with_progress(book, progress)
 
         except ValueError:
             raise
@@ -132,7 +95,13 @@ class BooksFacade:
             raise
 
     async def upload_book(
-        self, user_id: UUID, file_path: str, title: str, metadata: dict[str, Any] | None = None, *, session=None
+        self,
+        user_id: UUID,
+        file_path: str,
+        title: str,
+        metadata: dict[str, Any] | None = None,
+        *,
+        session: AsyncSession | None = None,
     ) -> dict[str, Any]:
         """Upload book file to user's library."""
         try:

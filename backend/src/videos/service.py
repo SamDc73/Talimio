@@ -43,11 +43,16 @@ def parse_video_id(video_id: str) -> UUID:
         raise ValueError(msg) from e
 
 
+def _create_downloader(options: dict[str, Any]) -> yt_dlp.YoutubeDL:
+    """Return a YoutubeDL instance without strict typing complaints."""
+    return yt_dlp.YoutubeDL(options)  # type: ignore[arg-type]
+
+
 async def _embed_video_background(video_id: str) -> None:
     """Background task to embed a video."""
     try:
         async with async_session_maker() as session:
-            await RAGService().process_video(session, video_id)
+            await RAGService().process_video(session, parse_video_id(video_id))
     except Exception:
         logger.exception("Failed to embed video %s", video_id)
 
@@ -164,7 +169,7 @@ async def _extract_video_transcript(video_url: str) -> str | None:
     """Extract transcript from YouTube video using yt-dlp."""
     try:
         # Metadata-only options to avoid triggering any downloads or format selection
-        ydl_opts = {
+        ydl_opts: dict[str, Any] = {
             "skip_download": True,
             "quiet": True,
             "no_warnings": True,
@@ -173,7 +178,7 @@ async def _extract_video_transcript(video_url: str) -> str | None:
             "allow_unplayable_formats": True,
         }
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with _create_downloader(ydl_opts) as ydl:
             # Get video info with subtitles (avoid format selection)
             info = ydl.extract_info(video_url, download=False, process=False)
 
@@ -375,7 +380,7 @@ class VideoService:
         await db.refresh(video)
 
         # Trigger background RAG processing of transcript when available
-        background_tasks.add_task(_embed_video_background, video.id)
+        background_tasks.add_task(_embed_video_background, str(video.id))
 
         # Trigger background chapter extraction
         background_tasks.add_task(_extract_chapters_background, str(video.id), user_id)
@@ -471,9 +476,6 @@ class VideoService:
 
         return VideoResponse.model_validate(self._video_to_dict(video))
 
-
-
-
     async def fetch_video_info(self, url: str) -> dict[str, Any]:
         """Fetch video information using yt-dlp."""
         ydl_opts = {
@@ -491,7 +493,7 @@ class VideoService:
         }
 
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            with _create_downloader(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False, process=False)
 
                 if not info:
@@ -514,7 +516,7 @@ class VideoService:
                     "title": info.get("title", "Unknown Title"),
                     "channel": info.get("uploader", "Unknown Channel"),
                     "channel_id": info.get("uploader_id", ""),
-                    "duration": int(info.get("duration", 0)),
+                    "duration": int(info.get("duration") or 0),
                     "thumbnail_url": info.get("thumbnail"),
                     "description": info.get("description"),
                     "tags": info.get("tags", []),
@@ -664,9 +666,7 @@ class VideoService:
                     {"completion_percentage": completion_pct, "completed_chapters": completed_chapter_ids},
                 )
         except Exception as e:
-            logger.warning(
-                f"Failed to update unified progress for video {video_id} after chapter status change: {e}"
-            )
+            logger.warning(f"Failed to update unified progress for video {video_id} after chapter status change: {e}")
 
         await db.commit()
         await db.refresh(chapter)
@@ -792,7 +792,9 @@ class VideoService:
             "processed_at": row.transcript_data.get("processed_at"),
         }
 
-    async def search_video(self, db: AsyncSession, video_id: str, user_id: UUID, query: str, limit: int = 5) -> list[dict]:
+    async def search_video(
+        self, db: AsyncSession, video_id: str, user_id: UUID, query: str, limit: int = 5
+    ) -> list[dict]:
         """Search this video's transcript chunks using pgvector."""
         # Ownership validation
         video = await self._get_user_video(db, video_id, user_id)
@@ -804,7 +806,9 @@ class VideoService:
         # Convert SearchResult objects to dicts for callers
         return [r.model_dump() for r in results]
 
-    async def get_video_transcript_segments(self, db: AsyncSession, video_id: str, user_id: UUID | None = None) -> VideoTranscriptResponse:
+    async def get_video_transcript_segments(
+        self, db: AsyncSession, video_id: str, user_id: UUID | None = None
+    ) -> VideoTranscriptResponse:
         """Get transcript segments with timestamps for a video."""
         # Convert string UUID to UUID object
         video_id_obj = parse_video_id(video_id)
@@ -824,14 +828,17 @@ class VideoService:
             # Use JSONB data if available (fast path)
             if video_data.transcript_data and video_data.transcript_data.get("segments"):
                 segments = [
-                    TranscriptSegment(start_time=seg["start"], end_time=seg["end"], text=seg["text"])
+                    TranscriptSegment.model_validate(
+                        {"start_time": seg["start"], "end_time": seg["end"], "text": seg["text"]}
+                    )
                     for seg in video_data.transcript_data["segments"]
                 ]
-                return VideoTranscriptResponse(
-                    video_id=video_data.id,
-                    segments=segments,
-                    total_segments=video_data.transcript_data.get("total_segments", len(segments)),
-                )
+                response_payload = {
+                    "video_id": video_data.id,
+                    "segments": segments,
+                    "total_segments": video_data.transcript_data.get("total_segments", len(segments)),
+                }
+                return VideoTranscriptResponse.model_validate(response_payload)
 
             # Fallback: extract segments from video URL (backward compatibility)
             logger.info(f"No JSONB data found for video {video_id}, extracting segments from URL")
@@ -850,11 +857,12 @@ class VideoService:
                 await db.commit()
                 logger.info(f"Stored {len(segments)} transcript segments in JSONB for video {video_id}")
 
-            return VideoTranscriptResponse(
-                video_id=video_data.id,
-                segments=segments,
-                total_segments=len(segments),
-            )
+            response_payload = {
+                "video_id": video_data.id,
+                "segments": segments,
+                "total_segments": len(segments),
+            }
+            return VideoTranscriptResponse.model_validate(response_payload)
         except Exception as e:
             logger.exception(f"Failed to get transcript segments for video {video_id}")
             msg = f"Failed to get transcript segments: {e!s}"
@@ -873,7 +881,7 @@ class VideoService:
                 "allow_unplayable_formats": True,
             }
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            with _create_downloader(ydl_opts) as ydl:
                 # Get video info with subtitles (avoid format selection)
                 info = ydl.extract_info(video_url, download=False, process=False)
 
@@ -938,7 +946,8 @@ class VideoService:
                     # Join remaining lines as text
                     text = " ".join(lines[2:])
 
-                    segments.append(TranscriptSegment(start_time=start_time, end_time=end_time, text=text))
+                    segment_payload = {"start_time": start_time, "end_time": end_time, "text": text}
+                    segments.append(TranscriptSegment.model_validate(segment_payload))
 
         return segments
 
@@ -954,7 +963,7 @@ class VideoService:
         }
 
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            with _create_downloader(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False, process=False)
 
                 if not info:
