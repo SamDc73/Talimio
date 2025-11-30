@@ -18,6 +18,27 @@ export async function getUserSettings() {
 }
 
 /**
+ * Fetch stored MCP servers for the authenticated user
+ */
+export async function listMcpServers({ page = 1, pageSize = 50 } = {}) {
+	return api.get(`/mcp/servers?page=${page}&page_size=${pageSize}`)
+}
+
+/**
+ * Create a new MCP server configuration for the authenticated user
+ */
+export async function createMcpServer(payload) {
+	return api.post("/mcp/servers", payload)
+}
+
+/**
+ * Delete a stored MCP server configuration
+ */
+export async function deleteMcpServer(serverId) {
+	return api.delete(`/mcp/servers/${serverId}`)
+}
+
+/**
  * Update custom AI instructions for current authenticated user
  * @param {string} instructions - The custom instructions to set
  */
