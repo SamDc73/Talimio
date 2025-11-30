@@ -48,22 +48,19 @@ async def chat_with_assistant(request: ChatRequest, user_id: UUID) -> AsyncGener
         # Build messages with context if available
         messages = await _build_messages(request, user_id)
 
-        # Stream the response
+        # Run completion through shared LLM client so memories and MCP tools are available
         llm_client = LLMClient(agent_id=AGENT_ID_ASSISTANT)
-        response = await llm_client.complete(
+        response_payload = await llm_client.get_completion(
             messages=messages,
-            stream=True,
             temperature=0.7,
             max_tokens=4000,
-            model=request.model,  # Honor UI-selected model when provided
+            user_id=user_id,
+            model=request.model,
         )
 
-        # Stream each chunk
-        async for chunk in response:
-            if chunk and hasattr(chunk, "choices") and chunk.choices:
-                delta = chunk.choices[0].delta
-                if hasattr(delta, "content") and delta.content:
-                    yield f"data: {json.dumps({'content': delta.content, 'done': False})}\n\n"
+        text_response = response_payload if isinstance(response_payload, str) else str(response_payload or "")
+        for chunk in _iter_sse_chunks(text_response):
+            yield chunk
 
         # Send completion signal
         yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
@@ -136,6 +133,17 @@ async def _build_messages(request: ChatRequest, user_id: UUID) -> list[dict[str,
     messages.append({"role": "user", "content": user_message})
 
     return messages
+
+
+def _iter_sse_chunks(content: str, chunk_size: int = 400) -> list[str]:
+    """Yield SSE-ready chunks from the final assistant response."""
+    if not content:
+        return [f"data: {json.dumps({'content': '', 'done': False})}\n\n"]
+    chunks: list[str] = []
+    for start in range(0, len(content), chunk_size):
+        piece = content[start : start + chunk_size]
+        chunks.append(f"data: {json.dumps({'content': piece, 'done': False})}\n\n")
+    return chunks
 
 
 def _extract_leading_blockquote(text: str) -> str:

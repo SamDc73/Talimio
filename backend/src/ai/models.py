@@ -1,18 +1,28 @@
 """Pydantic models for AI-related data structures."""
 
 import json
-import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 
-_SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
+def _normalize_slug_text(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    slug_chars: list[str] = []
+    last_was_separator = False
+    for char in text:
+        if char.isalnum():
+            slug_chars.append(char)
+            last_was_separator = False
+            continue
+        if slug_chars and not last_was_separator:
+            slug_chars.append("-")
+        last_was_separator = True
+    return "".join(slug_chars).strip("-")
 
 
 def _coerce_slug(value: Any, *, field: str) -> str:
-    text = str(value or "").strip().lower()
-    text = _SLUG_PATTERN.sub("-", text).strip("-")
+    text = _normalize_slug_text(value)
     if not text:
         msg = f"{field} must not be empty"
         raise ValueError(msg)

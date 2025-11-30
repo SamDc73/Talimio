@@ -2,8 +2,8 @@ import asyncio
 import copy
 import json
 import logging
-import re
-from typing import TYPE_CHECKING, Any
+import os
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 
@@ -30,6 +30,16 @@ SCHEMA_OVERRIDES: dict[type[BaseModel], type[BaseModel]] = {
     AdaptiveCoursePlan: AdaptiveCoursePlanSchema,
 }
 
+from collections import Counter
+
+from src.ai.mcp.service import get_user_mcp_config
+from src.ai.mcp.tooling import (
+    MCPToolBinding,
+    build_tool_instruction,
+    execute_user_tool_call,
+    load_user_tool_bindings,
+    parse_tool_arguments,
+)
 from src.ai.prompts import (
     ADAPTIVE_COURSE_GENERATION_PROMPT,
     COURSE_GENERATION_PROMPT,
@@ -39,7 +49,9 @@ from src.ai.prompts import (
     MEMORY_CONTEXT_SYSTEM_PROMPT,
     SELF_ASSESSMENT_QUESTIONS_PROMPT,
 )
+from src.ai.tool_preferences import build_preference_hint, preference_rank
 from src.config.settings import get_settings
+from src.database.session import async_session_maker
 
 
 class LLMClient:
@@ -56,6 +68,7 @@ class LLMClient:
         self._logger = logging.getLogger(__name__)
         self._rag_service = rag_service
         self._agent_id = agent_id
+        self._tool_maps: dict[UUID, dict[str, tuple[str, str]]] = {}
 
     async def complete(
         self,
@@ -113,7 +126,7 @@ class LLMClient:
         response_model: type[BaseModel] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[dict[str, Any]] | list[MCPToolBinding] | None = None,
         tool_choice: str | None = None,
         format_json: bool = False,
         user_id: str | UUID | None = None,
@@ -121,15 +134,34 @@ class LLMClient:
     ) -> Any:
         """Get completion with optional memory integration and structured output."""
         try:
-            # Inject memory context if user_id provided
-            if user_id:
-                messages = await self._inject_memory_into_messages(messages, user_id)
+            normalized_user_id = self._normalize_user_id(user_id)
+            if normalized_user_id:
+                messages = await self._inject_memory_into_messages(messages, normalized_user_id)
+                messages = self._inject_preference_hint(messages, normalized_user_id)
 
             # Handle structured output via LiteLLM json schema with Instructor fallback
+            tool_sources: list[dict[str, Any]] | list[MCPToolBinding] | None = tools
+            if tool_sources is None and normalized_user_id is not None:
+                tool_sources = await self._load_user_tool_bindings(normalized_user_id)
+            tool_schemas: list[dict[str, Any]] | None = self._prepare_tool_schemas(tool_sources, normalized_user_id)
+            effective_tool_choice = tool_choice or ("auto" if tool_schemas else None)
+
             if response_model:
+                normalized_user_id = self._normalize_user_id(user_id)
+                if normalized_user_id:
+                    messages = await self._inject_memory_into_messages(messages, normalized_user_id)
+                    messages = self._inject_preference_hint(messages, normalized_user_id)
+
                 settings = get_settings()
                 request_model = model or settings.primary_llm_model
                 schema_model = SCHEMA_OVERRIDES.get(response_model, response_model)
+
+                def _finalize(structured: BaseModel) -> BaseModel:
+                    if normalized_user_id:
+                        asyncio.create_task(  # noqa: RUF006
+                            self._save_conversation_to_memory(normalized_user_id, messages, structured)
+                        )
+                    return structured
 
                 try:
                     schema_instance = await self._complete_with_litellm_schema(
@@ -137,20 +169,23 @@ class LLMClient:
                         schema_model=schema_model,
                         temperature=temperature,
                         max_tokens=max_tokens,
-                        user_id=user_id,
+                        user_id=normalized_user_id,
                         model=request_model,
+                        tools=tool_schemas,
+                        tool_choice=effective_tool_choice,
                     )
+
                     if schema_model is response_model:
-                        result = schema_instance
+                        structured_output = _finalize(schema_instance)
                     else:
-                        result = response_model(**schema_instance.model_dump())
+                        structured_output = _finalize(response_model.model_validate(schema_instance.model_dump()))
                 except Exception:
                     self._logger.warning(
                         "LiteLLM structured output failed on model %s; falling back to Instructor",
                         request_model,
                         exc_info=True,
                     )
-                    result = await self._complete_with_instructor(
+                    instructor_result = await self._complete_with_instructor(
                         messages=messages,
                         response_model=response_model,
                         temperature=temperature,
@@ -159,29 +194,25 @@ class LLMClient:
                         model=request_model,
                         request_timeout=settings.ai_request_timeout,
                     )
+                    structured_output = _finalize(instructor_result)
 
-                if user_id and result:
-                    asyncio.create_task(  # noqa: RUF006
-                        self._save_conversation_to_memory(user_id, messages, result)
-                    )
-
-                return result
+                return structured_output
 
             # Handle function calling
-            if tools:
+            if tool_schemas:
                 response = await self.complete(
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    user_id=user_id,
+                    tools=tool_schemas,
+                    tool_choice=effective_tool_choice,
+                    user_id=normalized_user_id,
                 )
 
                 # Process function calls
                 if response.choices[0].message.tool_calls:
                     return await self._handle_function_calling(
-                        response, messages, tools, temperature, max_tokens, user_id
+                        response, messages, tool_schemas, temperature, max_tokens, normalized_user_id
                     )
 
                 return response.choices[0].message.content
@@ -191,7 +222,7 @@ class LLMClient:
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                user_id=user_id,
+                user_id=normalized_user_id,
                 response_format={"type": "json_object"} if format_json else None,
                 model=model,
             )
@@ -199,9 +230,9 @@ class LLMClient:
             content = response.choices[0].message.content
 
             # Save conversation to memory (non-blocking)
-            if user_id and response:
+            if normalized_user_id and response:
                 asyncio.create_task(  # noqa: RUF006
-                    self._save_conversation_to_memory(user_id, messages, content)
+                    self._save_conversation_to_memory(normalized_user_id, messages, content)
                 )
 
             # Handle JSON parsing if requested
@@ -215,6 +246,17 @@ class LLMClient:
             msg = f"Completion failed: {e}"
             raise RuntimeError(msg) from e
 
+    def _normalize_user_id(self, user_id: str | UUID | None) -> UUID | None:
+        if user_id is None:
+            return None
+        if isinstance(user_id, UUID):
+            return user_id
+        try:
+            return UUID(str(user_id))
+        except (ValueError, TypeError):
+            self._logger.warning("Ignoring invalid user_id: %s", user_id)
+            return None
+
     async def _complete_with_litellm_schema(
         self,
         *,
@@ -222,26 +264,56 @@ class LLMClient:
         schema_model: type[BaseModel],
         temperature: float | None,
         max_tokens: int | None,
-        user_id: str | UUID | None,
+        user_id: UUID | None,
         model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = None,
     ) -> BaseModel:
         last_error: Exception | None = None
-        for attempt in range(2):
+        attempt = 0
+        conversation = list(messages)
+        while attempt < 2:
             response = await self.complete(
-                messages=messages,
+                messages=conversation,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 user_id=user_id,
                 response_format=self._build_response_format(schema_model),
                 model=model,
+                tools=tools,
+                tool_choice=tool_choice,
             )
+            assistant_message = response.choices[0].message
+            tool_calls = getattr(assistant_message, "tool_calls", None)
+            if tool_calls:
+                conversation.append(
+                    {
+                        "role": "assistant",
+                        "content": assistant_message.content or "",
+                        "tool_calls": [tc.model_dump() for tc in tool_calls],
+                    }
+                )
+                if user_id is None:
+                    self._logger.warning("Structured output invoked MCP tools without a user context")
+                    break
+                executed = await self._execute_tool_calls(tool_calls, user_id)
+                for tool_call, result_content in executed:
+                    conversation.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": result_content,
+                        }
+                    )
+                continue
             try:
                 return self._coerce_response_model(response, schema_model)
             except Exception as parse_error:
                 last_error = parse_error
+                attempt += 1
                 self._logger.warning(
                     "Structured response validation failed on attempt %s: %s",
-                    attempt + 1,
+                    attempt,
                     parse_error,
                 )
         if last_error is None:
@@ -389,27 +461,22 @@ class LLMClient:
         data: dict[str, Any],
     ) -> BaseModel | None:
         try:
-            return response_model(**data)
+            return response_model.model_validate(data)
         except Exception:
             return None
 
-    async def _inject_memory_into_messages(
-        self, messages: list[dict[str, Any]], user_id: str | UUID
-    ) -> list[dict[str, Any]]:
+    async def _inject_memory_into_messages(self, messages: list[dict[str, Any]], user_id: UUID) -> list[dict[str, Any]]:
         """Inject user memory context into the conversation."""
         try:
             # Get user memory
             from src.ai.memory import search_memories
-
-            # Normalize user_id to UUID
-            normalized_user_id: UUID = user_id if isinstance(user_id, UUID) else UUID(str(user_id))
 
             query_text = self._build_memory_query(messages)
             if not query_text:
                 return messages
 
             memories = await search_memories(
-                user_id=normalized_user_id,
+                user_id=user_id,
                 query=query_text,
                 limit=6,
                 agent_id=self._agent_id,
@@ -439,6 +506,15 @@ class LLMClient:
             self._logger.warning(f"Failed to inject memory for user {user_id}: {e}")
             return messages
 
+    def _inject_preference_hint(self, messages: list[dict[str, Any]], user_id: UUID) -> list[dict[str, Any]]:
+        hint = build_preference_hint(user_id)
+        if not hint:
+            return messages
+        hint_message = {"role": "system", "content": f"Tool preferences: {hint}"}
+        if messages and messages[0].get("role") == "system":
+            return [messages[0], hint_message, *messages[1:]]
+        return [hint_message, *messages]
+
     def _build_memory_query(self, messages: list[dict[str, Any]]) -> str | None:
         """Return the most recent user utterance to drive mem0 vector search."""
         for message in reversed(messages):
@@ -458,38 +534,26 @@ class LLMClient:
         tools: list[dict[str, Any]],  # noqa: ARG002
         temperature: float | None,
         max_tokens: int | None,
-        user_id: str | UUID | None,
+        user_id: UUID | None,
     ) -> str:
         """Handle function calling responses."""
-        from src.ai.functions import execute_function
-
-        # Add assistant message with tool calls
         assistant_message = response.choices[0].message
         messages.append(
             {
                 "role": "assistant",
                 "content": assistant_message.content or "",
-                "tool_calls": [tc.dict() for tc in assistant_message.tool_calls],
+                "tool_calls": [tc.model_dump() for tc in assistant_message.tool_calls],
             }
         )
 
-        # Execute all function calls concurrently
-        tool_calls = assistant_message.tool_calls
-        function_tasks = [execute_function(tc.function.name, tc.function.arguments) for tc in tool_calls]
+        if user_id is None:
+            self._logger.warning("Model attempted to call MCP tools without a user context")
+            return assistant_message.content or ""
 
-        function_results = await asyncio.gather(*function_tasks, return_exceptions=True)
-
-        # Add function results to messages
-        for _i, (tool_call, result) in enumerate(zip(tool_calls, function_results, strict=False)):
-            if isinstance(result, Exception):
-                result_content = f"Error: {result!s}"
-                self._logger.error(f"Function {tool_call.function.name} failed: {result}")
-            else:
-                result_content = str(result)
-
+        executed_calls = await self._execute_tool_calls(assistant_message.tool_calls, user_id)
+        for tool_call, result_content in executed_calls:
             messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result_content})
 
-        # Get final response
         final_response = await self.complete(
             messages=messages,
             temperature=temperature,
@@ -499,15 +563,214 @@ class LLMClient:
 
         return final_response.choices[0].message.content
 
+    def _prepare_tool_schemas(
+        self,
+        tools: list[dict[str, Any]] | list[MCPToolBinding] | None,
+        user_id: UUID | None,
+    ) -> list[dict[str, Any]] | None:
+        if not tools:
+            if user_id is not None:
+                self._tool_maps.pop(user_id, None)
+            return None
+        first = tools[0]
+        if isinstance(first, MCPToolBinding):
+            if user_id is None:
+                self._logger.debug("MCP tools provided but user_id is missing; skipping tool wiring")
+                return None
+            bindings = cast("list[MCPToolBinding]", tools)
+            filtered = self._filter_tool_bindings(bindings, user_id)
+            if not filtered:
+                self._tool_maps.pop(user_id, None)
+                return None
+            return self._assign_tool_schemas(user_id, filtered)
+        schema_list = cast("list[dict[str, Any]]", tools)
+        return self._filter_schema_list(schema_list)
+
+    def _filter_schema_list(self, schemas: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+        allowed, blocked = self._get_tool_filters()
+        filtered: list[dict[str, Any]] = []
+        for schema in schemas:
+            if not isinstance(schema, dict):
+                continue
+            function_block = schema.get("function") or {}
+            name = str(function_block.get("name", "")).strip()
+            if not name:
+                continue
+            key = name.lower()
+            if allowed is not None and key not in allowed:
+                continue
+            if key in blocked:
+                continue
+            filtered.append(schema)
+        return filtered or None
+
+    def _assign_tool_schemas(self, user_id: UUID, bindings: list[MCPToolBinding]) -> list[dict[str, Any]]:
+        schemas: list[dict[str, Any]] = []
+        mapping: dict[str, tuple[str, str]] = {}
+        counts: Counter[str] = Counter()
+        for binding in bindings:
+            base = self._slug_tool_key(binding.server_name, binding.tool_name)
+            counts[base] += 1
+            encoded = base if counts[base] == 1 else f"{base}_{counts[base]}"
+            binding.encoded_name = encoded
+            mapping[encoded] = (binding.server_name, binding.tool_name)
+            schemas.append(binding.to_tool_schema())
+        self._tool_maps[user_id] = mapping
+        return schemas
+
+    def _filter_tool_bindings(
+        self,
+        bindings: list[MCPToolBinding],
+        user_id: UUID,
+    ) -> list[MCPToolBinding]:
+        allowed, blocked = self._get_tool_filters()
+        filtered: list[MCPToolBinding] = []
+        for binding in bindings:
+            key = binding.tool_name.lower()
+            if allowed is not None and key not in allowed:
+                continue
+            if key in blocked:
+                continue
+            filtered.append(binding)
+        filtered.sort(key=lambda b: preference_rank(user_id, b.tool_name))
+        return filtered
+
+    def _slug_tool_key(self, server_name: str, tool_name: str) -> str:
+        base = f"{server_name}_{tool_name}".lower()
+        return "".join(char if char.isalnum() or char == "_" else "_" for char in base)
+
+    def _get_tool_filters(self) -> tuple[set[str] | None, set[str]]:
+        allowed_env = os.getenv("AI_ENABLED_TOOLS")
+        allowed = {token.strip().lower() for token in allowed_env.split(",") if token.strip()} if allowed_env else None
+        blocked_env = os.getenv("AI_DISABLED_TOOLS")
+        blocked = {token.strip().lower() for token in blocked_env.split(",") if token.strip()} if blocked_env else set()
+        return allowed, blocked
+
+    async def _load_user_tool_bindings(self, user_id: UUID) -> list[MCPToolBinding]:
+        async with async_session_maker() as session:
+            return await load_user_tool_bindings(session, user_id)
+
+    async def _execute_tool_calls(
+        self,
+        tool_calls: list[Any],
+        user_id: UUID,
+    ) -> list[tuple[Any, str]]:
+        formatted: list[tuple[Any, str] | None] = []
+        pending: list[tuple[int, Any, dict[str, Any], tuple[str, str]]] = []
+        for idx, tool_call in enumerate(tool_calls):
+            target = self._resolve_tool_target(user_id, tool_call.function.name)
+            if target is None:
+                warning = f"Error: Tool '{tool_call.function.name}' is not available"
+                formatted.append((tool_call, warning))
+                continue
+            try:
+                args_dict = parse_tool_arguments(tool_call.function.arguments)
+            except ValueError as exc:
+                formatted.append((tool_call, f"Error: {exc!s}"))
+                continue
+            formatted.append(None)
+            pending.append((idx, tool_call, args_dict, target))
+            self._logger.info(
+                "Queued MCP tool call",
+                extra={
+                    "mcp_server": target[0],
+                    "mcp_tool": target[1],
+                    "encoded_tool": tool_call.function.name,
+                    "user_id": str(user_id),
+                    "tool_call_id": getattr(tool_call, "id", None),
+                },
+            )
+        if pending:
+            # Load config once, then run all tool calls concurrently without DB sessions
+            async with async_session_maker() as session:
+                config = await get_user_mcp_config(session, user_id)
+
+            tasks = [
+                execute_user_tool_call(
+                    user_id=user_id,
+                    server_name=target[0],
+                    tool_name=target[1],
+                    encoded_name=tool_call.function.name,
+                    arguments=args_dict,
+                    config=config,
+                )
+                for (_idx, tool_call, args_dict, target) in pending
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for (idx, tool_call, _args_dict, target), result in zip(pending, results, strict=False):
+                if isinstance(result, Exception):
+                    content = f"Error: {result!s}"
+                    self._logger.error(
+                        "MCP tool %s failed: %s",
+                        tool_call.function.name,
+                        result,
+                        extra={
+                            "mcp_server": target[0],
+                            "mcp_tool": target[1],
+                            "encoded_tool": tool_call.function.name,
+                            "user_id": str(user_id),
+                            "tool_call_id": getattr(tool_call, "id", None),
+                        },
+                    )
+                else:
+                    content = self._format_tool_result(result)
+                    self._logger.info(
+                        "MCP tool %s succeeded",
+                        tool_call.function.name,
+                        extra={
+                            "mcp_server": target[0],
+                            "mcp_tool": target[1],
+                            "encoded_tool": tool_call.function.name,
+                            "user_id": str(user_id),
+                            "tool_call_id": getattr(tool_call, "id", None),
+                        },
+                    )
+                formatted[idx] = (tool_call, content)
+        return [entry for entry in formatted if entry is not None]
+
+    def _resolve_tool_target(self, user_id: UUID, encoded_name: str) -> tuple[str, str] | None:
+        mapping = self._tool_maps.get(user_id)
+        if not mapping:
+            return None
+        return mapping.get(encoded_name)
+
+    def _format_tool_result(self, result: Any) -> str:
+        if isinstance(result, (dict, list)):
+            try:
+                return json.dumps(result, default=str)
+            except Exception:  # pragma: no cover - defensive fallback
+                return str(result)
+        return str(result)
+
+    def _build_tooling_instruction(self, bindings: list[MCPToolBinding]) -> str | None:
+        return build_tool_instruction(bindings)
+
+    async def _gather_research(self, user_prompt: str, user_id: UUID | str | None) -> str:
+        _ = user_prompt, user_id
+        return ""
+
+    def _extract_json_block(self, content: str) -> str | None:
+        marker = "```json"
+        lowered = content.lower()
+        marker_index = lowered.find(marker)
+        if marker_index == -1:
+            return None
+        block_start = marker_index + len(marker)
+        while block_start < len(content) and content[block_start] in {" ", "\t", "\r", "\n"}:
+            block_start += 1
+        block_end = content.find("```", block_start)
+        if block_end == -1:
+            return None
+        block = content[block_start:block_end].strip()
+        return block or None
+
     def _parse_json_content(self, content: str) -> dict[str, Any] | list[Any] | str:
         """Parse JSON content from AI response."""
         try:
-            # Look for JSON blocks
-            json_match = re.search(r"```json\s*\n(.*?)\n```", content, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group(1))
+            json_block = self._extract_json_block(content)
+            if json_block is not None:
+                return json.loads(json_block)
 
-            # Try parsing the entire content as JSON
             content_stripped = content.strip()
             if content_stripped.startswith(("{", "[")):
                 return json.loads(content_stripped)
@@ -578,17 +841,26 @@ class LLMClient:
         """Generate a structured learning course using LiteLLM structured output (Pydantic)."""
         try:
             prompt = system_prompt or COURSE_GENERATION_PROMPT
+            normalized_user_id = self._normalize_user_id(user_id)
             messages = [
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": user_prompt},
             ]
 
-            # Use structured output via LiteLLM response_format with a Pydantic model
+            tool_bindings: list[MCPToolBinding] = []
+            if normalized_user_id is not None:
+                tool_bindings = await self._load_user_tool_bindings(normalized_user_id)
+            tool_instruction = self._build_tooling_instruction(tool_bindings)
+            if tool_instruction:
+                messages = [messages[0], {"role": "system", "content": tool_instruction}, *messages[1:]]
+
             result = await self.get_completion(
                 messages,
                 response_model=CourseStructure,
-                temperature=0.7,
-                user_id=user_id,
+                temperature=0,
+                user_id=normalized_user_id,
+                tools=tool_bindings or None,
+                tool_choice="auto" if tool_bindings else None,
             )
 
             if not isinstance(result, CourseStructure):
@@ -814,15 +1086,15 @@ class LLMClient:
 
             # Generate lesson content
             settings = get_settings()
-            response = await self.complete(
+            response_content = await self.get_completion(
                 messages,
                 temperature=settings.ai_temperature_default,
                 max_tokens=settings.ai_max_tokens_default,
                 user_id=metadata.get("user_id"),
             )
 
-            # Get content from response (litellm standard format)
-            content = response.choices[0].message.content or ""
+            # Get content from response (litellm or tool-assisted output)
+            content = response_content if isinstance(response_content, str) else str(response_content or "")
 
             # Validate and fix MDX - keep trying until valid (max 3 attempts)
             from src.courses.services.mdx_service import mdx_service
@@ -841,12 +1113,12 @@ class LLMClient:
                 ]
 
                 try:
-                    fix_response = await self.complete(
+                    fix_response = await self.get_completion(
                         fix_messages,
                         temperature=0.3,  # Low temp for accuracy
                         user_id=metadata.get("user_id"),
                     )
-                    content = fix_response.choices[0].message.content
+                    content = fix_response if isinstance(fix_response, str) else str(fix_response or "")
                 except Exception as fix_error:
                     if fix_attempt == max_fix_attempts - 1:
                         # Last attempt failed, raise error
@@ -912,7 +1184,7 @@ class LLMClient:
             raise RuntimeError(msg) from exc
 
     async def _save_conversation_to_memory(
-        self, user_id: str | UUID, messages: list[dict[str, Any]], response: Any
+        self, user_id: UUID | None, messages: list[dict[str, Any]], response: Any
     ) -> None:
         """Save conversation to memory using mem0.
 
@@ -920,6 +1192,9 @@ class LLMClient:
         mem0 handles all the intelligent extraction, deduplication, and preference detection.
         """
         try:
+            if user_id is None:
+                return
+
             from src.ai.memory import add_memory
 
             # Extract the user's last message
@@ -940,14 +1215,13 @@ class LLMClient:
             # Combine into conversation format
             conversation = f"User: {user_message}\nAssistant: {ai_response}"
 
-            normalized_user_id = UUID(str(user_id)) if isinstance(user_id, str) else user_id
             metadata = {
                 "agent_id": self._agent_id,
             }
 
             # Let mem0 handle everything - extraction, deduplication, relevance filtering
             await add_memory(
-                user_id=normalized_user_id,
+                user_id=user_id,
                 content=conversation,
                 agent_id=self._agent_id,
                 metadata=metadata,

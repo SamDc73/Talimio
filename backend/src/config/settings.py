@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"  # "development", "production"
     PLATFORM_MODE: str = "oss"  # "oss" or "cloud"
     SECRET_KEY: str = "your-secret-key-change-in-production"  # For session middleware  # noqa: S105
+    MCP_TOKEN_ENCRYPTION_KEY: str | None = None
 
     # Database config kept minimal for Supabase session pooler
 

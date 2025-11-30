@@ -2,34 +2,64 @@
  * Personalization Dialog Component for AI customization
  */
 
-import { Brain, ChevronLeft, Eye, RotateCcw, Save, Trash2, X } from "lucide-react"
+import { ArrowLeft, ChevronRight, Loader2, Plus, Server, Sparkles, Trash2, X, Zap } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
 	clearUserMemory,
+	createMcpServer,
+	deleteMcpServer,
 	deleteMemory,
 	getUserMemories,
 	getUserSettings,
+	listMcpServers,
 	updateCustomInstructions,
 } from "@/api/personalizationApi.js"
 import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/Dialog"
+import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
+import { cn } from "@/lib/utils"
+
+const createEmptyServerForm = () => ({
+	url: "",
+	authType: "none",
+	authToken: "",
+})
+
+const createHeaderRow = () => ({
+	id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+	key: "",
+	value: "",
+})
+
+// View states for the dialog
+const VIEW = {
+	MAIN: "main",
+	MEMORIES: "memories",
+	MCP: "mcp",
+	MCP_ADD: "mcp_add",
+}
 
 export function PersonalizationDialog({ open, onOpenChange }) {
+	const [view, setView] = useState(VIEW.MAIN)
 	const [isLoading, setIsLoading] = useState(false)
 	const [isSaving, setIsSaving] = useState(false)
 	const [isClearing, setIsClearing] = useState(false)
 	const [instructions, setInstructions] = useState("")
 	const [memoryCount, setMemoryCount] = useState(0)
 	const [originalInstructions, setOriginalInstructions] = useState("")
-	const [showMemories, setShowMemories] = useState(false)
 	const [memories, setMemories] = useState([])
 	const [isLoadingMemories, setIsLoadingMemories] = useState(false)
-	// Track if we've loaded settings at least once to avoid showing spinner on subsequent opens
+	const [mcpServers, setMcpServers] = useState([])
+	const [isLoadingServers, setIsLoadingServers] = useState(false)
+	const [isSavingServer, setIsSavingServer] = useState(false)
+	const [serverError, setServerError] = useState("")
+	const [serverForm, setServerForm] = useState(() => createEmptyServerForm())
+	const [headerRows, setHeaderRows] = useState([])
+	const [deletingServerId, setDeletingServerId] = useState(null)
 	const hasLoadedRef = useRef(false)
 
 	const loadUserSettings = useCallback(async () => {
-		// Only show the blocking loader on first ever load
 		const firstLoad = !hasLoadedRef.current
 		if (firstLoad) setIsLoading(true)
 		try {
@@ -39,19 +69,123 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			setMemoryCount(settings.memory_count || 0)
 			hasLoadedRef.current = true
 		} catch (_error) {
+			// Silent fail
 		} finally {
 			if (firstLoad) setIsLoading(false)
 		}
 	}, [])
 
-	// Load user settings when dialog opens
+	const loadMcpServers = useCallback(async () => {
+		setIsLoadingServers(true)
+		try {
+			const response = await listMcpServers({ page: 1, pageSize: 50 })
+			setMcpServers(response.items || [])
+			setServerError("")
+		} catch (error) {
+			const detail = error?.data?.detail || error?.message || "Failed to load MCP servers"
+			setServerError(detail)
+		} finally {
+			setIsLoadingServers(false)
+		}
+	}, [])
+
+	const resetServerForm = useCallback(() => {
+		setServerForm(createEmptyServerForm())
+		setHeaderRows([])
+		setServerError("")
+	}, [])
+
+	const addHeaderRow = useCallback(() => {
+		setHeaderRows((prev) => [...prev, createHeaderRow()])
+	}, [])
+
+	const updateHeaderRow = useCallback((id, field, value) => {
+		setHeaderRows((prev) => prev.map((row) => (row.id === id ? { ...row, [field]: value } : row)))
+	}, [])
+
+	const removeHeaderRow = useCallback((id) => {
+		setHeaderRows((prev) => prev.filter((row) => row.id !== id))
+	}, [])
+
+	const handleCreateServer = async (event) => {
+		event.preventDefault()
+		setServerError("")
+
+		const trimmedUrl = serverForm.url.trim()
+		if (!trimmedUrl) {
+			setServerError("Server URL is required")
+			return
+		}
+
+		if (serverForm.authType === "bearer" && !serverForm.authToken.trim()) {
+			setServerError("API token is required for bearer authentication")
+			return
+		}
+
+		const headerEntries = headerRows
+			.map((row) => ({ key: row.key.trim(), value: row.value.trim() }))
+			.filter((row) => row.key && row.value)
+
+		const payload = {
+			url: trimmedUrl,
+			auth_type: serverForm.authType,
+			enabled: true,
+		}
+
+		if (serverForm.authType === "bearer") {
+			payload.auth_token = serverForm.authToken.trim()
+		}
+
+		if (headerEntries.length > 0) {
+			payload.headers = headerEntries.reduce((acc, row) => {
+				acc[row.key] = row.value
+				return acc
+			}, {})
+		}
+
+		setIsSavingServer(true)
+		try {
+			const created = await createMcpServer(payload)
+			setMcpServers((prev) => [created, ...prev])
+			resetServerForm()
+			setView(VIEW.MCP)
+		} catch (error) {
+			const detail = error?.data?.detail || error?.message || "Unable to add MCP server"
+			setServerError(detail)
+		} finally {
+			setIsSavingServer(false)
+		}
+	}
+
+	const handleDeleteServer = async (serverId) => {
+		if (!window.confirm("Remove this MCP server?")) return
+		setServerError("")
+		setDeletingServerId(serverId)
+		try {
+			await deleteMcpServer(serverId)
+			setMcpServers((prev) => prev.filter((server) => server.id !== serverId))
+		} catch (error) {
+			const detail = error?.data?.detail || error?.message || "Failed to remove MCP server"
+			setServerError(detail)
+		} finally {
+			setDeletingServerId(null)
+		}
+	}
+
 	useEffect(() => {
 		if (open) {
 			loadUserSettings()
+			loadMcpServers()
 		}
-	}, [open, loadUserSettings])
+	}, [open, loadUserSettings, loadMcpServers])
 
-	// Derive hasChanges inline per guidelines (no effect/state)
+	useEffect(() => {
+		if (!open) {
+			setView(VIEW.MAIN)
+			resetServerForm()
+		}
+	}, [open, resetServerForm])
+
 	const hasChanges = instructions !== originalInstructions
 
 	const handleSave = async () => {
@@ -60,246 +194,481 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			await updateCustomInstructions(instructions)
 			setOriginalInstructions(instructions)
 		} catch (_error) {
+			// Silent fail
 		} finally {
 			setIsSaving(false)
 		}
 	}
 
 	const handleClearMemory = async () => {
-		if (!window.confirm("Are you sure you want to clear all your learning history? This action cannot be undone.")) {
-			return
-		}
-
+		if (!window.confirm("Clear all memories? This cannot be undone.")) return
 		setIsClearing(true)
 		try {
 			await clearUserMemory()
 			setMemoryCount(0)
 			setMemories([])
 		} catch (_error) {
+			// Silent fail
 		} finally {
 			setIsClearing(false)
 		}
 	}
 
-	const handleReset = () => {
-		setInstructions(originalInstructions)
-	}
-
 	const handleViewMemories = async () => {
-		if (showMemories) {
-			setShowMemories(false)
-			return
-		}
-
-		// If we've already loaded memories, show them immediately
-		if (Array.isArray(memories) && memories.length > 0) {
-			setShowMemories(true)
-			return
-		}
-
-		setIsLoadingMemories(true)
-		try {
-			const userMemories = await getUserMemories()
-			setMemories(userMemories)
-			setShowMemories(true)
-		} catch (_error) {
-		} finally {
-			setIsLoadingMemories(false)
+		setView(VIEW.MEMORIES)
+		if (memories.length === 0) {
+			setIsLoadingMemories(true)
+			try {
+				const userMemories = await getUserMemories()
+				setMemories(userMemories)
+			} catch (_error) {
+				// Silent fail
+			} finally {
+				setIsLoadingMemories(false)
+			}
 		}
 	}
 
 	const formatTimestamp = (timestamp) => {
-		if (!timestamp) return "Unknown time"
+		if (!timestamp) return ""
 		try {
 			const date = new Date(timestamp)
-			return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {
-				hour: "2-digit",
-				minute: "2-digit",
-			})}`
+			const now = new Date()
+			const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24))
+			if (diffDays === 0) return "Today"
+			if (diffDays === 1) return "Yesterday"
+			if (diffDays < 7) return `${diffDays} days ago`
+			return date.toLocaleDateString()
 		} catch {
-			return timestamp
+			return ""
 		}
 	}
 
 	const handleDeleteMemory = async (memoryId) => {
 		try {
 			await deleteMemory(memoryId)
-			// Remove from local state
 			setMemories((prev) => prev.filter((m) => m.id !== memoryId))
 			setMemoryCount((prev) => Math.max(0, prev - 1))
-		} catch (_error) {}
+		} catch (_error) {
+			// Silent fail
+		}
 	}
 
 	const characterCount = instructions.length
 	const maxCharacters = 1500
 
+	// Render header based on current view
+	const renderHeader = () => {
+		const headers = {
+			[VIEW.MAIN]: { title: "Personalization", subtitle: "Customize how AI responds to you", icon: Sparkles },
+			[VIEW.MEMORIES]: {
+				title: "Your Memories",
+				subtitle: `${memoryCount} insights learned from interactions`,
+				icon: Zap,
+				back: VIEW.MAIN,
+			},
+			[VIEW.MCP]: {
+				title: "Connected Tools",
+				subtitle: "Extend AI with external services",
+				icon: Server,
+				back: VIEW.MAIN,
+			},
+			[VIEW.MCP_ADD]: { title: "Add Server", subtitle: "Connect an MCP server", icon: Plus, back: VIEW.MCP },
+		}
+		const h = headers[view]
+		const IconComponent = h.icon
+
+		return (
+			<DialogHeader className="space-y-2">
+				<div className="flex items-center gap-3">
+					{h.back ? (
+						<button
+							type="button"
+							onClick={() => {
+								if (view === VIEW.MCP_ADD) resetServerForm()
+								setView(h.back)
+							}}
+							className="p-2 -ml-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
+						>
+							<ArrowLeft className="h-5 w-5" />
+						</button>
+					) : (
+						<div className="p-2.5 bg-gradient-to-br from-primary/90 to-primary rounded-lg">
+							<IconComponent className="h-5 w-5 text-white" />
+						</div>
+					)}
+					<DialogTitle className="text-2xl">{h.title}</DialogTitle>
+				</div>
+				<DialogDescription>{h.subtitle}</DialogDescription>
+			</DialogHeader>
+		)
+	}
+
+	// Main view content
+	const renderMainView = () => (
+		<div className="space-y-5">
+			{/* Custom Instructions Card */}
+			<div className="space-y-3">
+				<Label htmlFor="instructions" className="text-sm font-medium">
+					Custom Instructions
+				</Label>
+				<div className="space-y-2">
+					<textarea
+						id="instructions"
+						value={instructions}
+						onChange={(e) => setInstructions(e.target.value)}
+						placeholder="Tell the AI how you'd like it to respond. For example: 'I prefer concise explanations with practical examples' or 'I'm a visual learner who likes diagrams and step-by-step guides.'"
+						className="w-full min-h-[120px] p-3 text-sm border border-border bg-card rounded-md resize-y focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
+						maxLength={maxCharacters}
+					/>
+
+					<div className="flex justify-between items-center text-xs text-muted-foreground">
+						<span>These instructions will be included in all AI interactions</span>
+						<span className={characterCount > maxCharacters * 0.9 ? "text-destructive" : ""}>
+							{characterCount}/{maxCharacters}
+						</span>
+					</div>
+				</div>
+			</div>
+
+			{/* Quick Actions Grid */}
+			<div className="grid grid-cols-2 gap-3">
+				{/* Memory Card */}
+				<button
+					type="button"
+					onClick={handleViewMemories}
+					disabled={isLoadingMemories}
+					className={cn(
+						"group relative p-5 rounded-xl text-left transition-all duration-200",
+						"bg-gradient-to-br from-muted/50 to-muted/20",
+						"border border-border/50 hover:border-border",
+						"hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5"
+					)}
+				>
+					<div className="flex items-center justify-between mb-3">
+						<div className="p-2.5 rounded-xl bg-background border border-border/50 shadow-sm">
+							<Zap className="h-4 w-4 text-primary" />
+						</div>
+						<ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+					</div>
+					<div className="text-3xl font-semibold tracking-tight text-foreground">{memoryCount}</div>
+					<div className="text-sm text-muted-foreground mt-0.5">memories</div>
+				</button>
+
+				{/* MCP Card */}
+				<button
+					type="button"
+					onClick={() => setView(VIEW.MCP)}
+					disabled={isLoadingServers}
+					className={cn(
+						"group relative p-5 rounded-xl text-left transition-all duration-200",
+						"bg-gradient-to-br from-muted/50 to-muted/20",
+						"border border-border/50 hover:border-border",
+						"hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5"
+					)}
+				>
+					<div className="flex items-center justify-between mb-3">
+						<div className="p-2.5 rounded-xl bg-background border border-border/50 shadow-sm">
+							<Server className="h-4 w-4 text-muted-foreground" />
+						</div>
+						<ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+					</div>
+					<div className="text-3xl font-semibold tracking-tight text-foreground">{mcpServers.length}</div>
+					<div className="text-sm text-muted-foreground mt-0.5">tools connected</div>
+				</button>
+			</div>
+
+			{/* Save Button */}
+			<div className="flex items-center justify-end gap-3 pt-2">
+				<Button variant="ghost" onClick={() => onOpenChange(false)} disabled={isSaving}>
+					Cancel
+				</Button>
+				<Button onClick={handleSave} disabled={!hasChanges || isSaving} className="min-w-[120px]">
+					{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+				</Button>
+			</div>
+		</div>
+	)
+
+	// Memories view content
+	const renderMemoriesView = () => (
+		<div className="space-y-3">
+			{isLoadingMemories ? (
+				<div className="flex items-center justify-center py-16">
+					<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+				</div>
+			) : memories.length === 0 ? (
+				<div className="py-16 text-center">
+					<div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-muted/50 mb-4">
+						<Zap className="h-6 w-6 text-muted-foreground/50" />
+					</div>
+					<p className="text-sm text-muted-foreground">No memories yet</p>
+					<p className="text-xs text-muted-foreground/70 mt-1">Memories are created as you learn</p>
+				</div>
+			) : (
+				<div className="space-y-2">
+					{memories.map((memory, index) => (
+						<div
+							key={memory.id || index}
+							className={cn(
+								"group relative p-4 rounded-xl transition-all duration-200",
+								"bg-muted/30 hover:bg-muted/50",
+								"border border-transparent hover:border-border/50"
+							)}
+						>
+							<button
+								type="button"
+								onClick={() => handleDeleteMemory(memory.id)}
+								className={cn(
+									"absolute top-3 right-3 p-2 rounded-lg",
+									"opacity-0 group-hover:opacity-100",
+									"text-muted-foreground hover:text-destructive hover:bg-destructive/10",
+									"transition-all duration-200"
+								)}
+							>
+								<X className="h-3.5 w-3.5" />
+							</button>
+							<p className="text-sm text-foreground pr-10 leading-relaxed">{memory.content}</p>
+							{formatTimestamp(memory.timestamp) && (
+								<p className="text-xs text-muted-foreground/70 mt-2">{formatTimestamp(memory.timestamp)}</p>
+							)}
+						</div>
+					))}
+
+					{/* Clear all button */}
+					{memories.length > 0 && (
+						<div className="pt-4 flex justify-center">
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={handleClearMemory}
+								disabled={isClearing}
+								className="text-destructive hover:text-destructive hover:bg-destructive/10"
+							>
+								{isClearing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+								Clear All Memories
+							</Button>
+						</div>
+					)}
+				</div>
+			)}
+		</div>
+	)
+
+	// MCP servers list view
+	const renderMcpView = () => (
+		<div className="space-y-3">
+			{serverError && (
+				<div className="mb-4 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+					{serverError}
+				</div>
+			)}
+
+			{isLoadingServers ? (
+				<div className="flex items-center justify-center py-16">
+					<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+				</div>
+			) : (
+				<div className="space-y-3">
+					{mcpServers.map((server) => (
+						<div
+							key={server.id}
+							className={cn(
+								"group flex items-center gap-4 p-4 rounded-xl transition-all duration-200",
+								"bg-muted/30 hover:bg-muted/50",
+								"border border-transparent hover:border-border/50"
+							)}
+						>
+							<div className="p-2.5 rounded-xl bg-background border border-border/50 shadow-sm">
+								<Server className="h-4 w-4 text-muted-foreground" />
+							</div>
+							<div className="flex-1 min-w-0">
+								<div className="flex items-center gap-2">
+									<span className="text-sm font-medium text-foreground truncate">{server.name}</span>
+									{server.enabled && (
+										<span className="h-2 w-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
+									)}
+								</div>
+								<p className="text-xs text-muted-foreground truncate mt-0.5">{server.url}</p>
+							</div>
+							<button
+								type="button"
+								onClick={() => handleDeleteServer(server.id)}
+								disabled={deletingServerId === server.id}
+								className={cn(
+									"p-2 rounded-lg opacity-0 group-hover:opacity-100",
+									"text-muted-foreground hover:text-destructive hover:bg-destructive/10",
+									"transition-all duration-200"
+								)}
+							>
+								{deletingServerId === server.id ? (
+									<Loader2 className="h-4 w-4 animate-spin" />
+								) : (
+									<Trash2 className="h-4 w-4" />
+								)}
+							</button>
+						</div>
+					))}
+
+					{/* Add server button */}
+					<button
+						type="button"
+						onClick={() => setView(VIEW.MCP_ADD)}
+						className={cn(
+							"w-full flex items-center justify-center gap-2 p-4 rounded-xl",
+							"border-2 border-dashed border-border/60 hover:border-primary/40",
+							"text-muted-foreground hover:text-foreground",
+							"transition-all duration-200 hover:bg-muted/30"
+						)}
+					>
+						<Plus className="h-4 w-4" />
+						<span className="text-sm font-medium">Add MCP Server</span>
+					</button>
+
+					{mcpServers.length === 0 && (
+						<p className="text-center text-xs text-muted-foreground/70 pt-2">
+							Connect tools like Exa Search or Context7
+						</p>
+					)}
+				</div>
+			)}
+		</div>
+	)
+
+	// Add MCP server form view
+	const renderMcpAddView = () => (
+		<div className="space-y-5">
+			{serverError && (
+				<div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+					{serverError}
+				</div>
+			)}
+
+			<div className="space-y-2">
+				<Label htmlFor="server-url">Server URL</Label>
+				<Input
+					id="server-url"
+					type="url"
+					value={serverForm.url}
+					onChange={(e) => setServerForm((prev) => ({ ...prev, url: e.target.value }))}
+					placeholder="https://mcp.example.com"
+					className="h-11"
+				/>
+				<p className="text-xs text-muted-foreground">Server name will be detected automatically</p>
+			</div>
+
+			<div className="space-y-3">
+				<span className="block text-sm font-medium text-foreground">Authentication</span>
+				<div className="flex gap-2">
+					{[
+						{ value: "none", label: "None" },
+						{ value: "bearer", label: "Bearer Token" },
+					].map((opt) => (
+						<button
+							key={opt.value}
+							type="button"
+							onClick={() => setServerForm((prev) => ({ ...prev, authType: opt.value }))}
+							className={cn(
+								"flex-1 px-4 py-2.5 text-sm font-medium rounded-xl border-2 transition-all duration-200",
+								serverForm.authType === opt.value
+									? "border-primary bg-primary/5 text-primary"
+									: "border-border/60 text-muted-foreground hover:border-border hover:text-foreground"
+							)}
+						>
+							{opt.label}
+						</button>
+					))}
+				</div>
+				{serverForm.authType === "bearer" && (
+					<Input
+						type="password"
+						value={serverForm.authToken}
+						onChange={(e) => setServerForm((prev) => ({ ...prev, authToken: e.target.value }))}
+						placeholder="Enter API token"
+						className="h-11 mt-2"
+					/>
+				)}
+			</div>
+
+			{/* Headers */}
+			{headerRows.length > 0 && (
+				<div className="space-y-3">
+					<span className="block text-sm font-medium text-foreground">Custom Headers</span>
+					{headerRows.map((row) => (
+						<div key={row.id} className="flex gap-2">
+							<Input
+								type="text"
+								value={row.key}
+								onChange={(e) => updateHeaderRow(row.id, "key", e.target.value)}
+								placeholder="Header name"
+								className="h-10"
+							/>
+							<Input
+								type="text"
+								value={row.value}
+								onChange={(e) => updateHeaderRow(row.id, "value", e.target.value)}
+								placeholder="Value"
+								className="h-10"
+							/>
+							<button
+								type="button"
+								onClick={() => removeHeaderRow(row.id)}
+								className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+							>
+								<X className="h-4 w-4" />
+							</button>
+						</div>
+					))}
+				</div>
+			)}
+
+			<button
+				type="button"
+				onClick={addHeaderRow}
+				className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+			>
+				+ Add custom header
+			</button>
+
+			<div className="flex items-center justify-end gap-3 pt-4">
+				<Button
+					variant="ghost"
+					onClick={() => {
+						resetServerForm()
+						setView(VIEW.MCP)
+					}}
+					disabled={isSavingServer}
+				>
+					Cancel
+				</Button>
+				<Button
+					onClick={handleCreateServer}
+					disabled={isSavingServer || !serverForm.url.trim()}
+					className="min-w-[100px]"
+				>
+					{isSavingServer ? <Loader2 className="h-4 w-4 animate-spin" /> : "Connect"}
+				</Button>
+			</div>
+		</div>
+	)
+
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
-				<DialogHeader>
-					<DialogTitle className="flex items-center gap-2">
-						{showMemories && (
-							<Button variant="ghost" size="sm" onClick={() => setShowMemories(false)} className="p-1 h-8 w-8">
-								<ChevronLeft className="h-4 w-4" />
-							</Button>
-						)}
-						<Brain className="h-5 w-5 text-primary" />
-						{showMemories ? "Your Learning Memories" : "Personalize Talimio"}
-					</DialogTitle>
-					<DialogDescription>
-						{showMemories
-							? "Review your stored learning interactions and preferences"
-							: "Customize how AI responds to you based on your learning preferences and history."}
-					</DialogDescription>
-				</DialogHeader>
-
+			<DialogContent className="sm:max-w-[520px] gap-5">
 				{isLoading ? (
-					<div className="flex items-center justify-center py-8">
-						<div className="text-sm text-muted-foreground">Loading settings...</div>
-					</div>
-				) : showMemories ? (
-					<div className="space-y-4">
-						{isLoadingMemories ? (
-							<div className="flex items-center justify-center py-8">
-								<div className="text-sm text-muted-foreground">Loading memories...</div>
-							</div>
-						) : memories.length === 0 ? (
-							<div className="text-center py-8">
-								<div className="text-sm text-muted-foreground">No memories found</div>
-							</div>
-						) : (
-							<div className="space-y-3 max-h-[400px] overflow-y-auto">
-								{memories.map((memory, index) => (
-									<div
-										key={memory.id || index}
-										className="rounded-lg border-l-2 border-primary/20 bg-muted/30 p-3 relative group"
-									>
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={() => handleDeleteMemory(memory.id)}
-											className="absolute top-2 right-2 p-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-											title="Delete this memory"
-										>
-											<X className="h-3 w-3" />
-										</Button>
-										<p className="text-sm font-medium text-foreground mb-2 pr-8">{memory.content}</p>
-										<div className="flex items-center justify-between text-xs text-muted-foreground">
-											<span>{formatTimestamp(memory.timestamp)}</span>
-										</div>
-										{memory.metadata && Object.keys(memory.metadata).length > 0 && (
-											<div className="mt-2 flex flex-wrap gap-1">
-												{Object.entries(memory.metadata)
-													.filter(([key, value]) => key !== "timestamp" && value && value !== "now")
-													.map(([key, value]) => (
-														<span key={key} className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded">
-															{key}: {value}
-														</span>
-													))}
-											</div>
-										)}
-									</div>
-								))}
-							</div>
-						)}
-
-						<div className="flex justify-between pt-4">
-							<Button variant="outline" onClick={() => setShowMemories(false)}>
-								<ChevronLeft className="h-4 w-4 mr-2" />
-								Back to Settings
-							</Button>
-							<Button variant="outline" onClick={() => onOpenChange(false)}>
-								Close
-							</Button>
-						</div>
+					<div className="flex items-center justify-center py-24">
+						<Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
 					</div>
 				) : (
-					<div className="space-y-6">
-						{/* Custom Instructions Section */}
-						<div className="space-y-3">
-							<Label htmlFor="instructions" className="text-sm font-medium">
-								Custom Instructions
-							</Label>
-							<div className="space-y-2">
-								<textarea
-									id="instructions"
-									value={instructions}
-									onChange={(e) => setInstructions(e.target.value)}
-									placeholder="Tell the AI how you'd like it to respond. For example: 'I prefer concise explanations with practical examples' or 'I'm a visual learner who likes diagrams and step-by-step guides.'"
-									className="w-full min-h-[120px] p-3 text-sm border border-border bg-card rounded-md resize-y focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
-									maxLength={maxCharacters}
-								/>
-
-								<div className="flex justify-between items-center text-xs text-muted-foreground">
-									<span>These instructions will be included in all AI interactions</span>
-									<span className={characterCount > maxCharacters * 0.9 ? "text-destructive" : ""}>
-										{characterCount}/{maxCharacters}
-									</span>
-								</div>
-							</div>
+					<>
+						{renderHeader()}
+						<div className="max-h-[55vh] overflow-y-auto -mx-6 px-6">
+							{view === VIEW.MAIN && renderMainView()}
+							{view === VIEW.MEMORIES && renderMemoriesView()}
+							{view === VIEW.MCP && renderMcpView()}
+							{view === VIEW.MCP_ADD && renderMcpAddView()}
 						</div>
-
-						{/* Memory Statistics */}
-						<div className="space-y-3">
-							<Label className="text-sm font-medium">Learning History</Label>
-							<div className="rounded-lg bg-muted/50 p-4">
-								<div className="flex items-center justify-between">
-									<div className="flex-1">
-										<button
-											type="button"
-											onClick={handleViewMemories}
-											disabled={memoryCount === 0 || isLoadingMemories}
-											className="text-left group disabled:cursor-not-allowed"
-										>
-											<p className="text-sm font-medium group-hover:text-primary group-disabled:text-muted-foreground transition-colors">
-												{memoryCount} memories stored
-											</p>
-											<p className="text-xs text-muted-foreground">
-												{memoryCount > 0
-													? "Click to view your stored learning interactions"
-													: "AI learns from your interactions to provide personalized responses"}
-											</p>
-										</button>
-									</div>
-									<div className="flex gap-2">
-										{memoryCount > 0 && (
-											<Button variant="outline" size="sm" onClick={handleViewMemories} disabled={isLoadingMemories}>
-												<Eye className="h-4 w-4 mr-2" />
-												{isLoadingMemories ? "Loading..." : "View"}
-											</Button>
-										)}
-										<Button
-											variant="outline"
-											size="sm"
-											onClick={handleClearMemory}
-											disabled={isClearing || memoryCount === 0}
-											className="text-destructive hover:text-destructive"
-										>
-											<Trash2 className="h-4 w-4 mr-2" />
-											{isClearing ? "Clearing..." : "Clear All"}
-										</Button>
-									</div>
-								</div>
-							</div>
-						</div>
-
-						{/* Action Buttons */}
-						<div className="flex justify-between pt-4">
-							<Button variant="outline" onClick={handleReset} disabled={!hasChanges || isSaving}>
-								<RotateCcw className="h-4 w-4 mr-2" />
-								Reset
-							</Button>
-							<div className="flex gap-2">
-								<Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
-									Cancel
-								</Button>
-								<Button onClick={handleSave} disabled={!hasChanges || isSaving}>
-									<Save className="h-4 w-4 mr-2" />
-									{isSaving ? "Saving..." : "Save Changes"}
-								</Button>
-							</div>
-						</div>
-					</div>
+					</>
 				)}
 			</DialogContent>
 		</Dialog>

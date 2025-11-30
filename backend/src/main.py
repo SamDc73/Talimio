@@ -16,6 +16,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from .ai.assistant.router import router as assistant_router
+from .ai.mcp.router import router as mcp_router  # type: ignore[import]
 from .ai.rag.router import router as rag_router
 from .auth.exceptions import (
     AuthenticationError,
@@ -80,6 +81,7 @@ def _register_routers(app: FastAPI) -> None:
         user_router,
         videos_router,
         auth_router,
+        mcp_router,
     ]
 
     for router in routers:
