@@ -241,6 +241,15 @@ class MDXValidateResponse(BaseModel):
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
+class ExecutionFilePayload(BaseModel):
+    """Single workspace file included during execution."""
+
+    path: str = Field(..., min_length=1, description="Relative path of the file inside the workspace root")
+    content: str = Field(..., description="Full file contents written to the sandbox before execution")
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
 class CodeExecuteRequest(BaseModel):
     """Request to execute a code snippet via E2B."""
 
@@ -249,6 +258,9 @@ class CodeExecuteRequest(BaseModel):
     stdin: str | None = Field(None, description="Optional stdin input")
     lesson_id: UUID | None = Field(None, description="Optional lesson id for analytics/logging")
     course_id: UUID | None = Field(None, description="Course id for sandbox scoping and setup commands")
+    files: list[ExecutionFilePayload] | None = Field(None, description="Optional multi-file workspace payload")
+    entry_file: str | None = Field(None, description="Entry file path to run when workspace files are provided")
+    workspace_id: str | None = Field(None, description="Logical workspace identifier for grouping files")
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 

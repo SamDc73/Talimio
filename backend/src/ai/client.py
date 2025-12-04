@@ -1147,6 +1147,10 @@ class LLMClient:
         stdin: str | None = None,
         sandbox_state: dict[str, Any] | None = None,
         user_id: str | UUID | None = None,
+        workspace_entry: str | None = None,
+        workspace_root: str | None = None,
+        workspace_files: list[str] | None = None,
+        workspace_id: str | None = None,
     ) -> ExecutionPlan:
         """Create a sandbox execution plan using Instructor-bound JSON output."""
         payload: dict[str, Any] = {
@@ -1157,6 +1161,14 @@ class LLMClient:
             "stdin": (stdin or "")[:2000],
             "sandbox_state": sandbox_state or {},
         }
+        if workspace_entry:
+            payload["workspace_entry"] = workspace_entry
+        if workspace_root:
+            payload["workspace_root"] = workspace_root
+        if workspace_files:
+            payload["workspace_files"] = workspace_files
+        if workspace_id:
+            payload["workspace_id"] = workspace_id
 
         messages = [
             {"role": "system", "content": E2B_EXECUTION_SYSTEM_PROMPT},

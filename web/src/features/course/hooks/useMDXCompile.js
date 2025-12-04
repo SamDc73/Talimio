@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react"
 import * as runtime from "react/jsx-runtime"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import rehypeKatex from "rehype-katex"
+import rehypeMdxCodeProps from "rehype-mdx-code-props"
 import rehypeSlug from "rehype-slug"
 import remarkEmoji from "remark-emoji"
 import remarkGfm from "remark-gfm"
@@ -26,6 +27,7 @@ const mdxOptions = {
 		rehypeSlug, // Add IDs to headings
 		[rehypeAutolinkHeadings, { behavior: "wrap" }], // Link headings
 		rehypeKatex, // Math rendering
+		[rehypeMdxCodeProps, { tagName: "pre" }], // Pass code meta as JSX props (must be last)
 	],
 }
 
@@ -48,6 +50,18 @@ const runtimeGlobals = {
 		warn: (...args) => logger.info("MDX Warning", { args }),
 		error: (...args) => logger.error("MDX Error", new Error(args.join(" "))),
 	},
+}
+
+/**
+ * Quote unquoted attributes in code fence meta (e.g., file=path → file="path")
+ * @param {string} meta - The meta string after the language identifier
+ * @returns {string} - Meta with properly quoted attributes
+ */
+function quoteCodeFenceMeta(meta) {
+	if (!meta) return meta
+	// Match attr=value where value is unquoted (not starting with " or ')
+	// Handle both key=value and standalone key (like "entry")
+	return meta.replace(/(\w+)=([^\s"'][^\s]*)/g, '$1="$2"')
 }
 
 /**
@@ -74,6 +88,12 @@ function preprocessMDXContent(content) {
 
 	// Remove HTML comments <!-- ... -->
 	processed = processed.replace(/<!--[\s\S]*?-->/g, "")
+
+	// Fix code fence meta: quote unquoted attributes (file=path → file="path")
+	// This must happen before we protect code blocks
+	processed = processed.replace(/^(```\w*)([^\n]*)/gm, (_match, fence, meta) => {
+		return fence + quoteCodeFenceMeta(meta)
+	})
 
 	// Fix common MDX syntax issues
 	// Remove any standalone curly braces that aren't in code blocks

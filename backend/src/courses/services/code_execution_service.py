@@ -15,7 +15,10 @@ import contextlib
 import hashlib
 import logging
 import os
+import posixpath
+import shlex
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -85,6 +88,14 @@ class ExecutionResult:
     memory: float | None
 
 
+@dataclass(slots=True)
+class WorkspaceFile:
+    """Simple data carrier for workspace file payloads."""
+
+    path: str
+    content: str
+
+
 class CodeExecutionError(RuntimeError):
     """Domain error raised when sandbox execution fails."""
 
@@ -142,6 +153,7 @@ class CodeExecutionService:
         self._ai_service = get_ai_service()
         self._apt_sentinel = "/home/user/.talimio_apt_updated"
         self._language_sentinel_prefix = "/home/user/.talimio_lang_"
+        self._workspace_root = "/home/user/workspaces"
 
     def _session_key(self, user_id: str | None, course_id: str | None) -> str:
         """Generate sandbox key per user+course (not per lesson)."""
@@ -201,6 +213,9 @@ class CodeExecutionService:
         course_id: str | None = None,
         lesson_id: str | None = None,
         setup_commands: list[str] | None = None,
+        files: Sequence[WorkspaceFile] | None = None,
+        entry_file: str | None = None,
+        workspace_id: str | None = None,
     ) -> ExecutionResult:
         """Execute code with fast-path optimization and course-scoped sandboxes.
 
@@ -218,12 +233,25 @@ class CodeExecutionService:
         if course_id and setup_commands and not self._course_setup_done.get(course_id):
             await self._run_course_setup(sbx, course_id, setup_commands)
 
+        workspace_context: dict[str, Any] | None = None
+        if files:
+            workspace_context = await self._prepare_workspace(
+                sbx=sbx,
+                files=files,
+                workspace_id=workspace_id,
+                course_id=course_id,
+                lesson_id=lesson_id,
+                entry_file=entry_file,
+            )
+
         code_sig = hashlib.sha256(source_code.encode("utf-8")).hexdigest()[:8]
         logging.debug("Run start key=%s lang=%s code_sig=%s size=%d", key, language, code_sig, len(source_code))
 
+        is_workspace_mode = workspace_context is not None
+
         # Try fast-path first (instant for common languages)
         norm_lang = language.lower().strip()
-        if norm_lang in FAST_PATH_TEMPLATES:
+        if not is_workspace_mode and norm_lang in FAST_PATH_TEMPLATES:
             logging.info("Fast-path provisioning check lang=%s key=%s", norm_lang, key)
             await self._ensure_runtime(sbx, norm_lang)
             try:
@@ -237,20 +265,23 @@ class CodeExecutionService:
                 logging.debug("Fast-path exception lang=%s, trying AI", norm_lang, exc_info=True)
 
         # Try cached plan
-        cache_key = self._plan_cache_key(course_id, language, source_code)
-        cached_plan = self._plan_cache.get(cache_key)
-        if cached_plan:
-            logging.debug("Using cached plan cache_key=%s", cache_key)
-            result = await self._apply_execution_plan(
-                sbx=sbx,
-                plan=cached_plan,
-                source_code=source_code,
-                language=language,
-                lesson_id=lesson_id,
-            )
-            if result.status != "error":
-                return result
-            logging.debug("Cached plan failed, trying AI")
+        cache_key: str | None = None
+        cached_plan: Any | None = None
+        if not is_workspace_mode:
+            cache_key = self._plan_cache_key(course_id, language, source_code)
+            cached_plan = self._plan_cache.get(cache_key)
+            if cached_plan:
+                logging.debug("Using cached plan cache_key=%s", cache_key)
+                result = await self._apply_execution_plan(
+                    sbx=sbx,
+                    plan=cached_plan,
+                    source_code=source_code,
+                    language=language,
+                    lesson_id=lesson_id,
+                )
+                if result.status != "error":
+                    return result
+                logging.debug("Cached plan failed, trying AI")
 
         # AI fallback
         result = await self._plan_and_execute_with_ai(
@@ -261,6 +292,10 @@ class CodeExecutionService:
             user_id=user_id,
             lesson_id=lesson_id,
             cache_key=cache_key,
+            workspace_entry_file=workspace_context["entry_file"] if workspace_context else None,
+            workspace_root=workspace_context["workspace_dir"] if workspace_context else None,
+            workspace_files=workspace_context["manifest"] if workspace_context else None,
+            workspace_identifier=workspace_context["identifier"] if workspace_context else workspace_id,
         )
 
         # Detect sandbox context restarts and reset the session to keep things healthy
@@ -481,6 +516,10 @@ class CodeExecutionService:
         user_id: str | None,
         lesson_id: str | None,
         cache_key: str | None = None,
+        workspace_entry_file: str | None = None,
+        workspace_root: str | None = None,
+        workspace_files: Sequence[str] | None = None,
+        workspace_identifier: str | None = None,
     ) -> ExecutionResult:
         sandbox_state = await self._gather_sandbox_state(sbx)
         plan = await self._ai_service.generate_execution_plan(
@@ -490,6 +529,10 @@ class CodeExecutionService:
             stdin=stdin,
             sandbox_state=sandbox_state,
             user_id=user_id,
+            workspace_entry=workspace_entry_file,
+            workspace_root=workspace_root,
+            workspace_files=list(workspace_files) if workspace_files else None,
+            workspace_id=workspace_identifier,
         )
 
         # Cache the plan for future use
@@ -768,6 +811,93 @@ class CodeExecutionService:
                     raise
         except Exception:
             logging.exception("Failed to persist patch for lesson lesson_id=%s", lesson_id)
+
+    async def _prepare_workspace(
+        self,
+        *,
+        sbx: Any,
+        files: Sequence[WorkspaceFile],
+        workspace_id: str | None,
+        course_id: str | None,
+        lesson_id: str | None,
+        entry_file: str | None,
+    ) -> dict[str, Any]:
+        file_list = list(files)
+        if not file_list:
+            msg = "Workspace execution requires at least one file"
+            raise ValueError(msg)
+
+        workspace_dir = self._resolve_workspace_root(workspace_id, course_id, lesson_id)
+        await self._reset_workspace_directory(sbx, workspace_dir)
+
+        directories: set[str] = set()
+        manifest: list[str] = []
+        writes: list[tuple[str, str]] = []
+
+        for file in file_list:
+            resolved_path, _relative_path = self._resolve_workspace_file_path(workspace_dir, file.path)
+            manifest.append(resolved_path)
+            parent_dir = posixpath.dirname(resolved_path)
+            if parent_dir and parent_dir.startswith(workspace_dir) and parent_dir != workspace_dir:
+                directories.add(parent_dir)
+            writes.append((resolved_path, file.content))
+
+        if directories:
+            await self._ensure_directories(sbx, directories)
+
+        for resolved_path, contents in writes:
+            await sbx.files.write(path=resolved_path, data=contents)
+
+        resolved_entry, _ = self._resolve_workspace_file_path(workspace_dir, entry_file or file_list[0].path)
+        identifier = workspace_id or "workspace"
+
+        return {
+            "entry_file": resolved_entry,
+            "workspace_dir": workspace_dir,
+            "manifest": manifest,
+            "identifier": identifier,
+        }
+
+    def _resolve_workspace_root(self, workspace_id: str | None, course_id: str | None, lesson_id: str | None) -> str:
+        safe_id = self._sanitize_workspace_id(workspace_id)
+        scope = f"{course_id or '_'}:{lesson_id or '_'}:{workspace_id or safe_id}"
+        digest = hashlib.sha256(scope.encode("utf-8")).hexdigest()[:10]
+        return posixpath.join(self._workspace_root, f"{safe_id}-{digest}")
+
+    def _sanitize_workspace_id(self, workspace_id: str | None) -> str:
+        base = (workspace_id or "workspace").strip().lower()
+        filtered = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in base)
+        sanitized = filtered.strip("-_") or "workspace"
+        return sanitized[:48]
+
+    async def _reset_workspace_directory(self, sbx: Any, workspace_dir: str) -> None:
+        if not workspace_dir.startswith(self._workspace_root):
+            msg = "Workspace directory outside sandbox root"
+            raise ValueError(msg)
+        root_quoted = shlex.quote(self._workspace_root)
+        await sbx.commands.run(f"mkdir -p {root_quoted}")
+        quoted = shlex.quote(workspace_dir)
+        await sbx.commands.run(f"rm -rf {quoted} && mkdir -p {quoted}")
+
+    async def _ensure_directories(self, sbx: Any, directories: set[str]) -> None:
+        for directory in sorted(directories):
+            if not directory.startswith(self._workspace_root):
+                continue
+            quoted = shlex.quote(directory)
+            await sbx.commands.run(f"mkdir -p {quoted}")
+
+    def _resolve_workspace_file_path(self, workspace_dir: str, raw_path: str) -> tuple[str, str]:
+        relative = self._normalize_workspace_relative_path(raw_path)
+        return posixpath.join(workspace_dir, relative), relative
+
+    def _normalize_workspace_relative_path(self, raw_path: str) -> str:
+        candidate = (raw_path or "").replace("\\", "/").strip()
+        candidate = candidate.lstrip("/")
+        normalized = posixpath.normpath(candidate)
+        if normalized in ("", ".", "..") or normalized.startswith("../"):
+            msg = f"Invalid workspace file path: {raw_path}"
+            raise ValueError(msg)
+        return normalized
 
 
 async def _maybe_await(value: Any) -> Any:

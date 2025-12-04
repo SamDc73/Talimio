@@ -139,6 +139,10 @@ class AIService:
         stdin: str | None = None,
         sandbox_state: dict[str, Any] | None = None,
         user_id: str | UUID | None = None,
+        workspace_entry: str | None = None,
+        workspace_root: str | None = None,
+        workspace_files: list[str] | None = None,
+        workspace_id: str | None = None,
     ) -> ExecutionPlan:
         """Generate a sandbox execution plan for code execution."""
         return await self._assistant_llm.generate_execution_plan(
@@ -148,6 +152,10 @@ class AIService:
             stdin=stdin,
             sandbox_state=sandbox_state,
             user_id=user_id,
+            workspace_entry=workspace_entry,
+            workspace_root=workspace_root,
+            workspace_files=workspace_files,
+            workspace_id=workspace_id,
         )
 
     # RAG helpers
