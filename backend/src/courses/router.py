@@ -38,7 +38,7 @@ from src.courses.schemas import (
     SelfAssessmentRequest,
     SelfAssessmentResponse,
 )
-from src.courses.services.code_execution_service import CodeExecutionError, CodeExecutionService
+from src.courses.services.code_execution_service import CodeExecutionError, CodeExecutionService, WorkspaceFile
 from src.courses.services.concept_graph_service import ConceptGraphService
 from src.courses.services.concept_scheduler_service import LectorSchedulerService
 from src.courses.services.concept_state_service import ConceptStateService
@@ -469,6 +469,10 @@ async def execute_code(
         except Exception:
             logger.debug("Could not fetch course setup_commands for course_id=%s", request.course_id)
 
+    workspace_files: list[WorkspaceFile] | None = None
+    if request.files:
+        workspace_files = [WorkspaceFile(path=item.path, content=item.content) for item in request.files]
+
     try:
         result = await svc.execute(
             source_code=request.code,
@@ -478,6 +482,9 @@ async def execute_code(
             course_id=str(request.course_id) if request.course_id else None,
             lesson_id=str(request.lesson_id) if request.lesson_id else None,
             setup_commands=setup_commands,
+            files=workspace_files,
+            entry_file=request.entry_file,
+            workspace_id=request.workspace_id,
         )
     except CodeExecutionError as error:
         logger.warning(

@@ -3,7 +3,8 @@ import { FillInTheBlank } from "@/components/quiz/FillInTheBlank.jsx"
 import { FreeForm } from "@/components/quiz/FreeForm.jsx"
 import { MultipleChoice } from "@/components/quiz/MultipleChoice.jsx"
 import { useMDXCompile } from "@/features/course/hooks/useMDXCompile"
-import ExecutableCodeBlock from "./ExecutableCodeBlock.jsx"
+import WorkspaceAwareCodeBlock from "./WorkspaceAwareCodeBlock.jsx"
+import { WorkspaceRegistryProvider } from "./workspaceContext"
 
 // Static component overrides - defined once outside component
 const MDX_COMPONENTS = {
@@ -150,18 +151,19 @@ export function MDXRenderer({ content, lessonId, courseId }) {
 	// Render the MDX component
 	return (
 		<div className="markdown-content prose prose-zinc max-w-none">
-			{(() => {
-				// Override only the `pre` component to inject ExecutableCodeBlock with lessonId and courseId
-				const componentsWithLesson = {
-					...MDX_COMPONENTS,
-					pre: (props) => <ExecutableCodeBlock {...props} lessonId={lessonId} courseId={courseId} />,
-				}
-				return (
-					<MDXProvider components={componentsWithLesson}>
-						<Component components={componentsWithLesson} />
-					</MDXProvider>
-				)
-			})()}
+			<WorkspaceRegistryProvider>
+				{(() => {
+					const componentsWithLesson = {
+						...MDX_COMPONENTS,
+						pre: (props) => <WorkspaceAwareCodeBlock {...props} lessonId={lessonId} courseId={courseId} />,
+					}
+					return (
+						<MDXProvider components={componentsWithLesson}>
+							<Component components={componentsWithLesson} />
+						</MDXProvider>
+					)
+				})()}
+			</WorkspaceRegistryProvider>
 		</div>
 	)
 }

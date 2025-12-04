@@ -28,7 +28,7 @@ import {
 } from "@/components/DropdownMenu"
 import { Input } from "@/components/Input"
 import { PersonalizationDialog } from "@/components/PersonalizationDialog"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/Sheet"
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/Sheet"
 import { TooltipButton } from "@/components/TooltipButton"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useAuth } from "@/hooks/useAuth"
@@ -326,10 +326,14 @@ export function MainHeader({ transparent = false, className }) {
 								</Button>
 							</SheetTrigger>
 							<SheetContent side="right" className="w-[300px] sm:w-[400px]">
+								<SheetHeader className="sr-only">
+									<SheetTitle>Mobile navigation</SheetTitle>
+								</SheetHeader>
 								<div className="flex flex-col h-full">
 									<div className="py-6">
 										<Logo size="sm" className="mx-auto" />
 									</div>
+
 									<nav className="flex flex-col space-y-4">
 										<Link
 											to="/courses"

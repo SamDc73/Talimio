@@ -1,26 +1,17 @@
-import { languages as CM_LANGS } from "@codemirror/language-data"
-import { EditorView } from "@codemirror/view"
-import { loadLanguage } from "@uiw/codemirror-extensions-langs"
 import CodeMirror from "@uiw/react-codemirror"
 import { AlertTriangle, CheckCircle, Play, RotateCcw } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
 
 import { Badge } from "@/components/Badge"
 import { Button } from "@/components/Button"
 import ErrorBoundary from "@/components/ErrorBoundary"
+import { useCodeMirrorLanguageExtensions } from "@/features/course/hooks/useCodeMirrorLanguage"
 import { useExecutableCodeBlockState } from "@/features/course/hooks/useExecutableCodeBlockState"
 import { flattenText, getLanguage } from "@/features/course/utils/codeBlockUtils"
-import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
 
-import { catppuccinLatte, catppuccinLatteColors } from "./catppuccinTheme"
+import { catppuccinLatteColors } from "./catppuccinTheme"
 
-const LANG_EXT_CACHE = new Map()
-
-// CodeMirror repeatedly resets its internal scroller on mount; disable browser anchoring to avoid loops.
-const disableScrollAnchoringTheme = EditorView.theme({
-	".cm-scroller": { overflowAnchor: "none" },
-})
+const LATTE_BORDER_COLOR = catppuccinLatteColors.surface1.hex
 
 const CODEMIRROR_ALIASES = {
 	js: "javascript",
@@ -59,8 +50,6 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 	// Determine if this code block can be executed
 	const canRun = Boolean(language)
 
-	const [languageExtensions, setLanguageExtensions] = useState(() => [EditorView.lineWrapping])
-
 	const { code, result, error, isRunning, onRun, onReset, handleCodeChange } = useExecutableCodeBlockState({
 		originalCode,
 		language,
@@ -69,69 +58,8 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 		lessonId,
 	})
 
-	useEffect(() => {
-		let cancelled = false
-		const baseExts = [EditorView.lineWrapping]
+	const editorExtensions = useCodeMirrorLanguageExtensions(editorLanguage)
 
-		async function loadLang() {
-			const name = typeof editorLanguage === "string" ? editorLanguage : null
-			if (!name) {
-				if (!cancelled) setLanguageExtensions(baseExts)
-				return
-			}
-			if (LANG_EXT_CACHE.has(name)) {
-				const cached = LANG_EXT_CACHE.get(name)
-				if (!cancelled) setLanguageExtensions([...baseExts, cached])
-				return
-			}
-			try {
-				let ext = loadLanguage(name)
-				if (ext && typeof ext.then === "function") {
-					ext = await ext
-				}
-				if (ext) {
-					LANG_EXT_CACHE.set(name, ext)
-					if (!cancelled) setLanguageExtensions([...baseExts, ext])
-					return
-				}
-				const lc = name.toLowerCase()
-				const candidate = CM_LANGS.find((l) => {
-					const lname = (l?.name || "").toLowerCase()
-					const aliases = Array.isArray(l?.alias) ? l.alias.map((a) => (a || "").toLowerCase()) : []
-					return lname === lc || aliases.includes(lc)
-				})
-				if (candidate) {
-					try {
-						let ext2 = candidate.load()
-						if (ext2 && typeof ext2.then === "function") ext2 = await ext2
-						if (ext2) {
-							LANG_EXT_CACHE.set(name, ext2)
-							if (!cancelled) setLanguageExtensions([...baseExts, ext2])
-							return
-						}
-					} catch (e2) {
-						logger.error("Failed to load fallback language extension", e2, { language: editorLanguage })
-					}
-				}
-			} catch (e) {
-				logger.error("Failed to load language extension", e, { language: editorLanguage })
-			}
-			if (!cancelled) setLanguageExtensions(baseExts)
-		}
-
-		loadLang()
-		return () => {
-			cancelled = true
-		}
-	}, [editorLanguage])
-
-	const editorExtensions = useMemo(
-		() => [disableScrollAnchoringTheme, catppuccinLatte, ...languageExtensions],
-		[languageExtensions]
-	)
-
-	// Exact border shade from Catppuccin Latte to keep container/header borders in perfect sync
-	const borderHex = catppuccinLatteColors.surface1.hex
 	const actionGroupClassName =
 		"inline-flex items-center overflow-hidden rounded-full border border-border/60 bg-background/60 shadow-xs backdrop-blur-[1px]"
 	const actionButtonBaseClass =
@@ -143,12 +71,12 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 	return (
 		<div
 			className="relative group mb-8 rounded-xl overflow-hidden border bg-card shadow-sm hover:shadow-md transition-all duration-200"
-			style={{ borderColor: borderHex }}
+			style={{ borderColor: LATTE_BORDER_COLOR }}
 		>
 			{/* Header */}
 			<div
 				className="flex items-center justify-between gap-3 px-4 py-2.5 border-b bg-gradient-to-r from-green-500/6 via-muted/45 to-muted/35 backdrop-blur-[1px]"
-				style={{ borderBottomColor: borderHex }}
+				style={{ borderBottomColor: LATTE_BORDER_COLOR }}
 			>
 				<div className="flex items-center gap-2.5">
 					<Badge

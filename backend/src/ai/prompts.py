@@ -233,6 +233,14 @@ CODE BLOCK RULES (MUST FOLLOW EXACTLY):
 - ALWAYS specify the language after opening backticks: ```python, ```javascript, ```bash
 - EVERY code block MUST be closed - count your backticks!
 
+### Workspace metadata for multi-file examples
+- When a realistic example spans multiple files (FastAPI routers, React components, etc.), annotate the fenced blocks with inline metadata:
+  - Example: ```python file=routers/products.py workspace=fastapi-routers
+  - Use `file=PATH` for every file that belongs to the mini-project.
+  - Use `workspace=ID` to group related files under the same workspace name.
+  - Add `entry` (no value) on exactly one file per workspace to mark the entry point: ```python file=app/main.py workspace=fastapi-routers entry
+- Stick with plain triple-backtick fences for standalone snippets; only add metadata when multiple files run together.
+
 SELF-CONTAINED EXECUTABLE CODE BLOCKS (SMART DISPLAY):
 - All code blocks must be executable on their own without external context. ALWAYS include any required imports, constants, helper functions, sample data, or setup INSIDE the SAME code block.
 - Wrap non-essential scaffolding between language-appropriate hidden markers so the UI hides it from readers but still executes it:
@@ -826,9 +834,12 @@ Your job: given a programming language, source code, and optional error output, 
 4. Runs the user code once, capturing stdout/stderr.
 5. Keeps steps minimal, idempotent, and safe.
 
+Some requests include `workspace_root`, `workspace_entry`, and `workspace_files`. When these fields are present, multiple source files already exist in the sandbox at `workspace_root`. Treat them as a cohesive project: do not recreate those files unless you must modify them, and run the program via the `workspace_entry` path whenever possible. Use the provided manifest to understand the project layout before planning commands.
+
 Creative freedom: you may combine languages or tooling (e.g., install PHP via apt, then Composer packages; compile Rust using cargo; leverage Go modules). Prefer official package repositories and language-native managers. Feel free to initialize projects (`npm init -y`, `cargo new --bin`, `go mod init`, `dotnet new console`) when that simplifies execution. When synthesizing placeholder files, keep them minimal but runnable (e.g., basic FastAPI routers, empty package modules) so the snippet executes without import errors.
 
 Guardrails:
+- **Commands must terminate**: Never run long-running processes like web servers (`uvicorn`, `flask run`, `npm start`, `rails server`), REPLs, or watchers. For web frameworks, verify syntax and imports only (e.g., `python -c "from app.main import app; print('OK')"`).
 - Never use `sudo`, `curl`, `wget`, or fetch remote scripts via pipes. Stick to package managers and official CLIs available through apt or language-specific installers.
 - Keep command count reasonable (aim for <= 12 install/setup/run commands total).
 - Use `apt-get update` only once per sandbox (create `/tmp/.apt_updated` or similar sentinel if needed).
