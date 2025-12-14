@@ -1,6 +1,21 @@
 # Talimio
 
-An all-in-one, AI-powered learning platform. Create custom courses, chat with your books and videos, and it adapts as you learn.
+An all-in-one, AI-powered learning platform that adapts to you.
+
+[![Talimio homepage showing a course Creation and AI sidechat](assets/homepage.png)](https://www.youtube.com/watch?v=qYfBoydYCTA)
+
+## Why Talimio?
+
+- Turn any topic into a full course in seconds. Upload your own documents to ground the AI with RAG, or let the model build from scratch.
+- Create adaptive courses where the AI builds a dependency graph (DAG) and only unlocks new lessons once you’ve mastered the prerequisites.
+- We don’t do boring flashcards. A LECTOR-based scheduler tracks concepts you struggle with and resurfaces them in future lessons exactly when you need them.
+- Lessons are fully interactive. Like Claude Artifacts or the demos on Brilliant, you get hands-on widgets you can click and play with right inside the lesson.
+- Executable code blocks are built in: run, tweak, and break code directly inside the lesson.
+- Answer quick questions and self-assessment quizzes inside lessons; your responses continuously shape and adapt the course to you.
+- Upload a PDF book or drop in a YouTube link and chat with it instantly.
+- Run the whole stack 100% offline with Ollama, or plug in your own cloud API keys (supports many providers via LiteLLM).
+- Persistent memory of your preferences and learning style, so it gets better at adapting to you the more you use it.
+- Extensible via the Model Context Protocol (MCP), so you can connect your own tools and APIs to interpret data or take actions.
 
 ## Quick Start (Docker Compose)
 
