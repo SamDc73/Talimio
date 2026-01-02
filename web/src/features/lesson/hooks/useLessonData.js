@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCourseProgress } from "@/features/course/hooks/useCourseProgress"
-import { useUpdateProgress } from "@/hooks/useProgress"
+import { useUpdateProgress } from "@/hooks/use-progress"
 import { fetchLesson } from "../api/lessonApi"
 
 const toSnakeCase = (key) => key.replace(/([A-Z])/g, "_$1").toLowerCase()

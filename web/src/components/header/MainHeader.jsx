@@ -31,7 +31,7 @@ import { PersonalizationDialog } from "@/components/PersonalizationDialog"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/Sheet"
 import { TooltipButton } from "@/components/TooltipButton"
 import { useTheme } from "@/contexts/ThemeContext"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import { cn } from "@/lib/utils"
 
 // User Avatar Menu Component

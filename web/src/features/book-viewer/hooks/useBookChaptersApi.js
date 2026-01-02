@@ -1,4 +1,4 @@
-import { useApi } from "@/hooks/useApi"
+import { useApi } from "@/hooks/use-api"
 
 /**
  * Hook for book chapter operations

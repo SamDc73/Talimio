@@ -9,7 +9,7 @@
  */
 
 import { useMemo } from "react"
-import { useApi } from "../../../hooks/useApi"
+import { useApi } from "../../../hooks/use-api"
 
 /**
  * Hook for document operations
