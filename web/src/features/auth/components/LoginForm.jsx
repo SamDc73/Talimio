@@ -1,23 +1,12 @@
 import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react"
-import React, { useState } from "react"
+import { useState } from "react"
 
-function LoginForm({
-	onSignUp = () => {},
-	onForgotPassword = () => {},
-	onSubmit = async (_email, _password) => {
-		await new Promise((resolve) => setTimeout(resolve, 2000))
-	},
-}) {
+function LoginForm({ onSignUp = () => {}, onForgotPassword = () => {}, onSubmit = async (_email, _password) => {} }) {
 	const [email, setEmail] = useState("")
 	const [password, setPassword] = useState("")
 	const [showPassword, setShowPassword] = useState(false)
 	const [isLoading, setIsLoading] = useState(false)
 	const [errors, setErrors] = useState({})
-	const [mounted, setMounted] = useState(false)
-
-	React.useEffect(() => {
-		setMounted(true)
-	}, [])
 
 	const validateEmail = (email) => {
 		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -56,8 +45,6 @@ function LoginForm({
 			setIsLoading(false)
 		}
 	}
-
-	if (!mounted) return null
 
 	return (
 		<div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-primary/10 p-4">
@@ -136,18 +123,15 @@ function LoginForm({
 							)}
 						</div>
 
-						{/* Forgot Password - Only show in multi-user mode */}
-						{import.meta.env.VITE_ENABLE_AUTH === "true" && (
-							<div className="flex justify-end">
-								<button
-									type="button"
-									onClick={onForgotPassword}
-									className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
-								>
-									Forgot password?
-								</button>
-							</div>
-						)}
+						<div className="flex justify-end">
+							<button
+								type="button"
+								onClick={onForgotPassword}
+								className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+							>
+								Forgot password?
+							</button>
+						</div>
 
 						{/* Submit Button */}
 						<button

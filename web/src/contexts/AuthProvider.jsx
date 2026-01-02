@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 
 import { api } from "@/lib/apiClient"
 import { securityMonitor } from "@/utils/securityConfig"
@@ -8,34 +8,17 @@ export function AuthProvider({ children }) {
 	const [user, setUser] = useState(null)
 	const [loading, setLoading] = useState(true)
 	const [isAuthenticated, setIsAuthenticated] = useState(false)
-	const [authMode, setAuthMode] = useState("none") // Default to single-user mode
 
 	// Inline auth check to avoid unstable function dependencies that cause infinite loops
 	// This pattern prevents React's strict dependency checking from triggering re-renders
 	useEffect(() => {
 		const performAuthCheck = async () => {
 			try {
-				// Check if auth is enabled via environment variable
-				const authEnabled = import.meta.env.VITE_ENABLE_AUTH === "true"
-
-				if (!authEnabled) {
-					setUser({
-						id: "00000000-0000-0000-0000-000000000001",
-						email: "demo@talimio.com",
-						username: "Demo User",
-					})
-					setIsAuthenticated(true)
-					setAuthMode("none")
-					setLoading(false)
-					return
-				}
-
 				// Try to get current user - httpOnly cookies are sent automatically
 				try {
 					const response = await api.get("/auth/me")
 					setUser(response)
 					setIsAuthenticated(true)
-					setAuthMode("supabase")
 				} catch (authError) {
 					// If it's a 401, try to refresh the token first
 					if (authError.status === 401) {
@@ -44,19 +27,16 @@ export function AuthProvider({ children }) {
 							if (refreshResponse?.user) {
 								setUser(refreshResponse.user)
 								setIsAuthenticated(true)
-								setAuthMode("supabase")
 								return
 							}
 						} catch (_refreshError) {}
 					}
 					setUser(null)
 					setIsAuthenticated(false)
-					setAuthMode("supabase")
 				}
 			} catch (_error) {
 				setUser(null)
 				setIsAuthenticated(false)
-				setAuthMode("supabase")
 			} finally {
 				setLoading(false)
 			}
@@ -65,49 +45,9 @@ export function AuthProvider({ children }) {
 		performAuthCheck()
 	}, [])
 
-	// User state updated - future real-time sync can be added here
-	useEffect(() => {
-		if (user?.id) {
-			// Future: Add any real-time sync or WebSocket connections here
-		}
-	}, [user?.id])
-
-	// Ref pattern prevents function recreation on every render while still accessing current state
-	// Without this, adding the function to useEffect deps would cause infinite loops
-	const handleTokenExpirationRef = useRef()
-
-	useEffect(() => {
-		handleTokenExpirationRef.current = () => {
-			setUser(null)
-			setIsAuthenticated(false)
-
-			// Only redirect to auth if we're in multi-user mode
-			if (authMode === "supabase") {
-				// Small delay to allow state to update
-				setTimeout(() => {
-					if (window.location.pathname !== "/auth") {
-						window.location.href = "/auth"
-					}
-				}, 100)
-			}
-		}
-	}, [authMode])
-
-	// Listen for token expiration events from API client
-	useEffect(() => {
-		const handleTokenExpired = () => {
-			if (handleTokenExpirationRef.current) {
-				handleTokenExpirationRef.current()
-			}
-		}
-
-		window.addEventListener("tokenExpired", handleTokenExpired)
-		return () => window.removeEventListener("tokenExpired", handleTokenExpired)
-	}, [])
-
 	// Set up periodic token refresh for authenticated users
 	useEffect(() => {
-		if (!isAuthenticated || authMode !== "supabase") {
+		if (!isAuthenticated || user?.email === "demo@talimio.com") {
 			return
 		}
 
@@ -133,18 +73,9 @@ export function AuthProvider({ children }) {
 		}, refreshInterval)
 
 		return () => clearInterval(intervalId)
-	}, [isAuthenticated, authMode])
+	}, [isAuthenticated, user?.email])
 
 	const login = async (email, password) => {
-		// Check if auth is enabled
-		const authEnabled = import.meta.env.VITE_ENABLE_AUTH === "true"
-		if (!authEnabled) {
-			return {
-				success: false,
-				error: "Authentication is not enabled",
-			}
-		}
-
 		try {
 			// Check rate limiting
 			if (!securityMonitor.trackLoginAttempt(email, false)) {
@@ -169,7 +100,6 @@ export function AuthProvider({ children }) {
 			// Update state (no token handling needed)
 			setUser(user)
 			setIsAuthenticated(true)
-			setAuthMode("supabase")
 
 			return { success: true }
 		} catch (error) {
@@ -184,15 +114,6 @@ export function AuthProvider({ children }) {
 	}
 
 	const signup = async (email, password, username) => {
-		// Check if auth is enabled
-		const authEnabled = import.meta.env.VITE_ENABLE_AUTH === "true"
-		if (!authEnabled) {
-			return {
-				success: false,
-				error: "Authentication is not enabled",
-			}
-		}
-
 		try {
 			const response = await api.post("/auth/signup", {
 				email,
@@ -218,7 +139,6 @@ export function AuthProvider({ children }) {
 			// Update state
 			setUser(user)
 			setIsAuthenticated(true)
-			setAuthMode("supabase")
 
 			return { success: true }
 		} catch (error) {
@@ -242,15 +162,6 @@ export function AuthProvider({ children }) {
 	}
 
 	const resetPassword = async (email) => {
-		// Check if auth is enabled
-		const authEnabled = import.meta.env.VITE_ENABLE_AUTH === "true"
-		if (!authEnabled) {
-			return {
-				success: false,
-				error: "Password reset is not available in single-user mode",
-			}
-		}
-
 		try {
 			const response = await api.post("/auth/reset-password", { email })
 			return {
@@ -269,7 +180,6 @@ export function AuthProvider({ children }) {
 		user,
 		loading,
 		isAuthenticated,
-		authMode,
 		login,
 		signup,
 		logout,

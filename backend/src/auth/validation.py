@@ -37,7 +37,6 @@ class AuthConfigValidator:
         # Validate Supabase configuration if enabled
         if auth_provider == "supabase":
             supabase_url = getattr(settings, "SUPABASE_URL", None)
-            supabase_secret = getattr(settings, "SUPABASE_SECRET_KEY", None)
             supabase_publishable = getattr(settings, "SUPABASE_PUBLISHABLE_KEY", None)
 
             if not supabase_url:
@@ -45,13 +44,8 @@ class AuthConfigValidator:
             elif not supabase_url.startswith("https://"):
                 issues.append("SUPABASE_URL must start with https://")
 
-            if not supabase_secret:
-                issues.append("SUPABASE_SECRET_KEY is required when AUTH_PROVIDER=supabase")
-            elif not supabase_secret.startswith("sb_secret_"):
-                warnings.append("SUPABASE_SECRET_KEY should start with 'sb_secret_'")
-
             if not supabase_publishable:
-                warnings.append("SUPABASE_PUBLISHABLE_KEY is recommended for frontend integration")
+                issues.append("SUPABASE_PUBLISHABLE_KEY is required when AUTH_PROVIDER=supabase")
             elif not supabase_publishable.startswith("sb_publishable_"):
                 warnings.append("SUPABASE_PUBLISHABLE_KEY should start with 'sb_publishable_'")
 
@@ -81,15 +75,13 @@ class AuthConfigValidator:
         if auth_provider == "supabase" and issues:
             recommendations.append("To fix Supabase configuration:")
             recommendations.append("1. Set SUPABASE_URL to your Supabase project URL")
-            recommendations.append("2. Set SUPABASE_SECRET_KEY to your service role key")
-            recommendations.append("3. Set SUPABASE_PUBLISHABLE_KEY for frontend integration")
-            recommendations.append("4. Ensure frontend VITE_ENABLE_AUTH=true matches backend AUTH_PROVIDER=supabase")
+            recommendations.append("2. Set SUPABASE_PUBLISHABLE_KEY (anon/publishable key)")
+            recommendations.append("3. Ensure the frontend can reach the backend and send cookies (httpOnly session)")
 
         if auth_provider == "none" and not issues:
             recommendations.append("Single-user mode active:")
-            recommendations.append("1. Frontend should have VITE_ENABLE_AUTH=false")
-            recommendations.append("2. No login/signup functionality will be available")
-            recommendations.append("3. Default user will be used for all operations")
+            recommendations.append("1. No login/signup functionality will be available")
+            recommendations.append("2. Default user will be used for all operations")
 
         if warnings:
             recommendations.append("Address warnings for better security:")
@@ -150,7 +142,7 @@ class AuthConfigValidator:
                 {
                     "type": "mismatch_warning",
                     "message": "Backend in single-user mode (AUTH_PROVIDER=none)",
-                    "recommendation": "Ensure frontend has VITE_ENABLE_AUTH=false",
+                    "recommendation": "No frontend auth flag needed; /api/v1/auth/me returns the demo user",
                 }
             )
 
@@ -161,7 +153,7 @@ class AuthConfigValidator:
                     {
                         "type": "mismatch_warning",
                         "message": "Backend in multi-user mode (AUTH_PROVIDER=supabase)",
-                        "recommendation": f"Ensure frontend has VITE_ENABLE_AUTH=true and VITE_SUPABASE_URL={supabase_url}",
+                        "recommendation": f"Ensure frontend points at this backend and cookies are allowed (SUPABASE_URL={supabase_url})",
                     }
                 )
 

@@ -24,7 +24,6 @@ class Settings(BaseSettings):
     # Supabase Auth (2025 API patterns)
     SUPABASE_URL: str = ""
     SUPABASE_PUBLISHABLE_KEY: str = ""  # Safe for client-side
-    SUPABASE_SECRET_KEY: str = ""  # Backend only
 
     # Storage settings
     STORAGE_PROVIDER: str = "local"  # "r2" or "local"
