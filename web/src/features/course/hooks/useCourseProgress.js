@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react"
-import { useProgress, useUpdateProgress } from "@/hooks/useProgress"
+import { useProgress, useUpdateProgress } from "@/hooks/use-progress"
 
 /**
  * Course progress hook backed by the unified progress API

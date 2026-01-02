@@ -23,7 +23,7 @@ import { useContentHandlers } from "@/features/home/hooks/useContentHandlers"
 import { useContentProgressSync } from "@/features/home/hooks/useContentProgressSync"
 import { useDialogStates } from "@/features/home/hooks/useDialogStates"
 import { usePinning } from "@/features/home/hooks/usePinning"
-import { useProgress } from "@/hooks/useProgress"
+import { useProgress } from "@/hooks/use-progress"
 
 export default function HomePage() {
 	const [isGenerating, setIsGenerating] = useState(false)

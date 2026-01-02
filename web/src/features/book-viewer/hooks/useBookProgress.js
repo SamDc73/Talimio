@@ -1,4 +1,4 @@
-import { useProgress, useUpdateProgress } from "@/hooks/useProgress"
+import { useProgress, useUpdateProgress } from "@/hooks/use-progress"
 
 /**
  * Book progress hook backed by the unified progress API

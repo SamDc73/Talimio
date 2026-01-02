@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { LoginHeader } from "@/components/header/LoginHeader"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/use-auth"
 import LoginForm from "./components/LoginForm"
 import PasswordResetForm from "./components/PasswordResetForm"
 import SignupForm from "./components/SignupForm"
