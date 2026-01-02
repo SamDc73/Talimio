@@ -10,21 +10,8 @@ function PasswordResetForm({ onBack }) {
 	const [successMessage, setSuccessMessage] = useState("")
 	const { resetPassword } = useAuth()
 
-	// Check if auth is enabled
-	const authEnabled = import.meta.env.VITE_ENABLE_AUTH === "true"
-
-	// Set error immediately if auth is disabled
-	if (!authEnabled) {
-		setError("Password reset is not available in single-user mode")
-	}
-
 	const handleSubmit = async (e) => {
 		e.preventDefault()
-
-		if (!authEnabled) {
-			setError("Password reset is not available in single-user mode")
-			return
-		}
 
 		setError("")
 		setSuccessMessage("")
@@ -36,7 +23,7 @@ function PasswordResetForm({ onBack }) {
 				setSuccessMessage("Password reset instructions sent to your email!")
 				setEmail("")
 			} else {
-				setError(result.error || "Failed to send reset email")
+				setError(result.error || "Password reset is not available")
 			}
 		} catch (_err) {
 			setError("An unexpected error occurred")

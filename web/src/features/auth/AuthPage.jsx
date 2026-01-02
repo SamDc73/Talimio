@@ -2,9 +2,9 @@ import { useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { LoginHeader } from "@/components/header/LoginHeader"
 import { useAuth } from "@/hooks/useAuth"
-import LoginForm from "./LoginForm"
-import PasswordResetForm from "./PasswordResetForm"
-import SignupForm from "./SignupForm"
+import LoginForm from "./components/LoginForm"
+import PasswordResetForm from "./components/PasswordResetForm"
+import SignupForm from "./components/SignupForm"
 
 function AuthPage() {
 	const [view, setView] = useState("login") // "login", "signup", "reset"
@@ -12,11 +12,7 @@ function AuthPage() {
 	const [successMessage, setSuccessMessage] = useState("")
 	const navigate = useNavigate()
 	const [searchParams] = useSearchParams()
-	const authContext = useAuth()
-	const { login, signup, isAuthenticated } = authContext
-
-	// Debug logging
-	useEffect(() => {}, [])
+	const { login, signup, isAuthenticated } = useAuth()
 
 	// Get redirect URL from query params
 	const redirectUrl = searchParams.get("redirect") || "/"

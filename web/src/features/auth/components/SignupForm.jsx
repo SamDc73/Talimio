@@ -1,23 +1,13 @@
 import { Eye, EyeOff, Loader2, Lock, Mail, User } from "lucide-react"
-import React, { useState } from "react"
+import { useState } from "react"
 
-function SignupForm({
-	onSignIn = () => {},
-	onSubmit = async (_email, _password, _username) => {
-		await new Promise((resolve) => setTimeout(resolve, 2000))
-	},
-}) {
+function SignupForm({ onSignIn = () => {}, onSubmit = async (_email, _password, _username) => {} }) {
 	const [email, setEmail] = useState("")
 	const [password, setPassword] = useState("")
 	const [username, setUsername] = useState("")
 	const [showPassword, setShowPassword] = useState(false)
 	const [isLoading, setIsLoading] = useState(false)
 	const [errors, setErrors] = useState({})
-	const [mounted, setMounted] = useState(false)
-
-	React.useEffect(() => {
-		setMounted(true)
-	}, [])
 
 	const validateEmail = (email) => {
 		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -62,8 +52,6 @@ function SignupForm({
 			setIsLoading(false)
 		}
 	}
-
-	if (!mounted) return null
 
 	return (
 		<div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-primary/10 p-4">
