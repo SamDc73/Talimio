@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useEffect, useState } from "react"
 import { useWorkspaceRegistry } from "@/features/course/hooks/use-workspace-registry"
 import { flattenText, getLanguage } from "@/features/course/utils/codeBlockUtils"
 import ExecutableCodeBlock from "./ExecutableCodeBlock.jsx"
@@ -19,9 +19,11 @@ export default function WorkspaceAwareCodeBlock({ lessonId, courseId, children, 
 	const code = flattenText(children)
 	const language = getLanguage(props, children)
 
-	// Register block synchronously during render
-	const shouldRenderRunner = useMemo(() => {
-		if (!filePath) return false
+	const [shouldRenderRunner, setShouldRenderRunner] = useState(false)
+
+	// Register block in effect to avoid state updates during render
+	useEffect(() => {
+		if (!filePath) return
 		const registration = registerBlock({
 			workspaceId,
 			workspaceLabel: formatLabel(workspaceId),
@@ -30,7 +32,7 @@ export default function WorkspaceAwareCodeBlock({ lessonId, courseId, children, 
 			language,
 			isEntry,
 		})
-		return registration.shouldRenderRunner
+		setShouldRenderRunner(registration.shouldRenderRunner)
 	}, [registerBlock, workspaceId, filePath, code, language, isEntry])
 
 	// Not a workspace block - render as regular executable code
