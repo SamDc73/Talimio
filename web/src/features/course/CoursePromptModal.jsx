@@ -366,9 +366,19 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	return (
 		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
 			<DialogContent className="sm:max-w-[560px] gap-5">
-				<AnimatePresence mode="wait">
-					{activeStep === MODAL_STEPS.PROMPT ? promptStepContent : selfAssessmentStep}
-				</AnimatePresence>
+				<div className="relative">
+					{isGenerating ? (
+						<div className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm">
+							<div className="flex flex-col items-center gap-3 text-muted-foreground">
+								<Loader2 className="h-5 w-5 animate-spin" />
+								<span className="text-sm">Generating course...</span>
+							</div>
+						</div>
+					) : null}
+					<AnimatePresence mode="wait">
+						{activeStep === MODAL_STEPS.PROMPT ? promptStepContent : selfAssessmentStep}
+					</AnimatePresence>
+				</div>
 			</DialogContent>
 		</Dialog>
 	)
