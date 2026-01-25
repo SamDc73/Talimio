@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { QuizMarkdown } from "@/components/quiz/QuizMarkdown.jsx"
 
 export function MultipleChoice({
 	question,
@@ -65,7 +66,7 @@ export function MultipleChoice({
 
 	return (
 		<div className="border-l-4 border-l-completed/20 pl-6 my-8 bg-background/30 rounded-r-lg" data-askai-exclude="true">
-			<h4 className="mb-6 text-lg font-medium text-foreground">{question}</h4>
+			<QuizMarkdown content={question} className="mb-6 text-lg font-medium text-foreground [&_p]:m-0" />
 
 			<div className="mb-6 space-y-2">
 				{options.map((option, index) => {
@@ -104,7 +105,7 @@ export function MultipleChoice({
 								disabled={hasFeedback}
 								className="mt-1 text-primary focus:ring-ring focus:ring-2 focus:ring-offset-0 border-input"
 							/>
-							<span className="flex-1 text-sm leading-relaxed">{option}</span>
+							<QuizMarkdown content={option} className="flex-1 text-sm leading-relaxed [&_p]:m-0" />
 							{hasFeedback && isCorrectOption && (
 								<span className="text-completed dark:text-completed text-sm font-medium ml-2">✓</span>
 							)}
@@ -121,7 +122,10 @@ export function MultipleChoice({
 								<div className={`text-sm font-medium mb-2 ${isCorrect ? "text-completed" : "text-destructive"}`}>
 									{isCorrect ? "✓ Correct" : "✗ Incorrect"}
 								</div>
-								<p className="text-sm leading-relaxed text-muted-foreground">{explanation}</p>
+								<QuizMarkdown
+									content={explanation}
+									className="text-sm leading-relaxed text-muted-foreground [&_p]:m-0"
+								/>
 							</div>
 						)}
 						<button

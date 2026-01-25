@@ -1,6 +1,7 @@
 /* Import Tailwind */
 @import "tailwindcss";
 @import "katex/dist/katex.min.css";
+@import "mathlive/fonts.css";
 
 /* Tailwind v4 @theme configuration */
 @theme {

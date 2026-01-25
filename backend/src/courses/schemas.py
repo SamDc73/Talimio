@@ -223,6 +223,90 @@ class NextReviewResponse(BaseModel):
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
+GradeKind = str
+GradeStatus = Literal["correct", "incorrect", "parse_error", "unsupported"]
+PracticeContext = Literal["inline", "quick_check", "scheduled_review", "drill"]
+
+
+class GradeExpectedPayload(BaseModel):
+    """Expected answer payload for grading."""
+
+    expected_latex: str = Field(..., min_length=1, description="Expected answer in LaTeX")
+    criteria: str | None = Field(None, description="Optional grading criteria or simplification note")
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class GradeAnswerPayload(BaseModel):
+    """Learner answer payload for grading."""
+
+    answer_latex: str = Field(..., min_length=1, description="Learner answer in LaTeX")
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class GradeContextPayload(BaseModel):
+    """Context payload for grading to enable adaptive wiring."""
+
+    course_id: UUID = Field(..., description="Course ID for the practice interaction")
+    lesson_id: UUID = Field(..., description="Lesson ID for the practice interaction")
+    concept_id: UUID = Field(..., description="Concept ID used for adaptive scheduling")
+    practice_context: PracticeContext = Field(..., description="Practice surface that collected the answer")
+    hints_used: int | None = Field(
+        None,
+        ge=0,
+        description="Number of hints revealed before submission",
+    )
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class GradeRequest(BaseModel):
+    """Request payload for grading a learner response."""
+
+    kind: GradeKind = Field(..., description="Answer kind to grade")
+    question: str = Field(..., min_length=1, description="Learner-facing question prompt")
+    expected: GradeExpectedPayload = Field(..., description="Expected answer payload")
+    answer: GradeAnswerPayload = Field(..., description="Learner-provided answer payload")
+    context: GradeContextPayload = Field(..., description="Context for adaptive learning signals")
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class VerifierInfo(BaseModel):
+    """Verifier metadata attached to grading responses."""
+
+    name: str = Field(..., description="Verifier name")
+    method: str | None = Field(None, description="Verification method used to determine correctness")
+    notes: str | None = Field(None, description="Optional notes about the verification process")
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class GradeErrorHighlight(BaseModel):
+    """Optional highlight for focused feedback in grading responses."""
+
+    latex: str = Field(..., min_length=1, description="LaTeX fragment to emphasize")
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class GradeResponse(BaseModel):
+    """Response payload for grading requests."""
+
+    is_correct: bool = Field(..., description="Deterministic correctness flag from verifier")
+    status: GradeStatus = Field(..., description="Verification status")
+    feedback_markdown: str = Field(..., min_length=1, description="Feedback rendered to learners (Markdown)")
+    verifier: VerifierInfo = Field(..., description="Verifier metadata")
+    tags: list[str] = Field(default_factory=list, description="Optional diagnostic tags for analytics")
+    error_highlight: GradeErrorHighlight | None = Field(
+        None,
+        description="Optional LaTeX fragment to highlight for targeted feedback",
+    )
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
 class MDXValidateRequest(BaseModel):
     """Request schema for MDX validation."""
 

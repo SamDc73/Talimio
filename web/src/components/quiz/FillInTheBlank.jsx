@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { QuizMarkdown } from "@/components/quiz/QuizMarkdown.jsx"
 
 export function FillInTheBlank({ question, answer, caseSensitive = false, explanation }) {
 	const [userAnswer, setUserAnswer] = useState("")
@@ -21,7 +22,7 @@ export function FillInTheBlank({ question, answer, caseSensitive = false, explan
 
 	return (
 		<div className="border-l-4 border-l-completed/20 pl-6 my-8 bg-background/30 rounded-r-lg" data-askai-exclude="true">
-			<h4 className="mb-6 text-lg font-medium text-foreground">{question}</h4>
+			<QuizMarkdown content={question} className="mb-6 text-lg font-medium text-foreground [&_p]:m-0" />
 
 			<div className="mb-6">
 				<input
@@ -69,7 +70,9 @@ export function FillInTheBlank({ question, answer, caseSensitive = false, explan
 								The correct answer is: <span className="font-medium text-foreground">{answer}</span>
 							</p>
 						)}
-						{explanation && <p className="text-sm leading-relaxed text-muted-foreground">{explanation}</p>}
+						{explanation && (
+							<QuizMarkdown content={explanation} className="text-sm leading-relaxed text-muted-foreground [&_p]:m-0" />
+						)}
 					</div>
 					<button
 						type="button"

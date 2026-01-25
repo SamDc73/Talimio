@@ -23,6 +23,7 @@ export function useCourseService(courseId = null) {
 	const getConceptFrontier = useApi("/courses/{courseId}/concepts")
 	const submitReviewsEndpoint = useApi("/courses/{courseId}/lessons/{lessonId}/reviews", { method: "POST" })
 	const getConceptNextReview = useApi("/courses/{courseId}/concepts/{conceptId}/next-review")
+	const gradeLessonAnswerEndpoint = useApi("/courses/{courseId}/lessons/{lessonId}/grade", { method: "POST" })
 
 	// Lesson endpoints
 	const getLessons = useApi("/courses/{courseId}/lessons")
@@ -223,6 +224,18 @@ export function useCourseService(courseId = null) {
 		},
 
 		/**
+		 * Grade a lesson answer for a practice interaction
+		 * @param {string} lessonId - Lesson ID
+		 * @param {Object} payload - Grading payload
+		 */
+		async gradeLessonAnswer(lessonId, payload) {
+			if (!courseId || !lessonId) {
+				throw new Error("Course ID and Lesson ID required")
+			}
+			return await gradeLessonAnswerEndpoint.execute(payload, { pathParams: { courseId, lessonId } })
+		},
+
+		/**
 		 * Retrieve next review info for a concept
 		 */
 		async fetchConceptNextReview(conceptId) {
@@ -254,7 +267,8 @@ export function useCourseService(courseId = null) {
 				regenerateLesson.isLoading ||
 				updateLesson.isLoading ||
 				submitReviewsEndpoint.isLoading ||
-				getConceptNextReview.isLoading
+				getConceptNextReview.isLoading ||
+				gradeLessonAnswerEndpoint.isLoading
 			)
 		},
 
@@ -274,7 +288,8 @@ export function useCourseService(courseId = null) {
 				regenerateLesson.error ||
 				updateLesson.error ||
 				submitReviewsEndpoint.error ||
-				getConceptNextReview.error
+				getConceptNextReview.error ||
+				gradeLessonAnswerEndpoint.error
 			)
 		},
 	}

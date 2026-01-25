@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.ai.service import AIService, get_ai_service
 from src.auth import CurrentAuth
 from src.courses.facade import CoursesFacade
-from src.courses.models import Course, CourseConcept
+from src.courses.models import Course, CourseConcept, Lesson
 from src.courses.schemas import (
     CodeExecuteRequest,
     CodeExecuteResponse,
@@ -28,6 +28,8 @@ from src.courses.schemas import (
     CourseResponse,
     CourseUpdate,
     FrontierResponse,
+    GradeRequest,
+    GradeResponse,
     LessonDetailResponse,
     MDXValidateRequest,
     MDXValidateResponse,
@@ -45,6 +47,7 @@ from src.courses.services.concept_state_service import ConceptStateService
 from src.courses.services.course_progress_service import CourseProgressService
 from src.courses.services.course_query_service import CourseQueryService
 from src.courses.services.frontier_builder import build_course_frontier
+from src.courses.services.grading_service import GradingService
 from src.courses.services.lesson_service import LessonService
 from src.courses.services.mdx_service import mdx_service
 from src.database.session import get_db_session
@@ -78,6 +81,11 @@ def get_lesson_service(
 def get_code_execution_service() -> CodeExecutionService:
     """Get code execution service instance."""
     return CodeExecutionService()
+
+
+def get_grading_service() -> GradingService:
+    """Get grading service instance."""
+    return GradingService()
 
 
 def get_ai_service_dependency() -> AIService:
@@ -217,6 +225,48 @@ async def get_lesson(
     return await lesson_service.get_lesson(course_id, lesson_id, force_refresh=generate)
 
 
+@router.post("/{course_id}/lessons/{lesson_id}/grade")
+async def grade_lesson_response(
+    course_id: UUID,
+    lesson_id: UUID,
+    payload: GradeRequest,
+    auth: CurrentAuth,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    grading_service: Annotated[GradingService, Depends(get_grading_service)],
+) -> GradeResponse:
+    """Grade a learner response for a lesson."""
+    await _get_course_or_404(session, course_id, auth.user_id)
+
+    if payload.context.course_id != course_id:
+        detail = "Context courseId does not match the request path"
+        raise HTTPException(status_code=422, detail=detail)
+    if payload.context.lesson_id != lesson_id:
+        detail = "Context lessonId does not match the request path"
+        raise HTTPException(status_code=422, detail=detail)
+
+    lesson_exists = await session.scalar(
+        select(Lesson.id).where(
+            Lesson.id == lesson_id,
+            Lesson.course_id == course_id,
+        )
+    )
+    if lesson_exists is None:
+        detail = "Lesson not found"
+        raise HTTPException(status_code=404, detail=detail)
+
+    concept_link = await session.scalar(
+        select(CourseConcept.concept_id).where(
+            CourseConcept.course_id == course_id,
+            CourseConcept.concept_id == payload.context.concept_id,
+        )
+    )
+    if concept_link is None:
+        detail = "Concept is not assigned to this course"
+        raise HTTPException(status_code=404, detail=detail)
+
+    return await grading_service.grade(payload, auth.user_id)
+
+
 @router.get("/{course_id}/concepts")
 async def get_course_concept_frontier(
     course_id: UUID,
@@ -353,7 +403,7 @@ async def submit_adaptive_reviews(
 
     if last_review_snapshot is not None:
         progress_payload: dict[str, Any] = {
-            "current_lesson": str(lesson_id),
+            "current_lesson_id": str(lesson_id),
             "last_reviewed_concept": last_review_snapshot["concept_id"],
             "last_reviewed_rating": last_review_snapshot["rating"],
             "last_review_duration_ms": last_review_snapshot["duration_ms"],

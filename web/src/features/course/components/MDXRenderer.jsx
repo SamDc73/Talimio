@@ -3,6 +3,7 @@ import { FillInTheBlank } from "@/components/quiz/FillInTheBlank.jsx"
 import { FreeForm } from "@/components/quiz/FreeForm.jsx"
 import { MultipleChoice } from "@/components/quiz/MultipleChoice.jsx"
 import { useMDXCompile } from "@/features/course/hooks/useMDXCompile"
+import { LatexExpressionPractice } from "./LatexExpressionPractice.jsx"
 import WorkspaceAwareCodeBlock from "./WorkspaceAwareCodeBlock.jsx"
 import { WorkspaceRegistryProvider } from "./workspaceContext"
 
@@ -107,7 +108,7 @@ const MDX_COMPONENTS = {
  * - Auto-linking headings
  * - Interactive component support
  */
-export function MDXRenderer({ content, lessonId, courseId }) {
+export function MDXRenderer({ content, lessonId, courseId, lessonConceptId }) {
 	// Use the custom hook for all compilation logic
 	const { Component, error, isLoading } = useMDXCompile(content, { lessonId, courseId })
 
@@ -155,6 +156,14 @@ export function MDXRenderer({ content, lessonId, courseId }) {
 				{(() => {
 					const componentsWithLesson = {
 						...MDX_COMPONENTS,
+						LatexExpression: (props) => (
+							<LatexExpressionPractice
+								{...props}
+								courseId={courseId}
+								lessonId={lessonId}
+								lessonConceptId={lessonConceptId}
+							/>
+						),
 						pre: (props) => <WorkspaceAwareCodeBlock {...props} lessonId={lessonId} courseId={courseId} />,
 					}
 					return (

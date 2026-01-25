@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { QuizMarkdown } from "@/components/quiz/QuizMarkdown.jsx"
 
 export function FreeForm({ question, sampleAnswer, minLength = 50 }) {
 	const [userAnswer, setUserAnswer] = useState("")
@@ -19,7 +20,7 @@ export function FreeForm({ question, sampleAnswer, minLength = 50 }) {
 
 	return (
 		<div className="border-l-4 border-l-completed/20 pl-6 my-8 bg-background/30 rounded-r-lg" data-askai-exclude="true">
-			<h4 className="mb-6 text-lg font-medium text-foreground">{question}</h4>
+			<QuizMarkdown content={question} className="mb-6 text-lg font-medium text-foreground [&_p]:m-0" />
 
 			<div className="mb-6">
 				<textarea
@@ -74,7 +75,10 @@ export function FreeForm({ question, sampleAnswer, minLength = 50 }) {
 								<span className="text-sm font-medium text-foreground group-open:text-primary">View Sample Answer</span>
 							</summary>
 							<div className="mt-3 p-4 rounded-lg bg-muted/20 border border-border">
-								<p className="text-sm leading-relaxed text-muted-foreground">{sampleAnswer}</p>
+								<QuizMarkdown
+									content={sampleAnswer}
+									className="text-sm leading-relaxed text-muted-foreground [&_p]:m-0"
+								/>
 							</div>
 						</details>
 					)}
