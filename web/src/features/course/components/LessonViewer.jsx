@@ -3,6 +3,8 @@ import { useMemo, useRef } from "react"
 import { Button } from "@/components/Button"
 import { AdaptiveReviewPanel } from "./AdaptiveReviewPanel"
 import { ContentRenderer } from "./ContentRenderer"
+import { LessonQuickCheckPanel } from "./LessonQuickCheckPanel"
+import { PracticeRegistryProvider } from "./PracticeRegistryProvider"
 
 /**
  * LessonViewer - Presents a lesson with MDX content and actions
@@ -136,11 +138,19 @@ export function LessonViewer({
 
 					{/* Content */}
 					<div className="p-6 md:p-8" data-selection-zone="true">
-						<ContentRenderer
-							content={lesson.md_source || lesson.content}
-							lessonId={lesson.id}
-							courseId={lesson.course_id}
-						/>
+						<PracticeRegistryProvider>
+							<ContentRenderer
+								content={lesson.content || lesson.md_source}
+								lessonId={lesson.id}
+								courseId={courseId ?? lesson.course_id}
+								lessonConceptId={lesson.concept_id}
+							/>
+							<LessonQuickCheckPanel
+								courseId={courseId ?? lesson.course_id}
+								lessonId={lesson.id}
+								lessonConceptId={lesson.concept_id}
+							/>
+						</PracticeRegistryProvider>
 					</div>
 
 					{/* Adaptive Review Panel - blends seamlessly into lesson flow */}

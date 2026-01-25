@@ -30,6 +30,31 @@ Return ONLY a JSON object with this exact structure (no markdown fences or comme
 Title: {title}
 Preview: {preview}"""
 
+GRADING_COACH_PROMPT = """You are a concise grading coach that gives premium feedback on learner responses.
+
+You will receive a JSON payload describing the question, expected answer, learner answer, optional criteria, and verifier diagnostics.
+Return ONLY a JSON object with the exact shape below (no markdown fences, no extra keys):
+{
+  "feedbackMarkdown": "string",
+  "tags": ["lowercase-hyphen-tag"],
+  "errorHighlight": {"latex": "string"}
+}
+
+Rules:
+- Always provide 1-3 sentences of feedback in Markdown.
+- Treat verifierVerdict as ground truth. Do not claim correctness that contradicts it.
+- If verifierVerdict.status is "parse_error", explain the parse issue and suggest a fix.
+- If verifierVerdict.status is "correct", give a brief affirmation and optionally mention criteria.
+- If verifierVerdict.status is "incorrect", call out the likely mistake when verifierDiagnostics.likely_mistake is present.
+- If hintsUsed is greater than 0, acknowledge the hint usage and avoid "perfect" language.
+- Wrap math tokens in $...$ for readability (for example: "$x^2$").
+- Never provide the full solution or step-by-step derivations.
+- Tags should be 0-3 short, lowercase, hyphenated strings from this list only:
+  ["sign-error", "notation-error", "calculation-error", "distribution", "simplification", "missing-term",
+   "parse-error", "expected-parse-error", "answer-parse-error", "constant-offset", "unsupported-relation"]
+- Only include errorHighlight when you can point to a specific LaTeX fragment to check; otherwise omit it.
+"""
+
 # Course Generation Prompts
 COURSE_GENERATION_PROMPT = """
 You are CurriculumArchitect 9000, a world-renowned expert in educational curriculum design with decades of experience crafting learning experiences that have helped millions master new skills.
@@ -216,6 +241,7 @@ CRITICAL FORMATTING RULES FOR MDX COMPATIBILITY:
 - When referencing variables or dynamic content, write them as plain text
 - NEVER output template variables like {next_lesson_title} or {variable_name} - write them as plain text instead
 - Do NOT use curly braces for anything except code examples inside code blocks
+- Do NOT use `$...$` or `$$...$$` in prose; keep raw LaTeX only inside `LatexExpression` props
 
 INLINE CODE RULES (MUST FOLLOW EXACTLY):
 - Use EXACTLY one backtick to open and one to close: `code`
@@ -232,6 +258,7 @@ CODE BLOCK RULES (MUST FOLLOW EXACTLY):
 - NEVER use 4 or more backticks
 - ALWAYS specify the language after opening backticks: ```python, ```javascript, ```bash
 - EVERY code block MUST be closed - count your backticks!
+- NEVER wrap the entire lesson in a single code block (```mdx, ```markdown, or ```text). Only use code fences for actual code samples.
 
 ### Workspace metadata for multi-file examples
 - When a realistic example spans multiple files (FastAPI routers, React components, etc.), annotate the fenced blocks with inline metadata:
@@ -315,7 +342,8 @@ When interactivity would enhance understanding, you can include React components
 - **Export functions then render**: First define `export function ComponentName()` then use `<ComponentName />`
 - **Use inline styles only**: No className, use style={{}} objects
 - **Available hooks**: useState, useEffect, useRef, useCallback, useMemo
-- **Math support**: Use KaTeX with `$inline$` and `$$display$$` syntax
+- **LaTeX formatting**: Do NOT use `$...$` or `$$...$$` in prose; keep raw LaTeX only inside `LatexExpression` props
+- **No LaTeX/backslashes in JSX text nodes**: Do not place backslashes or LaTeX directly inside JSX text (it breaks MDX parsing). Use `LatexExpression` outside the component or wrap text in a JS string literal and escape backslashes.
 
 **CRITICAL RULE**: Interactive components must be written directly in the MDX content, NOT inside code blocks. Code blocks are for showing example code. Interactive components are for actual interactivity!
 
@@ -331,6 +359,7 @@ When interactivity would enhance understanding, you can include React components
 - ALWAYS export the function first, then render it with `<ComponentName />`
 - NEVER put the component in a code block if you want it to be interactive
 - Component names MUST be PascalCase (InteractiveDemo not interactiveDemo)
+- Avoid backslashes in JSX text nodes; if needed, use a JS string literal like `{"Text with \\backslash"}` or move LaTeX into a `LatexExpression` block.
 
 **CRITICAL VARIABLE RULES (PREVENTS RUNTIME ERRORS):**
 - ALWAYS define ALL variables before using them
@@ -568,6 +597,19 @@ Write it EXACTLY like this (NO BACKTICKS):
   minLength={50}
 />
 
+4. **LatexExpression** - For input-based formula/equation practice (use when LaTeX input is needed):
+
+Write it EXACTLY like this (NO BACKTICKS):
+
+<LatexExpression
+  question="Expand (x+1)^2"
+  expectedLatex="x^2+2x+1"
+  criteria="expand fully"
+  hints={["Distribute (x+1)(x+1)", "Use (a+b)^2 = a^2 + 2ab + b^2"]}
+  solutionLatex="x^2+2x+1"
+  practiceContext="inline"
+/>
+
 **REMEMBER**: These quiz components will render as actual interactive elements! Do NOT put them in code blocks!
 
 #### When to Include Quizzes:
@@ -580,6 +622,11 @@ Write it EXACTLY like this (NO BACKTICKS):
 - Simple procedural steps (like installation)
 - Reference material that will be looked up when needed
 - Topics better learned through practice than testing
+
+#### LaTeX Expression Practice Guidelines:
+- If the lesson relies on equations or symbolic manipulation (common in math/physics/chem/engineering), include 2 to 5 LatexExpression blocks.
+- Each LatexExpression must include question and expectedLatex. Add criteria when needed (e.g., "simplify fully").
+- Respect practice-first requests by using shorter exposition and more LatexExpression problems with hints.
 
 #### Natural Integration Example:
 
@@ -632,7 +679,7 @@ CRITICAL TECHNICAL RULES FOR INTERACTIVE COMPONENTS:
 7. **Use inline styles only**: No className, use style={{}} objects
 8. **Available React hooks**: useState, useEffect, useRef, useCallback, useMemo
 9. **Leverage browser APIs**: localStorage, Canvas, SVG, Math, Date, setTimeout, setInterval
-10. **Math support**: Use KaTeX with `$inline$` and `$$display$$` syntax
+10. **LaTeX formatting**: Do NOT use `$...$` or `$$...$$` in prose; keep raw LaTeX only inside `LatexExpression` props
 
 CRITICAL MDX FORMATTING RULES:
 - **NEVER use curly braces {{}} outside of code blocks** except in React components and quiz props
@@ -809,6 +856,7 @@ CRITICAL FIXES REQUIRED:
 - Ensure all JavaScript expressions are valid
 - NEVER use template variables like {variable} without defining them
 - Make all interactive components SELF-CONTAINED with all variables defined
+- Return plain MDX content (no wrapping the entire lesson in ```mdx/```markdown fences)
 
 Return the COMPLETE corrected content."""
 
