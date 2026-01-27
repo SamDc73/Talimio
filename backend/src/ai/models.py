@@ -198,63 +198,44 @@ class CourseStructure(BaseModel):
         }
 
 
-class LessonOutlineSchema(BaseModel):
-    """Strict schema used for LiteLLM course outline responses."""
-
-    slug: str
-    title: str
-    description: str
-    module: str | None = None
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class CourseOutlineInfoSchema(BaseModel):
-    """Strict course metadata schema for LiteLLM."""
-
-    slug: str
-    title: str
-    description: str
-    setup_commands: list[str] = Field(default_factory=list)
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class CourseStructureSchema(BaseModel):
-    """Strict outline schema passed to LiteLLM json_mode."""
-
-    course: CourseOutlineInfoSchema
-    lessons: list[LessonOutlineSchema]
-
-    model_config = ConfigDict(extra="forbid")
-
-
 class AdaptiveCourseMeta(BaseModel):
     """Minimal course metadata emitted by adaptive course planning."""
 
-    slug: str
+    slug: str | None = None
     title: str
     setup_commands: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
+
+
+def _coerce_index(value: Any, *, field: str) -> int:
+    try:
+        idx = int(float(value))
+    except (TypeError, ValueError) as exc:
+        msg = f"{field} must be an integer"
+        raise ValueError(msg) from exc
+    if idx < 0:
+        msg = f"{field} must be >= 0"
+        raise ValueError(msg)
+    return idx
 
 
 class AdaptiveLessonPlan(BaseModel):
     """Lesson planning payload aligned with adaptive concept assignments."""
 
-    slug: str
+    index: int
     title: str | None = None
     description: str | None = None
     module: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 
-    @field_validator("slug", mode="before")
+    @field_validator("index", mode="before")
     @classmethod
-    def _normalize_slug(cls, value: Any) -> str:
-        return _coerce_slug(value, field="Lesson slug")
+    def _normalize_index(cls, value: Any) -> int:
+        return _coerce_index(value, field="Lesson index")
 
-    @field_validator("title", "description", mode="before")
+    @field_validator("title", "description", "module", mode="before")
     @classmethod
     def _strip_optional_text(cls, value: Any) -> str | None:
         if value is None:
@@ -266,16 +247,11 @@ class AdaptiveLessonPlan(BaseModel):
 class AdaptiveConceptNode(BaseModel):
     """Single concept node returned by adaptive course planning."""
 
-    slug: str
     title: str
     initial_mastery: float | None = Field(default=None, alias="initialMastery")
+    slug: str | None = None
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
-
-    @field_validator("slug", mode="before")
-    @classmethod
-    def _normalize_slug(cls, value: Any) -> str:
-        return _coerce_slug(value, field="Adaptive concept slug")
 
     @field_validator("title", mode="before")
     @classmethod
@@ -301,19 +277,26 @@ class AdaptiveConceptNode(BaseModel):
             raise ValueError(msg)
         return mastery
 
+    @field_validator("slug", mode="before")
+    @classmethod
+    def _normalize_slug(cls, value: Any) -> str | None:
+        if value is None or str(value).strip() == "":
+            return None
+        return _coerce_slug(value, field="Adaptive concept slug")
+
 
 class AdaptiveConfusor(BaseModel):
-    """Confusable concept emitted for adaptive planning."""
+    """Confusable concept emitted for adaptive planning (index-keyed)."""
 
-    slug: str
+    index: int
     risk: float = Field(ge=0.0, le=1.0)
 
     model_config = ConfigDict(extra="forbid")
 
-    @field_validator("slug", mode="before")
+    @field_validator("index", mode="before")
     @classmethod
-    def _normalize_slug(cls, value: Any) -> str:
-        return _coerce_slug(value, field="Confusor slug")
+    def _normalize_index(cls, value: Any) -> int:
+        return _coerce_index(value, field="Confusor index")
 
     @field_validator("risk", mode="before")
     @classmethod
@@ -330,26 +313,36 @@ class AdaptiveConfusor(BaseModel):
 
 
 class AdaptiveConfusorSet(BaseModel):
-    """Confusor mapping for a concept slug."""
+    """Confusor mapping for a base concept index."""
 
-    slug: str
+    index: int
     confusors: list[AdaptiveConfusor] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
-    @field_validator("slug", mode="before")
+    @field_validator("index", mode="before")
     @classmethod
-    def _normalize_slug(cls, value: Any) -> str:
-        return _coerce_slug(value, field="Confusor set slug")
+    def _normalize_index(cls, value: Any) -> int:
+        return _coerce_index(value, field="Confusor set index")
 
 
 class AdaptiveConceptEdge(BaseModel):
-    """Directed prerequisite edge expressed with camelCase fields."""
+    """Directed prerequisite edge expressed with camelCase fields (index-keyed)."""
 
-    source_slug: str = Field(alias="sourceSlug")
-    prereq_slug: str = Field(alias="prereqSlug")
+    source_index: int = Field(alias="sourceIndex")
+    prereq_index: int = Field(alias="prereqIndex")
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    @field_validator("source_index", mode="before")
+    @classmethod
+    def _normalize_source(cls, value: Any) -> int:
+        return _coerce_index(value, field="sourceIndex")
+
+    @field_validator("prereq_index", mode="before")
+    @classmethod
+    def _normalize_prereq(cls, value: Any) -> int:
+        return _coerce_index(value, field="prereqIndex")
 
 
 class ConfusorCandidate(BaseModel):
@@ -367,10 +360,32 @@ class AdaptiveConceptGraph(BaseModel):
 
     nodes: list[AdaptiveConceptNode]
     edges: list[AdaptiveConceptEdge] = Field(default_factory=list)
-    layers: list[list[str]] = Field(default_factory=list)
+    layers: list[list[int]] = Field(default_factory=list)
     confusors: list[AdaptiveConfusorSet] = Field(default_factory=list)
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    @field_validator("layers", mode="before")
+    @classmethod
+    def _normalize_layers(cls, value: Any) -> list[list[int]]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            return []
+        normalized: list[list[int]] = []
+        for raw_layer in value:
+            if not isinstance(raw_layer, list):
+                continue
+            layer: list[int] = []
+            for item in raw_layer:
+                if item is None or str(item).strip() == "":
+                    continue
+                try:
+                    layer.append(_coerce_index(item, field="Layer index"))
+                except ValueError:
+                    continue
+            normalized.append(layer)
+        return normalized
 
 
 class AdaptiveOutlineMeta(BaseModel):
@@ -378,28 +393,30 @@ class AdaptiveOutlineMeta(BaseModel):
 
     scope: str
     concept_graph: AdaptiveConceptGraph = Field(alias="conceptGraph")
-    concept_tags: dict[str, list[str]] = Field(default_factory=dict, alias="conceptTags")
+    concept_tags: list[list[str]] = Field(default_factory=list, alias="conceptTags")
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     @field_validator("concept_tags", mode="before")
     @classmethod
-    def _normalize_concept_tags(cls, value: Any) -> dict[str, list[str]]:
-        if not isinstance(value, dict):
-            return {}
-        normalized: dict[str, list[str]] = {}
-        for key, raw in value.items():
+    def _normalize_concept_tags(cls, value: Any) -> list[list[str]]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            return []
+        normalized: list[list[str]] = []
+        for raw in value:
             if isinstance(raw, list):
-                normalized[key] = [str(entry).strip() for entry in raw if str(entry).strip()]
+                normalized.append([str(entry).strip() for entry in raw if str(entry).strip()])
             elif isinstance(raw, str):
                 stripped = raw.strip()
-                normalized[key] = [stripped] if stripped else []
+                normalized.append([stripped] if stripped else [])
             else:
-                normalized[key] = []
+                normalized.append([])
         return normalized
 
 
-class AdaptiveCoursePlan(BaseModel):
+class AdaptiveCourseStructure(BaseModel):
     """Full adaptive course generation payload."""
 
     course: AdaptiveCourseMeta
@@ -408,40 +425,23 @@ class AdaptiveCoursePlan(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
-    def layer_index(self) -> dict[str, int]:
-        """Map concept slugs to their layer index for difficulty heuristics."""
-        lookup: dict[str, int] = {}
-        for index, layer in enumerate(self.ai_outline_meta.concept_graph.layers):
-            for slug in layer:
-                normalized = _coerce_slug(slug, field="Layer slug") if str(slug).strip() else ""
-                if normalized and normalized not in lookup:
-                    lookup[normalized] = index
+    def layer_index(self) -> dict[int, int]:
+        """Map node indices to their layer index for difficulty heuristics."""
+        lookup: dict[int, int] = {}
+        for layer_idx, layer in enumerate(self.ai_outline_meta.concept_graph.layers):
+            for node_idx in layer:
+                if node_idx not in lookup:
+                    lookup[node_idx] = layer_idx
         return lookup
 
-    def concept_tags_for(self, slug: str) -> list[str]:
-        """Return the tag list for a concept slug, if any."""
-        normalized = _coerce_slug(slug, field="Concept tag slug")
-        return self.ai_outline_meta.concept_tags.get(normalized, [])
-
-
-class AdaptiveOutlineMetaSchema(BaseModel):
-    """Relaxed adaptive meta schema for LiteLLM validation."""
-
-    scope: str
-    concept_graph: AdaptiveConceptGraph = Field(alias="conceptGraph")
-    concept_tags: dict[str, list[str] | str | bool | None] = Field(default_factory=dict, alias="conceptTags")
-
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-
-class AdaptiveCoursePlanSchema(BaseModel):
-    """Strict adaptive course schema passed to LiteLLM (more permissive inputs)."""
-
-    course: AdaptiveCourseMeta
-    ai_outline_meta: AdaptiveOutlineMetaSchema = Field(alias="ai_outline_meta")
-    lessons: list[AdaptiveLessonPlan]
-
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    def concept_tags_for_index(self, index: int) -> list[str]:
+        """Return the tag list for a node index, if any."""
+        if index < 0:
+            return []
+        tags = self.ai_outline_meta.concept_tags
+        if index >= len(tags):
+            return []
+        return tags[index]
 
 
 class ConceptNode(BaseModel):

@@ -14,7 +14,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from sqlalchemy import DateTime, Float, Integer, bindparam, select, text, update
 from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID, insert
 
-from src.ai.models import AdaptiveCoursePlan
+from src.ai.models import AdaptiveCourseStructure
 from src.ai.service import AIService
 from src.courses.models import (
     Concept,
@@ -33,11 +33,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-ADAPTIVE_MAX_NODES = 32
-ADAPTIVE_MAX_PREREQS = 3
-ADAPTIVE_MAX_LAYERS = 12
-ADAPTIVE_MAX_LESSONS = 96
-
 _SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
 
 
@@ -50,7 +45,7 @@ def _canonical_slug(value: str) -> str:
 class AdaptiveConceptBuildResult:
     """Container for adaptive concept seeding results."""
 
-    concept_lookup: dict[str, Concept]
+    concepts_by_index: list[Concept]
     deferred_concept_ids: list[UUID] = field(default_factory=list)
 
 
@@ -101,7 +96,7 @@ class CourseContentService:
         is_adaptive = bool(session_data.get("adaptive_enabled"))
         defer_embeddings = background_tasks is not None
 
-        adaptive_plan = await self._build_adaptive_plan(
+        adaptive_structure = await self._build_adaptive_structure(
             is_adaptive=is_adaptive,
             prompt=prompt,
             session_data=session_data,
@@ -145,7 +140,7 @@ class CourseContentService:
             normalized_modules, deferred_embedding_ids = await self._prepare_course_modules(
                 session=session,
                 course=course,
-                adaptive_plan=adaptive_plan,
+                adaptive_structure=adaptive_structure,
                 modules_payload=modules_payload,
                 lessons_payload=lessons_payload,
                 defer_embeddings=defer_embeddings,
@@ -176,14 +171,14 @@ class CourseContentService:
 
         return course
 
-    async def _build_adaptive_plan(
+    async def _build_adaptive_structure(
         self,
         *,
         is_adaptive: bool,
         prompt: str | None,
         session_data: dict[str, Any],
         user_id: UUID,
-    ) -> AdaptiveCoursePlan | None:
+    ) -> AdaptiveCourseStructure | None:
         """Populate session data via adaptive or prompt-based generation."""
         if not is_adaptive:
             if prompt:
@@ -192,21 +187,15 @@ class CourseContentService:
             return None
 
         goal_source = prompt or session_data.get("title") or ""
-        clean_goal, assessment_context = self._split_goal_and_assessment(goal_source)
-        goal_payload = clean_goal or goal_source or "Adaptive course outline"
-        adaptive_plan = await self.ai_service.generate_adaptive_course_from_prompt(
+        goal_payload = str(goal_source).strip() or "Adaptive course outline"
+        adaptive_structure = await self.ai_service.generate_adaptive_course_structure(
             user_id=user_id,
-            user_goal=goal_payload,
-            self_assessment_context=assessment_context,
-            max_nodes=ADAPTIVE_MAX_NODES,
-            max_prereqs=ADAPTIVE_MAX_PREREQS,
-            max_layers=ADAPTIVE_MAX_LAYERS,
-            max_lessons=ADAPTIVE_MAX_LESSONS,
+            user_prompt=goal_payload,
         )
-        session_data["title"] = adaptive_plan.course.title
-        session_data["description"] = adaptive_plan.ai_outline_meta.scope
-        session_data["setup_commands"] = adaptive_plan.course.setup_commands
-        return adaptive_plan
+        session_data["title"] = adaptive_structure.course.title
+        session_data["description"] = adaptive_structure.ai_outline_meta.scope
+        session_data["setup_commands"] = adaptive_structure.course.setup_commands
+        return adaptive_structure
 
     def _serialize_payload_fields(self, session_data: dict[str, Any]) -> None:
         """Ensure optional payload collections are stored as JSON strings."""
@@ -220,26 +209,26 @@ class CourseContentService:
         *,
         session: AsyncSession,
         course: Course,
-        adaptive_plan: AdaptiveCoursePlan | None,
+        adaptive_structure: AdaptiveCourseStructure | None,
         modules_payload: list[Any],
         lessons_payload: list[Any],
         defer_embeddings: bool,
     ) -> tuple[list[dict[str, Any]], list[UUID]]:
         """Return normalized modules and any deferred concept ids."""
-        if adaptive_plan is None:
+        if adaptive_structure is None:
             normalized = self._normalize_modules_payload(modules_payload, lessons_payload)
             return (normalized, [])
 
         adaptive_result = await self._create_adaptive_concepts(
             session=session,
             course=course,
-            plan=adaptive_plan,
+            plan=adaptive_structure,
             defer_embeddings=defer_embeddings,
         )
         adaptive_modules = self._build_adaptive_modules_payload(
             course=course,
-            plan=adaptive_plan,
-            concept_lookup=adaptive_result.concept_lookup,
+            plan=adaptive_structure,
+            concepts_by_index=adaptive_result.concepts_by_index,
         )
         normalized_modules = self._normalize_modules_payload(adaptive_modules, [])
         return (normalized_modules, adaptive_result.deferred_concept_ids)
@@ -614,42 +603,33 @@ class CourseContentService:
         *,
         session: AsyncSession,
         course: Course,
-        plan: AdaptiveCoursePlan,
+        plan: AdaptiveCourseStructure,
         defer_embeddings: bool,
     ) -> AdaptiveConceptBuildResult:
-        """Persist adaptive concept metadata derived from a precomputed plan and return a slug map."""
+        """Persist adaptive concept metadata derived from a precomputed plan."""
         graph_service = ConceptGraphService(session)
         concept_graph = plan.ai_outline_meta.concept_graph
 
         layer_lookup = plan.layer_index()
-        concept_lookup: dict[str, Concept] = {}
+        concepts_by_index: list[Concept] = []
         state_rows: list[dict[str, Any]] = []
         course_concept_rows: list[dict[str, Any]] = []
-        concept_order: list[str] = []
         deferred_concept_ids: list[UUID] = []
 
         for index, node in enumerate(concept_graph.nodes):
-            slug_source = node.slug or node.title
-            slug_text = _canonical_slug(slug_source)
-            if not slug_text:
-                msg = f"Adaptive plan provided an empty slug for concept index {index}"
-                raise ValueError(msg)
-            if slug_text in concept_lookup:
-                msg = f"Duplicate concept slug detected in adaptive plan: {slug_text}"
-                raise ValueError(msg)
-
-            layer_index = layer_lookup.get(slug_text)
+            layer_index = layer_lookup.get(index)
             difficulty = min(5, layer_index + 1) if layer_index is not None else None
-            description = self._build_concept_description(node.title, plan.concept_tags_for(slug_text))
+            description = self._build_concept_description(node.title, plan.concept_tags_for_index(index))
 
             concept = await graph_service.create_concept(
                 domain=course.title,
                 name=node.title,
                 description=description,
-                slug=slug_text,
+                slug=node.slug,
                 difficulty=difficulty,
                 generate_embedding=not defer_embeddings,
             )
+            concepts_by_index.append(concept)
             if defer_embeddings:
                 deferred_concept_ids.append(concept.id)
             course_concept_rows.append(
@@ -659,8 +639,6 @@ class CourseContentService:
                     "order_hint": index,
                 }
             )
-            concept_lookup[slug_text] = concept
-            concept_order.append(slug_text)
 
             if node.initial_mastery is not None:
                 state_rows.append(
@@ -679,7 +657,7 @@ class CourseContentService:
         confusor_pair_count = await self._persist_confusors(
             session=session,
             concept_graph=concept_graph,
-            concept_lookup=concept_lookup,
+            concepts_by_index=concepts_by_index,
             course_id=course.id,
         )
 
@@ -690,18 +668,19 @@ class CourseContentService:
             confusor_pair_count,
         )
 
+        node_count = len(concepts_by_index)
         edge_pairs: list[tuple[UUID, UUID]] = []
         for edge in concept_graph.edges:
-            source_slug = _canonical_slug(edge.source_slug)
-            prereq_slug = _canonical_slug(edge.prereq_slug)
-            dependent = concept_lookup.get(source_slug)
-            prerequisite = concept_lookup.get(prereq_slug)
-            if dependent is None or prerequisite is None:
+            if edge.source_index >= node_count or edge.prereq_index >= node_count:
                 logger.warning(
-                    "Skipping edge due to unknown nodes: %s depends on %s",
-                    edge.source_slug,
-                    edge.prereq_slug,
+                    "Skipping edge due to out-of-range indices: %s depends on %s",
+                    edge.source_index,
+                    edge.prereq_index,
                 )
+                continue
+            dependent = concepts_by_index[edge.source_index]
+            prerequisite = concepts_by_index[edge.prereq_index]
+            if dependent.id == prerequisite.id:
                 continue
             edge_pairs.append((dependent.id, prerequisite.id))
 
@@ -713,10 +692,9 @@ class CourseContentService:
         )
 
         return AdaptiveConceptBuildResult(
-            concept_lookup=concept_lookup,
+            concepts_by_index=concepts_by_index,
             deferred_concept_ids=deferred_concept_ids,
         )
-
     async def _insert_course_concepts(
         self,
         *,
@@ -813,24 +791,29 @@ class CourseContentService:
         *,
         session: AsyncSession,
         concept_graph: Any,
-        concept_lookup: dict[str, Concept],
+        concepts_by_index: list[Concept],
         course_id: UUID,
     ) -> int:
         confusor_pairs: dict[tuple[UUID, UUID], float] = {}
+        node_count = len(concepts_by_index)
+
         for confusor_set in concept_graph.confusors:
-            base_slug = _canonical_slug(confusor_set.slug)
-            base_concept = concept_lookup.get(base_slug)
-            if base_concept is None:
-                logger.warning("Skipping confusor set due to unknown concept slug: %s", confusor_set.slug)
+            base_index = int(confusor_set.index)
+            if base_index < 0 or base_index >= node_count:
+                logger.warning("Skipping confusor set due to out-of-range index: %s", confusor_set.index)
                 continue
+
+            base_concept = concepts_by_index[base_index]
             for confusor in confusor_set.confusors:
-                other_slug = _canonical_slug(confusor.slug)
-                other_concept = concept_lookup.get(other_slug)
-                if other_concept is None:
-                    logger.warning("Skipping confusor pair due to unknown concept slug: %s", confusor.slug)
+                other_index = int(confusor.index)
+                if other_index < 0 or other_index >= node_count:
+                    logger.warning("Skipping confusor pair due to out-of-range index: %s", confusor.index)
                     continue
+
+                other_concept = concepts_by_index[other_index]
                 if base_concept.id == other_concept.id:
                     continue
+
                 base_id = base_concept.id
                 other_id = other_concept.id
                 ordered: tuple[UUID, UUID] = (
@@ -881,19 +864,18 @@ class CourseContentService:
             },
         )
         return len(confusor_pairs)
-
     def _build_adaptive_modules_payload(
         self,
         *,
         course: Course,
-        plan: AdaptiveCoursePlan,
-        concept_lookup: dict[str, Concept],
+        plan: AdaptiveCourseStructure,
+        concepts_by_index: list[Concept],
     ) -> list[dict[str, Any]]:
         """Return module payload (pre-normalization) derived from adaptive concepts."""
         lessons = self._build_adaptive_lessons_payload(
             course=course,
             plan=plan,
-            concept_lookup=concept_lookup,
+            concepts_by_index=concepts_by_index,
         )
         if not lessons:
             logger.warning("Adaptive plan for course %s produced no lesson payloads", course.id)
@@ -915,34 +897,38 @@ class CourseContentService:
         self,
         *,
         course: Course,
-        plan: AdaptiveCoursePlan,
-        concept_lookup: dict[str, Concept],
+        plan: AdaptiveCourseStructure,
+        concepts_by_index: list[Concept],
     ) -> list[dict[str, Any]]:
         """Build deterministic lesson payloads for adaptive concepts."""
         lessons: list[dict[str, Any]] = []
-        assigned: set[UUID] = set()
+        assigned: set[int] = set()
+        node_count = len(concepts_by_index)
 
-        for index, lesson_plan in enumerate(plan.lessons):
-            slug = _canonical_slug(lesson_plan.slug)
-            concept = concept_lookup.get(slug)
-            if concept is None:
-                logger.debug("Skipping unknown adaptive lesson slug '%s' for course %s", slug, course.id)
+        for order, lesson_plan in enumerate(plan.lessons):
+            node_index = int(lesson_plan.index)
+            if node_index < 0 or node_index >= node_count:
+                logger.debug("Skipping adaptive lesson with out-of-range index %s for course %s", node_index, course.id)
+                continue
+            if node_index in assigned:
+                logger.debug("Skipping duplicate adaptive lesson index %s for course %s", node_index, course.id)
                 continue
 
+            concept = concepts_by_index[node_index]
             lesson_id = uuid5(NAMESPACE_URL, f"concept-lesson:{course.id}:{concept.id}")
             lessons.append(
                 {
                     "id": lesson_id,
                     "title": lesson_plan.title or concept.name,
                     "description": lesson_plan.description or concept.description,
-                    "order": index,
+                    "order": order,
                 }
             )
-            assigned.add(concept.id)
+            assigned.add(node_index)
 
         order_cursor = len(lessons)
-        for concept in concept_lookup.values():
-            if concept.id in assigned:
+        for node_index, concept in enumerate(concepts_by_index):
+            if node_index in assigned:
                 continue
 
             lesson_id = uuid5(NAMESPACE_URL, f"concept-lesson:{course.id}:{concept.id}")
@@ -957,20 +943,6 @@ class CourseContentService:
             order_cursor += 1
 
         return lessons
-
-    def _split_goal_and_assessment(self, text: str) -> tuple[str, str | None]:
-        """Extract self-assessment from user goal text."""
-        if not isinstance(text, str):
-            return ("", None)
-        marker = "self-assessment:"
-        lower = text.lower()
-        idx = lower.rfind(marker)
-        if idx == -1:
-            return (text.strip(), None)
-        base = text[:idx].strip()
-        assessment = text[idx:].strip()
-        return (base or text.strip(), assessment or None)
-
     def _build_concept_description(self, title: str, tags: list[str]) -> str:
         """Compose a concise description from title and tags."""
         clean_title = title.strip()
@@ -1048,9 +1020,9 @@ class CourseContentService:
         user_id: UUID,
     ) -> dict[str, Any]:
         """Generate course data from AI prompt."""
-        ai_result = await self.ai_service.course_generate(
+        ai_result = await self.ai_service.generate_course_structure(
             user_id=user_id,
-            topic=prompt,
+            user_prompt=prompt,
         )
         if not ai_result:
             error_msg = "Invalid AI response format for course generation"

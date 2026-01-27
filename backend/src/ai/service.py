@@ -12,11 +12,8 @@ from sqlalchemy import select
 
 from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_COURSE_PLANNER
 from src.ai.client import LLMClient
-from src.ai.models import AdaptiveCoursePlan, CourseStructure, ExecutionPlan, SelfAssessmentQuiz
-from src.ai.prompts import (
-    ASSISTANT_CHAT_SYSTEM_PROMPT,
-    COURSE_GENERATION_PROMPT,
-)
+from src.ai.models import AdaptiveCourseStructure, CourseStructure, ExecutionPlan, SelfAssessmentQuiz
+from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT
 from src.ai.rag.embeddings import VectorRAG
 from src.ai.rag.service import RAGService
 from src.books.models import Book
@@ -36,43 +33,27 @@ class AIService:
         self._assistant_llm = LLMClient(agent_id=AGENT_ID_ASSISTANT)
 
     # Course operations
-    async def course_generate(
-        self,
-        user_id: UUID,
-        topic: str,
-        description: str = "",
-        **_kwargs: Any,
-    ) -> CourseStructure:
-        """Generate a course outline."""
-        user_prompt = topic
-        if description:
-            user_prompt += f"\n\nAdditional details: {description}"
-
-        return await self._course_llm.generate_course_structure(
-            user_prompt=user_prompt,
-            user_id=str(user_id),
-            system_prompt=COURSE_GENERATION_PROMPT,
-        )
-
-    async def generate_adaptive_course_from_prompt(
+    async def generate_course_structure(
         self,
         *,
         user_id: UUID,
-        user_goal: str,
-        self_assessment_context: str | None = None,
-        max_nodes: int = 32,
-        max_prereqs: int = 3,
-        max_layers: int = 12,
-        max_lessons: int = 96,
-    ) -> AdaptiveCoursePlan:
+        user_prompt: str,
+    ) -> CourseStructure:
+        """Generate a course outline."""
+        return await self._course_llm.generate_course_structure(
+            user_prompt=user_prompt,
+            user_id=str(user_id),
+        )
+
+    async def generate_adaptive_course_structure(
+        self,
+        *,
+        user_id: UUID,
+        user_prompt: str,
+    ) -> AdaptiveCourseStructure:
         """Generate the unified adaptive course payload."""
-        return await self._course_llm.generate_adaptive_course_from_prompt(
-            user_goal=user_goal,
-            self_assessment_context=self_assessment_context,
-            max_nodes=max_nodes,
-            max_prereqs=max_prereqs,
-            max_layers=max_layers,
-            max_lessons=max_lessons,
+        return await self._course_llm.generate_adaptive_course_structure(
+            user_prompt=user_prompt,
             user_id=str(user_id),
         )
 
@@ -81,15 +62,13 @@ class AIService:
         *,
         topic: str,
         level: str | None,
-        user_id: UUID,
-    ) -> SelfAssessmentQuiz:
+        user_id: UUID) -> SelfAssessmentQuiz:
         """Generate optional self-assessment questions for the given topic."""
         try:
             return await self._course_llm.generate_self_assessment_questions(
                 topic=topic,
                 level=level,
-                user_id=str(user_id),
-            )
+                user_id=str(user_id))
         except ValueError:
             raise
         except Exception:
@@ -103,8 +82,7 @@ class AIService:
         message: str,
         context: dict | None = None,
         history: list[dict] | None = None,
-        **_kwargs: Any,
-    ) -> str:
+        **_kwargs: Any) -> str:
         """General assistant chat with optional context."""
         # Build messages
         messages = [{"role": "system", "content": ASSISTANT_CHAT_SYSTEM_PROMPT}]
@@ -125,7 +103,7 @@ class AIService:
         messages.append({"role": "user", "content": message})
 
         # Use completion with user context
-        response = await self._assistant_llm.get_completion(messages=messages, user_id=str(user_id), format_json=False)
+        response = await self._assistant_llm.get_completion(messages=messages, user_id=str(user_id))
 
         return str(response)
 
@@ -142,8 +120,7 @@ class AIService:
         workspace_entry: str | None = None,
         workspace_root: str | None = None,
         workspace_files: list[str] | None = None,
-        workspace_id: str | None = None,
-    ) -> ExecutionPlan:
+        workspace_id: str | None = None) -> ExecutionPlan:
         """Generate a sandbox execution plan for code execution."""
         return await self._assistant_llm.generate_execution_plan(
             language=language,
@@ -155,8 +132,7 @@ class AIService:
             workspace_entry=workspace_entry,
             workspace_root=workspace_root,
             workspace_files=workspace_files,
-            workspace_id=workspace_id,
-        )
+            workspace_id=workspace_id)
 
     # RAG helpers
     async def get_book_rag_context(self, book_id: UUID, query: str, user_id: UUID, limit: int = 5) -> list[dict]:
