@@ -11,7 +11,6 @@ from uuid import UUID
 from src.ai.mcp.client import get_mcp_client
 from src.ai.mcp.config import MCPConfig
 from src.ai.mcp.service import get_user_mcp_config, list_user_mcp_tools
-from src.ai.tool_preferences import record_tool_helpfulness
 
 
 if TYPE_CHECKING:
@@ -108,7 +107,6 @@ async def execute_user_tool_call(
             config=config,
         )
     except Exception:
-        record_tool_helpfulness(user_id, encoded_name, success=False)
         logger.warning(
             "MCP tool failed",
             extra={
@@ -119,7 +117,6 @@ async def execute_user_tool_call(
             },
         )
         raise
-    record_tool_helpfulness(user_id, encoded_name, success=True)
     logger.info(
         "MCP tool completed",
         extra={

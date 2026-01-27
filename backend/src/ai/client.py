@@ -49,7 +49,6 @@ from src.ai.prompts import (
     MEMORY_CONTEXT_SYSTEM_PROMPT,
     SELF_ASSESSMENT_QUESTIONS_PROMPT,
 )
-from src.ai.tool_preferences import build_preference_hint, preference_rank
 from src.config.settings import get_settings
 from src.database.session import async_session_maker
 
@@ -137,7 +136,6 @@ class LLMClient:
             normalized_user_id = self._normalize_user_id(user_id)
             if normalized_user_id:
                 messages = await self._inject_memory_into_messages(messages, normalized_user_id)
-                messages = self._inject_preference_hint(messages, normalized_user_id)
 
             # Handle structured output via LiteLLM json schema with Instructor fallback
             tool_sources: list[dict[str, Any]] | list[MCPToolBinding] | None = tools
@@ -150,7 +148,6 @@ class LLMClient:
                 normalized_user_id = self._normalize_user_id(user_id)
                 if normalized_user_id:
                     messages = await self._inject_memory_into_messages(messages, normalized_user_id)
-                    messages = self._inject_preference_hint(messages, normalized_user_id)
 
                 settings = get_settings()
                 request_model = model or settings.primary_llm_model
@@ -506,15 +503,6 @@ class LLMClient:
             self._logger.warning(f"Failed to inject memory for user {user_id}: {e}")
             return messages
 
-    def _inject_preference_hint(self, messages: list[dict[str, Any]], user_id: UUID) -> list[dict[str, Any]]:
-        hint = build_preference_hint(user_id)
-        if not hint:
-            return messages
-        hint_message = {"role": "system", "content": f"Tool preferences: {hint}"}
-        if messages and messages[0].get("role") == "system":
-            return [messages[0], hint_message, *messages[1:]]
-        return [hint_message, *messages]
-
     def _build_memory_query(self, messages: list[dict[str, Any]]) -> str | None:
         """Return the most recent user utterance to drive mem0 vector search."""
         for message in reversed(messages):
@@ -632,7 +620,6 @@ class LLMClient:
             if key in blocked:
                 continue
             filtered.append(binding)
-        filtered.sort(key=lambda b: preference_rank(user_id, b.tool_name))
         return filtered
 
     def _slug_tool_key(self, server_name: str, tool_name: str) -> str:
