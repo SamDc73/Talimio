@@ -1,37 +1,23 @@
 import asyncio
-import copy
 import json
 import logging
 import os
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 from uuid import UUID
 
 
 if TYPE_CHECKING:
     from src.auth.context import AuthContext
 
-import litellm
-from pydantic import BaseModel
-
-from src.ai import AGENT_ID_DEFAULT
-from src.ai.models import (
-    AdaptiveCoursePlan,
-    AdaptiveCoursePlanSchema,
-    CourseStructure,
-    CourseStructureSchema,
-    ExecutionPlan,
-    LessonContent,
-    SelfAssessmentQuiz,
-)
-
-
-SCHEMA_OVERRIDES: dict[type[BaseModel], type[BaseModel]] = {
-    CourseStructure: CourseStructureSchema,
-    AdaptiveCoursePlan: AdaptiveCoursePlanSchema,
-}
-
 from collections import Counter
 
+import litellm
+from pydantic import BaseModel, ValidationError
+
+
+T = TypeVar("T", bound=BaseModel)
+
+from src.ai import AGENT_ID_DEFAULT
 from src.ai.mcp.service import get_user_mcp_config
 from src.ai.mcp.tooling import (
     MCPToolBinding,
@@ -39,6 +25,13 @@ from src.ai.mcp.tooling import (
     execute_user_tool_call,
     load_user_tool_bindings,
     parse_tool_arguments,
+)
+from src.ai.models import (
+    AdaptiveCourseStructure,
+    CourseStructure,
+    ExecutionPlan,
+    LessonContent,
+    SelfAssessmentQuiz,
 )
 from src.ai.prompts import (
     ADAPTIVE_COURSE_GENERATION_PROMPT,
@@ -68,12 +61,20 @@ class LLMClient:
         self._rag_service = rag_service
         self._agent_id = agent_id
         self._tool_maps: dict[UUID, dict[str, tuple[str, str]]] = {}
+        self._tool_filters = self._parse_tool_filters()
+        self._background_tasks: set[asyncio.Task[Any]] = set()
+
+    def _parse_tool_filters(self) -> tuple[set[str] | None, set[str]]:
+        allowed_env = os.getenv("AI_ENABLED_TOOLS")
+        allowed = {token.strip().lower() for token in allowed_env.split(",") if token.strip()} if allowed_env else None
+        blocked_env = os.getenv("AI_DISABLED_TOOLS")
+        blocked = {token.strip().lower() for token in blocked_env.split(",") if token.strip()} if blocked_env else set()
+        return allowed, blocked
 
     async def complete(
         self,
         messages: list[dict[str, Any]],
         temperature: float | None = None,
-        max_tokens: int | None = None,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | None = None,
         user_id: str | UUID | None = None,
@@ -90,14 +91,11 @@ class LLMClient:
             kwargs = {
                 "model": request_model,
                 "messages": messages,
-                "temperature": temperature if temperature is not None else settings.ai_temperature_default,
                 "timeout": settings.ai_request_timeout,
             }
 
-            # Only add max_tokens if explicitly provided - let model decide otherwise
-            if max_tokens is not None:
-                kwargs["max_tokens"] = max_tokens
-
+            if temperature is not None:
+                kwargs["temperature"] = temperature
             if tools:
                 kwargs["tools"] = tools
             if tool_choice:
@@ -124,16 +122,16 @@ class LLMClient:
         messages: list[dict[str, Any]],
         response_model: type[BaseModel] | None = None,
         temperature: float | None = None,
-        max_tokens: int | None = None,
         tools: list[dict[str, Any]] | list[MCPToolBinding] | None = None,
         tool_choice: str | None = None,
-        format_json: bool = False,
         user_id: str | UUID | None = None,
         model: str | None = None,
     ) -> Any:
         """Get completion with optional memory integration and structured output."""
         try:
             normalized_user_id = self._normalize_user_id(user_id)
+            settings = get_settings()
+            request_model = model or settings.primary_llm_model
             if normalized_user_id:
                 messages = await self._inject_memory_into_messages(messages, normalized_user_id)
 
@@ -145,62 +143,33 @@ class LLMClient:
             effective_tool_choice = tool_choice or ("auto" if tool_schemas else None)
 
             if response_model:
-                normalized_user_id = self._normalize_user_id(user_id)
-                if normalized_user_id:
-                    messages = await self._inject_memory_into_messages(messages, normalized_user_id)
-
-                settings = get_settings()
-                request_model = model or settings.primary_llm_model
-                schema_model = SCHEMA_OVERRIDES.get(response_model, response_model)
 
                 def _finalize(structured: BaseModel) -> BaseModel:
                     if normalized_user_id:
-                        asyncio.create_task(  # noqa: RUF006
+                        task = asyncio.create_task(
                             self._save_conversation_to_memory(normalized_user_id, messages, structured)
                         )
+                        self._background_tasks.add(task)
+                        task.add_done_callback(self._background_tasks.discard)
                     return structured
 
-                try:
-                    schema_instance = await self._complete_with_litellm_schema(
-                        messages=messages,
-                        schema_model=schema_model,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        user_id=normalized_user_id,
-                        model=request_model,
-                        tools=tool_schemas,
-                        tool_choice=effective_tool_choice,
-                    )
+                schema_instance = await self._complete_with_litellm_schema(
+                    messages=messages,
+                    schema_model=response_model,
+                    temperature=temperature,
+                    user_id=normalized_user_id,
+                    model=request_model,
+                    tools=tool_schemas,
+                    tool_choice=effective_tool_choice,
+                )
 
-                    if schema_model is response_model:
-                        structured_output = _finalize(schema_instance)
-                    else:
-                        structured_output = _finalize(response_model.model_validate(schema_instance.model_dump()))
-                except Exception:
-                    self._logger.warning(
-                        "LiteLLM structured output failed on model %s; falling back to Instructor",
-                        request_model,
-                        exc_info=True,
-                    )
-                    instructor_result = await self._complete_with_instructor(
-                        messages=messages,
-                        response_model=response_model,
-                        temperature=temperature,
-                        temperature_default=settings.ai_temperature_default,
-                        max_tokens=max_tokens,
-                        model=request_model,
-                        request_timeout=settings.ai_request_timeout,
-                    )
-                    structured_output = _finalize(instructor_result)
-
-                return structured_output
+                return _finalize(schema_instance)
 
             # Handle function calling
             if tool_schemas:
                 response = await self.complete(
                     messages=messages,
                     temperature=temperature,
-                    max_tokens=max_tokens,
                     tools=tool_schemas,
                     tool_choice=effective_tool_choice,
                     user_id=normalized_user_id,
@@ -209,18 +178,16 @@ class LLMClient:
                 # Process function calls
                 if response.choices[0].message.tool_calls:
                     return await self._handle_function_calling(
-                        response, messages, tool_schemas, temperature, max_tokens, normalized_user_id
+                        response, messages, temperature, normalized_user_id
                     )
 
                 return response.choices[0].message.content
 
-            # Regular completion (optionally request strict JSON when format_json=True)
+            # Regular completion
             response = await self.complete(
                 messages=messages,
                 temperature=temperature,
-                max_tokens=max_tokens,
                 user_id=normalized_user_id,
-                response_format={"type": "json_object"} if format_json else None,
                 model=model,
             )
 
@@ -228,13 +195,12 @@ class LLMClient:
 
             # Save conversation to memory (non-blocking)
             if normalized_user_id and response:
-                asyncio.create_task(  # noqa: RUF006
+                task = asyncio.create_task(
                     self._save_conversation_to_memory(normalized_user_id, messages, content)
                 )
+                self._background_tasks.add(task)
+                task.add_done_callback(self._background_tasks.discard)
 
-            # Handle JSON parsing if requested
-            if format_json:
-                return self._parse_json_content(content)
 
             return content
 
@@ -260,7 +226,6 @@ class LLMClient:
         messages: list[dict[str, Any]],
         schema_model: type[BaseModel],
         temperature: float | None,
-        max_tokens: int | None,
         user_id: UUID | None,
         model: str,
         tools: list[dict[str, Any]] | None = None,
@@ -273,7 +238,6 @@ class LLMClient:
             response = await self.complete(
                 messages=conversation,
                 temperature=temperature,
-                max_tokens=max_tokens,
                 user_id=user_id,
                 response_format=self._build_response_format(schema_model),
                 model=model,
@@ -283,25 +247,15 @@ class LLMClient:
             assistant_message = response.choices[0].message
             tool_calls = getattr(assistant_message, "tool_calls", None)
             if tool_calls:
-                conversation.append(
-                    {
-                        "role": "assistant",
-                        "content": assistant_message.content or "",
-                        "tool_calls": [tc.model_dump() for tc in tool_calls],
-                    }
+                await self._append_tool_calls(
+                    conversation,
+                    assistant_content=assistant_message.content or "",
+                    tool_calls=tool_calls,
+                    user_id=user_id,
                 )
                 if user_id is None:
                     self._logger.warning("Structured output invoked MCP tools without a user context")
                     break
-                executed = await self._execute_tool_calls(tool_calls, user_id)
-                for tool_call, result_content in executed:
-                    conversation.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tool_call.id,
-                            "content": result_content,
-                        }
-                    )
                 continue
             try:
                 return self._coerce_response_model(response, schema_model)
@@ -313,45 +267,24 @@ class LLMClient:
                     attempt,
                     parse_error,
                 )
+                if attempt < 2:
+                    conversation.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "Your previous response did not match the required JSON schema. "
+                                "Reply again with ONLY valid JSON that matches the schema exactly "
+                                "(no markdown, no commentary, no extra keys)."
+                            ),
+                        }
+                    )
         if last_error is None:
             msg = "Structured response validation failed"
             raise RuntimeError(msg)
         raise last_error
 
-    async def _complete_with_instructor(
-        self,
-        *,
-        messages: list[dict[str, Any]],
-        response_model: type[BaseModel],
-        temperature: float | None,
-        temperature_default: float,
-        max_tokens: int | None,
-        model: str,
-        request_timeout: int,
-    ) -> BaseModel:
-        import instructor
-        from litellm import acompletion
-
-        client = instructor.from_litellm(acompletion)
-        instructor_kwargs = {
-            "model": model,
-            "messages": messages,
-            "response_model": response_model,
-            "temperature": temperature if temperature is not None else temperature_default,
-            "max_retries": 3,
-            "timeout": request_timeout,
-        }
-        if max_tokens is not None:
-            instructor_kwargs["max_tokens"] = max_tokens
-
-        return await asyncio.wait_for(
-            client.chat.completions.create(**instructor_kwargs),
-            timeout=request_timeout,
-        )
-
     def _build_response_format(self, response_model: type[BaseModel]) -> dict[str, Any]:
-        schema = copy.deepcopy(response_model.model_json_schema())
-        self._normalize_json_schema(schema)
+        schema = response_model.model_json_schema()
         return {
             "type": "json_schema",
             "json_schema": {
@@ -360,45 +293,11 @@ class LLMClient:
             },
         }
 
-    def _normalize_json_schema(self, node: Any) -> None:
-        if not isinstance(node, dict):
-            return
-
-        definitions = node.get("$defs") or node.get("definitions")
-        if isinstance(definitions, dict):
-            for child in definitions.values():
-                self._normalize_json_schema(child)
-
-        props = node.get("properties")
-        if isinstance(props, dict) and props:
-            node["required"] = list(props.keys())
-            if "additionalProperties" not in node:
-                node["additionalProperties"] = False
-            for child in props.values():
-                self._normalize_json_schema(child)
-
-        items = node.get("items")
-        if isinstance(items, dict):
-            self._normalize_json_schema(items)
-        elif isinstance(items, list):
-            for child in items:
-                self._normalize_json_schema(child)
-
-        for key in ("allOf", "anyOf", "oneOf"):
-            variants = node.get(key)
-            if isinstance(variants, list):
-                for child in variants:
-                    self._normalize_json_schema(child)
-
     def _coerce_response_model(
         self,
         raw_response: Any,
         response_model: type[BaseModel],
     ) -> BaseModel:
-        model_instance = self._try_convert_payload(raw_response, response_model)
-        if model_instance is not None:
-            return model_instance
-
         choices = getattr(raw_response, "choices", None)
         if choices:
             first_choice = choices[0]
@@ -412,6 +311,13 @@ class LLMClient:
                 parsed_result = self._try_convert_payload(content_candidate, response_model)
                 if parsed_result is not None:
                     return parsed_result
+
+            msg = f"Unable to coerce structured response into {response_model.__name__}"
+            raise TypeError(msg)
+
+        model_instance = self._try_convert_payload(raw_response, response_model)
+        if model_instance is not None:
+            return model_instance
 
         msg = f"Unable to coerce structured response into {response_model.__name__}"
         raise TypeError(msg)
@@ -459,8 +365,37 @@ class LLMClient:
     ) -> BaseModel | None:
         try:
             return response_model.model_validate(data)
-        except Exception:
+        except ValidationError:
             return None
+
+    async def _append_tool_calls(
+        self,
+        conversation: list[dict[str, Any]],
+        *,
+        assistant_content: str,
+        tool_calls: list[Any],
+        user_id: UUID | None,
+    ) -> None:
+        conversation.append(
+            {
+                "role": "assistant",
+                "content": assistant_content,
+                "tool_calls": [tc.model_dump() for tc in tool_calls],
+            }
+        )
+
+        if user_id is None:
+            return
+
+        executed = await self._execute_tool_calls(tool_calls, user_id)
+        for tool_call, result_content in executed:
+            conversation.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": result_content,
+                }
+            )
 
     async def _inject_memory_into_messages(self, messages: list[dict[str, Any]], user_id: UUID) -> list[dict[str, Any]]:
         """Inject user memory context into the conversation."""
@@ -519,33 +454,25 @@ class LLMClient:
         self,
         response: Any,
         messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]],  # noqa: ARG002
         temperature: float | None,
-        max_tokens: int | None,
         user_id: UUID | None,
     ) -> str:
         """Handle function calling responses."""
         assistant_message = response.choices[0].message
-        messages.append(
-            {
-                "role": "assistant",
-                "content": assistant_message.content or "",
-                "tool_calls": [tc.model_dump() for tc in assistant_message.tool_calls],
-            }
+        await self._append_tool_calls(
+            messages,
+            assistant_content=assistant_message.content or "",
+            tool_calls=assistant_message.tool_calls,
+            user_id=user_id,
         )
 
         if user_id is None:
             self._logger.warning("Model attempted to call MCP tools without a user context")
             return assistant_message.content or ""
 
-        executed_calls = await self._execute_tool_calls(assistant_message.tool_calls, user_id)
-        for tool_call, result_content in executed_calls:
-            messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result_content})
-
         final_response = await self.complete(
             messages=messages,
             temperature=temperature,
-            max_tokens=max_tokens,
             user_id=user_id,
         )
 
@@ -566,7 +493,7 @@ class LLMClient:
                 self._logger.debug("MCP tools provided but user_id is missing; skipping tool wiring")
                 return None
             bindings = cast("list[MCPToolBinding]", tools)
-            filtered = self._filter_tool_bindings(bindings, user_id)
+            filtered = self._filter_tool_bindings(bindings)
             if not filtered:
                 self._tool_maps.pop(user_id, None)
                 return None
@@ -609,7 +536,6 @@ class LLMClient:
     def _filter_tool_bindings(
         self,
         bindings: list[MCPToolBinding],
-        user_id: UUID,
     ) -> list[MCPToolBinding]:
         allowed, blocked = self._get_tool_filters()
         filtered: list[MCPToolBinding] = []
@@ -627,11 +553,7 @@ class LLMClient:
         return "".join(char if char.isalnum() or char == "_" else "_" for char in base)
 
     def _get_tool_filters(self) -> tuple[set[str] | None, set[str]]:
-        allowed_env = os.getenv("AI_ENABLED_TOOLS")
-        allowed = {token.strip().lower() for token in allowed_env.split(",") if token.strip()} if allowed_env else None
-        blocked_env = os.getenv("AI_DISABLED_TOOLS")
-        blocked = {token.strip().lower() for token in blocked_env.split(",") if token.strip()} if blocked_env else set()
-        return allowed, blocked
+        return self._tool_filters
 
     async def _load_user_tool_bindings(self, user_id: UUID) -> list[MCPToolBinding]:
         async with async_session_maker() as session:
@@ -725,48 +647,26 @@ class LLMClient:
         if isinstance(result, (dict, list)):
             try:
                 return json.dumps(result, default=str)
-            except Exception:  # pragma: no cover - defensive fallback
+            except Exception:
                 return str(result)
         return str(result)
 
     def _build_tooling_instruction(self, bindings: list[MCPToolBinding]) -> str | None:
         return build_tool_instruction(bindings)
 
-    async def _gather_research(self, user_prompt: str, user_id: UUID | str | None) -> str:
-        _ = user_prompt, user_id
-        return ""
-
-    def _extract_json_block(self, content: str) -> str | None:
-        marker = "```json"
-        lowered = content.lower()
-        marker_index = lowered.find(marker)
-        if marker_index == -1:
-            return None
-        block_start = marker_index + len(marker)
-        while block_start < len(content) and content[block_start] in {" ", "\t", "\r", "\n"}:
-            block_start += 1
-        block_end = content.find("```", block_start)
-        if block_end == -1:
-            return None
-        block = content[block_start:block_end].strip()
-        return block or None
-
-    def _parse_json_content(self, content: str) -> dict[str, Any] | list[Any] | str:
-        """Parse JSON content from AI response."""
-        try:
-            json_block = self._extract_json_block(content)
-            if json_block is not None:
-                return json.loads(json_block)
-
-            content_stripped = content.strip()
-            if content_stripped.startswith(("{", "[")):
-                return json.loads(content_stripped)
-
-            return content
-
-        except json.JSONDecodeError:
-            self._logger.warning("Failed to parse JSON content, returning as string")
-            return content
+    async def _apply_user_tooling(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        user_id: UUID | None,
+    ) -> tuple[list[dict[str, Any]], list[MCPToolBinding]]:
+        tool_bindings: list[MCPToolBinding] = []
+        if user_id is not None:
+            tool_bindings = await self._load_user_tool_bindings(user_id)
+        tool_instruction = self._build_tooling_instruction(tool_bindings)
+        if tool_instruction:
+            messages = [messages[0], {"role": "system", "content": tool_instruction}, *messages[1:]]
+        return messages, tool_bindings
 
     async def _get_rag_context(
         self,
@@ -818,137 +718,81 @@ class LLMClient:
             self._logger.warning(f"Failed to get RAG context for course {course_id}: {e}")
             return ""
 
+    async def _generate_structure_payload(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        response_model: type[T],
+        user_id: str | UUID | None,
+    ) -> T:
+        prompt_text = user_prompt.strip()
+        if not prompt_text:
+            msg = "User prompt must not be empty"
+            raise ValueError(msg)
+
+        normalized_user_id = self._normalize_user_id(user_id)
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt_text},
+        ]
+
+        messages, tool_bindings = await self._apply_user_tooling(messages, user_id=normalized_user_id)
+
+        result = await self.get_completion(
+            messages,
+            response_model=response_model,
+            user_id=normalized_user_id,
+            tools=tool_bindings or None,
+            tool_choice="auto" if tool_bindings else None,
+        )
+
+        if not isinstance(result, response_model):
+            msg = f"Expected {response_model.__name__} from structured output"
+            raise TypeError(msg)
+
+        return result
+
     async def generate_course_structure(
         self,
         user_prompt: str,
         user_id: str | UUID | None = None,
-        *,
-        system_prompt: str | None = None,
     ) -> CourseStructure:
         """Generate a structured learning course using LiteLLM structured output (Pydantic)."""
         try:
-            prompt = system_prompt or COURSE_GENERATION_PROMPT
-            normalized_user_id = self._normalize_user_id(user_id)
-            messages = [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": user_prompt},
-            ]
-
-            tool_bindings: list[MCPToolBinding] = []
-            if normalized_user_id is not None:
-                tool_bindings = await self._load_user_tool_bindings(normalized_user_id)
-            tool_instruction = self._build_tooling_instruction(tool_bindings)
-            if tool_instruction:
-                messages = [messages[0], {"role": "system", "content": tool_instruction}, *messages[1:]]
-
-            result = await self.get_completion(
-                messages,
+            return await self._generate_structure_payload(
+                system_prompt=COURSE_GENERATION_PROMPT,
+                user_prompt=user_prompt,
                 response_model=CourseStructure,
-                temperature=0,
-                user_id=normalized_user_id,
-                tools=tool_bindings or None,
-                tool_choice="auto" if tool_bindings else None,
+                user_id=user_id,
             )
-
-            if not isinstance(result, CourseStructure):
-                msg = "Expected CourseStructure from structured output"
-                raise TypeError(msg)
-
-            return result
-
+        except ValueError:
+            raise
         except Exception as e:
             self._logger.exception("Error generating course structure")
             msg = "Failed to generate course outline"
             raise RuntimeError(msg) from e
 
-    async def generate_adaptive_course_from_prompt(
+    async def generate_adaptive_course_structure(
         self,
-        *,
-        user_goal: str,
-        self_assessment_context: str | None = None,
-        max_nodes: int = 32,
-        max_prereqs: int = 3,
-        max_layers: int = 12,
-        max_lessons: int = 96,
+        user_prompt: str,
         user_id: str | UUID | None = None,
-    ) -> AdaptiveCoursePlan:
+    ) -> AdaptiveCourseStructure:
         """Generate the unified adaptive course payload used by ConceptFlow."""
-        goal_text = user_goal.strip()
-        if not goal_text:
-            msg = "User goal must not be empty"
-            raise ValueError(msg)
-
-        assessment_block = (
-            self_assessment_context.strip() if self_assessment_context else "No self-assessment provided."
-        )
-
-        # LLM-first: no heuristic scaffold; keep prompt lean
-        system_prompt = ADAPTIVE_COURSE_GENERATION_PROMPT.substitute(
-            user_goal=goal_text,
-            self_assessment_context=assessment_block,
-            scaffold_hints="",
-            max_nodes=max_nodes,
-            max_prereqs=max_prereqs,
-            max_layers=max_layers,
-            max_lessons=max_lessons,
-        )
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": "Produce the adaptive course plan JSON exactly as specified.",
-            },
-        ]
-
-        class _LiteLLMCompletionFilter(logging.Filter):
-            """Filter to suppress duplicate LiteLLM completion logs for this call."""
-
-            def __init__(self) -> None:
-                super().__init__()
-                self._seen: set[str] = set()
-
-            def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
-                name = record.name.lower()
-                if name != "litellm":
-                    return True
-                message = record.getMessage()
-                if "LiteLLM completion()" not in message:
-                    return True
-                if message in self._seen:
-                    return False
-                self._seen.add(message)
-                return True
-
-        log_filter = _LiteLLMCompletionFilter()
-        target_loggers = [logging.getLogger("LiteLLM"), logging.getLogger("litellm")]
-        for target in target_loggers:
-            target.addFilter(log_filter)
-
         try:
-            result = await self.get_completion(
-                messages,
-                response_model=AdaptiveCoursePlan,
-                temperature=0.2,
+            return await self._generate_structure_payload(
+                system_prompt=ADAPTIVE_COURSE_GENERATION_PROMPT,
+                user_prompt=user_prompt,
+                response_model=AdaptiveCourseStructure,
                 user_id=user_id,
             )
-
-            if not isinstance(result, AdaptiveCoursePlan):
-                msg = "Adaptive course structured response failed"
-                raise TypeError(msg)
-
-            return result
-
+        except ValueError:
+            raise
         except Exception as e:
-            self._logger.exception("Error generating adaptive course plan")
-            msg = "Failed to generate adaptive course plan"
+            self._logger.exception("Error generating adaptive course structure")
+            msg = "Failed to generate adaptive course structure"
             raise RuntimeError(msg) from e
-        finally:
-            for target in target_loggers:
-                try:
-                    target.removeFilter(log_filter)
-                except ValueError:
-                    continue
 
     async def generate_self_assessment_questions(
         self,
@@ -983,7 +827,6 @@ class LLMClient:
             result = await self.get_completion(
                 messages,
                 response_model=SelfAssessmentQuiz,
-                temperature=0.4,
                 user_id=user_id,
             )
 
@@ -1072,11 +915,8 @@ class LLMClient:
             ]
 
             # Generate lesson content
-            settings = get_settings()
             response_content = await self.get_completion(
                 messages,
-                temperature=settings.ai_temperature_default,
-                max_tokens=settings.ai_max_tokens_default,
                 user_id=metadata.get("user_id"),
             )
 
@@ -1102,7 +942,6 @@ class LLMClient:
                 try:
                     fix_response = await self.get_completion(
                         fix_messages,
-                        temperature=0.3,  # Low temp for accuracy
                         user_id=metadata.get("user_id"),
                     )
                     content = fix_response if isinstance(fix_response, str) else str(fix_response or "")
@@ -1166,8 +1005,6 @@ class LLMClient:
             plan = await self.get_completion(
                 messages,
                 response_model=ExecutionPlan,
-                temperature=0.1,
-                max_tokens=2000,
                 user_id=user_id,
             )
 
@@ -1177,7 +1014,7 @@ class LLMClient:
 
             return plan
 
-        except Exception as exc:  # pragma: no cover - surfaced to caller
+        except Exception as exc:
             self._logger.exception("Failed to generate execution plan")
             msg = "Execution planning failed"
             raise RuntimeError(msg) from exc
@@ -1202,12 +1039,12 @@ class LLMClient:
             # Handle different response types
             if isinstance(response, str):
                 ai_response = response[:1000]  # Limit to first 1000 chars
+            elif hasattr(response, "choices"):
+                # Raw completion response (LiteLLM / OpenAI-style)
+                ai_response = response.choices[0].message.content[:1000] if response.choices else ""
             elif hasattr(response, "model_dump"):
                 # Pydantic model (structured output)
                 ai_response = str(response.model_dump())[:1000]
-            elif hasattr(response, "choices"):
-                # Raw completion response
-                ai_response = response.choices[0].message.content[:1000] if response.choices else ""
             else:
                 ai_response = str(response)[:1000]
 
