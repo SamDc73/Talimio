@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 
 from src.auth import CurrentAuth
-from src.videos.facade import videos_facade
+from src.videos.facade import VideosFacade
 from src.videos.schemas import (
     VideoChapterProgressSync,
     VideoChapterResponse,
@@ -236,7 +236,7 @@ async def get_video_details(
 
         # Get progress
         try:
-            progress_result = await videos_facade.get_video(UUID(video_id), auth.user_id)
+            progress_result = await VideosFacade(auth.session).get_video(UUID(video_id), auth.user_id)
             progress = progress_result.get("progress") if progress_result.get("success") else None
         except Exception:
             progress = None

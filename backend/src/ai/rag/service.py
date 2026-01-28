@@ -1,5 +1,6 @@
 """RAG system service layer orchestrating LiteLLM + pgvector RAG flows."""
 
+import asyncio
 import contextlib
 import logging
 import tempfile
@@ -19,6 +20,7 @@ from src.ai.rag.schemas import DocumentResponse, SearchResult
 from src.auth import AuthContext
 from src.books.models import Book
 from src.courses.models import CourseDocument
+from src.database.session import async_session_maker
 from src.storage.factory import get_storage_provider
 from src.videos.models import Video
 
@@ -36,6 +38,7 @@ class RAGService:
 
         # Components will be lazily initialized
         self._document_processor = None  # Unstructured parser
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
     @property
     def document_processor(self) -> DocumentProcessor:
@@ -105,13 +108,11 @@ class RAGService:
 
             await auth.session.commit()
 
-            # Process the document immediately after upload
+            # Process the document in a background task to avoid blocking uploads.
             doc_id = doc.id  # Capture ID before potential session issues
-            try:
-                await self.process_document(auth.session, doc_id)
-            except Exception:
-                logger.exception("Failed to process document %s", doc_id)
-                # Don't fail the upload if processing fails - it can be retried later
+            task = asyncio.create_task(self._process_document_background(doc_id))
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
             # Re-query to get a Row object that works with model_validate
             # This matches the pattern used in get_document() and get_documents()
@@ -126,7 +127,6 @@ class RAGService:
             return DocumentResponse.model_validate(row_map)
 
         except Exception as e:
-            await auth.session.rollback()
             logger.exception("Failed to upload document")
             raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -226,6 +226,15 @@ class RAGService:
             )
             await session.commit()
             raise
+
+    async def _process_document_background(self, document_id: int) -> None:
+        """Process a document in the background with its own session."""
+        async with async_session_maker() as session:
+            try:
+                await self.process_document(session, document_id)
+            except Exception:
+                logger.exception("Failed to process document %s in background", document_id)
+                await session.rollback()
 
     async def _cleanup_course_source_file(
         self, session: AsyncSession, document_id: int, file_path_str: str | None
@@ -600,7 +609,6 @@ class RAGService:
             logger.info("Successfully deleted document %s", document_id)
 
         except Exception:
-            await auth.session.rollback()
             logger.exception("Failed to delete document %s", document_id)
             raise
 

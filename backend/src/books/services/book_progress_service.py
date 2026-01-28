@@ -5,13 +5,12 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import select
 
 from src.books.models import Book
-from src.database.session import async_session_maker
 from src.progress.models import ProgressUpdate
 from src.progress.protocols import ProgressTracker
 from src.progress.service import ProgressService
@@ -19,180 +18,183 @@ from src.progress.service import ProgressService
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 
 class BookProgressService(ProgressTracker):
-    """Stateless progress service for books implementing ProgressTracker."""
+    """Progress service for books implementing ProgressTracker."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
 
     async def initialize_progress(self, content_id: UUID, user_id: UUID, total_pages: int = 0) -> None:
         """Initialize progress tracking for a new book."""
-        async with async_session_maker() as session:
-            progress_service = ProgressService(session)
+        progress_service = ProgressService(self._session)
 
-            metadata = {
-                "current_page": 1,
-                "total_pages": total_pages,
-                "toc_progress": {},
-                "bookmarks": [],
-                "content_type": "book",
-            }
-            progress_update = ProgressUpdate(progress_percentage=0, metadata=metadata)
+        metadata = {
+            "current_page": 1,
+            "total_pages": total_pages,
+            "toc_progress": {},
+            "bookmarks": [],
+            "content_type": "book",
+        }
+        progress_update = ProgressUpdate(progress_percentage=0, metadata=metadata)
 
-            await progress_service.update_progress(
-                user_id=user_id, content_id=content_id, content_type="book", progress=progress_update
-            )
+        await progress_service.update_progress(
+            user_id=user_id, content_id=content_id, content_type="book", progress=progress_update
+        )
 
-            logger.info(
-                "Book progress initialized",
-                extra={"user_id": str(user_id), "book_id": str(content_id), "total_pages": total_pages},
-            )
+        logger.info(
+            "Book progress initialized",
+            extra={"user_id": str(user_id), "book_id": str(content_id), "total_pages": total_pages},
+        )
 
     async def get_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
         """Get progress data for specific book and user."""
-        async with async_session_maker() as session:
-            progress_service = ProgressService(session)
-            progress_data = await progress_service.get_single_progress(user_id, content_id)
+        progress_service = ProgressService(self._session)
+        progress_data = await progress_service.get_single_progress(user_id, content_id)
 
-            # Get book for total pages with user isolation
-            book_query = select(Book).where(Book.id == content_id, Book.user_id == user_id)
-            book_result = await session.execute(book_query)
-            book = book_result.scalar_one_or_none()
+        # Get book for total pages with user isolation
+        book_query = select(Book).where(Book.id == content_id, Book.user_id == user_id)
+        book_result = await self._session.execute(book_query)
+        book = book_result.scalar_one_or_none()
 
-            if not book:
-                logger.warning(
-                    "BOOK_ACCESS_DENIED",
-                    extra={"user_id": str(user_id), "book_id": str(content_id), "operation": "get_progress"},
-                )
+        if not book:
+            logger.warning(
+                "BOOK_ACCESS_DENIED",
+                extra={"user_id": str(user_id), "book_id": str(content_id), "operation": "get_progress"},
+            )
 
-            total_pages = book.total_pages if book else 0
+        total_pages = book.total_pages if book else 0
 
-            if not progress_data:
-                return {
-                    "page": 0,
-                    "total_pages": total_pages,
-                    "completion_percentage": 0,
-                    "toc_progress": {},
-                    "bookmarks": [],
-                }
-
-            # Extract metadata
-            metadata = progress_data.metadata or {}
-            toc_progress = metadata.get("toc_progress", {})
-
-            # Calculate progress percentage from ToC progress on-demand if needed
-            progress_percentage = progress_data.progress_percentage or 0
-
-            if book and book.table_of_contents and toc_progress and progress_percentage == 0:
-                try:
-                    progress_percentage = await self.get_book_toc_progress_percentage(
-                        content_id, user_id, book, toc_progress
-                    )
-                except Exception as e:  # pragma: no cover - best-effort fallback
-                    logger.warning(
-                        "Failed to calculate book progress percentage",
-                        extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(e)},
-                    )
-                    progress_percentage = 0
-
+        if not progress_data:
             return {
-                "page": metadata.get("current_page", 0),
+                "page": 0,
                 "total_pages": total_pages,
-                "completion_percentage": progress_percentage,
-                "toc_progress": toc_progress,
-                "bookmarks": metadata.get("bookmarks", []),
-                "last_accessed_at": progress_data.updated_at,
-                "created_at": progress_data.created_at,
-                "updated_at": progress_data.updated_at,
+                "completion_percentage": 0,
+                "toc_progress": {},
+                "bookmarks": [],
             }
+
+        # Extract metadata
+        metadata = progress_data.metadata or {}
+        toc_progress = metadata.get("toc_progress", {})
+
+        # Calculate progress percentage from ToC progress on-demand if needed
+        progress_percentage = progress_data.progress_percentage or 0
+
+        if book and book.table_of_contents and toc_progress and progress_percentage == 0:
+            try:
+                progress_percentage = await self.get_book_toc_progress_percentage(
+                    content_id, user_id, book, toc_progress
+                )
+            except Exception as e:  # pragma: no cover - best-effort fallback
+                logger.warning(
+                    "Failed to calculate book progress percentage",
+                    extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(e)},
+                )
+                progress_percentage = 0
+
+        return {
+            "page": metadata.get("current_page", 0),
+            "total_pages": total_pages,
+            "completion_percentage": progress_percentage,
+            "toc_progress": toc_progress,
+            "bookmarks": metadata.get("bookmarks", []),
+            "last_accessed_at": progress_data.updated_at,
+            "created_at": progress_data.created_at,
+            "updated_at": progress_data.updated_at,
+        }
 
     async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update progress data for specific book and user."""
-        async with async_session_maker() as session:
-            progress_service = ProgressService(session)
+        progress_service = ProgressService(self._session)
 
-            # Get current progress
-            current_progress = await progress_service.get_single_progress(user_id, content_id)
+        # Get current progress
+        current_progress = await progress_service.get_single_progress(user_id, content_id)
 
-            # Prepare metadata
-            metadata = current_progress.metadata if current_progress else {}
-            completion_percentage = current_progress.progress_percentage if current_progress else 0
+        # Prepare metadata
+        metadata = current_progress.metadata if current_progress else {}
+        completion_percentage = current_progress.progress_percentage if current_progress else 0
 
-            # Update metadata fields
-            if "page" in progress_data and progress_data["page"] is not None:
-                metadata["current_page"] = progress_data["page"]
+        # Update metadata fields
+        if "page" in progress_data and progress_data["page"] is not None:
+            metadata["current_page"] = progress_data["page"]
 
-                # Auto-calculate completion percentage if we have total pages
-                book_query = select(Book).where(Book.id == content_id, Book.user_id == user_id)
-                book_result = await session.execute(book_query)
-                book = book_result.scalar_one_or_none()
+            # Auto-calculate completion percentage if we have total pages
+            book_query = select(Book).where(Book.id == content_id, Book.user_id == user_id)
+            book_result = await self._session.execute(book_query)
+            book = book_result.scalar_one_or_none()
 
-                if book:
-                    total_pages_value = book.total_pages or 0
-                    if total_pages_value > 0:
-                        page_based_percentage = (progress_data["page"] / total_pages_value) * 100
-                        completion_percentage = min(page_based_percentage, 100.0)
+            if book:
+                total_pages_value = book.total_pages or 0
+                if total_pages_value > 0:
+                    page_based_percentage = (progress_data["page"] / total_pages_value) * 100
+                    completion_percentage = min(page_based_percentage, 100.0)
 
-            if "completion_percentage" in progress_data and progress_data["completion_percentage"] is not None:
-                completion_percentage = progress_data["completion_percentage"]
+        if "completion_percentage" in progress_data and progress_data["completion_percentage"] is not None:
+            completion_percentage = progress_data["completion_percentage"]
 
-            if "toc_progress" in progress_data:
-                # Merge incoming toc_progress with existing, don't replace
-                existing_toc_progress = metadata.get("toc_progress", {})
-                if isinstance(existing_toc_progress, dict) and isinstance(progress_data["toc_progress"], dict):
-                    merged_progress = existing_toc_progress.copy()
-                    merged_progress.update(progress_data["toc_progress"])
-                    metadata["toc_progress"] = merged_progress
-                else:
-                    metadata["toc_progress"] = progress_data["toc_progress"]
+        if "toc_progress" in progress_data:
+            # Merge incoming toc_progress with existing, don't replace
+            existing_toc_progress = metadata.get("toc_progress", {})
+            if isinstance(existing_toc_progress, dict) and isinstance(progress_data["toc_progress"], dict):
+                merged_progress = existing_toc_progress.copy()
+                merged_progress.update(progress_data["toc_progress"])
+                metadata["toc_progress"] = merged_progress
+            else:
+                metadata["toc_progress"] = progress_data["toc_progress"]
 
-                # Recalculate completion percentage after TOC updates
-                book_query = select(Book).where(Book.id == content_id, Book.user_id == user_id)
-                book_result = await session.execute(book_query)
-                book = book_result.scalar_one_or_none()
+            # Recalculate completion percentage after TOC updates
+            book_query = select(Book).where(Book.id == content_id, Book.user_id == user_id)
+            book_result = await self._session.execute(book_query)
+            book = book_result.scalar_one_or_none()
 
-                if book and book.table_of_contents and metadata["toc_progress"]:
-                    try:
-                        completion_percentage = await self.get_book_toc_progress_percentage(
-                            content_id, user_id, book, metadata["toc_progress"]
-                        )
-                    except Exception as e:  # pragma: no cover - best-effort fallback
-                        logger.warning(
-                            "Failed to recalculate book progress percentage",
-                            extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(e)},
-                        )
+            if book and book.table_of_contents and metadata["toc_progress"]:
+                try:
+                    completion_percentage = await self.get_book_toc_progress_percentage(
+                        content_id, user_id, book, metadata["toc_progress"]
+                    )
+                except Exception as e:  # pragma: no cover - best-effort fallback
+                    logger.warning(
+                        "Failed to recalculate book progress percentage",
+                        extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(e)},
+                    )
 
-            # Update zoom level if provided
-            if "zoom_level" in progress_data:
-                metadata["zoom_level"] = progress_data["zoom_level"]
+        # Update zoom level if provided
+        if "zoom_level" in progress_data:
+            metadata["zoom_level"] = progress_data["zoom_level"]
 
-            # Update bookmarks if provided
-            if "bookmarks" in progress_data:
-                metadata["bookmarks"] = progress_data["bookmarks"]
+        # Update bookmarks if provided
+        if "bookmarks" in progress_data:
+            metadata["bookmarks"] = progress_data["bookmarks"]
 
-            # Ensure content_type is set in metadata
-            metadata["content_type"] = "book"
+        # Ensure content_type is set in metadata
+        metadata["content_type"] = "book"
 
-            # Update using unified progress service
-            progress_update = ProgressUpdate(progress_percentage=completion_percentage, metadata=metadata)
-            updated = await progress_service.update_progress(user_id, content_id, "book", progress_update)
+        # Update using unified progress service
+        progress_update = ProgressUpdate(progress_percentage=completion_percentage, metadata=metadata)
+        updated = await progress_service.update_progress(user_id, content_id, "book", progress_update)
 
-            logger.info(
-                "Book progress updated",
-                extra={
-                    "user_id": str(user_id),
-                    "book_id": str(content_id),
-                    "completion_percentage": updated.progress_percentage,
-                },
-            )
-
-            # Return updated progress in expected format
-            return {
-                "page": metadata.get("current_page", 0),
+        logger.info(
+            "Book progress updated",
+            extra={
+                "user_id": str(user_id),
+                "book_id": str(content_id),
                 "completion_percentage": updated.progress_percentage,
-                "toc_progress": metadata.get("toc_progress", {}),
-                "last_accessed_at": updated.updated_at,
-                "created_at": updated.created_at,
-                "updated_at": updated.updated_at,
-            }
+            },
+        )
+
+        # Return updated progress in expected format
+        return {
+            "page": metadata.get("current_page", 0),
+            "completion_percentage": updated.progress_percentage,
+            "toc_progress": metadata.get("toc_progress", {}),
+            "last_accessed_at": updated.updated_at,
+            "created_at": updated.created_at,
+            "updated_at": updated.updated_at,
+        }
 
     async def calculate_completion_percentage(self, content_id: UUID, user_id: UUID) -> float:
         """Calculate completion percentage for a user's book progress."""
@@ -203,55 +205,54 @@ class BookProgressService(ProgressTracker):
         self, content_id: UUID, user_id: UUID, chapter_id: str, completed: bool = True
     ) -> None:
         """Mark a book chapter as complete or incomplete."""
-        async with async_session_maker() as session:
-            progress_service = ProgressService(session)
-            current_progress = await progress_service.get_single_progress(user_id, content_id)
+        progress_service = ProgressService(self._session)
+        current_progress = await progress_service.get_single_progress(user_id, content_id)
 
-            # Get current metadata
-            metadata = current_progress.metadata if current_progress else {}
-            toc_progress = metadata.get("toc_progress", {})
+        # Get current metadata
+        metadata = current_progress.metadata if current_progress else {}
+        toc_progress = metadata.get("toc_progress", {})
 
-            # Update chapter status
-            if completed:
-                toc_progress[chapter_id] = True
-            else:
-                toc_progress.pop(chapter_id, None)
+        # Update chapter status
+        if completed:
+            toc_progress[chapter_id] = True
+        else:
+            toc_progress.pop(chapter_id, None)
 
-            # Update metadata
-            metadata["toc_progress"] = toc_progress
+        # Update metadata
+        metadata["toc_progress"] = toc_progress
 
-            # Get book for recalculation with user isolation
-            book_query = select(Book).where(Book.id == content_id, Book.user_id == user_id)
-            book_result = await session.execute(book_query)
-            book = book_result.scalar_one_or_none()
+        # Get book for recalculation with user isolation
+        book_query = select(Book).where(Book.id == content_id, Book.user_id == user_id)
+        book_result = await self._session.execute(book_query)
+        book = book_result.scalar_one_or_none()
 
-            # Recalculate completion percentage
-            completion_percentage = 0
-            if book and book.table_of_contents:
-                try:
-                    completion_percentage = await self.get_book_toc_progress_percentage(
-                        content_id, user_id, book, toc_progress
-                    )
-                except Exception as e:  # pragma: no cover - best-effort fallback
-                    logger.warning(
-                        "Failed to recalculate book progress percentage",
-                        extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(e)},
-                    )
-                    completion_percentage = current_progress.progress_percentage if current_progress else 0
+        # Recalculate completion percentage
+        completion_percentage = 0
+        if book and book.table_of_contents:
+            try:
+                completion_percentage = await self.get_book_toc_progress_percentage(
+                    content_id, user_id, book, toc_progress
+                )
+            except Exception as e:  # pragma: no cover - best-effort fallback
+                logger.warning(
+                    "Failed to recalculate book progress percentage",
+                    extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(e)},
+                )
+                completion_percentage = current_progress.progress_percentage if current_progress else 0
 
-            # Update progress
-            progress_update = ProgressUpdate(progress_percentage=completion_percentage, metadata=metadata)
-            await progress_service.update_progress(user_id, content_id, "book", progress_update)
+        # Update progress
+        progress_update = ProgressUpdate(progress_percentage=completion_percentage, metadata=metadata)
+        await progress_service.update_progress(user_id, content_id, "book", progress_update)
 
-            logger.info(
-                "Book chapter completion updated",
-                extra={
-                    "user_id": str(user_id),
-                    "book_id": str(content_id),
-                    "chapter_id": chapter_id,
-                    "completed": completed,
-                },
-            )
+        logger.info(
+            "Book chapter completion updated",
+            extra={
+                "user_id": str(user_id),
+                "book_id": str(content_id),
+                "chapter_id": chapter_id,
+                "completed": completed,
+            },
+        )
 
     # TOC Progress Calculation Methods
 
@@ -266,22 +267,21 @@ class BookProgressService(ProgressTracker):
 
         # Get book and progress data if not provided
         if book is None or toc_progress is None:
-            async with async_session_maker() as session:
-                progress_service = ProgressService(session)
-                progress_data = await progress_service.get_single_progress(user_id, book_id)
+            progress_service = ProgressService(self._session)
+            progress_data = await progress_service.get_single_progress(user_id, book_id)
 
-                if not progress_data or not progress_data.metadata:
-                    return 0
+            if not progress_data or not progress_data.metadata:
+                return 0
 
-                toc_progress = progress_data.metadata.get("toc_progress", {})
+            toc_progress = progress_data.metadata.get("toc_progress", {})
 
-                # Get book with TOC and user isolation
-                book_query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
-                book_result = await session.execute(book_query)
-                book = book_result.scalar_one_or_none()
+            # Get book with TOC and user isolation
+            book_query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
+            book_result = await self._session.execute(book_query)
+            book = book_result.scalar_one_or_none()
 
-                if not book or not book.table_of_contents:
-                    return 0
+            if not book or not book.table_of_contents:
+                return 0
 
         # Calculate progress percentage
         safe_toc_progress: dict = toc_progress or {}

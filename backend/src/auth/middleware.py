@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -18,7 +19,13 @@ from src.auth.exceptions import (
     MissingTokenError,
     TokenExpiredError,
 )
-from src.middleware.error_handlers import handle_authentication_errors
+from src.middleware.error_handlers import (
+    ErrorCategory,
+    ErrorCode,
+    format_error_response,
+    handle_authentication_errors,
+    log_error_context,
+)
 
 
 if TYPE_CHECKING:
@@ -51,3 +58,17 @@ class AuthInjectionMiddleware(BaseHTTPMiddleware):
             # Return a consistent 401 response shape (exception handlers don't catch middleware errors)
             logger.exception("Auth error in middleware for %s: %s", path, type(e).__name__)
             return await handle_authentication_errors(request, e)
+        except ValueError as e:
+            error_id = uuid4()
+            log_error_context(request, e, error_id)
+            return format_error_response(
+                category=ErrorCategory.INTERNAL,
+                code=ErrorCode.INTERNAL,
+                detail=str(e),
+                status_code=500,
+                metadata={"error_id": str(error_id)},
+                suggestions=[
+                    "Please try again later",
+                    "If the problem persists, contact support with the error ID",
+                ],
+            )

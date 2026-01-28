@@ -7,11 +7,13 @@ prefer passing `CurrentAuth` instead of separate user_id/session pairs over time
 
 from __future__ import annotations
 
+import contextlib
+import logging
 from typing import TYPE_CHECKING, Annotated, Any, TypeVar, cast
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from src.auth.dependencies import _get_user_id
 from src.auth.exceptions import NotFoundError
@@ -24,6 +26,31 @@ if TYPE_CHECKING:
 
 
 T = TypeVar("T")
+logger = logging.getLogger(__name__)
+
+
+async def _ensure_local_user(session: AsyncSession, user_id: UUID) -> None:
+    """Ensure the current user exists in the local users table when available."""
+    try:
+        table_check = await session.execute(text("SELECT to_regclass('users')"))
+        if table_check.scalar() is None:
+            return
+
+        username_hint = str(user_id)
+        await session.execute(
+            text(
+                """
+                INSERT INTO users (id, username, password_hash, role)
+                VALUES (:uid, :uname, :pwd, 'user')
+                ON CONFLICT (id) DO NOTHING
+                """
+            ),
+            {"uid": str(user_id), "uname": username_hint, "pwd": "not_used_in_single_user_mode"},
+        )
+    except Exception:
+        with contextlib.suppress(Exception):
+            await session.rollback()
+        logger.debug("User ensure step failed for %s", user_id, exc_info=True)
 
 
 class AuthContext:
@@ -132,6 +159,7 @@ async def get_auth_context(
     session: DbSession,
 ) -> AuthContext:
     """Build an AuthContext for the current request (preferred)."""
+    await _ensure_local_user(session, user_id)
     return AuthContext(user_id=user_id, session=session)
 
 

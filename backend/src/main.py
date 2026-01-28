@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError, IntegrityError, OperationalError
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
@@ -34,7 +35,7 @@ from .config.settings import get_settings
 from .content.router import router as content_router
 from .courses.router import router as courses_router
 from .database.migrate import apply_migrations
-from .database.session import engine
+from .database.session import DbSession, engine
 from .exceptions import ResourceNotFoundError, ValidationError as CustomValidationError
 from .highlights.router import router as highlights_router
 from .middleware.error_handlers import (
@@ -256,10 +257,14 @@ def create_app() -> FastAPI:
         )
 
     # Register health check endpoint
-    @app.get("/health")
-    async def health_check() -> dict[str, str]:
+    @app.get("/health", response_model=None)
+    async def health_check(session: DbSession) -> JSONResponse:
         """Check application health status."""
-        return {"status": "healthy"}
+        try:
+            await session.execute(text("SELECT 1"))
+            return JSONResponse({"status": "healthy", "db": "connected"}, status_code=200)
+        except Exception:
+            return JSONResponse({"status": "unhealthy", "db": "disconnected"}, status_code=503)
 
     # Register all routers
     _register_routers(app)

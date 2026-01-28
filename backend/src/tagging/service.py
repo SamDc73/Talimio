@@ -64,6 +64,7 @@ class TaggingService:
                 temperature=0,
                 user_id=None,
                 model=model,
+                session=self.session,
             )
         except Exception as exc:
             logger.exception("Error generating tags via LiteLLM: %s", exc)
@@ -208,8 +209,6 @@ class TaggingService:
                 confidence_score=1.0,
                 auto_generated=False,
             )
-
-        await self.session.commit()
 
     async def get_all_tags(
         self,

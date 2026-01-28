@@ -106,6 +106,7 @@ class ContentArchiveService:
 
     @staticmethod
     async def list_archived_content(
+        session: AsyncSession,
         search: str | None = None,
         content_type: ContentType | None = None,
         page: int = 1,
@@ -118,7 +119,6 @@ class ContentArchiveService:
         Similar to list_content_fast but filters for archived = true.
         """
         from src.content.services.content_service import ContentService
-        from src.database.session import async_session_maker
 
         offset = (page - 1) * page_size
         search_term = f"%{search}%" if search else None
@@ -148,16 +148,15 @@ class ContentArchiveService:
                 {QueryBuilderService.get_courses_query(search, archived_only=True, include_archived=False, user_id=current_user_id)}
             """
 
-        async with async_session_maker() as session:
-            # Get total count and paginated results
-            total = await QueryBuilderService.get_total_count(session, combined_query, search_term, current_user_id)
-            service = ContentService()
-            rows = await service.get_paginated_results(
-                session, combined_query, search_term, page_size, offset, current_user_id
-            )
+        # Get total count and paginated results
+        total = await QueryBuilderService.get_total_count(session, combined_query, search_term, current_user_id)
+        service = ContentService(session)
+        rows = await service.get_paginated_results(
+            session, combined_query, search_term, page_size, offset, current_user_id
+        )
 
-            # Transform rows to content items
-            items = ContentTransformService.transform_rows_to_items(rows)
+        # Transform rows to content items
+        items = ContentTransformService.transform_rows_to_items(rows)
 
         return ContentListResponse(
             items=items,

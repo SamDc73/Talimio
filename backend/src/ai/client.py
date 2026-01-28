@@ -12,6 +12,7 @@ from collections import Counter
 
 import litellm
 from pydantic import BaseModel, ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 T = TypeVar("T", bound=BaseModel)
@@ -42,7 +43,6 @@ from src.ai.prompts import (
     SELF_ASSESSMENT_QUESTIONS_PROMPT,
 )
 from src.config.settings import get_settings
-from src.database.session import async_session_maker
 
 
 class LLMClient:
@@ -126,6 +126,7 @@ class LLMClient:
         tool_choice: str | None = None,
         user_id: str | UUID | None = None,
         model: str | None = None,
+        session: AsyncSession | None = None,
     ) -> Any:
         """Get completion with optional memory integration and structured output."""
         try:
@@ -138,7 +139,10 @@ class LLMClient:
             # Handle structured output via LiteLLM json schema with Instructor fallback
             tool_sources: list[dict[str, Any]] | list[MCPToolBinding] | None = tools
             if tool_sources is None and normalized_user_id is not None:
-                tool_sources = await self._load_user_tool_bindings(normalized_user_id)
+                if session is None:
+                    msg = "Database session is required to load MCP tool bindings"
+                    raise RuntimeError(msg)
+                tool_sources = await self._load_user_tool_bindings(session, normalized_user_id)
             tool_schemas: list[dict[str, Any]] | None = self._prepare_tool_schemas(tool_sources, normalized_user_id)
             effective_tool_choice = tool_choice or ("auto" if tool_schemas else None)
 
@@ -161,6 +165,7 @@ class LLMClient:
                     model=request_model,
                     tools=tool_schemas,
                     tool_choice=effective_tool_choice,
+                    session=session,
                 )
 
                 return _finalize(schema_instance)
@@ -177,7 +182,13 @@ class LLMClient:
 
                 # Process function calls
                 if response.choices[0].message.tool_calls:
-                    return await self._handle_function_calling(response, messages, temperature, normalized_user_id)
+                    return await self._handle_function_calling(
+                        response,
+                        messages,
+                        temperature,
+                        normalized_user_id,
+                        session=session,
+                    )
 
                 return response.choices[0].message.content
 
@@ -225,6 +236,7 @@ class LLMClient:
         model: str,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | None = None,
+        session: AsyncSession | None = None,
     ) -> BaseModel:
         last_error: Exception | None = None
         attempt = 0
@@ -247,6 +259,7 @@ class LLMClient:
                     assistant_content=assistant_message.content or "",
                     tool_calls=tool_calls,
                     user_id=user_id,
+                    session=session,
                 )
                 if user_id is None:
                     self._logger.warning("Structured output invoked MCP tools without a user context")
@@ -370,6 +383,7 @@ class LLMClient:
         assistant_content: str,
         tool_calls: list[Any],
         user_id: UUID | None,
+        session: AsyncSession | None,
     ) -> None:
         conversation.append(
             {
@@ -381,8 +395,11 @@ class LLMClient:
 
         if user_id is None:
             return
+        if session is None:
+            msg = "Database session is required to execute MCP tool calls"
+            raise RuntimeError(msg)
 
-        executed = await self._execute_tool_calls(tool_calls, user_id)
+        executed = await self._execute_tool_calls(session, tool_calls, user_id)
         for tool_call, result_content in executed:
             conversation.append(
                 {
@@ -450,6 +467,7 @@ class LLMClient:
         messages: list[dict[str, Any]],
         temperature: float | None,
         user_id: UUID | None,
+        session: AsyncSession | None,
     ) -> str:
         """Handle function calling responses."""
         assistant_message = response.choices[0].message
@@ -458,6 +476,7 @@ class LLMClient:
             assistant_content=assistant_message.content or "",
             tool_calls=assistant_message.tool_calls,
             user_id=user_id,
+            session=session,
         )
 
         if user_id is None:
@@ -549,12 +568,12 @@ class LLMClient:
     def _get_tool_filters(self) -> tuple[set[str] | None, set[str]]:
         return self._tool_filters
 
-    async def _load_user_tool_bindings(self, user_id: UUID) -> list[MCPToolBinding]:
-        async with async_session_maker() as session:
-            return await load_user_tool_bindings(session, user_id)
+    async def _load_user_tool_bindings(self, session: AsyncSession, user_id: UUID) -> list[MCPToolBinding]:
+        return await load_user_tool_bindings(session, user_id)
 
     async def _execute_tool_calls(
         self,
+        session: AsyncSession,
         tool_calls: list[Any],
         user_id: UUID,
     ) -> list[tuple[Any, str]]:
@@ -585,8 +604,7 @@ class LLMClient:
             )
         if pending:
             # Load config once, then run all tool calls concurrently without DB sessions
-            async with async_session_maker() as session:
-                config = await get_user_mcp_config(session, user_id)
+            config = await get_user_mcp_config(session, user_id)
 
             tasks = [
                 execute_user_tool_call(
@@ -653,10 +671,14 @@ class LLMClient:
         messages: list[dict[str, Any]],
         *,
         user_id: UUID | None,
+        session: AsyncSession | None,
     ) -> tuple[list[dict[str, Any]], list[MCPToolBinding]]:
         tool_bindings: list[MCPToolBinding] = []
         if user_id is not None:
-            tool_bindings = await self._load_user_tool_bindings(user_id)
+            if session is None:
+                msg = "Database session is required to load MCP tool bindings"
+                raise RuntimeError(msg)
+            tool_bindings = await self._load_user_tool_bindings(session, user_id)
         tool_instruction = self._build_tooling_instruction(tool_bindings)
         if tool_instruction:
             messages = [messages[0], {"role": "system", "content": tool_instruction}, *messages[1:]]
@@ -719,6 +741,7 @@ class LLMClient:
         user_prompt: str,
         response_model: type[T],
         user_id: str | UUID | None,
+        session: AsyncSession | None,
     ) -> T:
         prompt_text = user_prompt.strip()
         if not prompt_text:
@@ -732,7 +755,11 @@ class LLMClient:
             {"role": "user", "content": prompt_text},
         ]
 
-        messages, tool_bindings = await self._apply_user_tooling(messages, user_id=normalized_user_id)
+        messages, tool_bindings = await self._apply_user_tooling(
+            messages,
+            user_id=normalized_user_id,
+            session=session,
+        )
 
         result = await self.get_completion(
             messages,
@@ -740,6 +767,7 @@ class LLMClient:
             user_id=normalized_user_id,
             tools=tool_bindings or None,
             tool_choice="auto" if tool_bindings else None,
+            session=session,
         )
 
         if not isinstance(result, response_model):
@@ -752,6 +780,7 @@ class LLMClient:
         self,
         user_prompt: str,
         user_id: str | UUID | None = None,
+        session: AsyncSession | None = None,
     ) -> CourseStructure:
         """Generate a structured learning course using LiteLLM structured output (Pydantic)."""
         try:
@@ -760,6 +789,7 @@ class LLMClient:
                 user_prompt=user_prompt,
                 response_model=CourseStructure,
                 user_id=user_id,
+                session=session,
             )
         except ValueError:
             raise
@@ -772,6 +802,7 @@ class LLMClient:
         self,
         user_prompt: str,
         user_id: str | UUID | None = None,
+        session: AsyncSession | None = None,
     ) -> AdaptiveCourseStructure:
         """Generate the unified adaptive course payload used by ConceptFlow."""
         try:
@@ -780,6 +811,7 @@ class LLMClient:
                 user_prompt=user_prompt,
                 response_model=AdaptiveCourseStructure,
                 user_id=user_id,
+                session=session,
             )
         except ValueError:
             raise
@@ -794,6 +826,7 @@ class LLMClient:
         topic: str,
         level: str | None = None,
         user_id: str | UUID | None = None,
+        session: AsyncSession | None = None,
     ) -> SelfAssessmentQuiz:
         """Generate optional self-assessment questions for a course topic."""
         normalized_topic = topic.strip()
@@ -822,6 +855,7 @@ class LLMClient:
                 messages,
                 response_model=SelfAssessmentQuiz,
                 user_id=user_id,
+                session=session,
             )
 
             if not isinstance(result, SelfAssessmentQuiz):
@@ -835,7 +869,12 @@ class LLMClient:
             msg = "Failed to generate self-assessment questions"
             raise RuntimeError(msg) from error
 
-    async def create_lesson(self, node_meta: dict[str, Any], auth: "AuthContext | None" = None) -> LessonContent:
+    async def create_lesson(
+        self,
+        node_meta: dict[str, Any],
+        auth: "AuthContext | None" = None,
+        session: AsyncSession | None = None,
+    ) -> LessonContent:
         """Generate lesson content.
 
         Args:
@@ -847,6 +886,7 @@ class LLMClient:
             LessonContent
         """
         try:
+            resolved_session = session or (auth.session if auth else None)
             title = node_meta.get("title", "Untitled")
 
             # Build context (course info + RAG)
@@ -912,6 +952,7 @@ class LLMClient:
             response_content = await self.get_completion(
                 messages,
                 user_id=metadata.get("user_id"),
+                session=resolved_session,
             )
 
             # Get content from response (litellm or tool-assisted output)
@@ -937,6 +978,7 @@ class LLMClient:
                     fix_response = await self.get_completion(
                         fix_messages,
                         user_id=metadata.get("user_id"),
+                        session=resolved_session,
                     )
                     content = fix_response if isinstance(fix_response, str) else str(fix_response or "")
                 except Exception as fix_error:
@@ -971,6 +1013,7 @@ class LLMClient:
         workspace_root: str | None = None,
         workspace_files: list[str] | None = None,
         workspace_id: str | None = None,
+        session: AsyncSession | None = None,
     ) -> ExecutionPlan:
         """Create a sandbox execution plan using Instructor-bound JSON output."""
         payload: dict[str, Any] = {
@@ -1000,6 +1043,7 @@ class LLMClient:
                 messages,
                 response_model=ExecutionPlan,
                 user_id=user_id,
+                session=session,
             )
 
             if not isinstance(plan, ExecutionPlan):

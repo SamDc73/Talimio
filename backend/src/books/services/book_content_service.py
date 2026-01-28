@@ -18,22 +18,16 @@ logger = logging.getLogger(__name__)
 class BookContentService:
     """Book service handling book-specific content operations (stateless)."""
 
-    async def create_book(self, data: dict[str, Any], user_id: UUID, session: AsyncSession | None = None) -> Book:
-        """Create a new book with user isolation.
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
 
-        If a session is provided, use it; otherwise manage our own.
-        """
-        from src.database.session import async_session_maker
-
+    async def create_book(self, data: dict[str, Any], user_id: UUID) -> Book:
+        """Create a new book with user isolation."""
         # Convert tags to JSON if present
         if "tags" in data and data["tags"] is not None:
             data["tags"] = json.dumps(data["tags"])
 
-        if session is None:
-            async with async_session_maker() as managed_session:
-                return await self._create_with_session(managed_session, data, user_id)
-        # Use provided session
-        return await self._create_with_session(session, data, user_id)
+        return await self._create_with_session(self._session, data, user_id)
 
     async def _create_with_session(self, session: AsyncSession, data: dict[str, Any], user_id: UUID) -> Book:
         existing_book: Book | None = None
@@ -60,33 +54,30 @@ class BookContentService:
 
     async def update_book(self, book_id: UUID, data: dict, user_id: UUID) -> Book:
         """Update an existing book with ownership validation."""
-        from src.database.session import async_session_maker
+        # Get the book with user isolation
+        query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
+        result = await self._session.execute(query)
+        book = result.scalar_one_or_none()
 
-        async with async_session_maker() as session:
-            # Get the book with user isolation
-            query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
-            result = await session.execute(query)
-            book = result.scalar_one_or_none()
+        if not book:
+            logger.warning(
+                "BOOK_ACCESS_DENIED",
+                extra={"user_id": str(user_id), "book_id": str(book_id), "operation": "update"},
+            )
+            msg = f"Book {book_id} not found"
+            raise ValueError(msg)
 
-            if not book:
-                logger.warning(
-                    "BOOK_ACCESS_DENIED",
-                    extra={"user_id": str(user_id), "book_id": str(book_id), "operation": "update"},
-                )
-                msg = f"Book {book_id} not found"
-                raise ValueError(msg)
+        # Update fields
+        for field, value in data.items():
+            if (field == "tags" and value is not None) or (field == "table_of_contents" and value is not None):
+                setattr(book, field, json.dumps(value))
+            else:
+                setattr(book, field, value)
 
-            # Update fields
-            for field, value in data.items():
-                if (field == "tags" and value is not None) or (field == "table_of_contents" and value is not None):
-                    setattr(book, field, json.dumps(value))
-                else:
-                    setattr(book, field, value)
+        book.updated_at = datetime.now(UTC)
 
-            book.updated_at = datetime.now(UTC)
+        await self._session.commit()
+        await self._session.refresh(book)
 
-            await session.commit()
-            await session.refresh(book)
-
-            logger.info("Book updated", extra={"user_id": str(user_id), "book_id": str(book.id)})
-            return book
+        logger.info("Book updated", extra={"user_id": str(user_id), "book_id": str(book.id)})
+        return book

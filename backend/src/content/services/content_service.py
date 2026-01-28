@@ -9,22 +9,19 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.content.schemas import ContentListResponse, ContentType
-
-# Progress calculation imports removed - progress now fetched separately
 from src.content.services.content_transform_service import ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
 
+
+# Progress calculation imports removed - progress now fetched separately
 # AuthContext removed - using UUID directly
-from src.database.session import async_session_maker
-
-
 logger = logging.getLogger(__name__)
 
 
 class ContentService:
     """Main service for content operations."""
 
-    def __init__(self, session: AsyncSession | None = None) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         """Initialize the content service."""
         self._session = session
 
@@ -49,77 +46,40 @@ class ContentService:
         offset = (page - 1) * page_size
         search_term = f"%{search}%" if search else None
 
-        # Use provided session or create a new one
-        if self._session:
-            session = self._session
-            queries: list[str] = []
+        session = self._session
+        queries: list[str] = []
 
-            queries, _needs_user_id = QueryBuilderService.build_content_queries(
-                content_type, search, include_archived, user_id
-            )
+        queries, _needs_user_id = QueryBuilderService.build_content_queries(
+            content_type, search, include_archived, user_id
+        )
 
-            if not queries:
-                return ContentListResponse(items=[], total=0, page=page, per_page=page_size)
+        if not queries:
+            return ContentListResponse(items=[], total=0, page=page, per_page=page_size)
 
-            combined_query = " UNION ALL ".join(f"({q})" for q in queries)
-            total = await QueryBuilderService.get_total_count(session, combined_query, search_term, user_id)
-            rows = await self.get_paginated_results(session, combined_query, search_term, page_size, offset, user_id)
-            items = ContentTransformService.transform_rows_to_items(rows)
+        combined_query = " UNION ALL ".join(f"({q})" for q in queries)
+        total = await QueryBuilderService.get_total_count(session, combined_query, search_term, user_id)
+        rows = await self.get_paginated_results(session, combined_query, search_term, page_size, offset, user_id)
+        items = ContentTransformService.transform_rows_to_items(rows)
 
-            # PERFORMANCE OPTIMIZATION: Progress calculations removed
-            # Progress is now fetched separately via /api/v1/progress endpoints
-            # This reduces content endpoint response time from 300ms+ to <100ms
+        # PERFORMANCE OPTIMIZATION: Progress calculations removed
+        # Progress is now fetched separately via /api/v1/progress endpoints
+        # This reduces content endpoint response time from 300ms+ to <100ms
 
-            # Log archive status of returned items
-            archived_count = sum(1 for item in items if hasattr(item, "archived") and item.archived)
-            active_count = len(items) - archived_count
-            logger.info(f"📊 Returning {len(items)} items: {archived_count} archived, {active_count} active")
+        # Log archive status of returned items
+        archived_count = sum(1 for item in items if hasattr(item, "archived") and item.archived)
+        active_count = len(items) - archived_count
+        logger.info(f"📊 Returning {len(items)} items: {archived_count} archived, {active_count} active")
 
-            for item in items:
-                if hasattr(item, "archived"):
-                    logger.info(f"🔍 Item '{item.title}': archived={item.archived}, type={item.__class__.__name__}")
+        for item in items:
+            if hasattr(item, "archived"):
+                logger.info(f"🔍 Item '{item.title}': archived={item.archived}, type={item.__class__.__name__}")
 
-            return ContentListResponse(
-                items=items,
-                total=total,
-                page=page,
-                per_page=page_size,
-            )
-        # Fallback to creating a new session
-        async with async_session_maker() as session:
-            queries: list[str] = []
-
-            queries, _needs_user_id = QueryBuilderService.build_content_queries(
-                content_type, search, include_archived, user_id
-            )
-
-            if not queries:
-                return ContentListResponse(items=[], total=0, page=page, per_page=page_size)
-
-            combined_query = " UNION ALL ".join(f"({q})" for q in queries)
-            total = await QueryBuilderService.get_total_count(session, combined_query, search_term, user_id)
-            rows = await self.get_paginated_results(session, combined_query, search_term, page_size, offset, user_id)
-            items = ContentTransformService.transform_rows_to_items(rows)
-
-            # PERFORMANCE OPTIMIZATION: Progress calculations removed
-            # Progress is now fetched separately via /api/v1/progress endpoints
-            # This reduces content endpoint response time from 300ms+ to <100ms
-
-            # Log archive status of returned items
-            archived_count = sum(1 for item in items if hasattr(item, "archived") and item.archived)
-            active_count = len(items) - archived_count
-            logger.info(f"📊 Returning {len(items)} items: {archived_count} archived, {active_count} active")
-
-            for item in items:
-                if hasattr(item, "archived"):
-                    logger.info(f"🔍 Item '{item.title}': archived={item.archived}, type={item.__class__.__name__}")
-
-            return ContentListResponse(
-                items=items,
-                total=total,
-                page=page,
-                per_page=page_size,
-            )
+        return ContentListResponse(
+            items=items,
+            total=total,
+            page=page,
+            per_page=page_size,
+        )
 
     async def get_paginated_results(
         self,
@@ -264,42 +224,31 @@ class ContentService:
         user_id: UUID,
     ) -> None:
         """Delete a content item and all related references."""
-        # Resolve session
-        if self._session:
-            session = self._session
-            own_session = False
-        else:
-            session = await async_session_maker().__aenter__()
-            own_session = True
+        session = self._session
+        model, _doc_type = self._get_model_and_doc_type(content_type)
 
-        try:
-            model, _doc_type = self._get_model_and_doc_type(content_type)
+        # Parse UUID and load row with ownership check
+        obj_id = UUID(content_id)
+        row = await session.get(model, obj_id)
+        if row is None or getattr(row, "user_id", None) != user_id:
+            msg = f"{content_type.value.capitalize()} {content_id} not found"
+            raise ValueError(msg)
 
-            # Parse UUID and load row with ownership check
-            obj_id = UUID(content_id)
-            row = await session.get(model, obj_id)
-            if row is None or getattr(row, "user_id", None) != user_id:
-                msg = f"{content_type.value.capitalize()} {content_id} not found"
-                raise ValueError(msg)
+        # Remove RAG chunks and any stored files
+        from src.ai.rag.service import RAGService
 
-            # Remove RAG chunks and any stored files
-            from src.ai.rag.service import RAGService
+        await RAGService.purge_for_content(session, content_type.value, str(obj_id))
+        if content_type == ContentType.BOOK:
+            await self._delete_book_file(row)
+        elif content_type == ContentType.COURSE:
+            # Also remove any lingering uploaded course document source files
+            await self._delete_course_document_files(session, obj_id)
 
-            await RAGService.purge_for_content(session, content_type.value, str(obj_id))
-            if content_type == ContentType.BOOK:
-                await self._delete_book_file(row)
-            elif content_type == ContentType.COURSE:
-                # Also remove any lingering uploaded course document source files
-                await self._delete_course_document_files(session, obj_id)
+        # Cross-module cleanup
+        await self._delete_user_progress(session, user_id, obj_id)
+        await self._delete_tag_associations(session, content_type, obj_id)
+        await self._prune_orphan_tags(session)
 
-            # Cross-module cleanup
-            await self._delete_user_progress(session, user_id, obj_id)
-            await self._delete_tag_associations(session, content_type, obj_id)
-            await self._prune_orphan_tags(session)
-
-            # Delete the content row and commit once
-            await session.delete(row)
-            await session.commit()
-        finally:
-            if own_session:
-                await session.__aexit__(None, None, None)
+        # Delete the content row and commit once
+        await session.delete(row)
+        await session.commit()

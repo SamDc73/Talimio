@@ -12,7 +12,6 @@ from uuid import UUID
 
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import Select, select
-from sqlalchemy.exc import IntegrityError
 
 from src.ai.mcp.client import get_mcp_client, probe_mcp_server
 from src.ai.mcp.config import MCPAuthConfig, MCPConfig, MCPServerConfig
@@ -181,11 +180,7 @@ async def create_user_mcp_server(
         enabled=payload.enabled,
     )
     session.add(server)
-    try:
-        await session.commit()
-    except IntegrityError:
-        await session.rollback()
-        raise
+    await session.commit()
     await session.refresh(server)
     return server
 

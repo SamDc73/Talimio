@@ -16,6 +16,7 @@ from src.ai.mcp.service import (
 )
 from src.auth import CurrentAuth
 
+
 router = APIRouter(prefix="/api/v1/mcp", tags=["mcp"])
 
 _URL_ADAPTER = TypeAdapter(AnyHttpUrl)

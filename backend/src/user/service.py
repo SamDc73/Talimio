@@ -76,7 +76,6 @@ async def _save_user_preferences(user_id: UUID, preferences: UserPreferences, db
 
     except HTTPException:
         # Re-raise HTTP exceptions
-        await db_session.rollback()
         raise
     except Exception as e:
         logger.exception(f"Failed to save preferences for user {user_id}: {e}")
@@ -289,5 +288,4 @@ async def update_user_preferences(
         # Return current preferences on error
         current_prefs = await _load_user_preferences(user_id, db_session)
         return PreferencesUpdateResponse(preferences=current_prefs, updated=False)
-
 

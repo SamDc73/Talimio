@@ -14,7 +14,6 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.courses.models import Course, CourseConcept, Lesson, UserConceptState
-from src.database.session import async_session_maker
 from src.progress.models import ProgressUpdate
 from src.progress.protocols import ProgressTracker
 from src.progress.service import ProgressService
@@ -26,12 +25,7 @@ logger = logging.getLogger(__name__)
 class CourseProgressService(ProgressTracker):
     """Progress service for courses with lesson-based progress tracking functionality."""
 
-    def __init__(self, session: AsyncSession | None = None) -> None:
-        """Initialize course progress service.
-
-        When a session is provided, reuse it instead of creating a new one so
-        progress calculations share the same database/transaction as callers.
-        """
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     async def get_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
@@ -162,11 +156,7 @@ class CourseProgressService(ProgressTracker):
                 "learning_patterns": metadata.get("learning_patterns", {}),
             }
 
-        if self._session is not None:
-            return await _inner(self._session)
-
-        async with async_session_maker() as session:
-            return await _inner(session)
+        return await _inner(self._session)
 
     async def calculate_completion_percentage(self, content_id: UUID, user_id: UUID) -> float:
         """Calculate completion percentage (0.0 to 100.0)."""
@@ -214,11 +204,7 @@ class CourseProgressService(ProgressTracker):
             # Return updated progress in expected format
             return self._format_progress_response(updated, metadata, total_lessons, course)
 
-        if self._session is not None:
-            return await _inner(self._session)
-
-        async with async_session_maker() as session:
-            return await _inner(session)
+        return await _inner(self._session)
 
     async def _get_progress_context(
         self, session: Any, progress_service: Any, user_id: UUID, content_id: UUID

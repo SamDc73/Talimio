@@ -57,19 +57,16 @@ class VideoHighlightService(HighlightInterface):
             await self.session.commit()
             await self.session.refresh(highlight)
         except IntegrityError as e:
-            await self.session.rollback()
             logger.exception(f"Integrity constraint violation creating video highlight: {e}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid highlight data or duplicate entry"
             ) from e
         except SQLAlchemyError as e:
-            await self.session.rollback()
             logger.exception(f"Database error creating video highlight: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
             ) from e
         except Exception as e:
-            await self.session.rollback()
             logger.exception(f"Unexpected error creating video highlight: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"
@@ -150,13 +147,11 @@ class VideoHighlightService(HighlightInterface):
             await self.session.commit()
             await self.session.refresh(highlight)
         except SQLAlchemyError as e:
-            await self.session.rollback()
             logger.exception(f"Database error updating video highlight {highlight_id}: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
             ) from e
         except Exception as e:
-            await self.session.rollback()
             logger.exception(f"Unexpected error updating video highlight {highlight_id}: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"
@@ -177,13 +172,11 @@ class VideoHighlightService(HighlightInterface):
             result = await self.session.execute(stmt)
             await self.session.commit()
         except SQLAlchemyError as e:
-            await self.session.rollback()
             logger.exception(f"Database error deleting video highlight {highlight_id}: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
             ) from e
         except Exception as e:
-            await self.session.rollback()
             logger.exception(f"Unexpected error deleting video highlight {highlight_id}: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"

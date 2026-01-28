@@ -86,7 +86,6 @@ async def create_book_highlight(
         )
     except Exception as e:
         logger.exception(f"Error creating highlight for book {book_id}: {e}")
-        await auth.session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create highlight"
         ) from e
@@ -120,7 +119,6 @@ async def delete_highlight(
         raise
     except Exception as e:
         logger.exception(f"Error deleting highlight {highlight_id}: {e}")
-        await auth.session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete highlight"
         ) from e
@@ -167,7 +165,6 @@ async def update_highlight(
         raise
     except Exception as e:
         logger.exception(f"Error updating highlight {highlight_id}: {e}")
-        await auth.session.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update highlight"
         ) from e

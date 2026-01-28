@@ -8,6 +8,8 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from .service import VideoService
 from .services.video_progress_service import VideoProgressService
 
@@ -23,10 +25,11 @@ class VideosFacade:
     stable API that won't break when internal implementation changes.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
         # Internal services - not exposed to outside modules
         self._video_service = VideoService()
-        self._progress_service = VideoProgressService()  # Implements ProgressTracker protocol
+        self._progress_service = VideoProgressService(session)  # Implements ProgressTracker protocol
 
     async def get_content_with_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
         """
@@ -44,13 +47,9 @@ class VideosFacade:
         """
         try:
             # Get video information - need to pass user_id as well
-            # Create a temporary session for the video service call
-            from src.database.session import async_session_maker
-
-            async with async_session_maker() as session:
-                video_response = await self._video_service.get_video(session, str(video_id), user_id)
-                # Convert response to dict
-                video = video_response.model_dump() if video_response else None
+            video_response = await self._video_service.get_video(self._session, str(video_id), user_id)
+            # Convert response to dict
+            video = video_response.model_dump() if video_response else None
 
             if not video:
                 return {"error": "Video not found"}
@@ -100,5 +99,3 @@ class VideosFacade:
             logger.exception(f"Error updating progress for video {video_id}: {e}")
             return {"error": "Failed to update progress", "success": False}
 
-
-videos_facade = VideosFacade()
