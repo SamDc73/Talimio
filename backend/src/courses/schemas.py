@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -303,24 +303,6 @@ class GradeResponse(BaseModel):
         None,
         description="Optional LaTeX fragment to highlight for targeted feedback",
     )
-
-    model_config = ConfigDict(**_CAMEL_CONFIG)
-
-
-class MDXValidateRequest(BaseModel):
-    """Request schema for MDX validation."""
-
-    content: str = Field(..., description="MDX content to validate")
-
-    model_config = ConfigDict(**_CAMEL_CONFIG)
-
-
-class MDXValidateResponse(BaseModel):
-    """Response schema for MDX validation."""
-
-    valid: bool = Field(..., description="Whether the MDX content is valid")
-    error: str | None = Field(None, description="Error message if validation failed")
-    metadata: dict[str, Any] | None = Field(None, description="Extracted metadata from MDX content")
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 

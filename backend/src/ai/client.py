@@ -38,7 +38,6 @@ from src.ai.prompts import (
     COURSE_GENERATION_PROMPT,
     E2B_EXECUTION_SYSTEM_PROMPT,
     LESSON_GENERATION_PROMPT,
-    MDX_ERROR_FIX_PROMPT,
     MEMORY_CONTEXT_SYSTEM_PROMPT,
     SELF_ASSESSMENT_QUESTIONS_PROMPT,
 )
@@ -957,42 +956,6 @@ class LLMClient:
 
             # Get content from response (litellm or tool-assisted output)
             content = response_content if isinstance(response_content, str) else str(response_content or "")
-
-            # Validate and fix MDX - keep trying until valid (max 3 attempts)
-            from src.courses.services.mdx_service import mdx_service
-
-            max_fix_attempts = 3
-            for fix_attempt in range(max_fix_attempts):
-                is_valid, error_msg = mdx_service.validate_mdx(content)
-
-                if is_valid:
-                    break  # Content is valid, we're done
-
-                # Ask AI to fix the broken MDX
-                fix_messages = [
-                    {"role": "assistant", "content": content},
-                    {"role": "user", "content": f"MDX validation error: {error_msg}\n\n{MDX_ERROR_FIX_PROMPT}"},
-                ]
-
-                try:
-                    fix_response = await self.get_completion(
-                        fix_messages,
-                        user_id=metadata.get("user_id"),
-                        session=resolved_session,
-                    )
-                    content = fix_response if isinstance(fix_response, str) else str(fix_response or "")
-                except Exception as fix_error:
-                    if fix_attempt == max_fix_attempts - 1:
-                        # Last attempt failed, raise error
-                        msg = f"Could not fix MDX after {max_fix_attempts} attempts. Last error: {error_msg[:200] if error_msg else 'Unknown error'}"
-                        raise RuntimeError(msg) from fix_error
-
-            # Final validation check
-            is_valid, error_msg = mdx_service.validate_mdx(content)
-            if not is_valid:
-                # ALL attempts to fix failed - DO NOT save broken MDX
-                msg = f"MDX still invalid after {max_fix_attempts} fix attempts: {error_msg[:200] if error_msg else 'Unknown error'}"
-                raise ValueError(msg)
 
             return LessonContent(body=content.strip())
         except Exception as e:
