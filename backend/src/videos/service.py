@@ -45,7 +45,7 @@ def parse_video_id(video_id: str) -> UUID:
 
 def _create_downloader(options: dict[str, Any]) -> yt_dlp.YoutubeDL:
     """Return a YoutubeDL instance without strict typing complaints."""
-    return yt_dlp.YoutubeDL(options)  # type: ignore[arg-type]
+    return yt_dlp.YoutubeDL(options)
 
 
 async def _embed_video_background(video_id: str) -> None:
@@ -648,9 +648,9 @@ class VideoService:
                 completion_pct = (len(completed_chapter_ids) / total) * 100 if total > 0 else 0.0
 
                 # Persist unified progress for this user/video via facade (imports locally to avoid circular deps)
-                from src.videos.facade import videos_facade
+                from src.videos.facade import VideosFacade
 
-                await videos_facade.update_video_progress(
+                await VideosFacade(db).update_video_progress(
                     video.id,
                     user_id,
                     {"completion_percentage": completion_pct, "completed_chapters": completed_chapter_ids},
@@ -690,13 +690,13 @@ class VideoService:
 
         # Update progress using facade if user_id is provided
         if user_id:
-            from src.videos.facade import videos_facade
-
             progress_data = {
                 "completion_percentage": completion_percentage,
                 "completed_chapters": completed_chapter_ids,
             }
-            await videos_facade.update_video_progress(parse_video_id(video_id), user_id, progress_data)
+            from src.videos.facade import VideosFacade
+
+            await VideosFacade(db).update_video_progress(parse_video_id(video_id), user_id, progress_data)
 
         # Update video timestamp
         video.updated_at = datetime.now(UTC)

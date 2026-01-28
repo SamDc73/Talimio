@@ -9,6 +9,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_COURSE_PLANNER
 from src.ai.client import LLMClient
@@ -17,7 +18,6 @@ from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT
 from src.ai.rag.embeddings import VectorRAG
 from src.ai.rag.service import RAGService
 from src.books.models import Book
-from src.database.session import async_session_maker
 from src.videos.models import Video
 
 
@@ -38,11 +38,13 @@ class AIService:
         *,
         user_id: UUID,
         user_prompt: str,
+        session: AsyncSession | None = None,
     ) -> CourseStructure:
         """Generate a course outline."""
         return await self._course_llm.generate_course_structure(
             user_prompt=user_prompt,
             user_id=str(user_id),
+            session=session,
         )
 
     async def generate_adaptive_course_structure(
@@ -50,11 +52,13 @@ class AIService:
         *,
         user_id: UUID,
         user_prompt: str,
+        session: AsyncSession | None = None,
     ) -> AdaptiveCourseStructure:
         """Generate the unified adaptive course payload."""
         return await self._course_llm.generate_adaptive_course_structure(
             user_prompt=user_prompt,
             user_id=str(user_id),
+            session=session,
         )
 
     async def generate_self_assessment(
@@ -62,13 +66,17 @@ class AIService:
         *,
         topic: str,
         level: str | None,
-        user_id: UUID) -> SelfAssessmentQuiz:
+        user_id: UUID,
+        session: AsyncSession | None = None,
+    ) -> SelfAssessmentQuiz:
         """Generate optional self-assessment questions for the given topic."""
         try:
             return await self._course_llm.generate_self_assessment_questions(
                 topic=topic,
                 level=level,
-                user_id=str(user_id))
+                user_id=str(user_id),
+                session=session,
+            )
         except ValueError:
             raise
         except Exception:
@@ -82,6 +90,7 @@ class AIService:
         message: str,
         context: dict | None = None,
         history: list[dict] | None = None,
+        session: AsyncSession | None = None,
         **_kwargs: Any) -> str:
         """General assistant chat with optional context."""
         # Build messages
@@ -103,7 +112,7 @@ class AIService:
         messages.append({"role": "user", "content": message})
 
         # Use completion with user context
-        response = await self._assistant_llm.get_completion(messages=messages, user_id=str(user_id))
+        response = await self._assistant_llm.get_completion(messages=messages, user_id=str(user_id), session=session)
 
         return str(response)
 
@@ -120,7 +129,9 @@ class AIService:
         workspace_entry: str | None = None,
         workspace_root: str | None = None,
         workspace_files: list[str] | None = None,
-        workspace_id: str | None = None) -> ExecutionPlan:
+        workspace_id: str | None = None,
+        session: AsyncSession | None = None,
+    ) -> ExecutionPlan:
         """Generate a sandbox execution plan for code execution."""
         return await self._assistant_llm.generate_execution_plan(
             language=language,
@@ -132,38 +143,52 @@ class AIService:
             workspace_entry=workspace_entry,
             workspace_root=workspace_root,
             workspace_files=workspace_files,
-            workspace_id=workspace_id)
+            workspace_id=workspace_id,
+            session=session,
+        )
 
     # RAG helpers
-    async def get_book_rag_context(self, book_id: UUID, query: str, user_id: UUID, limit: int = 5) -> list[dict]:
+    async def get_book_rag_context(
+        self,
+        session: AsyncSession,
+        book_id: UUID,
+        query: str,
+        user_id: UUID,
+        limit: int = 5,
+    ) -> list[dict]:
         """Search book chunks via VectorRAG.search with ownership enforcement.
 
         Returns a list of result dicts with content and metadata (e.g., page).
         """
-        async with async_session_maker() as session:
-            # Ownership check
-            book = await session.scalar(select(Book).where(Book.id == book_id, Book.user_id == user_id))
-            if not book:
-                return []
+        # Ownership check
+        book = await session.scalar(select(Book).where(Book.id == book_id, Book.user_id == user_id))
+        if not book:
+            return []
 
-            rag = VectorRAG()
-            results = await rag.search(session, doc_type="book", query=query, limit=limit, doc_id=book.id)
-            return [r.model_dump() for r in results]
+        rag = VectorRAG()
+        results = await rag.search(session, doc_type="book", query=query, limit=limit, doc_id=book.id)
+        return [r.model_dump() for r in results]
 
-    async def get_video_rag_context(self, video_id: UUID, query: str, user_id: UUID, limit: int = 5) -> list[dict]:
+    async def get_video_rag_context(
+        self,
+        session: AsyncSession,
+        video_id: UUID,
+        query: str,
+        user_id: UUID,
+        limit: int = 5,
+    ) -> list[dict]:
         """Search video transcript chunks via VectorRAG.search with ownership enforcement.
 
         Returns a list of result dicts with content and metadata (e.g., start/end).
         """
-        async with async_session_maker() as session:
-            # Ownership check
-            video = await session.scalar(select(Video).where(Video.id == video_id, Video.user_id == user_id))
-            if not video:
-                return []
+        # Ownership check
+        video = await session.scalar(select(Video).where(Video.id == video_id, Video.user_id == user_id))
+        if not video:
+            return []
 
-            rag = VectorRAG()
-            results = await rag.search(session, doc_type="video", query=query, limit=limit, doc_id=video.id)
-            return [r.model_dump() for r in results]
+        rag = VectorRAG()
+        results = await rag.search(session, doc_type="video", query=query, limit=limit, doc_id=video.id)
+        return [r.model_dump() for r in results]
 
 
 # Singleton instance

@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -86,6 +87,15 @@ class Settings(BaseSettings):
     MIGRATIONS_AUTO_APPLY: bool = True
     MIGRATIONS_VERBOSE: bool = False
     MIGRATIONS_DIR: str | None = None
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def validate_database_url_scheme(cls, value: str) -> str:
+        """Ensure psycopg3 URL scheme is used."""
+        if not value.startswith("postgresql+psycopg://"):
+            msg = "DATABASE_URL must use postgresql+psycopg:// for psycopg3"
+            raise ValueError(msg)
+        return value
 
     @property
     def primary_llm_model(self) -> str:

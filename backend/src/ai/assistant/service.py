@@ -10,13 +10,13 @@ from uuid import UUID
 import fitz  # PyMuPDF
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai import AGENT_ID_ASSISTANT
 from src.ai.client import LLMClient
 from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT
 from src.books.models import Book
 from src.courses.facade import CoursesFacade
-from src.database.session import async_session_maker
 from src.storage.factory import get_storage_provider
 from src.videos.service import VideoService
 
@@ -35,7 +35,11 @@ class ContextData(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
-async def chat_with_assistant(request: ChatRequest, user_id: UUID) -> AsyncGenerator[str, None]:
+async def chat_with_assistant(
+    request: ChatRequest,
+    user_id: UUID,
+    session: AsyncSession,
+) -> AsyncGenerator[str, None]:
     """
     Stream chat responses with optional context.
 
@@ -46,7 +50,7 @@ async def chat_with_assistant(request: ChatRequest, user_id: UUID) -> AsyncGener
     """
     try:
         # Build messages with context if available
-        messages = await _build_messages(request, user_id)
+        messages = await _build_messages(request, user_id, session)
 
         # Run completion through shared LLM client so memories and MCP tools are available
         llm_client = LLMClient(agent_id=AGENT_ID_ASSISTANT)
@@ -56,6 +60,7 @@ async def chat_with_assistant(request: ChatRequest, user_id: UUID) -> AsyncGener
             max_tokens=4000,
             user_id=user_id,
             model=request.model,
+            session=session,
         )
 
         text_response = response_payload if isinstance(response_payload, str) else str(response_payload or "")
@@ -71,7 +76,7 @@ async def chat_with_assistant(request: ChatRequest, user_id: UUID) -> AsyncGener
         yield f"data: {json.dumps({'error': error_msg, 'done': True})}\n\n"
 
 
-async def _build_messages(request: ChatRequest, user_id: UUID) -> list[dict[str, str]]:
+async def _build_messages(request: ChatRequest, user_id: UUID, session: AsyncSession) -> list[dict[str, str]]:
     """Build message list with optional context."""
     context_parts = []
 
@@ -83,6 +88,7 @@ async def _build_messages(request: ChatRequest, user_id: UUID) -> list[dict[str,
             context_type=request.context_type,
             resource_id=request.context_id,
             context_meta=context_meta,
+            session=session,
         )
         if context_data:
             context_parts.append(f"Current {request.context_type} context:\n{context_data.content}")
@@ -90,7 +96,7 @@ async def _build_messages(request: ChatRequest, user_id: UUID) -> list[dict[str,
 
     # Get semantic context (RAG search)
     if request.context_type and request.context_id:
-        semantic_results = await _get_rag_context(request, user_id)
+        semantic_results = await _get_rag_context(request, user_id, session)
 
         if semantic_results:
             # Take top 3 results; include metadata cues (page or start-end)
@@ -172,7 +178,7 @@ def _extract_leading_blockquote(text: str) -> str:
         return ""
 
 
-async def _get_rag_context(request: ChatRequest, user_id: UUID) -> list:
+async def _get_rag_context(request: ChatRequest, user_id: UUID, session: AsyncSession) -> list:
     """Get semantic search results for any context type.
 
     Uses the user's quoted selection (if present) as the primary query, falling back to the full message.
@@ -186,8 +192,6 @@ async def _get_rag_context(request: ChatRequest, user_id: UUID) -> list:
     try:
         if request.context_type == "course":
             from src.ai.rag.service import RAGService
-            from src.database.session import async_session_maker
-
             logger.info(
                 "Searching for course documents with course_id: %s, query: %s...",
                 request.context_id,
@@ -195,26 +199,23 @@ async def _get_rag_context(request: ChatRequest, user_id: UUID) -> list:
             )
 
             rag_service = RAGService()
-            async with async_session_maker() as session:
-                results = await rag_service.search_course_documents(
-                    session=session,
-                    course_id=request.context_id,
-                    query=query_text,
-                    top_k=5,
-                )
-                logger.info("Retrieved %d RAG results for course %s", len(results), request.context_id)
-                if results:
-                    logger.debug("First result preview: %s", results[0].content[:100])
-                return results
+            results = await rag_service.search_course_documents(
+                session=session,
+                course_id=request.context_id,
+                query=query_text,
+                top_k=5,
+            )
+            logger.info("Retrieved %d RAG results for course %s", len(results), request.context_id)
+            if results:
+                logger.debug("First result preview: %s", results[0].content[:100])
+            return results
 
-        elif request.context_type in ("book", "video"):
+        if request.context_type in ("book", "video"):
             from uuid import UUID as _UUID
 
             from sqlalchemy import select as _select
 
             from src.ai.rag.embeddings import VectorRAG
-            from src.database.session import async_session_maker as _sm
-
             model_map = {"book": ("src.books.models", "Book"), "video": ("src.videos.models", "Video")}
             module_name, model_name = model_map[request.context_type]
 
@@ -225,33 +226,35 @@ async def _get_rag_context(request: ChatRequest, user_id: UUID) -> list:
             model_class = getattr(module, model_name)
 
             rag = VectorRAG()
-            async with _sm() as session:
-                # Ownership check
-                resource = await session.scalar(
-                    _select(model_class).where(
-                        model_class.id == _UUID(str(request.context_id)), model_class.user_id == user_id
-                    )
+            # Ownership check
+            resource = await session.scalar(
+                _select(model_class).where(
+                    model_class.id == _UUID(str(request.context_id)), model_class.user_id == user_id
                 )
-                if not resource:
-                    return []
+            )
+            if not resource:
+                return []
 
-                return await rag.search(
-                    session,
-                    doc_type=request.context_type,
-                    query=query_text,
-                    limit=5,
-                    doc_id=resource.id,
-                )
+            return await rag.search(
+                session,
+                doc_type=request.context_type,
+                query=query_text,
+                limit=5,
+                doc_id=resource.id,
+            )
 
-        else:
-            return []
+        return []
 
     except Exception:
         logger.exception("RAG search failed for %s_id: %s", request.context_type, request.context_id)
         return []
 
 
-async def _book_context(resource_id: UUID, context_meta: dict[str, Any]) -> ContextData | None:
+async def _book_context(
+    resource_id: UUID,
+    context_meta: dict[str, Any],
+    session: AsyncSession,
+) -> ContextData | None:
     """Get text from PDF pages around current page.
 
     Uses asyncio.to_thread to offload PyMuPDF parsing to a background thread,
@@ -266,13 +269,12 @@ async def _book_context(resource_id: UUID, context_meta: dict[str, Any]) -> Cont
         return None
     user_id = context_meta.get("user_id")
 
-    async with async_session_maker() as session:
-        query = select(Book).where(Book.id == resource_id)
-        if user_id:
-            query = query.where(Book.user_id == user_id)
-        book = await session.scalar(query)
-        if not book or not book.file_path:
-            return None
+    query = select(Book).where(Book.id == resource_id)
+    if user_id:
+        query = query.where(Book.user_id == user_id)
+    book = await session.scalar(query)
+    if not book or not book.file_path:
+        return None
 
     storage = get_storage_provider()
     file_content = await storage.download(book.file_path)
@@ -313,7 +315,11 @@ async def _book_context(resource_id: UUID, context_meta: dict[str, Any]) -> Cont
     )
 
 
-async def _video_context(resource_id: UUID, context_meta: dict[str, Any]) -> ContextData | None:
+async def _video_context(
+    resource_id: UUID,
+    context_meta: dict[str, Any],
+    session: AsyncSession,
+) -> ContextData | None:
     """Get full transcript with current timestamp."""
     if "timestamp" not in context_meta or "user_id" not in context_meta:
         return None
@@ -324,8 +330,7 @@ async def _video_context(resource_id: UUID, context_meta: dict[str, Any]) -> Con
         return None
     user_id = context_meta["user_id"]
 
-    async with async_session_maker() as session:
-        video = await VideoService().get_video(session, str(resource_id), user_id)
+    video = await VideoService().get_video(session, str(resource_id), user_id)
 
     if not video or not hasattr(video, "transcript_segments") or not video.transcript_segments:
         return None
@@ -342,7 +347,11 @@ async def _video_context(resource_id: UUID, context_meta: dict[str, Any]) -> Con
     )
 
 
-async def _course_context(resource_id: UUID, context_meta: dict[str, Any]) -> ContextData | None:
+async def _course_context(
+    resource_id: UUID,
+    context_meta: dict[str, Any],
+    session: AsyncSession,
+) -> ContextData | None:
     """Get course overview and optionally lesson content."""
     if "user_id" not in context_meta:
         return None
@@ -350,7 +359,7 @@ async def _course_context(resource_id: UUID, context_meta: dict[str, Any]) -> Co
     user_id = context_meta["user_id"]
     lesson_id = context_meta.get("lesson_id")
 
-    course_service = CoursesFacade()
+    course_service = CoursesFacade(session)
     result = await course_service.get_course(resource_id, user_id)
 
     if not result.get("success") or not result.get("course"):
@@ -422,6 +431,7 @@ async def get_context(
     context_type: str,
     resource_id: UUID,
     context_meta: dict[str, Any] | None = None,
+    session: AsyncSession | None = None,
 ) -> ContextData | None:
     """Get context for any resource type."""
     if not resource_id:
@@ -432,8 +442,12 @@ async def get_context(
         logger.error("Unknown context type: %s", context_type)
         return None
 
+    if session is None:
+        msg = "Database session is required to build assistant context"
+        raise RuntimeError(msg)
+
     try:
-        return await handler(resource_id, context_meta or {})
+        return await handler(resource_id, context_meta or {}, session)
     except (ValueError, AttributeError, KeyError):
         logger.exception("Context validation error")
         return None

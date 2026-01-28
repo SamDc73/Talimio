@@ -15,12 +15,12 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 
     Yields
     ------
-        AsyncSession: Database session without automatic commit.
-        The service layer should handle commits/rollbacks.
+        AsyncSession: Database session with request-scoped commit/rollback.
     """
     async with async_session_maker() as session:
         try:
             yield session
+            await session.commit()
         except Exception:
             await session.rollback()
             raise

@@ -63,9 +63,9 @@ router = APIRouter(
 logger = logging.getLogger(__name__)
 
 
-def get_courses_facade() -> CoursesFacade:
+def get_courses_facade(auth: CurrentAuth) -> CoursesFacade:
     """Get courses facade instance."""
-    return CoursesFacade()
+    return CoursesFacade(auth.session)
 
 
 def get_lesson_service(auth: CurrentAuth) -> LessonService:
@@ -73,14 +73,14 @@ def get_lesson_service(auth: CurrentAuth) -> LessonService:
     return LessonService(auth.session, auth.user_id)
 
 
-def get_code_execution_service() -> CodeExecutionService:
+def get_code_execution_service(auth: CurrentAuth) -> CodeExecutionService:
     """Get code execution service instance."""
-    return CodeExecutionService()
+    return CodeExecutionService(auth.session)
 
 
-def get_grading_service() -> GradingService:
+def get_grading_service(auth: CurrentAuth) -> GradingService:
     """Get grading service instance."""
-    return GradingService()
+    return GradingService(auth.session)
 
 
 def get_ai_service_dependency() -> AIService:
@@ -108,6 +108,7 @@ async def generate_self_assessment_questions(
             topic=topic,
             level=level,
             user_id=auth.user_id,
+            session=auth.session,
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -135,7 +136,6 @@ async def create_course(
     result = await facade.create_course(
         request.model_dump(),
         auth.user_id,
-        session=auth.session,
         background_tasks=background_tasks,
     )
     if not result.get("success"):
@@ -166,7 +166,7 @@ async def get_course(
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CourseResponse:
     """Get a specific course by ID."""
-    result = await facade.get_course(course_id, auth.user_id, session=auth.session)
+    result = await facade.get_course(course_id, auth.user_id)
 
     if not result.get("success"):
         from fastapi import HTTPException
@@ -492,7 +492,7 @@ async def execute_code(
     setup_commands: list[str] = []
     if request.course_id:
         try:
-            result = await facade.get_course(request.course_id, auth.user_id, session=auth.session)
+            result = await facade.get_course(request.course_id, auth.user_id)
             if result.get("success") and "course" in result:
                 course = result["course"]
                 setup_commands = course.setup_commands or []

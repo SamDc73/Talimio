@@ -19,14 +19,13 @@ import shlex
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from src.ai.models import PlanAction
 from src.ai.service import get_ai_service
 from src.config.settings import get_settings
 from src.courses.models import Lesson
-from src.database.session import async_session_maker
 
 
 # Prefer AsyncSandbox; fall back if package layout differs
@@ -37,6 +36,9 @@ with contextlib.suppress(Exception):  # e2b-code-interpreter >= 2.x
     _AsyncSandbox = _ImportedAsyncSandbox
 
 AsyncSandbox: Any | None = _AsyncSandbox
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 _AuthenticationException: type[Exception] = Exception
 _InvalidArgumentException: type[Exception] = Exception
@@ -144,10 +146,11 @@ class CodeExecutionService:
     # Course setup tracking: course_id -> bool
     _course_setup_done: dict[str, bool] = {}
 
-    def __init__(self) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         ttl = get_settings().E2B_SANDBOX_TTL
         self.sandbox_ttl = max(60, ttl)
         self._ai_service = get_ai_service()
+        self._session = session
         self._apt_sentinel = "/home/user/.talimio_apt_updated"
         self._language_sentinel_prefix = "/home/user/.talimio_lang_"
         self._workspace_root = "/home/user/workspaces"
@@ -530,6 +533,7 @@ class CodeExecutionService:
             workspace_root=workspace_root,
             workspace_files=list(workspace_files) if workspace_files else None,
             workspace_id=workspace_identifier,
+            session=self._session,
         )
 
         # Cache the plan for future use
@@ -785,27 +789,26 @@ class CodeExecutionService:
             return
 
         try:
-            async with async_session_maker() as session:
-                try:
-                    lesson = await session.get(Lesson, lesson_uuid)
-                    if lesson is None:
-                        logging.debug("Lesson not found for patch persistence lesson_id=%s", lesson_id)
-                        return
+            try:
+                lesson = await self._session.get(Lesson, lesson_uuid)
+                if lesson is None:
+                    logging.debug("Lesson not found for patch persistence lesson_id=%s", lesson_id)
+                    return
 
-                    existing_content = lesson.content or ""
-                    updated_content = self._replace_source_with_patch(existing_content, original, replacement)
+                existing_content = lesson.content or ""
+                updated_content = self._replace_source_with_patch(existing_content, original, replacement)
 
-                    if existing_content == updated_content:
-                        if original:
-                            logging.debug("Original snippet not found in lesson content lesson_id=%s", lesson_id)
-                        return
+                if existing_content == updated_content:
+                    if original:
+                        logging.debug("Original snippet not found in lesson content lesson_id=%s", lesson_id)
+                    return
 
-                    lesson.content = updated_content
-                    await session.commit()
-                    logging.info("Persisted AI patch to lesson lesson_id=%s", lesson_id)
-                except Exception:
-                    await session.rollback()
-                    raise
+                lesson.content = updated_content
+                await self._session.commit()
+                logging.info("Persisted AI patch to lesson lesson_id=%s", lesson_id)
+            except Exception:
+                await self._session.rollback()
+                raise
         except Exception:
             logging.exception("Failed to persist patch for lesson lesson_id=%s", lesson_id)
 

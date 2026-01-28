@@ -27,7 +27,7 @@ async def chat_endpoint(
     """Stream chat responses from the AI assistant."""
     try:
         return StreamingResponse(
-            chat_with_assistant(request, user_id=auth.user_id),
+            chat_with_assistant(request, user_id=auth.user_id, session=auth.session),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",

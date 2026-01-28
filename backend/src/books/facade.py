@@ -2,7 +2,7 @@
 
 Single entry point for all book-related operations.
 Coordinates internal book services and provides a stable API for other modules.
-Stateless: no session or user state bound to the instance.
+Session-bound: uses the injected AsyncSession for all operations.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from sqlalchemy import select
 
 from src.books.models import Book
 from src.books.schemas import BookResponse, BookWithProgress
-from src.database.session import async_session_maker
 
 from .services.book_content_service import BookContentService
 from .services.book_progress_service import BookProgressService
@@ -32,16 +31,16 @@ logger = logging.getLogger(__name__)
 
 class BooksFacade:
     """
-    Single entry point for all book operations (stateless).
+    Single entry point for all book operations.
 
     Coordinates internal book services, publishes events, and provides
-    a stable API without binding to request-scoped state.
+    a stable API while sharing the request-scoped session.
     """
 
-    def __init__(self) -> None:
-        # Internal services - stateless
-        self._content_service = BookContentService()
-        self._progress_service = BookProgressService()
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._content_service = BookContentService(session)
+        self._progress_service = BookProgressService(session)
 
     async def get_content_with_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
         """Get book with progress in a dict structure (parity with other facades)."""
@@ -67,9 +66,8 @@ class BooksFacade:
         """Get a single book with progress as a typed response."""
         try:
             # Ownership-checked book
-            async with async_session_maker() as session:
-                result = await session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
-                book = result.scalar_one_or_none()
+            result = await self._session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
+            book = result.scalar_one_or_none()
 
             if not book:
                 logger.warning(
@@ -100,8 +98,6 @@ class BooksFacade:
         file_path: str,
         title: str,
         metadata: dict[str, Any] | None = None,
-        *,
-        session: AsyncSession | None = None,
     ) -> dict[str, Any]:
         """Upload book file to user's library."""
         try:
@@ -113,7 +109,7 @@ class BooksFacade:
             data.setdefault("rag_status", "pending")
 
             # Create the book record via content service (prefer request session when provided)
-            book = await self._content_service.create_book(data, user_id, session=session)
+            book = await self._content_service.create_book(data, user_id)
 
             book_id = getattr(book, "id", None)
             total_pages = getattr(book, "total_pages", 0)
@@ -151,41 +147,40 @@ class BooksFacade:
             from src.tagging.processors.book_processor import process_book_for_tagging
             from src.tagging.service import TaggingService
 
-            async with async_session_maker() as session:
-                # Extract content preview for tagging
-                content_data = await process_book_for_tagging(book_id, user_id, session)
-                if not content_data:
-                    logger.warning(
-                        "Book not found or no content data for tagging",
-                        extra={"user_id": str(user_id), "book_id": str(book_id)},
-                    )
-                    return []
-
-                # Generate tags via TaggingService
-                tagging_service = TaggingService(session)
-                tags = await tagging_service.tag_content(
-                    content_id=book_id,
-                    content_type="book",
-                    user_id=user_id,
-                    title=content_data.get("title", ""),
-                    content_preview=content_data.get("content_preview", ""),
+            # Extract content preview for tagging
+            content_data = await process_book_for_tagging(book_id, user_id, self._session)
+            if not content_data:
+                logger.warning(
+                    "Book not found or no content data for tagging",
+                    extra={"user_id": str(user_id), "book_id": str(book_id)},
                 )
+                return []
 
-                # Persist tags onto the Book model for backward compatibility
-                if tags:
-                    db_book = await session.get(Book, book_id)
-                    if db_book:
-                        db_book.tags = json.dumps(tags)
-                        await session.commit()
-                        logger.info(
-                            "Book tagged successfully",
-                            extra={"user_id": str(user_id), "book_id": str(book_id), "tag_count": len(tags)},
-                        )
-                else:
-                    # Still commit any flushed tag associations inside TaggingService
-                    await session.commit()
+            # Generate tags via TaggingService
+            tagging_service = TaggingService(self._session)
+            tags = await tagging_service.tag_content(
+                content_id=book_id,
+                content_type="book",
+                user_id=user_id,
+                title=content_data.get("title", ""),
+                content_preview=content_data.get("content_preview", ""),
+            )
 
-                return tags or []
+            # Persist tags onto the Book model for backward compatibility
+            if tags:
+                db_book = await self._session.get(Book, book_id)
+                if db_book:
+                    db_book.tags = json.dumps(tags)
+                    await self._session.commit()
+                    logger.info(
+                        "Book tagged successfully",
+                        extra={"user_id": str(user_id), "book_id": str(book_id), "tag_count": len(tags)},
+                    )
+            else:
+                # Still commit any flushed tag associations inside TaggingService
+                await self._session.commit()
+
+            return tags or []
 
         except Exception as e:
             logger.exception(
@@ -194,7 +189,7 @@ class BooksFacade:
             return []
 
     async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
-        """Update book reading progress (stateless signature)."""
+        """Update book reading progress."""
         try:
             # Update progress using the progress tracker
             updated_progress = await self._progress_service.update_progress(content_id, user_id, progress_data)
@@ -229,11 +224,10 @@ class BooksFacade:
         """Get all books for user. Optionally includes progress information."""
         try:
             # Fetch books for this user
-            async with async_session_maker() as session:
-                result = await session.execute(
-                    select(Book).where(Book.user_id == user_id).order_by(Book.created_at.desc())
-                )
-                books = list(result.scalars().all())
+            result = await self._session.execute(
+                select(Book).where(Book.user_id == user_id).order_by(Book.created_at.desc())
+            )
+            books = list(result.scalars().all())
 
             # Convert to dict format and optionally add progress
             book_dicts: list[dict[str, Any]] = []
@@ -255,9 +249,8 @@ class BooksFacade:
         """Get book chapters/table of contents if available."""
         try:
             # Fetch book to read table_of_contents JSON
-            async with async_session_maker() as session:
-                result = await session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
-                book = result.scalar_one_or_none()
+            result = await self._session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
+            book = result.scalar_one_or_none()
             if not book:
                 logger.warning(
                     "BOOK_ACCESS_DENIED",

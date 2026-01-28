@@ -76,6 +76,8 @@ async def upload_document(
         # Don't process immediately to avoid blocking
         # TODO: Add to background job queue
 
+    except HTTPException:
+        raise
     except ValueError as e:
         # Validation errors
         logger.exception("Validation error uploading document: %s", str(e))

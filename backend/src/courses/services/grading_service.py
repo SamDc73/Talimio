@@ -6,6 +6,7 @@ import json
 import logging
 import uuid
 from dataclasses import asdict
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -51,13 +52,17 @@ ALLOWED_GRADING_TAGS = {
     "unsupported-relation",
 }
 
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 
 class GradingService:
     """Grade LaTeX expressions and generate feedback."""
 
-    def __init__(self) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self._verifier = LatexExpressionVerifier()
         self._llm_client = LLMClient()
+        self._session = session
         self._logger = logging.getLogger(__name__)
 
     async def grade(self, request: GradeRequest, user_id: uuid.UUID) -> GradeResponse:
@@ -139,6 +144,7 @@ class GradingService:
                 temperature=0,
                 user_id=user_id,
                 model=model,
+                session=self._session,
             )
         except Exception:
             self._logger.exception("Grading coach LLM feedback failed.")

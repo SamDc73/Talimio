@@ -23,7 +23,7 @@ from src.courses.models import (
 )
 from src.database.session import async_session_maker
 
-from .concept_graph_service import ConceptGraphService  # type: ignore[import]
+from .concept_graph_service import ConceptGraphService
 
 
 if TYPE_CHECKING:
@@ -52,7 +52,7 @@ class AdaptiveConceptBuildResult:
 class CourseContentService:
     """Course service handling course-specific content operations."""
 
-    def __init__(self, session: AsyncSession | None = None) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.ai_service = AIService()
 
@@ -60,27 +60,15 @@ class CourseContentService:
         self,
         data: dict[str, Any],
         user_id: UUID,
-        session: AsyncSession | None = None,
         background_tasks: BackgroundTasks | None = None,
     ) -> Course:
         """Create a new course and populate its lessons."""
-        working_session = session or self.session
-
-        if working_session is not None:
-            return await self._create_course_with_session(
-                working_session,
-                data,
-                user_id,
-                background_tasks=background_tasks,
-            )
-
-        async with async_session_maker() as managed_session:
-            return await self._create_course_with_session(
-                managed_session,
-                data,
-                user_id,
-                background_tasks=background_tasks,
-            )
+        return await self._create_course_with_session(
+            self.session,
+            data,
+            user_id,
+            background_tasks=background_tasks,
+        )
 
     async def _create_course_with_session(
         self,
@@ -108,48 +96,20 @@ class CourseContentService:
 
         self._serialize_payload_fields(session_data)
 
-        # Ensure the owning user exists in the current schema to satisfy FK constraints
-        try:
-            # Only attempt insert if the users table exists in the current search_path
-            tbl_check = await session.execute(text("SELECT to_regclass('users')"))
-            if tbl_check.scalar() is not None:
-                # Use the UUID string as username to avoid unique collisions across schemas
-                username_hint = str(user_id)
-                res = await session.execute(
-                    text(
-                        """
-                        INSERT INTO users (id, username, password_hash, role)
-                        VALUES (:uid, :uname, :pwd, 'user')
-                        ON CONFLICT (id) DO NOTHING
-                        """
-                    ),
-                    {"uid": str(user_id), "uname": username_hint, "pwd": "not-used"},
-                )
-                logger.debug("User ensure step for %s affected %s rows", user_id, getattr(res, "rowcount", None))
-        except Exception:
-            # Best-effort: if the users table is absent or other non-critical issues, continue
-            with contextlib.suppress(Exception):
-                await session.rollback()
-            logger.debug("User pre-insert skipped or failed for %s", user_id, exc_info=True)
-
         course = Course(user_id=user_id, **session_data)
         session.add(course)
 
-        try:
-            await session.flush()
-            normalized_modules, deferred_embedding_ids = await self._prepare_course_modules(
-                session=session,
-                course=course,
-                adaptive_structure=adaptive_structure,
-                modules_payload=modules_payload,
-                lessons_payload=lessons_payload,
-                defer_embeddings=defer_embeddings,
-            )
-            inserted_lessons = await self._insert_lessons(session, course.id, normalized_modules)
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+        await session.flush()
+        normalized_modules, deferred_embedding_ids = await self._prepare_course_modules(
+            session=session,
+            course=course,
+            adaptive_structure=adaptive_structure,
+            modules_payload=modules_payload,
+            lessons_payload=lessons_payload,
+            defer_embeddings=defer_embeddings,
+        )
+        inserted_lessons = await self._insert_lessons(session, course.id, normalized_modules)
+        await session.commit()
 
         await session.refresh(course)
 
@@ -191,6 +151,7 @@ class CourseContentService:
         adaptive_structure = await self.ai_service.generate_adaptive_course_structure(
             user_id=user_id,
             user_prompt=goal_payload,
+            session=self.session,
         )
         session_data["title"] = adaptive_structure.course.title
         session_data["description"] = adaptive_structure.ai_outline_meta.scope
@@ -372,6 +333,7 @@ class CourseContentService:
                     logger.warning("Skipping auto-tagging for missing course %s", course_id)
                     return
                 await self._auto_tag_course(tagging_session, course, user_id)
+                await tagging_session.commit()
         except Exception as exc:
             logger.exception("Background tagging task failed for course %s: %s", course_id, exc)
 
@@ -380,27 +342,15 @@ class CourseContentService:
         course_id: UUID,
         data: dict[str, Any],
         user_id: UUID,
-        session: AsyncSession | None = None,
     ) -> Course:
         """Update an existing course."""
-        working_session = session or self.session
-        if working_session is not None:
-            return await self._update_course_with_session(
-                working_session,
-                course_id,
-                data,
-                user_id,
-                commit=False,
-            )
-
-        async with async_session_maker() as managed_session:
-            return await self._update_course_with_session(
-                managed_session,
-                course_id,
-                data,
-                user_id,
-                commit=True,
-            )
+        return await self._update_course_with_session(
+            self.session,
+            course_id,
+            data,
+            user_id,
+            commit=False,
+        )
 
     async def _update_course_with_session(
         self,
@@ -743,19 +693,6 @@ class CourseContentService:
         if not state_rows:
             return 0
 
-        # Guard: ensure referenced users exist in current schema to avoid FK violations
-        # Tests may create isolated schemas without seeding a users row.
-        unique_user_ids = list({item["user_id"] for item in state_rows})
-        if unique_user_ids:
-            user_check = text("SELECT COUNT(*) FROM users WHERE id = ANY(:uids)").bindparams(
-                bindparam("uids", type_=ARRAY(PGUUID(as_uuid=True)))
-            )
-            existing_count_result = await session.execute(user_check, {"uids": unique_user_ids})
-            existing_count = int(existing_count_result.scalar() or 0)
-            if existing_count == 0:
-                logger.debug("Skipping user_concept_state seeding; no matching users in current schema")
-                return 0
-
         user_ids = [item["user_id"] for item in state_rows]
         concept_ids = [item["concept_id"] for item in state_rows]
         mastery_scores = [float(item["s_mastery"]) for item in state_rows]
@@ -1023,6 +960,7 @@ class CourseContentService:
         ai_result = await self.ai_service.generate_course_structure(
             user_id=user_id,
             user_prompt=prompt,
+            session=self.session,
         )
         if not ai_result:
             error_msg = "Invalid AI response format for course generation"

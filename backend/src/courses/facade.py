@@ -12,8 +12,6 @@ from uuid import UUID
 from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.session import async_session_maker
-
 from .services.course_content_service import CourseContentService
 from .services.course_progress_service import CourseProgressService
 from .services.course_query_service import CourseQueryService
@@ -30,10 +28,10 @@ class CoursesFacade:
     stable API that won't break when internal implementation changes.
     """
 
-    def __init__(self) -> None:
-        # Don't initialize with sessions - create on-demand
-        self._content_service = CourseContentService()  # New base service
-        self._progress_service = CourseProgressService()  # Handles lesson progress tracking
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._content_service = CourseContentService(session)
+        self._progress_service = CourseProgressService(session)
 
     async def get_content_with_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
         """
@@ -47,7 +45,6 @@ class CoursesFacade:
         self,
         course_id: UUID,
         user_id: UUID,
-        session: AsyncSession | None = None,
     ) -> dict[str, Any]:
         """
         Get complete course information with progress.
@@ -55,13 +52,8 @@ class CoursesFacade:
         Coordinates course service and progress service to provide comprehensive data.
         """
         try:
-            if session is not None:
-                query_service = CourseQueryService(session)
-                course_response = await query_service.get_course(course_id, user_id)
-            else:
-                async with async_session_maker() as query_session:
-                    query_service = CourseQueryService(query_session)
-                    course_response = await query_service.get_course(course_id, user_id)
+            query_service = CourseQueryService(self._session)
+            course_response = await query_service.get_course(course_id, user_id)
 
             course = course_response.model_dump() if course_response else None
             if not course:
@@ -92,7 +84,6 @@ class CoursesFacade:
         self,
         course_data: dict[str, Any],
         user_id: UUID,
-        session: AsyncSession | None = None,
         background_tasks: BackgroundTasks | None = None,
     ) -> dict[str, Any]:
         """
@@ -105,17 +96,11 @@ class CoursesFacade:
             created_course = await self._content_service.create_course(
                 course_data,
                 user_id,
-                session=session,
                 background_tasks=background_tasks,
             )
 
-            if session is not None:
-                query_service = CourseQueryService(session)
-                course_response = await query_service.get_course(created_course.id, user_id)
-            else:
-                async with async_session_maker() as query_session:
-                    query_service = CourseQueryService(query_session)
-                    course_response = await query_service.get_course(created_course.id, user_id)
+            query_service = CourseQueryService(self._session)
+            course_response = await query_service.get_course(created_course.id, user_id)
 
             return {"course": course_response, "success": True}
 
@@ -131,7 +116,6 @@ class CoursesFacade:
         topic: str,
         preferences: dict[str, Any],
         user_id: UUID,
-        session: AsyncSession | None = None,
         background_tasks: BackgroundTasks | None = None,
     ) -> dict[str, Any]:
         """
@@ -148,17 +132,11 @@ class CoursesFacade:
             course = await self._content_service.create_course(
                 data,
                 user_id,
-                session=session,
                 background_tasks=background_tasks,
             )
 
-            if session is not None:
-                query_service = CourseQueryService(session)
-                course_response = await query_service.get_course(course.id, user_id)
-            else:
-                async with async_session_maker() as query_session:
-                    query_service = CourseQueryService(query_session)
-                    course_response = await query_service.get_course(course.id, user_id)
+            query_service = CourseQueryService(self._session)
+            course_response = await query_service.get_course(course.id, user_id)
 
             return {"course": course_response, "success": True}
 
@@ -196,9 +174,8 @@ class CoursesFacade:
             # Update through content service which handles tags and reprocessing
             updated_course = await self._content_service.update_course(course_id, update_data, user_id)
 
-            async with async_session_maker() as session:
-                query_service = CourseQueryService(session)
-                course_response = await query_service.get_course(updated_course.id, user_id)
+            query_service = CourseQueryService(self._session)
+            course_response = await query_service.get_course(updated_course.id, user_id)
 
             return {"course": course_response, "success": True}
 
@@ -214,12 +191,9 @@ class CoursesFacade:
         Provides unified search across course content and metadata.
         """
         try:
-            from src.database.session import async_session_maker
-
-            async with async_session_maker() as session:
-                query_service = CourseQueryService(session)
-                limit = (filters or {}).get("limit", 20)
-                results, _total = await query_service.list_courses(per_page=limit, search=query, user_id=user_id)
+            query_service = CourseQueryService(self._session)
+            limit = (filters or {}).get("limit", 20)
+            results, _total = await query_service.list_courses(per_page=limit, search=query, user_id=user_id)
 
             return {"results": results, "success": True}
 
@@ -234,24 +208,23 @@ class CoursesFacade:
         Optionally includes progress information.
         """
         try:
-            async with async_session_maker() as session:
-                query_service = CourseQueryService(session)
-                # Simple: grab first 1000; real pagination handled at router when needed
-                course_responses, _total = await query_service.list_courses(
-                    page=1, per_page=1000, search=None, user_id=user_id
-                )
+            query_service = CourseQueryService(self._session)
+            # Simple: grab first 1000; real pagination handled at router when needed
+            course_responses, _total = await query_service.list_courses(
+                page=1, per_page=1000, search=None, user_id=user_id
+            )
 
-                course_dicts: list[dict[str, Any]] = []
-                for cr in course_responses:
-                    cd = cr.model_dump()
-                    if include_progress:
-                        try:
-                            progress = await self._progress_service.get_progress(cr.id, user_id)
-                            cd["progress"] = progress
-                        except Exception as e:
-                            logger.warning(f"Failed to get progress for course {cr.id}: {e}")
-                            cd["progress"] = {"completion_percentage": 0, "completed_lessons": {}}
-                    course_dicts.append(cd)
+            course_dicts: list[dict[str, Any]] = []
+            for cr in course_responses:
+                cd = cr.model_dump()
+                if include_progress:
+                    try:
+                        progress = await self._progress_service.get_progress(cr.id, user_id)
+                        cd["progress"] = progress
+                    except Exception as e:
+                        logger.warning(f"Failed to get progress for course {cr.id}: {e}")
+                        cd["progress"] = {"completion_percentage": 0, "completed_lessons": {}}
+                course_dicts.append(cd)
 
             return {"courses": course_dicts, "success": True}
 
@@ -265,9 +238,8 @@ class CoursesFacade:
         """Get course lessons grouped by modules."""
         try:
             try:
-                async with async_session_maker() as session:
-                    query_service = CourseQueryService(session)
-                    course_response = await query_service.get_course(course_id, user_id)
+                query_service = CourseQueryService(self._session)
+                course_response = await query_service.get_course(course_id, user_id)
             except HTTPException as exc:
                 if exc.status_code == 404:
                     logger.info(f"Course {course_id} not found for user {user_id}")
@@ -291,4 +263,3 @@ class CoursesFacade:
         except Exception:
             logger.exception("Error getting lessons for course %s", course_id)
             return {"error": "Failed to get lessons", "success": False}
-

@@ -1,13 +1,13 @@
 """Lightweight SQL migration runner for Supabase session pooler."""
 
 import logging
-import os
 from collections.abc import Iterable
 from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from src.config import env
 from src.config.settings import get_settings
 from src.database.engine import engine as default_engine
 
@@ -15,6 +15,8 @@ from src.database.engine import engine as default_engine
 logger = logging.getLogger(__name__)
 _MIGRATION_LOCK_KEY = "schema_migrations"
 _AUTOCOMMIT_TAG = "-- autocommit"
+_DEFAULT_RAG_EMBEDDING_OUTPUT_DIM = 1024
+_DEFAULT_MEMORY_EMBEDDING_OUTPUT_DIM = 1024
 
 
 def _migrations_dir() -> Path:
@@ -29,33 +31,6 @@ def _read_sql(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _parse_dotenv(path: Path) -> dict[str, str]:
-    """Parse a simple KEY=VALUE .env file into a dict.
-
-    - Ignores lines starting with '#'
-    - Trims surrounding quotes for values
-    - Does not support export/variable expansion (keep it minimal and safe)
-    """
-    result: dict[str, str] = {}
-    try:
-        for raw in path.read_text(encoding="utf-8").splitlines():
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" not in line:
-                continue
-            key, val = line.split("=", 1)
-            key = key.strip()
-            val = val.strip().strip("'\"")
-            if key:
-                result[key] = val
-    except FileNotFoundError:
-        pass
-    except Exception:
-        logger.debug("Failed parsing dotenv at %s", path, exc_info=True)
-    return result
-
-
 def _interpolate_env(sql: str) -> str:
     """Replace known ${VAR} placeholders in SQL with env values.
 
@@ -63,22 +38,24 @@ def _interpolate_env(sql: str) -> str:
     - ${RAG_EMBEDDING_OUTPUT_DIM}
     - ${MEMORY_EMBEDDING_OUTPUT_DIM}
 
-    Reads from process env first; if absent, attempts backend/.env relative to this file.
     Falls back to safe defaults if the values are missing or invalid.
     """
-    # Read from process env
-    rag_dim = os.getenv("RAG_EMBEDDING_OUTPUT_DIM")
-    mem_dim = os.getenv("MEMORY_EMBEDDING_OUTPUT_DIM")
+    def _resolve_int(name: str, default: int) -> int:
+        raw_value = env(name)
+        if raw_value in (None, ""):
+            return default
+        try:
+            return int(raw_value)
+        except (TypeError, ValueError):
+            logger.warning("Invalid %s=%s; using default %s", name, raw_value, default)
+            return default
 
-    # If missing, try backend/.env (two levels up from src/database)
-    if not rag_dim or not mem_dim:
-        backend_root = Path(__file__).resolve().parents[2]
-        dotenv_path = backend_root / ".env"
-        env_map = _parse_dotenv(dotenv_path) if dotenv_path.exists() else {}
-        rag_dim = rag_dim or env_map.get("RAG_EMBEDDING_OUTPUT_DIM")
-        mem_dim = mem_dim or env_map.get("MEMORY_EMBEDDING_OUTPUT_DIM")
+    rag_dim = _resolve_int("RAG_EMBEDDING_OUTPUT_DIM", _DEFAULT_RAG_EMBEDDING_OUTPUT_DIM)
+    mem_dim = _resolve_int("MEMORY_EMBEDDING_OUTPUT_DIM", _DEFAULT_MEMORY_EMBEDDING_OUTPUT_DIM)
 
-    return sql.replace("${RAG_EMBEDDING_OUTPUT_DIM}", rag_dim).replace("${MEMORY_EMBEDDING_OUTPUT_DIM}", mem_dim)
+    return sql.replace("${RAG_EMBEDDING_OUTPUT_DIM}", str(rag_dim)).replace(
+        "${MEMORY_EMBEDDING_OUTPUT_DIM}", str(mem_dim)
+    )
 
 
 def _sorted_sql_files(directory: Path) -> list[Path]:
