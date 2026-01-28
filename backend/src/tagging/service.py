@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 from typing import Any
 from uuid import UUID
 
@@ -12,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.client import LLMClient
 from src.ai.prompts import CONTENT_TAGGING_PROMPT
+from src.config.settings import get_settings
 
 from .models import Tag, TagAssociation
 from .schemas import TagWithConfidence
@@ -42,11 +42,11 @@ class TaggingService:
 
     async def _generate_tags_llm(self, title: str, content_preview: str) -> list[dict[str, Any]]:
         """Generate tags using LiteLLM structured outputs (Instructor fallback handled upstream)."""
-        model = os.getenv("TAGGING_LLM_MODEL")
+        settings = get_settings()
+        model = settings.TAGGING_LLM_MODEL
         if not model:
             try:
-                from src.config.settings import get_settings
-                model = get_settings().primary_llm_model
+                model = settings.primary_llm_model
                 logger.info("TAGGING_LLM_MODEL not set; falling back to PRIMARY_LLM_MODEL: %s", model)
             except Exception:
                 logger.warning("No TAGGING_LLM_MODEL and PRIMARY_LLM_MODEL unavailable; skipping tag generation")
@@ -135,74 +135,6 @@ class TaggingService:
             await self.session.rollback()
             return []
 
-    async def batch_tag_content(
-        self,
-        content_items: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        """Tag multiple content items.
-
-        Args:
-            content_items: List of dicts with content_id, content_type, title, preview
-
-        Returns
-        -------
-            Dictionary with results summary
-        """
-        results = []
-        successful = 0
-        failed = 0
-
-        for item in content_items:
-            try:
-                content_id = UUID(item["content_id"])
-                content_type = item["content_type"]
-                title = item.get("title", "")
-                preview = item.get("preview", "")
-
-                # Use user_id from item or raise error if not provided
-                if "user_id" not in item:
-                    msg = "user_id is required for batch tagging"
-                    raise ValueError(msg)
-                user_id_for_tag = UUID(item["user_id"])
-
-                tags = await self.tag_content(
-                    content_id=content_id,
-                    content_type=content_type,
-                    user_id=user_id_for_tag,
-                    title=title,
-                    content_preview=preview,
-                )
-
-                results.append(
-                    {
-                        "content_id": str(content_id),
-                        "content_type": content_type,
-                        "tags": tags,
-                        "success": True,
-                    },
-                )
-                successful += 1
-
-            except Exception as e:
-                logger.exception(f"Failed to tag item {item}: {e}")
-                results.append(
-                    {
-                        "content_id": item.get("content_id"),
-                        "content_type": item.get("content_type"),
-                        "tags": [],
-                        "success": False,
-                        "error": str(e),
-                    },
-                )
-                failed += 1
-
-        return {
-            "results": results,
-            "total": len(content_items),
-            "successful": successful,
-            "failed": failed,
-        }
-
     async def get_content_tags(
         self,
         content_id: UUID,
@@ -278,33 +210,6 @@ class TaggingService:
             )
 
         await self.session.commit()
-
-    async def suggest_tags(
-        self,
-        content_preview: str,
-        _user_id: UUID,
-        _content_type: str = "general",
-        title: str = "",
-    ) -> list[str]:
-        """Suggest tags for content without storing them.
-
-        Args:
-            content_preview: Preview text for tag generation
-            _user_id: User ID for personalized tag suggestions (reserved for future use)
-            _content_type: Type of content (reserved for future use)
-            title: Optional title
-
-        Returns
-        -------
-            List of suggested tag names
-        """
-        try:
-            tags_with_confidence = await self._generate_tags_llm(title, content_preview)
-            # Return just the tag names for backward compatibility
-            return [item["tag"] for item in tags_with_confidence]
-        except Exception as e:
-            logger.exception(f"Failed to generate tag suggestions: {e}")
-            return []
 
     async def get_all_tags(
         self,
@@ -467,5 +372,3 @@ async def update_content_tags_json(
         )
 
     await session.flush()
-
-

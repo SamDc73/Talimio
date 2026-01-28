@@ -337,44 +337,33 @@ class VideoService:
 
         # Trigger automatic tagging
         try:
+            from src.tagging.processors.video_processor import process_video_for_tagging
+
             tagging_service = TaggingService(db)
+            content_data = await process_video_for_tagging(video.id, db)
+            if not content_data:
+                logger.warning("Skipping tagging for missing video %s", video.id)
+            else:
+                tags = await tagging_service.tag_content(
+                    content_id=video.id,
+                    content_type="video",
+                    user_id=user_id,
+                    title=content_data.get("title", ""),
+                    content_preview=content_data.get("content_preview", ""),
+                )
 
-            # Build content preview
-            content_preview = []
-            content_preview.append(f"Channel: {video.channel}")
+                # Update video's tags field with both YouTube and generated tags
+                if tags:
+                    existing_tags = video_info.get("tags", [])
+                    all_tags = list(set(existing_tags + tags))  # Combine and deduplicate
+                    video.tags = json.dumps(all_tags)
+                    await db.commit()
 
-            if video.description:
-                # Take first 1000 characters
-                desc_preview = video.description[:1000]
-                if len(video.description) > 1000:
-                    desc_preview += "..."
-                content_preview.append(f"Description: {desc_preview}")
-
-            # Add YouTube tags if available
-            if video_info.get("tags"):
-                content_preview.append(f"YouTube tags: {', '.join(video_info['tags'][:10])}")
-
-            # Generate and store tags
-            tags = await tagging_service.tag_content(
-                content_id=video.id,
-                content_type="video",
-                user_id=user_id,  # Pass the user_id for personalized tags
-                title=video.title,
-                content_preview="\n\n".join(content_preview),
-            )
-
-            # Update video's tags field with both YouTube and generated tags
-            if tags:
-                existing_tags = video_info.get("tags", [])
-                all_tags = list(set(existing_tags + tags))  # Combine and deduplicate
-                video.tags = json.dumps(all_tags)
-                await db.commit()
-
-            logger.info(f"Successfully tagged video {video.id} with tags: {tags}")
+                logger.info("Successfully tagged video %s with tags: %s", video.id, tags)
 
         except Exception as e:
             # Don't fail video creation if tagging fails
-            logger.exception(f"Failed to tag video {video.id}: {e}")
+            logger.exception("Failed to tag video %s: %s", video.id, e)
 
         # Ensure video object is refreshed before validation
         await db.refresh(video)

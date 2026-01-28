@@ -38,23 +38,6 @@ class ContentTagsUpdate(BaseModel):
     tags: list[str] = Field(..., max_length=20)
 
 
-class TagSuggestionRequest(BaseModel):
-    """Request schema for tag suggestions."""
-
-    content_type: str = Field(..., pattern="^(book|video|course)$")
-    title: str = Field(..., min_length=1)
-    content_preview: str = Field(..., min_length=1, max_length=5000)
-
-
-class BatchTaggingRequest(BaseModel):
-    """Request schema for batch tagging."""
-
-    items: list[dict[str, str]] = Field(
-        ...,
-        description="List of items with content_id, content_type, and optional title",
-    )
-
-
 class TaggingResponse(BaseModel):
     """Response schema for tagging operations."""
 
@@ -65,11 +48,3 @@ class TaggingResponse(BaseModel):
     success: bool = True
     error: str | None = None
 
-
-class BatchTaggingResponse(BaseModel):
-    """Response schema for batch tagging operations."""
-
-    results: list[TaggingResponse]
-    total: int
-    successful: int
-    failed: int
