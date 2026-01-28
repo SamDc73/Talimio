@@ -447,7 +447,7 @@ class CourseContentService:
             from src.tagging.service import TaggingService
 
             # Re-extract content from DB by id to ensure the course still exists
-            content_data = await process_course_for_tagging(course_id_str, session)
+            content_data = await process_course_for_tagging(course.id, user_id, session)
             if not content_data:
                 logger.info("Skipping auto-tagging for missing/empty course %s", course_id_str)
                 return []

@@ -3,6 +3,7 @@
 import json
 import logging
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -191,12 +192,23 @@ class CourseProcessor:
 
 
 async def process_course_for_tagging(
-    course_id: str,
+    course_id: UUID,
+    user_id: UUID,
     session: DbSession | AsyncSession,
 ) -> dict[str, str] | None:
-    """Process a course to extract content for tagging."""
+    """Process a course to extract content for tagging.
+
+    Args:
+        course_id: ID of the course to process
+        user_id: Owner user ID
+        session: Database session
+
+    Returns
+    -------
+        Dictionary with title and content_preview, or None if not found
+    """
     result = await session.execute(
-        select(Course).where(Course.id == course_id),
+        select(Course).where(Course.id == course_id, Course.user_id == user_id),
     )
     course = result.scalar_one_or_none()
 

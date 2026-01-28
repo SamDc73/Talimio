@@ -14,7 +14,7 @@ from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_transform_service import ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
 
-# UserContext removed - using UUID directly
+# AuthContext removed - using UUID directly
 from src.database.session import async_session_maker
 
 

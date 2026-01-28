@@ -1,7 +1,7 @@
 """Video progress service implementing the ProgressTracker protocol.
 
 This provides a simplified interface for progress tracking that doesn't
-depend on UserContext or session management.
+depend on AuthContext or session management.
 """
 
 import logging

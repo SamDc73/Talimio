@@ -1,10 +1,11 @@
 """Ultra-simple auth configuration - core authentication logic."""
 
 import logging
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import Request
-from supabase import create_client
+from supabase import Client, create_client
 
 from src.auth.exceptions import (
     InvalidTokenError,
@@ -15,6 +16,10 @@ from src.auth.exceptions import (
 from src.config.settings import get_settings
 
 
+if TYPE_CHECKING:
+    from supabase_auth.types import UserResponse as SupabaseUserResponse
+
+
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
@@ -22,14 +27,14 @@ settings = get_settings()
 DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 # Initialize Supabase client ONCE
-supabase = (
+supabase: Client | None = (
     create_client(settings.SUPABASE_URL, settings.SUPABASE_PUBLISHABLE_KEY)
     if settings.AUTH_PROVIDER == "supabase" and settings.SUPABASE_URL
     else None
 )
 
 
-def _extract_token_from_request(request: Request) -> str | None:
+def extract_token_from_request(request: Request) -> str | None:
     """Extract JWT token from request headers or cookies."""
     # First check Authorization header
     auth_header = request.headers.get("Authorization", "")
@@ -45,10 +50,10 @@ def _extract_token_from_request(request: Request) -> str | None:
     return None
 
 
-async def _validate_supabase_token(token: str) -> UUID:
-    """Validate Supabase token and return user ID.
+async def _validate_supabase_token(request: Request, token: str) -> UUID:
+    """Validate Supabase token, store minimal user fields on request.state, and return user ID.
 
-    This is now async to avoid blocking the event loop with I/O operations.
+    This is async to avoid blocking the event loop with I/O operations.
     """
     if not supabase:
         logger.error("Supabase client not initialized")
@@ -57,14 +62,27 @@ async def _validate_supabase_token(token: str) -> UUID:
     try:
         # Run sync Supabase call in thread pool to avoid blocking
         from fastapi.concurrency import run_in_threadpool
-        response = await run_in_threadpool(supabase.auth.get_user, token)
+        response: SupabaseUserResponse | None = await run_in_threadpool(supabase.auth.get_user, token)
 
-        if response.user and response.user.id:
-            user_id = UUID(response.user.id)
-            logger.debug(f"Successfully authenticated user: {user_id}")
-            return user_id
-        logger.warning("Token validation returned no user")
-        raise InvalidTokenError
+        if not response:
+            logger.warning("Token validation returned no user")
+            raise InvalidTokenError
+
+        user = response.user
+        if not user.id:
+            logger.warning("Token validation returned user without id")
+            raise InvalidTokenError
+
+        # Store minimal user fields on the request for reuse (e.g., /api/v1/auth/me).
+        request.state.user_email = getattr(user, "email", None)
+        user_metadata = getattr(user, "user_metadata", {}) or {}
+        request.state.user_username = (
+            user_metadata.get("username") if isinstance(user_metadata, dict) else None
+        )
+
+        user_id = UUID(user.id)
+        logger.debug(f"Successfully authenticated user: {user_id}")
+        return user_id
     except InvalidTokenError:
         # Re-raise our custom exceptions
         raise
@@ -104,14 +122,13 @@ async def get_user_id(request: Request) -> UUID:
             logger.error("Supabase client not initialized for multi-user mode")
             raise SupabaseConfigError
 
-        token = _extract_token_from_request(request)
+        token = extract_token_from_request(request)
         if not token:
             logger.warning("Missing or invalid Authorization header and no access_token cookie")
             raise MissingTokenError
 
-        return await _validate_supabase_token(token)
+        return await _validate_supabase_token(request, token)
 
     # Unknown auth provider
     logger.error(f"Unknown auth provider: {settings.AUTH_PROVIDER}")
     raise UnknownAuthProviderError(settings.AUTH_PROVIDER)
-

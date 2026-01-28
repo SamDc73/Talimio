@@ -4,6 +4,7 @@ import logging
 import os
 from contextlib import redirect_stderr
 from pathlib import Path
+from uuid import UUID
 
 import fitz  # PyMuPDF
 
@@ -243,13 +244,15 @@ class BookProcessor:
 
 
 async def process_book_for_tagging(
-    book_id: str,
+    book_id: UUID,
+    user_id: UUID,
     session: AsyncSession,
 ) -> dict[str, str] | None:
     """Process a book to extract content for tagging.
 
     Args:
         book_id: ID of the book to process
+        user_id: Owner user ID
         session: Database session
 
     Returns
@@ -260,7 +263,7 @@ async def process_book_for_tagging(
 
     # Get book from database
     result = await session.execute(
-        select(Book).where(Book.id == book_id),
+        select(Book).where(Book.id == book_id, Book.user_id == user_id),
     )
     book = result.scalar_one_or_none()
 

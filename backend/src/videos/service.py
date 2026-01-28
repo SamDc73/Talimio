@@ -319,7 +319,6 @@ class VideoService:
         db.add(video)
         try:
             await db.commit()
-            await db.refresh(video)
         except IntegrityError:
             # Handle race condition - video was created by another request between check and insert
             await db.rollback()
@@ -365,9 +364,6 @@ class VideoService:
             # Don't fail video creation if tagging fails
             logger.exception("Failed to tag video %s: %s", video.id, e)
 
-        # Ensure video object is refreshed before validation
-        await db.refresh(video)
-
         # Trigger background RAG processing of transcript when available
         background_tasks.add_task(_embed_video_background, str(video.id))
 
@@ -377,6 +373,11 @@ class VideoService:
         # Trigger background transcript segment processing
         if video.transcript:  # Only if we have transcript text
             background_tasks.add_task(_process_transcript_to_jsonb, video.id)
+
+        # Reload to ensure server-default timestamps are loaded
+        refreshed_video = await db.get(Video, video.id, populate_existing=True)
+        if refreshed_video is not None:
+            video = refreshed_video
 
         # Convert to dict first to avoid SQLAlchemy lazy loading issues
         return VideoResponse.model_validate(self._video_to_dict(video))

@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     """Application settings - only define what needs validation."""
 
     # Critical configs that need validation/type conversion
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/talimio"
+    DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@localhost:5432/talimio"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"  # "development", "production"
     PLATFORM_MODE: str = "oss"  # "oss" or "cloud"
@@ -17,9 +17,6 @@ class Settings(BaseSettings):
     # Server Configuration (used when running src/main.py directly)
     API_HOST: str = "127.0.0.1"
     API_PORT: int = 8080
-
-    # Database config
-    DB_DISABLE_PREPARED_STATEMENTS: bool = False
 
     # Auth settings
     AUTH_PROVIDER: str = "none"  # "none" (single-user mode) or "supabase" (multi-user mode)
