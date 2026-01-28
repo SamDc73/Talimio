@@ -14,7 +14,6 @@ import asyncio
 import contextlib
 import hashlib
 import logging
-import os
 import posixpath
 import shlex
 import time
@@ -25,6 +24,7 @@ from uuid import UUID
 
 from src.ai.models import PlanAction
 from src.ai.service import get_ai_service
+from src.config.settings import get_settings
 from src.courses.models import Lesson
 from src.database.session import async_session_maker
 
@@ -68,7 +68,7 @@ SandboxException = _SandboxException
 CommandExitException = _CommandExitException
 
 # Trim noisy SDK logs by default; configurable via env
-E2B_SDK_LOG_LEVEL = os.getenv("E2B_SDK_LOG_LEVEL", "WARNING").upper()
+E2B_SDK_LOG_LEVEL = get_settings().E2B_SDK_LOG_LEVEL.upper()
 try:
     _e2b_level = getattr(logging, E2B_SDK_LOG_LEVEL, logging.WARNING)
 except Exception:
@@ -145,11 +145,8 @@ class CodeExecutionService:
     _course_setup_done: dict[str, bool] = {}
 
     def __init__(self) -> None:
-        ttl = os.getenv("E2B_SANDBOX_TTL", "600")
-        try:
-            self.sandbox_ttl = max(60, int(ttl))
-        except ValueError:
-            self.sandbox_ttl = 600
+        ttl = get_settings().E2B_SANDBOX_TTL
+        self.sandbox_ttl = max(60, ttl)
         self._ai_service = get_ai_service()
         self._apt_sentinel = "/home/user/.talimio_apt_updated"
         self._language_sentinel_prefix = "/home/user/.talimio_lang_"

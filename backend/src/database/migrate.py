@@ -8,20 +8,13 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from src.config.settings import get_settings
 from src.database.engine import engine as default_engine
 
 
 logger = logging.getLogger(__name__)
 _MIGRATION_LOCK_KEY = "schema_migrations"
 _AUTOCOMMIT_TAG = "-- autocommit"
-_BOOL_TRUE = {"1", "true", "yes", "on"}
-
-
-def _env_flag(key: str, default: bool) -> bool:
-    raw = os.getenv(key)
-    if raw is None:
-        return default
-    return raw.strip().lower() in _BOOL_TRUE
 
 
 def _migrations_dir() -> Path:
@@ -67,8 +60,8 @@ def _interpolate_env(sql: str) -> str:
     """Replace known ${VAR} placeholders in SQL with env values.
 
     Currently supports:
-    - ${RAG_EMBEDDING_OUTPUT_DIM} (default "768")
-    - ${MEMORY_EMBEDDING_OUTPUT_DIM} (default "1536")
+    - ${RAG_EMBEDDING_OUTPUT_DIM}
+    - ${MEMORY_EMBEDDING_OUTPUT_DIM}
 
     Reads from process env first; if absent, attempts backend/.env relative to this file.
     Falls back to safe defaults if the values are missing or invalid.
@@ -84,10 +77,6 @@ def _interpolate_env(sql: str) -> str:
         env_map = _parse_dotenv(dotenv_path) if dotenv_path.exists() else {}
         rag_dim = rag_dim or env_map.get("RAG_EMBEDDING_OUTPUT_DIM")
         mem_dim = mem_dim or env_map.get("MEMORY_EMBEDDING_OUTPUT_DIM")
-
-    # Sanitize to numeric strings; fall back to defaults on invalid values
-    rag_dim = rag_dim if isinstance(rag_dim, str) and rag_dim.isdigit() else "768"
-    mem_dim = mem_dim if isinstance(mem_dim, str) and mem_dim.isdigit() else "1536"
 
     return sql.replace("${RAG_EMBEDDING_OUTPUT_DIM}", rag_dim).replace("${MEMORY_EMBEDDING_OUTPUT_DIM}", mem_dim)
 
@@ -137,12 +126,13 @@ async def apply_migrations(db_engine: AsyncEngine | None = None) -> None:
     """
     engine = db_engine or default_engine
 
-    if not _env_flag(key="MIGRATIONS_AUTO_APPLY", default=True):
+    settings = get_settings()
+    if not settings.MIGRATIONS_AUTO_APPLY:
         logger.info("Migrations auto-apply disabled; skipping")
         return
 
-    migrations_dir = Path(os.getenv("MIGRATIONS_DIR") or _migrations_dir())
-    verbose = _env_flag(key="MIGRATIONS_VERBOSE", default=False)
+    migrations_dir = Path(settings.MIGRATIONS_DIR) if settings.MIGRATIONS_DIR else _migrations_dir()
+    verbose = settings.MIGRATIONS_VERBOSE
 
     if not migrations_dir.exists():
         logger.warning("Migrations directory %s does not exist; skipping", migrations_dir)

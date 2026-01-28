@@ -1,6 +1,5 @@
 """Security middleware."""
 
-import os
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -10,10 +9,13 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from src.config.settings import get_settings
+
 
 # Simple in-memory rate limiter (scales to 100k easily)
 limiter = Limiter(key_func=get_remote_address)
-DISABLE_RATE_LIMITS = os.getenv("ENVIRONMENT") == "test" or os.getenv("DISABLE_RATE_LIMITS") == "1"
+_settings = get_settings()
+DISABLE_RATE_LIMITS = _settings.ENVIRONMENT == "test" or _settings.DISABLE_RATE_LIMITS
 
 
 class SimpleSecurityMiddleware(BaseHTTPMiddleware):

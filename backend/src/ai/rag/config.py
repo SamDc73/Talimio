@@ -16,6 +16,22 @@ class RAGConfig(BaseSettings):
         default=None,  # Optional - only needed for models with variable dimensions
         description="Embedding vector dimensions (only for models that support it like OpenAI text-embedding-3)",
     )
+    embedding_context_size: int | None = Field(
+        default=None,
+        description="Optional provider-specific embedding context size",
+    )
+    embedding_manual_retries: int = Field(
+        default=1,
+        description="Manual retries for embedding calls (in addition to any provider retries)",
+    )
+    embedding_retry_delay_seconds: float = Field(
+        default=1.0,
+        description="Delay in seconds between manual embedding retries",
+    )
+    embedding_batch_size: int = Field(
+        default=1,
+        description="Batch size for embedding generation (must be >= 1)",
+    )
 
     # Database Configuration (pgvector)
     hnsw_ef_search: int = Field(

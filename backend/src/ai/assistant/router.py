@@ -1,7 +1,6 @@
 """Assistant API router - simple chat endpoint."""
 
 import logging
-import os
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -61,7 +60,7 @@ async def get_models() -> dict[str, list[dict[str, Any]]]:
         settings = get_settings()
 
         primary = settings.primary_llm_model
-        available_raw = os.getenv("AVAILABLE_MODELS", "")
+        available_raw = settings.AVAILABLE_MODELS
         available = [m.strip() for m in available_raw.split(",") if m.strip()] if available_raw else []
 
         # Build ordered unique list with primary first
