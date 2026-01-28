@@ -1,13 +1,13 @@
 """Authentication routes for user login, signup, and session management."""
 
-import asyncio
 import contextlib
-import hashlib
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, EmailStr
+from supabase import Client
+from supabase_auth.types import AuthResponse, User as SupabaseUser
 
 from src.auth.config import supabase
 from src.auth.context import CurrentAuth
@@ -22,11 +22,21 @@ router = APIRouter(
 )
 logger = logging.getLogger(__name__)
 
-# Simple in-memory lock for refresh tokens to prevent race conditions
-# Maps token prefix to a lock to prevent concurrent refreshes
-refresh_locks: dict[str, asyncio.Lock] = {}
 
+def _get_supabase_client() -> Client | None:
+    settings = get_settings()
+    if settings.AUTH_PROVIDER != "supabase":
+        return None
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+    return supabase
 
+def _require_user_email(user: SupabaseUser, fallback_email: str | None = None) -> str:
+    if user.email:
+        return user.email
+    if fallback_email:
+        return fallback_email
+    raise HTTPException(status_code=401, detail="Authenticated user is missing an email address")
 
 def set_auth_cookie(response: Response, token: str) -> None:
     """Set httpOnly auth cookie (secure!)."""
@@ -43,7 +53,6 @@ def set_auth_cookie(response: Response, token: str) -> None:
         path="/",  # Ensure cookie is available for all paths
     )
 
-
 def clear_auth_cookie(response: Response) -> None:
     """Clear auth cookie on logout."""
     settings = get_settings()
@@ -55,7 +64,6 @@ def clear_auth_cookie(response: Response) -> None:
         samesite="lax" if is_production else None,
         path="/",
     )
-
 
 def clear_refresh_cookie(response: Response) -> None:
     """Clear refresh token cookie."""
@@ -69,13 +77,11 @@ def clear_refresh_cookie(response: Response) -> None:
         path="/",
     )
 
-
 class LoginRequest(BaseModel):
     """Login request model."""
 
     email: EmailStr
     password: str
-
 
 class SignupRequest(BaseModel):
     """Signup request model."""
@@ -83,7 +89,6 @@ class SignupRequest(BaseModel):
     email: EmailStr
     password: str
     username: str | None = None
-
 
 class SignupResponse(BaseModel):
     """Signup response model - can handle both immediate auth and email confirmation."""
@@ -94,7 +99,6 @@ class SignupResponse(BaseModel):
     message: str | None = None
     email_confirmation_required: bool = False
 
-
 class UserResponse(BaseModel):
     """User response model."""
 
@@ -102,18 +106,15 @@ class UserResponse(BaseModel):
     email: str
     username: str | None = None
 
-
 class LoginResponse(BaseModel):
     """Login response model."""
 
     user: UserResponse
 
-
 class LogoutResponse(BaseModel):
     """Logout response model."""
 
     message: str
-
 
 class RefreshResponse(BaseModel):
     """Token refresh response model."""
@@ -121,12 +122,10 @@ class RefreshResponse(BaseModel):
     message: str
     user: UserResponse
 
-
 class MessageResponse(BaseModel):
     """Generic message response."""
 
     message: str
-
 
 class PasswordResetRequest(BaseModel):
     """Password reset request model."""
@@ -135,22 +134,17 @@ class PasswordResetRequest(BaseModel):
 
 
 
-
 @router.post("/signup")
 async def signup(data: SignupRequest) -> SignupResponse:
     """Create a new user account."""
-    settings = get_settings()
-
-    if settings.AUTH_PROVIDER != "supabase":
+    supabase_client = _get_supabase_client()
+    if not supabase_client:
         raise HTTPException(status_code=400, detail="Signup is only available with Supabase authentication")
-
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase not configured")
 
     try:
         # Create user with Supabase Auth (run in thread pool to avoid blocking)
-        auth_response = await run_in_threadpool(
-            supabase.auth.sign_up,
+        auth_response: AuthResponse = await run_in_threadpool(
+            supabase_client.auth.sign_up,
             {
                 "email": data.email,
                 "password": data.password,
@@ -161,25 +155,25 @@ async def signup(data: SignupRequest) -> SignupResponse:
         if not auth_response.user:
             raise HTTPException(status_code=400, detail="Failed to create user")
 
+        user = auth_response.user
+        user_email = _require_user_email(user, data.email)
+        user_payload = {
+            "id": str(user.id),
+            "email": user_email,
+            "username": user.user_metadata.get("username"),
+        }
+
         # If email confirmation is enabled, session will be None
         if not auth_response.session:
             # Return a special response indicating email confirmation is needed
             return SignupResponse(
-                user={
-                    "id": str(auth_response.user.id),
-                    "email": auth_response.user.email,
-                    "username": auth_response.user.user_metadata.get("username"),
-                },
+                user=user_payload,
                 message="Please check your email to confirm your account",
                 email_confirmation_required=True,
             )
 
         return SignupResponse(
-            user={
-                "id": str(auth_response.user.id),
-                "email": auth_response.user.email,
-                "username": auth_response.user.user_metadata.get("username"),
-            },
+            user=user_payload,
             access_token=auth_response.session.access_token,
             expires_in=auth_response.session.expires_in,
             email_confirmation_required=False,
@@ -189,32 +183,33 @@ async def signup(data: SignupRequest) -> SignupResponse:
         # If it's a Supabase auth error, try to get more details
         error_detail = str(e)
         if hasattr(e, "message"):
-            error_detail = e.message  # type: ignore[attr-defined]
+            error_detail = e.message
         elif hasattr(e, "args") and e.args:
             error_detail = str(e.args[0])
 
         raise HTTPException(status_code=400, detail=error_detail) from e
 
-
 @router.post("/login")
 async def login(response: Response, data: LoginRequest) -> LoginResponse:
     """Login with email and password."""
-    settings = get_settings()
-    if settings.AUTH_PROVIDER != "supabase":
+    supabase_client = _get_supabase_client()
+    if not supabase_client:
         raise HTTPException(status_code=400, detail="Login is only available with Supabase authentication")
 
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase not configured")
+    settings = get_settings()
 
     try:
         # Authenticate with Supabase (run in thread pool to avoid blocking)
-        auth_response = await run_in_threadpool(
-            supabase.auth.sign_in_with_password,
+        auth_response: AuthResponse = await run_in_threadpool(
+            supabase_client.auth.sign_in_with_password,
             {"email": data.email, "password": data.password}
         )
 
         if not auth_response.user or not auth_response.session:
             raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        user = auth_response.user
+        user_email = _require_user_email(user, data.email)
 
         # Set secure httpOnly cookies for both access and refresh tokens
         set_auth_cookie(response, auth_response.session.access_token)
@@ -233,99 +228,58 @@ async def login(response: Response, data: LoginRequest) -> LoginResponse:
 
         return LoginResponse(
             user=UserResponse(
-                id=str(auth_response.user.id),
-                email=auth_response.user.email,
-                username=auth_response.user.user_metadata.get("username"),
+                id=str(user.id),
+                email=user_email,
+                username=user.user_metadata.get("username"),
             )
         )
 
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid credentials") from e
 
-
 @router.post("/logout")
 async def logout(_request: Request, response: Response) -> LogoutResponse:
     """Logout the current user."""
-    settings = get_settings()
-    if settings.AUTH_PROVIDER != "supabase":
+    supabase_client = _get_supabase_client()
+    if not supabase_client:
         return LogoutResponse(message="Logout not required in current auth mode")
-
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase not configured")
 
     # Clear both httpOnly cookies (this is the real logout)
     clear_auth_cookie(response)
-    is_production = settings.ENVIRONMENT == "production"
-    response.delete_cookie(
-        key="refresh_token",
-        httponly=True,
-        secure=is_production,  # Consistent with other cookies
-        samesite="lax" if is_production else None,
-        path="/",
-    )
+    clear_refresh_cookie(response)
 
     with contextlib.suppress(Exception):
         # Try to sign out with Supabase (optional, run in thread pool)
-        await run_in_threadpool(supabase.auth.sign_out)
+        await run_in_threadpool(supabase_client.auth.sign_out)
 
     return LogoutResponse(message="Successfully logged out")
 
-
 @router.get("/me")
-async def get_current_user(request: Request, auth: CurrentAuth) -> UserResponse:
-    """Get the current user using centralized authentication."""
-    # In single-user mode, auth.user_id will be the DEFAULT_USER_ID internally
-    # Check if we're in single-user mode by checking settings
+async def get_current_user(request: Request, _auth: CurrentAuth) -> UserResponse:
+    """Return the current user using Supabase (or demo user in single-user mode)."""
     settings = get_settings()
     if settings.AUTH_PROVIDER == "none":
-        return UserResponse(id=str(auth.user_id), email="demo@talimio.com", username="Demo User")
+        return UserResponse(id=str(_auth.user_id), email="demo@talimio.com", username="Demo User")
 
-    # Multi-user mode - get user details from Supabase
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase not configured")
+    # Supabase mode: middleware token validation already fetched the user once.
+    if not hasattr(request.state, "user_email"):
+        raise HTTPException(status_code=500, detail="Auth middleware did not set user_email")
 
-    # Get token for additional user details
-    auth_header = request.headers.get("Authorization", "")
-    token = None
+    user_email: str | None = request.state.user_email
+    if not user_email:
+        raise HTTPException(status_code=401, detail="Authenticated user is missing an email address")
 
-    if auth_header.startswith("Bearer "):
-        token = auth_header.replace("Bearer ", "")
-    else:
-        cookie_token = request.cookies.get("access_token")
-        if cookie_token:
-            token = cookie_token.replace("Bearer ", "") if cookie_token.startswith("Bearer ") else cookie_token
-
-    if not token:
-        # We have user_id from centralized auth, but need token for details
-        # This shouldn't happen if auth is working correctly
-        logger.warning(f"Have user_id {auth.user_id} but no token for details")
-        raise HTTPException(status_code=401, detail="Token required for user details")
-
-    try:
-        # Get full user details (centralized auth already validated the token)
-        user = await run_in_threadpool(supabase.auth.get_user, token)
-        if user and user.user:
-            return UserResponse(
-                id=str(user.user.id),
-                email=user.user.email,
-                username=user.user.user_metadata.get("username", user.user.email.split("@")[0]),
-            )
-        # This shouldn't happen if centralized auth is working
-        logger.error(f"Centralized auth passed but can't get user details for {auth.user_id}")
-        raise HTTPException(status_code=500, detail="Failed to get user details")
-    except Exception as e:
-        logger.exception(f"Failed to get user details for {auth.user_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get user details") from e
-
+    user_username: str | None = getattr(request.state, "user_username", None)
+    return UserResponse(
+        id=str(_auth.user_id),
+        email=user_email,
+        username=user_username or user_email.split("@")[0],
+    )
 
 async def _validate_refresh_prerequisites(request: Request, response: Response) -> str:
     """Validate prerequisites for token refresh and return the refresh token."""
-    settings = get_settings()
-    if settings.AUTH_PROVIDER != "supabase":
+    if not _get_supabase_client():
         raise HTTPException(status_code=400, detail="Token refresh is only available with Supabase authentication")
-
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase not configured")
 
     # Get refresh token from cookie
     refresh_token_value = request.cookies.get("refresh_token")
@@ -336,22 +290,25 @@ async def _validate_refresh_prerequisites(request: Request, response: Response) 
 
     return refresh_token_value
 
-
 async def _perform_token_refresh(refresh_token_value: str, response: Response) -> RefreshResponse:
     """Perform the actual token refresh with Supabase."""
     settings = get_settings()
 
-    if not supabase:
+    supabase_client = _get_supabase_client()
+    if not supabase_client:
         raise HTTPException(status_code=503, detail="Authentication service not configured")
 
     # Use the refresh token to get a new session (run in thread pool)
-    auth_response = await run_in_threadpool(
-        supabase.auth.refresh_session,
+    auth_response: AuthResponse = await run_in_threadpool(
+        supabase_client.auth.refresh_session,
         refresh_token_value
     )
 
     if not auth_response or not auth_response.session:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    user = auth_response.user if auth_response.user else auth_response.session.user
+    user_email = _require_user_email(user)
 
     # Update both access and refresh tokens in cookies
     set_auth_cookie(response, auth_response.session.access_token)
@@ -371,12 +328,11 @@ async def _perform_token_refresh(refresh_token_value: str, response: Response) -
     return RefreshResponse(
         message="Token refreshed successfully",
         user=UserResponse(
-            id=str(auth_response.user.id),
-            email=auth_response.user.email,
-            username=auth_response.user.user_metadata.get("username"),
+            id=str(user.id),
+            email=user_email,
+            username=user.user_metadata.get("username"),
         ),
     )
-
 
 def _handle_refresh_error(error: Exception, response: Response) -> None:
     """Handle specific refresh token errors."""
@@ -418,69 +374,30 @@ def _handle_refresh_error(error: Exception, response: Response) -> None:
         headers={"X-Auth-Error": "refresh-failed"}
     ) from error
 
-
 @router.post("/refresh")
 async def refresh_token(request: Request, response: Response) -> RefreshResponse:
     """Refresh the access token using the refresh_token cookie."""
-    # Validate prerequisites and get the refresh token
     refresh_token_value = await _validate_refresh_prerequisites(request, response)
 
-    # Create a secure lock key using SHA256 hash (prevents collisions and protects token privacy)
-    lock_key = hashlib.sha256(refresh_token_value.encode()).hexdigest()[:16]
-
-    # Get or create a lock for this refresh attempt
-    if lock_key not in refresh_locks:
-        refresh_locks[lock_key] = asyncio.Lock()
-
-    lock = refresh_locks[lock_key]
-
-    # Try to acquire the lock with a timeout
     try:
-        async with asyncio.timeout(2):  # 2 second timeout
-            async with lock:
-                result = await _perform_token_refresh(refresh_token_value, response)
-
-                # Clean up locks occasionally
-                if len(refresh_locks) > 100:
-                    refresh_locks.clear()
-                    logger.info("Cleared refresh locks cache")
-
-                return result
-
-    except TimeoutError as timeout_err:
-        # Another request is already refreshing this token
-        logger.info("Refresh already in progress for this token")
-        raise HTTPException(
-            status_code=409,  # Conflict
-            detail="Token refresh already in progress. Please wait.",
-            headers={"Retry-After": "1"}  # Client should retry after 1 second
-        ) from timeout_err
-
+        return await _perform_token_refresh(refresh_token_value, response)
     except Exception as e:
         _handle_refresh_error(e, response)
-        # This line is unreachable, but satisfies type checker
         raise
-
 
 @router.post("/reset-password")
 async def reset_password(data: PasswordResetRequest) -> MessageResponse:
     """Send password reset email via Supabase Auth."""
-    settings = get_settings()
-    if settings.AUTH_PROVIDER != "supabase":
+    supabase_client = _get_supabase_client()
+    if not supabase_client:
         raise HTTPException(status_code=400, detail="Password reset is only available with Supabase authentication")
-
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase not configured")
 
     try:
         # Use Supabase's built-in password reset (run in thread pool)
         # According to the docs, it's resetPasswordForEmail in JS but Python uses snake_case
-        await run_in_threadpool(supabase.auth.reset_password_email, data.email)
+        await run_in_threadpool(supabase_client.auth.reset_password_email, data.email)
         # Don't reveal if email exists or not for security
         return MessageResponse(message="If the email exists, password reset instructions have been sent")
     except Exception:
         # Always return the same message for security (don't reveal if email exists)
         return MessageResponse(message="If the email exists, password reset instructions have been sent")
-
-
-# REMOVED: Debug endpoint was a security risk (exposed auth info without authentication)

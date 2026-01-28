@@ -153,7 +153,7 @@ class BooksFacade:
 
             async with async_session_maker() as session:
                 # Extract content preview for tagging
-                content_data = await process_book_for_tagging(str(book_id), session)
+                content_data = await process_book_for_tagging(book_id, user_id, session)
                 if not content_data:
                     logger.warning(
                         "Book not found or no content data for tagging",

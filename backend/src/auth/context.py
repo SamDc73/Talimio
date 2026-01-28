@@ -1,13 +1,13 @@
-"""AuthContext (aka UserContext) and FastAPI dependencies for centralized auth/ownership.
+"""AuthContext and FastAPI dependencies for centralized auth/ownership.
 
-This introduces a thin UserContext layer that pairs the authenticated user_id
+This introduces a thin AuthContext layer that pairs the authenticated user_id
 with an AsyncSession and exposes small ownership helpers. Feature modules should
 prefer passing `CurrentAuth` instead of separate user_id/session pairs over time.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated, Any, TypeVar
+from typing import TYPE_CHECKING, Annotated, Any, TypeVar, cast
 from uuid import UUID
 
 from fastapi import Depends
@@ -20,12 +20,13 @@ from src.database.session import DbSession
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.orm.attributes import QueryableAttribute
 
 
 T = TypeVar("T")
 
 
-class UserContext:
+class AuthContext:
     """Request-scoped user context with ownership helpers.
 
     Security principle: If a model does not expose a `user_id` column, generic
@@ -47,12 +48,14 @@ class UserContext:
             msg = f"Model {model.__name__} has no user_id attribute; implement explicit ownership logic"
             raise NotImplementedError(msg)
 
-        stmt = select(model).where(model.user_id == self.user_id)
+        user_id_attr = cast("QueryableAttribute[UUID]", model.user_id)
+        stmt = select(model).where(user_id_attr == self.user_id)
         for key, value in filters.items():
             if not hasattr(model, key):
                 msg = f"{model.__name__} has no attribute '{key}' for filtering"
                 raise AttributeError(msg)
-            stmt = stmt.where(getattr(model, key) == value)
+            column_attr = cast("QueryableAttribute[Any]", getattr(model, key))
+            stmt = stmt.where(column_attr == value)
 
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
@@ -75,7 +78,9 @@ class UserContext:
             msg = f"{model.__name__} has no id field '{id_field}'"
             raise AttributeError(msg)
 
-        stmt = select(model).where(getattr(model, id_field) == record_id, model.user_id == self.user_id)
+        record_attr = cast("QueryableAttribute[Any]", getattr(model, id_field))
+        user_id_attr = cast("QueryableAttribute[UUID]", model.user_id)
+        stmt = select(model).where(record_attr == record_id, user_id_attr == self.user_id)
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
@@ -103,29 +108,25 @@ class UserContext:
         This method allows validation without importing domain models directly,
         preventing circular dependencies in infrastructure modules like ai/rag.
         """
-        # Map resource types to models (auth module is allowed to know domains)
-        model_map = {
-            "course": "src.courses.models.Course",
-            "book": "src.books.models.Book",
-            "video": "src.videos.models.Video",
-        }
+        if resource_type == "course":
+            from src.courses.models import Course
 
-        if resource_type not in model_map:
+            model_class = Course
+        elif resource_type == "book":
+            from src.books.models import Book
+
+            model_class = Book
+        elif resource_type == "video":
+            from src.videos.models import Video
+
+            model_class = Video
+        else:
             raise NotFoundError(detail=f"Unknown resource type: {resource_type}")
-
-        # Dynamic import to avoid circular dependencies
-        module_path, class_name = model_map[resource_type].rsplit(".", 1)
-        module = __import__(module_path, fromlist=[class_name])
-        model_class = getattr(module, class_name)
 
         return await self.get_or_404(model_class, resource_id, resource_type)
 
 
 # FastAPI DI helpers
-# New preferred names
-AuthContext = UserContext
-
-
 async def get_auth_context(
     user_id: Annotated[UUID, Depends(_get_user_id)],
     session: DbSession,
@@ -152,9 +153,15 @@ AUTH_SKIP_PATHS: list[str] = [
     "/api/v1/auth/request-password-reset",
     "/api/v1/auth/reset-password",
     # NOTE: /api/v1/auth/me is NOT in skip paths - it needs authentication
+    # Public model list for unauthenticated UI model picker
     "/api/v1/assistant/models",
     # Docs/OpenAPI
     "/docs",
     "/redoc",
     "/openapi.json",
 ]
+
+
+def is_auth_skip_path(path: str) -> bool:
+    """Return True when the request path should bypass auth enforcement."""
+    return any(path == skip or path.startswith(f"{skip}/") for skip in AUTH_SKIP_PATHS)

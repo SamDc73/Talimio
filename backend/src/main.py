@@ -24,7 +24,7 @@ from .auth.exceptions import (
     InvalidTokenError,
     TokenExpiredError,
 )
-from .auth.middleware import AuthErrorMiddleware, AuthInjectionMiddleware
+from .auth.middleware import AuthInjectionMiddleware
 from .auth.router import router as auth_router
 from .books.router import router as books_router
 
@@ -165,7 +165,6 @@ def _configure_middlewares(app: FastAPI, settings: Any) -> None:
         https_only=settings.ENVIRONMENT == "production",
     )
     app.add_middleware(cast("Any", SimpleSecurityMiddleware))
-    app.add_middleware(cast("Any", AuthErrorMiddleware))
     app.state.limiter = limiter
     # Rate limit handler for RateLimitExceeded is registered in create_app()
     app.add_middleware(cast("Any", AuthInjectionMiddleware))

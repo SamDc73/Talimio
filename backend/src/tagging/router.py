@@ -5,11 +5,9 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 # AI imports removed - using facades instead
 from src.auth import CurrentAuth
-from src.database.session import get_db_session
 
 from .schemas import (
     ContentTagsUpdate,
@@ -24,12 +22,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/tags", tags=["tags"])
 
 
-async def get_tagging_service(
-    session: AsyncSession = Depends(get_db_session),
-) -> TaggingService:
+def get_tagging_service(auth: CurrentAuth) -> TaggingService:
     """Get tagging service instance."""
-    # TaggingService no longer needs model_manager
-    return TaggingService(session)
+    return TaggingService(auth.session)
 
 
 # Content type validation dependency
@@ -60,7 +55,6 @@ def validate_content_type(content_type: str) -> str:
 
 @router.get("/tags")
 async def list_tags(
-    _auth: CurrentAuth,
     service: Annotated[TaggingService, Depends(get_tagging_service)],
     category: str | None = None,
     limit: int = 100,
@@ -130,6 +124,8 @@ async def update_content_tags(
     # Validate content type
     content_type = validate_content_type(content_type)
 
+    await auth.validate_resource(content_type, content_id)
+
     try:
         await service.update_manual_tags(
             content_id=content_id,
@@ -146,6 +142,7 @@ async def update_content_tags(
             content_id,
             content_type,
             request.tags,
+            auth.user_id,
         )
 
         return TaggingResponse(

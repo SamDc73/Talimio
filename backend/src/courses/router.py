@@ -14,7 +14,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.service import AIService, get_ai_service
 from src.auth import CurrentAuth
@@ -50,7 +49,6 @@ from src.courses.services.frontier_builder import build_course_frontier
 from src.courses.services.grading_service import GradingService
 from src.courses.services.lesson_service import LessonService
 from src.courses.services.mdx_service import mdx_service
-from src.database.session import get_db_session
 from src.middleware.security import ai_rate_limit
 
 
@@ -70,12 +68,9 @@ def get_courses_facade() -> CoursesFacade:
     return CoursesFacade()
 
 
-def get_lesson_service(
-    auth: CurrentAuth,
-    session: AsyncSession = Depends(get_db_session),
-) -> LessonService:
+def get_lesson_service(auth: CurrentAuth) -> LessonService:
     """Get lesson service instance with user_id injection."""
-    return LessonService(session, auth.user_id)
+    return LessonService(auth.session, auth.user_id)
 
 
 def get_code_execution_service() -> CodeExecutionService:
@@ -92,17 +87,6 @@ def get_ai_service_dependency() -> AIService:
     """Provide AI service singleton for dependency injection."""
     return get_ai_service()
 
-
-async def _get_course_or_404(
-    session: AsyncSession,
-    course_id: UUID,
-    user_id: UUID,
-) -> Course:
-    """Load course ensuring ownership, else raise 404."""
-    course = await session.get(Course, course_id)
-    if course is None or course.user_id != user_id:
-        raise HTTPException(status_code=404, detail="Course not found")
-    return course
 
 
 # Course operations
@@ -145,14 +129,13 @@ async def create_course(
     request: CourseCreate,
     auth: CurrentAuth,
     background_tasks: BackgroundTasks,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CourseResponse:
     """Create a new course using AI generation."""
     result = await facade.create_course(
         request.model_dump(),
         auth.user_id,
-        session=session,
+        session=auth.session,
         background_tasks=background_tasks,
     )
     if not result.get("success"):
@@ -166,13 +149,12 @@ async def create_course(
 @router.get("/")
 async def list_courses(
     auth: CurrentAuth,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     per_page: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
     search: Annotated[str | None, Query(description="Search query")] = None,
 ) -> CourseListResponse:
     """List courses with pagination and optional search (single source of truth)."""
-    qs = CourseQueryService(session)
+    qs = CourseQueryService(auth.session)
     courses, total = await qs.list_courses(page=page, per_page=per_page, search=search, user_id=auth.user_id)
     return CourseListResponse(courses=courses, total=total, page=page, per_page=per_page)
 
@@ -181,11 +163,10 @@ async def list_courses(
 async def get_course(
     course_id: UUID,
     auth: CurrentAuth,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CourseResponse:
     """Get a specific course by ID."""
-    result = await facade.get_course(course_id, auth.user_id, session=session)
+    result = await facade.get_course(course_id, auth.user_id, session=auth.session)
 
     if not result.get("success"):
         from fastapi import HTTPException
@@ -231,11 +212,11 @@ async def grade_lesson_response(
     lesson_id: UUID,
     payload: GradeRequest,
     auth: CurrentAuth,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
     grading_service: Annotated[GradingService, Depends(get_grading_service)],
 ) -> GradeResponse:
     """Grade a learner response for a lesson."""
-    await _get_course_or_404(session, course_id, auth.user_id)
+    session = auth.session
+    await auth.get_or_404(Course, course_id, "course")
 
     if payload.context.course_id != course_id:
         detail = "Context courseId does not match the request path"
@@ -271,10 +252,10 @@ async def grade_lesson_response(
 async def get_course_concept_frontier(
     course_id: UUID,
     auth: CurrentAuth,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> FrontierResponse:
     """Return adaptive frontier data for a course."""
-    course = await _get_course_or_404(session, course_id, auth.user_id)
+    session = auth.session
+    course = await auth.get_or_404(Course, course_id, "course")
     if not course.adaptive_enabled:
         return FrontierResponse(
             frontier=[],
@@ -300,13 +281,13 @@ async def submit_adaptive_reviews(
     lesson_id: UUID,
     payload: ReviewBatchRequest,
     auth: CurrentAuth,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ReviewBatchResponse:
     """Submit concept reviews for LECTOR scheduling."""
+    session = auth.session
     if not payload.reviews:
         raise HTTPException(status_code=422, detail="At least one review is required")
 
-    course = await _get_course_or_404(session, course_id, auth.user_id)
+    course = await auth.get_or_404(Course, course_id, "course")
     if not course.adaptive_enabled:
         raise HTTPException(status_code=400, detail="Adaptive scheduling is not enabled for this course")
 
@@ -432,10 +413,10 @@ async def get_concept_next_review(
     course_id: UUID,
     concept_id: UUID,
     auth: CurrentAuth,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> NextReviewResponse:
     """Return the next scheduled review information for a concept."""
-    course = await _get_course_or_404(session, course_id, auth.user_id)
+    session = auth.session
+    course = await auth.get_or_404(Course, course_id, "course")
     if not course.adaptive_enabled:
         raise HTTPException(status_code=400, detail="Adaptive scheduling is not enabled for this course")
 
@@ -499,7 +480,6 @@ async def validate_mdx(request: MDXValidateRequest) -> MDXValidateResponse:
 async def execute_code(
     request: CodeExecuteRequest,
     auth: CurrentAuth,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
     svc: Annotated[CodeExecutionService, Depends(get_code_execution_service)],
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CodeExecuteResponse:
@@ -512,7 +492,7 @@ async def execute_code(
     setup_commands: list[str] = []
     if request.course_id:
         try:
-            result = await facade.get_course(request.course_id, auth.user_id, session=session)
+            result = await facade.get_course(request.course_id, auth.user_id, session=auth.session)
             if result.get("success") and "course" in result:
                 course = result["course"]
                 setup_commands = course.setup_commands or []

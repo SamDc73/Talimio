@@ -28,7 +28,7 @@ def get_rag_service() -> RAGService:
     return RAGService()
 
 
-# Ownership validation is handled via UserContext in each endpoint
+# Ownership validation is handled via AuthContext in each endpoint
 
 
 @router.post("/courses/{course_id}/documents", response_model=DocumentResponse)

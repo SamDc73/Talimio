@@ -5,13 +5,11 @@ eliminating the need to pass user_id in the URL.
 """
 
 import logging
-from typing import Annotated, Any
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth import CurrentAuth
-from src.database.session import get_db_session
 from src.middleware.security import api_rate_limit, create_rate_limit_dependency
 from src.user.schemas import (
     CustomInstructionsRequest,
@@ -42,7 +40,7 @@ router = APIRouter(
 
 @router.get("/settings")
 async def get_current_user_settings(
-    auth: CurrentAuth, db: Annotated[AsyncSession, Depends(get_db_session)]
+    auth: CurrentAuth
 ) -> UserSettingsResponse:
     """
     Get current user settings including custom instructions and memory count.
@@ -52,7 +50,7 @@ async def get_current_user_settings(
         UserSettingsResponse: User's personalization settings
     """
     try:
-        return await get_user_settings(auth.user_id, db)
+        return await get_user_settings(auth.user_id, auth.session)
     except Exception as e:
         logger.exception(f"Error in get_current_user_settings for user {auth.user_id}")
         raise HTTPException(
@@ -62,7 +60,7 @@ async def get_current_user_settings(
 
 @router.put("/settings/instructions")
 async def update_current_user_instructions(
-    auth: CurrentAuth, request: CustomInstructionsRequest, db: Annotated[AsyncSession, Depends(get_db_session)]
+    auth: CurrentAuth, request: CustomInstructionsRequest
 ) -> CustomInstructionsResponse:
     """
     Update custom instructions for AI personalization for current user.
@@ -75,7 +73,7 @@ async def update_current_user_instructions(
         CustomInstructionsResponse: Updated instructions and success status
     """
     try:
-        return await update_custom_instructions(auth.user_id, request.instructions, db)
+        return await update_custom_instructions(auth.user_id, request.instructions, auth.session)
     except Exception as e:
         logger.exception(f"Error in update_current_user_instructions for user {auth.user_id}")
         raise HTTPException(
@@ -132,7 +130,6 @@ async def delete_current_user_memory(auth: CurrentAuth, memory_id: str) -> dict[
 async def update_current_user_preferences(
     auth: CurrentAuth,
     preferences_request: PreferencesUpdateRequest,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> PreferencesUpdateResponse:
     """
     Update preferences for the current user with partial updates.
@@ -148,7 +145,7 @@ async def update_current_user_preferences(
         PreferencesUpdateResponse: Updated complete preferences and success status
     """
     try:
-        return await update_user_preferences(auth.user_id, preferences_request.preferences, db)
+        return await update_user_preferences(auth.user_id, preferences_request.preferences, auth.session)
     except Exception as e:
         logger.exception(f"Error in update_current_user_preferences for user {auth.user_id}")
         raise HTTPException(
@@ -159,7 +156,6 @@ async def update_current_user_preferences(
 @router.get("/preferences")
 async def get_current_user_preferences(
     auth: CurrentAuth,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> UserPreferences:
     """
     Get current user preferences.
@@ -169,7 +165,7 @@ async def get_current_user_preferences(
         UserPreferences: Current user preferences
     """
     try:
-        return await _load_user_preferences(auth.user_id, db)
+        return await _load_user_preferences(auth.user_id, auth.session)
     except Exception as e:
         logger.exception(f"Error in get_current_user_preferences for user {auth.user_id}")
         raise HTTPException(

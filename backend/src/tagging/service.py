@@ -332,6 +332,7 @@ async def update_content_tags_json(
     content_id: UUID,
     content_type: str,
     tags: list[str],
+    user_id: UUID,
 ) -> None:
     """Update the tags_json field for a content item.
 
@@ -343,6 +344,7 @@ async def update_content_tags_json(
         content_id: ID of the content
         content_type: Type of content (book, video, course)
         tags: List of tag names
+        user_id: Owner user ID
     """
     tags_json = json.dumps(tags)
 
@@ -352,7 +354,7 @@ async def update_content_tags_json(
         from src.books.models import Book
 
         await session.execute(
-            update(Book).where(Book.id == content_id).values(tags=tags_json),
+            update(Book).where(Book.id == content_id, Book.user_id == user_id).values(tags=tags_json),
         )
     elif content_type == "video":
         from sqlalchemy import update
@@ -360,7 +362,7 @@ async def update_content_tags_json(
         from src.videos.models import Video
 
         await session.execute(
-            update(Video).where(Video.id == content_id).values(tags=tags_json),
+            update(Video).where(Video.id == content_id, Video.user_id == user_id).values(tags=tags_json),
         )
     elif content_type == "course":
         from sqlalchemy import update
@@ -368,7 +370,7 @@ async def update_content_tags_json(
         from src.courses.models import Course
 
         await session.execute(
-            update(Course).where(Course.id == content_id).values(tags=tags_json),
+            update(Course).where(Course.id == content_id, Course.user_id == user_id).values(tags=tags_json),
         )
 
     await session.flush()

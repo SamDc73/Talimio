@@ -19,13 +19,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
 
 
-def _clean_model_id(model_id: str) -> str:
-    """Remove all provider prefixes from model ID."""
-    # Handle nested prefixes like "openrouter/openai/gpt-4"
-    parts = model_id.split("/")
-    return parts[-1]  # Always return just the model name
-
-
 @router.post("/chat")
 async def chat_endpoint(
     request: ChatRequest,
@@ -52,7 +45,6 @@ async def get_models() -> dict[str, list[dict[str, Any]]]:
 
     Minimal payload for UI model picker:
     - id: full model identifier (e.g., "openrouter/openai/gpt-4o")
-    - displayName: cleaned model name without provider prefixes (e.g., "gpt-4o")
     - isDefault: whether this is the primary model
     """
     try:
@@ -73,7 +65,6 @@ async def get_models() -> dict[str, list[dict[str, Any]]]:
                 continue
             models.append({
                 "id": model_id,
-                "displayName": _clean_model_id(model_id),
                 "isDefault": i == 0,
             })
             seen.add(model_id)

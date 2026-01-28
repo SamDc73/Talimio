@@ -7,7 +7,6 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from src.auth import CurrentAuth
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_service import ContentService
-from src.database.session import DbSession
 from src.middleware.security import api_rate_limit
 
 
@@ -22,7 +21,6 @@ async def get_all_content(
     _request: Request,
     _response: Response,
     auth: CurrentAuth,
-    db: DbSession,
     search: Annotated[str | None, Query(description="Search term for filtering content")] = None,
     content_type: Annotated[ContentType | None, Query(description="Filter by content type")] = None,
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
@@ -37,7 +35,7 @@ async def get_all_content(
     Requires authentication when Supabase auth is configured.
     """
     logger.info(f"🔍 Getting content for authenticated user: {auth.user_id}")
-    content_service = ContentService(session=db)
+    content_service = ContentService(session=auth.session)
     return await content_service.list_content_fast(
         user_id=auth.user_id,
         search=search,
@@ -55,13 +53,12 @@ async def archive_content_endpoint(
     content_type: ContentType,
     content_id: UUID,
     auth: CurrentAuth,
-    db: DbSession,
 ) -> None:
     """Archive a content item by type and ID."""
     from src.content.services.content_archive_service import ContentArchiveService
 
     try:
-        await ContentArchiveService.archive_content(db, content_type, content_id, auth.user_id)
+        await ContentArchiveService.archive_content(auth.session, content_type, content_id, auth.user_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
@@ -73,13 +70,12 @@ async def unarchive_content_endpoint(
     content_type: ContentType,
     content_id: UUID,
     auth: CurrentAuth,
-    db: DbSession,
 ) -> None:
     """Unarchive a content item by type and ID."""
     from src.content.services.content_archive_service import ContentArchiveService
 
     try:
-        await ContentArchiveService.unarchive_content(db, content_type, content_id, auth.user_id)
+        await ContentArchiveService.unarchive_content(auth.session, content_type, content_id, auth.user_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 
@@ -91,7 +87,6 @@ async def delete_content(
     content_type: str,
     content_id: str,
     auth: CurrentAuth,
-    db: DbSession,
 ) -> None:
     """Delete a content item by type and ID.
 
@@ -106,7 +101,7 @@ async def delete_content(
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported content type: {content_type}")
 
-    content_service = ContentService(session=db)
+    content_service = ContentService(session=auth.session)
     try:
         await content_service.delete_content(
             content_type=mapped_type,
@@ -115,31 +110,3 @@ async def delete_content(
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-
-
-@router.get("/test-books")
-async def test_books_endpoint(
-    auth: CurrentAuth,
-    db: DbSession,
-) -> dict:
-    """Test endpoint to debug book progress fetching."""
-    from sqlalchemy import text
-
-    query = """
-        SELECT
-            b.id::text,
-            b.title,
-            COALESCE(up.progress_percentage, 0) as progress
-        FROM books b
-        LEFT JOIN user_progress up
-          ON up.content_id = b.id
-         AND up.user_id = :user_id
-         AND up.content_type = 'book'
-        WHERE b.user_id = :user_id
-        LIMIT 5
-    """
-
-    result = await db.execute(text(query), {"user_id": str(auth.user_id)})
-    books = [{"id": row[0], "title": row[1], "progress": row[2]} for row in result]
-
-    return {"books": books}
