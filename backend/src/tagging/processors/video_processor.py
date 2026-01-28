@@ -37,21 +37,14 @@ class VideoProcessor:
         -------
             Dictionary with title, channel, and content_preview
         """
-        # Build content preview from available metadata
-        content_parts = []
+        content_parts = [f"Channel: {video.channel}"]
 
-        # Add channel information
-        content_parts.append(f"Channel: {video.channel}")
-
-        # Add description if available
         if video.description:
-            # Take first 1000 characters of description
             description_preview = video.description[:1000]
             if len(video.description) > 1000:
                 description_preview += "..."
             content_parts.append(f"Description: {description_preview}")
 
-        # Add duration information (can help identify tutorial vs lecture)
         if video.duration:
             duration_minutes = video.duration // 60
             if duration_minutes < 10:
@@ -61,19 +54,13 @@ class VideoProcessor:
             else:
                 content_parts.append(f"Duration: Long video ({duration_minutes} minutes)")
 
-        # Add existing tags if any
         if video.tags:
             try:
                 existing_tags = json.loads(video.tags)
                 if existing_tags:
                     content_parts.append(f"YouTube tags: {', '.join(existing_tags[:10])}")
-            except Exception as e:
-                logger.debug(f"Failed to parse existing video tags: {e}")
-
-        # TODO: In the future, could add:
-        # - Transcript extraction from YouTube API
-        # - Caption/subtitle analysis
-        # - Video metadata from YouTube Data API
+            except Exception as exc:
+                logger.debug("Failed to parse existing video tags: %s", exc)
 
         return {
             "title": video.title,
@@ -96,16 +83,14 @@ async def process_video_for_tagging(
     -------
         Dictionary with title, channel, and content_preview, or None if not found
     """
-    # Get video from database
     result = await session.execute(
         select(Video).where(Video.id == video_id),
     )
     video = result.scalar_one_or_none()
 
     if not video:
-        logger.error(f"Video not found: {video_id}")
+        logger.error("Video not found: %s", video_id)
         return None
 
-    # Process video
     processor = VideoProcessor(session)
     return await processor.extract_content_for_tagging(video)

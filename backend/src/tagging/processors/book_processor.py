@@ -1,6 +1,9 @@
 """Book content processor for tag generation."""
 
 import logging
+import os
+from contextlib import redirect_stderr
+from pathlib import Path
 
 import fitz  # PyMuPDF
 
@@ -106,7 +109,7 @@ class BookProcessor:
             # Try to extract table of contents for better context
             try:
                 if hasattr(pdf_document, "get_toc"):
-                    toc = pdf_document.get_toc()  # type: ignore[call-non-callable]
+                    toc = pdf_document.get_toc()
                     if toc:
                         toc_text = self._format_toc_for_tagging(toc)
                         if toc_text:
@@ -137,9 +140,7 @@ class BookProcessor:
 
         try:
             # Open EPUB directly from bytes with PyMuPDF (suppress MuPDF CSS warnings)
-            import os
-            from contextlib import redirect_stderr
-            with redirect_stderr(open(os.devnull, "w")):  # noqa: PTH123
+            with redirect_stderr(Path(os.devnull).open("w")):
                 epub_document = fitz.open(stream=file_content, filetype="epub")
 
             if epub_document is None:
