@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import uuid
 from dataclasses import asdict
 
@@ -12,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.ai.client import LLMClient
 from src.ai.prompts import GRADING_COACH_PROMPT
+from src.config.settings import get_settings
 from src.courses.schemas import GradeErrorHighlight, GradeRequest, GradeResponse, VerifierInfo
 from src.courses.services.latex_expression_verifier import (
     LatexExpressionVerificationResult,
@@ -104,12 +104,11 @@ class GradingService:
         verification: LatexExpressionVerificationResult,
         user_id: uuid.UUID,
     ) -> tuple[str | None, list[str], GradeErrorHighlight | None]:
-        model = os.getenv("GRADING_COACH_LLM_MODEL")
+        settings = get_settings()
+        model = settings.GRADING_COACH_LLM_MODEL
         if not model:
             try:
-                from src.config.settings import get_settings
-
-                model = get_settings().primary_llm_model
+                model = settings.primary_llm_model
                 self._logger.info("GRADING_COACH_LLM_MODEL not set; falling back to PRIMARY_LLM_MODEL: %s", model)
             except Exception:
                 return None, [], None

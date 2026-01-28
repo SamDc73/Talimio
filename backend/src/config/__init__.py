@@ -18,20 +18,27 @@ def env(key: str, default: Any = None) -> Any:
         The environment variable value or default
     """
     settings = get_settings()
+    normalized_upper = key.upper()
+    normalized_lower = key.lower()
 
     # First try to get from defined settings fields (with validation/type conversion)
-    value = getattr(settings, key.lower(), None)
-    if value is not None:
-        return value
+    for field_name in (normalized_upper, normalized_lower, key):
+        if field_name in settings.model_fields:
+            value = getattr(settings, field_name)
+            if value is not None:
+                return value
 
     # Fallback to accessing raw environment data for any undefined variables
     # This uses the `extra="allow"` setting in Settings to capture all env vars
-    value = settings.__dict__.get(key.upper(), default)
-    if value is not None:
-        return value
+    extra = settings.model_extra or {}
+    for extra_key in (key, normalized_upper, normalized_lower):
+        if extra_key in extra:
+            value = extra.get(extra_key)
+            if value is not None:
+                return value
 
     # Final fallback
-    return settings.__dict__.get(key.lower(), default)
+    return default
 
 
 __all__ = ["Settings", "env", "get_settings"]

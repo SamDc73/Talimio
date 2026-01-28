@@ -6,7 +6,6 @@ import asyncio
 import json
 import logging
 import math
-import os
 import uuid
 from collections.abc import Iterator, Sequence
 from typing import TYPE_CHECKING, Any
@@ -38,15 +37,10 @@ class VectorRAG:
             raise ValueError(error_msg)
 
         self.configured_embedding_dim = rag_config.embedding_output_dim
-
-        # Optional provider-specific context size (kept simple as env-only for now)
-        self.embedding_context_size = os.getenv("RAG_EMBEDDING_CONTEXT_SIZE")
-        if self.embedding_context_size:
-            self.embedding_context_size = int(self.embedding_context_size)
-
-        self.manual_retry_attempts = int(os.getenv("RAG_EMBEDDING_MANUAL_RETRIES", "1"))
-        self.retry_backoff_seconds = float(os.getenv("RAG_EMBEDDING_RETRY_DELAY_SECONDS", "1.0"))
-        self.batch_size = max(int(os.getenv("RAG_EMBEDDING_BATCH_SIZE", "1")), 1)
+        self.embedding_context_size = rag_config.embedding_context_size
+        self.manual_retry_attempts = max(rag_config.embedding_manual_retries, 0)
+        self.retry_backoff_seconds = max(rag_config.embedding_retry_delay_seconds, 0.0)
+        self.batch_size = max(rag_config.embedding_batch_size, 1)
 
         self._db_embedding_dim: int | None = None
         self._effective_embedding_dim: int | None = self.configured_embedding_dim

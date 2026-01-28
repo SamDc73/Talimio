@@ -9,16 +9,19 @@ class Settings(BaseSettings):
     # Critical configs that need validation/type conversion
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/talimio"
     DEBUG: bool = False
-    API_PORT: int = 8080
     ENVIRONMENT: str = "development"  # "development", "production"
     PLATFORM_MODE: str = "oss"  # "oss" or "cloud"
     SECRET_KEY: str = "your-secret-key-change-in-production"  # For session middleware  # noqa: S105
     MCP_TOKEN_ENCRYPTION_KEY: str | None = None
 
-    # Database config kept minimal for Supabase session pooler
+    # Server Configuration (used when running src/main.py directly)
+    API_HOST: str = "127.0.0.1"
+    API_PORT: int = 8080
+
+    # Database config
+    DB_DISABLE_PREPARED_STATEMENTS: bool = False
 
     # Auth settings
-    AUTH_DISABLED: bool = False
     AUTH_PROVIDER: str = "none"  # "none" (single-user mode) or "supabase" (multi-user mode)
 
     # Supabase Auth (2025 API patterns)
@@ -35,14 +38,6 @@ class Settings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET_NAME: str = "talimio-books"
     R2_REGION: str = "auto"
-
-    # RAG Video Processing Configuration
-    RAG_VIDEO_MAX_TOKENS: int = 512
-    RAG_VIDEO_OVERLAP_TOKENS: int = 50
-    RAG_VIDEO_TARGET_DURATION: int = 180  # 3 minutes in seconds
-    RAG_VIDEO_SHORT_DURATION_THRESHOLD: int = 600  # 10 minutes
-    RAG_VIDEO_MEDIUM_DURATION_THRESHOLD: int = 1800  # 30 minutes
-    RAG_VIDEO_LONG_DURATION_CHUNK: int = 300  # 5 minutes in seconds for long videos
 
     # Adaptive Learning Configuration
     ADAPTIVE_SIMILARITY_THRESHOLD: float = 0.78  # Threshold for concept similarity detection
@@ -68,16 +63,37 @@ class Settings(BaseSettings):
     DURATION_ADJUSTMENT_MAX: float = 1.2  # Maximum duration-based adjustment factor
     DURATION_BASE_MS: int = 90000  # Base duration for adjustment calculations (90 seconds)
 
-    # Feature flags for gradual rollout
-    USE_MODULE_FACADES: bool = True  # Enable new facade pattern
-
     # AI Configuration
+    PRIMARY_LLM_MODEL: str | None = None
+    AI_REQUEST_TIMEOUT: int = 300
+
+    # AI Tooling Configuration
+    AI_ENABLED_TOOLS: str = ""  # Comma-separated allowlist; empty means allow all.
+    AI_DISABLED_TOOLS: str = ""  # Comma-separated blocklist.
+
+    # Assistant UI Configuration
+    AVAILABLE_MODELS: str = ""  # Comma-separated additional models for UI pickers.
+
+    # Domain-specific model overrides
+    TAGGING_LLM_MODEL: str | None = None
+    GRADING_COACH_LLM_MODEL: str | None = None
+
+    # Security / rate-limits
+    DISABLE_RATE_LIMITS: bool = False
+
+    # Code Execution (E2B)
+    E2B_SANDBOX_TTL: int = 600
+    E2B_SDK_LOG_LEVEL: str = "WARNING"
+
+    # Migrations
+    MIGRATIONS_AUTO_APPLY: bool = True
+    MIGRATIONS_VERBOSE: bool = False
+    MIGRATIONS_DIR: str | None = None
+
     @property
     def primary_llm_model(self) -> str:
         """Get primary LLM model from environment - required configuration."""
-        import os
-
-        model = os.getenv("PRIMARY_LLM_MODEL")
+        model = self.PRIMARY_LLM_MODEL
         if not model:
             msg = "PRIMARY_LLM_MODEL environment variable is required"
             raise ValueError(msg)
@@ -86,37 +102,7 @@ class Settings(BaseSettings):
     @property
     def ai_request_timeout(self) -> int:
         """Get AI request timeout from environment."""
-        import os
-
-        # 5 minutes default for complex AI operations like lesson generation
-        return int(os.getenv("AI_REQUEST_TIMEOUT", "300"))
-
-    @property
-    def ai_max_tokens_default(self) -> int:
-        """Get default max tokens for AI requests."""
-        import os
-
-        return int(os.getenv("AI_MAX_TOKENS_DEFAULT", "4000"))
-
-    @property
-    def ai_temperature_default(self) -> float:
-        """Get default temperature for AI requests."""
-        import os
-
-        return float(os.getenv("AI_TEMPERATURE_DEFAULT", "0.7"))
-
-    # AI Model Configuration
-    def get_model_list(self) -> list[dict]:
-        """Get the model list configuration for litellm.Router."""
-        primary_model = self.primary_llm_model
-        return [
-            {
-                "model_name": "primary",
-                "litellm_params": {
-                    "model": primary_model,
-                },
-            }
-        ]
+        return self.AI_REQUEST_TIMEOUT
 
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.local"),
@@ -129,8 +115,4 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     """Get cached settings instance."""
-    settings = Settings()
-    if not settings.DATABASE_URL:
-        msg = "DATABASE_URL environment variable is not set"
-        raise ValueError(msg)
-    return settings
+    return Settings()
