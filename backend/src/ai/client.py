@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import os
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 from uuid import UUID
 
@@ -65,9 +64,10 @@ class LLMClient:
         self._background_tasks: set[asyncio.Task[Any]] = set()
 
     def _parse_tool_filters(self) -> tuple[set[str] | None, set[str]]:
-        allowed_env = os.getenv("AI_ENABLED_TOOLS")
+        settings = get_settings()
+        allowed_env = settings.AI_ENABLED_TOOLS
         allowed = {token.strip().lower() for token in allowed_env.split(",") if token.strip()} if allowed_env else None
-        blocked_env = os.getenv("AI_DISABLED_TOOLS")
+        blocked_env = settings.AI_DISABLED_TOOLS
         blocked = {token.strip().lower() for token in blocked_env.split(",") if token.strip()} if blocked_env else set()
         return allowed, blocked
 
@@ -177,9 +177,7 @@ class LLMClient:
 
                 # Process function calls
                 if response.choices[0].message.tool_calls:
-                    return await self._handle_function_calling(
-                        response, messages, temperature, normalized_user_id
-                    )
+                    return await self._handle_function_calling(response, messages, temperature, normalized_user_id)
 
                 return response.choices[0].message.content
 
@@ -195,12 +193,9 @@ class LLMClient:
 
             # Save conversation to memory (non-blocking)
             if normalized_user_id and response:
-                task = asyncio.create_task(
-                    self._save_conversation_to_memory(normalized_user_id, messages, content)
-                )
+                task = asyncio.create_task(self._save_conversation_to_memory(normalized_user_id, messages, content))
                 self._background_tasks.add(task)
                 task.add_done_callback(self._background_tasks.discard)
-
 
             return content
 
@@ -411,7 +406,6 @@ class LLMClient:
                 user_id=user_id,
                 query=query_text,
                 limit=6,
-                agent_id=self._agent_id,
             )
 
             if not memories:
@@ -1033,10 +1027,10 @@ class LLMClient:
 
             from src.ai.memory import add_memory
 
-            # Extract the user's last message
             user_message = messages[-1].get("content", "") if messages else ""
+            if not isinstance(user_message, str):
+                user_message = str(user_message)
 
-            # Handle different response types
             if isinstance(response, str):
                 ai_response = response[:1000]  # Limit to first 1000 chars
             elif hasattr(response, "choices"):
@@ -1048,19 +1042,19 @@ class LLMClient:
             else:
                 ai_response = str(response)[:1000]
 
-            # Combine into conversation format
-            conversation = f"User: {user_message}\nAssistant: {ai_response}"
+            memory_messages: list[dict[str, Any]] = []
+            if user_message:
+                memory_messages.append({"role": "user", "content": user_message})
+            if ai_response:
+                memory_messages.append({"role": "assistant", "content": ai_response})
 
-            metadata = {
-                "agent_id": self._agent_id,
-            }
+            if not memory_messages:
+                return
 
             # Let mem0 handle everything - extraction, deduplication, relevance filtering
             await add_memory(
                 user_id=user_id,
-                content=conversation,
-                agent_id=self._agent_id,
-                metadata=metadata,
+                messages=memory_messages,
             )
 
         except Exception as e:

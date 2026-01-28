@@ -6,7 +6,6 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai import AGENT_ID_ASSISTANT
 from src.ai.memory import add_memory, delete_memory, get_memories
 from src.user.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
@@ -166,14 +165,13 @@ async def update_custom_instructions(
             try:
                 await add_memory(
                     user_id=user_id,
-                    content="Updated personal AI instructions",
+                    messages="Updated personal AI instructions",
                     metadata={
                         "interaction_type": "settings_update",
                         "setting_type": "custom_instructions",
                         "instructions_length": len(instructions),
                         "timestamp": "now",
                     },
-                    agent_id=AGENT_ID_ASSISTANT,
                 )
             except Exception as e:
                 logger.warning(f"Failed to log instruction update in memory: {e}")

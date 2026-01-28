@@ -9,12 +9,17 @@ Key optimizations:
 """
 
 import logging
+import os
 from typing import Any
 from uuid import UUID
+
+
+os.environ["MEM0_TELEMETRY"] = "false"
 
 from mem0 import AsyncMemory
 from mem0.configs.base import MemoryConfig
 
+from src.ai.mem0_litellm_embedder_patch import apply_mem0_litellm_embedder_patch
 from src.config import env
 from src.config.settings import get_settings
 
@@ -30,20 +35,16 @@ def _memory_is_configured() -> bool:
     return bool(env("MEMORY_LLM_MODEL") and env("MEMORY_EMBEDDING_MODEL"))
 
 
-def _resolve_embedding_dims() -> int:
-    """Return configured embedding dimension with validation."""
-    raw_value = env("MEMORY_EMBEDDING_OUTPUT_DIM", "1536")
+def _resolve_embedding_dims() -> int | None:
+    """Return configured embedding dimension, if provided."""
+    raw_value = env("MEMORY_EMBEDDING_OUTPUT_DIM")
+    if raw_value in (None, ""):
+        return None
     try:
-        dims = int(raw_value)
+        return int(raw_value)
     except (TypeError, ValueError) as exc:
         msg = "MEMORY_EMBEDDING_OUTPUT_DIM must be an integer"
         raise ValueError(msg) from exc
-
-    if dims <= 0:
-        msg = "MEMORY_EMBEDDING_OUTPUT_DIM must be positive"
-        raise ValueError(msg)
-
-    return dims
 
 
 def _get_memory_config() -> dict[str, Any]:
@@ -60,34 +61,32 @@ def _get_memory_config() -> dict[str, Any]:
         msg = f"Unsupported DATABASE_URL format: {database_url}"
         raise ValueError(msg)
 
-    # Extract model names (mem0 doesn't need provider prefix)
-    embed_model = env("MEMORY_EMBEDDING_MODEL").split("/")[-1]
     embedding_dims = _resolve_embedding_dims()
+
+    vector_store_config: dict[str, Any] = {
+        "connection_string": connection_string,
+        "collection_name": "learning_memories",
+        "minconn": 1,
+        "maxconn": 3,
+    }
+    if embedding_dims is not None:
+        vector_store_config["embedding_model_dims"] = embedding_dims
 
     return {
         "vector_store": {
             "provider": "pgvector",
-            "config": {
-                "connection_string": connection_string,
-                "collection_name": "learning_memories",
-                "embedding_model_dims": embedding_dims,
-                "hnsw": True,  # Use HNSW for faster search
-                "minconn": 1,  # Min pool connections
-                "maxconn": 3,  # Reduced to prevent competition with SQLAlchemy pool
-            },
+            "config": vector_store_config,
         },
         "llm": {
             "provider": "litellm",
             "config": {
                 "model": env("MEMORY_LLM_MODEL"),
-                "temperature": 0.2,
             },
         },
         "embedder": {
             "provider": "openai",
             "config": {
-                "model": embed_model,
-                "embedding_dims": embedding_dims,
+                "model": env("MEMORY_EMBEDDING_MODEL"),
             },
         },
     }
@@ -103,12 +102,12 @@ async def get_memory_client() -> AsyncMemory:
             msg = "Memory disabled (MEMORY_* not set)"
             raise RuntimeError(msg)
         try:
+            apply_mem0_litellm_embedder_patch()
             config = _get_memory_config()
-            mem0_config = MemoryConfig(**config)
-            _memory_client = AsyncMemory(mem0_config)
+            _memory_client = AsyncMemory(config=MemoryConfig(**config))
             logger.info("AsyncMemory client initialized with connection pooling")
-        except Exception as e:
-            logger.exception(f"Failed to initialize AsyncMemory: {e}")
+        except Exception:
+            logger.exception("Failed to initialize AsyncMemory")
             raise
 
     return _memory_client
@@ -116,7 +115,7 @@ async def get_memory_client() -> AsyncMemory:
 
 async def add_memory(
     user_id: UUID,
-    content: str,
+    messages: str | dict[str, Any] | list[dict[str, Any]],
     metadata: dict[str, Any] | None = None,
     *,
     agent_id: str | None = None,
@@ -128,21 +127,13 @@ async def add_memory(
     try:
         client = await get_memory_client()
 
-        # Prepare metadata
-        metadata_payload = dict(metadata or {})
-        metadata_payload["user_id"] = str(user_id)
-        if agent_id:
-            metadata_payload.setdefault("agent_id", agent_id)
-        if run_id:
-            metadata_payload.setdefault("run_id", run_id)
-
         # Add memory using mem0's async method
         result = await client.add(
-            messages=[{"role": "user", "content": content}],
+            messages=messages,
             user_id=str(user_id),
             agent_id=agent_id,
             run_id=run_id,
-            metadata=metadata_payload,
+            metadata=metadata,
         )
 
         logger.debug(f"Added memory for user {user_id}")
@@ -193,10 +184,8 @@ async def search_memories(
     """Search memories for a user."""
     if not _memory_is_configured():
         return []
-    # Handle empty queries
     if not query or not query.strip():
-        logger.debug(f"Empty query, using get_memories for user {user_id}")
-        return await get_memories(user_id, limit, agent_id=agent_id, run_id=run_id)
+        return []
 
     try:
         client = await get_memory_client()
@@ -238,13 +227,8 @@ async def cleanup_memory_client() -> None:
     global _memory_client  # noqa: PLW0603
 
     if _memory_client is not None:
-        try:
-            # mem0 manages its own connection pools internally
-            # Just clear the reference
-            _memory_client = None
-            logger.info("Memory client reference cleared")
-        except Exception as e:
-            logger.warning(f"Error during memory cleanup: {e}")
+        _memory_client = None
+        logger.info("Memory client reference cleared")
 
 
 async def warm_memory_client() -> None:
