@@ -1018,19 +1018,6 @@ When users upload documents to a course (including resumes, research papers, art
 
 Remember: Your goal is to empower learners to achieve their educational objectives while making the learning process engaging and effective."""
 
-# MDX Error Fix Prompt
-MDX_ERROR_FIX_PROMPT = """Please fix the MDX error and return the corrected content.
-
-CRITICAL FIXES REQUIRED:
-- If error mentions undefined variable (e.g., "age is not defined"), DECLARE it first with React.useState or const
-- Close all unclosed tags
-- Ensure all JavaScript expressions are valid
-- NEVER use template variables like {variable} without defining them
-- Make all interactive components SELF-CONTAINED with all variables defined
-- Return plain MDX content (no wrapping the entire lesson in ```mdx/```markdown fences)
-
-Return the COMPLETE corrected content."""
-
 # Memory Context System Prompt Template
 MEMORY_CONTEXT_SYSTEM_PROMPT = "Personal Context: {memory_context}"
 

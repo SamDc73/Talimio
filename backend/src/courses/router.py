@@ -30,8 +30,6 @@ from src.courses.schemas import (
     GradeRequest,
     GradeResponse,
     LessonDetailResponse,
-    MDXValidateRequest,
-    MDXValidateResponse,
     NextReviewResponse,
     ReviewBatchRequest,
     ReviewBatchResponse,
@@ -48,7 +46,6 @@ from src.courses.services.course_query_service import CourseQueryService
 from src.courses.services.frontier_builder import build_course_frontier
 from src.courses.services.grading_service import GradingService
 from src.courses.services.lesson_service import LessonService
-from src.courses.services.mdx_service import mdx_service
 from src.middleware.security import ai_rate_limit
 
 
@@ -453,26 +450,6 @@ async def get_concept_next_review(
 
 # NOTE: Quiz submission removed - quizzes are part of lesson content and handled via lesson progress updates
 # Quiz results should be submitted through the lesson status update endpoints, not as separate entities
-
-
-# MDX validation endpoint
-@router.post("/validate-mdx")
-async def validate_mdx(request: MDXValidateRequest) -> MDXValidateResponse:
-    """
-    Validate MDX content syntax.
-
-    This endpoint validates MDX content before it's stored or processed,
-    ensuring proper syntax for JSX components, markdown, and exports.
-    """
-    is_valid, error = mdx_service.validate_mdx(request.content)
-
-    # Extract metadata if valid
-    metadata = None
-    if is_valid:
-        metadata = mdx_service.extract_metadata(request.content)
-
-    return MDXValidateResponse(valid=is_valid, error=error, metadata=metadata)
-
 
 # --- Code Execution (E2B) ---
 @ai_rate_limit
