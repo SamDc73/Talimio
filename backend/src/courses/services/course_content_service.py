@@ -147,7 +147,6 @@ class CourseContentService:
         adaptive_structure = await self.ai_service.generate_adaptive_course_structure(
             user_id=user_id,
             user_prompt=goal_payload,
-            session=self.session,
         )
         session_data["title"] = adaptive_structure.course.title
         session_data["description"] = adaptive_structure.ai_outline_meta.scope
@@ -336,8 +335,9 @@ class CourseContentService:
         """Generate and persist tags for a course.
 
         Uses SQLAlchemy Core UPDATE to avoid ORM stale update errors when the row
-        is concurrently deleted/updated. Ensures rollback before any logging and
-        avoids attribute access on ORM instances while in a failed state.
+        is concurrently deleted/updated. Commits before slow external calls to
+        avoid holding an "idle in transaction" connection open via the session
+        pooler.
         """
         course_id_str = str(course.id)
         try:
@@ -349,6 +349,11 @@ class CourseContentService:
             if not content_data:
                 logger.info("Skipping auto-tagging for missing/empty course %s", course_id_str)
                 return []
+
+            # Close the read-only transaction before making slow external calls (LLM tagging).
+            # This avoids holding an "idle in transaction" connection open via the session pooler.
+            # Use COMMIT (not ROLLBACK) so ORM instances are not expired.
+            await session.commit()
 
             tagging_service = TaggingService(session)
             tags = await tagging_service.tag_content(
@@ -903,7 +908,6 @@ class CourseContentService:
         ai_result = await self.ai_service.generate_course_structure(
             user_id=user_id,
             user_prompt=prompt,
-            session=self.session,
         )
         if not ai_result:
             error_msg = "Invalid AI response format for course generation"

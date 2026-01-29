@@ -124,8 +124,6 @@ class CourseDocument(Base):
     document_type: Mapped[str | None] = mapped_column(String(50))
     title: Mapped[str] = mapped_column(String(255))
     file_path: Mapped[str | None] = mapped_column(String(500))
-    source_url: Mapped[str | None] = mapped_column(String(500))
-    crawl_date: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=lambda: datetime.now(UTC))
     processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     embedded_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))

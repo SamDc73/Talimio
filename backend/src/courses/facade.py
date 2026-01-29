@@ -209,9 +209,10 @@ class CoursesFacade:
         """
         try:
             query_service = CourseQueryService(self._session)
-            # Simple: grab first 1000; real pagination handled at router when needed
+            # Keep pagination aligned with API defaults to avoid oversized payloads.
+            per_page = 20
             course_responses, _total = await query_service.list_courses(
-                page=1, per_page=1000, search=None, user_id=user_id
+                page=1, per_page=per_page, search=None, user_id=user_id
             )
 
             course_dicts: list[dict[str, Any]] = []

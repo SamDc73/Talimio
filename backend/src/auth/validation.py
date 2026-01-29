@@ -29,15 +29,15 @@ class AuthConfigValidator:
         warnings = []
 
         # Check AUTH_PROVIDER setting
-        auth_provider = getattr(settings, "AUTH_PROVIDER", "none").lower()
+        auth_provider = settings.AUTH_PROVIDER.lower()
 
         if auth_provider not in ["none", "supabase"]:
             issues.append(f"Invalid AUTH_PROVIDER: {auth_provider}. Must be 'none' or 'supabase'")
 
         # Validate Supabase configuration if enabled
         if auth_provider == "supabase":
-            supabase_url = getattr(settings, "SUPABASE_URL", None)
-            supabase_publishable = getattr(settings, "SUPABASE_PUBLISHABLE_KEY", None)
+            supabase_url = settings.SUPABASE_URL
+            supabase_publishable = settings.SUPABASE_PUBLISHABLE_KEY
 
             if not supabase_url:
                 issues.append("SUPABASE_URL is required when AUTH_PROVIDER=supabase")
@@ -50,11 +50,11 @@ class AuthConfigValidator:
                 warnings.append("SUPABASE_PUBLISHABLE_KEY should start with 'sb_publishable_'")
 
         # Check SECRET_KEY for session management
-        secret_key = getattr(settings, "SECRET_KEY", None)
+        secret_key = settings.SECRET_KEY
         if not secret_key:
             issues.append("SECRET_KEY is required for session management")
         elif secret_key == "your-secret-key-change-in-production-auth-sessions-development":  # noqa: S105
-            if getattr(settings, "ENVIRONMENT", "development") == "production":
+            if settings.ENVIRONMENT == "production":
                 issues.append("SECRET_KEY must be changed in production")
             else:
                 warnings.append("SECRET_KEY should be changed from default value")
@@ -132,7 +132,7 @@ class AuthConfigValidator:
         Note: This checks based on typical patterns and environment variables.
         """
         settings = get_settings()
-        backend_auth = getattr(settings, "AUTH_PROVIDER", "none").lower()
+        backend_auth = settings.AUTH_PROVIDER.lower()
 
         # Common mismatch patterns
         potential_issues = []
@@ -147,7 +147,7 @@ class AuthConfigValidator:
             )
 
         if backend_auth == "supabase":
-            supabase_url = getattr(settings, "SUPABASE_URL", None)
+            supabase_url = settings.SUPABASE_URL
             if supabase_url:
                 potential_issues.append(
                     {

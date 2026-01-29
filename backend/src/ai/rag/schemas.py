@@ -4,15 +4,14 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 class DocumentUpload(BaseModel):
     """Schema for document upload request."""
 
-    document_type: str = Field(..., description="Type of document: 'pdf' or 'url'")
+    document_type: str = Field(..., description="Type of document (e.g. pdf, txt, md, epub)")
     title: str = Field(..., description="Title for the document")
-    url: str | None = Field(None, description="URL for URL-type documents")
 
 
 class DocumentResponse(BaseModel):
@@ -23,25 +22,12 @@ class DocumentResponse(BaseModel):
     document_type: str
     title: str
     file_path: str | None = None
-    url: str | None = None
-    source_url: str | None = None
-    crawl_date: datetime | None = None
     content_hash: str | None = None
     # Removed doc_metadata - not used for course documents, only for books
     created_at: datetime
     processed_at: datetime | None = None
     embedded_at: datetime | None = None
     status: str
-
-    @model_validator(mode="before")
-    @classmethod
-    def mirror_source_url(cls, data: Any) -> Any:
-        """Ensure url mirrors source_url when missing."""
-        if isinstance(data, dict) and data.get("url") in (None, ""):
-            source_url = data.get("source_url")
-            if source_url:
-                data["url"] = source_url
-        return data
 
 
 class DocumentList(BaseModel):

@@ -38,22 +38,15 @@ async def upload_document(
     title: Annotated[str, Form()],
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
-    url: Annotated[str | None, Form()] = None,
     file: Annotated[UploadFile | None, File()] = None,
 ) -> dict:
     """Upload a document to a course."""
     # Validate course access via AuthContext
     await auth.validate_resource("course", course_id)
 
-    # Only file uploads supported in MVP (no URL crawling)
+    # Only file uploads supported in MVP
     if not file:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File upload required")
-
-    if document_type == "url":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="URL documents not supported in MVP. Please upload a file.",
-        )
 
     file_content = None
     filename = None
@@ -68,13 +61,9 @@ async def upload_document(
             document_type,
             title,
             file_content,
-            url,
             filename,
         )
         return result.model_dump(by_alias=True) if hasattr(result, "model_dump") else result
-
-        # Don't process immediately to avoid blocking
-        # TODO: Add to background job queue
 
     except HTTPException:
         raise
