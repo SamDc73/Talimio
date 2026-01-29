@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.memory import add_memory, delete_memory, get_memories
+from src.ai.memory import add_memory, delete_all_memories, delete_memory, get_memories
 from src.user.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
     CustomInstructionsResponse,
@@ -114,7 +114,7 @@ async def get_user_settings(user_id: UUID, db_session: AsyncSession) -> UserSett
 
         # Get memory count using direct function
         try:
-            memories = await get_memories(user_id, limit=1000)
+            memories = await get_memories(user_id)
             memory_count = len(memories)
         except Exception as e:
             logger.warning(f"Failed to count memories for user {user_id}: {e}")
@@ -185,7 +185,7 @@ async def update_custom_instructions(
         return CustomInstructionsResponse(instructions=instructions, updated=False)
 
 
-async def get_user_memories(user_id: UUID, agent_id: str | None = None) -> list[dict]:
+async def get_user_memories(user_id: UUID, agent_id: str | None = None, *, limit: int = 100) -> list[dict]:
     """
     Get memories for a user, optionally filtered to a specific agent scope.
 
@@ -199,7 +199,7 @@ async def get_user_memories(user_id: UUID, agent_id: str | None = None) -> list[
     """
     try:
         # Get all memories using direct function
-        memories = await get_memories(user_id, limit=1000, agent_id=agent_id)
+        memories = await get_memories(user_id, limit=limit, agent_id=agent_id)
 
         # Format memories for web app consumption
         formatted_memories = []
@@ -236,6 +236,15 @@ async def delete_user_memory(user_id: UUID, memory_id: str) -> bool:
         return await delete_memory(user_id, memory_id)
     except Exception as e:
         logger.exception(f"Error deleting memory {memory_id} for user {user_id}: {e}")
+        return False
+
+
+async def clear_user_memories(user_id: UUID, agent_id: str | None = None) -> bool:
+    """Clear all memories for a user, optionally scoped to a specific agent."""
+    try:
+        return await delete_all_memories(user_id, agent_id=agent_id)
+    except Exception as e:
+        logger.exception(f"Error clearing memories for user {user_id}: {e}")
         return False
 
 
@@ -288,4 +297,3 @@ async def update_user_preferences(
         # Return current preferences on error
         current_prefs = await _load_user_preferences(user_id, db_session)
         return PreferencesUpdateResponse(preferences=current_prefs, updated=False)
-

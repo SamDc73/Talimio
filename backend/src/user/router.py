@@ -5,13 +5,14 @@ eliminating the need to pass user_id in the URL.
 """
 
 import logging
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from src.auth import CurrentAuth
 from src.middleware.security import api_rate_limit, create_rate_limit_dependency
 from src.user.schemas import (
+    ClearMemoryResponse,
     CustomInstructionsRequest,
     CustomInstructionsResponse,
     PreferencesUpdateRequest,
@@ -21,6 +22,7 @@ from src.user.schemas import (
 )
 from src.user.service import (
     _load_user_preferences,
+    clear_user_memories,
     delete_user_memory,
     get_user_memories,
     get_user_settings,
@@ -82,7 +84,10 @@ async def update_current_user_instructions(
 
 
 @router.get("/memories")
-async def get_current_user_memories(auth: CurrentAuth) -> dict[str, Any]:
+async def get_current_user_memories(
+    auth: CurrentAuth,
+    limit: Annotated[int, Query(ge=1, le=100, description="Max memories to return")] = 100,
+) -> dict[str, Any]:
     """
     Get all memories for the current user.
 
@@ -91,12 +96,29 @@ async def get_current_user_memories(auth: CurrentAuth) -> dict[str, Any]:
         Dict with memories list and total count
     """
     try:
-        memories = await get_user_memories(auth.user_id)
+        memories = await get_user_memories(auth.user_id, limit=limit)
         return {"memories": memories, "total": len(memories)}
     except Exception as e:
         logger.exception(f"Error in get_current_user_memories for user {auth.user_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get memories: {e}"
+        ) from e
+
+
+@router.delete("/memories")
+async def clear_current_user_memories(auth: CurrentAuth) -> ClearMemoryResponse:
+    """Delete all memories for the current user."""
+    try:
+        cleared = await clear_user_memories(auth.user_id)
+        if not cleared:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to clear memories")
+        return ClearMemoryResponse(cleared=True, message="All memories cleared successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error in clear_current_user_memories for user {auth.user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to clear memories: {e}"
         ) from e
 
 

@@ -175,7 +175,7 @@ async def get_memories(
 async def search_memories(
     user_id: UUID,
     query: str,
-    limit: int = 5,
+    limit: int = 100,
     threshold: float | None = None,
     *,
     agent_id: str | None = None,
@@ -219,6 +219,29 @@ async def delete_memory(user_id: UUID, memory_id: str) -> bool:
 
     except Exception as e:
         logger.warning(f"Failed to delete memory {memory_id}: {e}")
+        return False
+
+
+async def delete_all_memories(
+    user_id: UUID,
+    *,
+    agent_id: str | None = None,
+    run_id: str | None = None,
+) -> bool:
+    """Delete all memories for a user (optionally scoped by agent/run)."""
+    if not _memory_is_configured():
+        return True
+    try:
+        client = await get_memory_client()
+        await client.delete_all(
+            user_id=str(user_id),
+            agent_id=agent_id,
+            run_id=run_id,
+        )
+        logger.info(f"Cleared memories for user {user_id}")
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to clear memories for user {user_id}: {e}")
         return False
 
 
