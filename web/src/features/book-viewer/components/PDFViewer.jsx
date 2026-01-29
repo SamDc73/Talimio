@@ -15,6 +15,7 @@ import { Viewport, ViewportPluginPackage } from "@embedpdf/plugin-viewport/react
 import { ZoomMode } from "@embedpdf/plugin-zoom"
 import { useZoom, ZoomPluginPackage } from "@embedpdf/plugin-zoom/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { api as apiClient } from "@/lib/apiClient"
 import { useBookActions, useBookReadingState, useBookStoreHydrated } from "../hooks/useBookState"
 
 function ViewerRuntime({
@@ -281,11 +282,7 @@ function PDFViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 		const fetchPdf = async () => {
 			try {
 				setLoadError(null)
-				const response = await fetch(url, { credentials: "include" })
-				if (!response.ok) {
-					throw new Error(`Failed to load PDF: ${response.status}`)
-				}
-				const blob = await response.blob()
+				const blob = await apiClient.blob(url, { absoluteUrl: true })
 				if (cancelled) return
 				if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
 				const blobUrl = URL.createObjectURL(blob)

@@ -1,5 +1,5 @@
 /**
- * Content service for archive/unarchive operations
+ * Content service for common content operations (archive/unarchive/delete).
  */
 
 import { api } from "@/lib/apiClient"
@@ -39,4 +39,13 @@ export const unarchiveContent = async (contentType, contentId) => {
 	return response
 }
 
-// Removed dead functions getContentStats and listArchivedContent.
+/**
+ * Delete a content item
+ * @param {string} contentType - Type of content (book, youtube, course)
+ * @param {string} contentId - ID of the content item
+ * @returns {Promise<null>}
+ */
+export const deleteContent = async (contentType, contentId) => {
+	const mapped = mapContentType(contentType)
+	return api.delete(`/content/${mapped}/${contentId}`)
+}

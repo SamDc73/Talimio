@@ -15,6 +15,7 @@ import { Button } from "@/components/Button"
 import { Card } from "@/components/Card"
 import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
+import { api } from "@/lib/apiClient"
 
 function DocumentUploader({
 	onDocumentsChange,
@@ -137,12 +138,7 @@ function DocumentUploader({
 			const formData = new FormData()
 			formData.append("url", url)
 
-			const response = await fetch("/api/v1/extract-title", {
-				method: "POST",
-				body: formData,
-			})
-
-			const data = await response.json()
+			const data = await api.post("/extract-title", formData)
 			const title = data.title || "Untitled Document"
 			setUrlTitle(title)
 			return title

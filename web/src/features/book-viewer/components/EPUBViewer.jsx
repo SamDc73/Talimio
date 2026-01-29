@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ReactReader } from "react-reader"
+import { api as apiClient } from "@/lib/apiClient"
 import { useBookActions, useBookReadingState, useBookZoomLevel } from "../hooks/useBookState"
 
 function EPUBViewer({ url, bookId, onProgressUpdate }) {
@@ -309,17 +310,10 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 				setLoading(true)
 				setError(null)
 
-				// Fetch the EPUB file with credentials
-				const response = await fetch(url, {
-					credentials: "include",
-					headers: {
-						accept: "application/epub+zip, application/octet-stream",
-					},
+				const response = await apiClient.raw(url, {
+					absoluteUrl: true,
+					headers: { accept: "application/epub+zip, application/octet-stream" },
 				})
-
-				if (!response.ok) {
-					throw new Error(`Failed to load EPUB: ${response.statusText}`)
-				}
 
 				// Verify content type and binary signature (must be a ZIP for EPUB)
 				const contentType = response.headers.get("content-type") || ""
