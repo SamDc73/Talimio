@@ -116,7 +116,6 @@ async def get_single_progress(
 
 
 @router.put("/{content_id}")
-# @progress_rate_limit  # TODO: Re-enable rate limiting when needed
 async def update_progress(
     content_id: UUID,
     progress: ProgressUpdate,

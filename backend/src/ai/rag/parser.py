@@ -1,8 +1,6 @@
 """Document parsing using Unstructured's auto-partition."""
 
 import logging
-from datetime import UTC
-from typing import Any
 
 from fastapi.concurrency import run_in_threadpool
 
@@ -29,23 +27,3 @@ class DocumentProcessor:
             ocr_languages=["eng"] if rag_config.enable_ocr else None,
         )
         return "\n".join([str(el) for el in elements])
-
-    async def process_url_document(self, url: str) -> tuple[str, Any]:
-        """Process a document from URL using Unstructured's auto-partition."""
-        from datetime import datetime
-
-        from unstructured.partition.auto import partition
-
-        # Use Unstructured's auto-partition for URL
-        elements = await run_in_threadpool(
-            partition,
-            url=url,
-            strategy="auto",
-            extract_images_in_pdf=rag_config.extract_images,
-            extract_tables=rag_config.extract_tables,
-        )
-
-        text_content = "\n".join([str(el) for el in elements])
-        crawl_date = datetime.now(UTC)
-
-        return text_content, crawl_date

@@ -18,12 +18,17 @@ from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT
 from src.books.models import Book
 from src.courses.facade import CoursesFacade
 from src.storage.factory import get_storage_provider
-from src.videos.service import VideoService
+from src.videos.models import Video
 
 from .schemas import ChatRequest
 
 
 logger = logging.getLogger(__name__)
+
+ASSISTANT_RAG_TOP_K = 5
+ASSISTANT_RAG_MAX_RESULTS = 3
+ASSISTANT_PDF_CONTEXT_RADIUS_PAGES = 2
+ASSISTANT_VIDEO_CONTEXT_WINDOW_SECONDS = 120
 
 
 class ContextData(BaseModel):
@@ -56,8 +61,6 @@ async def chat_with_assistant(
         llm_client = LLMClient(agent_id=AGENT_ID_ASSISTANT)
         response_payload = await llm_client.get_completion(
             messages=messages,
-            temperature=0.7,
-            max_tokens=4000,
             user_id=user_id,
             model=request.model,
             session=session,
@@ -99,8 +102,9 @@ async def _build_messages(request: ChatRequest, user_id: UUID, session: AsyncSes
         semantic_results = await _get_rag_context(request, user_id, session)
 
         if semantic_results:
-            # Take top 3 results; include metadata cues (page or start-end)
-            top = semantic_results[:3]
+            # Limit how many results we inject into the prompt.
+            max_results = max(ASSISTANT_RAG_MAX_RESULTS, 0)
+            top = [] if max_results <= 0 else semantic_results[:max_results]
             blocks: list[str] = []
 
             # Simple suffix mapping for metadata
@@ -117,9 +121,10 @@ async def _build_messages(request: ChatRequest, user_id: UUID, session: AsyncSes
                 suffix = suffix_map.get(request.context_type, lambda _: "")(meta)
                 blocks.append(f"{content}{suffix}")
 
-            semantic_text = "\n\n".join(blocks)
-            context_parts.append(f"Related {request.context_type} content:\n{semantic_text}")
-            logger.debug("Added %d semantic search results", len(semantic_results))
+            if blocks:
+                semantic_text = "\n\n".join(blocks)
+                context_parts.append(f"Related {request.context_type} content:\n{semantic_text}")
+                logger.debug("Added %d semantic search results", len(blocks))
 
     # Use unified prompt that handles context intelligently
     system_prompt = ASSISTANT_CHAT_SYSTEM_PROMPT
@@ -203,7 +208,7 @@ async def _get_rag_context(request: ChatRequest, user_id: UUID, session: AsyncSe
                 session=session,
                 course_id=request.context_id,
                 query=query_text,
-                top_k=5,
+                top_k=ASSISTANT_RAG_TOP_K,
             )
             logger.info("Retrieved %d RAG results for course %s", len(results), request.context_id)
             if results:
@@ -239,7 +244,7 @@ async def _get_rag_context(request: ChatRequest, user_id: UUID, session: AsyncSe
                 session,
                 doc_type=request.context_type,
                 query=query_text,
-                limit=5,
+                limit=ASSISTANT_RAG_TOP_K,
                 doc_id=resource.id,
             )
 
@@ -283,8 +288,8 @@ async def _book_context(
         """Parse PDF synchronously and return (joined_text, source_label)."""
         doc = fitz.open(stream=content, filetype="pdf")
         try:
-            start_page = max(0, page_index - 2)
-            end_page = min(doc.page_count - 1, page_index + 2)
+            start_page = max(0, page_index - ASSISTANT_PDF_CONTEXT_RADIUS_PAGES)
+            end_page = min(doc.page_count - 1, page_index + ASSISTANT_PDF_CONTEXT_RADIUS_PAGES)
 
             text_parts: list[str] = []
             for page_num in range(start_page, end_page + 1):
@@ -320,7 +325,7 @@ async def _video_context(
     context_meta: dict[str, Any],
     session: AsyncSession,
 ) -> ContextData | None:
-    """Get full transcript with current timestamp."""
+    """Get transcript window around the current timestamp."""
     if "timestamp" not in context_meta or "user_id" not in context_meta:
         return None
 
@@ -330,20 +335,40 @@ async def _video_context(
         return None
     user_id = context_meta["user_id"]
 
-    video = await VideoService().get_video(session, str(resource_id), user_id)
-
-    if not video or not hasattr(video, "transcript_segments") or not video.transcript_segments:
+    result = await session.execute(
+        select(Video.title, Video.transcript_data).where(Video.id == resource_id, Video.user_id == user_id)
+    )
+    row = result.first()
+    if not row:
         return None
 
-    # Just join all transcript text
-    segments = getattr(video, "transcript_segments", [])  # type: ignore[attr-defined]
+    title = row.title
+    transcript_data = row.transcript_data or {}
+    segments = transcript_data.get("segments") or []
     if not segments:
         return None
-    transcript = " ".join(seg["text"] for seg in segments)
+
+    window_start = max(0.0, timestamp - ASSISTANT_VIDEO_CONTEXT_WINDOW_SECONDS)
+    window_end = timestamp + ASSISTANT_VIDEO_CONTEXT_WINDOW_SECONDS
+
+    window_segments = []
+    for seg in segments:
+        start = seg.get("start")
+        end = seg.get("end")
+        text = seg.get("text")
+        if text is None or start is None or end is None:
+            continue
+        if float(end) >= window_start and float(start) <= window_end:
+            window_segments.append(str(text))
+
+    if not window_segments:
+        return None
+
+    transcript = " ".join(window_segments)
 
     return ContextData(
         content=f"[Currently at {timestamp:.1f} seconds]\n\n{transcript}",
-        source=video.title,
+        source=title or "Video",
     )
 
 

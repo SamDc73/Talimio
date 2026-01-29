@@ -54,7 +54,6 @@ class RAGService:
         document_type: str,
         title: str,
         file_content: bytes | None = None,
-        url: str | None = None,
         filename: str | None = None,
     ) -> DocumentResponse:
         """Upload a document to a course, ensuring user ownership."""
@@ -66,7 +65,6 @@ class RAGService:
             doc = CourseDocument(
                 course_id=course_id,
                 title=title,
-                source_url=url,
                 document_type=document_type or "unknown",
                 status="pending",  # Start as pending for processing
             )
@@ -153,14 +151,7 @@ class RAGService:
 
             # Extract text using Unstructured parser
             text_content = ""
-            if doc_dict["document_type"] == "url" and doc_dict["source_url"]:
-                # TODO: Parse URL with Unstructured
-                text_content, crawl_date = await self.document_processor.process_url_document(doc_dict["source_url"])
-                await session.execute(
-                    text("UPDATE course_documents SET crawl_date = :crawl_date WHERE id = :doc_id"),
-                    {"crawl_date": crawl_date, "doc_id": document_id},
-                )
-            elif doc_dict["file_path"]:
+            if doc_dict["file_path"]:
                 # Process file using temp copy for efficient memory usage
                 stored_file_path = Path(doc_dict["file_path"])
                 if not stored_file_path.exists():
@@ -182,7 +173,7 @@ class RAGService:
                     with contextlib.suppress(OSError):
                         Path(temp_file_path).unlink()
             else:
-                msg = "No file path or URL to process"
+                msg = "No file path to process"
                 raise ValueError(msg)
 
             # Chunk text using Chonkie
@@ -404,11 +395,7 @@ class RAGService:
             raise
 
     async def _collect_video_transcript_chunks(self, video: Video) -> tuple[list[str], list[dict]]:
-        """Collect transcript chunks and per-chunk metadata for a video.
-
-        Prefer structured segments with timestamps from transcript_data; otherwise
-        fall back to chunking the raw transcript text via the default chunker.
-        """
+        """Collect transcript chunks and per-chunk metadata for a video."""
         chunks: list[str] = []
         per_chunk_meta: list[dict] = []
 
@@ -423,11 +410,6 @@ class RAGService:
                     continue
                 chunks.append(text_val)
                 per_chunk_meta.append({"start": seg.get("start"), "end": seg.get("end")})
-        else:
-            transcript = getattr(video, "transcript", None)
-            if isinstance(transcript, str) and transcript:
-                chunks = await chunk_text_async(transcript)
-                per_chunk_meta = [{} for _ in chunks]
 
         return chunks, per_chunk_meta
 

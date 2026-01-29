@@ -31,6 +31,10 @@ from src.videos.schemas import (
 
 logger = logging.getLogger(__name__)
 
+CHAPTER_EXTRACTION_MAX_RETRIES = 3
+CHAPTER_EXTRACTION_RETRY_DELAY_SECONDS = 2
+VIDEO_RAG_SEARCH_LIMIT = 5
+
 
 def parse_video_id(video_id: str) -> UUID:
     """Convert string UUID to UUID object with validation."""
@@ -102,8 +106,8 @@ async def _try_extract_chapters(video_id: str, user_id: UUID) -> bool:
 
 async def _extract_chapters_background(video_id: str, user_id: UUID) -> None:
     """Extract chapters in background after video creation with retry logic."""
-    max_retries = 3
-    retry_delay = 2  # seconds
+    max_retries = CHAPTER_EXTRACTION_MAX_RETRIES
+    retry_delay = CHAPTER_EXTRACTION_RETRY_DELAY_SECONDS
 
     for attempt in range(max_retries):
         try:
@@ -132,13 +136,13 @@ async def _extract_chapters_background(video_id: str, user_id: UUID) -> None:
 
 
 async def _process_transcript_to_jsonb(video_id: UUID) -> None:
-    """Process transcript text into JSONB segments in background."""
+    """Process transcript segments into JSONB in background."""
     try:
         async with async_session_maker() as db:
             result = await db.execute(select(Video).where(Video.id == video_id))
             video = result.scalar_one_or_none()
 
-            if not video or not video.transcript:
+            if not video:
                 return
 
             # Check if already processed
@@ -160,74 +164,10 @@ async def _process_transcript_to_jsonb(video_id: UUID) -> None:
                 }
                 await db.commit()
                 logger.info(f"Stored {len(segments)} transcript segments for video {video_id}")
+                await _embed_video_background(str(video.id))
 
     except Exception as e:
         logger.exception(f"Failed to process transcript segments for video {video_id}: {e}")
-
-
-async def _extract_video_transcript(video_url: str) -> str | None:
-    """Extract transcript from YouTube video using yt-dlp."""
-    try:
-        # Metadata-only options to avoid triggering any downloads or format selection
-        ydl_opts: dict[str, Any] = {
-            "skip_download": True,
-            "quiet": True,
-            "no_warnings": True,
-            "noplaylist": True,
-            "ignore_no_formats_error": True,
-            "allow_unplayable_formats": True,
-        }
-
-        with _create_downloader(ydl_opts) as ydl:
-            # Get video info with subtitles (avoid format selection)
-            info = ydl.extract_info(video_url, download=False, process=False)
-
-            # Try to get subtitles
-            subtitles = info.get("subtitles", {})
-            automatic_captions = info.get("automatic_captions", {})
-
-            # Prefer manual subtitles over automatic ones
-            subs_to_use = subtitles.get("en") or automatic_captions.get("en")
-
-            if not subs_to_use:
-                return None
-
-            # Find the best subtitle format (prefer SRT to avoid VTT issues)
-            subtitle_url = None
-            for sub in subs_to_use:
-                if sub.get("ext") == "srt":
-                    subtitle_url = sub.get("url")
-                    break
-
-            # Fallback to any available subtitle
-            if not subtitle_url and subs_to_use:
-                subtitle_url = subs_to_use[0].get("url")
-
-            if not subtitle_url:
-                return None
-
-            # Download and parse subtitle content
-            async with aiohttp.ClientSession() as session, session.get(subtitle_url) as response:
-                if response.status == 200:
-                    content = await response.text()
-                    # Simple SRT parser - extract text lines
-                    lines = content.split("\n")
-                    transcript_lines = []
-
-                    for line_text in lines:
-                        line = line_text.strip()
-                        # Skip timestamp lines and sequence numbers
-                        if not line or "-->" in line or line.isdigit():
-                            continue
-                        transcript_lines.append(line)
-
-                    return " ".join(transcript_lines)
-
-    except Exception as e:
-        logger.exception(f"Failed to extract transcript for {video_url}: {e}")
-        return None
-
-    return None
 
 
 class VideoService:
@@ -265,7 +205,6 @@ class VideoService:
             "thumbnail_url": video.thumbnail_url,
             "description": video.description,
             "tags": video.tags,
-            "transcript": video.transcript,
             "transcript_data": video.transcript_data,
             "chapters_status": video.chapters_status,
             "chapters_extracted_at": video.chapters_extracted_at,
@@ -297,9 +236,6 @@ class VideoService:
             video_dict["already_exists"] = True
             return VideoResponse.model_validate(video_dict)
 
-        # Extract transcript immediately (simple approach)
-        transcript_content = await _extract_video_transcript(video_data.url)
-
         # Create video record
         video = Video(
             user_id=user_id_for_creation,
@@ -313,7 +249,6 @@ class VideoService:
             description=video_info.get("description"),
             tags=json.dumps(video_info.get("tags", [])),
             published_at=video_info.get("published_at"),
-            transcript=transcript_content,
         )
 
         db.add(video)
@@ -364,15 +299,11 @@ class VideoService:
             # Don't fail video creation if tagging fails
             logger.exception("Failed to tag video %s: %s", video.id, e)
 
-        # Trigger background RAG processing of transcript when available
-        background_tasks.add_task(_embed_video_background, str(video.id))
-
         # Trigger background chapter extraction
         background_tasks.add_task(_extract_chapters_background, str(video.id), user_id)
 
         # Trigger background transcript segment processing
-        if video.transcript:  # Only if we have transcript text
-            background_tasks.add_task(_process_transcript_to_jsonb, video.id)
+        background_tasks.add_task(_process_transcript_to_jsonb, video.id)
 
         # Reload to ensure server-default timestamps are loaded
         refreshed_video = await db.get(Video, video.id, populate_existing=True)
@@ -783,7 +714,7 @@ class VideoService:
         }
 
     async def search_video(
-        self, db: AsyncSession, video_id: str, user_id: UUID, query: str, limit: int = 5
+        self, db: AsyncSession, video_id: str, user_id: UUID, query: str, limit: int = VIDEO_RAG_SEARCH_LIMIT
     ) -> list[dict]:
         """Search this video's transcript chunks using pgvector."""
         # Ownership validation

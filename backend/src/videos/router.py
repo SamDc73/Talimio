@@ -26,7 +26,6 @@ router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-# @upload_rate_limit  # TODO: Enable rate limiting with request parameter
 async def create_video(
     video_data: VideoCreate,
     background_tasks: BackgroundTasks,
@@ -45,7 +44,6 @@ async def create_video(
 
 
 @router.get("")
-# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def list_videos(
     auth: CurrentAuth,
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
@@ -65,7 +63,6 @@ async def list_videos(
 
 
 @router.get("/{video_id}")
-# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video(
     video_id: str,
     auth: CurrentAuth,
@@ -81,7 +78,6 @@ async def get_video(
 
 
 @router.patch("/{video_id}")
-# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def update_video(
     video_id: str,
     update_data: VideoUpdate,
@@ -102,7 +98,6 @@ async def update_video(
 
 
 @router.get("/{video_id}/chapters")
-# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video_chapters(
     video_id: str,
     auth: CurrentAuth,
@@ -118,7 +113,6 @@ async def get_video_chapters(
 
 
 @router.get("/{video_id}/chapters/{chapter_id}")
-# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video_chapter(
     video_id: str,
     chapter_id: str,
@@ -135,7 +129,6 @@ async def get_video_chapter(
 
 
 @router.put("/{video_id}/chapters/{chapter_id}/status")
-# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def update_video_chapter_status(
     video_id: str,
     chapter_id: str,
@@ -157,7 +150,6 @@ async def update_video_chapter_status(
 
 
 @router.post("/{video_id}/extract-chapters")
-# @ai_rate_limit  # TODO: Enable rate limiting with request parameter
 async def extract_video_chapters(
     video_id: str,
     auth: CurrentAuth,
@@ -176,7 +168,6 @@ async def extract_video_chapters(
 
 
 @router.post("/{video_id}/sync-chapter-progress")
-# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def sync_video_chapter_progress(
     video_id: str,
     progress_data: VideoChapterProgressSync,
@@ -199,7 +190,6 @@ async def sync_video_chapter_progress(
 
 
 @router.get("/{video_id}/transcript")
-# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video_transcript(
     video_id: str,
     auth: CurrentAuth,
@@ -215,7 +205,6 @@ async def get_video_transcript(
 
 
 @router.get("/{video_id}/details")
-# @api_rate_limit  # TODO: Enable rate limiting with request parameter
 async def get_video_details(
     video_id: str,
     auth: CurrentAuth,

@@ -15,7 +15,14 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.settings import get_settings
-from src.courses.models import Concept, ConceptSimilarity, CourseConcept, ProbeEvent, UserConceptState
+from src.courses.models import (
+    _DEFAULT_LEARNER_PROFILE,
+    Concept,
+    ConceptSimilarity,
+    CourseConcept,
+    ProbeEvent,
+    UserConceptState,
+)
 
 from .concept_graph_service import FrontierEntry
 
@@ -23,12 +30,15 @@ from .concept_graph_service import FrontierEntry
 logger = logging.getLogger(__name__)
 
 
-_DEFAULT_PROFILE = {
-    "learning_speed": 1.0,
-    "retention_rate": 0.8,
-    "success_rate": 0.5,
-    "semantic_sensitivity": 1.0,
-}
+LEARNER_PROFILE_EMA = 0.1
+LEARNER_PROFILE_SPEED_MIN = 0.3
+LEARNER_PROFILE_SPEED_MAX = 2.0
+LEARNER_PROFILE_SPEED_BASE_MS = 60000
+LEARNER_PROFILE_SPEED_FLOOR_MS = 500
+LEARNER_PROFILE_SENSITIVITY_DECAY = 0.9
+LEARNER_PROFILE_SENSITIVITY_BOOST = 1.1
+LEARNER_PROFILE_SENSITIVITY_MIN = 0.4
+LEARNER_PROFILE_SENSITIVITY_MAX = 1.6
 
 
 class DueConceptEntry(TypedDict):
@@ -44,9 +54,9 @@ class LectorSchedulerService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._settings = get_settings()
-        self._unlock_threshold = float(getattr(self._settings, "ADAPTIVE_UNLOCK_MASTERY_THRESHOLD", 0.5))
-        self._confusion_lambda = float(getattr(self._settings, "ADAPTIVE_CONFUSION_LAMBDA", 0.3))
-        self._risk_recent_k = int(getattr(self._settings, "ADAPTIVE_RISK_RECENT_K", 3))
+        self._unlock_threshold = float(self._settings.ADAPTIVE_UNLOCK_MASTERY_THRESHOLD)
+        self._confusion_lambda = float(self._settings.ADAPTIVE_CONFUSION_LAMBDA)
+        self._risk_recent_k = int(self._settings.ADAPTIVE_RISK_RECENT_K)
 
     async def rank_frontier_entries(
         self,
@@ -101,7 +111,7 @@ class LectorSchedulerService:
 
     def _semantic_sensitivity(self, state: UserConceptState | None) -> float:
         """Return learner-specific sensitivity coefficient."""
-        baseline = float(_DEFAULT_PROFILE["semantic_sensitivity"])
+        baseline = float(_DEFAULT_LEARNER_PROFILE["semantic_sensitivity"])
         if state is None or not state.learner_profile:
             return baseline
         candidate = state.learner_profile.get("semantic_sensitivity", baseline)
@@ -308,23 +318,31 @@ class LectorSchedulerService:
             state = UserConceptState(user_id=user_id, concept_id=concept_id)
             self._session.add(state)
 
-        profile = dict(_DEFAULT_PROFILE)
+        profile = dict(_DEFAULT_LEARNER_PROFILE)
         if state.learner_profile:
             profile.update(state.learner_profile)
 
-        ema = 0.1
+        ema = LEARNER_PROFILE_EMA
         success = 1.0 if rating >= 3 else 0.0
         profile["success_rate"] = (1 - ema) * profile["success_rate"] + ema * success
         profile["retention_rate"] = (1 - ema) * profile["retention_rate"] + ema * (state.s_mastery)
 
         if duration_ms is not None and duration_ms > 0:
-            speed = max(0.3, min(2.0, 60000 / max(duration_ms, 500)))
+            speed = max(
+                LEARNER_PROFILE_SPEED_MIN,
+                min(
+                    LEARNER_PROFILE_SPEED_MAX,
+                    LEARNER_PROFILE_SPEED_BASE_MS / max(duration_ms, LEARNER_PROFILE_SPEED_FLOOR_MS),
+                ),
+            )
             profile["learning_speed"] = (1 - ema) * profile["learning_speed"] + ema * speed
 
-        sensitivity_adjustment = 0.9 if rating <= 2 else 1.1
+        sensitivity_adjustment = (
+            LEARNER_PROFILE_SENSITIVITY_DECAY if rating <= 2 else LEARNER_PROFILE_SENSITIVITY_BOOST
+        )
         profile["semantic_sensitivity"] = max(
-            0.4,
-            min(1.6, profile["semantic_sensitivity"] * sensitivity_adjustment),
+            LEARNER_PROFILE_SENSITIVITY_MIN,
+            min(LEARNER_PROFILE_SENSITIVITY_MAX, profile["semantic_sensitivity"] * sensitivity_adjustment),
         )
 
         state.learner_profile = profile

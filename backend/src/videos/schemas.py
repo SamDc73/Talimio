@@ -20,7 +20,6 @@ class VideoBase(BaseModel):
     thumbnail_url: str | None = Field(None, max_length=500, alias="thumbnailUrl")
     description: str | None = None
     tags: list[str] | None = Field(default_factory=list)
-    transcript: str | None = None
     published_at: datetime | None = Field(None, alias="publishedAt")
 
 
@@ -166,6 +165,5 @@ class RAGStatusResponse(BaseModel):
     rag_status: str  # pending, processing, completed, failed
     rag_processed_at: str | None = None
     message: str
-
 
 
