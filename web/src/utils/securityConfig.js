@@ -3,6 +3,8 @@
  * Essential security settings for 100k+ user scale
  */
 
+import { api } from "@/lib/apiClient"
+
 export const SECURITY_CONFIG = {
 	// Token Management
 	TOKEN_EXPIRY: 15 * 60 * 1000, // 15 minutes
@@ -120,11 +122,7 @@ class SecurityMonitor {
 	// Send to security monitoring service
 	async sendToSecurityService(violation) {
 		try {
-			await fetch("/api/v1/security/violation", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(violation),
-			})
+			await api.post("/security/violation", violation, { keepalive: true })
 		} catch (_error) {}
 	}
 

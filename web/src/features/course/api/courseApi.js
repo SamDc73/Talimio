@@ -7,6 +7,7 @@
  * Courses → Modules → Lessons
  */
 
+import { api } from "@/lib/apiClient"
 import { useApi } from "../../../hooks/use-api"
 
 /**
@@ -68,17 +69,7 @@ export function useCourseService(courseId = null) {
 		 * @returns {Promise<Object>} The created course data
 		 */
 		async createCourseFromDocument(formData) {
-			const response = await fetch("/api/v1/courses/upload", {
-				method: "POST",
-				body: formData,
-			})
-
-			if (!response.ok) {
-				const errorData = await response.json()
-				throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
-			}
-
-			return await response.json()
+			return api.post("/courses/upload", formData)
 		},
 
 		/**
@@ -90,17 +81,7 @@ export function useCourseService(courseId = null) {
 			const formData = new FormData()
 			formData.append("file", file)
 
-			const response = await fetch("/api/v1/courses/extract-metadata", {
-				method: "POST",
-				body: formData,
-			})
-
-			if (!response.ok) {
-				const errorData = await response.json()
-				throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
-			}
-
-			return await response.json()
+			return api.post("/courses/extract-metadata", formData)
 		},
 
 		/**

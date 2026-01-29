@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { archiveContent, unarchiveContent } from "@/api/contentApi"
-import { deleteApi } from "@/api/deleteApi"
+import { archiveContent, deleteContent, unarchiveContent } from "@/api/contentApi"
 import { api } from "@/lib/apiClient"
 
 /**
@@ -90,7 +89,7 @@ export function useDeleteContent() {
 
 	return useMutation({
 		mutationFn: async ({ itemId, itemType }) => {
-			await deleteApi.deleteItem(itemType, itemId)
+			await deleteContent(itemType, itemId)
 			return { itemId, itemType }
 		},
 
@@ -124,27 +123,6 @@ export function useDeleteContent() {
 					queryClient.setQueryData(queryKey, data)
 				})
 			}
-		},
-
-		// Success notification
-		onSuccess: (data) => {
-			const _getTypeLabel = (type) => {
-				if (type === "video") return "Video"
-				if (type === "book") return "Book"
-				if (type === "course") return "Course"
-				return "Item"
-			}
-
-			// Emit event for other components
-			window.dispatchEvent(
-				new CustomEvent("contentDeleted", {
-					detail: { itemId: data.itemId, itemType: data.itemType },
-				})
-			)
-
-			// Invalidate queries to ensure consistency with backend
-			// Backend caching has been fixed so this is now safe
-			queryClient.invalidateQueries({ queryKey: contentKeys.all })
 		},
 
 		// Clean up on settled regardless of success/failure

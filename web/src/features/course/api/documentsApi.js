@@ -9,6 +9,7 @@
  */
 
 import { useMemo } from "react"
+import { api } from "@/lib/apiClient"
 import { useApi } from "../../../hooks/use-api"
 
 /**
@@ -17,9 +18,6 @@ import { useApi } from "../../../hooks/use-api"
  */
 export function useDocumentsService(courseId = null) {
 	// Document endpoints
-	const uploadDocument = useApi("/courses/{courseId}/documents", {
-		method: "POST",
-	})
 	const getDocuments = useApi("/courses/{courseId}/documents")
 	const searchDocuments = useApi("/courses/{courseId}/search", {
 		method: "POST",
@@ -47,18 +45,7 @@ export function useDocumentsService(courseId = null) {
 				formData.append("document_type", "pdf")
 				formData.append("title", title)
 
-				// Use fetch directly for better upload progress tracking
-				const response = await fetch(`/api/v1/courses/${courseId}/documents`, {
-					method: "POST",
-					body: formData,
-				})
-
-				if (!response.ok) {
-					const errorData = await response.json()
-					throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
-				}
-
-				return await response.json()
+				return api.post(`/courses/${courseId}/documents`, formData)
 			},
 
 			/**
@@ -74,17 +61,7 @@ export function useDocumentsService(courseId = null) {
 				formData.append("document_type", "url")
 				formData.append("title", title)
 
-				const response = await fetch(`/api/v1/courses/${courseId}/documents`, {
-					method: "POST",
-					body: formData,
-				})
-
-				if (!response.ok) {
-					const errorData = await response.json()
-					throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
-				}
-
-				return await response.json()
+				return api.post(`/courses/${courseId}/documents`, formData)
 			},
 
 			/**
@@ -305,26 +282,14 @@ export function useDocumentsService(courseId = null) {
 			 * Check if any operation is loading
 			 */
 			get isLoading() {
-				return (
-					uploadDocument.isLoading ||
-					getDocuments.isLoading ||
-					searchDocuments.isLoading ||
-					getDocument.isLoading ||
-					deleteDocument.isLoading
-				)
+				return getDocuments.isLoading || searchDocuments.isLoading || getDocument.isLoading || deleteDocument.isLoading
 			},
 
 			/**
 			 * Get any error that occurred
 			 */
 			get error() {
-				return (
-					uploadDocument.error ||
-					getDocuments.error ||
-					searchDocuments.error ||
-					getDocument.error ||
-					deleteDocument.error
-				)
+				return getDocuments.error || searchDocuments.error || getDocument.error || deleteDocument.error
 			},
 		}),
 		[
@@ -341,8 +306,6 @@ export function useDocumentsService(courseId = null) {
 			searchDocuments.error,
 			searchDocuments.execute,
 			searchDocuments.isLoading,
-			uploadDocument.error,
-			uploadDocument.isLoading,
 		] // Only courseId affects the service methods
 	)
 }

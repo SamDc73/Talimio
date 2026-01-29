@@ -6,6 +6,7 @@ import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
 import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
+import { api } from "@/lib/apiClient"
 
 export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 	const [selectedFile, setSelectedFile] = useState(null)
@@ -92,22 +93,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 			formData.append("author", bookAuthor)
 			formData.append("tags", JSON.stringify([]))
 
-			const response = await fetch("/api/v1/books", {
-				method: "POST",
-				body: formData,
-				credentials: "include", // Include auth cookies
-			})
-
-			if (!response.ok) {
-				const errorData = await response.json()
-				if (response.status === 409) {
-				} else {
-					throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
-				}
-				return
-			}
-
-			const newBook = await response.json()
+			const newBook = await api.post("/books", formData)
 
 			// Reset and close
 			setSelectedFile(null)
