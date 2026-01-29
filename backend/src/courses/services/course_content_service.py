@@ -6,7 +6,7 @@ import contextlib
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -46,7 +46,6 @@ class AdaptiveConceptBuildResult:
     """Container for adaptive concept seeding results."""
 
     concepts_by_index: list[Concept]
-    deferred_concept_ids: list[UUID] = field(default_factory=list)
 
 
 class CourseContentService:
@@ -82,7 +81,6 @@ class CourseContentService:
         session_data = dict(data)
         prompt = session_data.pop("prompt", None)
         is_adaptive = bool(session_data.get("adaptive_enabled"))
-        defer_embeddings = background_tasks is not None
 
         adaptive_structure = await self._build_adaptive_structure(
             is_adaptive=is_adaptive,
@@ -100,13 +98,12 @@ class CourseContentService:
         session.add(course)
 
         await session.flush()
-        normalized_modules, deferred_embedding_ids = await self._prepare_course_modules(
+        normalized_modules = await self._prepare_course_modules(
             session=session,
             course=course,
             adaptive_structure=adaptive_structure,
             modules_payload=modules_payload,
             lessons_payload=lessons_payload,
-            defer_embeddings=defer_embeddings,
         )
         inserted_lessons = await self._insert_lessons(session, course.id, normalized_modules)
         await session.commit()
@@ -117,7 +114,6 @@ class CourseContentService:
             session=session,
             course=course,
             user_id=user_id,
-            deferred_embedding_ids=deferred_embedding_ids,
             background_tasks=background_tasks,
         )
 
@@ -173,26 +169,22 @@ class CourseContentService:
         adaptive_structure: AdaptiveCourseStructure | None,
         modules_payload: list[Any],
         lessons_payload: list[Any],
-        defer_embeddings: bool,
-    ) -> tuple[list[dict[str, Any]], list[UUID]]:
-        """Return normalized modules and any deferred concept ids."""
+    ) -> list[dict[str, Any]]:
+        """Return normalized modules."""
         if adaptive_structure is None:
-            normalized = self._normalize_modules_payload(modules_payload, lessons_payload)
-            return (normalized, [])
+            return self._normalize_modules_payload(modules_payload, lessons_payload)
 
         adaptive_result = await self._create_adaptive_concepts(
             session=session,
             course=course,
             plan=adaptive_structure,
-            defer_embeddings=defer_embeddings,
         )
         adaptive_modules = self._build_adaptive_modules_payload(
             course=course,
             plan=adaptive_structure,
             concepts_by_index=adaptive_result.concepts_by_index,
         )
-        normalized_modules = self._normalize_modules_payload(adaptive_modules, [])
-        return (normalized_modules, adaptive_result.deferred_concept_ids)
+        return self._normalize_modules_payload(adaptive_modules, [])
 
     async def _handle_post_creation(
         self,
@@ -200,51 +192,15 @@ class CourseContentService:
         session: AsyncSession,
         course: Course,
         user_id: UUID,
-        deferred_embedding_ids: list[UUID],
         background_tasks: BackgroundTasks | None,
     ) -> None:
         """Kick off background work for embeddings and tagging."""
-        # Determine if any concepts still lack embeddings (e.g., inline generation failed)
-        missing_emb_res = await session.execute(
-            text(
-                """
-                SELECT COUNT(*)
-                FROM concepts c
-                JOIN course_concepts cc ON cc.concept_id = c.id
-                WHERE cc.course_id = :cid AND c.embedding IS NULL
-                """
-            ),
-            {"cid": str(course.id)},
-        )
-        missing_embeddings = int(missing_emb_res.scalar() or 0)
-
-        if deferred_embedding_ids or missing_embeddings > 0:
-            if background_tasks is not None:
-                self._schedule_background_embeddings(background_tasks, course.id)
-            else:
-                graph_service = ConceptGraphService(session)
-                updated = await graph_service.backfill_embeddings_for_course(course.id)
-                # Compute embedding-based confusors immediately when running inline
-                try:
-                    _ = await graph_service.recompute_embedding_confusors_for_course(course.id)
-                except Exception as exc:
-                    logger.warning(
-                        "Inline confusor recompute failed for course %s after backfill (%s updates): %s",
-                        course.id,
-                        updated,
-                        exc,
-                    )
-                await session.commit()
-        # No deferred embeddings and no missing vectors: compute confusors directly
-        elif background_tasks is not None:
-            self._schedule_background_confusors(background_tasks, course.id)
-        else:
-            try:
-                graph_service = ConceptGraphService(session)
-                _ = await graph_service.recompute_embedding_confusors_for_course(course.id)
-                await session.commit()
-            except Exception as exc:
-                logger.warning("Confusor recompute failed for course %s: %s", course.id, exc)
+        if course.adaptive_enabled:
+            await self._handle_adaptive_embeddings(
+                session=session,
+                course_id=course.id,
+                background_tasks=background_tasks,
+            )
 
         try:
             if background_tasks is not None:
@@ -262,6 +218,33 @@ class CourseContentService:
         """Enqueue background embedding generation so the response can return immediately."""
         background_tasks.add_task(self._run_background_embeddings, course_id)
 
+    async def _handle_adaptive_embeddings(
+        self,
+        *,
+        session: AsyncSession,
+        course_id: UUID,
+        background_tasks: BackgroundTasks | None,
+    ) -> None:
+        if background_tasks is not None:
+            self._schedule_background_embeddings(background_tasks, course_id)
+            return
+        await self._run_embedding_pipeline(session, course_id)
+
+    async def _run_embedding_pipeline(
+        self,
+        session: AsyncSession,
+        course_id: UUID,
+    ) -> tuple[int, int]:
+        graph_service = ConceptGraphService(session)
+        updated = await graph_service.backfill_embeddings_for_course(course_id)
+        try:
+            pairs = await graph_service.recompute_embedding_confusors_for_course(course_id)
+        except Exception as conf_exc:
+            logger.exception("Confusor recompute failed for course %s: %s", course_id, conf_exc)
+            pairs = 0
+        await session.commit()
+        return updated, pairs
+
     async def _run_background_embeddings(self, course_id: UUID) -> None:
         """Generate embeddings for any concepts that were deferred and compute confusors.
 
@@ -270,15 +253,7 @@ class CourseContentService:
         """
         try:
             async with async_session_maker() as embedding_session:
-                graph_service = ConceptGraphService(embedding_session)
-                updated = await graph_service.backfill_embeddings_for_course(course_id)
-                # Immediately compute embedding-based confusors for the course
-                try:
-                    pairs = await graph_service.recompute_embedding_confusors_for_course(course_id)
-                except Exception as conf_exc:  # best-effort: log and continue
-                    logger.exception("Confusor recompute failed for course %s: %s", course_id, conf_exc)
-                    pairs = 0
-                await embedding_session.commit()
+                updated, pairs = await self._run_embedding_pipeline(embedding_session, course_id)
                 logger.info(
                     "Background embedding task backfilled %s concepts and computed %s confusor pairs for course %s",
                     updated,
@@ -287,33 +262,6 @@ class CourseContentService:
                 )
         except Exception as exc:  # pragma: no cover - best-effort background task
             logger.exception("Background embedding task failed for course %s: %s", course_id, exc)
-
-    def _schedule_background_confusors(
-        self,
-        background_tasks: BackgroundTasks,
-        course_id: UUID,
-    ) -> None:
-        """Enqueue confusor recomputation when embeddings already exist."""
-        background_tasks.add_task(self._run_background_confusors, course_id)
-
-    async def _run_background_confusors(self, course_id: UUID) -> None:
-        """Compute embedding-based confusors without re-embedding concepts."""
-        try:
-            async with async_session_maker() as conf_session:
-                graph_service = ConceptGraphService(conf_session)
-                try:
-                    pairs = await graph_service.recompute_embedding_confusors_for_course(course_id)
-                except Exception as conf_exc:  # best-effort: log and continue
-                    logger.exception("Confusor recompute failed for course %s: %s", course_id, conf_exc)
-                    pairs = 0
-                await conf_session.commit()
-                logger.info(
-                    "Background confusor task computed %s confusor pairs for course %s",
-                    pairs,
-                    course_id,
-                )
-        except Exception as exc:  # pragma: no cover - best-effort background task
-            logger.exception("Background confusor task failed for course %s: %s", course_id, exc)
 
     def _schedule_background_tagging(
         self,
@@ -554,7 +502,6 @@ class CourseContentService:
         session: AsyncSession,
         course: Course,
         plan: AdaptiveCourseStructure,
-        defer_embeddings: bool,
     ) -> AdaptiveConceptBuildResult:
         """Persist adaptive concept metadata derived from a precomputed plan."""
         graph_service = ConceptGraphService(session)
@@ -564,7 +511,6 @@ class CourseContentService:
         concepts_by_index: list[Concept] = []
         state_rows: list[dict[str, Any]] = []
         course_concept_rows: list[dict[str, Any]] = []
-        deferred_concept_ids: list[UUID] = []
 
         for index, node in enumerate(concept_graph.nodes):
             layer_index = layer_lookup.get(index)
@@ -577,11 +523,9 @@ class CourseContentService:
                 description=description,
                 slug=node.slug,
                 difficulty=difficulty,
-                generate_embedding=not defer_embeddings,
+                generate_embedding=False,
             )
             concepts_by_index.append(concept)
-            if defer_embeddings:
-                deferred_concept_ids.append(concept.id)
             course_concept_rows.append(
                 {
                     "course_id": course.id,
@@ -643,7 +587,6 @@ class CourseContentService:
 
         return AdaptiveConceptBuildResult(
             concepts_by_index=concepts_by_index,
-            deferred_concept_ids=deferred_concept_ids,
         )
     async def _insert_course_concepts(
         self,
