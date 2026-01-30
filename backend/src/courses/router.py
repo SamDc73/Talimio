@@ -105,7 +105,6 @@ async def generate_self_assessment_questions(
             topic=topic,
             level=level,
             user_id=auth.user_id,
-            session=auth.session,
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

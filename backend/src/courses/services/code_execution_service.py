@@ -533,7 +533,6 @@ class CodeExecutionService:
             workspace_root=workspace_root,
             workspace_files=list(workspace_files) if workspace_files else None,
             workspace_id=workspace_identifier,
-            session=self._session,
         )
 
         # Cache the plan for future use

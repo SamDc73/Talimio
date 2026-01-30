@@ -38,13 +38,11 @@ class AIService:
         *,
         user_id: UUID,
         user_prompt: str,
-        session: AsyncSession | None = None,
     ) -> CourseStructure:
         """Generate a course outline."""
         return await self._course_llm.generate_course_structure(
             user_prompt=user_prompt,
             user_id=str(user_id),
-            session=session,
         )
 
     async def generate_adaptive_course_structure(
@@ -52,13 +50,11 @@ class AIService:
         *,
         user_id: UUID,
         user_prompt: str,
-        session: AsyncSession | None = None,
     ) -> AdaptiveCourseStructure:
         """Generate the unified adaptive course payload."""
         return await self._course_llm.generate_adaptive_course_structure(
             user_prompt=user_prompt,
             user_id=str(user_id),
-            session=session,
         )
 
     async def generate_self_assessment(
@@ -67,7 +63,6 @@ class AIService:
         topic: str,
         level: str | None,
         user_id: UUID,
-        session: AsyncSession | None = None,
     ) -> SelfAssessmentQuiz:
         """Generate optional self-assessment questions for the given topic."""
         try:
@@ -75,7 +70,6 @@ class AIService:
                 topic=topic,
                 level=level,
                 user_id=str(user_id),
-                session=session,
             )
         except ValueError:
             raise
@@ -90,7 +84,6 @@ class AIService:
         message: str,
         context: dict | None = None,
         history: list[dict] | None = None,
-        session: AsyncSession | None = None,
         **_kwargs: Any) -> str:
         """General assistant chat with optional context."""
         # Build messages
@@ -112,7 +105,7 @@ class AIService:
         messages.append({"role": "user", "content": message})
 
         # Use completion with user context
-        response = await self._assistant_llm.get_completion(messages=messages, user_id=str(user_id), session=session)
+        response = await self._assistant_llm.get_completion(messages=messages, user_id=str(user_id))
 
         return str(response)
 
@@ -130,7 +123,6 @@ class AIService:
         workspace_root: str | None = None,
         workspace_files: list[str] | None = None,
         workspace_id: str | None = None,
-        session: AsyncSession | None = None,
     ) -> ExecutionPlan:
         """Generate a sandbox execution plan for code execution."""
         return await self._assistant_llm.generate_execution_plan(
@@ -144,7 +136,6 @@ class AIService:
             workspace_root=workspace_root,
             workspace_files=workspace_files,
             workspace_id=workspace_id,
-            session=session,
         )
 
     # RAG helpers

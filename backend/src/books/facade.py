@@ -156,6 +156,10 @@ class BooksFacade:
                 )
                 return []
 
+            # Close the read transaction before making slow external calls (LLM tagging).
+            # This avoids holding an "idle in transaction" connection open via the session pooler.
+            await self._session.rollback()
+
             # Generate tags via TaggingService
             tagging_service = TaggingService(self._session)
             tags = await tagging_service.tag_content(
