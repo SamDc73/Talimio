@@ -9,15 +9,20 @@ Key optimizations:
 """
 
 import logging
-import os
+from contextlib import suppress
 from typing import Any
 from uuid import UUID
 
+from src.ai.mem0_telemetry_disable_patch import apply_mem0_telemetry_disable_patch
 
-os.environ["MEM0_TELEMETRY"] = "false"
+
+apply_mem0_telemetry_disable_patch()
 
 from mem0 import AsyncMemory
 from mem0.configs.base import MemoryConfig
+
+
+apply_mem0_telemetry_disable_patch()
 
 from src.ai.mem0_litellm_embedder_patch import apply_mem0_litellm_embedder_patch
 from src.config import env
@@ -249,9 +254,35 @@ async def cleanup_memory_client() -> None:
     """Cleanup the memory client on shutdown."""
     global _memory_client  # noqa: PLW0603
 
-    if _memory_client is not None:
-        _memory_client = None
-        logger.info("Memory client reference cleared")
+    client = _memory_client
+    if client is None:
+        return
+
+    _memory_client = None
+
+    for store_attr in ("vector_store", "_telemetry_vector_store"):
+        store = getattr(client, store_attr, None)
+        pool = getattr(store, "connection_pool", None) if store is not None else None
+        if pool is None:
+            continue
+
+        close_pool = getattr(pool, "close", None)
+        close_all = getattr(pool, "closeall", None)
+        with suppress(Exception):
+            if callable(close_pool):
+                close_pool()
+            elif callable(close_all):
+                close_all()
+
+    with suppress(Exception):
+        from mem0.memory import telemetry as mem0_telemetry
+
+        mem0_client = getattr(mem0_telemetry, "client_telemetry", None)
+        close_client = getattr(mem0_client, "close", None) if mem0_client is not None else None
+        if callable(close_client):
+            close_client()
+
+    logger.info("Memory client cleaned up")
 
 
 async def warm_memory_client() -> None:
