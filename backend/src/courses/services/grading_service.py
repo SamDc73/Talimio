@@ -144,7 +144,6 @@ class GradingService:
                 temperature=0,
                 user_id=user_id,
                 model=model,
-                session=self._session,
             )
         except Exception:
             self._logger.exception("Grading coach LLM feedback failed.")

@@ -63,7 +63,6 @@ async def chat_with_assistant(
             messages=messages,
             user_id=user_id,
             model=request.model,
-            session=session,
         )
 
         text_response = response_payload if isinstance(response_payload, str) else str(response_payload or "")

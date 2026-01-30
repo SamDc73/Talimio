@@ -269,17 +269,22 @@ class VideoService:
             # If we still can't find it, something else is wrong
             raise
 
+        video_id = video.id
+
         # Trigger automatic tagging
         try:
             from src.tagging.processors.video_processor import process_video_for_tagging
 
             tagging_service = TaggingService(db)
-            content_data = await process_video_for_tagging(video.id, db)
+            content_data = await process_video_for_tagging(video_id, db)
             if not content_data:
-                logger.warning("Skipping tagging for missing video %s", video.id)
+                logger.warning("Skipping tagging for missing video %s", video_id)
             else:
+                # Close the read transaction before making slow external calls (LLM tagging).
+                # This avoids holding an "idle in transaction" connection open via the session pooler.
+                await db.rollback()
                 tags = await tagging_service.tag_content(
-                    content_id=video.id,
+                    content_id=video_id,
                     content_type="video",
                     user_id=user_id,
                     title=content_data.get("title", ""),
@@ -293,20 +298,20 @@ class VideoService:
                     video.tags = json.dumps(all_tags)
                     await db.commit()
 
-                logger.info("Successfully tagged video %s with tags: %s", video.id, tags)
+                logger.info("Successfully tagged video %s with tags: %s", video_id, tags)
 
         except Exception as e:
             # Don't fail video creation if tagging fails
-            logger.exception("Failed to tag video %s: %s", video.id, e)
+            logger.exception("Failed to tag video %s: %s", video_id, e)
 
         # Trigger background chapter extraction
-        background_tasks.add_task(_extract_chapters_background, str(video.id), user_id)
+        background_tasks.add_task(_extract_chapters_background, str(video_id), user_id)
 
         # Trigger background transcript segment processing
-        background_tasks.add_task(_process_transcript_to_jsonb, video.id)
+        background_tasks.add_task(_process_transcript_to_jsonb, video_id)
 
         # Reload to ensure server-default timestamps are loaded
-        refreshed_video = await db.get(Video, video.id, populate_existing=True)
+        refreshed_video = await db.get(Video, video_id, populate_existing=True)
         if refreshed_video is not None:
             video = refreshed_video
 

@@ -64,7 +64,6 @@ class TaggingService:
                 temperature=0,
                 user_id=None,
                 model=model,
-                session=self.session,
             )
         except Exception as exc:
             logger.exception("Error generating tags via LiteLLM: %s", exc)
