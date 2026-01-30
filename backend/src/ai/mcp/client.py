@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any
+from typing import Any, Protocol, cast
 
 from src.ai.mcp.config import MCPConfig, MCPServerConfig
 
@@ -16,24 +17,37 @@ class MCPClientDependencyError(RuntimeError):
     """Raised when the MCP Python SDK is unavailable."""
 
 
+class ClientSession(Protocol):
+    """Minimal protocol for MCP client sessions."""
+
+    async def call_tool(self, tool_name: str, *, arguments: dict[str, Any]) -> Any: ...
+
+    async def list_tools(self) -> Any: ...
+
+    async def initialize(self) -> Any: ...
+
+
 _ClientSession: type[ClientSession] | None
 _streamablehttp_client: Callable[..., Any] | None
 _import_error: ModuleNotFoundError | None
 
-if TYPE_CHECKING:
-    from mcp import ClientSession
-
 try:
-    from mcp import ClientSession as _ImportedClientSession
-    from mcp.client.streamable_http import streamablehttp_client as _imported_streamablehttp_client
+    mcp_module = importlib.import_module("mcp")
+    streamable_module = importlib.import_module("mcp.client.streamable_http")
 except ModuleNotFoundError as exc:
     _ClientSession = None
     _streamablehttp_client = None
     _import_error = exc
 else:
-    _ClientSession = _ImportedClientSession
-    _streamablehttp_client = _imported_streamablehttp_client
-    _import_error = None
+    try:
+        _ClientSession = cast("type[ClientSession]", mcp_module.ClientSession)
+        _streamablehttp_client = cast("Callable[..., Any]", streamable_module.streamablehttp_client)
+    except AttributeError as exc:
+        _ClientSession = None
+        _streamablehttp_client = None
+        _import_error = ModuleNotFoundError(str(exc))
+    else:
+        _import_error = None
 
 
 def _ensure_mcp_sdk() -> tuple[type[ClientSession], Callable[..., Any]]:

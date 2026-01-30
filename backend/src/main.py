@@ -17,7 +17,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from .ai.assistant.router import router as assistant_router
-from .ai.mcp.router import router as mcp_router  # type: ignore[import]
+from .ai.mcp.router import router as mcp_router
 from .ai.rag.router import router as rag_router
 from .auth.exceptions import (
     AuthenticationError,

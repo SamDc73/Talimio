@@ -87,7 +87,7 @@ class BookMetadataService:
 
             # Extract table of contents
             try:
-                toc = pdf_document.get_toc()  # type: ignore[attr-defined]
+                toc = pdf_document.get_toc()
                 if toc:
                     metadata.table_of_contents = self._process_toc(toc)
             except AttributeError:
@@ -132,7 +132,7 @@ class BookMetadataService:
 
             # Extract table of contents - this works for EPUB too!
             try:
-                toc = epub_document.get_toc()  # type: ignore[attr-defined]
+                toc = epub_document.get_toc()
                 if toc:
                     metadata.table_of_contents = self._process_toc(toc)
             except AttributeError:
