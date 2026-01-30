@@ -106,20 +106,7 @@ class CourseResponseBuilder:
             grouped[key].append(lesson)
 
         modules: list[ModuleResponse] = []
-        sorted_groups = sorted(
-            grouped.items(),
-            key=lambda kv: (
-                kv[0][1] is None,
-                kv[0][1] if kv[0][1] is not None else 1_000_000,
-                (kv[0][0] or "").lower(),
-            ),
-        )
-
-        for (module_name, _), module_lessons in sorted_groups:
-            ordered_lessons = sorted(
-                module_lessons,
-                key=lambda lesson_model: (lesson_model.order, lesson_model.title or ""),
-            )
+        for (module_name, _), ordered_lessons in grouped.items():
             module_id = compute_module_id(course.id, module_name)
             title = module_name or "Lessons"
 

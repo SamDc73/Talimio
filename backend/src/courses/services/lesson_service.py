@@ -27,6 +27,180 @@ class LessonService:
         self.session = session
         self.user_id = user_id
 
+    async def _build_course_outline_context(
+        self,
+        *,
+        course_id: UUID,
+        lesson_id: UUID,
+    ) -> tuple[list[dict[str, Any]], int | None, int | None, str | None]:
+        outline_query = (
+            select(
+                Lesson.id,
+                Lesson.title,
+                Lesson.description,
+            )
+            .where(Lesson.course_id == course_id)
+            .order_by(*Lesson.course_order_by())
+        )
+
+        outline_result = await self.session.execute(outline_query)
+        rows = outline_result.all()
+
+        ordered_lessons: list[dict[str, Any]] = []
+        for row in rows:
+            row_lesson_id, title, description = row
+            ordered_lessons.append(
+                {
+                    "id": row_lesson_id,
+                    "title": title,
+                    "description": description,
+                }
+            )
+
+        lesson_total = len(ordered_lessons)
+        current_index = next((idx for idx, item in enumerate(ordered_lessons) if item.get("id") == lesson_id), None)
+        if not isinstance(current_index, int):
+            return [], None, lesson_total, None
+
+        lesson_position = current_index + 1
+
+        next_lesson_title: str | None = None
+        next_item = ordered_lessons[current_index + 1] if current_index + 1 < lesson_total else None
+        if isinstance(next_item, dict):
+            next_title = next_item.get("title")
+            if isinstance(next_title, str) and next_title.strip():
+                next_lesson_title = next_title.strip()
+
+        window_start = max(0, current_index - 2)
+        window_end = min(lesson_total, current_index + 5)
+        outline_window: list[dict[str, Any]] = []
+        for idx in range(window_start, window_end):
+            item = ordered_lessons[idx]
+            title_value = item.get("title") or ""
+            if not isinstance(title_value, str) or not title_value.strip():
+                continue
+            outline_window.append(
+                {
+                    "index": idx + 1,
+                    "title": title_value,
+                    "description": item.get("description") or "",
+                }
+            )
+
+        return outline_window, lesson_position, lesson_total, next_lesson_title
+
+    async def _build_rag_context(
+        self,
+        *,
+        auth: AuthContext,
+        course_id: UUID,
+        title: str,
+        description: str,
+    ) -> str:
+        search_query = f"{title} {description}".strip()
+        if not search_query:
+            return ""
+
+        try:
+            from src.ai.rag.service import RAGService
+
+            rag_service = RAGService()
+            search_results = await rag_service.search_documents(auth=auth, course_id=course_id, query=search_query, top_k=5)
+            if not search_results:
+                return ""
+
+            context_parts = ["## Course Context"]
+            for i, result in enumerate(search_results[:5], 1):
+                context_parts.append(f"### Context {i}")
+                context_parts.append(result.content)
+                context_parts.append("")
+
+            return "\n".join(context_parts).strip()
+        except Exception:
+            logger.exception(
+                "Failed to get RAG context for course",
+                extra={"user_id": str(self.user_id), "course_id": str(course_id)},
+            )
+            return ""
+
+    def _build_outline_window_text(self, outline_window: list[dict[str, Any]]) -> str:
+        if not outline_window:
+            return ""
+
+        outline_lines: list[str] = []
+        for item in outline_window:
+            index_value = item.get("index")
+            title_value = item.get("title")
+            if not isinstance(title_value, str) or not title_value:
+                continue
+            prefix = f"{index_value}. " if isinstance(index_value, int) else ""
+            outline_lines.append(f"{prefix}{title_value}")
+
+            item_desc = item.get("description")
+            if isinstance(item_desc, str) and item_desc:
+                outline_lines.append(f"Description: {item_desc}")
+            outline_lines.append("")
+
+        return "\n".join(outline_lines).strip()
+
+    async def _prepare_lesson_context(
+        self,
+        *,
+        lesson: Lesson,
+        course: Course,
+        auth: AuthContext,
+    ) -> str:
+        outline_window: list[dict[str, Any]] = []
+        lesson_position: int | None = None
+        lesson_total: int | None = None
+        next_lesson_title: str | None = None
+        try:
+            outline_window, lesson_position, lesson_total, next_lesson_title = await self._build_course_outline_context(
+                course_id=course.id,
+                lesson_id=lesson.id,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to build course outline context",
+                extra={"user_id": str(self.user_id), "course_id": str(course.id), "lesson_id": str(lesson.id)},
+            )
+
+        context_sections: list[str] = []
+
+        course_lines: list[str] = [f"Course: {course.title}", "Course Description:", course.description]
+        context_sections.append("## Course Information\n" + "\n".join(course_lines))
+
+        lesson_lines: list[str] = []
+        if lesson.module_name:
+            lesson_lines.append(f"Module: {lesson.module_name}")
+        if isinstance(lesson_position, int) and isinstance(lesson_total, int) and lesson_total > 0:
+            lesson_lines.append(f"Current lesson: {lesson_position}/{lesson_total}")
+        lesson_lines.append(f"Title: {lesson.title}")
+        if lesson.description:
+            lesson_lines.append("Description:")
+            lesson_lines.append(lesson.description)
+        context_sections.append("## Lesson Focus\n" + "\n".join(lesson_lines))
+
+        if next_lesson_title:
+            context_sections.append("## Next Lesson\n" + f"Next: {next_lesson_title}")
+
+        outline_text = self._build_outline_window_text(outline_window)
+        if outline_text:
+            context_sections.append("## Course Outline (Near Term)\n" + outline_text)
+
+        rag_context = await self._build_rag_context(
+            auth=auth,
+            course_id=course.id,
+            title=lesson.title,
+            description=lesson.description or "",
+        )
+        return "\n\n".join([*context_sections, rag_context]).strip()
+
+    async def _generate_lesson_body(self, *, lesson_context: str) -> str:
+        llm_client = LLMClient(agent_id=AGENT_ID_LESSON_WRITER)
+        lesson_content = await llm_client.generate_lesson_content(lesson_context, user_id=self.user_id)
+        return lesson_content.body
+
     async def get_lesson(
         self,
         course_id: UUID,
@@ -72,7 +246,7 @@ class LessonService:
         lesson, course = row
 
         if force_refresh or lesson.content == "":
-            lesson = await self._generate_content_secure(lesson, course, force=force_refresh)
+            lesson = await self._ensure_lesson_content(lesson, course, force_refresh=force_refresh)
 
         concept_id_value = getattr(cast("Any", lesson), "concept_id", None)
 
@@ -88,18 +262,10 @@ class LessonService:
             updated_at=lesson.updated_at,
         )
 
-    async def _generate_content_secure(self, lesson: Lesson, course: Course, force: bool = False) -> Lesson:
+    async def _ensure_lesson_content(self, lesson: Lesson, course: Course, force_refresh: bool = False) -> Lesson:
         """Generate content for a lesson on demand."""
-        if not force and lesson.content != "":
+        if not force_refresh and lesson.content != "":
             return lesson
-
-        context = {
-            "title": lesson.title,
-            "description": lesson.description or "",
-            "course_id": str(course.id),
-            "course_title": course.title,
-            "user_id": self.user_id,
-        }
 
         try:
             logger.info(
@@ -112,12 +278,11 @@ class LessonService:
             )
 
             auth = AuthContext(self.user_id, self.session)
-            llm_client = LLMClient(agent_id=AGENT_ID_LESSON_WRITER)
-            lesson_content = await llm_client.create_lesson(context, auth)
-            content = lesson_content.body
+            lesson_context = await self._prepare_lesson_context(lesson=lesson, course=course, auth=auth)
+            content = await self._generate_lesson_body(lesson_context=lesson_context)
 
             conditions = [Lesson.id == lesson.id]
-            if not force:
+            if not force_refresh:
                 conditions.append(Lesson.content == "")
 
             update_stmt = update(Lesson).where(*conditions).values(content=content, updated_at=datetime.now(UTC))

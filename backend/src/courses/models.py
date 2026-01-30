@@ -20,6 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as SA_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -108,6 +109,17 @@ class Lesson(Base):
     )
 
     course: Mapped[Course] = relationship("Course", back_populates="lessons")
+
+    @classmethod
+    def course_order_by(cls) -> tuple[Any, ...]:
+        """Return stable ordering for lessons within a course."""
+        return (
+            cls.module_order.is_(None),
+            cls.module_order,
+            func.lower(func.coalesce(cls.module_name, "")),
+            cls.order,
+            cls.title,
+        )
 
 
 class CourseDocument(Base):
