@@ -133,6 +133,13 @@ FAST_PATH_INSTALLERS = {
         "apt-get update",
         ("DEBIAN_FRONTEND=noninteractive DEBCONF_NOWARNINGS=yes apt-get install -y --no-install-recommends golang-go"),
     ],
+    "rust": [
+        "apt-get update",
+        (
+            "DEBIAN_FRONTEND=noninteractive DEBCONF_NOWARNINGS=yes "
+            "apt-get install -y --no-install-recommends rustc cargo"
+        ),
+    ],
 }
 
 
@@ -249,11 +256,13 @@ class CodeExecutionService:
 
         is_workspace_mode = workspace_context is not None
 
-        # Try fast-path first (instant for common languages)
         norm_lang = language.lower().strip()
+        if norm_lang in FAST_PATH_INSTALLERS:
+            await self._ensure_runtime(sbx, norm_lang)
+
+        # Try fast-path first (instant for common languages)
         if not is_workspace_mode and norm_lang in FAST_PATH_TEMPLATES:
             logging.info("Fast-path provisioning check lang=%s key=%s", norm_lang, key)
-            await self._ensure_runtime(sbx, norm_lang)
             try:
                 result = await self._fast_path_execute(sbx, norm_lang, source_code, stdin)
                 if result.status != "error":
@@ -278,6 +287,7 @@ class CodeExecutionService:
                     source_code=source_code,
                     language=language,
                     lesson_id=lesson_id,
+                    is_workspace_mode=is_workspace_mode,
                 )
                 if result.status != "error":
                     return result
@@ -296,6 +306,7 @@ class CodeExecutionService:
             workspace_root=workspace_context["workspace_dir"] if workspace_context else None,
             workspace_files=workspace_context["manifest"] if workspace_context else None,
             workspace_identifier=workspace_context["identifier"] if workspace_context else workspace_id,
+            is_workspace_mode=is_workspace_mode,
         )
 
         # Detect sandbox context restarts and reset the session to keep things healthy
@@ -463,8 +474,9 @@ class CodeExecutionService:
         except Exception:
             logging.debug("Runtime sentinel missing for %s, proceeding with provisioning", language, exc_info=True)
 
+        runtime_binary = "rustc" if language == "rust" else language
         try:
-            result = await sbx.commands.run(f"command -v {language}", timeout=60)
+            result = await sbx.commands.run(f"command -v {shlex.quote(runtime_binary)}", timeout=60)
             if getattr(result, "exit_code", None) == 0:
                 await sbx.files.write(sentinel_path, "present")
                 return
@@ -520,6 +532,7 @@ class CodeExecutionService:
         workspace_root: str | None = None,
         workspace_files: Sequence[str] | None = None,
         workspace_identifier: str | None = None,
+        is_workspace_mode: bool = False,
     ) -> ExecutionResult:
         sandbox_state = await self._gather_sandbox_state(sbx)
         plan = await self._ai_service.generate_execution_plan(
@@ -546,6 +559,9 @@ class CodeExecutionService:
             source_code=source_code,
             language=language,
             lesson_id=lesson_id,
+            is_workspace_mode=is_workspace_mode,
+            workspace_entry_file=workspace_entry_file,
+            workspace_root=workspace_root,
         )
 
     async def _gather_sandbox_state(self, sbx: Any) -> dict[str, Any]:
@@ -565,51 +581,122 @@ class CodeExecutionService:
         source_code: str,
         language: str,
         lesson_id: str | None,
+        is_workspace_mode: bool = False,
+        workspace_entry_file: str | None = None,
+        workspace_root: str | None = None,
     ) -> ExecutionResult:
         stdout_chunks: list[str] = []
         stderr_chunks: list[str] = []
 
-        # Materialize files requested by the plan
-        if getattr(plan, "files", None):
-            for file_entry in plan.files:
-                try:
-                    await sbx.files.write(path=file_entry.path, data=file_entry.content)
-                except Exception:
-                    logging.exception("Failed to write file %s", file_entry.path)
-                    raise
-
-        # Execute setup, install, and run commands sequentially
         envs = dict(getattr(plan, "environment", {}) or {})
-        if getattr(plan, "actions", None):
-            source_code = await self._apply_actions(
-                sbx=sbx,
-                actions=list(plan.actions),
-                envs=envs,
-                stdout_chunks=stdout_chunks,
-                stderr_chunks=stderr_chunks,
-                source_code=source_code,
-                lesson_id=lesson_id,
-            )
+
+        await self._materialize_plan_files(sbx, plan)
+        source_code = await self._apply_plan_actions(
+            sbx=sbx,
+            plan=plan,
+            envs=envs,
+            stdout_chunks=stdout_chunks,
+            stderr_chunks=stderr_chunks,
+            source_code=source_code,
+            lesson_id=lesson_id,
+        )
 
         await self._run_command_list(sbx, plan.setup_commands, envs, stdout_chunks, stderr_chunks)
         await self._run_command_list(sbx, plan.install_commands, envs, stdout_chunks, stderr_chunks)
 
         if plan.run_commands:
             await self._run_command_list(sbx, plan.run_commands, envs, stdout_chunks, stderr_chunks)
-        else:
-            exec_result = await self._run_code_with_handling(sbx, source_code, language)
-            sandbox_result = self._extract_result(exec_result)
-            if sandbox_result.stdout:
-                stdout_chunks.append(sandbox_result.stdout)
-            if sandbox_result.stderr:
-                stderr_chunks.append(sandbox_result.stderr)
-            return sandbox_result
+            return self._finalize_command_run(stdout_chunks=stdout_chunks, stderr_chunks=stderr_chunks)
 
+        return await self._execute_when_no_run_commands(
+            sbx=sbx,
+            source_code=source_code,
+            language=language,
+            envs=envs,
+            stdout_chunks=stdout_chunks,
+            stderr_chunks=stderr_chunks,
+            is_workspace_mode=is_workspace_mode,
+            workspace_entry_file=workspace_entry_file,
+            workspace_root=workspace_root,
+        )
+
+    async def _materialize_plan_files(self, sbx: Any, plan: Any) -> None:
+        if not getattr(plan, "files", None):
+            return
+
+        for file_entry in plan.files:
+            try:
+                await sbx.files.write(path=file_entry.path, data=file_entry.content)
+            except Exception:
+                logging.exception("Failed to write file %s", file_entry.path)
+                raise
+
+    async def _apply_plan_actions(
+        self,
+        *,
+        sbx: Any,
+        plan: Any,
+        envs: dict[str, str],
+        stdout_chunks: list[str],
+        stderr_chunks: list[str],
+        source_code: str,
+        lesson_id: str | None,
+    ) -> str:
+        if not getattr(plan, "actions", None):
+            return source_code
+
+        return await self._apply_actions(
+            sbx=sbx,
+            actions=list(plan.actions),
+            envs=envs,
+            stdout_chunks=stdout_chunks,
+            stderr_chunks=stderr_chunks,
+            source_code=source_code,
+            lesson_id=lesson_id,
+        )
+
+    async def _execute_when_no_run_commands(
+        self,
+        *,
+        sbx: Any,
+        source_code: str,
+        language: str,
+        envs: dict[str, str],
+        stdout_chunks: list[str],
+        stderr_chunks: list[str],
+        is_workspace_mode: bool,
+        workspace_entry_file: str | None,
+        workspace_root: str | None,
+    ) -> ExecutionResult:
+        norm_lang = language.lower().strip()
+
+        workspace_default = (
+            self._default_workspace_run(
+                language=norm_lang,
+                workspace_entry_file=workspace_entry_file,
+                workspace_root=workspace_root,
+            )
+            if is_workspace_mode and workspace_entry_file
+            else None
+        )
+        if workspace_default:
+            cwd, cmd = workspace_default
+            await self._ensure_runtime(sbx, norm_lang)
+            await self._run_command_list(sbx, [cmd], envs, stdout_chunks, stderr_chunks, cwd=cwd)
+            return self._finalize_command_run(stdout_chunks=stdout_chunks, stderr_chunks=stderr_chunks)
+
+        if norm_lang in FAST_PATH_TEMPLATES:
+            await self._ensure_runtime(sbx, norm_lang)
+            return await self._fast_path_execute(sbx, norm_lang, source_code, None)
+
+        exec_result = await self._run_code_with_handling(sbx, source_code, language)
+        return self._extract_result(exec_result)
+
+    def _finalize_command_run(self, *, stdout_chunks: list[str], stderr_chunks: list[str]) -> ExecutionResult:
         stdout = "\n".join(chunk for chunk in stdout_chunks if chunk)
         stderr = "\n".join(chunk for chunk in stderr_chunks if chunk)
 
         status = "error" if stderr and not stdout else None
-
         return ExecutionResult(
             stdout=stdout or None,
             stderr=stderr or None,
@@ -618,22 +705,42 @@ class CodeExecutionService:
             memory=None,
         )
 
-    def _select_command_user(self, command: str, override: str | None) -> str:
-        if override:
-            return override
-        lowered = command.lower()
-        privileged_markers = (
-            "apt-get",
-            "apt ",
-            "dnf ",
-            "yum ",
-            "apk ",
-            "pacman",
-        )
-        for marker in privileged_markers:
-            if marker in lowered:
-                return "root"
-        return "user"
+    def _default_workspace_run(
+        self,
+        *,
+        language: str,
+        workspace_entry_file: str,
+        workspace_root: str | None,
+    ) -> tuple[str, str] | None:
+        root = workspace_root.rstrip("/") if workspace_root else None
+        cwd = root or posixpath.dirname(workspace_entry_file) or "."
+        entry_rel = workspace_entry_file
+        if root and workspace_entry_file.startswith(root + "/"):
+            entry_rel = workspace_entry_file[len(root) + 1 :]
+
+        entry_q = shlex.quote(entry_rel)
+
+        run_templates: dict[str, str] = {
+            "python": "python3 {entry}",
+            "javascript": "node {entry}",
+            "typescript": "npx tsx {entry}",
+            "go": "go run {entry}",
+            "ruby": "ruby {entry}",
+            "php": "php {entry}",
+            "r": "Rscript {entry}",
+            "lua": "lua {entry}",
+        }
+        compile_templates: dict[str, str] = {
+            "rust": "rustc {entry} -o main && ./main",
+            "c": "gcc {entry} -o main && ./main",
+            "cpp": "g++ {entry} -o main && ./main",
+        }
+
+        template = run_templates.get(language) or compile_templates.get(language)
+        if not template:
+            return None
+
+        return cwd, template.format(entry=entry_q)
 
     async def _run_command_list(
         self,
@@ -644,6 +751,7 @@ class CodeExecutionService:
         stderr_chunks: list[str],
         *,
         user: str | None = None,
+        cwd: str | None = None,
     ) -> None:
         if not commands:
             return
@@ -652,16 +760,26 @@ class CodeExecutionService:
             normalized_command = command.strip()
             if not normalized_command:
                 continue
-            run_user = self._select_command_user(normalized_command, user)
+            run_user = user or "user"
             logging.info("Sandbox command user=%s cmd=%s", run_user, normalized_command)
             try:
-                result = await sbx.commands.run(
-                    cmd=normalized_command,
-                    envs=envs or None,
-                    timeout=240,
-                    request_timeout=300,
-                    user=run_user,
-                )
+                try:
+                    result = await sbx.commands.run(
+                        cmd=normalized_command,
+                        envs=envs or None,
+                        timeout=240,
+                        request_timeout=300,
+                        user=run_user,
+                        cwd=cwd,
+                    )
+                except TypeError:
+                    result = await sbx.commands.run(
+                        cmd=normalized_command,
+                        envs=envs or None,
+                        timeout=240,
+                        request_timeout=300,
+                        user=run_user,
+                    )
             except CommandExitException as exc:
                 stderr_text = getattr(exc, "stderr", "")
                 if stderr_text:
