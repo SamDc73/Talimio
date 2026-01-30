@@ -1,23 +1,15 @@
 import asyncio
 import json
 import logging
+from collections import Counter
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import Any, TypeVar, cast
 from uuid import UUID
-
-
-if TYPE_CHECKING:
-    from src.auth.context import AuthContext
-
-from collections import Counter
 
 import litellm
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
-
-
-T = TypeVar("T", bound=BaseModel)
 
 from src.ai import AGENT_ID_DEFAULT
 from src.ai.mcp.service import get_user_mcp_config
@@ -45,6 +37,9 @@ from src.ai.prompts import (
 )
 from src.config.settings import get_settings
 from src.database.session import async_session_maker
+
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class LLMClient:
@@ -684,56 +679,6 @@ class LLMClient:
             messages = [messages[0], {"role": "system", "content": tool_instruction}, *messages[1:]]
         return messages, tool_bindings
 
-    async def _get_rag_context(
-        self,
-        course_id: str | None,
-        title: str,
-        description: str,
-        auth: "AuthContext | None" = None,
-    ) -> str:
-        """Get RAG context for lesson generation.
-
-        Requires an `AuthContext` to access the RAG service. If `auth` is not provided
-        or `course_id` is missing, this returns an empty string and skips RAG.
-
-        This removes the previous direct DB/session fallback to keep concerns separated and
-        align with the centralized auth strategy.
-        """
-        if not course_id:
-            return ""
-
-        try:
-            # Use injected RAG service if available, otherwise create a new one for backward compatibility
-            if self._rag_service is not None:
-                rag_service = self._rag_service
-            else:
-                from src.ai.rag.service import RAGService
-
-                rag_service = RAGService()
-
-            if not auth:
-                return ""
-
-            # Create search query from title and description
-            search_query = f"{title} {description}"
-            search_results = await rag_service.search_documents(
-                auth=auth, course_id=UUID(course_id), query=search_query, top_k=5
-            )
-
-            if not search_results:
-                return ""
-
-            # Build context
-            context_parts = ["## Course Context\n"]
-            for i, result in enumerate(search_results[:5], 1):
-                context_parts.append(f"### Context {i}\n{result.content}\n")
-
-            return "\n".join(context_parts)
-
-        except Exception as e:
-            self._logger.warning(f"Failed to get RAG context for course {course_id}: {e}")
-            return ""
-
     async def _generate_structure_payload(
         self,
         *,
@@ -860,97 +805,43 @@ class LLMClient:
             msg = "Failed to generate self-assessment questions"
             raise RuntimeError(msg) from error
 
-    async def create_lesson(
+    async def generate_lesson_content(
         self,
-        node_meta: dict[str, Any],
-        auth: "AuthContext | None" = None,
+        lesson_context: str,
+        user_id: str | UUID | None = None,
     ) -> LessonContent:
-        """Generate lesson content.
+        """Generate a lesson body from a prepared LESSON_CONTEXT string."""
+        context_text = lesson_context.strip()
+        if not context_text:
+            msg = "Lesson context must not be empty"
+            raise ValueError(msg)
 
-        Args:
-            node_meta: Node metadata (title, description, course_id, user_id)
-            auth: AuthContext for RAG access
+        normalized_user_id = self._normalize_user_id(user_id)
 
-        Returns
-        -------
-            LessonContent
-        """
+        messages = [
+            {"role": "system", "content": LESSON_GENERATION_PROMPT},
+            {"role": "user", "content": context_text},
+        ]
+
+        messages, tool_bindings = await self._apply_user_tooling(
+            messages,
+            user_id=normalized_user_id,
+        )
+
         try:
-            title = node_meta.get("title", "Untitled")
-
-            # Build context (course info + RAG)
-            metadata = {
-                "node_title": title,
-                "node_description": node_meta.get("description", ""),
-                "course_id": node_meta.get("course_id"),
-                "user_id": node_meta.get("user_id"),
-                "course_title": node_meta.get("course_title", ""),
-                "original_user_prompt": node_meta.get("original_user_prompt", ""),
-            }
-
-            # Build context string
-            context_parts = []
-            if metadata["course_title"]:
-                context_parts.append(f"Course: {metadata['course_title']}")
-            if metadata["node_description"]:
-                context_parts.append(f"Lesson Topic: {metadata['node_description']}")
-
-            content_info = "## Course Information\n" + "\n".join(context_parts) + "\n\n" if context_parts else ""
-
-            rag_context = await self._get_rag_context(
-                metadata.get("course_id"),
-                metadata.get("node_title") or "",
-                metadata.get("node_description") or "",
-                auth,
-            )
-
-            # Inject target concept context for adaptive mode (single-concept lessons)
-            target = node_meta.get("target_concept") or {}
-            target_section = ""
-            if isinstance(target, dict) and (target.get("name") or target.get("description")):
-                t_name = str(target.get("name", "")).strip()
-                t_desc = str(target.get("description", "")).strip()
-                t_mastery = target.get("mastery")
-                lines = [
-                    "## Target Concept",
-                    f"Name: {t_name}" if t_name else None,
-                    f"Description: {t_desc}" if t_desc else None,
-                ]
-                if isinstance(t_mastery, (int, float)):
-                    lines.append(f"Current mastery: {float(t_mastery):.2f}")
-                target_section = "\n".join([ln for ln in lines if ln]) + "\n\n"
-
-            # Prepare prompt
-            combined_content = (content_info + target_section + rag_context).strip()
-            if not combined_content:
-                combined_content = f"Lesson Title: {title}\nLesson Topic: {metadata['node_description'] or title}"
-
-            system_prompt = LESSON_GENERATION_PROMPT.replace("{content}", combined_content)
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": (
-                        f'Write the complete lesson titled "{title}" in Markdown,'
-                        " following every instruction in the system prompt."
-                    ),
-                },
-            ]
-
-            # Generate lesson content
             response_content = await self.get_completion(
                 messages,
-                user_id=metadata.get("user_id"),
+                user_id=normalized_user_id,
+                tools=tool_bindings or None,
+                tool_choice="auto" if tool_bindings else None,
             )
 
-            # Get content from response (litellm or tool-assisted output)
             content = response_content if isinstance(response_content, str) else str(response_content or "")
-
             return LessonContent(body=content.strip())
-        except Exception as e:
+        except Exception as error:
             self._logger.exception("Error generating lesson content")
             msg = "Failed to generate lesson content"
-            raise RuntimeError(msg) from e
+            raise RuntimeError(msg) from error
 
     async def generate_execution_plan(
         self,

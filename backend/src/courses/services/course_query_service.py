@@ -38,7 +38,7 @@ class CourseQueryService:
         lessons_query = (
             select(Lesson)
             .where(Lesson.course_id == course_id)
-            .order_by(Lesson.module_order.is_(None), Lesson.module_order, Lesson.order)
+            .order_by(*Lesson.course_order_by())
         )
         lessons_result = await self.session.execute(lessons_query)
         lessons = lessons_result.scalars().all()
