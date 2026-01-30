@@ -251,9 +251,9 @@ class RAGService:
             return
         storage = get_storage_provider()
         with contextlib.suppress(Exception):
-            await storage.delete(book.file_path)  # type: ignore[arg-type]
+            await storage.delete(book.file_path)
         # Clear DB reference
-        book.file_path = None  # type: ignore[assignment]
+        book.file_path = ""
         await session.commit()
 
     async def process_book(self, session: AsyncSession, book_id: uuid.UUID) -> None:
@@ -269,7 +269,7 @@ class RAGService:
             if not getattr(book, "file_path", None):
                 logger.warning("Book %s has no file path; marking as failed", book_id)
                 book.rag_status = "failed"
-                with contextlib.suppress(Exception):  # type: ignore[name-defined]
+                with contextlib.suppress(Exception):
                     book.rag_error = "missing_file"  # type: ignore[attr-defined]
                 await session.commit()
                 return

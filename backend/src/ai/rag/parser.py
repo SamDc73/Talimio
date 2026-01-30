@@ -22,8 +22,8 @@ class DocumentProcessor:
             partition,
             filename=file_path,
             strategy="hi_res" if document_type == "pdf" and rag_config.enable_ocr else "auto",
+            pdf_infer_table_structure=rag_config.extract_tables,
             extract_images_in_pdf=rag_config.extract_images,
-            extract_tables=rag_config.extract_tables,
-            ocr_languages=["eng"] if rag_config.enable_ocr else None,
+            ocr_languages="eng" if rag_config.enable_ocr else None,
         )
         return "\n".join([str(el) for el in elements])
