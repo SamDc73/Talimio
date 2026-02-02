@@ -62,13 +62,13 @@ function AuthPage() {
 			<LoginHeader />
 
 			{error && (
-				<div className="fixed top-4 right-4 bg-destructive text-destructive-foreground px-4 py-2 rounded-lg shadow-lg animate-slideDown z-50">
+				<div className="fixed top-4 right-4 bg-destructive text-destructive-foreground px-4 py-2 rounded-lg shadow-lg z-50">
 					{error}
 				</div>
 			)}
 
 			{successMessage && (
-				<div className="fixed top-4 right-4 bg-completed text-completed-text px-4 py-2 rounded-lg shadow-lg animate-slideDown z-50">
+				<div className="fixed top-4 right-4 bg-completed text-completed-text px-4 py-2 rounded-lg shadow-lg z-50">
 					{successMessage}
 				</div>
 			)}

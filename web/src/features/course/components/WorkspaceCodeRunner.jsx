@@ -40,7 +40,7 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 			style={{ borderColor: LATTE_BORDER_COLOR }}
 		>
 			<div
-				className="flex flex-col gap-2 border-b bg-gradient-to-r from-slate-100/60 via-muted/45 to-muted/25 px-4 py-3"
+				className="flex flex-col gap-2 border-b bg-linear-to-r from-slate-100/60 via-muted/45 to-muted/25 px-4 py-3"
 				style={{ borderBottomColor: LATTE_BORDER_COLOR }}
 			>
 				<div className="flex flex-wrap items-center justify-between gap-3">
@@ -57,7 +57,7 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 							size="sm"
 							className="rounded-s-full border-transparent"
 						>
-							<Play className="h-4 w-4" />
+							<Play className="size-4 " />
 							<span>{isRunning ? "Running" : "Run workspace"}</span>
 						</Button>
 						<Button
@@ -68,7 +68,7 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 							size="sm"
 							className="rounded-e-full border-transparent"
 						>
-							{canReset ? <RotateCcw className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+							{canReset ? <RotateCcw className="size-4 " /> : <CheckCircle className="size-4 " />}
 							<span>{canReset ? "Reset" : "Synced"}</span>
 						</Button>
 					</div>
@@ -92,7 +92,7 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 								)}
 							>
 								<div className="flex items-center gap-2 text-sm font-medium">
-									<FileText className="h-4 w-4" />
+									<FileText className="size-4 " />
 									<span className="truncate">{file.filePath}</span>
 								</div>
 								{file.isEntry && (
@@ -116,11 +116,11 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 				</div>
 			</div>
 			{(result || error) && (
-				<div className="border-t border-border bg-muted/20 px-4 py-4 space-y-3">
+				<div className="border-t border-border bg-muted/20 p-4  space-y-3">
 					{error && (
 						<div className="rounded-md border p-3 bg-destructive/10 border-l-2 border-l-destructive">
 							<div className="flex items-center gap-2 text-xs font-semibold text-destructive mb-2">
-								<AlertTriangle className="h-4 w-4" />
+								<AlertTriangle className="size-4 " />
 								Error
 							</div>
 							<pre className="text-xs font-mono whitespace-pre-wrap text-destructive/90">{error}</pre>
@@ -129,7 +129,7 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 					{result?.stdout && (
 						<div className="rounded-md border p-3 bg-emerald-50 border-l-2 border-l-emerald-500">
 							<div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 mb-2">
-								<CheckCircle className="h-4 w-4" />
+								<CheckCircle className="size-4 " />
 								Output
 							</div>
 							<pre className="text-xs font-mono whitespace-pre-wrap text-foreground/90">{result.stdout}</pre>
@@ -138,7 +138,7 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 					{result?.stderr && (
 						<div className="rounded-md border p-3 bg-amber-50 border-l-2 border-l-amber-500">
 							<div className="flex items-center gap-2 text-xs font-semibold text-amber-700 mb-2">
-								<AlertTriangle className="h-4 w-4" />
+								<AlertTriangle className="size-4 " />
 								Warnings
 							</div>
 							<pre className="text-xs font-mono whitespace-pre-wrap text-amber-900">{result.stderr}</pre>

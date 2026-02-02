@@ -1,7 +1,3 @@
-/**
- * Perfected circular progress with dynamic colors and glow effect
- * Adaptive learning UI component with progressive color system
- */
 export function CircularProgress({ value, size = 120, strokeWidth = 10, className = "" }) {
 	const percentage = Math.round(value || 0)
 	const radius = size / 2 - 10
@@ -18,7 +14,7 @@ export function CircularProgress({ value, size = 120, strokeWidth = 10, classNam
 	const colors = getProgressColor()
 
 	return (
-		<div className={`relative animate-in fade-in duration-700 ${className}`}>
+		<div className={`relative ${className}`.trim()}>
 			<svg
 				width={size}
 				height={size}

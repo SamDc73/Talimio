@@ -105,7 +105,7 @@ export function MultipleChoice({
 								disabled={hasFeedback}
 								className="mt-1 text-primary focus:ring-ring focus:ring-2 focus:ring-offset-0 border-input"
 							/>
-							<QuizMarkdown content={option} className="flex-1 text-sm leading-relaxed [&_p]:m-0" />
+							<QuizMarkdown content={option} className="flex-1 text-sm/relaxed  [&_p]:m-0" />
 							{hasFeedback && isCorrectOption && (
 								<span className="text-completed dark:text-completed text-sm font-medium ml-2">✓</span>
 							)}
@@ -114,43 +114,38 @@ export function MultipleChoice({
 				})}
 			</div>
 
-			{!isSurveyMode ? (
-				hasFeedback ? (
-					<div>
-						{explanation && (
-							<div className="p-4 mb-4 rounded-lg border border-border bg-muted/20">
-								<div className={`text-sm font-medium mb-2 ${isCorrect ? "text-completed" : "text-destructive"}`}>
-									{isCorrect ? "✓ Correct" : "✗ Incorrect"}
-								</div>
-								<QuizMarkdown
-									content={explanation}
-									className="text-sm leading-relaxed text-muted-foreground [&_p]:m-0"
-								/>
+			{isSurveyMode ? null : hasFeedback ? (
+				<div>
+					{explanation && (
+						<div className="p-4 mb-4 rounded-lg border border-border bg-muted/20">
+							<div className={`text-sm font-medium mb-2 ${isCorrect ? "text-completed" : "text-destructive"}`}>
+								{isCorrect ? "✓ Correct" : "✗ Incorrect"}
 							</div>
-						)}
-						<button
-							type="button"
-							onClick={handleReset}
-							className="px-4 py-2 bg-muted text-foreground hover:bg-muted/80 rounded-lg text-sm font-medium transition-colors"
-						>
-							Try Again
-						</button>
-					</div>
-				) : (
+							<QuizMarkdown content={explanation} className="text-sm/relaxed  text-muted-foreground [&_p]:m-0" />
+						</div>
+					)}
 					<button
 						type="button"
-						onClick={handleSubmit}
-						disabled={effectiveSelected === null}
-						className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-							effectiveSelected === null
-								? "bg-muted text-muted-foreground cursor-not-allowed"
-								: "bg-completed text-completed-text hover:bg-completed/90"
-						}`}
+						onClick={handleReset}
+						className="px-4 py-2 bg-muted text-foreground hover:bg-muted/80 rounded-lg text-sm font-medium transition-colors"
 					>
-						{submitLabel}
+						Try Again
 					</button>
-				)
-			) : null}
+				</div>
+			) : (
+				<button
+					type="button"
+					onClick={handleSubmit}
+					disabled={effectiveSelected === null}
+					className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+						effectiveSelected === null
+							? "bg-muted text-muted-foreground cursor-not-allowed"
+							: "bg-completed text-completed-text hover:bg-completed/90"
+					}`}
+				>
+					{submitLabel}
+				</button>
+			)}
 		</div>
 	)
 }

@@ -11,7 +11,7 @@ function ProtectedRoute({ children }) {
 		return (
 			<div className="min-h-screen flex items-center justify-center">
 				<div className="text-center">
-					<Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-2" />
+					<Loader2 className="size-8  animate-spin text-primary mx-auto mb-2" />
 
 					<p className="text-sm text-muted-foreground">Checking authentication...</p>
 				</div>

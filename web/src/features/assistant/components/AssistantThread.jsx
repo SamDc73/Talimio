@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/Button"
+import { useChatSidebar } from "@/contexts/chatSidebarContext"
 import {
 	ComposerAddAttachment,
 	ComposerAttachments,
@@ -30,7 +31,6 @@ import { MarkdownText } from "@/features/assistant/components/MarkdownText"
 import { ModelPicker } from "@/features/assistant/components/ModelPicker"
 import { ToolFallback } from "@/features/assistant/components/ToolFallback"
 import { TooltipIconButton } from "@/features/assistant/components/TooltipIconButton"
-import { useChatSidebar } from "@/features/assistant/contexts/chatSidebarContext"
 import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
 
@@ -112,7 +112,7 @@ function ComposerAction() {
 function MessageError() {
 	return (
 		<MessagePrimitive.Error>
-			<ErrorPrimitive.Root className="aui-message-error-root mt-1.5 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2 text-[13px] leading-[1.5] text-destructive/90 dark:border-destructive/15 dark:bg-destructive/10">
+			<ErrorPrimitive.Root className="aui-message-error-root mt-1.5 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2 text-[13px] leading-normal text-destructive/90 dark:border-destructive/15 dark:bg-destructive/10">
 				<ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
 			</ErrorPrimitive.Root>
 		</MessagePrimitive.Error>
@@ -123,10 +123,10 @@ function AssistantMessage() {
 	return (
 		<MessagePrimitive.Root asChild>
 			<div
-				className="aui-assistant-message-root relative mx-auto flex w-full max-w-[var(--thread-max-width)] animate-in flex-col items-start gap-1 py-2.5 pl-2 duration-200 fade-in slide-in-from-bottom-1 first:pt-1.5 last:mb-16"
+				className="aui-assistant-message-root relative mx-auto flex w-full max-w-(--thread-max-width) flex-col items-start gap-1 py-2.5 pl-2 duration-200 first:pt-1.5 last:mb-16"
 				data-role="assistant"
 			>
-				<div className="aui-assistant-message-content max-w-[min(75%,520px)] break-words text-[15px] leading-[1.6] tracking-[-0.011em] text-foreground/95">
+				<div className="aui-assistant-message-content max-w-[min(75%,520px)] wrap-break-word text-[15px] leading-[1.6] tracking-[-0.011em] text-foreground/95">
 					<MessagePrimitive.Parts
 						components={{
 							Text: MarkdownText,
@@ -148,8 +148,8 @@ function AssistantMessage() {
 function ThreadWelcome() {
 	return (
 		<ThreadPrimitive.Empty>
-			<div className="aui-thread-welcome-root mx-auto mt-12 mb-auto flex w-full max-w-[var(--thread-max-width)] flex-grow flex-col">
-				<div className="aui-thread-welcome-center flex w-full flex-grow flex-col items-center justify-center">
+			<div className="aui-thread-welcome-root mx-auto mt-12 mb-auto flex w-full max-w-(--thread-max-width) grow flex-col">
+				<div className="aui-thread-welcome-center flex w-full grow flex-col items-center justify-center">
 					<div className="aui-thread-welcome-message flex size-full flex-col justify-center px-4">
 						<m.div
 							initial={{ opacity: 0, y: 8 }}
@@ -183,7 +183,7 @@ function ThreadScrollToBottom() {
 				variant="outline"
 				className="aui-thread-scroll-to-bottom absolute -top-11 z-10 size-8 self-center rounded-full border-border/60 bg-background/95 p-0 shadow-[0_2px_8px_rgba(0,0,0,0.08)] backdrop-blur-xl transition-all duration-150 hover:scale-105 hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] disabled:invisible dark:border-border/40 dark:bg-background/90"
 			>
-				<ArrowDownIcon className="h-4 w-4" />
+				<ArrowDownIcon className="size-4 " />
 			</TooltipIconButton>
 		</ThreadPrimitive.ScrollToBottom>
 	)
@@ -199,35 +199,35 @@ function Composer() {
 		}
 	}, [replyText, setPendingQuote])
 	return (
-		<div className="aui-composer-wrapper sticky bottom-0 mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-3 overflow-visible rounded-t-3xl bg-background pb-3 md:pb-4">
+		<div className="aui-composer-wrapper sticky bottom-0 mx-auto flex w-full max-w-(--thread-max-width) flex-col gap-3 overflow-visible rounded-t-3xl bg-background pb-3 md:pb-4">
 			<ThreadScrollToBottom />
 			<ComposerPrimitive.Root className="aui-composer-root group relative flex w-full flex-col rounded-2xl border border-border/60 bg-background/95 shadow-[0_2px_8px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] backdrop-blur-xl transition-all duration-200 hover:border-border hover:shadow-[0_4px_16px_rgba(0,0,0,0.06),0_2px_4px_rgba(0,0,0,0.08)] dark:border-border/40 dark:bg-background/90 dark:shadow-[0_2px_8px_rgba(0,0,0,0.2),0_1px_2px_rgba(0,0,0,0.15)] dark:hover:border-border/60">
 				<ComposerAttachments />
 				{replyText && (
-					<div className="aui-composer-reply group/quote relative mx-2 mb-1.5 mt-2 rounded-xl border border-primary/15 bg-primary/[0.025] backdrop-blur-sm dark:border-primary/10 dark:bg-primary/[0.04]">
+					<div className="aui-composer-reply group/quote relative mx-2 mb-1.5 mt-2 rounded-xl border border-primary/15 bg-primary/2.5 backdrop-blur-sm dark:border-primary/10 dark:bg-primary/4">
 						<div className="flex items-start gap-2 px-3 py-1.5">
-							<blockquote className="relative flex-1 min-w-0 pl-2.5 text-[13px] leading-[1.5] text-foreground/70 before:absolute before:left-0 before:top-0.5 before:bottom-0.5 before:w-[1.5px] before:rounded-full before:bg-primary/40 dark:before:bg-primary/30">
-								<span className="block max-h-[4.2rem] overflow-hidden whitespace-pre-wrap break-words [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">
+							<blockquote className="relative flex-1 min-w-0 pl-2.5 text-[13px] leading-normal text-foreground/70 before:absolute before:left-0 before:top-0.5 before:bottom-0.5 before:w-[1.5px] before:rounded-full before:bg-primary/40 dark:before:bg-primary/30">
+								<span className="max-h-[4.2rem] overflow-hidden whitespace-pre-wrap wrap-break-word [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">
 									{replyText}
 								</span>
 							</blockquote>
 							<button
 								type="button"
-								className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground/40 opacity-0 transition-all hover:bg-primary/10 hover:text-foreground/60 focus-visible:opacity-100 group-hover/quote:opacity-100"
+								className="mt-px flex size-4  shrink-0 items-center justify-center rounded-sm text-muted-foreground/40 opacity-0 transition-all hover:bg-primary/10 hover:text-foreground/60 focus-visible:opacity-100 group-hover/quote:opacity-100"
 								onClick={() => {
 									setInitialText("")
 									logger.info("cleared selection quote")
 								}}
 								aria-label="Clear selection quote"
 							>
-								<X className="h-2.5 w-2.5" />
+								<X className="size-2.5 " />
 							</button>
 						</div>
 					</div>
 				)}
 				<ComposerPrimitive.Input
 					placeholder="Send a message..."
-					className="aui-composer-input mx-2 mb-1 max-h-32 min-h-[52px] w-auto resize-none bg-transparent px-1 pt-1 pb-1 text-[15px] leading-[1.5] tracking-[-0.011em] text-foreground outline-none placeholder:text-muted-foreground/50"
+					className="aui-composer-input mx-2 mb-1 max-h-32 min-h-[52px] w-auto resize-none bg-transparent p-1   text-[15px] leading-normal tracking-[-0.011em] text-foreground outline-none placeholder:text-muted-foreground/50"
 					rows={1}
 					autoFocus
 					aria-label="Message input"
@@ -248,18 +248,18 @@ function AssistantActionBar() {
 			className="aui-assistant-action-bar-root col-start-3 row-start-2 -ml-0.5 flex gap-0.5 text-muted-foreground/60 data-floating:absolute data-floating:rounded-lg data-floating:border data-floating:border-border/60 data-floating:bg-background/95 data-floating:p-0.5 data-floating:shadow-[0_2px_8px_rgba(0,0,0,0.08)] data-floating:backdrop-blur-xl"
 		>
 			<ActionBarPrimitive.Copy asChild>
-				<TooltipIconButton tooltip="Copy" className="h-7 w-7">
+				<TooltipIconButton tooltip="Copy" className="size-7 ">
 					<MessagePrimitive.If copied>
-						<CheckIcon className="h-3.5 w-3.5" />
+						<CheckIcon className="size-3.5 " />
 					</MessagePrimitive.If>
 					<MessagePrimitive.If copied={false}>
-						<CopyIcon className="h-3.5 w-3.5" />
+						<CopyIcon className="size-3.5 " />
 					</MessagePrimitive.If>
 				</TooltipIconButton>
 			</ActionBarPrimitive.Copy>
 			<ActionBarPrimitive.Reload asChild>
-				<TooltipIconButton tooltip="Refresh" className="h-7 w-7">
-					<RefreshCwIcon className="h-3.5 w-3.5" />
+				<TooltipIconButton tooltip="Refresh" className="size-7 ">
+					<RefreshCwIcon className="size-3.5 " />
 				</TooltipIconButton>
 			</ActionBarPrimitive.Reload>
 		</ActionBarPrimitive.Root>
@@ -273,22 +273,22 @@ function UserMessage() {
 	return (
 		<MessagePrimitive.Root asChild>
 			<div
-				className="aui-user-message-root relative mx-auto flex w-full max-w-[var(--thread-max-width)] animate-in flex-col items-end gap-1 py-2.5 pr-2 duration-200 fade-in slide-in-from-bottom-1 first:pt-1.5 last:mb-5"
+				className="aui-user-message-root relative mx-auto flex w-full max-w-(--thread-max-width) flex-col items-end gap-1 py-2.5 pr-2 duration-200 first:pt-1.5 last:mb-5"
 				data-role="user"
 			>
 				<UserMessageAttachments />
 
 				{quotedAtSend && (
-					<div className="aui-user-message-quote max-w-[min(75%,520px)] rounded-2xl border border-primary/15 bg-primary/[0.025] px-3 py-1.5 text-[13px] leading-[1.5] text-foreground/70 backdrop-blur-sm dark:border-primary/10 dark:bg-primary/[0.04]">
+					<div className="aui-user-message-quote max-w-[min(75%,520px)] rounded-2xl border border-primary/15 bg-primary/2.5 px-3 py-1.5 text-[13px] leading-normal text-foreground/70 backdrop-blur-sm dark:border-primary/10 dark:bg-primary/4">
 						<blockquote className="relative pl-2.5 before:absolute before:left-0 before:top-0.5 before:bottom-0.5 before:w-[1.5px] before:rounded-full before:bg-primary/40 dark:before:bg-primary/30">
-							<span className="block max-h-[4.2rem] overflow-hidden whitespace-pre-wrap break-words [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">
+							<span className="max-h-[4.2rem] overflow-hidden whitespace-pre-wrap wrap-break-word [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">
 								{quotedAtSend}
 							</span>
 						</blockquote>
 					</div>
 				)}
 
-				<div className="aui-user-message-content max-w-[min(75%,520px)] rounded-[1.25rem] bg-muted/90 px-3.5 py-1.5 text-[15px] leading-[1.5] tracking-[-0.011em] text-foreground/95 backdrop-blur-sm">
+				<div className="aui-user-message-content max-w-[min(75%,520px)] rounded-[1.25rem] bg-muted/90 px-3.5 py-1.5 text-[15px] leading-normal tracking-[-0.011em] text-foreground/95 backdrop-blur-sm">
 					<MessagePrimitive.Parts
 						components={{
 							Text: MarkdownText,
@@ -314,8 +314,8 @@ function UserActionBar() {
 			className="aui-user-action-bar-root flex flex-col items-end"
 		>
 			<ActionBarPrimitive.Edit asChild>
-				<TooltipIconButton tooltip="Edit" className="aui-user-action-edit h-7 w-7 text-muted-foreground/60">
-					<PencilIcon className="h-3.5 w-3.5" />
+				<TooltipIconButton tooltip="Edit" className="aui-user-action-edit size-7  text-muted-foreground/60">
+					<PencilIcon className="size-3.5 " />
 				</TooltipIconButton>
 			</ActionBarPrimitive.Edit>
 		</ActionBarPrimitive.Root>
@@ -325,10 +325,10 @@ function UserActionBar() {
 function EditComposer() {
 	return (
 		<MessagePrimitive.Root asChild>
-			<div className="aui-edit-composer-wrapper mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col items-end py-2.5 pr-2 first:pt-2.5">
+			<div className="aui-edit-composer-wrapper mx-auto flex w-full max-w-(--thread-max-width) flex-col items-end py-2.5 pr-2 first:pt-2.5">
 				<ComposerPrimitive.Root className="aui-edit-composer-root flex w-full max-w-[min(75%,520px)] flex-col rounded-2xl border border-border/60 bg-background/95 shadow-[0_2px_8px_rgba(0,0,0,0.04)] backdrop-blur-xl dark:border-border/40 dark:bg-background/90 dark:shadow-[0_2px_8px_rgba(0,0,0,0.2)]">
 					<ComposerPrimitive.Input
-						className="aui-edit-composer-input min-h-[52px] w-full resize-none bg-transparent px-3.5 py-2 text-[15px] leading-[1.5] tracking-[-0.011em] text-foreground outline-none"
+						className="aui-edit-composer-input min-h-[52px] w-full resize-none bg-transparent px-3.5 py-2 text-[15px] leading-normal tracking-[-0.011em] text-foreground outline-none"
 						autoFocus
 						spellCheck="true"
 					/>
@@ -366,16 +366,16 @@ function BranchPicker({ className, ...rest }) {
 			{...rest}
 		>
 			<BranchPickerPrimitive.Previous asChild>
-				<TooltipIconButton tooltip="Previous" className="h-6 w-6">
-					<ChevronLeftIcon className="h-3 w-3" />
+				<TooltipIconButton tooltip="Previous" className="size-6 ">
+					<ChevronLeftIcon className="size-3 " />
 				</TooltipIconButton>
 			</BranchPickerPrimitive.Previous>
 			<span className="aui-branch-picker-state px-1 font-medium tabular-nums">
 				<BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count />
 			</span>
 			<BranchPickerPrimitive.Next asChild>
-				<TooltipIconButton tooltip="Next" className="h-6 w-6">
-					<ChevronRightIcon className="h-3 w-3" />
+				<TooltipIconButton tooltip="Next" className="size-6 ">
+					<ChevronRightIcon className="size-3 " />
 				</TooltipIconButton>
 			</BranchPickerPrimitive.Next>
 		</BranchPickerPrimitive.Root>

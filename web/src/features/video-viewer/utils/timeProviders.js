@@ -1,4 +1,4 @@
-// timeProviders.js
+import logger from "@/lib/logger"
 
 class TimeProvider {
 	getTime() {
@@ -48,6 +48,15 @@ export class YouTubeTimeProvider extends TimeProvider {
 		this.sampleTs = new Float64Array(this.sampleWindow)
 		this.sampleIdx = 0
 		this.sampleCount = 0
+		this.lastErrorLog = 0
+	}
+
+	logError(error, message) {
+		if (!error) return
+		const now = performance.now()
+		if (now - this.lastErrorLog < 2000) return
+		this.lastErrorLog = now
+		logger.error(message, error)
 	}
 
 	setPlaying(isPlaying) {
@@ -101,7 +110,8 @@ export class YouTubeTimeProvider extends TimeProvider {
 			this.sampleCount = Math.min(this.sampleCount + 1, this.sampleWindow)
 
 			return currentTime
-		} catch (_error) {
+		} catch (error) {
+			this.logError(error, "Failed to sample YouTube time")
 			return this.cachedData.time
 		}
 	}
@@ -124,14 +134,17 @@ export class YouTubeTimeProvider extends TimeProvider {
 			const withinGrace = performance.now() - this.lastStateChangeTs < 500
 			derivedIsPlaying = this.isPlaying || playerIsPlaying || (withinGrace && state === 2)
 			this.isPlaying = derivedIsPlaying
-		} catch (_error) {}
+		} catch (error) {
+			this.logError(error, "Failed to read YouTube player state")
+		}
 
 		// If not actively playing, return the current time directly from player for precision
 		if (!derivedIsPlaying) {
 			try {
 				const time = player.getCurrentTime() || this.cachedData.time
 				return time
-			} catch (_error) {
+			} catch (error) {
+				this.logError(error, "Failed to read YouTube current time")
 				return this.cachedData.time
 			}
 		}
@@ -178,7 +191,9 @@ export class YouTubeTimeProvider extends TimeProvider {
 				if (typeof player.getPlayerState === "function") playerState = player.getPlayerState()
 				if (typeof player.getCurrentTime === "function") playerTime = player.getCurrentTime()
 				if (typeof player.getPlaybackRate === "function") playerRate = player.getPlaybackRate()
-			} catch (_e) {}
+			} catch (error) {
+				this.logError(error, "Failed to read YouTube player info")
+			}
 		}
 		const elapsed = (now - this.lastRealTimestamp) / 1000
 		const predicted = this.lastRealTime + elapsed * (this.cachedData.rate || 1)

@@ -185,13 +185,13 @@ function ViewerRuntime({
 	}, [selection])
 
 	return (
-		<Viewport className="h-full w-full">
+		<Viewport className="size-full ">
 			<Scroller renderPage={renderPage} />
 		</Viewport>
 	)
 }
 
-function PDFViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi = null }) {
+function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi = null }) {
 	// Component-local state (ephemeral UI)
 	const [hasRestoredPage, setHasRestoredPage] = useState(false)
 	const [pdfBlobUrl, setPdfBlobUrl] = useState(null)
@@ -387,7 +387,7 @@ function PDFViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 		<div className="relative flex h-full flex-col overflow-auto bg-muted py-8 dark:bg-background/80">
 			<EmbedPDF engine={engine} plugins={plugins}>
 				<GlobalPointerProvider>
-					<div className="flex h-full w-full justify-center" data-selection-zone="true">
+					<div className="flex size-full  justify-center" data-selection-zone="true">
 						<ViewerRuntime
 							bookId={bookId}
 							registerApi={registerApi}
@@ -403,4 +403,4 @@ function PDFViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 	)
 }
 
-export default PDFViewer
+export default PdfViewer

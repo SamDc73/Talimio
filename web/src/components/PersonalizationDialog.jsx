@@ -18,6 +18,7 @@ import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/Dialog"
 import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
+import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
 
 const createEmptyServerForm = () => ({
@@ -26,8 +27,13 @@ const createEmptyServerForm = () => ({
 	authToken: "",
 })
 
+let headerRowCounter = 0
+
 const createHeaderRow = () => ({
-	id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+	id:
+		typeof crypto !== "undefined" && crypto.randomUUID
+			? crypto.randomUUID()
+			: `header-${Date.now()}-${headerRowCounter++}`,
 	key: "",
 	value: "",
 })
@@ -68,8 +74,8 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			setOriginalInstructions(settings.custom_instructions || "")
 			setMemoryCount(settings.memory_count || 0)
 			hasLoadedRef.current = true
-		} catch (_error) {
-			// Silent fail
+		} catch (error) {
+			logger.error("Failed to load personalization settings", error)
 		} finally {
 			if (firstLoad) setIsLoading(false)
 		}
@@ -105,6 +111,10 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 
 	const removeHeaderRow = useCallback((id) => {
 		setHeaderRows((prev) => prev.filter((row) => row.id !== id))
+	}, [])
+
+	const handleAuthTypeChange = useCallback((authType) => {
+		setServerForm((prev) => ({ ...prev, authType }))
 	}, [])
 
 	const handleCreateServer = async (event) => {
@@ -193,8 +203,8 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		try {
 			await updateCustomInstructions(instructions)
 			setOriginalInstructions(instructions)
-		} catch (_error) {
-			// Silent fail
+		} catch (error) {
+			logger.error("Failed to update custom instructions", error)
 		} finally {
 			setIsSaving(false)
 		}
@@ -207,8 +217,8 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			await clearUserMemory()
 			setMemoryCount(0)
 			setMemories([])
-		} catch (_error) {
-			// Silent fail
+		} catch (error) {
+			logger.error("Failed to clear memories", error)
 		} finally {
 			setIsClearing(false)
 		}
@@ -221,8 +231,8 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			try {
 				const userMemories = await getUserMemories()
 				setMemories(userMemories)
-			} catch (_error) {
-				// Silent fail
+			} catch (error) {
+				logger.error("Failed to load memories", error)
 			} finally {
 				setIsLoadingMemories(false)
 			}
@@ -249,8 +259,8 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			await deleteMemory(memoryId)
 			setMemories((prev) => prev.filter((m) => m.id !== memoryId))
 			setMemoryCount((prev) => Math.max(0, prev - 1))
-		} catch (_error) {
-			// Silent fail
+		} catch (error) {
+			logger.error("Failed to delete memory", error, { memoryId })
 		}
 	}
 
@@ -290,11 +300,11 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 							}}
 							className="p-2 -ml-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
 						>
-							<ArrowLeft className="h-5 w-5" />
+							<ArrowLeft className="size-5 " />
 						</button>
 					) : (
-						<div className="p-2.5 bg-gradient-to-br from-primary/90 to-primary rounded-lg">
-							<IconComponent className="h-5 w-5 text-white" />
+						<div className="p-2.5 bg-linear-to-br from-primary/90 to-primary rounded-lg">
+							<IconComponent className="size-5  text-white" />
 						</div>
 					)}
 					<DialogTitle className="text-2xl">{h.title}</DialogTitle>
@@ -340,16 +350,16 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 					disabled={isLoadingMemories}
 					className={cn(
 						"group relative p-5 rounded-xl text-left transition-all duration-200",
-						"bg-gradient-to-br from-muted/50 to-muted/20",
+						"bg-linear-to-br from-muted/50 to-muted/20",
 						"border border-border/50 hover:border-border",
 						"hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5"
 					)}
 				>
 					<div className="flex items-center justify-between mb-3">
 						<div className="p-2.5 rounded-xl bg-background border border-border/50 shadow-sm">
-							<Zap className="h-4 w-4 text-primary" />
+							<Zap className="size-4  text-primary" />
 						</div>
-						<ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+						<ChevronRight className="size-4  text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
 					</div>
 					<div className="text-3xl font-semibold tracking-tight text-foreground">{memoryCount}</div>
 					<div className="text-sm text-muted-foreground mt-0.5">memories</div>
@@ -362,16 +372,16 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 					disabled={isLoadingServers}
 					className={cn(
 						"group relative p-5 rounded-xl text-left transition-all duration-200",
-						"bg-gradient-to-br from-muted/50 to-muted/20",
+						"bg-linear-to-br from-muted/50 to-muted/20",
 						"border border-border/50 hover:border-border",
 						"hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5"
 					)}
 				>
 					<div className="flex items-center justify-between mb-3">
 						<div className="p-2.5 rounded-xl bg-background border border-border/50 shadow-sm">
-							<Server className="h-4 w-4 text-muted-foreground" />
+							<Server className="size-4  text-muted-foreground" />
 						</div>
-						<ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+						<ChevronRight className="size-4  text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
 					</div>
 					<div className="text-3xl font-semibold tracking-tight text-foreground">{mcpServers.length}</div>
 					<div className="text-sm text-muted-foreground mt-0.5">tools connected</div>
@@ -384,7 +394,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 					Cancel
 				</Button>
 				<Button onClick={handleSave} disabled={!hasChanges || isSaving} className="min-w-[120px]">
-					{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+					{isSaving ? <Loader2 className="size-4  animate-spin" /> : "Save Changes"}
 				</Button>
 			</div>
 		</div>
@@ -395,12 +405,12 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		<div className="space-y-3">
 			{isLoadingMemories ? (
 				<div className="flex items-center justify-center py-16">
-					<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+					<Loader2 className="size-5  animate-spin text-muted-foreground" />
 				</div>
 			) : memories.length === 0 ? (
 				<div className="py-16 text-center">
-					<div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-muted/50 mb-4">
-						<Zap className="h-6 w-6 text-muted-foreground/50" />
+					<div className="inline-flex items-center justify-center size-14  rounded-2xl bg-muted/50 mb-4">
+						<Zap className="size-6  text-muted-foreground/50" />
 					</div>
 					<p className="text-sm text-muted-foreground">No memories yet</p>
 					<p className="text-xs text-muted-foreground/70 mt-1">Memories are created as you learn</p>
@@ -426,9 +436,9 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 									"transition-all duration-200"
 								)}
 							>
-								<X className="h-3.5 w-3.5" />
+								<X className="size-3.5 " />
 							</button>
-							<p className="text-sm text-foreground pr-10 leading-relaxed">{memory.content}</p>
+							<p className="text-sm/relaxed text-foreground pr-10 ">{memory.content}</p>
 							{formatTimestamp(memory.timestamp) && (
 								<p className="text-xs text-muted-foreground/70 mt-2">{formatTimestamp(memory.timestamp)}</p>
 							)}
@@ -445,7 +455,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 								disabled={isClearing}
 								className="text-destructive hover:text-destructive hover:bg-destructive/10"
 							>
-								{isClearing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+								{isClearing ? <Loader2 className="size-4  animate-spin mr-2" /> : null}
 								Clear All Memories
 							</Button>
 						</div>
@@ -466,7 +476,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 
 			{isLoadingServers ? (
 				<div className="flex items-center justify-center py-16">
-					<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+					<Loader2 className="size-5  animate-spin text-muted-foreground" />
 				</div>
 			) : (
 				<div className="space-y-3">
@@ -480,13 +490,13 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 							)}
 						>
 							<div className="p-2.5 rounded-xl bg-background border border-border/50 shadow-sm">
-								<Server className="h-4 w-4 text-muted-foreground" />
+								<Server className="size-4  text-muted-foreground" />
 							</div>
 							<div className="flex-1 min-w-0">
 								<div className="flex items-center gap-2">
 									<span className="text-sm font-medium text-foreground truncate">{server.name}</span>
 									{server.enabled && (
-										<span className="h-2 w-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
+										<span className="size-2  rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
 									)}
 								</div>
 								<p className="text-xs text-muted-foreground truncate mt-0.5">{server.url}</p>
@@ -502,9 +512,9 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 								)}
 							>
 								{deletingServerId === server.id ? (
-									<Loader2 className="h-4 w-4 animate-spin" />
+									<Loader2 className="size-4  animate-spin" />
 								) : (
-									<Trash2 className="h-4 w-4" />
+									<Trash2 className="size-4 " />
 								)}
 							</button>
 						</div>
@@ -521,7 +531,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 							"transition-all duration-200 hover:bg-muted/30"
 						)}
 					>
-						<Plus className="h-4 w-4" />
+						<Plus className="size-4 " />
 						<span className="text-sm font-medium">Add MCP Server</span>
 					</button>
 
@@ -560,24 +570,30 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			<div className="space-y-3">
 				<span className="block text-sm font-medium text-foreground">Authentication</span>
 				<div className="flex gap-2">
-					{[
-						{ value: "none", label: "None" },
-						{ value: "bearer", label: "Bearer Token" },
-					].map((opt) => (
-						<button
-							key={opt.value}
-							type="button"
-							onClick={() => setServerForm((prev) => ({ ...prev, authType: opt.value }))}
-							className={cn(
-								"flex-1 px-4 py-2.5 text-sm font-medium rounded-xl border-2 transition-all duration-200",
-								serverForm.authType === opt.value
-									? "border-primary bg-primary/5 text-primary"
-									: "border-border/60 text-muted-foreground hover:border-border hover:text-foreground"
-							)}
-						>
-							{opt.label}
-						</button>
-					))}
+					<button
+						type="button"
+						onClick={() => handleAuthTypeChange("none")}
+						className={cn(
+							"flex-1 rounded-xl border-2 px-4 py-2.5 text-sm font-medium transition-all duration-200",
+							serverForm.authType === "none"
+								? "border-primary bg-primary/5 text-primary"
+								: "border-border/60 text-muted-foreground hover:border-border hover:text-foreground"
+						)}
+					>
+						None
+					</button>
+					<button
+						type="button"
+						onClick={() => handleAuthTypeChange("bearer")}
+						className={cn(
+							"flex-1 rounded-xl border-2 px-4 py-2.5 text-sm font-medium transition-all duration-200",
+							serverForm.authType === "bearer"
+								? "border-primary bg-primary/5 text-primary"
+								: "border-border/60 text-muted-foreground hover:border-border hover:text-foreground"
+						)}
+					>
+						Bearer Token
+					</button>
 				</div>
 				{serverForm.authType === "bearer" && (
 					<Input
@@ -615,7 +631,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 								onClick={() => removeHeaderRow(row.id)}
 								className="p-2 text-muted-foreground hover:text-destructive transition-colors"
 							>
-								<X className="h-4 w-4" />
+								<X className="size-4 " />
 							</button>
 						</div>
 					))}
@@ -646,7 +662,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 					disabled={isSavingServer || !serverForm.url.trim()}
 					className="min-w-[100px]"
 				>
-					{isSavingServer ? <Loader2 className="h-4 w-4 animate-spin" /> : "Connect"}
+					{isSavingServer ? <Loader2 className="size-4  animate-spin" /> : "Connect"}
 				</Button>
 			</div>
 		</div>
@@ -657,7 +673,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			<DialogContent className="sm:max-w-[520px] gap-5">
 				{isLoading ? (
 					<div className="flex items-center justify-center py-24">
-						<Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+						<Loader2 className="size-6  animate-spin text-muted-foreground" />
 					</div>
 				) : (
 					<>

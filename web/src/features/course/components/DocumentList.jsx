@@ -68,14 +68,18 @@ function DocumentList({
 		if (statusFilter !== "all") {
 			filtered = filtered.filter((doc) => {
 				switch (statusFilter) {
-					case "ready":
+					case "ready": {
 						return isDocumentReady(doc)
-					case "processing":
+					}
+					case "processing": {
 						return isDocumentProcessing(doc)
-					case "failed":
+					}
+					case "failed": {
 						return isDocumentFailed(doc)
-					default:
+					}
+					default: {
 						return true
+					}
 				}
 			})
 		}
@@ -109,9 +113,9 @@ function DocumentList({
 	// Get file type icon
 	const getFileTypeIcon = (doc) => {
 		if (doc.document_type === "url") {
-			return <Link2 className="w-5 h-5 text-green-500" />
+			return <Link2 className="size-5  text-green-500" />
 		}
-		return <FileText className="w-5 h-5 text-blue-500" />
+		return <FileText className="size-5  text-blue-500" />
 	}
 
 	// Format file size
@@ -142,14 +146,14 @@ function DocumentList({
 	// Get sort icon
 	const getSortIcon = (field) => {
 		if (sortBy !== field) return null
-		return sortOrder === "asc" ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />
+		return sortOrder === "asc" ? <ArrowUp className="size-4 " /> : <ArrowDown className="size-4 " />
 	}
 
 	if (isLoading) {
 		return (
 			<Card className={className}>
 				<div className="p-6 text-center">
-					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4" />
+					<div className="animate-spin rounded-full size-8  border-b-2 border-blue-600 mx-auto mb-4" />
 					<p className="text-muted-foreground">Loading documents...</p>
 				</div>
 			</Card>
@@ -176,7 +180,7 @@ function DocumentList({
 						{/* Search */}
 						{showSearch && (
 							<div className="flex-1 relative">
-								<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground/70" />
+								<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4  text-muted-foreground/70" />
 								<Input
 									type="text"
 									placeholder="Search documents..."
@@ -190,7 +194,7 @@ function DocumentList({
 						{/* Filter */}
 						{showFilter && (
 							<div className="flex items-center space-x-2">
-								<Filter className="w-4 h-4 text-muted-foreground/70" />
+								<Filter className="size-4  text-muted-foreground/70" />
 								<select
 									value={statusFilter}
 									onChange={(e) => setStatusFilter(e.target.value)}
@@ -212,7 +216,7 @@ function DocumentList({
 				<Card>
 					{searchTerm || statusFilter !== "all" ? (
 						<div className="p-8 text-center">
-							<FileText className="w-12 h-12 text-muted-foreground/70 mx-auto mb-4" />
+							<FileText className="size-12  text-muted-foreground/70 mx-auto mb-4" />
 							<p className="text-muted-foreground mb-2">No documents match your criteria</p>
 							<Button
 								variant="outline"
@@ -227,7 +231,7 @@ function DocumentList({
 						</div>
 					) : typeof emptyMessage === "string" ? (
 						<div className="p-8 text-center">
-							<FileText className="w-12 h-12 text-muted-foreground/70 mx-auto mb-4" />
+							<FileText className="size-12  text-muted-foreground/70 mx-auto mb-4" />
 							<p className="text-muted-foreground mb-2">{emptyMessage}</p>
 						</div>
 					) : (
@@ -294,7 +298,7 @@ function DocumentList({
 										{/* Document Info */}
 										<div className="col-span-5">
 											<div className="flex items-center space-x-3">
-												<div className="flex-shrink-0">{getFileTypeIcon(doc)}</div>
+												<div className="shrink-0">{getFileTypeIcon(doc)}</div>
 												<div className="min-w-0 flex-1">
 													<p className="text-sm font-medium text-foreground truncate">
 														{doc.title || "Untitled Document"}
@@ -302,7 +306,7 @@ function DocumentList({
 													{doc.document_type === "url" && doc.url && (
 														<p className="text-xs text-muted-foreground/80 truncate">{doc.url}</p>
 													)}
-													{doc.file_path && doc.size && (
+													{doc.file_path && doc.size > 0 && (
 														<p className="text-xs text-muted-foreground/80">{formatFileSize(doc.size)}</p>
 													)}
 												</div>
@@ -322,7 +326,7 @@ function DocumentList({
 										{/* Date */}
 										<div className="col-span-2">
 											<div className="flex items-center text-sm text-muted-foreground/80">
-												<Calendar className="w-4 h-4 mr-1" />
+												<Calendar className="size-4  mr-1" />
 												{formatDate(doc.created_at)}
 											</div>
 										</div>
@@ -333,19 +337,19 @@ function DocumentList({
 												<DropdownMenu>
 													<DropdownMenuTrigger asChild>
 														<Button variant="ghost" size="sm">
-															<MoreVertical className="w-4 h-4" />
+															<MoreVertical className="size-4 " />
 														</Button>
 													</DropdownMenuTrigger>
 													<DropdownMenuContent align="end">
 														{isDocumentReady(doc) && onViewDocument && (
 															<DropdownMenuItem onClick={() => onViewDocument(doc)}>
-																<Eye className="w-4 h-4 mr-2" />
+																<Eye className="size-4  mr-2" />
 																View
 															</DropdownMenuItem>
 														)}
 														{doc.file_path && onDownloadDocument && (
 															<DropdownMenuItem onClick={() => onDownloadDocument(doc)}>
-																<Download className="w-4 h-4 mr-2" />
+																<Download className="size-4  mr-2" />
 																Download
 															</DropdownMenuItem>
 														)}
@@ -354,7 +358,7 @@ function DocumentList({
 																onClick={() => onRemoveDocument(doc)}
 																className="text-red-600 hover:text-red-800"
 															>
-																<Trash2 className="w-4 h-4 mr-2" />
+																<Trash2 className="size-4  mr-2" />
 																Remove
 															</DropdownMenuItem>
 														)}

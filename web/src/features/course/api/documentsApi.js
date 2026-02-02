@@ -263,16 +263,21 @@ export function useDocumentsService(courseId = null) {
 			 */
 			getDocumentStatusText(document) {
 				switch (document?.status) {
-					case "pending":
+					case "pending": {
 						return "Pending"
-					case "processing":
+					}
+					case "processing": {
 						return "Processing"
-					case "embedded":
+					}
+					case "embedded": {
 						return "Ready"
-					case "failed":
+					}
+					case "failed": {
 						return "Failed"
-					default:
+					}
+					default: {
 						return "Unknown"
+					}
 				}
 			},
 

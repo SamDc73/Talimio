@@ -172,14 +172,18 @@ function DocumentsView() {
 
 	const ragStatusIndicatorClass = useMemo(() => {
 		switch (ragStatus.status) {
-			case "ready":
+			case "ready": {
 				return "bg-completed"
-			case "processing":
+			}
+			case "processing": {
 				return "bg-upcoming animate-pulse"
-			case "partial":
+			}
+			case "partial": {
 				return "bg-due-today"
-			default:
+			}
+			default: {
 				return "bg-muted-foreground/60"
+			}
 		}
 	}, [ragStatus.status])
 
@@ -197,12 +201,12 @@ function DocumentsView() {
 
 					<div className="flex items-center space-x-3">
 						<Button variant="outline" size="sm" onClick={() => loadDocuments(true)} disabled={isRefreshing}>
-							<RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
+							<RefreshCw className={`size-4  mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
 							Refresh
 						</Button>
 
 						<Button onClick={() => setShowUploadModal(true)} size="sm">
-							<Plus className="w-4 h-4 mr-2" />
+							<Plus className="size-4  mr-2" />
 							Add Documents
 						</Button>
 					</div>
@@ -217,7 +221,7 @@ function DocumentsView() {
 						<div className="p-4">
 							<div className="flex items-center justify-between">
 								<div className="flex items-center space-x-3">
-									<div className={`w-3 h-3 rounded-full ${ragStatusIndicatorClass}`} />
+									<div className={`size-3  rounded-full ${ragStatusIndicatorClass}`} />
 
 									<div>
 										<h3 className="text-sm font-medium text-foreground">RAG Integration Status</h3>
@@ -225,10 +229,10 @@ function DocumentsView() {
 									</div>
 								</div>
 
-								{ragStatus.status === "ready" && <CheckCircle2 className="w-5 h-5 text-completed" />}
+								{ragStatus.status === "ready" && <CheckCircle2 className="size-5  text-completed" />}
 
 								{ragStatus.status === "processing" && (
-									<div className="w-5 h-5 border-2 border-upcoming border-t-transparent rounded-full animate-spin" />
+									<div className="size-5  border-2 border-upcoming border-t-transparent rounded-full animate-spin" />
 								)}
 							</div>
 
@@ -249,8 +253,8 @@ function DocumentsView() {
 						isLoading={isLoading}
 						emptyMessage={
 							<div className="text-center py-12">
-								<div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-									<Search className="w-8 h-8 text-muted-foreground" />
+								<div className="size-16  bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+									<Search className="size-8  text-muted-foreground" />
 								</div>
 								<h3 className="text-lg font-medium text-foreground mb-2">No documents yet</h3>
 								<p className="text-muted-foreground mb-6 max-w-md mx-auto">
@@ -258,7 +262,7 @@ function DocumentsView() {
 									assistant responses.
 								</p>
 								<Button onClick={() => setShowUploadModal(true)}>
-									<Plus className="w-4 h-4 mr-2" />
+									<Plus className="size-4  mr-2" />
 									Upload First Document
 								</Button>
 							</div>

@@ -1,6 +1,6 @@
 import { useLocalRuntime } from "@assistant-ui/react"
 import { useCallback, useEffect, useMemo, useRef } from "react"
-import { useChatSidebar } from "@/features/assistant/contexts/chatSidebarContext"
+import { useChatSidebar } from "@/contexts/chatSidebarContext"
 import { useAssistantModel } from "@/features/assistant/hooks/assistant-store"
 import logger from "@/lib/logger"
 import { assistantApi } from "../api/assistantApi"
@@ -16,13 +16,12 @@ export const useAssistantRuntime = () => {
 	const ctxType = contextData?.contextType || null
 	const ctxId = contextData?.contextId ? String(contextData.contextId) : null
 	const ctxMeta = contextData?.contextMeta || {}
-	const _ctxMetaKey = useMemo(() => JSON.stringify(ctxMeta), [ctxMeta])
 
 	const makeQuote = useCallback(
 		(s) =>
 			(s || "")
 				.split("\n")
-				.map((line) => (line.trim().length ? `> ${line}` : ">"))
+				.map((line) => (line.trim().length > 0 ? `> ${line}` : ">"))
 				.join("\n"),
 		[]
 	)
@@ -59,7 +58,7 @@ export const useAssistantRuntime = () => {
 	// Stable run function to avoid recreating the runtime each render
 	const run = useCallback(
 		async function* run({ messages, abortSignal }) {
-			const last = messages[messages.length - 1]
+			const last = messages.at(-1)
 			const lastMessageText0 = last ? partsToText(last.content) : ""
 			if (!lastMessageText0.trim()) {
 				return { content: [{ type: "text", text: "" }] }

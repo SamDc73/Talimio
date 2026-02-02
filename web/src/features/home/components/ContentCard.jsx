@@ -112,16 +112,14 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 								const Icon = V.icon
 								return (
 									<>
-										<Icon className="h-3 w-3" />
+										<Icon className="size-3 " />
 										<span>{V.label}</span>
 									</>
 								)
 							})()}
 						</div>
 					</div>
-					<h3 className="text-xl font-display font-bold text-foreground hover:underline line-clamp-2 mb-1">
-						{item.title}
-					</h3>
+					<h3 className="text-xl font-bold text-foreground hover:underline line-clamp-2 mb-1">{item.title}</h3>
 
 					{/* Video metadata */}
 					{item.type === "video" && (
@@ -147,7 +145,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 							<TagChip key={t} tag={t} contentType={item.type} />
 						))}
 						{item.tags?.length > 2 && (
-							<span className="inline-flex text-xs font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded">
+							<span className="inline-flex text-xs font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-sm">
 								+{item.tags.length - 2}
 							</span>
 						)}
@@ -159,7 +157,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 						<div className="w-full bg-muted rounded-full h-2 overflow-hidden">
 							<div
 								style={{ width: `${progressValue}%` }}
-								className={`h-full bg-gradient-to-r ${VARIANTS[item.type].grad} rounded-full transition-all duration-500`}
+								className={`h-full bg-linear-to-r ${VARIANTS[item.type].grad} rounded-full transition-all duration-500`}
 							/>
 						</div>
 					</div>
@@ -168,8 +166,8 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 					<div className="absolute top-4 right-4 z-10">
 						<Popover>
 							<PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
-								<Button variant="ghost" size="icon" className="h-10 w-10 rounded-full">
-									<MoreHorizontal className="h-4 w-4" />
+								<Button variant="ghost" size="icon" className="size-10  rounded-full">
+									<MoreHorizontal className="size-4 " />
 								</Button>
 							</PopoverTrigger>
 							<PopoverContent align="end" className="w-40 p-0">
@@ -185,17 +183,31 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 												className={`justify-start flex items-center gap-2 ${action === "Delete" ? "text-destructive hover:bg-destructive/10" : ""}`}
 												onClick={(e) => {
 													e.stopPropagation()
-													if (action === "Pin") onTogglePin()
-													else if (action === "Delete") handleDeleteClick()
-													else if (action === "Archive") handleArchive()
-													else if (action === "Edit Tags") handleEditTags()
+													switch (action) {
+														case "Pin": {
+															onTogglePin()
+															break
+														}
+														case "Delete": {
+															handleDeleteClick()
+															break
+														}
+														case "Archive": {
+															handleArchive()
+															break
+														}
+														case "Edit Tags": {
+															handleEditTags()
+															break
+														}
+													}
 												}}
 												disabled={action === "Archive" && archiveContentMutation.isPending}
 											>
-												{action === "Pin" && <Pin className="h-4 w-4" />}
-												{action === "Edit Tags" && <Tag className="h-4 w-4" />}
-												{action === "Archive" && <Archive className="h-4 w-4" />}
-												{action === "Delete" && <X className="h-4 w-4" />}
+												{action === "Pin" && <Pin className="size-4 " />}
+												{action === "Edit Tags" && <Tag className="size-4 " />}
+												{action === "Archive" && <Archive className="size-4 " />}
+												{action === "Delete" && <X className="size-4 " />}
 												{getActionLabel(action)}
 											</Button>
 										)

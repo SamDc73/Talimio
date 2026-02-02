@@ -44,7 +44,7 @@ export function ModelPicker({ className }) {
 					)}
 				>
 					<span>{currentModel.displayName || currentModel.id}</span>
-					<ChevronDown className="h-4 w-4 text-muted-foreground" />
+					<ChevronDown className="size-4  text-muted-foreground" />
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
@@ -76,7 +76,7 @@ export function ModelPicker({ className }) {
 								)}
 							>
 								<div className="flex items-center gap-3">
-									{isSelected && <Check className="h-4 w-4 text-muted-foreground shrink-0" />}
+									{isSelected && <Check className="size-4  text-muted-foreground shrink-0" />}
 									<div className={cn("flex flex-col", !isSelected && "ml-7")}>
 										<span
 											className={cn("text-sm", isSelected ? "text-foreground font-medium" : "text-muted-foreground")}

@@ -34,7 +34,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 	const countLessons = (items) => {
 		const counts = { total: 0, completed: 0 }
 
-		if (!items || !items.length) {
+		if (!items || items.length === 0) {
 			return [counts.total, counts.completed]
 		}
 
@@ -59,9 +59,9 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 	function LessonStatusIndicator({ isCompleted, indexStr: _indexStr }) {
 		// Show a proper empty circle when not completed to match the old outline's spirit
 		if (isCompleted) {
-			return <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+			return <CheckCircle className="size-5  text-emerald-600 shrink-0" />
 		}
-		return <Circle className="w-5 h-5 text-zinc-400 shrink-0" />
+		return <Circle className="size-5  text-zinc-400 shrink-0" />
 	}
 
 	// Removed the separate action button; the whole row is clickable now with a subtle chevron indicator
@@ -89,7 +89,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 					className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
 				>
 					<span className={titleClasses}>{lesson.title}</span>
-					<ChevronRight className="h-4 w-4 text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100" />
+					<ChevronRight className="size-4  text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100" />
 				</button>
 			</div>
 		)
@@ -154,13 +154,13 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 			>
 				<div
 					className={cn(
-						"flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-medium transition-all duration-300",
+						"flex size-8  shrink-0 items-center justify-center rounded-full border text-sm font-medium transition-all duration-300",
 						isModuleCompleted
 							? "border-emerald-300 bg-emerald-50 text-emerald-700"
 							: "border-border/70 bg-muted/60 text-muted-foreground"
 					)}
 				>
-					{isModuleCompleted ? <CheckCircle className="h-4 w-4" /> : index + 1}
+					{isModuleCompleted ? <CheckCircle className="size-4 " /> : index + 1}
 				</div>
 
 				<h2 className="flex-1 truncate text-lg font-semibold text-foreground md:text-xl" title={module.title}>

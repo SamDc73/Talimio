@@ -1,14 +1,3 @@
-/**
- * DocumentUploadModal Component
- *
- * Modal for adding documents to an existing course:
- * - Reuses DocumentUploader component
- * - Handles upload progress and status
- * - Provides immediate feedback
- * - Auto-closes on successful upload
- * - Error handling and retry options
- */
-
 import { AlertTriangle, CheckCircle2, X } from "lucide-react"
 import { useCallback, useState } from "react"
 import { Button } from "@/components/Button"
@@ -20,17 +9,14 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 	const [documents, setDocuments] = useState([])
 	const [isUploading, setIsUploading] = useState(false)
 	const [uploadResults, setUploadResults] = useState(null)
-	const [_uploadProgress, setUploadProgress] = useState({})
 
 	const documentsService = useDocumentsService(courseId)
 
-	// Handle document changes from uploader
 	const handleDocumentsChange = useCallback((newDocuments) => {
 		setDocuments(newDocuments)
-		setUploadResults(null) // Clear previous results
+		setUploadResults(null)
 	}, [])
 
-	// Handle upload process
 	const handleUpload = async () => {
 		if (documents.length === 0) {
 			return
@@ -40,19 +26,16 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 		setUploadResults(null)
 
 		try {
-			// Update document status to processing for UI feedback
 			const processingDocs = documents.map((doc) => ({
 				...doc,
 				status: "processing",
 			}))
 			setDocuments(processingDocs)
 
-			// Upload documents
 			const results = await documentsService.uploadMultipleDocuments(documents.map((doc, index) => ({ ...doc, index })))
 
 			setUploadResults(results)
 
-			// Update document status based on results
 			const updatedDocs = documents.map((doc) => {
 				const result = results.results.find((r) => r.originalIndex === doc.index)
 				const error = results.errors.find((e) => e.originalIndex === doc.index)
@@ -68,22 +51,16 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 
 			setDocuments(updatedDocs)
 
-			// Show success/error toast
 			if (results.errors.length === 0) {
-				// Auto-close modal after successful upload
 				setTimeout(() => {
 					handleClose()
 				}, 2000)
-			} else if (results.results.length === 0) {
-			} else {
 			}
 
-			// Notify parent component
 			if (onDocumentsUploaded && results.results.length > 0) {
 				onDocumentsUploaded(results.results)
 			}
 		} catch (error) {
-			// Update all documents to failed status
 			const failedDocs = documents.map((doc) => ({
 				...doc,
 				status: "failed",
@@ -95,21 +72,17 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 		}
 	}
 
-	// Handle modal close
 	const handleClose = () => {
 		if (!isUploading) {
 			setDocuments([])
 			setUploadResults(null)
-			setUploadProgress({})
 			onClose()
 		}
 	}
 
-	// Handle retry for failed documents
 	const handleRetryFailed = () => {
 		const failedDocs = documents.filter((doc) => doc.status === "failed")
 		if (failedDocs.length > 0) {
-			// Reset failed documents to pending
 			const resetDocs = documents.map((doc) =>
 				doc.status === "failed" ? { ...doc, status: "pending", error: undefined } : doc
 			)
@@ -127,9 +100,8 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 		documents.length > 0 && documents.every((doc) => doc.status === "embedded" || doc.status === "failed")
 
 	return (
-		<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+		<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
 			<div className="bg-card rounded-lg max-w-3xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
-				{/* Header */}
 				<div className="flex items-center justify-between p-6 border-b border-border">
 					<h2 className="text-xl font-semibold text-foreground">Add Documents to Course</h2>
 					<button
@@ -138,13 +110,11 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 						disabled={isUploading}
 						className="text-muted-foreground/70 hover:text-muted-foreground dark:hover:text-foreground transition-colors disabled:opacity-50"
 					>
-						<X className="h-6 w-6" />
+						<X className="size-6 " />
 					</button>
 				</div>
 
-				{/* Content */}
 				<div className="p-6">
-					{/* Document Uploader */}
 					<div className="mb-6">
 						<DocumentUploader
 							onDocumentsChange={handleDocumentsChange}
@@ -155,7 +125,6 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 						/>
 					</div>
 
-					{/* Upload Progress */}
 					{isUploading && documents.length > 0 && (
 						<div className="mb-6 space-y-3">
 							<h3 className="text-sm font-medium text-foreground">Upload Progress</h3>
@@ -171,13 +140,12 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 						</div>
 					)}
 
-					{/* Upload Results Summary */}
 					{uploadResults && allCompleted && (
 						<div className="mb-6">
 							{uploadResults.results.length > 0 && (
 								<div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-3">
 									<div className="flex items-center space-x-2">
-										<CheckCircle2 className="w-5 h-5 text-green-600" />
+										<CheckCircle2 className="size-5  text-green-600" />
 										<p className="text-sm font-medium text-green-800 dark:text-green-300">
 											{uploadResults.results.length} document(s) uploaded successfully
 										</p>
@@ -188,7 +156,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 							{uploadResults.errors.length > 0 && (
 								<div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
 									<div className="flex items-center space-x-2 mb-2">
-										<AlertTriangle className="w-5 h-5 text-red-600" />
+										<AlertTriangle className="size-5  text-red-600" />
 										<p className="text-sm font-medium text-red-800 dark:text-red-300">
 											{uploadResults.errors.length} document(s) failed to upload
 										</p>
@@ -205,7 +173,6 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 						</div>
 					)}
 
-					{/* Info Section */}
 					{!isUploading && !uploadResults && (
 						<div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
 							<p className="text-sm text-blue-700 dark:text-blue-300">
@@ -216,7 +183,6 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 					)}
 				</div>
 
-				{/* Actions */}
 				<div className="flex justify-end space-x-3 p-6 border-t border-border">
 					<Button type="button" variant="outline" onClick={handleClose} disabled={isUploading}>
 						{allCompleted && hasSuccessfulDocuments ? "Close" : "Cancel"}
@@ -242,11 +208,11 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 						>
 							{isUploading ? (
 								<div className="flex items-center space-x-2">
-									<div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+									<div className="size-4  border-2 border-white border-t-transparent rounded-full animate-spin" />
 									<span>Uploading...</span>
 								</div>
 							) : (
-								`Upload ${documents.length} Document${documents.length !== 1 ? "s" : ""}`
+								`Upload ${documents.length} Document${documents.length === 1 ? "" : "s"}`
 							)}
 						</Button>
 					)}

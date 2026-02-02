@@ -62,8 +62,8 @@ function SearchBar({
 							onChange={(e) => setSearchQuery(e.target.value)}
 						/>
 						{searchQuery && (
-							<Button variant="ghost" size="icon" onClick={() => setSearchQuery("")} className="h-8 w-8">
-								<X className="h-4 w-4" />
+							<Button variant="ghost" size="icon" onClick={() => setSearchQuery("")} className="size-8 ">
+								<X className="size-4 " />
 							</Button>
 						)}
 					</div>
@@ -109,9 +109,9 @@ function SearchBar({
 								<Button
 									onClick={onGenerateCourse}
 									size="sm"
-									className="bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white flex items-center gap-1"
+									className="bg-linear-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white flex items-center gap-1"
 								>
-									<Sparkles className="h-3.5 w-3.5" />
+									<Sparkles className="size-3.5 " />
 									Generate Course
 								</Button>
 								<div className="h-8 w-px bg-border" />

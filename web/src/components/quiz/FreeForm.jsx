@@ -46,25 +46,12 @@ export function FreeForm({ question, sampleAnswer, minLength = 50 }) {
 				)}
 			</div>
 
-			{!submitted ? (
-				<button
-					type="button"
-					onClick={handleSubmit}
-					disabled={userAnswer.length < minLength}
-					className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-						userAnswer.length < minLength
-							? "bg-muted text-muted-foreground cursor-not-allowed"
-							: "bg-completed text-completed-text hover:bg-completed/90"
-					}`}
-				>
-					Submit Answer
-				</button>
-			) : (
+			{submitted ? (
 				<div>
 					<div className="p-4 mb-4 rounded-lg border border-border bg-muted/20">
 						<div className="text-sm font-medium mb-2 text-completed">✓ Answer Submitted</div>
 
-						<p className="text-sm leading-relaxed text-muted-foreground">
+						<p className="text-sm/relaxed  text-muted-foreground">
 							Thank you for your thoughtful response. This is a free-form question, so there's no single correct answer.
 						</p>
 					</div>
@@ -75,10 +62,7 @@ export function FreeForm({ question, sampleAnswer, minLength = 50 }) {
 								<span className="text-sm font-medium text-foreground group-open:text-primary">View Sample Answer</span>
 							</summary>
 							<div className="mt-3 p-4 rounded-lg bg-muted/20 border border-border">
-								<QuizMarkdown
-									content={sampleAnswer}
-									className="text-sm leading-relaxed text-muted-foreground [&_p]:m-0"
-								/>
+								<QuizMarkdown content={sampleAnswer} className="text-sm/relaxed  text-muted-foreground [&_p]:m-0" />
 							</div>
 						</details>
 					)}
@@ -91,6 +75,19 @@ export function FreeForm({ question, sampleAnswer, minLength = 50 }) {
 						Write Another Answer
 					</button>
 				</div>
+			) : (
+				<button
+					type="button"
+					onClick={handleSubmit}
+					disabled={userAnswer.length < minLength}
+					className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+						userAnswer.length < minLength
+							? "bg-muted text-muted-foreground cursor-not-allowed"
+							: "bg-completed text-completed-text hover:bg-completed/90"
+					}`}
+				>
+					Submit Answer
+				</button>
 			)}
 		</div>
 	)

@@ -41,11 +41,11 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 	const { goToLesson } = useCourseNavigation()
 
 	// Handle lesson click - navigate to lesson page
-	const handleLessonClick = async (_moduleId, lessonId, _lessonTitle, _lessonDescription) => {
-		try {
-			// Navigate to the lesson using the course page
-			goToLesson(courseId, lessonId)
-		} catch (_err) {}
+	const handleLessonClick = (_moduleId, lessonId) => {
+		if (!lessonId) {
+			return
+		}
+		goToLesson(courseId, lessonId)
 	}
 
 	// Create refs for path, wrappers, circles and lesson wrappers
@@ -163,22 +163,24 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 			}
 		}
 
-		// Run initial measurement
-		requestAnimationFrame(() => requestAnimationFrame(() => measure(true)))
+		const scheduleMeasure = () => {
+			requestAnimationFrame(() => measure(true))
+		}
 
-		const ro = new ResizeObserver(() => requestAnimationFrame(() => requestAnimationFrame(() => measure(true))))
+		// Run initial measurement
+		scheduleMeasure()
+
+		const ro = new ResizeObserver(() => scheduleMeasure())
 		if (svgRef.current) {
 			ro.observe(svgRef.current)
 		}
 
 		// Font loading might affect layout - apply initial positions when fonts are ready
-		// eslint-disable-next-line promise/always-return
-		document.fonts?.ready.then(() => {
-			requestAnimationFrame(() => requestAnimationFrame(() => measure(true)))
-		})
+
+		document.fonts?.ready.then(scheduleMeasure)
 
 		// Handle resize with double RAF
-		const handleResize = () => requestAnimationFrame(() => requestAnimationFrame(() => measure(true)))
+		const handleResize = () => scheduleMeasure()
 		window.addEventListener("resize", handleResize)
 
 		return () => {
@@ -190,7 +192,8 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 	// Note: Lesson viewing is handled by the nested CourseLayout via routing
 
 	// Normalize available ids set for quick lookups (undefined => no locking)
-	const availableSet = Array.isArray(availableLessonIds) ? new Set(availableLessonIds.map((v) => String(v))) : null
+	const availableSet = Array.isArray(availableLessonIds) ? new Set(availableLessonIds.map(String)) : null
+	lessonWrapRefs.current = []
 
 	return (
 		<div key={`track-${modules.length}`} className="flex-1 min-h-screen flex flex-col p-4 md:p-6 lg:p-8">
@@ -198,10 +201,10 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 				{/* Duolingo-style vertical learning path */}
 				<div className="flex-1 relative">
 					{/* Central path - curved line */}
-					<div className="absolute left-0 right-0 top-0 bottom-0 z-0">
+					<div className="absolute inset-0    z-0">
 						<svg
 							ref={svgRef}
-							className="absolute w-full h-full"
+							className="absolute size-full "
 							preserveAspectRatio="none"
 							viewBox="0 0 100 100"
 							style={{ overflow: "visible" }}
@@ -218,7 +221,6 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 								stroke="#10b981"
 								strokeWidth="2"
 								strokeLinecap="round"
-								className="path"
 							/>
 						</svg>
 					</div>
@@ -232,11 +234,6 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 							initialPositioningDone && "opacity-100 transition-opacity duration-300"
 						)}
 					>
-						{/* Clear lesson refs before mapping */}
-						{(() => {
-							lessonWrapRefs.current = []
-							return null
-						})()}
 						{modules.map((module, moduleIndex) => (
 							<div key={module.id} className="mb-16">
 								{/* Module node with title beside it */}
@@ -262,15 +259,15 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 											className="relative shrink-0"
 										>
 											<div
-												className={`w-24 h-24 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg ${
+												className={`size-24  rounded-full bg-emerald-500 flex items-center justify-center shadow-lg ${
 													moduleIndex % 2 === 0 ? "rotate-[-5deg]" : "rotate-[5deg]"
 												}`}
 											>
 												<div className="absolute inset-2 rounded-full bg-card flex items-center justify-center">
 													{module.status === "completed" ? (
-														<CheckCircle className="w-10 h-10 text-emerald-500" />
+														<CheckCircle className="size-10  text-emerald-500" />
 													) : (
-														<div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-emerald-600 bg-emerald-50">
+														<div className="size-16  rounded-full flex items-center justify-center text-2xl font-bold text-emerald-600 bg-emerald-50">
 															{moduleIndex + 1}
 														</div>
 													)}
@@ -288,10 +285,10 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 												)}
 											>
 												{module.title ? (
-													<h3 className="text-xl font-bold text-slate-800 leading-snug">{module.title}</h3>
+													<h3 className="text-xl/snug font-bold text-slate-800 ">{module.title}</h3>
 												) : null}
 												{module.description ? (
-													<p className="text-slate-500 text-sm mt-1 leading-tight">{module.description}</p>
+													<p className="text-slate-500 text-sm/tight mt-1 ">{module.description}</p>
 												) : null}
 											</div>
 										)}
@@ -304,76 +301,74 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 										{/* Lessons container with alternating sides */}
 										<div className="relative">
 											{module.lessons
-												.sort((a, b) => a.order - b.order)
-												.map((lesson, lessonIndex) => (
-													<div
-														key={lesson.id}
-														className={cn("mb-4 flex", lessonIndex % 2 === 0 ? "justify-start" : "justify-end")}
-													>
-														{/* Connector line to center path */}
+												.toSorted((a, b) => a.order - b.order)
+												.map((lesson, lessonIndex) => {
+													const completed = isCompleted(lesson.id)
+													const locked = availableSet ? !completed && !availableSet.has(String(lesson.id)) : false
+
+													return (
 														<div
-															className={cn(
-																"absolute top-1/2 h-0.5 bg-emerald-200 z-0",
-																lessonIndex % 2 === 0
-																	? "left-1/2 right-[calc(100%-70px)]"
-																	: "right-1/2 left-[calc(100%-70px)]"
-															)}
-															style={{ top: `${lessonIndex * 84 + 40}px` }}
-														/>
+															key={lesson.id}
+															className={cn("mb-4 flex", lessonIndex % 2 === 0 ? "justify-start" : "justify-end")}
+														>
+															{/* Connector line to center path */}
+															<div
+																className={cn(
+																	"absolute top-1/2 h-0.5 bg-emerald-200 z-0",
+																	lessonIndex % 2 === 0
+																		? "left-1/2 right-[calc(100%-70px)]"
+																		: "right-1/2 left-[calc(100%-70px)]"
+																)}
+																style={{ top: `${lessonIndex * 84 + 40}px` }}
+															/>
 
-														{/* Lesson card */}
-														{(() => {
-															const completed = isCompleted(lesson.id)
-															const locked = availableSet ? !completed && !availableSet.has(String(lesson.id)) : false
-															return (
-																<button
-																	type="button"
-																	ref={(el) => {
-																		if (!lessonWrapRefs.current[moduleIndex]) lessonWrapRefs.current[moduleIndex] = []
-																		lessonWrapRefs.current[moduleIndex][lessonIndex] = el
-																	}}
-																	className={cn(
-																		"relative bg-card border rounded-xl p-4 shadow-sm w-[calc(50%-20px)] z-10 text-left",
-																		completed
-																			? "border-emerald-300 bg-emerald-50/30"
-																			: locked
-																				? "border-slate-200 opacity-60"
-																				: "border-slate-200 hover:shadow-md hover:border-emerald-300"
-																	)}
-																	onClick={() => {
-																		if (locked) return
-																		handleLessonClick(module.id, lesson.id, lesson.title, lesson.description)
-																	}}
-																	aria-label={`Open lesson: ${lesson.title}`}
-																	aria-disabled={locked}
-																>
-																	<div className="flex items-center gap-3 mb-2">
-																		<div
-																			className={cn(
-																				"w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-																				completed ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-600"
-																			)}
-																		>
-																			{completed ? (
-																				<CheckCircle className="w-4 h-4" />
-																			) : (
-																				<span className="text-sm font-medium">{lessonIndex + 1}</span>
-																			)}
-																		</div>
-																		<h4 className="font-medium text-slate-800 text-sm">{lesson.title}</h4>
+															<button
+																type="button"
+																ref={(el) => {
+																	if (!lessonWrapRefs.current[moduleIndex]) lessonWrapRefs.current[moduleIndex] = []
+																	lessonWrapRefs.current[moduleIndex][lessonIndex] = el
+																}}
+																className={cn(
+																	"relative bg-card border rounded-xl p-4 shadow-sm w-[calc(50%-20px)] z-10 text-left",
+																	completed
+																		? "border-emerald-300 bg-emerald-50/30"
+																		: locked
+																			? "border-slate-200 opacity-60"
+																			: "border-slate-200 hover:shadow-md hover:border-emerald-300"
+																)}
+																onClick={() => {
+																	if (locked) return
+																	handleLessonClick(module.id, lesson.id)
+																}}
+																aria-label={`Open lesson: ${lesson.title}`}
+																aria-disabled={locked}
+															>
+																<div className="flex items-center gap-3 mb-2">
+																	<div
+																		className={cn(
+																			"size-8 rounded-full flex items-center justify-center shrink-0",
+																			completed ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-600"
+																		)}
+																	>
+																		{completed ? (
+																			<CheckCircle className="size-4" />
+																		) : (
+																			<span className="text-sm font-medium">{lessonIndex + 1}</span>
+																		)}
 																	</div>
-																	<p className="text-xs text-slate-500 ml-11">{lesson.description}</p>
+																	<h4 className="text-sm font-medium text-slate-800">{lesson.title}</h4>
+																</div>
+																<p className="ml-11 text-xs text-slate-500">{lesson.description}</p>
 
-																	{locked ? (
-																		<span className="absolute right-2 top-2 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white/80 p-1">
-																			<Lock className="h-3.5 w-3.5 text-slate-500" />
-																		</span>
-																	) : null}
-																</button>
-															)
-														})()}
-													</div>
-												))}
+																{locked ? (
+																	<span className="absolute right-2 top-2 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white/80 p-1">
+																		<Lock className="size-3.5 text-slate-500" />
+																	</span>
+																) : null}
+															</button>
+														</div>
+													)
+												})}
 										</div>
 									</div>
 								)}

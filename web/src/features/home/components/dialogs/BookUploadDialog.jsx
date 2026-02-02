@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/D
 import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
 import { api } from "@/lib/apiClient"
+import logger from "@/lib/logger"
 
 export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 	const [selectedFile, setSelectedFile] = useState(null)
@@ -79,7 +80,9 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 		}
 		try {
 			e.target.value = ""
-		} catch (_e) {}
+		} catch (error) {
+			logger.error("Failed to reset file input", error)
+		}
 	}
 
 	const handleUpload = async () => {
@@ -101,8 +104,8 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 			setBookAuthor("")
 			onOpenChange(false)
 			if (onBookUploaded) onBookUploaded(newBook)
-		} catch (_error) {
-			// Intentionally quiet – parent surfaces toast if needed
+		} catch (error) {
+			logger.error("Failed to upload book", error)
 		} finally {
 			setIsUploadingBook(false)
 		}
@@ -115,7 +118,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 					{isUploadingBook && (
 						<div className="absolute inset-0 z-50 flex items-center justify-center rounded-lg bg-background/75 backdrop-blur-sm">
 							<div className="flex items-center gap-3 text-sm">
-								<Loader2 className="h-5 w-5 animate-spin text-book" />
+								<Loader2 className="size-5  animate-spin text-book" />
 								<span className="font-medium">Uploading book…</span>
 							</div>
 						</div>
@@ -131,8 +134,8 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 					>
 						<DialogHeader className="space-y-3">
 							<div className="flex items-center gap-3">
-								<div className="rounded-lg bg-gradient-to-br from-book/90 to-book p-2.5">
-									<BookOpen className="h-5 w-5 text-white" />
+								<div className="rounded-lg bg-linear-to-br from-book/90 to-book p-2.5">
+									<BookOpen className="size-5  text-white" />
 								</div>
 								<DialogTitle className="text-2xl">Upload Book</DialogTitle>
 							</div>
@@ -159,7 +162,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 										}
 									}}
 								>
-									<Upload className="mx-auto h-10 w-10 text-muted-foreground/70 mb-2" />
+									<Upload className="mx-auto size-10  text-muted-foreground/70 mb-2" />
 									<p className="text-sm font-medium text-foreground">
 										{selectedFile ? "Replace file" : "Drag PDF/EPUB here"}
 									</p>
@@ -220,7 +223,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 							>
 								{isUploadingBook ? (
 									<div className="flex items-center gap-2">
-										<Loader2 className="h-4 w-4 animate-spin" />
+										<Loader2 className="size-4  animate-spin" />
 										<span>Uploading…</span>
 									</div>
 								) : (

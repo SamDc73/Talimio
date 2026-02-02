@@ -2,6 +2,7 @@ import { ChevronLeft, Mail } from "lucide-react"
 import { useState } from "react"
 
 import { useAuth } from "@/hooks/use-auth"
+import logger from "@/lib/logger"
 
 function PasswordResetForm({ onBack }) {
 	const [email, setEmail] = useState("")
@@ -25,7 +26,8 @@ function PasswordResetForm({ onBack }) {
 			} else {
 				setError(result.error || "Password reset is not available")
 			}
-		} catch (_err) {
+		} catch (err) {
+			logger.error("Password reset failed", err, { email })
 			setError("An unexpected error occurred")
 		} finally {
 			setLoading(false)
@@ -36,7 +38,6 @@ function PasswordResetForm({ onBack }) {
 		<div className="min-h-screen bg-background flex items-center justify-center p-4">
 			<div className="w-full max-w-md">
 				<div className="bg-card border border-border rounded-lg shadow-sm p-6 space-y-6">
-					{/* Header */}
 					<div className="text-center space-y-2">
 						<h1 className="text-2xl font-bold">Reset Password</h1>
 						<p className="text-muted-foreground">
@@ -44,21 +45,19 @@ function PasswordResetForm({ onBack }) {
 						</p>
 					</div>
 
-					{/* Error/Success Messages */}
 					{error && <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-md text-sm">{error}</div>}
 
 					{successMessage && (
 						<div className="bg-primary/10 text-primary px-4 py-2 rounded-md text-sm">{successMessage}</div>
 					)}
 
-					{/* Form */}
 					<form onSubmit={handleSubmit} className="space-y-4">
 						<div>
 							<label htmlFor="email" className="block text-sm font-medium mb-1">
 								Email
 							</label>
 							<div className="relative">
-								<Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+								<Mail className="absolute left-3 top-3 size-4  text-muted-foreground" />
 								<input
 									type="email"
 									id="email"
@@ -81,14 +80,13 @@ function PasswordResetForm({ onBack }) {
 						</button>
 					</form>
 
-					{/* Back to login */}
 					<div className="text-center">
 						<button
 							type="button"
 							onClick={onBack}
 							className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
 						>
-							<ChevronLeft className="h-4 w-4 mr-1" />
+							<ChevronLeft className="size-4  mr-1" />
 							Back to login
 						</button>
 					</div>

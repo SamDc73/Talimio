@@ -15,18 +15,24 @@ const executeApiRequest = async (method, endpoint, body, requestOptions) => {
 	const normalizedMethod = method.toUpperCase()
 
 	switch (normalizedMethod) {
-		case "GET":
+		case "GET": {
 			return api.get(endpoint, requestOptions)
-		case "POST":
+		}
+		case "POST": {
 			return api.post(endpoint, body, requestOptions)
-		case "PUT":
+		}
+		case "PUT": {
 			return api.put(endpoint, body, requestOptions)
-		case "PATCH":
+		}
+		case "PATCH": {
 			return api.patch(endpoint, body, requestOptions)
-		case "DELETE":
+		}
+		case "DELETE": {
 			return api.delete(endpoint, requestOptions)
-		default:
+		}
+		default: {
 			throw new Error(`Unsupported method: ${method}`)
+		}
 	}
 }
 

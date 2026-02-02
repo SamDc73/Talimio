@@ -20,7 +20,7 @@ export function useWorkspaceState(workspaceId) {
 		const ws = getWorkspaceState(workspaceId)
 		return {
 			workspace: ws,
-			files: ws ? Array.from(ws.files.values()) : [],
+			files: ws ? [...ws.files.values()] : [],
 		}
 	}, [getWorkspaceState, workspaceId, version])
 

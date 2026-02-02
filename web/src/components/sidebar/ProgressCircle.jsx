@@ -16,7 +16,7 @@ function ProgressCircle({ number, progress, variant = "default" }) {
 
 	if (progress <= 0) {
 		return (
-			<div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">
+			<div className="size-8  rounded-full bg-zinc-100 flex items-center justify-center">
 				<span className="text-sm text-zinc-600">{number}</span>
 			</div>
 		)
@@ -24,11 +24,11 @@ function ProgressCircle({ number, progress, variant = "default" }) {
 
 	return (
 		<div className="relative flex items-center justify-center">
-			<div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">
+			<div className="size-8  rounded-full bg-zinc-100 flex items-center justify-center">
 				<span className="text-sm text-zinc-600">{number}</span>
 			</div>
 			<svg
-				className="absolute top-0 left-0 w-8 h-8 -rotate-90"
+				className="absolute top-0 left-0 size-8  -rotate-90"
 				role="img"
 				aria-label={`Progress: ${Math.round(progress)}%`}
 			>

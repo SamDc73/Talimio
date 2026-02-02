@@ -14,7 +14,7 @@ export default function CodeMirrorEditor({ value = "", onChange, extensions = []
 
 	useLayoutEffect(() => {
 		if (!containerRef.current) {
-			return undefined
+			return
 		}
 
 		const updateListener = EditorView.updateListener.of((update) => {

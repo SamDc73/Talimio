@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react"
 
 import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
+import logger from "@/lib/logger"
 import useTagStore from "../../../stores/useTagStore"
 
 import { TagList } from "./Tag"
@@ -23,7 +24,8 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 		try {
 			const tags = await fetchContentTags(contentType, contentId)
 			setCurrentTags(tags)
-		} catch (_error) {
+		} catch (error) {
+			logger.error("Failed to load content tags", error, { contentType, contentId })
 		} finally {
 			setIsLoading(false)
 		}
@@ -50,7 +52,8 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 			}
 
 			onOpenChange(false)
-		} catch (_error) {
+		} catch (error) {
+			logger.error("Failed to update tags", error, { contentType, contentId })
 		} finally {
 			setIsSaving(false)
 		}
@@ -72,7 +75,7 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2">
-						<TagIcon className="h-5 w-5" />
+						<TagIcon className="size-5 " />
 						Edit Tags
 					</DialogTitle>
 					{contentTitle && <p className="text-sm text-muted-foreground mt-1">for "{contentTitle}"</p>}
@@ -81,7 +84,7 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 				<div className="space-y-4 py-4">
 					{isLoading ? (
 						<div className="flex items-center justify-center py-8">
-							<Loader2 className="h-6 w-6 animate-spin" />
+							<Loader2 className="size-6  animate-spin" />
 							<span className="ml-2 text-sm text-muted-foreground">Loading tags...</span>
 						</div>
 					) : (
@@ -114,7 +117,7 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 							</div>
 
 							{/* Helper text */}
-							<div className="text-xs text-muted-foreground/80 bg-muted/40 p-3 rounded">
+							<div className="text-xs text-muted-foreground/80 bg-muted/40 p-3 rounded-sm">
 								<p>• Type to search existing tags or create new ones</p>
 								<p>• Press Enter to add a tag</p>
 								<p>• Click the X on a tag to remove it</p>
@@ -131,7 +134,7 @@ function TagEditModal({ open, onOpenChange, contentType, contentId, contentTitle
 					<Button type="button" onClick={handleSave} disabled={isSaving || isLoading}>
 						{isSaving ? (
 							<>
-								<Loader2 className="h-4 w-4 animate-spin mr-2" />
+								<Loader2 className="size-4  animate-spin mr-2" />
 								Saving...
 							</>
 						) : (

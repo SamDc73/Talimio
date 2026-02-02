@@ -17,7 +17,7 @@ import { TooltipIconButton } from "@/features/assistant/components/TooltipIconBu
 import { cn } from "@/lib/utils"
 
 const useFileSrc = (file) => {
-	const [src, setSrc] = useState(undefined)
+	const [src, setSrc] = useState()
 
 	useEffect(() => {
 		if (!file) {
@@ -41,7 +41,7 @@ const useAttachmentSrc = () => {
 		useShallow(({ attachment }) => {
 			if (attachment.type !== "image") return {}
 			if (attachment.file) return { file: attachment.file }
-			const src = attachment.content?.filter((c) => c.type === "image")[0]?.image
+			const src = attachment.content?.find((c) => c.type === "image")?.image
 			if (!src) return {}
 			return { src }
 		})
@@ -58,7 +58,7 @@ function AttachmentPreview({ src }) {
 			alt="Attachment preview"
 			className={
 				isLoaded
-					? "aui-attachment-preview-image-loaded block h-auto max-h-[80vh] w-auto max-w-full object-contain"
+					? "aui-attachment-preview-image-loaded block size-auto max-h-[80vh]  max-w-full object-contain"
 					: "aui-attachment-preview-image-loading hidden"
 			}
 			onLoad={() => setIsLoaded(true)}
@@ -81,7 +81,7 @@ function AttachmentPreviewDialog({ children }) {
 			>
 				{children}
 			</DialogTrigger>
-			<DialogContent className="aui-attachment-preview-dialog-content p-2 sm:max-w-3xl [&_svg]:text-background [&>button]:rounded-full [&>button]:bg-foreground/60 [&>button]:p-1 [&>button]:opacity-100 [&>button]:!ring-0 [&>button]:hover:[&_svg]:text-destructive">
+			<DialogContent className="aui-attachment-preview-dialog-content p-2 sm:max-w-3xl [&_svg]:text-background [&>button]:rounded-full [&>button]:bg-foreground/60 [&>button]:p-1 [&>button]:opacity-100 [&>button]:ring-0! [&>button]:hover:[&_svg]:text-destructive">
 				<DialogTitle className="aui-sr-only sr-only">Image Attachment Preview</DialogTitle>
 				<div className="aui-attachment-preview relative mx-auto flex max-h-[80dvh] w-full items-center justify-center overflow-hidden bg-background">
 					<AttachmentPreview src={src} />
@@ -96,7 +96,7 @@ function AttachmentThumb() {
 	const src = useAttachmentSrc()
 
 	return (
-		<Avatar className="aui-attachment-tile-avatar h-full w-full rounded-none">
+		<Avatar className="aui-attachment-tile-avatar size-full  rounded-none">
 			<AvatarImage src={src} alt="Attachment preview" className="aui-attachment-tile-image object-cover" />
 			<AvatarFallback delayMs={isImage ? 200 : 0}>
 				<FileText className="aui-attachment-tile-fallback-icon size-8 text-muted-foreground" />
@@ -113,12 +113,15 @@ function AttachmentUI() {
 	const typeLabel = useAssistantState(({ attachment }) => {
 		const type = attachment.type
 		switch (type) {
-			case "image":
+			case "image": {
 				return "Image"
-			case "document":
+			}
+			case "document": {
 				return "Document"
-			case "file":
+			}
+			case "file": {
 				return "File"
+			}
 			default: {
 				const ExhaustiveCheck = type
 				throw new Error(`Unknown attachment type: ${ExhaustiveCheck}`)
@@ -163,7 +166,7 @@ function AttachmentRemove() {
 		<AttachmentPrimitive.Remove asChild>
 			<TooltipIconButton
 				tooltip="Remove file"
-				className="aui-attachment-tile-remove absolute top-1.5 right-1.5 size-3.5 rounded-full bg-background text-muted-foreground opacity-100 shadow-sm hover:!bg-background [&_svg]:text-black hover:[&_svg]:text-destructive"
+				className="aui-attachment-tile-remove absolute top-1.5 right-1.5 size-3.5 rounded-full bg-background text-muted-foreground opacity-100 shadow-sm hover:bg-background! [&_svg]:text-black hover:[&_svg]:text-destructive"
 				side="top"
 			>
 				<XIcon className="aui-attachment-remove-icon size-3 dark:stroke-[2.5px]" />

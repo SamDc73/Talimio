@@ -2,7 +2,7 @@ import { Maximize, MessageSquare, PanelLeft, Type } from "lucide-react"
 import { Link } from "react-router-dom"
 import { UserAvatarMenu } from "@/components/header/MainHeader"
 import { TooltipButton } from "@/components/TooltipButton"
-import { useChatSidebar } from "@/features/assistant/contexts/chatSidebarContext"
+import { useChatSidebar } from "@/contexts/chatSidebarContext"
 import useAppStore from "@/stores/useAppStore"
 import { formatProgressText } from "@/utils/progressUtils"
 
@@ -46,7 +46,7 @@ export function BookHeader({
 			<div className="container mx-auto px-4">
 				<div className="flex h-16 items-center">
 					{/* Logo Section */}
-					<div className="flex-shrink-0 mr-4">
+					<div className="shrink-0 mr-4">
 						<Link to="/" className="block">
 							<img src="/logo.png" alt="Talimio Logo" width={32} height={32} className="object-contain" />
 						</Link>
@@ -62,7 +62,7 @@ export function BookHeader({
 							<div className="flex items-center mt-1">
 								<div className="w-32 md:w-48 bg-muted rounded-full h-1.5 overflow-hidden">
 									<div
-										className="h-full bg-gradient-to-r from-book to-book-accent rounded-full transition-all duration-300"
+										className="h-full bg-linear-to-r from-book to-book-accent rounded-full transition-all duration-300"
 										style={{ width: `${progressPercentage}%` }}
 									/>
 								</div>
@@ -86,19 +86,19 @@ export function BookHeader({
 								<TooltipButton
 									variant="ghost"
 									size="icon"
-									className="h-6 w-6 rounded-full"
+									className="size-6  rounded-full"
 									onClick={onZoomOut}
 									tooltipContent="Zoom out"
 								>
 									<span className="text-sm font-medium">-</span>
 								</TooltipButton>
-								<span className="px-2 text-xs font-medium text-muted-foreground min-w-[3rem] text-center">
+								<span className="px-2 text-xs font-medium text-muted-foreground min-w-12 text-center">
 									{zoomLevel}%
 								</span>
 								<TooltipButton
 									variant="ghost"
 									size="icon"
-									className="h-6 w-6 rounded-full"
+									className="size-6  rounded-full"
 									onClick={onZoomIn}
 									tooltipContent="Zoom in"
 								>
@@ -107,11 +107,11 @@ export function BookHeader({
 								<TooltipButton
 									variant="ghost"
 									size="icon"
-									className="h-6 w-6 rounded-full ml-1"
+									className="size-6  rounded-full ml-1"
 									onClick={onFitToScreen}
 									tooltipContent="Fit to screen"
 								>
-									<Maximize className="h-3 w-3" />
+									<Maximize className="size-3 " />
 								</TooltipButton>
 							</div>
 						)}
@@ -122,22 +122,20 @@ export function BookHeader({
 								<TooltipButton
 									variant="ghost"
 									size="icon"
-									className="h-6 w-6 rounded-full"
+									className="size-6  rounded-full"
 									onClick={onFontDecrease}
 									tooltipContent="Decrease font size"
 								>
 									<span className="text-sm font-medium">A-</span>
 								</TooltipButton>
 								<div className="px-2 flex items-center gap-1">
-									<Type className="h-3 w-3 text-muted-foreground" />
-									<span className="text-xs font-medium text-muted-foreground min-w-[2.5rem] text-center">
-										{fontSize}%
-									</span>
+									<Type className="size-3  text-muted-foreground" />
+									<span className="text-xs font-medium text-muted-foreground min-w-10 text-center">{fontSize}%</span>
 								</div>
 								<TooltipButton
 									variant="ghost"
 									size="icon"
-									className="h-6 w-6 rounded-full"
+									className="size-6  rounded-full"
 									onClick={onFontIncrease}
 									tooltipContent="Increase font size"
 								>
@@ -151,12 +149,12 @@ export function BookHeader({
 							<TooltipButton
 								variant="outline"
 								size="icon"
-								className="h-8 w-8 rounded-full"
+								className="size-8  rounded-full"
 								onClick={onToggleSidebar}
 								tooltipContent={`${isSidebarOpen ? "Hide" : "Show"} chapters`}
 							>
 								<PanelLeft
-									className={`h-4 w-4 transition-transform duration-300 ${isSidebarOpen ? "" : "rotate-180"}`}
+									className={`size-4  transition-transform duration-300 ${isSidebarOpen ? "" : "rotate-180"}`}
 								/>
 							</TooltipButton>
 						)}
@@ -166,10 +164,10 @@ export function BookHeader({
 							onClick={toggleChat}
 							variant="outline"
 							size="icon"
-							className="h-8 w-8 rounded-full"
+							className="size-8  rounded-full"
 							tooltipContent="Chat with AI assistant"
 						>
-							<MessageSquare className="h-4 w-4" />
+							<MessageSquare className="size-4 " />
 						</TooltipButton>
 
 						{/* User Avatar */}

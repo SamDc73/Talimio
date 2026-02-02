@@ -2,7 +2,7 @@ import { MDXProvider } from "@mdx-js/react"
 import { FillInTheBlank } from "@/components/quiz/FillInTheBlank.jsx"
 import { FreeForm } from "@/components/quiz/FreeForm.jsx"
 import { MultipleChoice } from "@/components/quiz/MultipleChoice.jsx"
-import { useMDXCompile } from "@/features/course/hooks/useMDXCompile"
+import { useMdxCompile } from "@/features/course/hooks/useMdxCompile"
 import { LatexExpressionPractice } from "./LatexExpressionPractice.jsx"
 import WorkspaceAwareCodeBlock from "./WorkspaceAwareCodeBlock.jsx"
 import { WorkspaceRegistryProvider } from "./workspaceContext"
@@ -37,7 +37,7 @@ const MDX_COMPONENTS = {
 		const isInline = !className
 		if (isInline) {
 			return (
-				<code className="px-1.5 py-0.5 rounded bg-muted text-sm font-mono text-foreground" {...props}>
+				<code className="px-1.5 py-0.5 rounded-sm bg-muted text-sm font-mono text-foreground" {...props}>
 					{children}
 				</code>
 			)
@@ -67,12 +67,24 @@ const MDX_COMPONENTS = {
 	),
 
 	// Style tables
-	table: (props) => (
-		<div className="overflow-x-auto mb-4">
-			<table className="min-w-full divide-y divide-border border border-border rounded-lg" {...props} />
+	table: ({ children, ...props }) => (
+		<div className="mb-4 overflow-x-auto">
+			<table className="min-w-full divide-y divide-border rounded-lg border border-border" {...props}>
+				<thead data-hidden="true">
+					<tr>
+						<th>Table</th>
+					</tr>
+				</thead>
+				{children}
+			</table>
 		</div>
 	),
-	thead: (props) => <thead className="bg-muted/40" {...props} />,
+	thead: (props) => {
+		if (props["data-hidden"]) {
+			return <thead className="sr-only" {...props} />
+		}
+		return <thead className="bg-muted/40" {...props} />
+	},
 	tbody: (props) => <tbody className="bg-card divide-y divide-border" {...props} />,
 	th: (props) => (
 		<th
@@ -92,25 +104,19 @@ const MDX_COMPONENTS = {
 	input: (props) => {
 		if (props.type === "checkbox") {
 			return (
-				<input type="checkbox" className="mr-2 rounded border-input text-primary focus:ring-ring" disabled {...props} />
+				<input
+					type="checkbox"
+					className="mr-2 rounded-sm border-input text-primary focus:ring-ring"
+					disabled
+					{...props}
+				/>
 			)
 		}
 		return <input {...props} />
 	},
 }
-/**
- * MDXRenderer - Simplified MDX renderer for React 19
- *
- * Features:
- * - GitHub Flavored Markdown (tables, task lists, etc.)
- * - Syntax highlighting for code blocks
- * - Math support (LaTeX)
- * - Auto-linking headings
- * - Interactive component support
- */
-export function MDXRenderer({ content, lessonId, courseId, lessonConceptId }) {
-	// Use the custom hook for all compilation logic
-	const { Component, error, isLoading } = useMDXCompile(content, { lessonId, courseId })
+export function MdxRenderer({ content, lessonId, courseId, lessonConceptId }) {
+	const { Component, error, isLoading } = useMdxCompile(content, { lessonId, courseId })
 
 	// Render states
 	if (!content) {
@@ -151,7 +157,7 @@ export function MDXRenderer({ content, lessonId, courseId, lessonConceptId }) {
 
 	// Render the MDX component
 	return (
-		<div className="markdown-content prose prose-zinc max-w-none">
+		<div className="max-w-none text-foreground">
 			<WorkspaceRegistryProvider>
 				{(() => {
 					const componentsWithLesson = {
@@ -177,4 +183,4 @@ export function MDXRenderer({ content, lessonId, courseId, lessonConceptId }) {
 	)
 }
 
-export default MDXRenderer
+export default MdxRenderer

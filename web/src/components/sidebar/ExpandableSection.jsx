@@ -53,7 +53,7 @@ function ExpandableSection({
 				</div>
 				{showExpandButton && (
 					<ChevronRight
-						className={`w-4 h-4 text-muted-foreground/80 transition-transform duration-200 ${
+						className={`size-4  text-muted-foreground/80 transition-transform duration-200 ${
 							isExpanded ? `rotate-90 ${chevronColor}` : "rotate-0"
 						}`}
 					/>

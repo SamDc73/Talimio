@@ -1,4 +1,4 @@
-import { MDXRenderer } from "./MDXRenderer"
+import { MdxRenderer } from "./MdxRenderer"
 
 /**
  * Component to render content using MDX
@@ -12,5 +12,5 @@ export function ContentRenderer({ content, lessonId, courseId, lessonConceptId }
 	}
 
 	// Use MDXRenderer with proper interactive component support
-	return <MDXRenderer content={content} lessonId={lessonId} courseId={courseId} lessonConceptId={lessonConceptId} />
+	return <MdxRenderer content={content} lessonId={lessonId} courseId={courseId} lessonConceptId={lessonConceptId} />
 }

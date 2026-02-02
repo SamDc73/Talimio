@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 
 import { api } from "@/lib/apiClient"
+import logger from "@/lib/logger"
 import { securityMonitor } from "@/utils/securityConfig"
 import { AuthContext } from "./AuthContext.js"
 
@@ -29,12 +30,15 @@ export function AuthProvider({ children }) {
 								setIsAuthenticated(true)
 								return
 							}
-						} catch (_refreshError) {}
+						} catch (refreshError) {
+							logger.error("Auth refresh failed", refreshError)
+						}
 					}
 					setUser(null)
 					setIsAuthenticated(false)
 				}
-			} catch (_error) {
+			} catch (error) {
+				logger.error("Auth check failed", error)
 				setUser(null)
 				setIsAuthenticated(false)
 			} finally {
@@ -68,6 +72,8 @@ export function AuthProvider({ children }) {
 				if (error.status === 401) {
 					setUser(null)
 					setIsAuthenticated(false)
+				} else {
+					logger.error("Token refresh failed", error)
 				}
 			}
 		}, refreshInterval)
@@ -153,7 +159,8 @@ export function AuthProvider({ children }) {
 		try {
 			// Call logout endpoint (this clears the httpOnly cookie)
 			await api.post("/auth/logout")
-		} catch (_error) {
+		} catch (error) {
+			logger.error("Logout failed", error)
 		} finally {
 			// Clear local state (cookies are cleared by server)
 			setUser(null)

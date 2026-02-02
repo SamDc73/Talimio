@@ -5,10 +5,9 @@ import { useEffect, useImperativeHandle, useRef, useState } from "react"
 // 2. External libraries
 import { ErrorBoundary } from "react-error-boundary"
 import { getVideoTranscript } from "@/api/videosApi"
+import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
 import { useVideoTranscriptSync } from "./hooks/useVideoTranscriptSync"
-// 3. Internal absolute imports
-import "./video-overrides.css" // Only for third-party overrides
 
 // Virtualization config for performance
 const CONFIG = {
@@ -112,7 +111,6 @@ function VirtualizedTranscriptList({ segments, activeIndex, onSegmentClick, cont
 				data-index={i}
 				type="button"
 				className={cn(
-					"transcript-segment", // Keep for performance optimizations in CSS
 					"flex items-center gap-3 px-6 py-2 pl-6",
 					"border-l-2 border-transparent cursor-pointer border-0 w-full text-left",
 					"transition-all duration-150 ease-in-out",
@@ -139,7 +137,7 @@ function VirtualizedTranscriptList({ segments, activeIndex, onSegmentClick, cont
 			>
 				<span
 					className={cn(
-						"flex-shrink-0 text-[11px] font-semibold tabular-nums",
+						"shrink-0 text-[11px] font-semibold tabular-nums",
 						"min-w-[42px] px-1.5 py-0.5 rounded-md text-center",
 						"bg-video/15 text-video",
 						"hover:bg-video/20",
@@ -151,8 +149,8 @@ function VirtualizedTranscriptList({ segments, activeIndex, onSegmentClick, cont
 				</span>
 				<span
 					className={cn(
-						"flex-1 text-sm leading-normal",
-						"text-foreground/85 break-words",
+						"flex-1 text-sm/normal ",
+						"text-foreground/85 wrap-break-word",
 						"transition-colors duration-150 select-text",
 						"hover:text-foreground",
 						isActive && "text-foreground font-medium"
@@ -167,7 +165,7 @@ function VirtualizedTranscriptList({ segments, activeIndex, onSegmentClick, cont
 	return (
 		<div
 			ref={containerRef}
-			className="transcript-virtualized-container relative overflow-auto bg-card"
+			className="relative overflow-auto bg-card"
 			style={{
 				height: containerHeight,
 				// Firefox-specific optimizations
@@ -210,7 +208,8 @@ export function VideoTranscript({ videoId, videoElement, youtubePlayerRef, onSee
 			try {
 				const data = await getVideoTranscript(videoId)
 				setTranscript(data)
-			} catch (_err) {
+			} catch (err) {
+				logger.error("Failed to load transcript", err, { videoId })
 				setError("Failed to load transcript")
 			} finally {
 				setLoading(false)
@@ -294,9 +293,9 @@ export function VideoTranscript({ videoId, videoElement, youtubePlayerRef, onSee
 		return (
 			<div className="p-12 text-center bg-transparent">
 				<div className="flex items-center justify-center gap-3 text-sm font-medium text-video">
-					<span className="relative flex h-5 w-5">
-						<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-video/60 opacity-75" />
-						<span className="relative inline-flex rounded-full h-5 w-5 bg-video" />
+					<span className="relative flex size-5 ">
+						<span className="animate-ping absolute inline-flex size-full  rounded-full bg-video/60 opacity-75" />
+						<span className="relative inline-flex rounded-full size-5  bg-video" />
 					</span>
 					Loading transcript...
 				</div>
@@ -339,7 +338,7 @@ function TranscriptErrorFallback({ error, resetErrorBoundary }) {
 		<div className="p-4 border border-destructive rounded-md">
 			<h2 className="text-lg font-semibold text-destructive">Transcript Error</h2>
 			<pre className="mt-2 text-sm text-muted-foreground">{error.message}</pre>
-			<button onClick={resetErrorBoundary} className="mt-4 px-4 py-2 bg-primary text-white rounded" type="button">
+			<button onClick={resetErrorBoundary} className="mt-4 px-4 py-2 bg-primary text-white rounded-sm" type="button">
 				Retry Loading Transcript
 			</button>
 		</div>

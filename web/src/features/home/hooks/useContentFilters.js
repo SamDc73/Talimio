@@ -62,20 +62,25 @@ export const useContentFilters = () => {
 
 				return item.tags?.some((tag) => tag.toLowerCase().includes(tagFilter.toLowerCase()))
 			})
-			.sort((a, b) => {
+			.toSorted((a, b) => {
 				const direction = sortDirection === "asc" ? 1 : -1
 
 				switch (activeSort) {
-					case "last-accessed":
+					case "last-accessed": {
 						return direction * (new Date(a.lastAccessedDate).getTime() - new Date(b.lastAccessedDate).getTime())
-					case "created":
+					}
+					case "created": {
 						return direction * (new Date(a.createdDate).getTime() - new Date(b.createdDate).getTime())
-					case "progress":
+					}
+					case "progress": {
 						return direction * (a.progress - b.progress)
-					case "title":
+					}
+					case "title": {
 						return direction * a.title.localeCompare(b.title)
-					default:
+					}
+					default: {
 						return 0
+					}
 				}
 			})
 	}

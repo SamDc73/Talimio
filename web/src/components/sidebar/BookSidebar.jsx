@@ -1,14 +1,12 @@
 import { ChevronRight, FileText } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { useBookChaptersApi } from "@/features/book-viewer/hooks/useBookChaptersApi"
-import { useBookProgress } from "@/features/book-viewer/hooks/useBookProgress"
+import CompletionCheckbox from "@/components/sidebar/CompletionCheckbox"
+import ProgressCircle from "@/components/sidebar/ProgressCircle"
+import ProgressIndicator from "@/components/sidebar/ProgressIndicator"
+import SidebarContainer from "@/components/sidebar/SidebarContainer"
+import SidebarItem from "@/components/sidebar/SidebarItem"
+import SidebarNav from "@/components/sidebar/SidebarNav"
 import logger from "@/lib/logger"
-import CompletionCheckbox from "./CompletionCheckbox"
-import ProgressCircle from "./ProgressCircle"
-import ProgressIndicator from "./ProgressIndicator"
-import SidebarContainer from "./SidebarContainer"
-import SidebarItem from "./SidebarItem"
-import SidebarNav from "./SidebarNav"
 
 /**
  * BookSidebar - Displays book table of contents with progress tracking
@@ -29,34 +27,43 @@ import SidebarNav from "./SidebarNav"
  * @param {Function} onChapterClick - Handler for chapter navigation
  * @param {number} progressPercentage - Overall progress percentage
  */
-function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPercentage = 0 }) {
+function BookSidebar({
+	book,
+	bookId,
+	currentPage = 1,
+	onChapterClick,
+	progressPercentage = 0,
+	chaptersApi,
+	progressApi,
+}) {
 	const [ExpandedChapters, SetExpandedChapters] = useState([0])
 	const [ApiChapters, SetApiChapters] = useState([])
 	const [IsExtracting, SetIsExtracting] = useState(false)
 	const [IsLoadingChapters, SetIsLoadingChapters] = useState(false)
 	const [optimisticCompletions, setOptimisticCompletions] = useState({})
 
-	// Hook-based API for book chapters (use stable callbacks)
-	const { fetchChapters, extractChapters } = useBookChaptersApi(bookId)
+	const fetchChapters = chaptersApi?.fetchChapters
+	const extractChapters = chaptersApi?.extractChapters
 
-	// Keep a stable reference to fetchChapters to avoid effect dependency thrash
 	const fetchChaptersRef = useRef(fetchChapters)
 	useEffect(() => {
 		fetchChaptersRef.current = fetchChapters
 	}, [fetchChapters])
 
-	// Use the standardized hook with bookId prop
-	const { progress, toggleCompletion, isCompleted, batchUpdate, refetch } = useBookProgress(bookId)
+	const progress = progressApi?.progress
+	const toggleCompletion = progressApi?.toggleCompletion
+	const isCompleted = progressApi?.isCompleted || (() => false)
+	const batchUpdate = progressApi?.batchUpdate
+	const refetch = progressApi?.refetch
 
 	/**
 	 * Get all children IDs recursively
 	 */
 	const getAllChildrenIds = (section) => {
-		let ids = []
+		const ids = []
 		if (section.children?.length > 0) {
 			for (const child of section.children) {
-				ids.push(child.id)
-				ids = ids.concat(getAllChildrenIds(child))
+				ids.push(child.id, ...getAllChildrenIds(child))
 			}
 		}
 		return ids
@@ -72,10 +79,8 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 		const countLeaves = (items) => {
 			for (const item of items) {
 				if (!item.children || item.children.length === 0) {
-					// This is a leaf node
 					count++
 				} else {
-					// Has children, recurse
 					countLeaves(item.children)
 				}
 			}
@@ -88,13 +93,10 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 		return count
 	}
 
-	// Helper to check if chapter is completed (with optimistic state)
 	const isChapterCompleted = (chapterId) => {
-		// Check optimistic state first
 		if (chapterId in optimisticCompletions) {
 			return optimisticCompletions[chapterId]
 		}
-		// Fall back to actual state
 		return isCompleted(chapterId)
 	}
 
@@ -105,13 +107,14 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 		const hasChildren = section.children?.length > 0
 
 		if (hasChildren) {
-			// For parent chapters, toggle all children
+			if (!batchUpdate) {
+				return
+			}
 			const allChildren = getAllChildrenIds(section)
 			const allIds = [section.id, ...allChildren]
 			const completedCount = allIds.filter((id) => isChapterCompleted(id)).length
 			const newStatus = completedCount < allIds.length
 
-			// Optimistic update
 			const newOptimistic = {}
 			allIds.forEach((id) => {
 				newOptimistic[id] = newStatus
@@ -124,7 +127,6 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 					completed: newStatus,
 				}))
 				await batchUpdate(updates, totalChapters)
-				// Clear optimistic state on success
 				setOptimisticCompletions((prev) => {
 					const newState = { ...prev }
 					allIds.forEach((id) => {
@@ -133,7 +135,6 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 					return newState
 				})
 			} catch (error) {
-				// Revert optimistic update on error
 				setOptimisticCompletions((prev) => {
 					const newState = { ...prev }
 					allIds.forEach((id) => {
@@ -147,10 +148,11 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 				})
 			}
 		} else {
-			// For single sections, just toggle
+			if (!toggleCompletion) {
+				return
+			}
 			const chapterId = section.id
 
-			// Optimistic update
 			setOptimisticCompletions((prev) => ({
 				...prev,
 				[chapterId]: !isChapterCompleted(chapterId),
@@ -158,14 +160,12 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 
 			try {
 				await toggleCompletion(chapterId, totalChapters)
-				// Clear optimistic state on success
 				setOptimisticCompletions((prev) => {
 					const newState = { ...prev }
 					delete newState[chapterId]
 					return newState
 				})
 			} catch (error) {
-				// Revert optimistic update on error
 				setOptimisticCompletions((prev) => {
 					const newState = { ...prev }
 					delete newState[chapterId]
@@ -186,33 +186,30 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 		if (!chapter.children?.length) {
 			return isChapterCompleted(chapter.id) ? 100 : 0
 		}
-		// Calculate progress for chapters with children
 		const allChildren = getAllChildrenIds(chapter)
 		const allIds = [chapter.id, ...allChildren]
 		const completedCount = allIds.filter((id) => isChapterCompleted(id)).length
 		return Math.round((completedCount / allIds.length) * 100)
 	}
 
-	/**
-	 * Fetch chapters from API only once per book
-	 * Skip if book already has tableOfContents to prevent unnecessary API calls
-	 */
 	useEffect(() => {
 		if (!bookId) return
 
-		// Skip if already have chapters from book object
 		if (book?.tableOfContents?.length > 0) {
 			return
 		}
 
 		async function loadChapters() {
+			if (!fetchChaptersRef.current) {
+				return
+			}
 			SetIsLoadingChapters(true)
 			try {
 				const chapters = await fetchChaptersRef.current()
 				SetApiChapters(chapters || [])
 			} catch (error) {
-				// Don't log error if it's expected (404 when no chapters exist)
 				if (!error.message?.includes("404")) {
+					logger.error("Failed to load book chapters", error, { bookId: book?.id })
 				}
 				SetApiChapters([])
 			} finally {
@@ -221,12 +218,12 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 		}
 
 		loadChapters()
-	}, [bookId, book?.tableOfContents?.length])
+	}, [bookId, book?.tableOfContents?.length, book?.id])
 
-	/**
-	 * Extract chapters using AI
-	 */
 	const handleExtractChapters = async () => {
+		if (!extractChapters || !fetchChapters) {
+			return
+		}
 		SetIsExtracting(true)
 		try {
 			const result = await extractChapters()
@@ -235,12 +232,10 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 				chapterCount: result?.length || 0,
 			})
 
-			// Refresh chapters
 			const chapters = await fetchChapters()
 			SetApiChapters(chapters || [])
 
-			// Refresh progress data
-			await refetch()
+			await refetch?.()
 		} catch (error) {
 			logger.error("Failed to extract book chapters", error, { bookId })
 		} finally {
@@ -269,21 +264,16 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 		return false
 	}
 
-	/**
-	 * Toggle chapter expansion
-	 */
 	const handleToggleChapter = (chapterIndex) => {
 		SetExpandedChapters((prev) =>
 			prev.includes(chapterIndex) ? prev.filter((idx) => idx !== chapterIndex) : [...prev, chapterIndex]
 		)
 	}
 
-	// Auto-expand chapter containing current page
 	useEffect(() => {
 		const chapters = book?.tableOfContents || ApiChapters
 		if (chapters.length > 0 && currentPage) {
 			const currentChapterIndex = chapters.findIndex((chapter) => {
-				// Inline isPageInChapter logic to avoid function dependency
 				if (chapter.startPage && chapter.endPage) {
 					return currentPage >= chapter.startPage && currentPage <= chapter.endPage
 				}
@@ -301,9 +291,8 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 				return false
 			})
 
-			// Only expand if not already expanded to avoid infinite loops
 			SetExpandedChapters((prev) => {
-				if (currentChapterIndex >= 0 && !prev.includes(currentChapterIndex)) {
+				if (currentChapterIndex !== -1 && !prev.includes(currentChapterIndex)) {
 					return [...prev, currentChapterIndex]
 				}
 				return prev
@@ -315,18 +304,16 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 
 	const chapters = book.tableOfContents?.length > 0 ? book.tableOfContents : ApiChapters
 
-	const overallProgress = progress.percentage || progressPercentage || 0
+	const overallProgress = progress?.percentage || progressPercentage || 0
 
-	// Calculate total leaf chapters for progress calculation
 	const totalLeafChapters = CountTotalLeafChapters(chapters)
 
-	// Empty state
-	if (!chapters.length) {
+	if (chapters.length === 0) {
 		return (
 			<SidebarContainer>
 				<div className="px-4 pt-20 pb-4">
 					<div className="text-center text-muted-foreground text-sm mt-8">
-						<FileText className="w-12 h-12 mx-auto mb-4 text-zinc-300" />
+						<FileText className="size-12  mx-auto mb-4 text-zinc-300" />
 						<p>No table of contents available</p>
 						{!IsLoadingChapters && (
 							<>
@@ -335,9 +322,9 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 									type="button"
 									onClick={handleExtractChapters}
 									disabled={IsExtracting}
-									className="mt-4 inline-flex items-center gap-2 rounded-lg bg-book px-4 py-2 text-sm text-book-foreground transition-colors hover:bg-book-accent/80 disabled:cursor-not-allowed disabled:opacity-50"
+									className="mt-4 inline-flex items-center gap-2 rounded-lg bg-book px-4 py-2 text-sm text-book-text transition-colors hover:bg-book-accent/80 disabled:cursor-not-allowed disabled:opacity-50"
 								>
-									<FileText className="w-4 h-4" />
+									<FileText className="size-4 " />
 									{IsExtracting ? "Extracting..." : "Extract Chapters"}
 								</button>
 							</>
@@ -364,7 +351,6 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 					const hasChildren = chapter.children?.length > 0
 					const isCompleted = chapterProgress === 100
 
-					// For chapters without children, show checkbox
 					if (!hasChildren) {
 						return (
 							<div
@@ -377,7 +363,6 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 									<ProgressCircle number={chapterIndex + 1} progress={chapterProgress} variant="book" />
 									<CompletionCheckbox
 										asDiv={true}
-										className="completion-checkbox"
 										isCompleted={isCompleted}
 										onClick={(e) => {
 											e.stopPropagation()
@@ -399,7 +384,6 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 						)
 					}
 
-					// For chapters with children
 					return (
 						<div
 							key={`chapter_${chapterIndex}_${chapter.id}`}
@@ -411,7 +395,6 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 								<ProgressCircle number={chapterIndex + 1} progress={chapterProgress} variant="book" />
 								<CompletionCheckbox
 									asDiv={true}
-									className="completion-checkbox"
 									isCompleted={isCompleted}
 									onClick={(e) => {
 										e.stopPropagation()
@@ -426,7 +409,7 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 								>
 									<span className="line-clamp-2 text-sm font-semibold">{chapter.title}</span>
 									<ChevronRight
-										className={`w-4 h-4 text-muted-foreground/80 transition-transform duration-200 ${
+										className={`size-4  text-muted-foreground/80 transition-transform duration-200 ${
 											isExpanded ? "rotate-90 text-book" : "rotate-0"
 										}`}
 									/>
@@ -455,7 +438,6 @@ function BookSidebar({ book, bookId, currentPage = 1, onChapterClick, progressPe
 													leftContent={
 														<CompletionCheckbox
 															asDiv={true}
-															className="completion-checkbox"
 															isCompleted={isSectionCompleted}
 															onClick={(e) => {
 																e.stopPropagation()

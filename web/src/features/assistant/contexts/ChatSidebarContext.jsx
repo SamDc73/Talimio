@@ -1,6 +1,6 @@
 import { useState } from "react"
+import { ChatSidebarContext } from "@/contexts/chatSidebarContext"
 import { ChatSidebar } from "@/features/assistant/components/ChatSidebar"
-import { ChatSidebarContext } from "./chatSidebarContext"
 
 export function ChatSidebarProvider({ children }) {
 	const [isOpen, setIsOpen] = useState(false)

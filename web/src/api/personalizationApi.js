@@ -3,6 +3,7 @@
  */
 
 import { api } from "@/lib/apiClient"
+import logger from "@/lib/logger"
 
 /**
  * Get user personalization settings for current authenticated user
@@ -76,8 +77,8 @@ export async function clearUserMemory() {
 		try {
 			await api.delete(`/user/memories/${m.id}`)
 			deleted += 1
-		} catch (_e) {
-			// Continue deleting remaining memories even if one fails
+		} catch (error) {
+			logger.error("Failed to delete memory", error, { memoryId: m.id })
 		}
 	}
 

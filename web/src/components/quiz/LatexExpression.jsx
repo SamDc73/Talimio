@@ -8,7 +8,7 @@ const normalizeHints = (hints) => {
 		return []
 	}
 	if (Array.isArray(hints)) {
-		return hints.filter(Boolean).map((hint) => String(hint))
+		return hints.filter(Boolean).map(String)
 	}
 	return [String(hints)]
 }
@@ -304,7 +304,7 @@ export function LatexExpression({
 				<div className="rounded-lg border border-input bg-background px-3 py-2 focus-within:ring-2 focus-within:ring-ring">
 					<math-field
 						ref={fieldRef}
-						className="w-full min-h-[2.75rem] text-base text-foreground"
+						className="w-full min-h-11 text-base text-foreground"
 						aria-label="Expression answer input"
 					/>
 				</div>
@@ -320,17 +320,14 @@ export function LatexExpression({
 				<div className={`mb-4 rounded-lg border px-4 py-3 ${feedbackContainer}`}>
 					{feedbackTitle ? <div className={`text-sm font-medium mb-2 ${feedbackTone}`}>{feedbackTitle}</div> : null}
 					{feedbackMessage ? (
-						<QuizMarkdown
-							content={feedbackMessage}
-							className="text-sm leading-relaxed text-muted-foreground [&_p]:m-0"
-						/>
+						<QuizMarkdown content={feedbackMessage} className="text-sm/relaxed  text-muted-foreground [&_p]:m-0" />
 					) : null}
 					{feedback?.errorHighlight?.latex ? (
 						<div className="mt-3 rounded-md border border-amber-400/40 bg-amber-50/70 px-3 py-2">
 							<div className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-2">Check this part</div>
 							<ReadOnlyLatexField
 								latex={feedback.errorHighlight.latex}
-								className="w-full min-h-[2.25rem] bg-background/80 rounded-md px-2 py-1"
+								className="w-full min-h-9 bg-background/80 rounded-md px-2 py-1"
 							/>
 						</div>
 					) : null}
@@ -338,7 +335,15 @@ export function LatexExpression({
 			) : null}
 
 			<div className="flex flex-wrap items-center gap-2 mb-4">
-				{!isComplete ? (
+				{isComplete ? (
+					<button
+						type="button"
+						onClick={resetState}
+						className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-muted text-foreground hover:bg-muted/80"
+					>
+						Try another
+					</button>
+				) : (
 					<>
 						<button
 							type="button"
@@ -365,14 +370,6 @@ export function LatexExpression({
 							I don&apos;t know
 						</button>
 					</>
-				) : (
-					<button
-						type="button"
-						onClick={resetState}
-						className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-muted text-foreground hover:bg-muted/80"
-					>
-						Try another
-					</button>
 				)}
 			</div>
 
@@ -411,11 +408,11 @@ export function LatexExpression({
 						{solutionLatex ? (
 							<ReadOnlyLatexField
 								latex={solutionLatex}
-								className="w-full min-h-[2.5rem] bg-background/80 rounded-md px-2 py-1"
+								className="w-full min-h-10 bg-background/80 rounded-md px-2 py-1"
 							/>
 						) : null}
 						{solutionMdx ? (
-							<QuizMarkdown content={solutionMdx} className="text-sm leading-relaxed text-muted-foreground [&_p]:m-0" />
+							<QuizMarkdown content={solutionMdx} className="text-sm/relaxed  text-muted-foreground [&_p]:m-0" />
 						) : null}
 					</div>
 				</details>

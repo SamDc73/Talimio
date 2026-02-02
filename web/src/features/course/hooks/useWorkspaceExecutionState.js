@@ -59,7 +59,7 @@ export function useWorkspaceExecutionState({ workspaceId, lessonId, courseId, fi
 	})
 
 	// Derived values (computed during render, not stored)
-	const filesForDisplay = useMemo(() => Object.values(fileState).sort((a, b) => a.order - b.order), [fileState])
+	const filesForDisplay = useMemo(() => Object.values(fileState).toSorted((a, b) => a.order - b.order), [fileState])
 	const currentFile = fileState[activeFilePath] || filesForDisplay[0] || null
 	const hasChanges = filesForDisplay.some((f) => f.code !== f.initialCode)
 

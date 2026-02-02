@@ -2,15 +2,13 @@ import { Loader2 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { getVideo } from "@/api/videosApi"
-import { VideoHeader } from "@/components/header/VideoHeader"
-import { VideoSidebar } from "@/components/sidebar"
+import { VideoHeader } from "@/features/video-viewer/components/VideoHeader"
+import VideoSidebarContainer from "@/features/video-viewer/components/VideoSidebarContainer"
 import { useVideoProgress, useVideoProgressWithPosition } from "@/features/video-viewer/hooks/useVideoProgress"
 import useAppStore, { selectSidebarOpen, selectToggleSidebar } from "@/stores/useAppStore"
 import { useVideoProgressSaving } from "./hooks/useVideoProgressSaving"
 import { VideoContentTabs } from "./VideoContentTabs"
 import { YouTubePlayer } from "./YouTubePlayer"
-
-import "./video-overrides.css" // Only for third-party overrides
 
 /**
  * VideoViewer component with high-performance YouTube player and transcript sync
@@ -200,10 +198,10 @@ function VideoViewerContent() {
 			<div className="h-screen">
 				<VideoHeader />
 				<div
-					className={`flex flex-col transition-all duration-300 min-h-[calc(100vh-4rem)] bg-gradient-to-b from-background to-muted/40 pt-16 ${isOpen ? "ml-80" : "ml-0"}`}
+					className={`flex flex-col transition-all duration-300 min-h-[calc(100vh-4rem)] bg-linear-to-b from-background to-muted/40 pt-16 ${isOpen ? "ml-80" : "ml-0"}`}
 				>
-					<div className="flex flex-col items-center justify-center min-h-[30rem] gap-4 text-muted-foreground p-12">
-						<Loader2 className="h-8 w-8 animate-spin" />
+					<div className="flex flex-col items-center justify-center min-h-120 gap-4 text-muted-foreground p-12">
+						<Loader2 className="size-8  animate-spin" />
 						<p className="mt-2 text-sm font-medium opacity-80">Loading video...</p>
 					</div>
 				</div>
@@ -217,12 +215,10 @@ function VideoViewerContent() {
 			<div className="h-screen">
 				<VideoHeader />
 				<div
-					className={`flex flex-col transition-all duration-300 min-h-[calc(100vh-4rem)] bg-gradient-to-b from-background to-muted/40 pt-16 ${isOpen ? "ml-80" : "ml-0"}`}
+					className={`flex flex-col transition-all duration-300 min-h-[calc(100vh-4rem)] bg-linear-to-b from-background to-muted/40 pt-16 ${isOpen ? "ml-80" : "ml-0"}`}
 				>
-					<div className="flex flex-col items-center justify-center min-h-[30rem] gap-4 p-12 bg-gradient-to-br from-destructive/5 to-transparent rounded-2xl border border-destructive/10">
-						<p className="text-base font-medium text-destructive text-center max-w-[30rem]">
-							{error || "Video not found"}
-						</p>
+					<div className="flex flex-col items-center justify-center min-h-120 gap-4 p-12 bg-linear-to-br from-destructive/5 to-transparent rounded-2xl border border-destructive/10">
+						<p className="text-base font-medium text-destructive text-center max-w-120">{error || "Video not found"}</p>
 						<button
 							type="button"
 							onClick={() => navigate("/")}
@@ -240,7 +236,7 @@ function VideoViewerContent() {
 	return (
 		<div className="flex h-screen bg-background">
 			<VideoHeader video={video} onToggleSidebar={toggleSidebar} isSidebarOpen={isOpen} />
-			<VideoSidebar
+			<VideoSidebarContainer
 				video={video}
 				currentTime={currentTime}
 				onSeek={handleSeekToChapter}
@@ -249,7 +245,7 @@ function VideoViewerContent() {
 			<main className={`flex-1 transition-all duration-300 ${isOpen ? "ml-80" : "ml-0"} pt-16`}>
 				<div className="flex-1 flex flex-col overflow-y-auto p-8 max-w-7xl mx-auto w-full scroll-smooth">
 					{/* Video Player Container */}
-					<div className="video-player relative w-full pb-[56.25%] bg-black rounded-xl overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
+					<div className="relative w-full pb-[56.25%] bg-black rounded-xl overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
 						<YouTubePlayer
 							ref={youtubePlayerRef}
 							videoId={video.youtubeId}
@@ -263,7 +259,7 @@ function VideoViewerContent() {
 
 					{/* Video Info */}
 					<div className="mt-6 p-0">
-						<h1 className="text-[1.75rem] font-bold leading-9 tracking-tight mb-3 text-foreground">{video.title}</h1>
+						<h1 className="text-[1.75rem]/9 font-bold  tracking-tight mb-3 text-foreground">{video.title}</h1>
 						<div className="flex items-center flex-wrap gap-3 text-sm text-muted-foreground mb-6">
 							<span className="font-semibold text-video">{video.channel}</span>
 							<span className="opacity-30">•</span>

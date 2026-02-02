@@ -11,9 +11,6 @@ export const useDialogStates = () => {
 	const [isUploadingBook, setIsUploadingBook] = useState(false)
 	const [youtubeUrl, setYoutubeUrl] = useState("")
 	const [isAddingVideo, setIsAddingVideo] = useState(false)
-	const [_newDeckTitle, _setNewDeckTitle] = useState("")
-	const [_newDeckDescription, _setNewDeckDescription] = useState("")
-	const [_newCards, _setNewCards] = useState("")
 
 	const resetUploadDialog = () => {
 		setShowUploadDialog(false)

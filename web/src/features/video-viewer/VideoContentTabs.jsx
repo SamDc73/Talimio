@@ -10,13 +10,13 @@ export function VideoContentTabs({ video, youtubePlayerRef, onSeek, isPlaying, o
 		{
 			id: "transcript",
 			label: "Transcript",
-			icon: <FileText className="w-4 h-4" />,
-			badge: video.hasTranscript !== false ? null : "Not available",
+			icon: <FileText className="size-4 " />,
+			badge: video.hasTranscript === false ? "Not available" : null,
 		},
 		{
 			id: "description",
 			label: "About",
-			icon: <AlignLeft className="w-4 h-4" />,
+			icon: <AlignLeft className="size-4 " />,
 			badge: null,
 		},
 	]
@@ -33,7 +33,7 @@ export function VideoContentTabs({ video, youtubePlayerRef, onSeek, isPlaying, o
 							onClick={() => setActiveTab(tab.id)}
 							className={cn(
 								"flex-1 flex items-center justify-center gap-2",
-								"px-6 py-3 min-h-[3rem]",
+								"px-6 py-3 min-h-12",
 								"bg-transparent border border-transparent rounded-lg",
 								"text-muted-foreground text-sm font-medium tracking-tight",
 								"cursor-pointer transition-all duration-200",
@@ -51,7 +51,7 @@ export function VideoContentTabs({ video, youtubePlayerRef, onSeek, isPlaying, o
 							{tab.icon}
 							<span className="font-medium tracking-tight">{tab.label}</span>
 							{tab.badge && (
-								<span className="text-[10px] px-1.5 py-0.5 ml-1 rounded bg-muted text-muted-foreground font-medium uppercase">
+								<span className="text-[10px] px-1.5 py-0.5 ml-1 rounded-sm bg-muted text-muted-foreground font-medium uppercase">
 									{tab.badge}
 								</span>
 							)}
@@ -69,7 +69,7 @@ export function VideoContentTabs({ video, youtubePlayerRef, onSeek, isPlaying, o
 			</div>
 
 			{/* Tab Content */}
-			<div className="relative min-h-[25rem] rounded-b-xl bg-card overflow-hidden">
+			<div className="relative min-h-100 rounded-b-xl bg-card overflow-hidden">
 				{/* Transcript Tab */}
 				<div
 					className={cn(
@@ -100,13 +100,13 @@ export function VideoContentTabs({ video, youtubePlayerRef, onSeek, isPlaying, o
 				>
 					{video.description ? (
 						<div className="max-w-none">
-							<p className="whitespace-pre-wrap leading-relaxed text-foreground/90 text-sm max-h-[400px] overflow-y-auto pr-2">
+							<p className="whitespace-pre-wrap text-sm/relaxed text-foreground/90  max-h-[400px] overflow-y-auto pr-2">
 								{video.description}
 							</p>
 						</div>
 					) : (
 						<div className="flex flex-col items-center justify-center py-[60px] text-center gap-4">
-							<AlignLeft className="w-12 h-12 text-muted-foreground opacity-20" />
+							<AlignLeft className="size-12  text-muted-foreground opacity-20" />
 							<p className="text-[15px] opacity-70 font-medium text-muted-foreground">No description available</p>
 						</div>
 					)}

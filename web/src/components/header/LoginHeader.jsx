@@ -43,7 +43,7 @@ export function LoginLogo({ className, size = "md", href = "/" }) {
 			</div>
 			<span className={cn("font-bold tracking-tight text-foreground dark:text-white", textSize)}>
 				Tali
-				<span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500">
+				<span className="text-transparent bg-clip-text bg-linear-to-r from-pink-500 via-orange-500 to-cyan-500">
 					mio
 				</span>
 			</span>

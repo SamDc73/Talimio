@@ -60,7 +60,7 @@ export function useProgress(contentIds) {
 		enabled: contentIds && contentIds.length > 0, // Don't query with empty array
 		// Error recovery with retry
 		retry: 3,
-		retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+		retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30_000),
 		onError: (_error) => {},
 	})
 

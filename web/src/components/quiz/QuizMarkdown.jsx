@@ -4,6 +4,7 @@ import * as runtime from "react/jsx-runtime"
 import rehypeKatex from "rehype-katex"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
+import logger from "@/lib/logger"
 
 const mdxOptions = {
 	outputFormat: "function-body",
@@ -39,7 +40,8 @@ export function QuizMarkdown({ content, className }) {
 				if (!cancelled) {
 					setComponent(() => mdxModule.default)
 				}
-			} catch (_error) {
+			} catch (error) {
+				logger.error("Failed to compile quiz markdown", error)
 				if (!cancelled) {
 					setComponent(null)
 				}

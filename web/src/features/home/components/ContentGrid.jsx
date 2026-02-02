@@ -23,7 +23,7 @@ export default function ContentGrid({
 				{isLoading ? (
 					<SkeletonGrid count={6} />
 				) : filteredAndSortedContent.length > 0 ? (
-					<AnimatePresence mode="popLayout">{visible.map(renderCard)}</AnimatePresence>
+					<AnimatePresence mode="popLayout">{visible.map((item, index) => renderCard(item, index))}</AnimatePresence>
 				) : (
 					<EmptyState onGenerateCourse={onGenerateCourse} onUploadBook={onUploadBook} onAddYoutube={onAddYoutube} />
 				)}
@@ -34,12 +34,12 @@ export default function ContentGrid({
 					<Button variant="outline" onClick={onShowMoreToggle} className="text-sm font-medium px-4 py-2 gap-1">
 						{showAll ? (
 							<>
-								<ChevronUp className="h-4 w-4 -mt-[1px]" />
+								<ChevronUp className="size-4  -mt-px" />
 								<span>Show Less</span>
 							</>
 						) : (
 							<>
-								<ChevronDown className="h-4 w-4 -mt-[1px]" />
+								<ChevronDown className="size-4  -mt-px" />
 								<span>See {unpinned.length - 3} More</span>
 							</>
 						)}
@@ -50,9 +50,9 @@ export default function ContentGrid({
 			{!isLoading && filteredAndSortedContent.length === 0 && (
 				<div className="text-center py-12">
 					<div className="inline-block bg-completed/10 p-4 rounded-full mb-4">
-						<Check className="h-8 w-8 text-completed" />
+						<Check className="size-8  text-completed" />
 					</div>
-					<h3 className="text-xl font-display font-bold text-completed mb-2">All Caught Up!</h3>
+					<h3 className="text-xl font-bold text-completed mb-2">All Caught Up!</h3>
 					<p className="text-muted-foreground">You've completed all your learning tasks. Great job!</p>
 				</div>
 			)}

@@ -6,12 +6,12 @@ import ErrorBoundary from "@/components/ErrorBoundary"
 // Radix UI component initialization
 
 import { MainHeader } from "@/components/header/MainHeader"
-import CoursePromptModal from "@/features/course/CoursePromptModal"
 import ContentCard from "@/features/home/components/ContentCard"
 import ContentGrid from "@/features/home/components/ContentGrid"
 import { BookUploadDialog } from "@/features/home/components/dialogs/BookUploadDialog"
+import CoursePromptModal from "@/features/home/components/dialogs/CoursePromptModal"
 import { YouTubeDialog } from "@/features/home/components/dialogs/YouTubeDialog"
-import FabMenu from "@/features/home/components/FABMenu"
+import FabMenu from "@/features/home/components/FabMenu"
 import FilterBadges from "@/features/home/components/FilterBadges"
 import PinnedSection from "@/features/home/components/PinnedSection"
 import SearchBar from "@/features/home/components/SearchBar"
@@ -120,7 +120,7 @@ export default function HomePage() {
 	// Show loading skeleton while content is loading
 	if (contentLoading) {
 		return (
-			<div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
+			<div className="min-h-screen bg-linear-to-b from-slate-50 to-slate-100">
 				<MainHeader transparent />
 				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-28">
 					<WelcomeHeader />
@@ -135,7 +135,7 @@ export default function HomePage() {
 	return (
 		<ErrorBoundary>
 			<ErrorBoundary>
-				<div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
+				<div className="min-h-screen bg-linear-to-b from-slate-50 to-slate-100">
 					<MainHeader transparent />
 					<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-28">
 						<WelcomeHeader />

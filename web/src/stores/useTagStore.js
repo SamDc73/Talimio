@@ -159,7 +159,7 @@ const useTagStore = create(
 					filteredTags = filteredTags.filter((tag) => tag.name.toLowerCase().includes(query))
 				}
 
-				return filteredTags.sort((a, b) => b.usage_count - a.usage_count)
+				return filteredTags.toSorted((a, b) => b.usage_count - a.usage_count)
 			},
 
 			getRecentTags() {

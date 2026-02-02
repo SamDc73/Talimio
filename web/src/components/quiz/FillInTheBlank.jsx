@@ -46,20 +46,7 @@ export function FillInTheBlank({ question, answer, caseSensitive = false, explan
 				/>
 			</div>
 
-			{!showFeedback ? (
-				<button
-					type="button"
-					onClick={handleSubmit}
-					disabled={!userAnswer.trim()}
-					className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-						!userAnswer.trim()
-							? "bg-muted text-muted-foreground cursor-not-allowed"
-							: "bg-completed text-completed-text hover:bg-completed/90"
-					}`}
-				>
-					Submit Answer
-				</button>
-			) : (
+			{showFeedback ? (
 				<div>
 					<div className="p-4 mb-4 rounded-lg border border-border bg-muted/20">
 						<div className={`text-sm font-medium mb-2 ${isCorrect ? "text-completed" : "text-destructive"}`}>
@@ -71,7 +58,7 @@ export function FillInTheBlank({ question, answer, caseSensitive = false, explan
 							</p>
 						)}
 						{explanation && (
-							<QuizMarkdown content={explanation} className="text-sm leading-relaxed text-muted-foreground [&_p]:m-0" />
+							<QuizMarkdown content={explanation} className="text-sm/relaxed  text-muted-foreground [&_p]:m-0" />
 						)}
 					</div>
 					<button
@@ -82,6 +69,19 @@ export function FillInTheBlank({ question, answer, caseSensitive = false, explan
 						Try Again
 					</button>
 				</div>
+			) : (
+				<button
+					type="button"
+					onClick={handleSubmit}
+					disabled={!userAnswer.trim()}
+					className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+						userAnswer.trim()
+							? "bg-completed text-completed-text hover:bg-completed/90"
+							: "bg-muted text-muted-foreground cursor-not-allowed"
+					}`}
+				>
+					Submit Answer
+				</button>
 			)}
 		</div>
 	)
