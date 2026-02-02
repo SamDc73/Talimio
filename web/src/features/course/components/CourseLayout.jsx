@@ -1,9 +1,9 @@
 import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom"
 
 import FullPageLoader from "@/components/FullPageLoader"
-import { CourseHeader } from "@/components/header/CourseHeader"
-import CourseSidebar from "@/components/sidebar/CourseSidebar.jsx"
 import { useCourseContext } from "@/features/course/CourseContext.jsx"
+import { CourseHeader } from "@/features/course/components/CourseHeader"
+import CourseSidebarContainer from "@/features/course/components/CourseSidebarContainer.jsx"
 import { cn } from "@/lib/utils"
 import useAppStore, { selectSidebarOpen, selectToggleSidebar } from "@/stores/useAppStore"
 
@@ -98,7 +98,7 @@ export default function CourseLayout() {
 				toggleSidebar={toggleSidebar}
 			/>
 			<div className="flex h-screen">
-				<CourseSidebar
+				<CourseSidebarContainer
 					modules={modules || []}
 					onLessonClick={handleLessonClick}
 					courseId={courseId}
@@ -110,7 +110,6 @@ export default function CourseLayout() {
 					<Outlet />
 				</div>
 			</div>
-			{/* ChatSidebar is globally mounted in App.jsx */}
 		</div>
 	)
 }

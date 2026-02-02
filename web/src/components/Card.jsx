@@ -15,13 +15,7 @@ function CardHeader({ className, ref, ...props }) {
 }
 
 function CardTitle({ className, ref, ...props }) {
-	return (
-		<h3
-			ref={ref}
-			className={cn("text-2xl font-display font-semibold leading-none tracking-tight", className)}
-			{...props}
-		/>
-	)
+	return <h3 ref={ref} className={cn("text-2xl/none font-semibold tracking-tight", className)} {...props} />
 }
 
 function CardDescription({ className, ref, ...props }) {

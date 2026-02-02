@@ -15,19 +15,19 @@ const RATING_OPTIONS = [
 ]
 
 function formatIn(nextTs) {
-	try {
-		const t = typeof nextTs === "string" ? new Date(nextTs) : nextTs
-		const diffMs = Math.max(0, t.getTime() - Date.now())
-		const mins = Math.round(diffMs / 60000)
-		if (mins < 60) return `in ${mins}m`
-		const hours = Math.floor(mins / 60)
-		const remM = mins % 60
-		if (hours < 24) return remM > 0 ? `in ${hours}h ${remM}m` : `in ${hours}h`
-		const days = Math.round(hours / 24)
-		return `in ${days}d`
-	} catch (_e) {
+	if (!nextTs) return "soon"
+	const t = typeof nextTs === "string" || typeof nextTs === "number" ? new Date(nextTs) : nextTs
+	if (!(t instanceof Date) || Number.isNaN(t.getTime())) {
 		return "soon"
 	}
+	const diffMs = Math.max(0, t.getTime() - Date.now())
+	const mins = Math.round(diffMs / 60_000)
+	if (mins < 60) return `in ${mins}m`
+	const hours = Math.floor(mins / 60)
+	const remM = mins % 60
+	if (hours < 24) return remM > 0 ? `in ${hours}h ${remM}m` : `in ${hours}h`
+	const days = Math.round(hours / 24)
+	return `in ${days}d`
 }
 
 export function AdaptiveReviewPanel({
@@ -130,8 +130,8 @@ export function AdaptiveReviewPanel({
 						Tell us how this concept felt
 					</p>
 				</div>
-				<span className="flex items-center gap-1 rounded-full bg-[var(--color-course)]/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-course)]">
-					<Zap className="h-3.5 w-3.5" aria-hidden="true" />
+				<span className="flex items-center gap-1 rounded-full bg-(--color-course)/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-(--color-course)">
+					<Zap className="size-3.5 " aria-hidden="true" />
 					Active
 				</span>
 			</div>
@@ -149,7 +149,7 @@ export function AdaptiveReviewPanel({
 								"h-10 rounded-full border bg-background/70 text-sm font-medium transition",
 								option.tone,
 								selectedRating === option.value &&
-									"bg-[var(--color-course)]/10 border-[var(--color-course)] text-[var(--color-course)]",
+									"bg-(--color-course)/10 border-(--color-course) text-(--color-course)",
 								(isSubmitting || hasSubmitted) && "opacity-60"
 							)}
 						>
@@ -160,14 +160,14 @@ export function AdaptiveReviewPanel({
 
 				{submissionError ? (
 					<div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-						<AlertTriangle className="mt-0.5 h-4 w-4" aria-hidden="true" />
+						<AlertTriangle className="mt-0.5 size-4 " aria-hidden="true" />
 						<p>We couldn&apos;t save that rating. Please try again.</p>
 					</div>
 				) : null}
 
 				{hasSubmitted ? (
 					<div className="flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-700">
-						<Check className="h-4 w-4" aria-hidden="true" />
+						<Check className="size-4 " aria-hidden="true" />
 						<p>
 							Saved.
 							{nextReviewAt ? (

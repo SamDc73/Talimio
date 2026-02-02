@@ -80,7 +80,7 @@ export function LessonQuickCheckPanel({ courseId, lessonId, lessonConceptId }) {
 	}, [currentItem])
 
 	const handleNext = useCallback(() => {
-		if (!visibleItems.length) {
+		if (visibleItems.length === 0) {
 			return
 		}
 		let nextIndex = -1

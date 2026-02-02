@@ -6,7 +6,7 @@ const normalizeHints = (hints) => {
 		return []
 	}
 	if (Array.isArray(hints)) {
-		return hints.filter(Boolean).map((hint) => String(hint))
+		return hints.filter(Boolean).map(String)
 	}
 	return [String(hints)]
 }
@@ -104,7 +104,7 @@ export function PracticeRegistryProvider({ children }) {
 		}
 	}, [])
 
-	const getItems = useCallback(() => Array.from(registryRef.current.values()), [])
+	const getItems = useCallback(() => [...registryRef.current.values()], [])
 
 	return (
 		<PracticeRegistryContext.Provider value={{ registerItem, unregisterItem, getItems, version }}>

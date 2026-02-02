@@ -26,7 +26,7 @@ class ErrorBoundary extends React.Component {
 	render() {
 		if (this.state.hasError) {
 			return (
-				<div className="error-boundary p-4 m-4 border border-destructive rounded bg-destructive/10">
+				<div className="m-4 rounded-sm border border-destructive bg-destructive/10 p-4">
 					<h2 className="text-xl font-bold text-destructive mb-2">Something went wrong</h2>
 					<p className="text-sm text-muted-foreground mb-3">
 						Don't worry - this error has been contained and won't break the rest of the app.
@@ -34,7 +34,7 @@ class ErrorBoundary extends React.Component {
 					<button
 						type="button"
 						onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
-						className="px-3 py-1 bg-completed text-completed-text rounded text-sm hover:bg-completed/90 mb-3"
+						className="mb-3 rounded-sm bg-completed px-3 py-1 text-sm text-completed-text hover:bg-completed/90"
 					>
 						Try Again
 					</button>

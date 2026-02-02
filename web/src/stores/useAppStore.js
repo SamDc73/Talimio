@@ -1,6 +1,9 @@
 import { create } from "zustand"
 import { createJSONStorage, devtools, persist } from "zustand/middleware"
 import { immer } from "zustand/middleware/immer"
+import logger from "@/lib/logger"
+
+/* eslint-disable sonarjs/todo-tag */
 
 // Stable default objects to prevent infinite re-renders
 const DEFAULT_BOOK_PROGRESS = {
@@ -768,7 +771,7 @@ const useAppStore = create(
 					})
 
 					const completedFromArray = Array.isArray(nextProgress.completedLessons)
-						? nextProgress.completedLessons.map((lesson) => String(lesson))
+						? nextProgress.completedLessons.map(String)
 						: []
 					const completedFromItems = Object.entries(nextProgress.items || {})
 						.filter(([, value]) => Boolean(value))
@@ -777,7 +780,7 @@ const useAppStore = create(
 
 					const metadata = {
 						content_type: "course",
-						completed_lessons: Array.from(new Set(completedLessons)),
+						completed_lessons: [...new Set(completedLessons)],
 						total_lessons: nextProgress.totalItems ?? completedLessons.length ?? 0,
 					}
 
@@ -959,7 +962,8 @@ const useAppStore = create(
 						set((state) => {
 							state.ui.loading.hydration = true
 						})
-					} catch (_error) {
+					} catch (error) {
+						logger.error("Failed to hydrate app store", error)
 						get().addError("Failed to sync with server")
 					} finally {
 						set((state) => {

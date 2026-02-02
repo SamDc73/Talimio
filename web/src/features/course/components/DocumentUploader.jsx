@@ -1,14 +1,3 @@
-/**
- * DocumentUploader Component
- *
- * Provides a unified interface for uploading documents to courses:
- * - PDF file uploads with drag-and-drop
- * - URL document uploads
- * - Multiple document support
- * - Upload progress tracking
- * - Error handling and validation
- */
-
 import { AlertCircle, CheckCircle2, FileText, Link2, Upload, X } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Button } from "@/components/Button"
@@ -16,6 +5,7 @@ import { Card } from "@/components/Card"
 import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
 import { api } from "@/lib/apiClient"
+import logger from "@/lib/logger"
 
 function DocumentUploader({
 	onDocumentsChange,
@@ -33,7 +23,6 @@ function DocumentUploader({
 	const fileInputRef = useRef(null)
 	const documentsRef = useRef(null)
 
-	// Auto-scroll to documents when they're added
 	useEffect(() => {
 		if (justAdded && documentsRef.current) {
 			documentsRef.current.scrollIntoView({
@@ -44,14 +33,12 @@ function DocumentUploader({
 		}
 	}, [justAdded])
 
-	// Notify parent of document changes
 	const updateDocuments = useCallback(
 		(newDocuments) => {
 			const wasEmpty = documents.length === 0
 			setDocuments(newDocuments)
 			onDocumentsChange?.(newDocuments)
 
-			// Trigger auto-scroll if documents were just added
 			if (wasEmpty && newDocuments.length > 0) {
 				setJustAdded(true)
 			}
@@ -59,16 +46,15 @@ function DocumentUploader({
 		[onDocumentsChange, documents.length]
 	)
 
-	// Handle file selection
 	const handleFiles = useCallback(
 		(files) => {
 			if (disabled) return
 
-			const newDocuments = Array.from(files).map((file, index) => ({
+			const newDocuments = [...files].map((file, index) => ({
 				id: `file-${Date.now()}-${index}`,
 				type: "pdf",
 				file,
-				title: file.name.replace(/\.[^/.]+$/, ""), // Remove extension
+				title: file.name.replace(/\.[^/.]+$/, ""),
 				size: file.size,
 				status: "pending",
 			}))
@@ -84,7 +70,6 @@ function DocumentUploader({
 		[documents, maxFiles, disabled, updateDocuments]
 	)
 
-	// Handle drag and drop
 	const handleDrag = useCallback((e) => {
 		e.preventDefault()
 		e.stopPropagation()
@@ -103,7 +88,7 @@ function DocumentUploader({
 
 			if (disabled) return
 
-			const files = Array.from(e.dataTransfer.files).filter(
+			const files = [...e.dataTransfer.files].filter(
 				(file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
 			)
 
@@ -117,7 +102,6 @@ function DocumentUploader({
 		[disabled, handleFiles]
 	)
 
-	// Handle file input click
 	const handleFileInputClick = () => {
 		if (!disabled) {
 			fileInputRef.current?.click()
@@ -127,11 +111,10 @@ function DocumentUploader({
 	const handleFileInputChange = (e) => {
 		if (e.target.files?.length > 0) {
 			handleFiles(e.target.files)
-			e.target.value = "" // Reset input
+			e.target.value = ""
 		}
 	}
 
-	// Extract title from URL
 	const extractTitle = async (url) => {
 		setIsExtractingTitle(true)
 		try {
@@ -142,7 +125,8 @@ function DocumentUploader({
 			const title = data.title || "Untitled Document"
 			setUrlTitle(title)
 			return title
-		} catch (_error) {
+		} catch (error) {
+			logger.error("Failed to extract document title", error, { url })
 			const title = "Untitled Document"
 			setUrlTitle(title)
 			return title
@@ -151,23 +135,20 @@ function DocumentUploader({
 		}
 	}
 
-	// Handle URL input change
 	const handleUrlInputChange = (e) => {
 		const url = e.target.value
 		setUrlInput(url)
 
-		// Clear title when URL is cleared
 		if (!url.trim()) {
 			setUrlTitle("")
 		}
 	}
 
-	// Handle URL document addition
 	const handleAddUrl = async () => {
 		if (!urlInput.trim() || disabled || isExtractingTitle) return
 
 		try {
-			new URL(urlInput) // Validate URL
+			new URL(urlInput)
 		} catch {
 			alert("Please enter a valid URL.")
 			return
@@ -178,10 +159,8 @@ function DocumentUploader({
 			return
 		}
 
-		// Extract title if not already done
 		let finalTitle = urlTitle
 		if (!finalTitle) {
-			// Wait for title extraction to complete and get the returned title
 			finalTitle = await extractTitle(urlInput.trim())
 		}
 
@@ -198,19 +177,16 @@ function DocumentUploader({
 		setUrlTitle("")
 	}
 
-	// Remove document
 	const removeDocument = (documentId) => {
 		if (disabled) return
 		updateDocuments(documents.filter((doc) => doc.id !== documentId))
 	}
 
-	// Update document title
 	const updateDocumentTitle = (documentId, newTitle) => {
 		if (disabled) return
 		updateDocuments(documents.map((doc) => (doc.id === documentId ? { ...doc, title: newTitle } : doc)))
 	}
 
-	// Format file size
 	const formatFileSize = (bytes) => {
 		if (bytes === 0) return "0 Bytes"
 		const k = 1024
@@ -219,33 +195,35 @@ function DocumentUploader({
 		return `${Number.parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`
 	}
 
-	// Get status icon
 	const getStatusIcon = (status) => {
 		switch (status) {
 			case "completed":
-			case "embedded":
-				return <CheckCircle2 className="h-4 w-4 text-primary" />
-			case "failed":
-				return <AlertCircle className="h-4 w-4 text-destructive" />
-			case "processing":
-				return <div className="h-4 w-4 animate-spin rounded-full border-2 border-course border-t-transparent" />
-			default:
-				return <FileText className="h-4 w-4 text-muted-foreground" />
+			case "embedded": {
+				return <CheckCircle2 className="size-4  text-primary" />
+			}
+			case "failed": {
+				return <AlertCircle className="size-4  text-destructive" />
+			}
+			case "processing": {
+				return <div className="size-4  animate-spin rounded-full border-2 border-course border-t-transparent" />
+			}
+			default: {
+				return <FileText className="size-4  text-muted-foreground" />
+			}
 		}
 	}
 
 	return (
 		<div className="space-y-4">
-			{/* Document Preview List - Move to top when documents exist */}
 			{showPreview && documents.length > 0 && (
 				<Card
 					ref={documentsRef}
-					className="border-primary/30 bg-gradient-to-r from-primary/10 to-primary/5 dark:from-primary/10 dark:to-primary/5 shadow-sm"
+					className="border-primary/30 bg-linear-to-r from-primary/10 to-primary/5 dark:from-primary/10 dark:to-primary/5 shadow-sm"
 				>
 					<div className="p-5">
 						<div className="flex items-center justify-between mb-4">
 							<div className="flex items-center space-x-2">
-								<div className="w-2 h-2 bg-green-500 rounded-full" />
+								<div className="size-2  bg-green-500 rounded-full" />
 								<span className="text-sm font-semibold text-green-900 dark:text-green-100">Ready to Upload</span>
 								<span className="text-xs bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 px-2 py-0.5 rounded-full font-medium">
 									{documents.length}
@@ -264,7 +242,7 @@ function DocumentUploader({
 									className="group flex items-center space-x-4 p-3 bg-background/80 dark:bg-background/80 backdrop-blur-sm rounded-lg border border-border/40 dark:border-border/40 hover:bg-card dark:hover:bg-background/80 hover:shadow-sm transition-all duration-200"
 									style={{ animationDelay: `${index * 50}ms` }}
 								>
-									<div className="flex-shrink-0 w-6 flex justify-center">{getStatusIcon(doc.status)}</div>
+									<div className="shrink-0 w-6 flex justify-center">{getStatusIcon(doc.status)}</div>
 
 									<div className="flex-1 min-w-0">
 										<Input
@@ -272,7 +250,7 @@ function DocumentUploader({
 											value={doc.title}
 											onChange={(e) => updateDocumentTitle(doc.id, e.target.value)}
 											disabled={disabled}
-											className="text-sm font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground dark:text-foreground placeholder:text-muted-foreground/70 hover:bg-muted/60 dark:hover:bg-background/70 rounded px-1 -mx-1 transition-colors"
+											className="text-sm font-medium border-0 bg-transparent p-0 focus:ring-0 text-foreground dark:text-foreground placeholder:text-muted-foreground/70 hover:bg-muted/60 dark:hover:bg-background/70 rounded-sm px-1 -mx-1 transition-colors"
 											placeholder="Enter document title"
 										/>
 
@@ -281,8 +259,8 @@ function DocumentUploader({
 												{doc.type}
 											</span>
 
-											{doc.type === "pdf" && doc.size && (
-												<span className="text-xs text-muted-foreground dark:text-muted-foreground/70 bg-muted dark:bg-background/70 px-2 py-0.5 rounded">
+											{doc.type === "pdf" && doc.size > 0 && (
+												<span className="text-xs text-muted-foreground dark:text-muted-foreground/70 bg-muted dark:bg-background/70 px-2 py-0.5 rounded-sm">
 													{formatFileSize(doc.size)}
 												</span>
 											)}
@@ -301,16 +279,16 @@ function DocumentUploader({
 										size="sm"
 										onClick={() => removeDocument(doc.id)}
 										disabled={disabled}
-										className="flex-shrink-0 w-8 h-8 p-0 text-muted-foreground/70 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all duration-200"
+										className="shrink-0 size-8  p-0 text-muted-foreground/70 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all duration-200"
 									>
-										<X className="w-4 h-4" />
+										<X className="size-4 " />
 									</Button>
 								</div>
 							))}
 						</div>
 
 						{documents.length >= maxFiles && (
-							<div className="mt-3 p-2 bg-amber-100 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-700 dark:text-amber-300">
+							<div className="mt-3 p-2 bg-amber-100 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-sm text-xs text-amber-700 dark:text-amber-300">
 								Maximum documents reached ({maxFiles}). Remove some to add more.
 							</div>
 						)}
@@ -318,7 +296,6 @@ function DocumentUploader({
 				</Card>
 			)}
 
-			{/* File Upload Area - Compact when documents exist */}
 			<Card
 				className={`border-dashed ${dragActive ? "border-course bg-course/10" : "border-border"} ${documents.length > 0 ? "border-border" : ""}`}
 			>
@@ -333,7 +310,7 @@ function DocumentUploader({
 					onDrop={handleDrop}
 				>
 					<Upload
-						className={`mx-auto ${documents.length > 0 ? "h-8 w-8" : "h-12 w-12"} text-muted-foreground/70 mb-2`}
+						className={`mx-auto ${documents.length > 0 ? "size-8 " : "size-12 "} text-muted-foreground/70 mb-2`}
 					/>
 					<p className={`${documents.length > 0 ? "text-base" : "text-lg"} font-medium text-foreground mb-2`}>
 						{documents.length > 0 ? "Add More PDFs" : "Upload PDF Documents"}
@@ -364,7 +341,6 @@ function DocumentUploader({
 				</section>
 			</Card>
 
-			{/* URL Input - Compact when documents exist */}
 			<Card className={documents.length > 0 ? "border-border" : ""}>
 				<div className={documents.length > 0 ? "p-3" : "p-4"}>
 					<Label className={`${documents.length > 0 ? "text-xs" : "text-sm"} font-medium text-foreground mb-3 block`}>
@@ -386,8 +362,8 @@ function DocumentUploader({
 								}}
 							/>
 							{urlTitle && (
-								<div className="flex items-center space-x-2 p-2 bg-muted/40 dark:bg-background rounded">
-									<FileText className="w-4 h-4 text-muted-foreground" />
+								<div className="flex items-center space-x-2 p-2 bg-muted/40 dark:bg-background rounded-sm">
+									<FileText className="size-4  text-muted-foreground" />
 									<span className="text-sm text-foreground dark:text-muted-foreground flex-1 truncate">{urlTitle}</span>
 								</div>
 							)}
@@ -401,12 +377,12 @@ function DocumentUploader({
 						>
 							{isExtractingTitle ? (
 								<>
-									<div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+									<div className="size-4  border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
 									Extracting Title...
 								</>
 							) : (
 								<>
-									<Link2 className="w-4 h-4 mr-2" />
+									<Link2 className="size-4  mr-2" />
 									Add Article
 								</>
 							)}

@@ -3,7 +3,7 @@ import { ReactReader } from "react-reader"
 import { api as apiClient } from "@/lib/apiClient"
 import { useBookActions, useBookReadingState, useBookZoomLevel } from "../hooks/useBookState"
 
-function EPUBViewer({ url, bookId, onProgressUpdate }) {
+function EpubViewer({ url, bookId, onProgressUpdate }) {
 	const [location, setLocation] = useState(null)
 	const [firstRenderDone, setFirstRenderDone] = useState(false)
 	const renditionRef = useRef(null)
@@ -116,7 +116,7 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 						let r = null
 						try {
 							const rawRects = range?.getClientRects?.() || []
-							const rects = Array.from(rawRects).filter((rr) => rr && rr.width > 0 && rr.height > 0)
+							const rects = [...rawRects].filter((rr) => rr && rr.width > 0 && rr.height > 0)
 							if (rects.length > 0) {
 								let minLeft = rects[0].left
 								let maxRight = rects[0].right
@@ -243,7 +243,9 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 		}
 
 		// Attach to any existing iframes inside the reader
-		containerRef.current.querySelectorAll("iframe").forEach(attachToIframe)
+		containerRef.current.querySelectorAll("iframe").forEach((iframe) => {
+			attachToIframe(iframe)
+		})
 
 		// Observe the reader container for new iframes
 		const mo = new MutationObserver((mutations) => {
@@ -251,7 +253,11 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 				for (const n of m.addedNodes) {
 					if (n.nodeType === 1) {
 						if (n.tagName === "IFRAME") attachToIframe(n)
-						if (n.querySelectorAll) n.querySelectorAll("iframe").forEach(attachToIframe)
+						if (n.querySelectorAll) {
+							n.querySelectorAll("iframe").forEach((iframe) => {
+								attachToIframe(iframe)
+							})
+						}
 					}
 				}
 			}
@@ -282,11 +288,11 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
         display: none !important;
       }
     `
-		document.head.appendChild(style)
+		document.head.append(style)
 
 		return () => {
 			if (style.parentNode) {
-				style.parentNode.removeChild(style)
+				style.remove()
 			}
 		}
 	}, [])
@@ -368,7 +374,7 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 			<div className="h-full flex items-center justify-center bg-background">
 				<div className="text-center">
 					<div className="mb-4">
-						<div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
+						<div className="inline-block size-8  animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
 					</div>
 					<p className="text-muted-foreground">Loading EPUB...</p>
 				</div>
@@ -485,4 +491,4 @@ function EPUBViewer({ url, bookId, onProgressUpdate }) {
 	)
 }
 
-export default EPUBViewer
+export default EpubViewer

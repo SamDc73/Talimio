@@ -9,10 +9,10 @@ import BookViewer from "@/features/book-viewer/BookViewer"
 import { CourseProvider } from "@/features/course/CourseContext.jsx"
 import CourseLayout from "@/features/course/components/CourseLayout.jsx"
 import DocumentsView from "@/features/course/views/DocumentsView.jsx"
+import LessonContent from "@/features/course/views/LessonContent.jsx"
 import OutlineView from "@/features/course/views/OutlineView.jsx"
 import TrackView from "@/features/course/views/TrackView.jsx"
 import HomePage from "@/features/home"
-import LessonContent from "@/features/lesson/LessonContent.jsx"
 import { VideoViewer } from "@/features/video-viewer/VideoViewer"
 
 function App() {

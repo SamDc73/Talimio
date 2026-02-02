@@ -54,11 +54,11 @@ export function UserAvatarMenu() {
 	const userInitials = useMemo(() => {
 		if (!user) return "U"
 		if (user.username) {
-			return user.username.substring(0, 2).toUpperCase()
+			return user.username.slice(0, 2).toUpperCase()
 		}
 		if (user.email) {
 			const name = user.email.split("@")[0]
-			return name.substring(0, 2).toUpperCase()
+			return name.slice(0, 2).toUpperCase()
 		}
 		return "U"
 	}, [user])
@@ -70,14 +70,14 @@ export function UserAvatarMenu() {
 					<TooltipButton
 						variant="ghost"
 						size="icon"
-						className="h-10 w-10 rounded-full hover:bg-muted transition-all p-0"
+						className="size-10  rounded-full hover:bg-muted transition-all p-0"
 						tooltipContent="Profile"
 						tooltipSide="bottom"
 						asChild
 					>
 						<button type="button" className="flex items-center justify-center">
-							<div className="h-8 w-8 rounded-full bg-card flex items-center justify-center overflow-hidden border border-border shadow-sm">
-								<div className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500 font-semibold text-sm">
+							<div className="size-8  rounded-full bg-card flex items-center justify-center overflow-hidden border border-border shadow-sm">
+								<div className="text-transparent bg-clip-text bg-linear-to-r from-pink-500 via-orange-500 to-cyan-500 font-semibold text-sm">
 									{userInitials}
 								</div>
 							</div>
@@ -87,20 +87,18 @@ export function UserAvatarMenu() {
 				<DropdownMenuContent className="w-56 border-border" align="end" forceMount>
 					<DropdownMenuLabel className="font-normal">
 						<div className="flex flex-col space-y-1">
-							<p className="text-sm font-medium leading-none">
-								{user?.username || user?.email?.split("@")[0] || "User"}
-							</p>
-							<p className="text-xs leading-none text-muted-foreground">{user?.email || "Not logged in"}</p>
+							<p className="text-sm/none font-medium ">{user?.username || user?.email?.split("@")[0] || "User"}</p>
+							<p className="text-xs/none  text-muted-foreground">{user?.email || "Not logged in"}</p>
 						</div>
 					</DropdownMenuLabel>
 					<DropdownMenuSeparator />
 					<DropdownMenuGroup>
 						<DropdownMenuItem onClick={() => navigate("/settings")}>
-							<Settings className="mr-2 h-4 w-4" />
+							<Settings className="mr-2 size-4 " />
 							<span>Settings</span>
 						</DropdownMenuItem>
 						<DropdownMenuItem onClick={() => setPersonalizationOpen(true)}>
-							<Sparkles className="mr-2 h-4 w-4" />
+							<Sparkles className="mr-2 size-4 " />
 							<span>Personalize AI</span>
 						</DropdownMenuItem>
 					</DropdownMenuGroup>
@@ -121,7 +119,7 @@ export function UserAvatarMenu() {
 										)}
 										aria-label="Light theme"
 									>
-										<Sun className="h-3 w-3" />
+										<Sun className="size-3 " />
 									</button>
 									<button
 										type="button"
@@ -134,7 +132,7 @@ export function UserAvatarMenu() {
 										)}
 										aria-label="Dark theme"
 									>
-										<Moon className="h-3 w-3" />
+										<Moon className="size-3 " />
 									</button>
 									<button
 										type="button"
@@ -147,7 +145,7 @@ export function UserAvatarMenu() {
 										)}
 										aria-label="System theme"
 									>
-										<Monitor className="h-3 w-3" />
+										<Monitor className="size-3 " />
 									</button>
 								</div>
 							</div>
@@ -155,7 +153,7 @@ export function UserAvatarMenu() {
 					</DropdownMenuGroup>
 					<DropdownMenuSeparator />
 					<DropdownMenuItem onClick={handleLogout}>
-						<LogOut className="mr-2 h-4 w-4" />
+						<LogOut className="mr-2 size-4 " />
 						<span>Log out</span>
 					</DropdownMenuItem>
 				</DropdownMenuContent>
@@ -206,7 +204,7 @@ export function Logo({ className, size = "md", href = "/" }) {
 			</div>
 			<span className={cn("font-bold tracking-tight text-foreground dark:text-white", textSize)}>
 				Tali
-				<span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-orange-500 to-cyan-500">
+				<span className="text-transparent bg-clip-text bg-linear-to-r from-pink-500 via-orange-500 to-cyan-500">
 					mio
 				</span>
 			</span>
@@ -276,7 +274,7 @@ export function MainHeader({ transparent = false, className }) {
 									onClick={() => setSearchOpen(false)}
 									className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
 								>
-									<X className="h-4 w-4" />
+									<X className="size-4 " />
 								</button>
 							</motion.div>
 						)}
@@ -291,10 +289,10 @@ export function MainHeader({ transparent = false, className }) {
 									variant="ghost"
 									size="icon"
 									onClick={() => setSearchOpen(true)}
-									className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted transition-all"
+									className="size-10  rounded-full text-muted-foreground hover:bg-muted transition-all"
 									tooltipContent="Search"
 								>
-									<Search className="h-5 w-5" />
+									<Search className="size-5 " />
 								</TooltipButton>
 							)}
 
@@ -302,11 +300,11 @@ export function MainHeader({ transparent = false, className }) {
 								variant="ghost"
 								size="icon"
 								onClick={toggleChat}
-								className="h-10 w-10 rounded-full text-muted-foreground hover:bg-muted transition-all"
+								className="size-10  rounded-full text-muted-foreground hover:bg-muted transition-all"
 								tooltipContent="Chat with AI"
 								tooltipSide="bottom"
 							>
-								<MessageSquare className="h-5 w-5" />
+								<MessageSquare className="size-5 " />
 							</TooltipButton>
 						</div>
 
@@ -319,9 +317,9 @@ export function MainHeader({ transparent = false, className }) {
 								<Button
 									variant="ghost"
 									size="icon"
-									className="md:hidden h-10 w-10 rounded-full text-muted-foreground hover:bg-muted ml-1"
+									className="md:hidden size-10  rounded-full text-muted-foreground hover:bg-muted ml-1"
 								>
-									<Menu className="h-5 w-5" />
+									<Menu className="size-5 " />
 									<span className="sr-only">Toggle menu</span>
 								</Button>
 							</SheetTrigger>
@@ -339,33 +337,33 @@ export function MainHeader({ transparent = false, className }) {
 											to="/courses"
 											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
 										>
-											<BookOpen className="h-5 w-5 text-course" />
+											<BookOpen className="size-5  text-course" />
 											<span className="font-medium">Courses</span>
 										</Link>
 										<Link
 											to="/books"
 											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
 										>
-											<FileText className="h-5 w-5 text-book" />
+											<FileText className="size-5  text-book" />
 											<span className="font-medium">Books</span>
 										</Link>
 										<Link
 											to="/videos"
 											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
 										>
-											<Youtube className="h-5 w-5 text-video" />
+											<Youtube className="size-5  text-video" />
 											<span className="font-medium">Videos</span>
 										</Link>
 										<div className="px-4 py-3">
 											<Button onClick={toggleChat} className="w-full flex items-center justify-center gap-2">
-												<MessageSquare className="h-5 w-5" />
+												<MessageSquare className="size-5 " />
 												<span>Open Chat Assistant</span>
 											</Button>
 										</div>
 									</nav>
 									<div className="mt-auto pt-6 border-t">
 										<Button className="w-full" variant="outline">
-											<Sparkles className="mr-2 h-4 w-4" />
+											<Sparkles className="mr-2 size-4 " />
 											Generate Course
 										</Button>
 									</div>

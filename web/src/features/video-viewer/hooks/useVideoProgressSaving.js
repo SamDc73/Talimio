@@ -27,7 +27,7 @@ export function useVideoProgressSaving({ video, videoId, currentTime, duration, 
 		}
 
 		// Save every 10 seconds (reduced frequency)
-		const saveInterval = setInterval(saveProgress, 10000)
+		const saveInterval = setInterval(saveProgress, 10_000)
 
 		return () => {
 			clearInterval(saveInterval)

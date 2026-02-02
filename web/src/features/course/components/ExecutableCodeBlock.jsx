@@ -66,7 +66,7 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 		"rounded-none first:rounded-s-full last:rounded-e-full h-8 px-3 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-foreground/80 transition-all duration-200 focus-visible:outline-none focus-visible:ring-0 disabled:text-muted-foreground/70 disabled:hover:bg-transparent"
 
 	const runDisabled = !canRun || isRunning
-	const runLabel = !canRun ? "Unavailable" : isRunning ? "Running" : "Run"
+	const runLabel = canRun ? (isRunning ? "Running" : "Run") : "Unavailable"
 
 	return (
 		<div
@@ -75,16 +75,16 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 		>
 			{/* Header */}
 			<div
-				className="flex items-center justify-between gap-3 px-4 py-2.5 border-b bg-gradient-to-r from-green-500/6 via-muted/45 to-muted/35 backdrop-blur-[1px]"
+				className="flex items-center justify-between gap-3 px-4 py-2.5 border-b bg-linear-to-r from-green-500/6 via-muted/45 to-muted/35 backdrop-blur-[1px]"
 				style={{ borderBottomColor: LATTE_BORDER_COLOR }}
 			>
 				<div className="flex items-center gap-2.5">
 					<Badge
 						variant="outline"
-						className="group/language relative flex items-center gap-1.5 rounded-full border border-primary/25 bg-gradient-to-r from-primary/8 via-primary/5 to-primary/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/90 shadow-[0_6px_18px_-12px_RGBA(var(--primary-rgb),0.6)] backdrop-blur-[1px]"
+						className="group/language relative flex items-center gap-1.5 rounded-full border border-primary/25 bg-linear-to-r from-primary/8 via-primary/5 to-primary/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/90 shadow-[0_6px_18px_-12px_RGBA(var(--primary-rgb),0.6)] backdrop-blur-[1px]"
 					>
 						<span
-							className="inline-flex h-1 w-1 rounded-full bg-primary shadow-[0_0_6px_RGBA(var(--primary-rgb),0.35)] transition-transform duration-200 group-hover/language:scale-110"
+							className="inline-flex size-1  rounded-full bg-primary shadow-[0_0_6px_RGBA(var(--primary-rgb),0.35)] transition-transform duration-200 group-hover/language:scale-110"
 							aria-hidden="true"
 						/>
 						<span className="opacity-90">
@@ -99,14 +99,14 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 						disabled={runDisabled}
 						variant="outline"
 						size="sm"
-						title={!canRun ? "Language not supported yet" : undefined}
+						title={canRun ? undefined : "Language not supported yet"}
 						className={cn(
 							actionButtonBaseClass,
 							"border-primary/60 hover:bg-primary/10",
 							runDisabled ? "bg-primary/5 text-muted-foreground/70" : "hover:text-primary"
 						)}
 					>
-						<Play className="h-4 w-4" aria-hidden="true" />
+						<Play className="size-4 " aria-hidden="true" />
 						<span>{runLabel}</span>
 					</Button>
 					<Button
@@ -123,12 +123,12 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 					>
 						{code === originalCode ? (
 							<>
-								<CheckCircle className="h-4 w-4" aria-hidden="true" />
+								<CheckCircle className="size-4 " aria-hidden="true" />
 								<span>Saved</span>
 							</>
 						) : (
 							<>
-								<RotateCcw className="h-4 w-4" aria-hidden="true" />
+								<RotateCcw className="size-4 " aria-hidden="true" />
 								<span>Reset</span>
 							</>
 						)}
@@ -155,7 +155,7 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 						{error && (
 							<div className="rounded-md border p-3 bg-muted/30 border-l-2 border-l-red-500">
 								<div className="flex items-center gap-2 text-xs font-semibold text-red-600 mb-2">
-									<AlertTriangle className="h-4 w-4" aria-hidden="true" />
+									<AlertTriangle className="size-4 " aria-hidden="true" />
 									Error
 								</div>
 								<pre className="text-[12.5px] text-red-700 font-mono whitespace-pre-wrap leading-relaxed">
@@ -166,7 +166,7 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 						{result?.stdout && (
 							<div className="rounded-md border p-3 bg-muted/30 border-l-2 border-l-green-500">
 								<div className="flex items-center gap-2 text-xs font-semibold text-green-600 mb-2">
-									<CheckCircle className="w-3.5 h-3.5" aria-hidden="true" />
+									<CheckCircle className="size-3.5 " aria-hidden="true" />
 									Output
 								</div>
 								<pre className="max-h-56 overflow-auto text-[12.5px] text-foreground/90 font-mono whitespace-pre-wrap leading-relaxed">
@@ -177,7 +177,7 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 						{result?.stderr && (
 							<div className="rounded-md border p-3 bg-muted/30 border-l-2 border-l-amber-500">
 								<div className="flex items-center gap-2 text-xs font-semibold text-amber-700 mb-2">
-									<AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
+									<AlertTriangle className="size-3.5 " aria-hidden="true" />
 									Warnings
 								</div>
 								<pre className="max-h-56 overflow-auto text-[12.5px] text-amber-800 font-mono whitespace-pre-wrap leading-relaxed">

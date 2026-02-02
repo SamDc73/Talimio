@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
+import { useCourseService } from "@/api/courseApi"
 import logger from "@/lib/logger"
-import { useCourseService } from "../api/courseApi.js"
 import { useCourseProgress } from "./useCourseProgress.js"
 import { useLectorReview } from "./useLectorReview.js"
 

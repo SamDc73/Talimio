@@ -1,6 +1,7 @@
 import { Sparkles } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
-import { useChatSidebar } from "@/features/assistant/contexts/chatSidebarContext"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { useChatSidebar } from "@/contexts/chatSidebarContext"
+import logger from "@/lib/logger"
 
 /**
  * Minimal floating toolbar that appears near selected text.
@@ -17,6 +18,30 @@ export function TextSelectionTooltip() {
 	const suppressUntilRef = useRef(0)
 	const { openChat } = useChatSidebar()
 
+	const openTooltipAtRect = useCallback((text, rect, handler) => {
+		const tooltipWidth = 152
+		const tooltipHeight = 44
+		const padding = 10
+
+		const rawX = rect.left + rect.width / 2 - tooltipWidth / 2
+		const x = Math.max(padding, Math.min(rawX, window.innerWidth - tooltipWidth - padding))
+		let y = rect.top - tooltipHeight - padding
+		if (y < padding) {
+			y = rect.bottom + padding
+		}
+
+		selectedTextRef.current = text
+		handlerRef.current = handler
+		setPosition({ x, y })
+		setIsOpen(true)
+	}, [])
+
+	const resetTooltip = useCallback(() => {
+		handlerRef.current = null
+		selectedTextRef.current = ""
+		setIsOpen(false)
+	}, [])
+
 	useEffect(() => {
 		const updateTooltip = () => {
 			const now = Date.now()
@@ -26,9 +51,7 @@ export function TextSelectionTooltip() {
 			const selection = window.getSelection()
 			const text = selection?.toString().trim()
 			if (!selection || !text) {
-				handlerRef.current = null
-				selectedTextRef.current = ""
-				setIsOpen(false)
+				resetTooltip()
 				return
 			}
 
@@ -37,49 +60,28 @@ export function TextSelectionTooltip() {
 			// Suppress tooltip in explicitly excluded areas (e.g., quizzes)
 			const excludedZone = element?.closest?.("[data-askai-exclude]")
 			if (excludedZone) {
-				handlerRef.current = null
-				selectedTextRef.current = ""
-				setIsOpen(false)
+				resetTooltip()
 				return
 			}
 			// Only enable tooltip within allowed selection zones
 			const selectionZone = element?.closest?.("[data-selection-zone]")
 			if (!selectionZone) {
-				handlerRef.current = null
-				selectedTextRef.current = ""
-				setIsOpen(false)
+				resetTooltip()
 				return
 			}
 			const askAiHandler = selectionZone?.__selectionHandlers?.onAskAI || openChat
 
-			if (!askAiHandler) {
-				handlerRef.current = null
-				setIsOpen(false)
-			} else {
+			if (askAiHandler) {
 				try {
 					const range = selection.getRangeAt(0)
 					const rect = range.getBoundingClientRect()
-
-					const tooltipWidth = 152
-					const tooltipHeight = 44
-					const padding = 10
-
-					const rawX = rect.left + rect.width / 2 - tooltipWidth / 2
-					const x = Math.max(padding, Math.min(rawX, window.innerWidth - tooltipWidth - padding))
-					let y = rect.top - tooltipHeight - padding
-					if (y < padding) {
-						y = rect.bottom + padding
-					}
-
-					selectedTextRef.current = text
-					handlerRef.current = askAiHandler
-					setPosition({ x, y })
-					setIsOpen(true)
-				} catch (_error) {
-					handlerRef.current = null
-					selectedTextRef.current = ""
-					setIsOpen(false)
+					openTooltipAtRect(text, rect, askAiHandler)
+				} catch (error) {
+					logger.error("Failed to open selection tooltip", error)
+					resetTooltip()
 				}
+			} else {
+				resetTooltip()
 			}
 		}
 
@@ -101,9 +103,7 @@ export function TextSelectionTooltip() {
 
 		const handleClickOutside = (event) => {
 			if (tooltipRef.current && !tooltipRef.current.contains(event.target)) {
-				handlerRef.current = null
-				selectedTextRef.current = ""
-				setIsOpen(false)
+				resetTooltip()
 			}
 		}
 
@@ -113,75 +113,39 @@ export function TextSelectionTooltip() {
 		document.addEventListener("mousedown", handleClickOutside)
 
 		// Bridge for iframe-based selections (e.g., EPUB reader). Event detail: { text, clientRect }
-		const handleIframeSelection = (event) => {
+		const handleExternalSelection = (event) => {
 			try {
 				const detail = event?.detail || {}
 				const text = String(detail.text || "").trim()
 				const rect = detail.clientRect
-				if (!text || !rect) return
+				if (!text || !rect) {
+					return
+				}
 				// Require an allowed selection zone in the parent document
 				const zone = document.querySelector("[data-selection-zone]")
 				if (!zone) {
 					return
 				}
-
-				const tooltipWidth = 152
-				const tooltipHeight = 44
-				const padding = 10
-
-				const rawX = rect.left + rect.width / 2 - tooltipWidth / 2
-				const x = Math.max(padding, Math.min(rawX, window.innerWidth - tooltipWidth - padding))
-				let y = rect.top - tooltipHeight - padding
-				if (y < padding) y = rect.bottom + padding
-
-				selectedTextRef.current = text
-				handlerRef.current = openChat
-				setPosition({ x, y })
-				setIsOpen(true)
+				openTooltipAtRect(text, rect, openChat)
 				suppressUntilRef.current = Date.now() + 600
-			} catch (_error) {}
+			} catch (error) {
+				logger.error("Failed to handle external selection", error)
+				resetTooltip()
+			}
 		}
-		document.addEventListener("talimio-iframe-selection", handleIframeSelection)
+		document.addEventListener("talimio-iframe-selection", handleExternalSelection)
 
 		// Bridge for EmbedPDF selections. Event detail: { text, clientRect }
-		const handlePdfSelection = (event) => {
-			try {
-				const detail = event?.detail || {}
-				const text = String(detail.text || "").trim()
-				const rect = detail.clientRect
-				if (!text || !rect) return
-				// Require an allowed selection zone in the parent document
-				const zone = document.querySelector("[data-selection-zone]")
-				if (!zone) {
-					return
-				}
-
-				const tooltipWidth = 152
-				const tooltipHeight = 44
-				const padding = 10
-
-				const rawX = rect.left + rect.width / 2 - tooltipWidth / 2
-				const x = Math.max(padding, Math.min(rawX, window.innerWidth - tooltipWidth - padding))
-				let y = rect.top - tooltipHeight - padding
-				if (y < padding) y = rect.bottom + padding
-
-				selectedTextRef.current = text
-				handlerRef.current = openChat
-				setPosition({ x, y })
-				setIsOpen(true)
-				suppressUntilRef.current = Date.now() + 600
-			} catch (_error) {}
-		}
-		document.addEventListener("talimio-pdf-selection", handlePdfSelection)
+		document.addEventListener("talimio-pdf-selection", handleExternalSelection)
 		return () => {
 			document.removeEventListener("mouseup", handleMouseUp)
 			document.removeEventListener("selectionchange", handleSelectionChange)
 			document.removeEventListener("mousedown", handleClickOutside)
-			document.removeEventListener("talimio-iframe-selection", handleIframeSelection)
-			document.removeEventListener("talimio-pdf-selection", handlePdfSelection)
+			document.removeEventListener("talimio-iframe-selection", handleExternalSelection)
+			document.removeEventListener("talimio-pdf-selection", handleExternalSelection)
 			clearSelectionTimeout()
 		}
-	}, [openChat])
+	}, [openChat, openTooltipAtRect, resetTooltip])
 
 	if (!isOpen || !handlerRef.current) {
 		return null
@@ -201,17 +165,17 @@ export function TextSelectionTooltip() {
 	return (
 		<div
 			ref={tooltipRef}
-			style={{ position: "fixed", left: position.x, top: position.y, zIndex: 2147483647 }}
-			className="animate-in fade-in zoom-in-95 duration-150"
+			style={{ position: "fixed", left: position.x, top: position.y, zIndex: 2_147_483_647 }}
+			className="duration-150"
 		>
 			<button
 				type="button"
 				onClick={handleAskAiClick}
-				className="group flex items-center gap-2 rounded-full border border-completed/15 bg-background/95 px-4 py-2 text-sm font-medium text-completed shadow-sm shadow-completed/20 backdrop-blur transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-completed/30 focus:ring-offset-2 focus:ring-offset-background dark:border-completed/30 dark:bg-zinc-900/95 dark:text-completed dark:shadow-completed/25 dark:hover:shadow-lg dark:focus:ring-completed/40 dark:focus:ring-offset-zinc-900"
+				className="group flex items-center gap-2 rounded-full border border-completed/15 bg-background/95 px-4 py-2 text-sm font-medium text-completed shadow-sm shadow-completed/20 backdrop-blur-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-completed/30 focus:ring-offset-2 focus:ring-offset-background dark:border-completed/30 dark:bg-zinc-900/95 dark:text-completed dark:shadow-completed/25 dark:hover:shadow-lg dark:focus:ring-completed/40 dark:focus:ring-offset-zinc-900"
 				title="Ask AI"
 			>
-				<span className="flex h-5 w-5 items-center justify-center text-completed transition-transform duration-150 group-hover:scale-105 dark:text-completed">
-					<Sparkles className="h-4 w-4" />
+				<span className="flex size-5 items-center justify-center text-completed transition-transform duration-150 group-hover:scale-105 dark:text-completed">
+					<Sparkles className="size-4" />
 				</span>
 				<span className="tracking-wide">Ask AI</span>
 			</button>

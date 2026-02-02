@@ -3,10 +3,10 @@ import { useEffect, useRef } from "react"
 import { useParams } from "react-router-dom"
 import ErrorBoundary from "@/components/ErrorBoundary"
 import { BookHeader } from "@/components/header/BookHeader"
-import BookSidebar from "@/components/sidebar/BookSidebar"
+import BookSidebarContainer from "@/features/book-viewer/components/BookSidebarContainer"
 import { booksApi } from "./api/booksApi"
-import EpubViewer from "./components/EPUBViewer"
-import PdfViewer from "./components/PDFViewer"
+import EpubViewer from "./components/EpubViewer"
+import PdfViewer from "./components/PdfViewer"
 import {
 	useBookActions,
 	useBookCurrentPage,
@@ -62,9 +62,8 @@ function BookViewerContent() {
 	})
 
 	useEffect(() => {
-		void bookId
 		viewerApiRef.current = null
-	}, [bookId])
+	}, [])
 
 	const handleZoomIn = () => {
 		viewerApiRef.current?.zoomIn?.()
@@ -145,7 +144,7 @@ function BookViewerContent() {
 			/>
 
 			{sidebarOpen ? (
-				<BookSidebar
+				<BookSidebarContainer
 					book={{ ...book, totalPages: sidebarTotalPages }}
 					bookId={bookId}
 					onChapterClick={handleChapterClick}

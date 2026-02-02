@@ -14,7 +14,7 @@ export function MasteryCircle({ value, className }) {
 			width={size}
 			height={size}
 			viewBox={`0 0 ${size} ${size}`}
-			className={cn("flex-shrink-0", className)}
+			className={cn("shrink-0", className)}
 			role="img"
 			aria-label={`${percentage}% mastery`}
 		>

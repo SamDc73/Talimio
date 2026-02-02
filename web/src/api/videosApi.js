@@ -2,6 +2,7 @@
  * Service for managing videos, chapters and their progress
  */
 import { api } from "@/lib/apiClient"
+import logger from "@/lib/logger"
 
 /**
  * Get a video by ID (with authentication)
@@ -60,9 +61,10 @@ export async function getVideoChapters(videoId) {
 		const chapters = await api.get(`/videos/${videoId}/chapters`)
 		return chapters || []
 	} catch (error) {
-		// Log authentication errors for debugging
-		if (error.status === 401) {
-		} else if (error.status !== 404) {
+		if (error?.status === 401) {
+			logger.info("Video chapters request unauthorized", { videoId })
+		} else if (error?.status !== 404) {
+			logger.error("Failed to fetch video chapters", error, { videoId })
 		}
 		// Don't throw - return empty array so the sidebar can still render
 		return []

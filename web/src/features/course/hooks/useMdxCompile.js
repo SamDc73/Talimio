@@ -59,9 +59,27 @@ const runtimeGlobals = {
  */
 function quoteCodeFenceMeta(meta) {
 	if (!meta) return meta
-	// Match attr=value where value is unquoted (not starting with " or ')
-	// Handle both key=value and standalone key (like "entry")
-	return meta.replace(/(\w+)=([^\s"'][^\s]*)/g, '$1="$2"')
+	const leadingWhitespace = meta.match(/^\s+/)?.[0] ?? ""
+	const trimmed = meta.trim()
+	if (!trimmed) return meta
+
+	const parts = trimmed.split(/\s+/).map((part) => {
+		const separatorIndex = part.indexOf("=")
+		if (separatorIndex === -1) {
+			return part
+		}
+		const key = part.slice(0, separatorIndex)
+		const value = part.slice(separatorIndex + 1)
+		if (!value) {
+			return part
+		}
+		if (value.startsWith('"') || value.startsWith("'")) {
+			return `${key}=${value}`
+		}
+		return `${key}="${value}"`
+	})
+
+	return `${leadingWhitespace}${parts.join(" ")}`
 }
 
 /**
@@ -74,17 +92,6 @@ function preprocessMDXContent(content) {
 
 	// Remove JSX comments {/* ... */}
 	processed = processed.replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-
-	// Fix self-closing tags that might have issues
-	// Match tags like <br/> and ensure they have proper spacing
-	processed = processed.replace(/<(\w+)([^>]*?)\/>/g, (_match, tag, attrs) => {
-		// Ensure there's a space before the closing slash
-		const cleanAttrs = attrs.trim()
-		if (cleanAttrs) {
-			return `<${tag} ${cleanAttrs} />`
-		}
-		return `<${tag} />`
-	})
 
 	// Remove HTML comments <!-- ... -->
 	processed = processed.replace(/<!--[\s\S]*?-->/g, "")
@@ -126,7 +133,7 @@ function preprocessMDXContent(content) {
  * @param {string} content - MDX content to compile
  * @returns {Object} - { Component, error, isLoading }
  */
-export function useMDXCompile(content) {
+export function useMdxCompile(content) {
 	const [Component, setComponent] = useState(null)
 	const [error, setError] = useState(null)
 	const [isLoading, setIsLoading] = useState(true)
@@ -203,9 +210,12 @@ export function useMDXCompile(content) {
 					let errorMessage = "Failed to compile MDX content"
 
 					if (err.message) {
-						const lineMatch = err.message.match(/(\d+):(\d+)/)
-						if (lineMatch) {
-							errorMessage = `MDX syntax error at line ${lineMatch[1]}`
+						const [maybeLine, maybeColumn] = err.message.split(":")
+						const lineNumber = Number.parseInt(maybeLine, 10)
+						const columnNumber = Number.parseInt(maybeColumn, 10)
+
+						if (Number.isFinite(lineNumber) && Number.isFinite(columnNumber)) {
+							errorMessage = `MDX syntax error at line ${lineNumber}`
 						} else {
 							errorMessage = err.message.split("\n")[0]
 						}

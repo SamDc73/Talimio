@@ -7,6 +7,7 @@ import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
 import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
+import logger from "@/lib/logger"
 
 export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 	const [youtubeUrl, setYoutubeUrl] = useState("")
@@ -37,8 +38,8 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 			onOpenChange(false)
 
 			if (onVideoAdded) onVideoAdded(response)
-		} catch (_error) {
-			// Intentionally quiet – parent surfaces toast if needed
+		} catch (error) {
+			logger.error("Failed to add YouTube video", error)
 		} finally {
 			setIsAddingVideo(false)
 		}
@@ -57,8 +58,8 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 				>
 					<DialogHeader className="space-y-2">
 						<div className="flex items-center gap-3">
-							<div className="rounded-lg bg-gradient-to-br from-video/90 to-video p-2.5">
-								<Youtube className="h-5 w-5 text-white" />
+							<div className="rounded-lg bg-linear-to-br from-video/90 to-video p-2.5">
+								<Youtube className="size-5  text-white" />
 							</div>
 							<DialogTitle className="text-2xl">Add a YouTube Video</DialogTitle>
 						</div>
@@ -96,12 +97,12 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 						>
 							{isAddingVideo ? (
 								<div className="flex items-center gap-2">
-									<Loader2 className="h-4 w-4 animate-spin" />
+									<Loader2 className="size-4  animate-spin" />
 									<span>Adding…</span>
 								</div>
 							) : (
 								<div className="flex items-center gap-2">
-									<Youtube className="h-4 w-4" />
+									<Youtube className="size-4 " />
 									<span>Add Video</span>
 								</div>
 							)}

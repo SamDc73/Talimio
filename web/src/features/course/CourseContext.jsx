@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router-dom"
 
-import { useCourseService } from "@/features/course/api/courseApi"
+import { useCourseService } from "@/api/courseApi"
 import { useCourseData } from "@/features/course/hooks/useCourseData"
 import { useOutlineData } from "@/features/course/hooks/useOutlineData"
 
@@ -20,7 +20,7 @@ export function CourseProvider({ children }) {
 
 	// Concept frontier for adaptive progress (avgMastery)
 	const courseService = useCourseService(courseId)
-	const [lastAdaptiveProgressPct, setLastAdaptiveProgressPct] = useState(undefined)
+	const [lastAdaptiveProgressPct, setLastAdaptiveProgressPct] = useState()
 
 	const { data: frontierData } = useQuery({
 		queryKey: ["course", courseId, "adaptive-concepts"],

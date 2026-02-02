@@ -79,7 +79,7 @@ export function useLessonProgressMutation(courseId) {
 				metadataInput.completedLessons ??
 				[]
 
-			const completedLessons = completedLessonsSource.map((lesson) => String(lesson))
+			const completedLessons = completedLessonsSource.map(String)
 
 			const totalLessons =
 				progress?.total_lessons ??

@@ -18,7 +18,9 @@ export function useBookProgress(bookId) {
 	const tocProgress = rawMetadata.toc_progress || {}
 	const currentPage = rawMetadata.current_page || 0
 	const totalPages = rawMetadata.total_pages || 0
-	const totalChaptersFromMetadata = rawMetadata.total_chapters || Object.keys(tocProgress).length
+	const tocChapterCount = Object.keys(tocProgress).length
+	const totalChaptersFromMetadata =
+		typeof rawMetadata.total_chapters === "number" ? rawMetadata.total_chapters : tocChapterCount
 	const zoomLevel = rawMetadata.zoom_level ?? 100
 
 	// Helper to calculate progress from TOC (only counts leaf chapters)

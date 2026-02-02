@@ -36,9 +36,9 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onFilterChange("all")}
-						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className="size-4  p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
 					>
-						<X className="h-3 w-3" />
+						<X className="size-3 " />
 						<span className="sr-only">Remove filter</span>
 					</Button>
 				</Badge>
@@ -51,9 +51,9 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onArchiveFilterChange("active")}
-						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className="size-4  p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
 					>
-						<X className="h-3 w-3" />
+						<X className="size-3 " />
 						<span className="sr-only">Reset archive filter</span>
 					</Button>
 				</Badge>
@@ -66,9 +66,9 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onSortChange("last-accessed")}
-						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className="size-4  p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
 					>
-						<X className="h-3 w-3" />
+						<X className="size-3 " />
 						<span className="sr-only">Remove sort</span>
 					</Button>
 				</Badge>
@@ -81,9 +81,9 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onSortDirectionChange("desc")}
-						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className="size-4  p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
 					>
-						<X className="h-3 w-3" />
+						<X className="size-3 " />
 						<span className="sr-only">Remove sort direction</span>
 					</Button>
 				</Badge>
@@ -96,9 +96,9 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onTagFilterChange("")}
-						className="h-4 w-4 p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className="size-4  p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
 					>
-						<X className="h-3 w-3" />
+						<X className="size-3 " />
 						<span className="sr-only">Remove tag filter</span>
 					</Button>
 				</Badge>

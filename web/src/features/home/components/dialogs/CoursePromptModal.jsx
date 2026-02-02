@@ -5,14 +5,13 @@
 import { AnimatePresence, motion } from "framer-motion"
 import { HelpCircle, Loader2, Sparkles } from "lucide-react"
 import { useState } from "react"
-
+import { useCourseService } from "@/api/courseApi"
 import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
 import { Label } from "@/components/Label"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/Tooltip"
 import { cn } from "@/lib/utils"
 import useAppStore, { selectSelfAssessmentEnabled, selectSetSelfAssessmentEnabled } from "@/stores/useAppStore"
-import { useCourseService } from "./api/courseApi"
 import SelfAssessmentDialog from "./SelfAssessmentDialog"
 
 const MODAL_STEPS = {
@@ -45,7 +44,7 @@ function formatSelfAssessmentSummary(responses) {
 		})
 		.filter(Boolean)
 
-	if (!lines.length) {
+	if (lines.length === 0) {
 		return ""
 	}
 
@@ -179,8 +178,8 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 		>
 			<DialogHeader className="space-y-2">
 				<div className="flex items-center gap-3">
-					<div className="p-2.5 bg-gradient-to-br from-[var(--color-course)]/90 to-[var(--color-course)] rounded-lg">
-						<Sparkles className="h-5 w-5 text-white" />
+					<div className="p-2.5 bg-linear-to-br from-(--color-course)/90 to-(--color-course) rounded-lg">
+						<Sparkles className="size-5  text-white" />
 					</div>
 					<DialogTitle className="text-2xl">Create Course</DialogTitle>
 				</div>
@@ -199,8 +198,8 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 						disabled={isGenerating}
 						className={cn(
 							"w-full px-3.5 py-2.5 rounded-lg border border-border bg-background",
-							"text-sm leading-relaxed resize-none",
-							"focus:outline-none focus:ring-2 focus:ring-[var(--color-course)]/20 focus:border-[var(--color-course)]",
+							"text-sm/relaxed  resize-none",
+							"focus:outline-none focus:ring-2 focus:ring-(--color-course)/20 focus:border-(--color-course)",
 							"placeholder:text-muted-foreground/60",
 							"transition-all duration-200",
 							"disabled:opacity-50 disabled:cursor-not-allowed"
@@ -252,7 +251,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 							checked={adaptiveEnabled}
 							onChange={handleToggleAdaptive}
 							disabled={isGenerating}
-							className="h-4 w-4 rounded border-border text-[var(--color-course)] focus:ring-2 focus:ring-[var(--color-course)]/20 focus:ring-offset-0 transition-all"
+							className="size-4  rounded-sm border-border text-(--color-course) focus:ring-2 focus:ring-(--color-course)/20 focus:ring-offset-0 transition-all"
 						/>
 						<span className="text-sm text-foreground select-none">Adaptive mode</span>
 						<Tooltip>
@@ -264,7 +263,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 									className="ml-0.5 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
 									aria-label="Adaptive mode information"
 								>
-									<HelpCircle className="h-3.5 w-3.5" />
+									<HelpCircle className="size-3.5 " />
 								</button>
 							</TooltipTrigger>
 							<TooltipContent side="top" className="text-xs">
@@ -288,7 +287,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 							checked={selfAssessmentEnabled}
 							onChange={handleToggleSelfAssessment}
 							disabled={isGenerating}
-							className="h-4 w-4 rounded border-border text-[var(--color-course)] focus:ring-2 focus:ring-[var(--color-course)]/20 focus:ring-offset-0 transition-all"
+							className="size-4  rounded-sm border-border text-(--color-course) focus:ring-2 focus:ring-(--color-course)/20 focus:ring-offset-0 transition-all"
 						/>
 						<span className="text-sm text-foreground select-none">Self-assessment</span>
 						<Tooltip>
@@ -300,7 +299,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 									className="ml-0.5 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
 									aria-label="Self-assessment information"
 								>
-									<HelpCircle className="h-3.5 w-3.5" />
+									<HelpCircle className="size-3.5 " />
 								</button>
 							</TooltipTrigger>
 							<TooltipContent side="top" className="text-xs">
@@ -323,16 +322,16 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 					<Button
 						type="submit"
 						disabled={isGenerating || !prompt.trim()}
-						className="min-w-[140px] bg-[var(--color-course)] hover:bg-[var(--color-course)]/90 text-white"
+						className="min-w-[140px] bg-(--color-course) hover:bg-(--color-course)/90 text-white"
 					>
 						{isGenerating ? (
 							<div className="flex items-center gap-2">
-								<Loader2 className="h-4 w-4 animate-spin" />
+								<Loader2 className="size-4  animate-spin" />
 								<span>Creating…</span>
 							</div>
 						) : (
 							<div className="flex items-center gap-2">
-								<Sparkles className="h-4 w-4" />
+								<Sparkles className="size-4 " />
 								<span>Continue</span>
 							</div>
 						)}
@@ -370,7 +369,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 					{isGenerating ? (
 						<div className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm">
 							<div className="flex flex-col items-center gap-3 text-muted-foreground">
-								<Loader2 className="h-5 w-5 animate-spin" />
+								<Loader2 className="size-5  animate-spin" />
 								<span className="text-sm">Generating course...</span>
 							</div>
 						</div>

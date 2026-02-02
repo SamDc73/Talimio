@@ -4,6 +4,7 @@
  */
 
 import { api } from "@/lib/apiClient"
+import logger from "@/lib/logger"
 
 export const SECURITY_CONFIG = {
 	// Token Management
@@ -123,7 +124,9 @@ class SecurityMonitor {
 	async sendToSecurityService(violation) {
 		try {
 			await api.post("/security/violation", violation, { keepalive: true })
-		} catch (_error) {}
+		} catch (error) {
+			logger.error("Failed to report security violation", error, { violationType: violation?.type })
+		}
 	}
 
 	// Validate password strength

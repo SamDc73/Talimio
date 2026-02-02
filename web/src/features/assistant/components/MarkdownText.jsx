@@ -8,7 +8,7 @@ import {
 	useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown"
 import { CheckIcon, CopyIcon } from "lucide-react"
-import { memo, useEffect, useRef, useState } from "react"
+import { Children, isValidElement, memo, useEffect, useRef, useState } from "react"
 import remarkGfm from "remark-gfm"
 
 import { TooltipIconButton } from "@/features/assistant/components/TooltipIconButton"
@@ -120,7 +120,7 @@ const defaultComponents = memoizeMarkdownComponents({
 		<h6 className={cn("aui-md-h6 my-4 font-semibold first:mt-0 last:mb-0", className)} {...props} />
 	),
 	p: ({ className, ...props }) => (
-		<p className={cn("aui-md-p mt-5 mb-5 leading-7 first:mt-0 last:mb-0", className)} {...props} />
+		<p className={cn("aui-md-p my-5  leading-7 first:mt-0 last:mb-0", className)} {...props} />
 	),
 	a: ({ className, ...props }) => (
 		<a className={cn("aui-md-a font-medium text-primary underline underline-offset-4", className)} {...props} />
@@ -135,16 +135,29 @@ const defaultComponents = memoizeMarkdownComponents({
 		<ol className={cn("aui-md-ol my-5 ml-6 list-decimal [&>li]:mt-2", className)} {...props} />
 	),
 	hr: ({ className, ...props }) => <hr className={cn("aui-md-hr my-5 border-b", className)} {...props} />,
-	table: ({ className, ...props }) => (
-		<table
-			className={cn("aui-md-table my-5 w-full border-separate border-spacing-0 overflow-y-auto", className)}
-			{...props}
-		/>
-	),
+	table: ({ className, children, ...props }) => {
+		const childArray = Children.toArray(children)
+		const hasHead = childArray.some((child) => isValidElement(child) && child.type === "thead")
+		return (
+			<table
+				className={cn("aui-md-table my-5 w-full border-separate border-spacing-0 overflow-y-auto", className)}
+				{...props}
+			>
+				{hasHead ? null : (
+					<thead className="sr-only" data-hidden>
+						<tr>
+							<th scope="col">Column</th>
+						</tr>
+					</thead>
+				)}
+				{children}
+			</table>
+		)
+	},
 	th: ({ className, ...props }) => (
 		<th
 			className={cn(
-				"aui-md-th bg-muted px-4 py-2 text-left font-bold first:rounded-tl-lg last:rounded-tr-lg [&[align=center]]:text-center [&[align=right]]:text-right",
+				"aui-md-th bg-muted px-4 py-2 text-left font-bold first:rounded-tl-lg last:rounded-tr-lg [[align=center]]:text-center [[align=right]]:text-right",
 				className
 			)}
 			{...props}
@@ -153,7 +166,7 @@ const defaultComponents = memoizeMarkdownComponents({
 	td: ({ className, ...props }) => (
 		<td
 			className={cn(
-				"aui-md-td border-b border-l px-4 py-2 text-left last:border-r [&[align=center]]:text-center [&[align=right]]:text-right",
+				"aui-md-td border-b border-l px-4 py-2 text-left last:border-r [[align=center]]:text-center [[align=right]]:text-right",
 				className
 			)}
 			{...props}
@@ -173,7 +186,7 @@ const defaultComponents = memoizeMarkdownComponents({
 	),
 	pre: ({ className, ...props }) => (
 		<pre
-			className={cn("aui-md-pre overflow-x-auto !rounded-t-none rounded-b-lg bg-black p-4 text-white", className)}
+			className={cn("aui-md-pre overflow-x-auto rounded-t-none! rounded-b-lg bg-black p-4 text-white", className)}
 			{...props}
 		/>
 	),
@@ -181,7 +194,7 @@ const defaultComponents = memoizeMarkdownComponents({
 		const isCodeBlock = useIsMarkdownCodeBlock()
 		return (
 			<code
-				className={cn(!isCodeBlock && "aui-md-inline-code rounded border bg-muted font-semibold", className)}
+				className={cn(!isCodeBlock && "aui-md-inline-code rounded-sm border bg-muted font-semibold", className)}
 				{...props}
 			/>
 		)

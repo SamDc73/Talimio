@@ -8,7 +8,7 @@ export default function WelcomeHeader() {
 			transition={{ duration: 0.5 }}
 			className="text-center mb-6"
 		>
-			<h1 className="text-4xl md:text-5xl font-display font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 mb-4 tracking-tight">
+			<h1 className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-linear-to-r from-slate-900 via-slate-800 to-slate-900 mb-4 tracking-tight">
 				Welcome Back!
 			</h1>
 			<p className="text-lg text-muted-foreground max-w-2xl mx-auto">

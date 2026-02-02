@@ -1,6 +1,7 @@
 import { Plus, Search, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
+import logger from "@/lib/logger"
 import useTagStore from "../../../stores/useTagStore"
 
 import Tag, { TagList } from "./Tag"
@@ -72,17 +73,19 @@ function TagInput({
 		if (!isOpen) return
 
 		switch (e.key) {
-			case "ArrowDown":
+			case "ArrowDown": {
 				e.preventDefault()
 				setHighlightedIndex((prev) =>
 					prev < suggestions.length - 1 + (allowCreate && inputValue.trim() ? 1 : 0) ? prev + 1 : prev
 				)
 				break
-			case "ArrowUp":
+			}
+			case "ArrowUp": {
 				e.preventDefault()
 				setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : prev))
 				break
-			case "Enter":
+			}
+			case "Enter": {
 				e.preventDefault()
 				if (highlightedIndex >= 0) {
 					if (highlightedIndex < suggestions.length) {
@@ -102,12 +105,14 @@ function TagInput({
 					}
 				}
 				break
-			case "Escape":
+			}
+			case "Escape": {
 				setIsOpen(false)
 				setInputValue("")
 				setHighlightedIndex(-1)
 				inputRef.current?.blur()
 				break
+			}
 		}
 	}
 
@@ -141,8 +146,8 @@ function TagInput({
 			setIsOpen(false)
 			setHighlightedIndex(-1)
 			inputRef.current?.focus()
-		} catch (_error) {
-			// You might want to show a toast notification here
+		} catch (error) {
+			logger.error("Failed to create tag", error)
 		}
 	}
 
@@ -168,7 +173,7 @@ function TagInput({
 			{/* Input field */}
 			<div className="relative">
 				<div className="flex items-center rounded-lg border border-input bg-card focus-within:border-ring focus-within:ring-2 focus-within:ring-ring">
-					<Search className="ml-3 h-4 w-4 text-muted-foreground" />
+					<Search className="ml-3 size-4  text-muted-foreground" />
 					<input
 						ref={inputRef}
 						type="text"
@@ -189,9 +194,9 @@ function TagInput({
 								setHighlightedIndex(-1)
 								inputRef.current?.focus()
 							}}
-							className="mr-2 p-1 hover:bg-muted/40 rounded"
+							className="mr-2 p-1 hover:bg-muted/40 rounded-sm"
 						>
-							<X className="h-3 w-3 text-muted-foreground" />
+							<X className="size-3  text-muted-foreground" />
 						</button>
 					)}
 				</div>
@@ -212,7 +217,7 @@ function TagInput({
 										key={tag.id}
 										type="button"
 										onClick={() => handleTagSelect(tag)}
-										className={`w-full flex items-center gap-2 px-3 py-2 text-left rounded hover:bg-muted/40 ${
+										className={`w-full flex items-center gap-2 px-3 py-2 text-left rounded-sm hover:bg-muted/40 ${
 											index === highlightedIndex ? "bg-primary/10 text-primary" : ""
 										}`}
 									>
@@ -234,7 +239,7 @@ function TagInput({
 										highlightedIndex === suggestions.length ? "bg-primary/10 text-primary" : ""
 									}`}
 								>
-									<Plus className="h-4 w-4 text-primary" />
+									<Plus className="size-4  text-primary" />
 									<span>
 										Create "{inputValue.trim()}"{loading.creating && " (creating...)"}
 									</span>

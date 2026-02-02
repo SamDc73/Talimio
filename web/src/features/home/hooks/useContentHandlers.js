@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom"
 import { api } from "@/lib/apiClient"
+import logger from "@/lib/logger"
 
 /**
  * Content Handlers Hook:
@@ -19,14 +20,15 @@ export function useContentHandlers({ filters, pinning, setContentItems, loadCont
 		setIsGenerating(true)
 
 		try {
-			const _response = await api.post("/assistant/generate-course", {
+			await api.post("/assistant/generate-course", {
 				topic: filters.searchQuery,
 				level: "beginner",
 			})
 
 			// Clear search after generating
 			filters.setSearchQuery("")
-		} catch (_error) {
+		} catch (error) {
+			logger.error("Failed to generate course", error)
 		} finally {
 			setIsGenerating(false)
 		}
@@ -47,13 +49,24 @@ export function useContentHandlers({ filters, pinning, setContentItems, loadCont
 
 	const handleCardClick = (item) => {
 		// Navigate to the appropriate page based on item type
-		if (item.type === "course") {
-			// Use the new course routes for both course and course types
-			navigate(`/course/${item.id}`)
-		} else if (item.type === "video") {
-			navigate(`/videos/${item.id}`)
-		} else if (item.type === "book") {
-			navigate(`/books/${item.id}`)
+		switch (item.type) {
+			case "course": {
+				// Use the new course routes for both course and course types
+				navigate(`/course/${item.id}`)
+
+				break
+			}
+			case "video": {
+				navigate(`/videos/${item.id}`)
+
+				break
+			}
+			case "book": {
+				navigate(`/books/${item.id}`)
+
+				break
+			}
+			// No default
 		}
 	}
 

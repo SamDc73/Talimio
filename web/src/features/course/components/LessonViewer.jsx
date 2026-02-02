@@ -59,7 +59,7 @@ export function LessonViewer({
 		return (
 			<div className="h-[calc(100vh-4rem)] overflow-y-auto w-full">
 				<div className="flex flex-col items-center justify-center min-h-full text-muted-foreground">
-					<div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mb-4" />
+					<div className="animate-spin rounded-full size-12  border-y-2  border-primary mb-4" />
 					<p>Loading lesson...</p>
 				</div>
 			</div>
@@ -75,7 +75,7 @@ export function LessonViewer({
 						<h2 className="text-xl font-semibold mb-4">Error loading lesson</h2>
 						<p className="mb-4">{error}</p>
 						<Button onClick={onBack} variant="outline" size="sm">
-							<ArrowLeft className="w-4 h-4" />
+							<ArrowLeft className="size-4 " />
 							Back
 						</Button>
 					</div>
@@ -93,7 +93,7 @@ export function LessonViewer({
 						<h2 className="text-xl font-semibold mb-4 text-foreground">No lesson available</h2>
 						<p className="mb-4">This lesson could not be loaded.</p>
 						<Button onClick={onBack} variant="outline" size="sm">
-							<ArrowLeft className="w-4 h-4" />
+							<ArrowLeft className="size-4 " />
 							Back
 						</Button>
 					</div>
@@ -107,31 +107,31 @@ export function LessonViewer({
 			<div className="max-w-4xl w-full mx-auto px-4 flex justify-center">
 				<div className="w-full rounded-lg border border-border bg-card shadow-sm flex flex-col my-8">
 					{/* Header */}
-					<div className="border-b border-border bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-6">
+					<div className="border-b border-border bg-linear-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-6">
 						<div className="flex items-center justify-between mb-5">
 							<Button onClick={onBack} variant="secondary" size="sm">
-								<ArrowLeft className="w-4 h-4" />
+								<ArrowLeft className="size-4 " />
 								Back
 							</Button>
 
 							<div className="flex items-center gap-2">
 								{onRegenerate && (
 									<Button onClick={() => onRegenerate(lesson.id)} variant="outline" size="sm">
-										<RotateCcw className="w-4 h-4" />
+										<RotateCcw className="size-4 " />
 										Regenerate
 									</Button>
 								)}
 
 								{onMarkComplete && (
 									<Button onClick={() => onMarkComplete(lesson.id)} size="sm">
-										<CheckCircle className="w-4 h-4" />
+										<CheckCircle className="size-4 " />
 										Complete
 									</Button>
 								)}
 							</div>
 						</div>
 
-						<h1 className="text-3xl font-bold leading-tight text-foreground px-6">
+						<h1 className="text-3xl/tight font-bold  text-foreground px-6">
 							{lesson.title || lesson.slug || "Lesson"}
 						</h1>
 					</div>
@@ -171,7 +171,7 @@ export function LessonViewer({
 							<div className="flex items-center justify-between gap-4 pt-6 mt-6 border-t border-border/40">
 								{previousLesson ? (
 									<Button type="button" variant="outline" size="sm" onClick={() => onLessonNavigate(previousLesson.id)}>
-										<ArrowLeft className="w-4 h-4" />
+										<ArrowLeft className="size-4 " />
 										Previous
 									</Button>
 								) : (
@@ -187,7 +187,7 @@ export function LessonViewer({
 										className="ml-auto"
 									>
 										Next Lesson
-										<ArrowRight className="w-4 h-4" />
+										<ArrowRight className="size-4 " />
 									</Button>
 								) : (
 									<div />

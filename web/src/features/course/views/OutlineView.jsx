@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query"
 import { ArrowRight, CheckCircle2, Circle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCourseService } from "@/api/courseApi"
 import { Button } from "@/components/Button"
 import { MasteryCircle } from "@/components/MasteryCircle"
-import { useCourseService } from "@/features/course/api/courseApi"
 import { useCourseContext } from "@/features/course/CourseContext.jsx"
 import OutlineNode from "@/features/course/components/navigation/OutlineNode.jsx"
 import { useCourseProgress } from "@/features/course/hooks/useCourseProgress"
@@ -33,7 +33,6 @@ function findFiniteNumber(values) {
 			return numeric
 		}
 	}
-	return undefined
 }
 
 function BuildForecast(meta) {
@@ -75,9 +74,9 @@ function BuildForecast(meta) {
 	}
 
 	const normalizedDays =
-		days !== undefined ? Math.max(0, Math.round(days)) : weeks !== undefined ? Math.max(0, Math.round(weeks * 7)) : 0
+		days === undefined ? (weeks === undefined ? 0 : Math.max(0, Math.round(weeks * 7))) : Math.max(0, Math.round(days))
 	const normalizedWeeks =
-		weeks !== undefined ? Math.max(0, Math.round(weeks)) : normalizedDays > 0 ? Math.round(normalizedDays / 7) : 0
+		weeks === undefined ? (normalizedDays > 0 ? Math.round(normalizedDays / 7) : 0) : Math.max(0, Math.round(weeks))
 
 	if (normalizedDays === 0 && normalizedWeeks === 0) {
 		return null
@@ -184,14 +183,14 @@ function OutlineView() {
 			const da = num(a?.difficulty, 999)
 			const db = num(b?.difficulty, 999)
 			if (da !== db) return da - db
-			const oa = num(a?.order, 999999)
-			const ob = num(b?.order, 999999)
+			const oa = num(a?.order, 999_999)
+			const ob = num(b?.order, 999_999)
 			if (oa !== ob) return oa - ob
 			const na = String(a?.name ?? "")
 			const nb = String(b?.name ?? "")
 			return na.localeCompare(nb)
 		}
-		return all.sort(cmp)
+		return all.toSorted(cmp)
 	}, [dueList, frontierList])
 
 	const idToTitle = useMemo(() => {
@@ -270,13 +269,13 @@ function OutlineView() {
 										<div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
 											Next up
 										</div>
-										<h2 className="truncate text-lg font-semibold leading-tight text-foreground md:text-xl">
+										<h2 className="truncate text-lg/tight font-semibold  text-foreground md:text-xl">
 											{nextLesson ? nextLesson.title : "All caught up"}
 										</h2>
 									</div>
 									<div className="flex flex-col items-start gap-3 md:flex-row md:items-center md:gap-4">
 										<span className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground">
-											<CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+											<CheckCircle2 className="size-3.5  text-emerald-500" />
 											<span>
 												Completed {completedCount}/{totalLessons}
 											</span>
@@ -284,7 +283,7 @@ function OutlineView() {
 										{nextLesson ? (
 											<Button onClick={handleStartNext} variant={primaryCtaVariant} className="h-9 rounded-full px-4">
 												<span className="text-sm font-semibold">{primaryCtaLabel}</span>
-												<ArrowRight className="h-4 w-4" />
+												<ArrowRight className="size-4 " />
 											</Button>
 										) : null}
 									</div>
@@ -329,13 +328,13 @@ function OutlineView() {
 									<div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
 										Next up
 									</div>
-									<h2 className="truncate text-lg font-semibold leading-tight text-foreground md:text-xl">
+									<h2 className="truncate text-lg/tight font-semibold  text-foreground md:text-xl">
 										{nextLesson ? nextLesson.title : "All caught up"}
 									</h2>
 								</div>
 								<div className="flex flex-col items-start gap-3 md:flex-row md:items-center md:gap-4">
 									<span className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground">
-										<CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+										<CheckCircle2 className="size-3.5  text-emerald-500" />
 										<span>
 											Completed {completedCount}/{totalLessons}
 										</span>
@@ -343,7 +342,7 @@ function OutlineView() {
 									{nextLesson ? (
 										<Button onClick={handleStartNext} variant={primaryCtaVariant} className="h-9 rounded-full px-4">
 											<span className="text-sm font-semibold">{primaryCtaLabel}</span>
-											<ArrowRight className="h-4 w-4" />
+											<ArrowRight className="size-4 " />
 										</Button>
 									) : null}
 								</div>
@@ -360,7 +359,7 @@ function OutlineView() {
 									<div className="flex flex-wrap gap-2">
 										{metadata.completedLessons
 											.slice(-4)
-											.reverse()
+											.toReversed()
 											.map((id) => {
 												const label = idToTitle.get(String(id)) || "Lesson"
 												return (
@@ -368,11 +367,11 @@ function OutlineView() {
 														key={id}
 														type="button"
 														onClick={() => goToLesson(courseId, id)}
-														className="inline-flex max-w-[12rem] items-center gap-2 rounded-full border border-border/70 bg-muted/50 px-3 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted/70"
+														className="inline-flex max-w-48 items-center gap-2 rounded-full border border-border/70 bg-muted/50 px-3 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted/70"
 														title={label}
 													>
 														<span className="truncate">{label}</span>
-														<ArrowRight className="h-3.5 w-3.5 opacity-60" />
+														<ArrowRight className="size-3.5  opacity-60" />
 													</button>
 												)
 											})}
@@ -389,7 +388,7 @@ function OutlineView() {
 							{dueList.length > 0 || frontierList.length > 0 ? (
 								<div className="relative overflow-hidden rounded-3xl border border-border/70 bg-card/95 p-5 md:p-6 lg:p-7 shadow-sm transition-shadow hover:shadow-md">
 									<div className="mb-5 flex w-full items-center gap-3 md:gap-4">
-										<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted/60 text-sm font-medium text-muted-foreground">
+										<div className="flex size-8  shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted/60 text-sm font-medium text-muted-foreground">
 											1
 										</div>
 										<h2 className="flex-1 truncate text-lg font-semibold text-foreground md:text-xl">In Progress</h2>
@@ -411,7 +410,7 @@ function OutlineView() {
 														className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
 													>
 														<span className="truncate text-sm font-medium text-foreground">{label}</span>
-														<ArrowRight className="h-4 w-4 text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100" />
+														<ArrowRight className="size-4  text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100" />
 													</button>
 												</div>
 											)
@@ -424,7 +423,7 @@ function OutlineView() {
 							{comingList.length > 0 ? (
 								<div className="relative overflow-hidden rounded-3xl border border-border/70 bg-card/95 p-5 md:p-6 lg:p-7 shadow-sm transition-shadow hover:shadow-md">
 									<div className="mb-5 flex w-full items-center gap-3 md:gap-4">
-										<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted/60 text-sm font-medium text-muted-foreground">
+										<div className="flex size-8  shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted/60 text-sm font-medium text-muted-foreground">
 											{dueList.length > 0 || frontierList.length > 0 ? 2 : 1}
 										</div>
 										<h2 className="flex-1 truncate text-lg font-semibold text-foreground md:text-xl">Upcoming</h2>
@@ -439,7 +438,7 @@ function OutlineView() {
 													key={lessonId || idx}
 													className="flex items-center gap-3 rounded-2xl border border-transparent px-4 py-3 md:px-5 md:py-3.5 opacity-60"
 												>
-													<Circle className="h-5 w-5 shrink-0 text-muted-foreground/50" />
+													<Circle className="size-5  shrink-0 text-muted-foreground/50" />
 													<span className="truncate text-sm font-medium text-muted-foreground">{label}</span>
 												</div>
 											)

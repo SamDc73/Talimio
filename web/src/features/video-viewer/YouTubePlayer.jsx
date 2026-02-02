@@ -11,13 +11,13 @@ const loadYouTubeAPI = () => {
 
 		const tag = document.createElement("script")
 		tag.src = "https://www.youtube.com/iframe_api"
-		tag.onerror = () => reject(new Error("Failed to load YouTube API"))
+		tag.addEventListener("error", () => reject(new Error("Failed to load YouTube API")))
 
 		const firstScriptTag = document.getElementsByTagName("script")[0]
 		if (firstScriptTag?.parentNode) {
 			firstScriptTag.parentNode.insertBefore(tag, firstScriptTag)
 		} else {
-			document.head.appendChild(tag)
+			document.head.append(tag)
 		}
 
 		// Store previous callback to avoid conflicts
@@ -36,7 +36,7 @@ const loadYouTubeAPI = () => {
 		setTimeout(() => {
 			window.onYouTubeIframeAPIReady = undefined
 			reject(new Error("YouTube API load timeout"))
-		}, 10000)
+		}, 10_000)
 	})
 }
 
@@ -222,7 +222,7 @@ function YouTubePlayerBase({
 		// Callbacks are handled via refs to avoid unnecessary recreations
 	}, [videoId, width, height, playerVars])
 
-	return <div ref={containerRef} />
+	return <div ref={containerRef} className="absolute inset-0 size-full " />
 }
 
 // Export memoized component to prevent unnecessary re-renders

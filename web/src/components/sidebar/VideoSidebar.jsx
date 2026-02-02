@@ -1,6 +1,13 @@
 import { Clock, Download } from "lucide-react"
+import { useEffect, useState } from "react"
+import { extractVideoChapters, getVideoChapters } from "@/api/videosApi"
+import CompletionCheckbox from "@/components/sidebar/CompletionCheckbox"
+import ProgressCircle from "@/components/sidebar/ProgressCircle"
+import ProgressIndicator from "@/components/sidebar/ProgressIndicator"
+import SidebarContainer from "@/components/sidebar/SidebarContainer"
+import SidebarNav from "@/components/sidebar/SidebarNav"
+import logger from "@/lib/logger"
 
-// Helper function to format seconds to time string - outside component to prevent recreating
 const formatTime = (seconds) => {
 	const hours = Math.floor(seconds / 3600)
 	const minutes = Math.floor((seconds % 3600) / 60)
@@ -12,30 +19,17 @@ const formatTime = (seconds) => {
 	return `${minutes}:${secs.toString().padStart(2, "0")}`
 }
 
-import { useEffect, useState } from "react"
-import { extractVideoChapters, getVideoChapters } from "@/api/videosApi"
-import { useVideoProgress } from "@/features/video-viewer/hooks/useVideoProgress"
-import logger from "@/lib/logger"
-import CompletionCheckbox from "./CompletionCheckbox"
-import ProgressCircle from "./ProgressCircle"
-import ProgressIndicator from "./ProgressIndicator"
-import SidebarContainer from "./SidebarContainer"
-import SidebarNav from "./SidebarNav"
-
-export function VideoSidebar({ video, currentTime, onSeek, progressPercentage }) {
+export function VideoSidebar({ video, currentTime, onSeek, progressPercentage, progressApi }) {
 	const [chapters, setChapters] = useState([])
 	const [activeChapter, setActiveChapter] = useState(null)
 	const [isLoadingChapters, setIsLoadingChapters] = useState(false)
 	const [isExtracting, setIsExtracting] = useState(false)
 	const [optimisticCompletions, setOptimisticCompletions] = useState({})
 
-	// Use the standardized hook
-	const { toggleCompletion, isCompleted, refetch } = useVideoProgress(video?.id)
+	const toggleCompletion = progressApi?.toggleCompletion
+	const isCompleted = progressApi?.isCompleted || (() => false)
+	const refetch = progressApi?.refetch
 
-	// Helper function to format seconds to time string - moved outside component to prevent recreating
-	// This function is pure and doesn't need to be inside the component
-
-	// Fetch chapters from API only
 	useEffect(() => {
 		if (!video?.id) return
 
@@ -43,7 +37,6 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 			setIsLoadingChapters(true)
 			try {
 				const apiChapters = await getVideoChapters(video.id)
-				// Convert API chapters to the expected format
 				if (apiChapters && apiChapters.length > 0) {
 					const formattedChapters = apiChapters.map((chapter) => ({
 						id: chapter.id,
@@ -57,9 +50,8 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 					setChapters([])
 				}
 			} catch (error) {
-				// Log authentication errors for debugging
-				if (error.message?.includes("401") || error.message?.includes("Authentication")) {
-				} else if (!error.message?.includes("404")) {
+				if (!error.message?.includes("404")) {
+					logger.error("Failed to load video chapters", error, { videoId: video?.id })
 				}
 				setChapters([])
 			} finally {
@@ -68,7 +60,7 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 		}
 
 		fetchChapters()
-	}, [video?.id]) // Removed formatTime from deps - it's now a pure function outside component
+	}, [video?.id])
 
 	useEffect(() => {
 		if (chapters.length > 0 && currentTime !== undefined) {
@@ -89,23 +81,23 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 	const toggleChapterCompletion = async (chapter) => {
 		const chapterId = chapter.id || chapter.chapter_id
 
-		// Optimistic update - immediately update UI
+		if (!toggleCompletion) {
+			return
+		}
+
 		setOptimisticCompletions((prev) => ({
 			...prev,
 			[chapterId]: !isChapterCompleted(chapterId),
 		}))
 
 		try {
-			// Pass the total chapters count so progress can be calculated correctly
 			await toggleCompletion(chapterId, chapters.length)
-			// On success, clear the optimistic state (real state will take over)
 			setOptimisticCompletions((prev) => {
 				const newState = { ...prev }
 				delete newState[chapterId]
 				return newState
 			})
 		} catch (error) {
-			// On error, revert optimistic update
 			setOptimisticCompletions((prev) => {
 				const newState = { ...prev }
 				delete newState[chapterId]
@@ -115,13 +107,10 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 		}
 	}
 
-	// Helper to check if chapter is completed (with optimistic state)
 	const isChapterCompleted = (chapterId) => {
-		// Check optimistic state first
 		if (chapterId in optimisticCompletions) {
 			return optimisticCompletions[chapterId]
 		}
-		// Fall back to actual state
 		return isCompleted(chapterId)
 	}
 
@@ -131,7 +120,6 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 			const result = await extractVideoChapters(video.id)
 			logger.track("video_chapters_extracted", { videoId: video.id, chapterCount: result?.length || 0 })
 
-			// Refresh chapters
 			const updatedChapters = await getVideoChapters(video.id)
 			if (updatedChapters && updatedChapters.length > 0) {
 				const formattedChapters = updatedChapters.map((chapter) => ({
@@ -144,8 +132,7 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 				setChapters(formattedChapters)
 			}
 
-			// Refresh progress data
-			await refetch()
+			await refetch?.()
 		} catch (error) {
 			logger.error("Failed to extract video chapters", error, { videoId: video?.id })
 		} finally {
@@ -155,18 +142,11 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 
 	if (!video) return null
 
-	// Calculate chapter completion progress for the "Done" pill
-	// Only show "Done" when ALL chapters are completed
 	const completedChapterCount = chapters.filter((chapter) => {
 		const chapterId = chapter.id || chapter.chapter_id
 		return isChapterCompleted(chapterId)
 	}).length
 
-	const _chapterCompletionPercentage =
-		chapters.length > 0 ? Math.round((completedChapterCount / chapters.length) * 100) : 0
-
-	// Determine what to show in the progress indicator
-	// Show "Done" only when all chapters are completed, otherwise show watch percentage
 	const isFullyCompleted = chapters.length > 0 && completedChapterCount === chapters.length
 	const displayProgress = isFullyCompleted ? 100 : progressPercentage || 0
 	const displaySuffix = isFullyCompleted ? "Done" : "Watched"
@@ -189,7 +169,7 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 			<SidebarNav>
 				{chapters.length === 0 ? (
 					<div className="py-8 px-4 text-center text-muted-foreground">
-						<Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
+						<Clock className="size-12  mx-auto mb-4 opacity-50" />
 						{isLoadingChapters ? (
 							<div>
 								<p className="text-sm font-medium">Loading chapters...</p>
@@ -205,9 +185,9 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 									type="button"
 									onClick={handleExtractChapters}
 									disabled={isExtracting}
-									className="mt-4 inline-flex items-center gap-2 rounded-lg bg-video px-4 py-2 text-sm font-medium text-video-foreground transition-colors hover:bg-video-accent/80 disabled:cursor-not-allowed disabled:opacity-50"
+									className="mt-4 inline-flex items-center gap-2 rounded-lg bg-video px-4 py-2 text-sm font-medium text-video-text transition-colors hover:bg-video-accent/80 disabled:cursor-not-allowed disabled:opacity-50"
 								>
-									<Download className="w-4 h-4" />
+									<Download className="size-4 " />
 									{isExtracting ? "Extracting..." : "Extract Chapters"}
 								</button>
 							</div>
@@ -258,11 +238,7 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage })
 											</div>
 											<h5
 												className={`text-sm font-semibold line-clamp-2 transition-colors ${
-													chapterCompleted
-														? "text-video"
-														: isActive
-															? "text-video"
-															: "text-foreground group-hover:text-video"
+													chapterCompleted || isActive ? "text-video" : "text-foreground group-hover:text-video"
 												}`}
 											>
 												{chapter.title}

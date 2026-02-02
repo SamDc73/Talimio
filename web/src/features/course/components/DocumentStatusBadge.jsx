@@ -102,7 +102,7 @@ export function DocumentStatusIndicator({ status, className = "" }) {
 
 	const color = statusConfig[status] || statusConfig.pending
 
-	return <div className={`w-2 h-2 rounded-full ${color} ${className}`} title={status} />
+	return <div className={`size-2  rounded-full ${color} ${className}`} title={status} />
 }
 
 /**
@@ -110,7 +110,7 @@ export function DocumentStatusIndicator({ status, className = "" }) {
  */
 export function DocumentStatusProgress({ status, progress = null, className = "" }) {
 	const isProcessing = status === "processing"
-	const progressValue = progress !== null ? progress : isProcessing ? 50 : 0
+	const progressValue = progress === null ? (isProcessing ? 50 : 0) : progress
 
 	return (
 		<div className={`space-y-1 ${className}`}>
@@ -156,7 +156,7 @@ export function DocumentStatusSummary({ documents, className = "" }) {
 	return (
 		<div className={`flex items-center space-x-2 text-sm ${className}`}>
 			<span className="font-medium">
-				{total} document{total !== 1 ? "s" : ""}
+				{total} document{total === 1 ? "" : "s"}
 			</span>
 			<span className="text-muted-foreground/70">•</span>
 

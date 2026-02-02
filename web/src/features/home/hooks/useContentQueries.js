@@ -17,6 +17,38 @@ export const contentKeys = {
 	item: (id) => [...contentKeys.all, "item", id],
 }
 
+const removeItemFromCache = (old, itemId) => {
+	if (!old) return old
+	return {
+		...old,
+		items: old.items?.filter((item) => !(item.id === itemId || item.uuid === itemId)),
+	}
+}
+
+const updateItemArchiveStatus = (old, itemId, archive) => {
+	if (!old) return old
+	return {
+		...old,
+		items: old.items?.map((item) =>
+			item.id === itemId || item.uuid === itemId ? { ...item, archived: archive } : item
+		),
+	}
+}
+
+const updateItemTags = (old, itemId, tags) => {
+	if (!old) return old
+	return {
+		...old,
+		items: old.items?.map((item) => (item.id === itemId || item.uuid === itemId ? { ...item, tags } : item)),
+	}
+}
+
+const scheduleArchiveRemoval = (queryClient, itemId) => {
+	setTimeout(() => {
+		queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => removeItemFromCache(old, itemId))
+	}, 300)
+}
+
 /**
  * Fetch content list with proper caching
  */
@@ -104,13 +136,7 @@ export function useDeleteContent() {
 			})
 
 			// Optimistically update all content queries
-			queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => {
-				if (!old) return old
-				return {
-					...old,
-					items: old.items?.filter((item) => !(item.id === itemId || item.uuid === itemId)),
-				}
-			})
+			queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => removeItemFromCache(old, itemId))
 
 			// Return snapshot for rollback
 			return { previousContent }
@@ -158,13 +184,7 @@ export function useArchiveContent() {
 			})
 
 			// Update the item's archived status
-			queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => {
-				if (!old) return old
-				return {
-					...old,
-					items: old.items?.map((i) => (i.id === item.id || i.uuid === item.id ? { ...i, archived: archive } : i)),
-				}
-			})
+			queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => updateItemArchiveStatus(old, item.id, archive))
 
 			return { previousContent }
 		},
@@ -189,15 +209,7 @@ export function useArchiveContent() {
 
 			// If archiving, remove from view after animation
 			if (archive) {
-				setTimeout(() => {
-					queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => {
-						if (!old) return old
-						return {
-							...old,
-							items: old.items?.filter((i) => i.id !== item.id),
-						}
-					})
-				}, 300)
+				scheduleArchiveRemoval(queryClient, item.id)
 			}
 
 			// For archive/unarchive, we can safely invalidate to get the latest state
@@ -232,13 +244,7 @@ export function useUpdateContentTags() {
 			})
 
 			// Update the item's tags
-			queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => {
-				if (!old) return old
-				return {
-					...old,
-					items: old.items?.map((item) => (item.id === itemId || item.uuid === itemId ? { ...item, tags } : item)),
-				}
-			})
+			queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => updateItemTags(old, itemId, tags))
 
 			return { previousContent }
 		},

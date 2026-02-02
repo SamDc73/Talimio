@@ -1,14 +1,11 @@
-import { useQuery } from "@tanstack/react-query"
 import { useMemo, useState } from "react"
-import { useCourseService } from "@/features/course/api/courseApi"
-import { useCourseProgress } from "@/features/course/hooks/useCourseProgress"
-import CompletionCheckbox from "./CompletionCheckbox"
-import ExpandableSection from "./ExpandableSection"
-
-import ProgressIndicator from "./ProgressIndicator"
-import SidebarContainer from "./SidebarContainer"
-import SidebarItem from "./SidebarItem"
-import SidebarNav from "./SidebarNav"
+import CompletionCheckbox from "@/components/sidebar/CompletionCheckbox"
+import ExpandableSection from "@/components/sidebar/ExpandableSection"
+import ProgressIndicator from "@/components/sidebar/ProgressIndicator"
+import SidebarContainer from "@/components/sidebar/SidebarContainer"
+import SidebarItem from "@/components/sidebar/SidebarItem"
+import SidebarNav from "@/components/sidebar/SidebarNav"
+import logger from "@/lib/logger"
 
 /**
  * Course navigation sidebar that displays a hierarchical view of modules and lessons
@@ -20,21 +17,19 @@ function CourseSidebar({
 	courseId,
 	adaptiveEnabled = false,
 	adaptiveProgressPct,
+	frontierData,
+	progressApi,
 }) {
-	const {
-		progress: courseProgress,
-		toggleCompletion,
-		isCompleted,
-		updateProgressAsync,
-		metadata,
-	} = useCourseProgress(courseId)
-	const courseService = useCourseService(courseId)
+	const courseProgress = progressApi?.progress
+	const toggleCompletion = progressApi?.toggleCompletion
+	const isCompleted = progressApi?.isCompleted || (() => false)
+	const updateProgressAsync = progressApi?.updateProgressAsync
+	const metadata = progressApi?.metadata
 
 	const [expandedModules, setExpandedModules] = useState(() => {
 		return modules.length > 0 ? [modules[0].id] : []
 	})
 
-	// Adaptive section expansion state
 	const [practiceExpanded, setPracticeExpanded] = useState(true)
 	const [readyExpanded, setReadyExpanded] = useState(true)
 
@@ -45,7 +40,6 @@ function CourseSidebar({
 	const progress =
 		adaptiveEnabled && typeof adaptiveProgressPct === "number" ? adaptiveProgressPct : courseProgress?.percentage || 0
 
-	// Count total lessons across modules (including nested)
 	const countLessons = (items = []) => {
 		let total = 0
 		for (const item of items) {
@@ -58,15 +52,6 @@ function CourseSidebar({
 	}
 
 	const totalLessons = (modules || []).reduce((sum, m) => sum + countLessons(m?.lessons || []), 0)
-
-	// Adaptive sidebar data: due, frontier, coming soon
-	const { data: frontierData } = useQuery({
-		queryKey: ["course", courseId, "adaptive-concepts"],
-		queryFn: async () => await courseService.fetchConceptFrontier(),
-		enabled: Boolean(courseId) && adaptiveEnabled,
-		staleTime: 30 * 1000,
-		refetchOnWindowFocus: false,
-	})
 
 	const adaptiveLists = useMemo(() => {
 		if (!adaptiveEnabled || !frontierData) {
@@ -86,10 +71,43 @@ function CourseSidebar({
 			}
 		}
 		return {
-			due: listify(frontierData.dueForReview).map(mapItem),
-			frontier: listify(frontierData.frontier).map(mapItem),
+			due: listify(frontierData.dueForReview).map((item) => mapItem(item)),
+			frontier: listify(frontierData.frontier).map((item) => mapItem(item)),
 		}
 	}, [adaptiveEnabled, frontierData])
+
+	const handleLessonCompletionToggle = async (lessonId) => {
+		if (!lessonId) {
+			return
+		}
+
+		if (!adaptiveEnabled) {
+			if (toggleCompletion) {
+				toggleCompletion(lessonId, totalLessons)
+			}
+			return
+		}
+
+		if (!updateProgressAsync) {
+			return
+		}
+
+		const lessonIdStr = String(lessonId)
+		const current = Array.isArray(metadata?.completedLessons) ? metadata.completedLessons : []
+		const nextCompleted = current.includes(lessonIdStr)
+			? current.filter((id) => id !== lessonIdStr)
+			: [...current, lessonIdStr]
+
+		try {
+			await updateProgressAsync(courseProgress?.percentage ?? 0, {
+				completed_lessons: nextCompleted,
+				current_lesson_id: lessonIdStr,
+				total_lessons: totalLessons,
+			})
+		} catch (error) {
+			logger.error("Failed to update lesson completion", error, { courseId, lessonId: lessonIdStr })
+		}
+	}
 
 	return (
 		<SidebarContainer>
@@ -143,16 +161,16 @@ function CourseSidebar({
 										onClick={() => onLessonClick?.(null, item.lessonId)}
 										variant="course"
 										leftContent={
-											item.mastery !== null ? (
-												/* Confidence badge with tooltip: predicted correctness now */
-												<div className="inline-flex">
-													<div title="Confidence: predicted correctness now (based on recent answers and memory decay)">
-														<span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-100 px-1.5 text-[10px] font-semibold text-emerald-700">
-															Conf {Math.round(item.mastery * 100)}%
-														</span>
-													</div>
+											item.mastery === null ? null : (
+												<div
+													className="inline-flex"
+													title="Confidence: predicted correctness now (based on recent answers and memory decay)"
+												>
+													<span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-100 px-1.5 text-[10px] font-semibold text-emerald-700">
+														Conf {Math.round(item.mastery * 100)}%
+													</span>
 												</div>
-											) : null
+											)
 										}
 									/>
 								))}
@@ -185,28 +203,7 @@ function CourseSidebar({
 													<CompletionCheckbox
 														isCompleted={isCompleted(lesson.id)}
 														isLocked={lesson.status === "locked"}
-														onClick={async () => {
-															if (adaptiveEnabled) {
-																const lessonIdStr = String(lesson.id)
-																const current = Array.isArray(metadata?.completedLessons)
-																	? metadata.completedLessons
-																	: []
-																const nextCompleted = current.includes(lessonIdStr)
-																	? current.filter((id) => id !== lessonIdStr)
-																	: [...current, lessonIdStr]
-																try {
-																	await updateProgressAsync(courseProgress?.percentage ?? 0, {
-																		completed_lessons: nextCompleted,
-																		current_lesson_id: lessonIdStr,
-																		total_lessons: totalLessons,
-																	})
-																} catch (_e) {
-																	// no-op: UI already reflects optimistic toggle
-																}
-															} else {
-																toggleCompletion(lesson.id, totalLessons)
-															}
-														}}
+														onClick={() => handleLessonCompletionToggle(lesson.id)}
 														variant="course"
 													/>
 												}

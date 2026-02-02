@@ -7,7 +7,7 @@ export class VideoTranscriptSync {
 			throw new Error("VideoTranscriptSync: timeProvider is required")
 		}
 		if (!Array.isArray(segments)) {
-			throw new Error("VideoTranscriptSync: segments must be an array")
+			throw new TypeError("VideoTranscriptSync: segments must be an array")
 		}
 
 		this.timeProvider = timeProvider

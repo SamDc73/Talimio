@@ -23,29 +23,37 @@ function FilterPopover({
 }) {
 	const getIcon = (iconName) => {
 		switch (iconName) {
-			case "Search":
+			case "Search": {
 				return Search
-			case "BookOpen":
+			}
+			case "BookOpen": {
 				return BookOpen
-			case "Youtube":
+			}
+			case "Youtube": {
 				return Youtube
-			case "FileText":
+			}
+			case "FileText": {
 				return FileText
-			case "Clock":
+			}
+			case "Clock": {
 				return Clock
-			case "CalendarDays":
+			}
+			case "CalendarDays": {
 				return CalendarDays
-			case "ArrowUpDown":
+			}
+			case "ArrowUpDown": {
 				return ArrowUpDown
-			default:
+			}
+			default: {
 				return Search
+			}
 		}
 	}
 	return (
 		<Popover>
 			<PopoverTrigger asChild>
 				<Button variant="outline" size="sm" className="flex items-center gap-1">
-					<SlidersHorizontal className="h-3.5 w-3.5 mr-1" />
+					<SlidersHorizontal className="size-3.5  mr-1" />
 					Filters
 				</Button>
 			</PopoverTrigger>
@@ -60,7 +68,7 @@ function FilterPopover({
 									<Label htmlFor={`filter-${option.id}`} className="flex items-center cursor-pointer">
 										{(() => {
 											const Icon = getIcon(option.icon)
-											return <Icon className="h-4 w-4 mr-2" />
+											return <Icon className="size-4  mr-2" />
 										})()}
 										{option.label}
 									</Label>
@@ -123,7 +131,7 @@ function FilterPopover({
 									<Label htmlFor={`sort-${option.id}`} className="flex items-center cursor-pointer">
 										{(() => {
 											const Icon = getIcon(option.icon)
-											return <Icon className="h-4 w-4 mr-2" />
+											return <Icon className="size-4  mr-2" />
 										})()}
 										{option.label}
 									</Label>

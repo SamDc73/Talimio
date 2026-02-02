@@ -1,11 +1,10 @@
 import { AnimatePresence, motion } from "framer-motion"
 import { AlertCircle, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-
+import { useCourseService } from "@/api/courseApi"
 import { Button } from "@/components/Button"
 import { DialogHeader, DialogTitle } from "@/components/Dialog"
 import { MultipleChoice } from "@/components/quiz/MultipleChoice"
-import { useCourseService } from "./api/courseApi"
 
 const MOTION_VARIANTS = {
 	enter: { opacity: 0, x: 16 },
@@ -75,7 +74,7 @@ export default function SelfAssessmentDialog({ topic, level = null, onBack, onSk
 
 			const sanitized = Array.isArray(result?.questions) ? result.questions.slice(0, 5) : []
 
-			if (!sanitized.length) {
+			if (sanitized.length === 0) {
 				// Auto-retry a couple of times before surfacing an error
 				if (autoRetryCountRef.current < MAX_AUTO_RETRIES) {
 					autoRetryCountRef.current += 1
@@ -189,7 +188,7 @@ export default function SelfAssessmentDialog({ topic, level = null, onBack, onSk
 					({ id, isActive }) => (
 						<div
 							key={`progress-step-${id}`}
-							className={`h-1 flex-1 rounded-full ${isActive ? "bg-[var(--color-course)]" : "bg-border"}`}
+							className={`h-1 flex-1 rounded-full ${isActive ? "bg-(--color-course)" : "bg-border"}`}
 						/>
 					)
 				)}
@@ -197,7 +196,7 @@ export default function SelfAssessmentDialog({ topic, level = null, onBack, onSk
 
 			{isLoading ? (
 				<div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-					<Loader2 className="h-6 w-6 animate-spin" />
+					<Loader2 className="size-6  animate-spin" />
 					<span className="mt-3 text-sm">
 						{isAutoRetrying
 							? `Generating questions… (attempt ${autoRetryAttempt}/${MAX_AUTO_RETRIES})`
@@ -235,7 +234,7 @@ export default function SelfAssessmentDialog({ topic, level = null, onBack, onSk
 
 			{error && questions.length === 0 ? (
 				<div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-					<AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+					<AlertCircle className="size-4  shrink-0 mt-0.5" />
 					<div className="flex-1 space-y-2">
 						<p>{error}</p>
 						<div className="flex flex-wrap gap-2">
@@ -265,11 +264,11 @@ export default function SelfAssessmentDialog({ topic, level = null, onBack, onSk
 						</Button>
 						<Button
 							type="button"
-							onClick={currentSelection !== null ? goToNext : handleSkip}
+							onClick={currentSelection === null ? handleSkip : goToNext}
 							disabled={isSubmitting}
-							className="min-w-[120px] bg-[var(--color-course)] text-white hover:bg-[var(--color-course)]/90"
+							className="min-w-[120px] bg-(--color-course) text-white hover:bg-(--color-course)/90"
 						>
-							{currentSelection !== null ? "Next" : "Skip"}
+							{currentSelection === null ? "Skip" : "Next"}
 						</Button>
 					</div>
 				</div>

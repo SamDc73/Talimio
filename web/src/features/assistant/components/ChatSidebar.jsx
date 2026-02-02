@@ -84,7 +84,7 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 
 		const timer = setTimeout(() => {
 			onClose()
-		}, 30000) // 30 seconds
+		}, 30_000) // 30 seconds
 
 		autoHideTimerRef.current = timer
 
@@ -223,16 +223,13 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 									onClick={handleTogglePin}
 									disabled={isPending}
 									className={cn(
-										"h-8 w-8 rounded-md transition-all duration-200",
+										"size-8  rounded-md transition-all duration-200",
 										assistantSidebarPinned ? "bg-primary/10 hover:bg-primary/20 text-primary" : "hover:bg-muted"
 									)}
 									aria-label={assistantSidebarPinned ? "Unpin sidebar" : "Pin sidebar"}
 								>
 									<Pin
-										className={cn(
-											"h-3.5 w-3.5 transition-transform duration-200",
-											assistantSidebarPinned && "rotate-45"
-										)}
+										className={cn("size-3.5  transition-transform duration-200", assistantSidebarPinned && "rotate-45")}
 									/>
 								</Button>
 							</motion.div>
@@ -244,10 +241,10 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 								variant="ghost"
 								size="icon"
 								onClick={onClose}
-								className="h-8 w-8 rounded-md hover:bg-muted"
+								className="size-8  rounded-md hover:bg-muted"
 								aria-label="Close assistant"
 							>
-								<X className="h-3.5 w-3.5" />
+								<X className="size-3.5 " />
 							</Button>
 						</motion.div>
 					</div>

@@ -27,12 +27,12 @@ function CompletionCheckbox({
 
 	const renderIcon = () => {
 		if (isIndeterminate) {
-			return <MinusSquare className={`w-5 h-5 ${completedColor}`} />
+			return <MinusSquare className={`size-5  ${completedColor}`} />
 		}
 		if (isCompleted) {
-			return <CheckCircle className={`w-5 h-5 ${completedColor}`} />
+			return <CheckCircle className={`size-5  ${completedColor}`} />
 		}
-		return <Circle className={`w-5 h-5 ${isLocked ? "text-zinc-200" : "text-zinc-300 hover:text-zinc-400"}`} />
+		return <Circle className={`size-5  ${isLocked ? "text-zinc-200" : "text-zinc-300 hover:text-zinc-400"}`} />
 	}
 
 	const handleClick = (e) => {

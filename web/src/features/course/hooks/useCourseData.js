@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { useCourseService } from "../api/courseApi"
+import { useCourseService } from "@/api/courseApi"
 
 /**
  * Simple hook to fetch course data

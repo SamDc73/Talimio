@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { Loader2 } from "lucide-react"
 import { useMemo } from "react"
-import { useCourseService } from "@/features/course/api/courseApi"
+import { useCourseService } from "@/api/courseApi"
 import { useCourseContext } from "@/features/course/CourseContext.jsx"
 import TrackPath from "@/features/course/components/TrackPath"
 
@@ -20,7 +20,7 @@ export default function TrackView() {
 
 	// Compute the set of currently available lessons (due + frontier) for locking logic.
 	const availableLessonIds = useMemo(() => {
-		if (!adaptiveEnabled || !data) return undefined
+		if (!adaptiveEnabled || !data) return
 		const toId = (c) => c?.lessonId ?? c?.lesson_id ?? c?.lessonIdRef ?? c?.lesson_id_ref ?? c?.lesson?.id ?? c?.id
 		const ids = new Set()
 		for (const c of data?.dueForReview || []) {
@@ -31,7 +31,7 @@ export default function TrackView() {
 			const id = toId(c)
 			if (id !== undefined && id !== null) ids.add(String(id))
 		}
-		return Array.from(ids)
+		return [...ids]
 	}, [adaptiveEnabled, data])
 
 	const fallbackModules = useMemo(() => {
@@ -85,7 +85,7 @@ export default function TrackView() {
 	if (adaptiveEnabled && isLoading) {
 		return (
 			<div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
-				<Loader2 className="h-8 w-8 animate-spin text-primary" />
+				<Loader2 className="size-8  animate-spin text-primary" />
 			</div>
 		)
 	}

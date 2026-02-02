@@ -11,7 +11,7 @@ function SidebarContainer({ children }) {
 	return (
 		<aside
 			className={cn(
-				"fixed left-0 top-0 z-20 flex h-screen flex-col overflow-y-auto rounded-br-2xl bg-gradient-to-br from-background/95 to-muted/90 backdrop-blur-md transition-all duration-300 ease-in-out",
+				"fixed left-0 top-0 z-20 flex h-screen flex-col overflow-y-auto rounded-br-2xl bg-linear-to-br from-background/95 to-muted/90 backdrop-blur-md transition-all duration-300 ease-in-out",
 				isOpen ? "w-80 translate-x-0 opacity-100" : "w-0 -translate-x-full opacity-0"
 			)}
 			style={{

@@ -1,6 +1,4 @@
-/**
- * Secure API client with authentication and security monitoring
- */
+import logger from "@/lib/logger"
 
 const BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1"
 
@@ -42,7 +40,8 @@ const handleResponse = async (response, endpoint, responseType) => {
 		let errorData
 		try {
 			errorData = await parseResponseBody(response, "json")
-		} catch (_e) {
+		} catch (error) {
+			logger.error("Failed to parse error response", error, { endpoint, status: response.status })
 			errorData = { message: response.statusText }
 		}
 		if (!errorData) errorData = { message: response.statusText }
@@ -96,11 +95,11 @@ const secureRequest = async (method, endpoint, data = null, options = {}) => {
 
 // Extract the actual request execution logic
 const executeRequest = async (method, endpoint, data = null, options = {}) => {
+	const { headers: optionHeaders, responseType, absoluteUrl, ...restOptions } = options
+
 	const makeRequest = async () => {
-		const { headers: optionHeaders, responseType, absoluteUrl, ...restOptions } = options
-		void responseType
 		const url = absoluteUrl ? endpoint : joinUrl(BASE_URL, endpoint)
-		const headers = { ...(optionHeaders || {}) }
+		const headers = { ...optionHeaders }
 		const requestOptions = {
 			method,
 			headers,
@@ -128,7 +127,7 @@ const executeRequest = async (method, endpoint, data = null, options = {}) => {
 	}
 
 	const response = await makeRequest()
-	return handleResponse(response, endpoint, options?.responseType)
+	return handleResponse(response, endpoint, responseType)
 }
 
 // Main API client

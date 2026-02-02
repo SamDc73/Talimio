@@ -7,8 +7,8 @@
  * Courses → Modules → Lessons
  */
 
+import { useApi } from "@/hooks/use-api"
 import { api } from "@/lib/apiClient"
-import { useApi } from "../../../hooks/use-api"
 
 /**
  * Hook for course operations

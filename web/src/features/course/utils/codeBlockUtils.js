@@ -35,7 +35,7 @@ export function getLanguage(props, children) {
 export function flattenText(node) {
 	if (node == null) return ""
 	if (typeof node === "string") return node
-	if (Array.isArray(node)) return node.map(flattenText).join("")
+	if (Array.isArray(node)) return node.map((child) => flattenText(child)).join("")
 	if (typeof node === "object" && node?.props) {
 		return flattenText(node.props.children)
 	}
@@ -44,9 +44,11 @@ export function flattenText(node) {
 
 function hash32(str) {
 	let h = 0
-	for (let i = 0; i < str.length; i++) {
-		h = (h << 5) - h + str.charCodeAt(i)
-		h |= 0
+	for (const char of str) {
+		const codePoint = char.codePointAt(0)
+		if (codePoint === undefined) continue
+		h = (h << 5) - h + codePoint
+		h = Math.trunc(h)
 	}
 	return h.toString(16)
 }
