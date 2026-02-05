@@ -9,10 +9,11 @@ CoursesFacade now handles all endpoints including lesson-specific operations.
 
 import logging
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated, Any, cast
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import select
 
 from src.ai.service import AIService, get_ai_service
@@ -22,7 +23,6 @@ from src.courses.models import Course, CourseConcept, Lesson
 from src.courses.schemas import (
     CodeExecuteRequest,
     CodeExecuteResponse,
-    CourseCreate,
     CourseListResponse,
     CourseResponse,
     CourseUpdate,
@@ -58,6 +58,8 @@ router = APIRouter(
 
 # Local logger for analytics
 logger = logging.getLogger(__name__)
+
+_COURSE_ATTACHMENT_EXTENSIONS = {".pdf", ".epub", ".png", ".jpg", ".jpeg"}
 
 
 def get_courses_facade(auth: CurrentAuth) -> CoursesFacade:
@@ -123,20 +125,33 @@ async def generate_self_assessment_questions(
 
 @router.post("/")
 async def create_course(
-    request: CourseCreate,
+    prompt: Annotated[str, Form()],
     auth: CurrentAuth,
     background_tasks: BackgroundTasks,
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
+    adaptive_enabled: Annotated[bool, Form()] = False,
+    files: Annotated[list[UploadFile] | None, File()] = None,
 ) -> CourseResponse:
     """Create a new course using AI generation."""
+    prompt_text = prompt.strip()
+    if not prompt_text:
+        raise HTTPException(status_code=422, detail="Prompt must not be empty")
+
+    attachments = files or []
+    for upload in attachments:
+        if not upload.filename:
+            raise HTTPException(status_code=400, detail="Attachment filename required")
+        ext = Path(upload.filename).suffix.lower()
+        if ext not in _COURSE_ATTACHMENT_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="Unsupported attachment type")
+
     result = await facade.create_course(
-        request.model_dump(),
+        {"prompt": prompt_text, "adaptive_enabled": adaptive_enabled},
         auth.user_id,
         background_tasks=background_tasks,
+        attachments=attachments,
     )
     if not result.get("success"):
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail=result.get("error", "Failed to create course"))
 
     return result["course"]
@@ -165,8 +180,6 @@ async def get_course(
     result = await facade.get_course(course_id, auth.user_id)
 
     if not result.get("success"):
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=404, detail=result.get("error", "Course not found"))
 
     return result["course"]
@@ -184,8 +197,6 @@ async def update_course(
     result = await facade.update_course(course_id, auth.user_id, request.model_dump(exclude_none=True))
 
     if not result.get("success"):
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail=result.get("error", "Failed to update course"))
 
     return result["course"]

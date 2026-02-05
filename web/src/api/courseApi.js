@@ -44,9 +44,20 @@ export function useCourseService(courseId = null) {
 		 * Create a new course
 		 * @param {Object} courseData - Course creation data
 		 * @param {string} courseData.prompt - AI prompt for course generation
+		 * @param {boolean} courseData.adaptive_enabled - Whether adaptive mode is enabled
+		 * @param {File[]} [courseData.files] - Optional attachments (pdf/epub/images)
 		 */
 		async createCourse(courseData) {
-			return await createCourse.execute(courseData)
+			const formData = new FormData()
+			formData.append("prompt", courseData?.prompt ?? "")
+			formData.append("adaptive_enabled", String(Boolean(courseData?.adaptive_enabled)))
+
+			const files = Array.isArray(courseData?.files) ? courseData.files : []
+			for (const file of files) {
+				formData.append("files", file)
+			}
+
+			return await createCourse.execute(formData)
 		},
 
 		async fetchSelfAssessmentQuestions(payload) {

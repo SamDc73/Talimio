@@ -37,7 +37,7 @@ class AIService:
         self,
         *,
         user_id: UUID,
-        user_prompt: str,
+        user_prompt: str | list[dict[str, Any]],
     ) -> CourseStructure:
         """Generate a course outline."""
         return await self._course_llm.generate_course_structure(
@@ -49,7 +49,7 @@ class AIService:
         self,
         *,
         user_id: UUID,
-        user_prompt: str,
+        user_prompt: str | list[dict[str, Any]],
     ) -> AdaptiveCourseStructure:
         """Generate the unified adaptive course payload."""
         return await self._course_llm.generate_adaptive_course_structure(

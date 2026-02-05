@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import json
 import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from uuid import NAMESPACE_URL, UUID, uuid5
 
@@ -15,7 +17,9 @@ from sqlalchemy import DateTime, Float, Integer, bindparam, select, text, update
 from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID, insert
 
 from src.ai.models import AdaptiveCourseStructure
+from src.ai.rag.service import RAGService
 from src.ai.service import AIService
+from src.auth import AuthContext
 from src.courses.models import (
     Concept,
     Course,
@@ -27,13 +31,15 @@ from .concept_graph_service import ConceptGraphService
 
 
 if TYPE_CHECKING:
-    from fastapi import BackgroundTasks
+    from fastapi import BackgroundTasks, UploadFile
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)
 
 _SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
+_DOC_EXTENSIONS = {".pdf", ".epub"}
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
 
 def _canonical_slug(value: str) -> str:
@@ -60,6 +66,7 @@ class CourseContentService:
         data: dict[str, Any],
         user_id: UUID,
         background_tasks: BackgroundTasks | None = None,
+        attachments: list[UploadFile] | None = None,
     ) -> Course:
         """Create a new course and populate its lessons."""
         return await self._create_course_with_session(
@@ -67,6 +74,7 @@ class CourseContentService:
             data,
             user_id,
             background_tasks=background_tasks,
+            attachments=attachments,
         )
 
     async def _create_course_with_session(
@@ -76,37 +84,77 @@ class CourseContentService:
         user_id: UUID,
         *,
         background_tasks: BackgroundTasks | None = None,
+        attachments: list[UploadFile] | None = None,
     ) -> Course:
         """Create a course using the provided session."""
         session_data = dict(data)
-        prompt = session_data.pop("prompt", None)
         is_adaptive = bool(session_data.get("adaptive_enabled"))
 
-        adaptive_structure = await self._build_adaptive_structure(
-            is_adaptive=is_adaptive,
-            prompt=prompt,
-            session_data=session_data,
+        draft_title = str(session_data.get("title") or "Draft course")
+        draft_description = str(session_data.get("description") or "Draft course description")
+        course = Course(
             user_id=user_id,
+            title=draft_title,
+            description=draft_description,
+            adaptive_enabled=is_adaptive,
+            archived=bool(session_data.get("archived", False)),
         )
-
-        modules_payload = session_data.pop("modules", [])
-        lessons_payload = session_data.pop("lessons", [])
-
-        self._serialize_payload_fields(session_data)
-
-        course = Course(user_id=user_id, **session_data)
         session.add(course)
-
         await session.flush()
-        normalized_modules = await self._prepare_course_modules(
-            session=session,
-            course=course,
-            adaptive_structure=adaptive_structure,
-            modules_payload=modules_payload,
-            lessons_payload=lessons_payload,
-        )
-        inserted_lessons = await self._insert_lessons(session, course.id, normalized_modules)
-        await session.commit()
+
+        course_id = course.id
+
+        prompt = session_data.pop("prompt", None)
+        prompt_text = self._normalize_prompt_text(prompt)
+        attachments = attachments or []
+        normalized_modules: list[dict[str, Any]] = []
+        inserted_lessons = 0
+
+        try:
+            rag_service = RAGService()
+            auth = AuthContext(user_id=user_id, session=session)
+            image_data_urls = await self._ingest_course_attachments(
+                rag_service=rag_service,
+                auth=auth,
+                course_id=course.id,
+                attachments=attachments,
+            )
+            augmented_prompt = await self._build_augmented_prompt(
+                rag_service=rag_service,
+                auth=auth,
+                course_id=course.id,
+                prompt_text=prompt_text,
+            )
+            prompt_payload = self._build_prompt_payload(augmented_prompt, image_data_urls)
+
+            adaptive_structure = await self._build_adaptive_structure(
+                is_adaptive=is_adaptive,
+                prompt=prompt_payload,
+                prompt_text=prompt_text,
+                session_data=session_data,
+                user_id=user_id,
+            )
+
+            modules_payload = session_data.pop("modules", [])
+            lessons_payload = session_data.pop("lessons", [])
+
+            self._serialize_payload_fields(session_data)
+            self._apply_course_updates(course, session_data)
+
+            normalized_modules = await self._prepare_course_modules(
+                session=session,
+                course=course,
+                adaptive_structure=adaptive_structure,
+                modules_payload=modules_payload,
+                lessons_payload=lessons_payload,
+            )
+            inserted_lessons = await self._insert_lessons(session, course.id, normalized_modules)
+            await session.commit()
+
+        except Exception:
+            await session.rollback()
+            await self._delete_draft_course(session, course_id)
+            raise
 
         await session.refresh(course)
 
@@ -131,22 +179,24 @@ class CourseContentService:
         self,
         *,
         is_adaptive: bool,
-        prompt: str | None,
+        prompt: str | list[dict[str, Any]] | None,
+        prompt_text: str,
         session_data: dict[str, Any],
         user_id: UUID,
     ) -> AdaptiveCourseStructure | None:
         """Populate session data via adaptive or prompt-based generation."""
         if not is_adaptive:
             if prompt:
-                generated = await self._generate_course_from_prompt(prompt, user_id)
+                generated = await self._generate_course_from_prompt(prompt, prompt_text, user_id)
                 session_data.update(generated)
             return None
 
-        goal_source = prompt or session_data.get("title") or ""
+        goal_source = prompt_text or session_data.get("title") or ""
         goal_payload = str(goal_source).strip() or "Adaptive course outline"
+        user_prompt_payload = prompt if prompt else goal_payload
         adaptive_structure = await self.ai_service.generate_adaptive_course_structure(
             user_id=user_id,
-            user_prompt=goal_payload,
+            user_prompt=user_prompt_payload,
         )
         session_data["title"] = adaptive_structure.course.title
         session_data["description"] = adaptive_structure.ai_outline_meta.scope
@@ -159,6 +209,98 @@ class CourseContentService:
             value = session_data.get(key)
             if value is not None:
                 session_data[key] = self._ensure_json_string(value)
+
+    def _normalize_prompt_text(self, prompt: Any) -> str:
+        """Normalize prompt input into a trimmed string."""
+        if prompt is None:
+            return ""
+        return str(prompt).strip()
+
+    async def _ingest_course_attachments(
+        self,
+        *,
+        rag_service: RAGService,
+        auth: AuthContext,
+        course_id: UUID,
+        attachments: list[UploadFile],
+    ) -> list[str]:
+        """Upload attachments and return image data URLs."""
+        image_data_urls: list[str] = []
+        for attachment in attachments:
+            raw_filename = attachment.filename or "attachment"
+            filename = Path(raw_filename).name
+            extension = Path(filename).suffix.lower()
+            file_content = await attachment.read()
+            if extension in _DOC_EXTENSIONS:
+                document_type = extension.lstrip(".")
+                document = await rag_service.upload_document(
+                    auth=auth,
+                    course_id=course_id,
+                    document_type=document_type,
+                    title=filename,
+                    file_content=file_content,
+                    filename=filename,
+                    process_in_background=False,
+                )
+                await rag_service.process_document(auth.session, document.id)
+                continue
+            if extension in _IMAGE_EXTENSIONS:
+                data_url = self._build_image_data_url(file_content, attachment.content_type, extension)
+                image_data_urls.append(data_url)
+                await rag_service.upload_document(
+                    auth=auth,
+                    course_id=course_id,
+                    document_type="image",
+                    title=filename,
+                    file_content=file_content,
+                    filename=filename,
+                    process_in_background=False,
+                )
+        return image_data_urls
+
+    async def _build_augmented_prompt(
+        self,
+        *,
+        rag_service: RAGService,
+        auth: AuthContext,
+        course_id: UUID,
+        prompt_text: str,
+    ) -> str:
+        """Append RAG context to the prompt if available."""
+        if not prompt_text:
+            return ""
+        results = await rag_service.search_documents(auth, course_id, query=prompt_text, top_k=5)
+        chunks = [result.content for result in results if result.content]
+        if not chunks:
+            return prompt_text
+        context_block = "\n\nReference Context:\n" + "\n\n".join(chunks)
+        return f"{prompt_text}{context_block}"
+
+    def _build_prompt_payload(self, prompt_text: str, image_data_urls: list[str]) -> str | list[dict[str, Any]]:
+        """Return a multimodal prompt payload when images are present."""
+        if not image_data_urls:
+            return prompt_text
+        image_parts = [{"type": "image_url", "image_url": {"url": url}} for url in image_data_urls]
+        return [{"type": "text", "text": prompt_text}, *image_parts]
+
+    def _build_image_data_url(self, file_content: bytes, content_type: str | None, extension: str) -> str:
+        """Build a base64 data URL for image inputs."""
+        mime_type = content_type
+        if not mime_type:
+            mime_type = "image/png" if extension == ".png" else "image/jpeg"
+        encoded = base64.b64encode(file_content).decode("utf-8")
+        return f"data:{mime_type};base64,{encoded}"
+
+    def _apply_course_updates(self, course: Course, session_data: dict[str, Any]) -> None:
+        """Apply generated payload fields to the draft course."""
+        for key in ("title", "description", "tags", "setup_commands", "adaptive_enabled", "archived"):
+            if key in session_data and session_data[key] is not None:
+                setattr(course, key, session_data[key])
+
+    async def _delete_draft_course(self, session: AsyncSession, course_id: UUID) -> None:
+        """Delete the draft course if creation fails."""
+        await session.execute(text("DELETE FROM courses WHERE id = :course_id"), {"course_id": str(course_id)})
+        await session.commit()
 
     async def _prepare_course_modules(
         self,
@@ -901,13 +1043,14 @@ class CourseContentService:
 
     async def _generate_course_from_prompt(
         self,
-        prompt: str,
+        user_prompt: str | list[dict[str, Any]],
+        prompt_text: str,
         user_id: UUID,
     ) -> dict[str, Any]:
         """Generate course data from AI prompt."""
         ai_result = await self.ai_service.generate_course_structure(
             user_id=user_id,
-            user_prompt=prompt,
+            user_prompt=user_prompt,
         )
         if not ai_result:
             error_msg = "Invalid AI response format for course generation"
@@ -919,11 +1062,11 @@ class CourseContentService:
             raise RuntimeError(error_msg)
 
         title = course_meta.title
-        description = course_meta.description or f"A course about {prompt}"
+        description = course_meta.description or f"A course about {prompt_text}"
 
         modules = self._build_modules_from_outline(list(ai_result.lessons or []))
         if not modules:
-            logger.warning("AI generated no lessons for prompt '%s'", prompt)
+            logger.warning("AI generated no lessons for prompt '%s'", prompt_text)
 
         result: dict[str, Any] = {
             "title": title,

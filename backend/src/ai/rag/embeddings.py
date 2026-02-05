@@ -243,6 +243,12 @@ class VectorRAG:
 
     async def _ensure_dimensions(self, session: AsyncSession) -> None:
         """Validate embedding dimensions against database schema."""
+        if not hasattr(self, "_dimensions_validated"):
+            self._dimensions_validated = False
+        if not hasattr(self, "_effective_embedding_dim"):
+            self._effective_embedding_dim = getattr(self, "configured_embedding_dim", None)
+        if not hasattr(self, "_db_embedding_dim"):
+            self._db_embedding_dim = None
         if self._dimensions_validated:
             return
 

@@ -76,6 +76,12 @@ class CoursesFacade:
                 "success": True,
             }
 
+        except HTTPException as exc:
+            if exc.status_code == 404:
+                return {"error": "Course not found", "success": False}
+            logger.exception("Error getting course %s for user %s", course_id, user_id)
+            return {"error": "Failed to retrieve course", "success": False}
+
         except Exception:
             logger.exception("Error getting course %s for user %s", course_id, user_id)
             return {"error": "Failed to retrieve course", "success": False}
@@ -85,6 +91,7 @@ class CoursesFacade:
         course_data: dict[str, Any],
         user_id: UUID,
         background_tasks: BackgroundTasks | None = None,
+        attachments: list[Any] | None = None,
     ) -> dict[str, Any]:
         """
         Create new course entry.
@@ -97,6 +104,7 @@ class CoursesFacade:
                 course_data,
                 user_id,
                 background_tasks=background_tasks,
+                attachments=attachments,
             )
 
             query_service = CourseQueryService(self._session)

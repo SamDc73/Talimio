@@ -3,11 +3,12 @@
  */
 
 import { AnimatePresence, motion } from "framer-motion"
-import { HelpCircle, Loader2, Sparkles } from "lucide-react"
-import { useState } from "react"
+import { FileText, HelpCircle, Image, Loader2, Paperclip, Sparkles, X } from "lucide-react"
+import { useRef, useState } from "react"
 import { useCourseService } from "@/api/courseApi"
 import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
+import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/Tooltip"
 import { cn } from "@/lib/utils"
@@ -27,6 +28,77 @@ const examplePrompts = [
 ]
 
 const tooltipCopy = "Answer a few quick questions to tailor your course. Optional."
+
+const ACCEPTED_ATTACHMENT_EXTENSIONS = [".pdf", ".epub", ".png", ".jpg", ".jpeg"]
+const ACCEPTED_ATTACHMENT_ACCEPT_ATTR = ACCEPTED_ATTACHMENT_EXTENSIONS.join(",")
+const ACCEPTED_ATTACHMENT_MIME_TYPES = {
+	"application/pdf": ".pdf",
+	"application/epub+zip": ".epub",
+	"image/png": ".png",
+	"image/jpeg": ".jpg",
+}
+
+function buildPastedFileName(extension) {
+	const isoTimestamp = new Date().toISOString().replace(/[:.]/g, "-")
+	return `pasted-${isoTimestamp}${extension}`
+}
+
+function buildAttachmentId(file, sequence) {
+	const fileIdentity = `${file.name}-${file.size}-${file.lastModified}`
+	if (globalThis.crypto?.randomUUID) {
+		return `${fileIdentity}-${globalThis.crypto.randomUUID()}`
+	}
+
+	if (globalThis.crypto?.getRandomValues) {
+		const values = new Uint32Array(1)
+		globalThis.crypto.getRandomValues(values)
+		return `${fileIdentity}-${values[0].toString(16)}`
+	}
+
+	return `${fileIdentity}-${Date.now()}-${sequence}`
+}
+
+function normalizeAttachmentFile(file) {
+	if (!file) {
+		return null
+	}
+
+	const fileName = (file.name || "").trim()
+	const fileNameLower = fileName.toLowerCase()
+	const nameHasAllowedExtension = ACCEPTED_ATTACHMENT_EXTENSIONS.some((ext) => fileNameLower.endsWith(ext))
+	if (fileName && nameHasAllowedExtension) {
+		return file
+	}
+
+	const mimeType = (file.type || "").toLowerCase()
+	const extensionFromMimeType = ACCEPTED_ATTACHMENT_MIME_TYPES[mimeType]
+	if (!extensionFromMimeType) {
+		return file
+	}
+
+	const normalizedName = fileName
+		? fileNameLower.endsWith(extensionFromMimeType)
+			? fileName
+			: `${fileName}${extensionFromMimeType}`
+		: buildPastedFileName(extensionFromMimeType)
+
+	try {
+		const lastModified = typeof file.lastModified === "number" ? file.lastModified : Date.now()
+		return new File([file], normalizedName, { type: file.type || undefined, lastModified })
+	} catch {
+		return file
+	}
+}
+
+function isAllowedAttachment(file) {
+	const fileName = file?.name?.toLowerCase?.() ?? ""
+	const isAllowedByExtension = ACCEPTED_ATTACHMENT_EXTENSIONS.some((ext) => fileName.endsWith(ext))
+	if (isAllowedByExtension) {
+		return true
+	}
+	const mimeType = (file?.type || "").toLowerCase()
+	return Boolean(ACCEPTED_ATTACHMENT_MIME_TYPES[mimeType])
+}
 
 function formatSelfAssessmentSummary(responses) {
 	if (!responses?.length) {
@@ -65,6 +137,11 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	const [isGenerating, setIsGenerating] = useState(false)
 	const [error, setError] = useState("")
 	const [adaptiveEnabled, setAdaptiveEnabled] = useState(() => Boolean(defaultAdaptiveEnabled))
+	const [attachments, setAttachments] = useState([])
+	const [dragActive, setDragActive] = useState(false)
+	const [isAddingAttachments, setIsAddingAttachments] = useState(false)
+	const fileInputRef = useRef(null)
+	const attachmentSequenceRef = useRef(0)
 
 	const courseService = useCourseService()
 
@@ -76,6 +153,11 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 		setError("")
 		setAdaptiveEnabled(Boolean(defaultAdaptiveEnabled))
 		setActiveStep(MODAL_STEPS.PROMPT)
+		setAttachments([])
+		setDragActive(false)
+		if (fileInputRef.current) {
+			fileInputRef.current.value = ""
+		}
 	}
 
 	const closeModal = (force = false) => {
@@ -100,6 +182,117 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	const handleToggleAdaptive = (event) => {
 		const { checked } = event.target
 		setAdaptiveEnabled(checked)
+	}
+
+	const addAttachments = (files) => {
+		const nextFiles = [...(files || [])].map((file) => normalizeAttachmentFile(file)).filter(Boolean)
+		if (nextFiles.length === 0) {
+			return
+		}
+
+		const invalidFiles = []
+		const validFiles = []
+
+		for (const file of nextFiles) {
+			const isAllowed = isAllowedAttachment(file)
+			if (isAllowed) {
+				validFiles.push(file)
+			} else {
+				invalidFiles.push(file)
+			}
+		}
+
+		if (invalidFiles.length > 0) {
+			setError(`Unsupported files: ${invalidFiles.map((file) => file.name).join(", ")}`)
+		} else {
+			setError("")
+		}
+
+		if (validFiles.length === 0) {
+			return
+		}
+
+		setAttachments((prev) => [
+			...prev,
+			...validFiles.map((file) => {
+				attachmentSequenceRef.current += 1
+				return {
+					id: buildAttachmentId(file, attachmentSequenceRef.current),
+					file,
+				}
+			}),
+		])
+	}
+
+	const handleFileInputChange = (event) => {
+		addAttachments(event.target.files)
+		if (fileInputRef.current) {
+			fileInputRef.current.value = ""
+		}
+	}
+
+	const handleDrag = (event) => {
+		event.preventDefault()
+		event.stopPropagation()
+		if (isGenerating) {
+			return
+		}
+		if (event.type === "dragenter" || event.type === "dragover") {
+			setDragActive(true)
+		} else if (event.type === "dragleave") {
+			setDragActive(false)
+		}
+	}
+
+	const handleDrop = (event) => {
+		event.preventDefault()
+		event.stopPropagation()
+		setDragActive(false)
+		if (isGenerating) {
+			return
+		}
+		addAttachments(event.dataTransfer?.files)
+	}
+
+	const removeAttachment = (attachmentId) => {
+		if (isGenerating) {
+			return
+		}
+		setAttachments((prev) => prev.filter((item) => item.id !== attachmentId))
+	}
+
+	const handlePaste = (event) => {
+		if (isGenerating) {
+			return
+		}
+
+		const clipboardData = event.clipboardData
+		const clipboardFiles = clipboardData?.files ? [...clipboardData.files] : []
+
+		const itemFiles = []
+		const clipboardItems = clipboardData?.items ? [...clipboardData.items] : []
+		for (const item of clipboardItems) {
+			if (item?.kind !== "file") {
+				continue
+			}
+			const file = item.getAsFile()
+			if (file) {
+				itemFiles.push(file)
+			}
+		}
+
+		const nextFiles = clipboardFiles.length > 0 ? clipboardFiles : itemFiles
+		if (nextFiles.length === 0) {
+			return
+		}
+
+		event.preventDefault()
+		setIsAddingAttachments(true)
+		try {
+			addAttachments(nextFiles)
+		} finally {
+			queueMicrotask(() => setIsAddingAttachments(false))
+		}
 	}
 
 	const handlePromptSubmit = async (event) => {
@@ -146,6 +339,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 			const response = await courseService.createCourse({
 				prompt: finalPrompt,
 				adaptive_enabled: adaptiveEnabled,
+				files: attachments.map((attachment) => attachment.file),
 			})
 
 			if (response?.id) {
@@ -185,32 +379,128 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 				</div>
 			</DialogHeader>
 
-			<form onSubmit={handlePromptSubmit} className="space-y-5">
-				<div className="space-y-2">
-					<Label htmlFor="course-prompt" className="text-base">
+			<form onSubmit={handlePromptSubmit} onPaste={handlePaste} className="space-y-5">
+				<div className="space-y-3">
+					<Label htmlFor="course-prompt" className="text-base font-medium">
 						What would you like to learn?
 					</Label>
-					<textarea
-						id="course-prompt"
-						value={prompt}
-						onChange={(event) => setPrompt(event.target.value)}
-						placeholder="Describe what you want to learn..."
-						disabled={isGenerating}
+					<fieldset
+						aria-label="Course prompt editor and file drop zone"
 						className={cn(
-							"w-full px-3.5 py-2.5 rounded-lg border border-border bg-background",
-							"text-sm/relaxed  resize-none",
-							"focus:outline-none focus:ring-2 focus:ring-(--color-course)/20 focus:border-(--color-course)",
-							"placeholder:text-muted-foreground/60",
-							"transition-all duration-200",
-							"disabled:opacity-50 disabled:cursor-not-allowed"
+							"relative flex flex-col rounded-xl border bg-background transition-all duration-200",
+							"focus-within:border-(--color-course) focus-within:ring-4 focus-within:ring-(--color-course)/10",
+							dragActive
+								? "border-(--color-course) bg-(--color-course)/5 ring-4 ring-(--color-course)/10"
+								: "border-border shadow-sm hover:border-muted-foreground/30"
 						)}
-						rows={4}
-						maxLength={500}
-					/>
-					<div className="flex items-center justify-between text-xs">
-						<span className="text-muted-foreground">Try one of the examples below</span>
-						<span className="text-muted-foreground/70">{prompt.length}/500</span>
-					</div>
+						onDragEnter={handleDrag}
+						onDragOver={handleDrag}
+						onDragLeave={handleDrag}
+						onDrop={handleDrop}
+					>
+						<textarea
+							id="course-prompt"
+							value={prompt}
+							onChange={(event) => setPrompt(event.target.value)}
+							placeholder="Describe what you want to learn..."
+							disabled={isGenerating}
+							className={cn(
+								"w-full bg-transparent px-4 py-3 placeholder:text-muted-foreground/50",
+								"text-sm/relaxed  resize-none focus:outline-none",
+								"min-h-[120px]"
+							)}
+							rows={4}
+							maxLength={500}
+						/>
+
+						<div className="flex items-end justify-between px-3 pb-3 pt-2 gap-2">
+							<div className="flex items-center gap-2 flex-1 flex-wrap">
+								<Input
+									type="file"
+									ref={fileInputRef}
+									multiple
+									accept={ACCEPTED_ATTACHMENT_ACCEPT_ATTR}
+									onChange={handleFileInputChange}
+									disabled={isGenerating}
+									className="hidden"
+								/>
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<button
+											type="button"
+											onClick={() => fileInputRef.current?.click()}
+											disabled={isGenerating}
+											className={cn(
+												"inline-flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors",
+												"hover:bg-secondary hover:text-foreground",
+												isAddingAttachments && "animate-pulse cursor-wait",
+												isGenerating && "opacity-50 cursor-not-allowed"
+											)}
+										>
+											<Paperclip className="size-4" />
+											<span className="sr-only">Attach files</span>
+										</button>
+									</TooltipTrigger>
+									<TooltipContent side="right" className="text-xs">
+										Attach files ({ACCEPTED_ATTACHMENT_EXTENSIONS.join(", ")})
+									</TooltipContent>
+								</Tooltip>
+
+								<AnimatePresence>
+									{attachments.length > 0 && (
+										<motion.div
+											initial={{ opacity: 0, width: 0 }}
+											animate={{ opacity: 1, width: "auto" }}
+											exit={{ opacity: 0, width: 0 }}
+											className="flex flex-wrap gap-2"
+										>
+											{attachments.map((attachment) => {
+												const fileName = attachment.file?.name ?? "Untitled"
+												const lowerName = fileName.toLowerCase()
+												const isImage =
+													lowerName.endsWith(".png") || lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")
+
+												return (
+													<motion.div
+														key={attachment.id}
+														layout
+														initial={{ scale: 0.8, opacity: 0 }}
+														animate={{ scale: 1, opacity: 1 }}
+														exit={{ scale: 0.8, opacity: 0 }}
+														className="group flex items-center gap-2 rounded-md bg-secondary/50 px-2.5 py-1.5 text-xs font-medium text-secondary-foreground ring-1 ring-inset ring-black/5"
+													>
+														{isImage ? (
+															<Image className="size-3.5 text-muted-foreground/70" />
+														) : (
+															<FileText className="size-3.5 text-muted-foreground/70" />
+														)}
+														<span className="truncate max-w-[100px]" title={fileName}>
+															{fileName}
+														</span>
+														<button
+															type="button"
+															onClick={() => removeAttachment(attachment.id)}
+															className="ml-1 text-muted-foreground/50 hover:text-destructive transition-colors"
+														>
+															<X className="size-3.5" />
+														</button>
+													</motion.div>
+												)
+											})}
+										</motion.div>
+									)}
+								</AnimatePresence>
+
+								{attachments.length === 0 && (
+									<span className="text-xs text-muted-foreground/40 hidden sm:inline-block ml-1 select-none">
+										Drag & drop files
+									</span>
+								)}
+							</div>
+
+							<div className="text-xs text-muted-foreground/40 font-mono select-none">{prompt.length}/500</div>
+						</div>
+					</fieldset>
 				</div>
 
 				<div className="space-y-2">
@@ -370,7 +660,9 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 						<div className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm">
 							<div className="flex flex-col items-center gap-3 text-muted-foreground">
 								<Loader2 className="size-5  animate-spin" />
-								<span className="text-sm">Generating course...</span>
+								<span className="text-sm">
+									{attachments.length > 0 ? "Uploading attachments & generating course..." : "Generating course..."}
+								</span>
 							</div>
 						</div>
 					) : null}
