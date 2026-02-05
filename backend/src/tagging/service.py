@@ -135,6 +135,18 @@ class TaggingService:
             await self.session.rollback()
             return []
 
+    async def suggest_tags(
+        self,
+        content_preview: str,
+        _user_id: UUID,
+        _content_type: str,
+        title: str = "",
+    ) -> list[str]:
+        """Suggest tags for content using the LiteLLM structured path."""
+        tags_with_confidence = await self._generate_tags_llm(title, content_preview)
+        return [item["tag"] for item in tags_with_confidence]
+
+
     async def get_content_tags(
         self,
         content_id: UUID,
@@ -167,6 +179,52 @@ class TaggingService:
 
         result = await self.session.execute(query)
         return list(result.scalars().all())
+
+    async def batch_tag_content(self, content_items: list[dict[str, Any]]) -> dict[str, Any]:
+        """Tag multiple content items and return per-item results."""
+        results: list[dict[str, Any]] = []
+        successful = 0
+        for item in content_items:
+            try:
+                content_id = UUID(str(item.get("content_id")))
+                user_id = UUID(str(item.get("user_id")))
+                content_type = str(item.get("content_type", ""))
+                title = str(item.get("title", ""))
+                preview = str(item.get("preview", ""))
+                tags = await self.tag_content(
+                    content_id=content_id,
+                    content_type=content_type,
+                    user_id=user_id,
+                    title=title,
+                    content_preview=preview,
+                )
+                results.append(
+                    {
+                        "content_id": str(content_id),
+                        "success": True,
+                        "tags": tags,
+                    }
+                )
+                successful += 1
+            except Exception as exc:
+                results.append(
+                    {
+                        "content_id": str(item.get("content_id", "")),
+                        "success": False,
+                        "tags": [],
+                        "error": str(exc),
+                    }
+                )
+
+        total = len(content_items)
+        failed = total - successful
+        return {
+            "total": total,
+            "successful": successful,
+            "failed": failed,
+            "results": results,
+        }
+
 
     async def update_manual_tags(
         self,

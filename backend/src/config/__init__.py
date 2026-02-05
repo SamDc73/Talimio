@@ -23,7 +23,7 @@ def env(key: str, default: Any = None) -> Any:
 
     # First try to get from defined settings fields (with validation/type conversion)
     for field_name in (normalized_upper, normalized_lower, key):
-        if field_name in settings.model_fields:
+        if field_name in type(settings).model_fields:
             value = getattr(settings, field_name)
             if value is not None:
                 return value

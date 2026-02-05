@@ -683,20 +683,36 @@ class LLMClient:
         self,
         *,
         system_prompt: str,
-        user_prompt: str,
+        user_prompt: str | list[dict[str, Any]],
         response_model: type[T],
         user_id: str | UUID | None,
     ) -> T:
-        prompt_text = user_prompt.strip()
-        if not prompt_text:
-            msg = "User prompt must not be empty"
-            raise ValueError(msg)
+        if isinstance(user_prompt, str):
+            prompt_text = user_prompt.strip()
+            if not prompt_text:
+                msg = "User prompt must not be empty"
+                raise ValueError(msg)
+            user_content: str | list[dict[str, Any]] = prompt_text
+        elif isinstance(user_prompt, list):
+            text_parts = [
+                part.get("text", "").strip()
+                for part in user_prompt
+                if isinstance(part, dict) and part.get("type") == "text"
+            ]
+            prompt_text = " ".join(part for part in text_parts if part)
+            if not prompt_text:
+                msg = "User prompt must not be empty"
+                raise ValueError(msg)
+            user_content = user_prompt
+        else:
+            msg = "User prompt must be a string or list of content parts"
+            raise TypeError(msg)
 
         normalized_user_id = self._normalize_user_id(user_id)
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt_text},
+            {"role": "user", "content": user_content},
         ]
 
         messages, tool_bindings = await self._apply_user_tooling(
@@ -720,7 +736,7 @@ class LLMClient:
 
     async def generate_course_structure(
         self,
-        user_prompt: str,
+        user_prompt: str | list[dict[str, Any]],
         user_id: str | UUID | None = None,
     ) -> CourseStructure:
         """Generate a structured learning course using LiteLLM structured output (Pydantic)."""
@@ -740,7 +756,7 @@ class LLMClient:
 
     async def generate_adaptive_course_structure(
         self,
-        user_prompt: str,
+        user_prompt: str | list[dict[str, Any]],
         user_id: str | UUID | None = None,
     ) -> AdaptiveCourseStructure:
         """Generate the unified adaptive course payload used by ConceptFlow."""

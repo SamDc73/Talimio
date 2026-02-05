@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
@@ -55,18 +56,23 @@ class RAGService:
         title: str,
         file_content: bytes | None = None,
         filename: str | None = None,
+        process_in_background: bool = True,
     ) -> DocumentResponse:
         """Upload a document to a course, ensuring user ownership."""
         # Validate user owns the course
         await auth.validate_resource("course", course_id)
 
         try:
+            is_image = document_type == "image"
+            now = datetime.now(UTC)
             # Create document record
             doc = CourseDocument(
                 course_id=course_id,
                 title=title,
                 document_type=document_type or "unknown",
-                status="pending",  # Start as pending for processing
+                status="embedded" if is_image else "pending",
+                processed_at=now if is_image else None,
+                embedded_at=now if is_image else None,
             )
             auth.session.add(doc)
             await auth.session.flush()
@@ -91,26 +97,27 @@ class RAGService:
                 # This is intentional - RAG documents are course-specific reference materials
                 # while books are user-owned files with different access patterns
                 rag_document_dir = Path(settings.LOCAL_STORAGE_PATH) / "rag_documents" / str(course_id)
-                rag_document_dir.mkdir(parents=True, exist_ok=True)
+                await run_in_threadpool(rag_document_dir.mkdir, parents=True, exist_ok=True)
 
                 # Security fix: Use only UUID + validated extension, no user-provided filename in path
                 # This prevents path traversal attacks while preserving file type handling
                 ext = Path(filename).suffix.lower() if filename else ""
-                allowed_extensions = {".pdf", ".txt", ".md", ".epub"}
+                allowed_extensions = {".pdf", ".txt", ".md", ".epub", ".png", ".jpg", ".jpeg"}
                 safe_ext = ext if ext in allowed_extensions else ""
 
                 file_path = rag_document_dir / f"{doc.id}{safe_ext}"
-                file_path.write_bytes(file_content)
+                await run_in_threadpool(file_path.write_bytes, file_content)
 
                 doc.file_path = str(file_path)
 
             await auth.session.commit()
 
-            # Process the document in a background task to avoid blocking uploads.
-            doc_id = doc.id  # Capture ID before potential session issues
-            task = asyncio.create_task(self._process_document_background(doc_id))
-            self._background_tasks.add(task)
-            task.add_done_callback(self._background_tasks.discard)
+            if process_in_background and not is_image:
+                # Process the document in a background task to avoid blocking uploads.
+                doc_id = doc.id  # Capture ID before potential session issues
+                task = asyncio.create_task(self._process_document_background(doc_id))
+                self._background_tasks.add(task)
+                task.add_done_callback(self._background_tasks.discard)
 
             # Re-query to get a Row object that works with model_validate
             # This matches the pattern used in get_document() and get_documents()
