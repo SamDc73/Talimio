@@ -204,6 +204,108 @@ export function useLatexPracticeReview({
 		]
 	)
 
+	const submitJxgStateAnswer = useCallback(
+		async ({
+			question,
+			expectedState,
+			answerState,
+			tolerance,
+			perCheckTolerance,
+			criteria,
+			conceptId,
+			attempts,
+			durationMs,
+			hintsUsed,
+			practiceContext: contextOverride,
+		} = {}) => {
+			if (!courseId || !lessonId) {
+				throw new Error("Course ID and Lesson ID required for JSXGraph practice grading")
+			}
+
+			const resolvedConceptId = resolveConceptId(conceptId)
+			const normalizedAttempts = normalizeAttempts(attempts)
+			const normalizedDuration = normalizeDuration(durationMs)
+			const normalizedHints = normalizeHintsUsed(hintsUsed)
+			const contextValue = contextOverride || practiceContext
+
+			const payload = {
+				kind: "jxg_state",
+				question,
+				expected: {
+					expectedState,
+					tolerance,
+					perCheckTolerance,
+					criteria,
+				},
+				answer: {
+					answerState,
+				},
+				context: {
+					courseId,
+					lessonId,
+					conceptId: resolvedConceptId,
+					practiceContext: contextValue,
+					hintsUsed: normalizedHints,
+				},
+			}
+
+			setIsSubmitting(true)
+			setError(null)
+
+			try {
+				const grade = await courseService.gradeLessonAnswer(lessonId, payload)
+				let review = null
+				let rating = null
+
+				if (grade) {
+					rating = deriveRating({
+						isCorrect: grade.isCorrect,
+						attempts: normalizedAttempts,
+						durationMs: normalizedDuration,
+						skipped: false,
+						hintsUsed: normalizedHints,
+					})
+					review = await submitReview({
+						conceptId: resolvedConceptId,
+						rating,
+						reviewDurationMs: normalizedDuration,
+					})
+
+					await persistPracticeMetadata({
+						conceptId: resolvedConceptId,
+						rating,
+						attempts: normalizedAttempts,
+						durationMs: normalizedDuration,
+						context: contextValue,
+						hintsUsed: normalizedHints,
+					})
+				}
+
+				return { grade, review, rating }
+			} catch (submissionError) {
+				setError(submissionError)
+				logger.error("Failed to grade JSXGraph practice answer", submissionError, {
+					courseId,
+					lessonId,
+					conceptId: conceptId ?? initialConceptId,
+				})
+				throw submissionError
+			} finally {
+				setIsSubmitting(false)
+			}
+		},
+		[
+			courseId,
+			lessonId,
+			practiceContext,
+			resolveConceptId,
+			courseService,
+			submitReview,
+			persistPracticeMetadata,
+			initialConceptId,
+		]
+	)
+
 	const submitSkip = useCallback(
 		async ({ conceptId, attempts, durationMs, hintsUsed, practiceContext: contextOverride } = {}) => {
 			if (!courseId || !lessonId) {
@@ -261,11 +363,12 @@ export function useLatexPracticeReview({
 	return useMemo(
 		() => ({
 			submitAnswer,
+			submitJxgStateAnswer,
 			submitSkip,
 			isSubmitting,
 			error,
 		}),
-		[error, isSubmitting, submitAnswer, submitSkip]
+		[error, isSubmitting, submitAnswer, submitJxgStateAnswer, submitSkip]
 	)
 }
 

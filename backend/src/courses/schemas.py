@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 def _to_camel(string: str) -> str:
@@ -223,15 +223,56 @@ class NextReviewResponse(BaseModel):
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
-GradeKind = str
+GradeKind = Literal["latex_expression", "jxg_state"]
 GradeStatus = Literal["correct", "incorrect", "parse_error", "unsupported"]
 PracticeContext = Literal["inline", "quick_check", "scheduled_review", "drill"]
+
+
+class JXGBoardState(BaseModel):
+    """Normalized board state used for deterministic JSXGraph grading."""
+
+    points: dict[str, tuple[float, float]] = Field(
+        default_factory=dict,
+        description=(
+            "Point coordinates keyed by stable point id (use explicit JSXGraph `name`, for example `A`) "
+            "with values `[x, y]`"
+        ),
+    )
+    sliders: dict[str, float] = Field(
+        default_factory=dict,
+        description="Slider values keyed by stable slider id (use explicit JSXGraph `name`, for example `a`)",
+    )
+    curves: dict[str, list[tuple[float, float]]] = Field(
+        default_factory=dict,
+        description=(
+            "Curve samples keyed by stable curve id. Values must be fixed ordered samples `[[x1,y1], ...]` "
+            "that can be compared by index against expected samples."
+        ),
+    )
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
 
 class GradeExpectedPayload(BaseModel):
     """Expected answer payload for grading."""
 
-    expected_latex: str = Field(..., min_length=1, description="Expected answer in LaTeX")
+    expected_latex: str | None = Field(None, min_length=1, description="Expected answer in LaTeX")
+    expected_state: JXGBoardState | None = Field(
+        None,
+        description=(
+            "Expected board state for JSXGraph grading using `{ points, sliders, curves }` shape "
+            "with stable ids from JSXGraph `name`."
+        ),
+    )
+    tolerance: float | None = Field(
+        None,
+        ge=0,
+        description="Global tolerance used for graph-state comparisons",
+    )
+    per_check_tolerance: dict[str, float] | None = Field(
+        None,
+        description="Per-check tolerance overrides keyed by check id (`point:A`, `slider:a`, `curve:f`)",
+    )
     criteria: str | None = Field(None, description="Optional grading criteria or simplification note")
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
@@ -240,7 +281,14 @@ class GradeExpectedPayload(BaseModel):
 class GradeAnswerPayload(BaseModel):
     """Learner answer payload for grading."""
 
-    answer_latex: str = Field(..., min_length=1, description="Learner answer in LaTeX")
+    answer_latex: str | None = Field(None, min_length=1, description="Learner answer in LaTeX")
+    answer_state: JXGBoardState | None = Field(
+        None,
+        description=(
+            "Learner board state for JSXGraph grading using `{ points, sliders, curves }` and the same stable ids "
+            "as expectedState."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
@@ -272,6 +320,29 @@ class GradeRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
+    @model_validator(mode="after")
+    def validate_payload_for_kind(self) -> GradeRequest:
+        """Validate required payload fields for each grading kind."""
+        if self.kind == "latex_expression":
+            if not self.expected.expected_latex:
+                message = "expected.expectedLatex is required when kind=latex_expression"
+                raise ValueError(message)
+            if not self.answer.answer_latex:
+                message = "answer.answerLatex is required when kind=latex_expression"
+                raise ValueError(message)
+            return self
+
+        if self.kind == "jxg_state":
+            if self.expected.expected_state is None:
+                message = "expected.expectedState is required when kind=jxg_state"
+                raise ValueError(message)
+            if self.answer.answer_state is None:
+                message = "answer.answerState is required when kind=jxg_state"
+                raise ValueError(message)
+            return self
+
+        return self
+
 
 class VerifierInfo(BaseModel):
     """Verifier metadata attached to grading responses."""
@@ -302,6 +373,10 @@ class GradeResponse(BaseModel):
     error_highlight: GradeErrorHighlight | None = Field(
         None,
         description="Optional LaTeX fragment to highlight for targeted feedback",
+    )
+    feedback_metadata: dict[str, Any] | None = Field(
+        None,
+        description="Optional structured metadata with verifier deltas (for example deltaX, deltaY, off-by info)",
     )
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
