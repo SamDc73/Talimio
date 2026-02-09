@@ -3,6 +3,7 @@ import { FillInTheBlank } from "@/components/quiz/FillInTheBlank.jsx"
 import { FreeForm } from "@/components/quiz/FreeForm.jsx"
 import { MultipleChoice } from "@/components/quiz/MultipleChoice.jsx"
 import { useMdxCompile } from "@/features/course/hooks/useMdxCompile"
+import { JXGBoardPractice } from "./JXGBoardPractice.jsx"
 import { LatexExpressionPractice } from "./LatexExpressionPractice.jsx"
 import WorkspaceAwareCodeBlock from "./WorkspaceAwareCodeBlock.jsx"
 import { WorkspaceRegistryProvider } from "./workspaceContext"
@@ -162,6 +163,9 @@ export function MdxRenderer({ content, lessonId, courseId, lessonConceptId }) {
 				{(() => {
 					const componentsWithLesson = {
 						...MDX_COMPONENTS,
+						JXGBoard: (props) => (
+							<JXGBoardPractice {...props} courseId={courseId} lessonId={lessonId} lessonConceptId={lessonConceptId} />
+						),
 						LatexExpression: (props) => (
 							<LatexExpressionPractice
 								{...props}

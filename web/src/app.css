@@ -2,6 +2,7 @@
 @import "tailwindcss";
 @import "katex/dist/katex.min.css";
 @import "mathlive/fonts.css";
+@import "../node_modules/jsxgraph/distrib/jsxgraph.css";
 
 /* Tailwind v4 @theme configuration */
 @theme {

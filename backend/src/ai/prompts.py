@@ -437,20 +437,37 @@ Use these inline (NOT inside code fences) as you teach:
   `<FreeForm question="..." sampleAnswer="..." minLength={80} />`
 - LaTeX expression practice (graded/tracked):
   `<LatexExpression question="..." expectedLatex="..." criteria={{...}} hints={["..."]} solutionLatex="..." solutionMdx="..." />`
+- JSXGraph interactive board (visual + exploratory):
+  `<JXGBoard boundingBox={[-6,6,6,-6]} grid setup={({ board, emit, startAnimation, theme }) => { ... }} />`
 
 Guidelines:
 - Use 2-6 checkpoints total, placed right after the idea they verify.
 - String props may include Markdown + LaTeX.
 - Prefer `<LatexExpression>` when the answer can be checked as a single expression.
 - To populate the lesson's Quick Check, set `practiceContext="quick_check"` on 1-3 `<LatexExpression>` items.
+- If the lesson needs graphs, geometry, or simulation-style visualization, prefer `<JXGBoard>` over static text descriptions.
+- For `<JXGBoard>` plots, pass real JS functions (e.g. `(x) => x * x - 3`) or point arrays, never parse math strings (for example `"x^2"`).
+- Use `emit(name, payload)` in `setup` when learner interactions should unlock hints, notes, or next steps in the lesson flow.
+- For graded board-state checks, always emit `emit("state", payload)` where `payload` matches this exact shape:
+  - `points: { [id]: [x, y] }`
+  - `sliders: { [id]: value }`
+  - `curves: { [id]: [[x1, y1], [x2, y2], ...] }`
+- For board-state ids, always set explicit JSXGraph `name` values and reuse them consistently in both `expectedState` and emitted `payload`.
+- For curve checks, emit fixed ordered sample arrays so grading can compare by index.
 - Match the app's visual language: if you define custom JSX/React blocks, use Tailwind theme tokens
   (`bg-background`, `bg-card`, `bg-muted`, `text-foreground`, `text-muted-foreground`, `border-border`, `text-primary`)
   and avoid hard-coded hex colors.
+- For `<JXGBoard>` elements, rely on default values as much as possible. If valid semantic distinctions are needed, use `theme.colors` provided in the `setup` callback (e.g., `strokeColor: theme.colors.primary`).
+- Do not set the `<JXGBoard theme="...">` prop unless the lesson explicitly needs a non-default visual mode; default styling should stay `talimio`.
 
 ### Optional custom React blocks (use sparingly)
 - Add a small interactive demo only when it genuinely improves understanding.
 - Define it as `export function DemoName() { ... }` and then render `<DemoName />`.
 - Use hooks via `React.*` (for example: `React.useState(...)`).
+- Never include third-party imports inside MDX output.
+- Canonical `<JXGBoard>` patterns include: function plots, auto-play timeline animation via `startAnimation`, non-math visual simulations (physics/CS), and multi-board state coordination with `React.useState`.
+- Graded `<JXGBoard>` pattern:
+  `<JXGBoard expectedState={{ points: { A: [1, 2] }, sliders: { a: 2 }, curves: { f: [[0,0],[1,1]] } }} setup={({ board, emit }) => { ...; emit("state", { points: { A: [x, y] }, sliders: { a: v }, curves: { f: samples } }); }} />`
 - Avoid HTML/JSX comments.
 
 ## Course Alignment (use the outline)
