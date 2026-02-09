@@ -381,6 +381,10 @@ async def refresh_token(request: Request, response: Response) -> RefreshResponse
 
     try:
         return await _perform_token_refresh(refresh_token_value, response)
+    except HTTPException as e:
+        if e.status_code == 401:
+            clear_refresh_cookie(response)
+        raise
     except Exception as e:
         _handle_refresh_error(e, response)
         raise

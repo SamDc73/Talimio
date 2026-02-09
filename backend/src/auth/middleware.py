@@ -13,12 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.auth.config import get_user_id
 from src.auth.context import is_auth_skip_path
-from src.auth.exceptions import (
-    AuthenticationError,
-    InvalidTokenError,
-    MissingTokenError,
-    TokenExpiredError,
-)
+from src.auth.exceptions import AuthenticationError
 from src.middleware.error_handlers import (
     ErrorCategory,
     ErrorCode,
@@ -54,9 +49,9 @@ class AuthInjectionMiddleware(BaseHTTPMiddleware):
         try:
             request.state.user_id = await get_user_id(request)
             return await call_next(request)
-        except (AuthenticationError, InvalidTokenError, MissingTokenError, TokenExpiredError) as e:
+        except AuthenticationError as e:
             # Return a consistent 401 response shape (exception handlers don't catch middleware errors)
-            logger.exception("Auth error in middleware for %s: %s", path, type(e).__name__)
+            logger.info("Auth rejected in middleware for %s: %s", path, type(e).__name__)
             return await handle_authentication_errors(request, e)
         except ValueError as e:
             error_id = uuid4()
