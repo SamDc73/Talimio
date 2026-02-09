@@ -11,6 +11,7 @@ from src.auth.exceptions import (
     InvalidTokenError,
     MissingTokenError,
     SupabaseConfigError,
+    TokenExpiredError,
     UnknownAuthProviderError,
 )
 from src.config.settings import get_settings
@@ -94,9 +95,9 @@ async def _validate_supabase_token(request: Request, token: str) -> UUID:
         error_msg = str(e).lower()
         if "expired" in error_msg or "invalid claims" in error_msg:
             logger.debug("Token expired or has invalid claims - client should refresh or re-authenticate")
-        else:
-            # Only log full exception for unexpected errors
-            logger.exception("Unexpected token validation error: %s", e)
+            raise TokenExpiredError from e
+        # Only log full exception for unexpected errors
+        logger.exception("Unexpected token validation error: %s", e)
         raise InvalidTokenError from e
 
 
@@ -124,7 +125,7 @@ async def get_user_id(request: Request) -> UUID:
 
         token = extract_token_from_request(request)
         if not token:
-            logger.warning("Missing or invalid Authorization header and no access_token cookie")
+            logger.debug("Missing or invalid Authorization header and no access_token cookie")
             raise MissingTokenError
 
         return await _validate_supabase_token(request, token)
