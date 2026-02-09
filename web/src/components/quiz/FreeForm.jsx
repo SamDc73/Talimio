@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { QuizMarkdown } from "@/components/quiz/QuizMarkdown.jsx"
+import { QuizMarkdown } from "@/components/quiz/QuizMarkdown"
 
 export function FreeForm({ question, sampleAnswer, minLength = 50 }) {
 	const [userAnswer, setUserAnswer] = useState("")

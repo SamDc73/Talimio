@@ -7,9 +7,9 @@ from pathlib import Path
 from uuid import UUID
 
 import fitz  # PyMuPDF
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book
-from src.database.session import AsyncSession
 from src.storage.factory import get_storage_provider
 
 

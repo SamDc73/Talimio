@@ -2,7 +2,7 @@
 
 import { CheckCircle, Lock } from "lucide-react"
 import { useLayoutEffect, useRef, useState } from "react"
-import { useCourseProgress } from "@/features/course/hooks/useCourseProgress"
+import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
 import { cn } from "@/lib/utils"
 import { useCourseNavigation } from "@/utils/navigationUtils"
 
@@ -305,6 +305,12 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 												.map((lesson, lessonIndex) => {
 													const completed = isCompleted(lesson.id)
 													const locked = availableSet ? !completed && !availableSet.has(String(lesson.id)) : false
+													let lessonCardStateClass = "border-slate-200 hover:shadow-md hover:border-emerald-300"
+													if (completed) {
+														lessonCardStateClass = "border-emerald-300 bg-emerald-50/30"
+													} else if (locked) {
+														lessonCardStateClass = "border-slate-200 opacity-60"
+													}
 
 													return (
 														<div
@@ -330,11 +336,7 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 																}}
 																className={cn(
 																	"relative bg-card border rounded-xl p-4 shadow-sm w-[calc(50%-20px)] z-10 text-left",
-																	completed
-																		? "border-emerald-300 bg-emerald-50/30"
-																		: locked
-																			? "border-slate-200 opacity-60"
-																			: "border-slate-200 hover:shadow-md hover:border-emerald-300"
+																	lessonCardStateClass
 																)}
 																onClick={() => {
 																	if (locked) return

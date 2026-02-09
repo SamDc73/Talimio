@@ -1,9 +1,9 @@
 import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom"
 
 import FullPageLoader from "@/components/FullPageLoader"
-import { useCourseContext } from "@/features/course/CourseContext.jsx"
+import { useCourseContext } from "@/features/course/CourseContext"
 import { CourseHeader } from "@/features/course/components/CourseHeader"
-import CourseSidebarContainer from "@/features/course/components/CourseSidebarContainer.jsx"
+import CourseSidebarContainer from "@/features/course/components/CourseSidebarContainer"
 import { cn } from "@/lib/utils"
 import useAppStore, { selectSidebarOpen, selectToggleSidebar } from "@/stores/useAppStore"
 

@@ -76,11 +76,10 @@ function normalizeAttachmentFile(file) {
 		return file
 	}
 
-	const normalizedName = fileName
-		? fileNameLower.endsWith(extensionFromMimeType)
-			? fileName
-			: `${fileName}${extensionFromMimeType}`
-		: buildPastedFileName(extensionFromMimeType)
+	let normalizedName = buildPastedFileName(extensionFromMimeType)
+	if (fileName) {
+		normalizedName = fileNameLower.endsWith(extensionFromMimeType) ? fileName : `${fileName}${extensionFromMimeType}`
+	}
 
 	try {
 		const lastModified = typeof file.lastModified === "number" ? file.lastModified : Date.now()

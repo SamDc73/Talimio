@@ -59,6 +59,12 @@ function Tag({
 	}
 
 	const Component = onClick ? "button" : "span"
+	const removeIconSizeByVariant = {
+		small: 10,
+		medium: 12,
+		large: 16,
+	}
+	const removeIconSize = removeIconSizeByVariant[size] ?? 12
 
 	return (
 		<Component
@@ -79,7 +85,7 @@ function Tag({
 					className="ml-1 hover:bg-destructive/10 hover:text-destructive rounded-full p-0.5 transition-colors"
 					aria-label="Remove tag"
 				>
-					<X size={size === "small" ? 10 : size === "large" ? 16 : 12} />
+					<X size={removeIconSize} />
 				</button>
 			)}
 		</Component>

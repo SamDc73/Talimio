@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from collections.abc import AsyncGenerator
@@ -209,9 +210,7 @@ async def create_book_endpoint(
         # Upload the file (returns None, we use the key as the path)
         await storage.upload(file_content, storage_key)
 
-        # The file path is the storage key we used
-        file_path = storage_key
-        logger.info(f"File uploaded with key: {file_path}")
+        logger.info(f"File uploaded with key: {storage_key}")
 
         # Extract metadata if needed
         metadata_service = BookMetadataService()
@@ -221,8 +220,6 @@ async def create_book_endpoint(
         )
 
         # Calculate file hash
-        import hashlib
-
         file_hash = hashlib.sha256(file_content).hexdigest()
 
         # Smart metadata priority: use extracted metadata when form data looks like filename hints
@@ -260,7 +257,7 @@ async def create_book_endpoint(
         facade = BooksFacade(auth.session)
         result = await facade.upload_book(
             user_id=auth.user_id,
-            file_path=file_path,
+            file_path=storage_key,
             title=final_title,
             metadata=book_metadata,
         )
@@ -275,13 +272,17 @@ async def create_book_endpoint(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result.get("error", "Failed to create book")
             )
 
-        book = result.get("book", {})
+        book_response = result.get("book")
+        book_id = result.get("book_id")
 
-        if getattr(book, "id", None):
-            background_tasks.add_task(_embed_book_background, book.id)
+        if book_id:
+            background_tasks.add_task(_embed_book_background, book_id)
 
-        # Build response explicitly to avoid any lazy attribute refresh during Pydantic validation
-        return BookResponseBuilder.build_book_response(book)
+        if isinstance(book_response, BookResponse):
+            return book_response
+
+        msg = "Failed to build book response"
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=msg)
 
     except HTTPException:
         raise

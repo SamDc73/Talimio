@@ -7,7 +7,7 @@ import { ErrorBoundary } from "react-error-boundary"
 import { getVideoTranscript } from "@/api/videosApi"
 import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
-import { useVideoTranscriptSync } from "./hooks/useVideoTranscriptSync"
+import { useVideoTranscriptSync } from "./hooks/use-video-transcript-sync"
 
 // Virtualization config for performance
 const CONFIG = {

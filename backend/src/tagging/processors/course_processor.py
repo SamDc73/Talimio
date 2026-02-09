@@ -9,7 +9,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.courses.models import Course, Lesson
-from src.database.session import DbSession
 
 
 logger = logging.getLogger(__name__)
@@ -18,7 +17,7 @@ logger = logging.getLogger(__name__)
 class CourseProcessor:
     """Processor for extracting course content for tagging."""
 
-    def __init__(self, session: DbSession | AsyncSession) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         """Initialize course processor.
 
         Args:
@@ -194,7 +193,7 @@ class CourseProcessor:
 async def process_course_for_tagging(
     course_id: UUID,
     user_id: UUID,
-    session: DbSession | AsyncSession,
+    session: AsyncSession,
 ) -> dict[str, str] | None:
     """Process a course to extract content for tagging.
 

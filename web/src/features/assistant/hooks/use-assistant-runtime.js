@@ -1,10 +1,10 @@
 import { useLocalRuntime } from "@assistant-ui/react"
 import { useCallback, useEffect, useMemo, useRef } from "react"
-import { useChatSidebar } from "@/contexts/chatSidebarContext"
-import { useAssistantModel } from "@/features/assistant/hooks/assistant-store"
+import { useChatSidebar } from "@/contexts/ChatSidebarContext"
+import { useAssistantModel } from "@/features/assistant/hooks/use-assistant-store"
 import logger from "@/lib/logger"
 import { assistantApi } from "../api/assistantApi"
-import { useContextualChat } from "./useContextualChat"
+import { useContextualChat } from "./use-contextual-chat"
 
 export const useAssistantRuntime = () => {
 	const assistantModel = useAssistantModel()

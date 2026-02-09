@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useCourseService } from "@/api/courseApi"
 import { Button } from "@/components/Button"
 import { MasteryCircle } from "@/components/MasteryCircle"
-import { useCourseContext } from "@/features/course/CourseContext.jsx"
-import OutlineNode from "@/features/course/components/navigation/OutlineNode.jsx"
-import { useCourseProgress } from "@/features/course/hooks/useCourseProgress"
+import { useCourseContext } from "@/features/course/CourseContext"
+import OutlineNode from "@/features/course/components/navigation/OutlineNode"
+import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
 import { useCourseNavigation } from "@/utils/navigationUtils"
 
 function extractLessonId(item) {
@@ -108,11 +108,10 @@ function OutlineView() {
 	}, [modules])
 
 	const completedIds = Array.isArray(metadata?.completedLessons) ? metadata.completedLessons : []
-	const totalLessons = adaptiveEnabled
-		? typeof metadata?.totalLessons === "number"
-			? metadata.totalLessons
-			: flatLessons.length
-		: flatLessons.length
+	let totalLessons = flatLessons.length
+	if (adaptiveEnabled && typeof metadata?.totalLessons === "number") {
+		totalLessons = metadata.totalLessons
+	}
 	const completedCount = adaptiveEnabled ? completedIds.length : flatLessons.filter((l) => isCompleted(l.id)).length
 
 	const { data: frontierData } = useQuery({

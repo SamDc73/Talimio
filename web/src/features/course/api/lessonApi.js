@@ -1,4 +1,4 @@
-import { api } from "@/lib/apiClient.js"
+import { api } from "@/lib/apiClient"
 
 /**
  * Lesson-specific API functions

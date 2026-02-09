@@ -1,7 +1,7 @@
 import { useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { useCourseNavigation } from "@/utils/navigationUtils"
-import { useLessonCompleteMutation, useLessonProgressMutation } from "./useLessonData"
+import { useLessonCompleteMutation, useLessonProgressMutation } from "./use-lesson-data"
 
 /**
  * Business logic actions for lessons

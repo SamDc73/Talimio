@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useCourseProgress } from "@/features/course/hooks/useCourseProgress"
+import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
 import { useUpdateProgress } from "@/hooks/use-progress"
 import { fetchLesson } from "../api/lessonApi"
 

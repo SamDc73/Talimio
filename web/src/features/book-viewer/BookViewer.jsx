@@ -14,7 +14,7 @@ import {
 	useBookZoomLevel,
 	useSidebarOpen,
 	useToggleSidebar,
-} from "./hooks/useBookState"
+} from "./hooks/use-book-state"
 
 function BookViewerStatus({ tone, title, description }) {
 	if (tone === "loading") {
@@ -124,6 +124,18 @@ function BookViewerContent() {
 		const newSize = Math.max(50, zoomLevel - 25)
 		setBookZoom(bookId, newSize)
 	}
+	let viewerContent = (
+		<BookViewerStatus
+			tone="empty"
+			title="Unsupported file format"
+			description="Only PDF and EPUB files are supported."
+		/>
+	)
+	if (isPdf) {
+		viewerContent = <PdfViewer url={bookUrl} bookId={bookId} registerApi={handleRegisterApi} />
+	} else if (isEpub) {
+		viewerContent = <EpubViewer url={bookUrl} bookId={bookId} />
+	}
 
 	return (
 		<div className="flex h-screen bg-background">
@@ -155,19 +167,7 @@ function BookViewerContent() {
 
 			<main className={`flex-1 transition-all duration-300 ${sidebarOpen ? "ml-64" : "ml-0"} pt-16`}>
 				<div className="h-full overflow-hidden">
-					<ErrorBoundary>
-						{isPdf ? (
-							<PdfViewer url={bookUrl} bookId={bookId} registerApi={handleRegisterApi} />
-						) : isEpub ? (
-							<EpubViewer url={bookUrl} bookId={bookId} />
-						) : (
-							<BookViewerStatus
-								tone="empty"
-								title="Unsupported file format"
-								description="Only PDF and EPUB files are supported."
-							/>
-						)}
-					</ErrorBoundary>
+					<ErrorBoundary>{viewerContent}</ErrorBoundary>
 				</div>
 			</main>
 		</div>

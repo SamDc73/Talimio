@@ -31,14 +31,14 @@
 				"noVar": "error",
 				"useStrictMode": "warn"
 			},
-			"style": {
-				"useConst": "error",
-				"noNonNullAssertion": "off",
-				"useTemplate": "error",
-				"useShorthandFunctionType": "error",
-				"noDefaultExport": "off",
-				"noNestedTernary": "off",
-				"noParameterAssign": "error",
+				"style": {
+					"useConst": "error",
+					"noNonNullAssertion": "off",
+					"useTemplate": "error",
+					"useShorthandFunctionType": "error",
+					"noDefaultExport": "off",
+					"noNestedTernary": "error",
+					"noParameterAssign": "error",
 				"useNamingConvention": {
 					"level": "error",
 					"options": {

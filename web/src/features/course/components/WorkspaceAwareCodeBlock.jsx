@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react"
 import { useWorkspaceRegistry } from "@/features/course/hooks/use-workspace-registry"
 import { flattenText, getLanguage } from "@/features/course/utils/codeBlockUtils"
-import ExecutableCodeBlock from "./ExecutableCodeBlock.jsx"
-import WorkspaceCodeRunner from "./WorkspaceCodeRunner.jsx"
+import ExecutableCodeBlock from "./ExecutableCodeBlock"
+import WorkspaceCodeRunner from "./WorkspaceCodeRunner"
 
 function formatLabel(id) {
 	if (!id) return "Workspace"

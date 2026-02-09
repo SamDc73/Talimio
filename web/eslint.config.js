@@ -151,6 +151,7 @@ export default [
 			"unicorn/no-array-reduce": "off",
 			"unicorn/no-for-loop": "off",
 			"unicorn/no-null": "off",
+			"unicorn/number-literal-case": "off",
 			"unicorn/prefer-default-parameters": "off",
 			"unicorn/prefer-global-this": "off",
 			"unicorn/prefer-optional-catch-binding": "off",
@@ -168,9 +169,10 @@ export default [
 						kebabCase: true,
 						pascalCase: true,
 					},
+					ignore: ["^JXGBoard\\.jsx$", "^JXGBoardPractice\\.jsx$"],
 				},
 			],
-			"no-nested-ternary": "off", // Biome enforces this (style/noNestedTernary)
+			"no-nested-ternary": "off",
 			"import/no-cycle": ["warn", { maxDepth: 1 }],
 			"import/no-duplicates": "error",
 			// Enforce project structure (no cross-feature imports, unidirectional architecture)
@@ -240,6 +242,7 @@ export default [
 			"unicorn/no-for-loop": "off",
 			"unicorn/no-null": "off",
 			"unicorn/no-nested-ternary": "off",
+			"unicorn/number-literal-case": "off",
 			"unicorn/prefer-default-parameters": "off",
 			"unicorn/prefer-global-this": "off",
 			"unicorn/prefer-optional-catch-binding": "off",
@@ -256,9 +259,9 @@ export default [
 						kebabCase: true,
 						pascalCase: true,
 					},
+					ignore: ["^JXGBoard\\.jsx$", "^JXGBoardPractice\\.jsx$"],
 				},
 			],
-			// Nested ternary - handled by Biome
 			"no-nested-ternary": "off",
 
 			"import/no-cycle": ["warn", { maxDepth: 1 }],

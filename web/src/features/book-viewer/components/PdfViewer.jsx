@@ -16,7 +16,7 @@ import { ZoomMode } from "@embedpdf/plugin-zoom"
 import { useZoom, ZoomPluginPackage } from "@embedpdf/plugin-zoom/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api as apiClient } from "@/lib/apiClient"
-import { useBookActions, useBookReadingState, useBookStoreHydrated } from "../hooks/useBookState"
+import { useBookActions, useBookReadingState, useBookStoreHydrated } from "../hooks/use-book-state"
 
 function ViewerRuntime({
 	bookId,
@@ -318,12 +318,12 @@ function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 
 		const documentId = bookId ? `book-${bookId}` : "pdf-document"
 		// Prefer saved zoomMode (Automatic/FitPage/FitWidth). If absent, use saved numeric zoom; else Automatic.
-		const defaultZoom =
-			typeof initialZoomModeRef.current === "string" && initialZoomModeRef.current
-				? initialZoomModeRef.current
-				: typeof initialZoomLevelRef.current === "number" && initialZoomLevelRef.current > 0
-					? initialZoomLevelRef.current / 100
-					: ZoomMode.Automatic
+		let defaultZoom = ZoomMode.Automatic
+		if (typeof initialZoomModeRef.current === "string" && initialZoomModeRef.current) {
+			defaultZoom = initialZoomModeRef.current
+		} else if (typeof initialZoomLevelRef.current === "number" && initialZoomLevelRef.current > 0) {
+			defaultZoom = initialZoomLevelRef.current / 100
+		}
 		return [
 			createPluginRegistration(LoaderPluginPackage, {
 				loadingOptions: {

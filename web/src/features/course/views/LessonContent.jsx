@@ -1,8 +1,8 @@
 import { useParams } from "react-router-dom"
-import { useCourseContext } from "@/features/course/CourseContext.jsx"
+import { useCourseContext } from "@/features/course/CourseContext"
 import { LessonViewer } from "@/features/course/components/LessonViewer"
-import { useLessonActions } from "@/features/course/hooks/useLessonActions"
-import { useLessonData } from "@/features/course/hooks/useLessonData"
+import { useLessonActions } from "@/features/course/hooks/use-lesson-actions"
+import { useLessonData } from "@/features/course/hooks/use-lesson-data"
 
 export default function LessonContent() {
 	const { lessonId } = useParams()

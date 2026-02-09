@@ -30,6 +30,8 @@ function SidebarItem({
 	}
 
 	const activeColor = variantColors[variant] || variantColors.default
+	const isHighlighted = isCompleted || isActive
+	const titleClassName = isHighlighted ? `font-semibold ${activeColor}` : "text-zinc-800"
 
 	return (
 		<li className={`flex items-start gap-3 ${className}`}>
@@ -37,9 +39,7 @@ function SidebarItem({
 			<button
 				type="button"
 				disabled={isLocked}
-				className={`text-left flex-1 min-w-0 ${
-					isCompleted ? `font-semibold ${activeColor}` : isActive ? `font-semibold ${activeColor}` : "text-zinc-800"
-				}`}
+				className={`text-left flex-1 min-w-0 ${titleClassName}`}
 				style={{
 					background: "none",
 					border: "none",

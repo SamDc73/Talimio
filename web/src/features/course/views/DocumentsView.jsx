@@ -13,13 +13,13 @@ import { CheckCircle2, Plus, RefreshCw, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/Button"
 import { Card } from "@/components/Card"
-import { useCourseContext } from "@/features/course/CourseContext.jsx"
+import { useCourseContext } from "@/features/course/CourseContext"
 import DocumentList from "@/features/course/components/DocumentList"
 import { DocumentStatusSummary } from "@/features/course/components/DocumentStatusBadge"
 import DocumentUploadModal from "@/features/course/components/DocumentUploadModal"
 import logger from "@/lib/logger"
 import { useDocumentsService } from "../api/documentsApi"
-import { usePolling } from "../hooks/usePolling"
+import { usePolling } from "../hooks/use-polling"
 
 const POLLING_INTERVAL = 5000 // 5 seconds
 

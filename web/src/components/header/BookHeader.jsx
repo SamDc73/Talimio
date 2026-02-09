@@ -2,7 +2,7 @@ import { Maximize, MessageSquare, PanelLeft, Type } from "lucide-react"
 import { Link } from "react-router-dom"
 import { UserAvatarMenu } from "@/components/header/MainHeader"
 import { TooltipButton } from "@/components/TooltipButton"
-import { useChatSidebar } from "@/contexts/chatSidebarContext"
+import { useChatSidebar } from "@/contexts/ChatSidebarContext"
 import useAppStore from "@/stores/useAppStore"
 import { formatProgressText } from "@/utils/progressUtils"
 
@@ -35,7 +35,12 @@ export function BookHeader({
 		(typeof epubProgressFromReading === "number" ? epubProgressFromReading : undefined) ??
 		(typeof epubProgressFromSlice === "number" ? epubProgressFromSlice : undefined) ??
 		0
-	const progressPercentage = isEpub ? epubProgressPct : totalPages ? Math.round((currentPage / totalPages) * 100) : 0
+	let progressPercentage = 0
+	if (isEpub) {
+		progressPercentage = epubProgressPct
+	} else if (totalPages) {
+		progressPercentage = Math.round((currentPage / totalPages) * 100)
+	}
 	// Derive a display page for EPUB from percentage and known totalPages
 	const displayCurrentPage =
 		isEpub && totalPages

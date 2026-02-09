@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCallback, useMemo, useState } from "react"
 import { useCourseService } from "@/api/courseApi"
 import logger from "@/lib/logger"
-import { useCourseProgress } from "./useCourseProgress.js"
+import { useCourseProgress } from "./use-course-progress"
 
 const normalizeConcept = (concept) => {
 	if (!concept || typeof concept !== "object") {

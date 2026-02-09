@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/Button"
-import { usePracticeItems } from "../hooks/use-practice-registry.js"
-import { LatexExpressionPractice } from "./LatexExpressionPractice.jsx"
+import { usePracticeItems } from "../hooks/use-practice-registry"
+import { LatexExpressionPractice } from "./LatexExpressionPractice"
 
 const DEFAULT_QUESTION_COUNT = 2
 
@@ -112,6 +112,59 @@ export function LessonQuickCheckPanel({ courseId, lessonId, lessonConceptId }) {
 	if (isDismissed || quickCheckItems.length === 0) {
 		return null
 	}
+	let panelBody = <p className="text-sm text-muted-foreground">No quick check items available yet.</p>
+	if (allComplete) {
+		panelBody = (
+			<div className="space-y-4">
+				<p className="text-sm text-muted-foreground">Nice work — you finished this quick check.</p>
+				<div className="flex flex-wrap items-center gap-3">
+					{quickCheckItems.length > visibleCount ? (
+						<Button type="button" size="sm" onClick={handlePracticeMore}>
+							Practice more (+1)
+						</Button>
+					) : null}
+					<Button type="button" variant="outline" size="sm" onClick={() => setIsDismissed(true)}>
+						Done for now
+					</Button>
+				</div>
+			</div>
+		)
+	} else if (currentItem) {
+		panelBody = (
+			<div className="space-y-4">
+				<LatexExpressionPractice
+					key={currentItem.id}
+					question={currentItem.question}
+					expectedLatex={currentItem.expectedLatex}
+					criteria={currentItem.criteria}
+					hints={currentItem.hints}
+					solutionLatex={currentItem.solutionLatex}
+					solutionMdx={currentItem.solutionMdx}
+					practiceContext="quick_check"
+					courseId={currentItem.courseId ?? courseId}
+					lessonId={currentItem.lessonId ?? lessonId}
+					lessonConceptId={currentItem.conceptId ?? lessonConceptId}
+					renderInQuickCheck={true}
+					onComplete={handleComplete}
+				/>
+
+				{isCurrentComplete ? (
+					<div className="flex flex-wrap items-center gap-3">
+						{visibleItems.length > 1 && !allComplete ? (
+							<Button type="button" size="sm" onClick={handleNext}>
+								Next question
+							</Button>
+						) : null}
+						{allComplete ? (
+							<Button type="button" size="sm" onClick={handlePracticeMore}>
+								Practice more (+1)
+							</Button>
+						) : null}
+					</div>
+				) : null}
+			</div>
+		)
+	}
 
 	return (
 		<section className="mt-8 rounded-xl border border-border/60 bg-background/60 shadow-sm">
@@ -132,58 +185,7 @@ export function LessonQuickCheckPanel({ courseId, lessonId, lessonConceptId }) {
 				</div>
 			</div>
 
-			<div className="px-5 py-6">
-				{allComplete ? (
-					<div className="space-y-4">
-						<p className="text-sm text-muted-foreground">Nice work — you finished this quick check.</p>
-						<div className="flex flex-wrap items-center gap-3">
-							{quickCheckItems.length > visibleCount ? (
-								<Button type="button" size="sm" onClick={handlePracticeMore}>
-									Practice more (+1)
-								</Button>
-							) : null}
-							<Button type="button" variant="outline" size="sm" onClick={() => setIsDismissed(true)}>
-								Done for now
-							</Button>
-						</div>
-					</div>
-				) : currentItem ? (
-					<div className="space-y-4">
-						<LatexExpressionPractice
-							key={currentItem.id}
-							question={currentItem.question}
-							expectedLatex={currentItem.expectedLatex}
-							criteria={currentItem.criteria}
-							hints={currentItem.hints}
-							solutionLatex={currentItem.solutionLatex}
-							solutionMdx={currentItem.solutionMdx}
-							practiceContext="quick_check"
-							courseId={currentItem.courseId ?? courseId}
-							lessonId={currentItem.lessonId ?? lessonId}
-							lessonConceptId={currentItem.conceptId ?? lessonConceptId}
-							renderInQuickCheck={true}
-							onComplete={handleComplete}
-						/>
-
-						{isCurrentComplete ? (
-							<div className="flex flex-wrap items-center gap-3">
-								{visibleItems.length > 1 && !allComplete ? (
-									<Button type="button" size="sm" onClick={handleNext}>
-										Next question
-									</Button>
-								) : null}
-								{allComplete ? (
-									<Button type="button" size="sm" onClick={handlePracticeMore}>
-										Practice more (+1)
-									</Button>
-								) : null}
-							</div>
-						) : null}
-					</div>
-				) : (
-					<p className="text-sm text-muted-foreground">No quick check items available yet.</p>
-				)}
-			</div>
+			<div className="px-5 py-6">{panelBody}</div>
 		</section>
 	)
 }

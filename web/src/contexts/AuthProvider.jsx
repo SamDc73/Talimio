@@ -3,7 +3,7 @@ import { useEffect, useState } from "react"
 import { api } from "@/lib/apiClient"
 import logger from "@/lib/logger"
 import { securityMonitor } from "@/utils/securityConfig"
-import { AuthContext } from "./AuthContext.js"
+import { AuthContext } from "./AuthContext"
 
 export function AuthProvider({ children }) {
 	const [user, setUser] = useState(null)

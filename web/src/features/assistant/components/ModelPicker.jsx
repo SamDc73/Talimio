@@ -3,7 +3,7 @@ import { useEffect, useMemo } from "react"
 import { Button } from "@/components/Button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/DropdownMenu"
 import { useAssistantModelsQuery } from "@/features/assistant/api/useAssistantModelsQuery"
-import { useAssistantModel, useSetAssistantModel } from "@/features/assistant/hooks/assistant-store"
+import { useAssistantModel, useSetAssistantModel } from "@/features/assistant/hooks/use-assistant-store"
 import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
 
@@ -29,6 +29,61 @@ export function ModelPicker({ className }) {
 	const currentModel = models.find((m) => m.id === assistantModel) || {
 		id: assistantModel || "Select Model",
 	}
+	const renderModelItems = () => {
+		if (isLoading) {
+			return (
+				<DropdownMenuItem disabled className="text-muted-foreground text-sm">
+					Loading models...
+				</DropdownMenuItem>
+			)
+		}
+
+		if (isError) {
+			return (
+				<DropdownMenuItem disabled className="text-destructive text-sm">
+					Failed to load models
+				</DropdownMenuItem>
+			)
+		}
+
+		if (models.length === 0) {
+			return (
+				<DropdownMenuItem disabled className="text-muted-foreground text-sm">
+					No models available
+				</DropdownMenuItem>
+			)
+		}
+
+		return models.map((model) => {
+			const isSelected = model.id === assistantModel
+
+			return (
+				<DropdownMenuItem
+					key={model.id}
+					onClick={() => setAssistantModel(model.id)}
+					className={cn(
+						"relative flex items-center justify-between",
+						"px-3 py-2.5 rounded-lg cursor-pointer",
+						"transition-all duration-150",
+						isSelected && "bg-muted/60",
+						!isSelected && "hover:bg-muted/60"
+					)}
+				>
+					<div className="flex items-center gap-3">
+						{isSelected && <Check className="size-4  text-muted-foreground shrink-0" />}
+						<div className={cn("flex flex-col", !isSelected && "ml-7")}>
+							<span className={cn("text-sm", isSelected ? "text-foreground font-medium" : "text-muted-foreground")}>
+								{model.displayName || model.id}
+							</span>
+						</div>
+					</div>
+					<div className="flex items-center gap-2">
+						{model.isDefault && <span className="text-xs text-muted-foreground">Default</span>}
+					</div>
+				</DropdownMenuItem>
+			)
+		})
+	}
 
 	return (
 		<DropdownMenu>
@@ -51,51 +106,7 @@ export function ModelPicker({ className }) {
 				align="start"
 				className={cn("w-56 p-2", "bg-card/95 backdrop-blur-lg", "border border-border shadow-lg", "rounded-xl")}
 			>
-				{isLoading ? (
-					<DropdownMenuItem disabled className="text-muted-foreground text-sm">
-						Loading models...
-					</DropdownMenuItem>
-				) : isError ? (
-					<DropdownMenuItem disabled className="text-destructive text-sm">
-						Failed to load models
-					</DropdownMenuItem>
-				) : models.length > 0 ? (
-					models.map((model) => {
-						const isSelected = model.id === assistantModel
-
-						return (
-							<DropdownMenuItem
-								key={model.id}
-								onClick={() => setAssistantModel(model.id)}
-								className={cn(
-									"relative flex items-center justify-between",
-									"px-3 py-2.5 rounded-lg cursor-pointer",
-									"transition-all duration-150",
-									isSelected && "bg-muted/60",
-									!isSelected && "hover:bg-muted/60"
-								)}
-							>
-								<div className="flex items-center gap-3">
-									{isSelected && <Check className="size-4  text-muted-foreground shrink-0" />}
-									<div className={cn("flex flex-col", !isSelected && "ml-7")}>
-										<span
-											className={cn("text-sm", isSelected ? "text-foreground font-medium" : "text-muted-foreground")}
-										>
-											{model.displayName || model.id}
-										</span>
-									</div>
-								</div>
-								<div className="flex items-center gap-2">
-									{model.isDefault && <span className="text-xs text-muted-foreground">Default</span>}
-								</div>
-							</DropdownMenuItem>
-						)
-					})
-				) : (
-					<DropdownMenuItem disabled className="text-muted-foreground text-sm">
-						No models available
-					</DropdownMenuItem>
-				)}
+				{renderModelItems()}
 			</DropdownMenuContent>
 		</DropdownMenu>
 	)

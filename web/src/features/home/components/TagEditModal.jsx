@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
 import logger from "@/lib/logger"
-import useTagStore from "../../../stores/useTagStore"
+import useTagStore from "@/stores/useTagStore"
 
 import { TagList } from "./Tag"
 import TagInput from "./TagInput"

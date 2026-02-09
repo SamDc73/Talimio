@@ -9,8 +9,8 @@
  */
 
 import { useMemo } from "react"
+import { useApi } from "@/hooks/use-api"
 import { api } from "@/lib/apiClient"
-import { useApi } from "../../../hooks/use-api"
 
 /**
  * Hook for document operations

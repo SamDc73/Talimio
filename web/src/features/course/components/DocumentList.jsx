@@ -148,6 +148,32 @@ function DocumentList({
 		if (sortBy !== field) return null
 		return sortOrder === "asc" ? <ArrowUp className="size-4 " /> : <ArrowDown className="size-4 " />
 	}
+	let emptyStateContent = emptyMessage
+	if (searchTerm || statusFilter !== "all") {
+		emptyStateContent = (
+			<div className="p-8 text-center">
+				<FileText className="size-12  text-muted-foreground/70 mx-auto mb-4" />
+				<p className="text-muted-foreground mb-2">No documents match your criteria</p>
+				<Button
+					variant="outline"
+					size="sm"
+					onClick={() => {
+						setSearchTerm("")
+						setStatusFilter("all")
+					}}
+				>
+					Clear filters
+				</Button>
+			</div>
+		)
+	} else if (typeof emptyMessage === "string") {
+		emptyStateContent = (
+			<div className="p-8 text-center">
+				<FileText className="size-12  text-muted-foreground/70 mx-auto mb-4" />
+				<p className="text-muted-foreground mb-2">{emptyMessage}</p>
+			</div>
+		)
+	}
 
 	if (isLoading) {
 		return (
@@ -213,31 +239,7 @@ function DocumentList({
 
 			{/* Document List */}
 			{filteredDocuments.length === 0 ? (
-				<Card>
-					{searchTerm || statusFilter !== "all" ? (
-						<div className="p-8 text-center">
-							<FileText className="size-12  text-muted-foreground/70 mx-auto mb-4" />
-							<p className="text-muted-foreground mb-2">No documents match your criteria</p>
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={() => {
-									setSearchTerm("")
-									setStatusFilter("all")
-								}}
-							>
-								Clear filters
-							</Button>
-						</div>
-					) : typeof emptyMessage === "string" ? (
-						<div className="p-8 text-center">
-							<FileText className="size-12  text-muted-foreground/70 mx-auto mb-4" />
-							<p className="text-muted-foreground mb-2">{emptyMessage}</p>
-						</div>
-					) : (
-						emptyMessage
-					)}
-				</Card>
+				<Card>{emptyStateContent}</Card>
 			) : (
 				<Card>
 					<div className="overflow-hidden">

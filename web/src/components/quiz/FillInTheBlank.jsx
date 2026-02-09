@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { QuizMarkdown } from "@/components/quiz/QuizMarkdown.jsx"
+import { QuizMarkdown } from "@/components/quiz/QuizMarkdown"
 
 export function FillInTheBlank({ question, answer, caseSensitive = false, explanation }) {
 	const [userAnswer, setUserAnswer] = useState("")
@@ -19,6 +19,12 @@ export function FillInTheBlank({ question, answer, caseSensitive = false, explan
 	const isCorrect = caseSensitive
 		? userAnswer.trim() === answer
 		: userAnswer.trim().toLowerCase() === answer.toLowerCase()
+	let inputStateClass = "bg-background border-input focus:border-completed/40 placeholder:text-muted-foreground/70"
+	if (showFeedback) {
+		inputStateClass = isCorrect
+			? "bg-completed/10 border-completed/30 text-completed dark:bg-completed/20 dark:border-completed/30 dark:text-completed"
+			: "bg-destructive/10 border-destructive text-destructive dark:bg-destructive/20 dark:border-destructive/30 dark:text-destructive"
+	}
 
 	return (
 		<div className="border-l-4 border-l-completed/20 pl-6 my-8 bg-background/30 rounded-r-lg" data-askai-exclude="true">
@@ -36,13 +42,7 @@ export function FillInTheBlank({ question, answer, caseSensitive = false, explan
 					}}
 					disabled={showFeedback}
 					placeholder="Type your answer here..."
-					className={`w-full px-4 py-3 text-sm rounded-lg border transition-all focus:ring-2 focus:ring-ring focus:outline-none ${
-						showFeedback
-							? isCorrect
-								? "bg-completed/10 border-completed/30 text-completed dark:bg-completed/20 dark:border-completed/30 dark:text-completed"
-								: "bg-destructive/10 border-destructive text-destructive dark:bg-destructive/20 dark:border-destructive/30 dark:text-destructive"
-							: "bg-background border-input focus:border-completed/40 placeholder:text-muted-foreground/70"
-					}`}
+					className={`w-full px-4 py-3 text-sm rounded-lg border transition-all focus:ring-2 focus:ring-ring focus:outline-none ${inputStateClass}`}
 				/>
 			</div>
 

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Loader2 } from "lucide-react"
 import { useMemo } from "react"
 import { useCourseService } from "@/api/courseApi"
-import { useCourseContext } from "@/features/course/CourseContext.jsx"
+import { useCourseContext } from "@/features/course/CourseContext"
 import TrackPath from "@/features/course/components/TrackPath"
 
 export default function TrackView() {

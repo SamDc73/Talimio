@@ -1,6 +1,6 @@
 import { Sparkles } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useChatSidebar } from "@/contexts/chatSidebarContext"
+import { useChatSidebar } from "@/contexts/ChatSidebarContext"
 import logger from "@/lib/logger"
 
 /**

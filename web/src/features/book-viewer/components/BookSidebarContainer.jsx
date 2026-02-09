@@ -1,6 +1,6 @@
 import BookSidebar from "@/components/sidebar/BookSidebar"
-import { useBookChaptersApi } from "@/features/book-viewer/hooks/useBookChaptersApi"
-import { useBookProgress } from "@/features/book-viewer/hooks/useBookProgress"
+import { useBookChaptersApi } from "@/features/book-viewer/hooks/use-book-chapters-api"
+import { useBookProgress } from "@/features/book-viewer/hooks/use-book-progress"
 
 export default function BookSidebarContainer(props) {
 	const { bookId } = props

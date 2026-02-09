@@ -1,12 +1,12 @@
 import { MDXProvider } from "@mdx-js/react"
-import { FillInTheBlank } from "@/components/quiz/FillInTheBlank.jsx"
-import { FreeForm } from "@/components/quiz/FreeForm.jsx"
-import { MultipleChoice } from "@/components/quiz/MultipleChoice.jsx"
-import { useMdxCompile } from "@/features/course/hooks/useMdxCompile"
-import { JXGBoardPractice } from "./JXGBoardPractice.jsx"
-import { LatexExpressionPractice } from "./LatexExpressionPractice.jsx"
-import WorkspaceAwareCodeBlock from "./WorkspaceAwareCodeBlock.jsx"
-import { WorkspaceRegistryProvider } from "./workspaceContext"
+import { FillInTheBlank } from "@/components/quiz/FillInTheBlank"
+import { FreeForm } from "@/components/quiz/FreeForm"
+import { MultipleChoice } from "@/components/quiz/MultipleChoice"
+import { useMdxCompile } from "@/features/course/hooks/use-mdx-compile"
+import { JXGBoardPractice } from "./JXGBoardPractice"
+import { LatexExpressionPractice } from "./LatexExpressionPractice"
+import WorkspaceAwareCodeBlock from "./WorkspaceAwareCodeBlock"
+import { WorkspaceRegistryProvider } from "./WorkspaceRegistryProvider"
 
 // Static component overrides - defined once outside component
 const MDX_COMPONENTS = {
