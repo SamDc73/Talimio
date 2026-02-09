@@ -1,4 +1,4 @@
-import { api } from "@/lib/apiClient.js"
+import { api } from "@/lib/apiClient"
 
 export async function executeCode({ code, language, lessonId, courseId, files, entryFile, workspaceId }) {
 	if (!code || !language) {

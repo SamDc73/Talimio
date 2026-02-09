@@ -1,7 +1,7 @@
 import "mathlive"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { QuizMarkdown } from "@/components/quiz/QuizMarkdown.jsx"
+import { QuizMarkdown } from "@/components/quiz/QuizMarkdown"
 
 const normalizeHints = (hints) => {
 	if (!hints) {

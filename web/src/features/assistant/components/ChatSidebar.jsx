@@ -10,9 +10,9 @@ import {
 	useAssistantSidebarWidth,
 	useSetAssistantSidebarWidth,
 	useToggleAssistantPinned,
-} from "@/features/assistant/hooks/assistant-store"
+} from "@/features/assistant/hooks/use-assistant-store"
 import { cn } from "@/lib/utils"
-import { useAssistantRuntime } from "../hooks/useAssistantRuntime"
+import { useAssistantRuntime } from "../hooks/use-assistant-runtime"
 
 const MIN_WIDTH = 320
 const MAX_WIDTH = 600

@@ -21,7 +21,7 @@ import {
 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/Button"
-import { useChatSidebar } from "@/contexts/chatSidebarContext"
+import { useChatSidebar } from "@/contexts/ChatSidebarContext"
 import {
 	ComposerAddAttachment,
 	ComposerAttachments,

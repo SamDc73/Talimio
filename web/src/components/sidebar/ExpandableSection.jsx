@@ -25,14 +25,25 @@ function ExpandableSection({
 	}
 
 	const activeStyle = variantColors[variant] || variantColors.default
-	const chevronColor =
-		variant === "course"
-			? "text-course"
-			: variant === "book"
-				? "text-book"
-				: variant === "video"
-					? "text-video"
-					: "text-primary"
+	let chevronColor = "text-primary"
+	switch (variant) {
+		case "course": {
+			chevronColor = "text-course"
+
+			break
+		}
+		case "book": {
+			chevronColor = "text-book"
+
+			break
+		}
+		case "video": {
+			chevronColor = "text-video"
+
+			break
+		}
+		// No default
+	}
 
 	return (
 		<div

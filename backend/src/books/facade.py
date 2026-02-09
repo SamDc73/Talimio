@@ -16,6 +16,7 @@ from sqlalchemy import select
 
 from src.books.models import Book
 from src.books.schemas import BookResponse, BookWithProgress
+from src.database.session import async_session_maker
 
 from .services.book_content_service import BookContentService
 from .services.book_progress_service import BookProgressService
@@ -134,7 +135,17 @@ class BooksFacade:
                     extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)},
                 )
 
-            return {"book": book, "success": True}
+            # Reload from DB so we return a stable snapshot even if other operations used rollbacks/commits.
+            if book_id:
+                refreshed_book = await self._session.get(Book, book_id, populate_existing=True)
+                if refreshed_book:
+                    book = refreshed_book
+
+            return {
+                "book": BookResponseBuilder.build_book_response(book),
+                "book_id": book_id,
+                "success": True,
+            }
 
         except Exception as e:
             logger.exception("Error uploading book", extra={"user_id": str(user_id), "title": title, "error": str(e)})
@@ -147,44 +158,40 @@ class BooksFacade:
             from src.tagging.processors.book_processor import process_book_for_tagging
             from src.tagging.service import TaggingService
 
-            # Extract content preview for tagging
-            content_data = await process_book_for_tagging(book_id, user_id, self._session)
-            if not content_data:
-                logger.warning(
-                    "Book not found or no content data for tagging",
-                    extra={"user_id": str(user_id), "book_id": str(book_id)},
-                )
-                return []
-
-            # Close the read transaction before making slow external calls (LLM tagging).
-            # This avoids holding an "idle in transaction" connection open via the session pooler.
-            await self._session.rollback()
-
-            # Generate tags via TaggingService
-            tagging_service = TaggingService(self._session)
-            tags = await tagging_service.tag_content(
-                content_id=book_id,
-                content_type="book",
-                user_id=user_id,
-                title=content_data.get("title", ""),
-                content_preview=content_data.get("content_preview", ""),
-            )
-
-            # Persist tags onto the Book model for backward compatibility
-            if tags:
-                db_book = await self._session.get(Book, book_id)
-                if db_book:
-                    db_book.tags = json.dumps(tags)
-                    await self._session.commit()
-                    logger.info(
-                        "Book tagged successfully",
-                        extra={"user_id": str(user_id), "book_id": str(book_id), "tag_count": len(tags)},
+            # Use a short-lived dedicated session for slow tagging work so request session state stays stable.
+            async with async_session_maker() as tagging_session:
+                content_data = await process_book_for_tagging(book_id, user_id, tagging_session)
+                if not content_data:
+                    logger.warning(
+                        "Book not found or no content data for tagging",
+                        extra={"user_id": str(user_id), "book_id": str(book_id)},
                     )
-            else:
-                # Still commit any flushed tag associations inside TaggingService
-                await self._session.commit()
+                    return []
 
-            return tags or []
+                tagging_service = TaggingService(tagging_session)
+                tags = await tagging_service.tag_content(
+                    content_id=book_id,
+                    content_type="book",
+                    user_id=user_id,
+                    title=content_data.get("title", ""),
+                    content_preview=content_data.get("content_preview", ""),
+                )
+
+                # Persist tags onto the Book model for backward compatibility.
+                if tags:
+                    db_book = await tagging_session.get(Book, book_id)
+                    if db_book:
+                        db_book.tags = json.dumps(tags)
+                        await tagging_session.commit()
+                        logger.info(
+                            "Book tagged successfully",
+                            extra={"user_id": str(user_id), "book_id": str(book_id), "tag_count": len(tags)},
+                        )
+                else:
+                    # Still commit any flushed tag associations inside TaggingService.
+                    await tagging_session.commit()
+
+                return tags or []
 
         except Exception as e:
             logger.exception(

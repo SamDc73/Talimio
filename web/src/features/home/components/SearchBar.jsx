@@ -27,6 +27,92 @@ function SearchBar({
 	sortDirection,
 	toggleSortDirection,
 }) {
+	let searchModeBackgroundClass = ""
+	let searchModeIcon = <Search className="text-muted-foreground" size={20} />
+	let searchPlaceholder = "Search your courses and books..."
+	if (isGenerateMode) {
+		searchModeBackgroundClass = "bg-course/10"
+		searchModeIcon = <Sparkles className="text-course" size={20} />
+		searchPlaceholder = "What do you want to learn about?"
+	} else if (isYoutubeMode) {
+		searchModeBackgroundClass = "bg-video/10"
+		searchModeIcon = <Youtube className="text-video" size={20} />
+		searchPlaceholder = "Paste a YouTube URL or search for videos..."
+	}
+
+	const renderActionControls = () => {
+		if (isGenerateMode) {
+			return (
+				<>
+					<div className="h-8 w-px bg-border" />
+					<Button variant="ghost" size="sm" onClick={() => onSetMode(null)} className="text-muted-foreground">
+						Cancel
+					</Button>
+					<Button
+						size="sm"
+						onClick={onGenerateCourse}
+						disabled={!searchQuery.trim() || isGenerating}
+						className="bg-course hover:bg-course-accent text-white"
+					>
+						{isGenerating ? "Generating..." : "Generate"}
+					</Button>
+				</>
+			)
+		}
+
+		if (isYoutubeMode) {
+			return (
+				<>
+					<div className="h-8 w-px bg-border" />
+					<Button variant="ghost" size="sm" onClick={() => onSetMode(null)} className="text-muted-foreground">
+						Cancel
+					</Button>
+					<Button
+						size="sm"
+						onClick={() => {
+							if (searchQuery.trim()) {
+								onYoutubeAdd(searchQuery)
+								onSetMode(null)
+							}
+						}}
+						disabled={!searchQuery.trim()}
+						className="bg-video hover:bg-video-accent text-white"
+					>
+						Add Video
+					</Button>
+				</>
+			)
+		}
+
+		return (
+			<>
+				<Button
+					onClick={onGenerateCourse}
+					size="sm"
+					className="bg-linear-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white flex items-center gap-1"
+				>
+					<Sparkles className="size-3.5 " />
+					Generate Course
+				</Button>
+				<div className="h-8 w-px bg-border" />
+				<FilterPopover
+					filterOptions={filterOptions}
+					sortOptions={sortOptions}
+					activeFilter={activeFilter}
+					setActiveFilter={setActiveFilter}
+					archiveFilter={archiveFilter}
+					setArchiveFilter={setArchiveFilter}
+					tagFilter={tagFilter}
+					setTagFilter={setTagFilter}
+					activeSort={activeSort}
+					setActiveSort={setActiveSort}
+					sortDirection={sortDirection}
+					toggleSortDirection={toggleSortDirection}
+				/>
+			</>
+		)
+	}
+
 	return (
 		<motion.div
 			initial={{ opacity: 0, y: 20 }}
@@ -37,26 +123,12 @@ function SearchBar({
 			<div className="bg-card rounded-2xl shadow-sm p-2 border border-border transition-all hover:shadow-md">
 				<div className="flex items-center">
 					<div
-						className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${
-							isGenerateMode ? "bg-course/10" : isYoutubeMode ? "bg-video/10" : ""
-						}`}
+						className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${searchModeBackgroundClass}`}
 					>
-						{isGenerateMode ? (
-							<Sparkles className="text-course" size={20} />
-						) : isYoutubeMode ? (
-							<Youtube className="text-video" size={20} />
-						) : (
-							<Search className="text-muted-foreground" size={20} />
-						)}
+						{searchModeIcon}
 						<Input
 							type="text"
-							placeholder={
-								isGenerateMode
-									? "What do you want to learn about?"
-									: isYoutubeMode
-										? "Paste a YouTube URL or search for videos..."
-										: "Search your courses and books..."
-							}
+							placeholder={searchPlaceholder}
 							className="border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
 							value={searchQuery}
 							onChange={(e) => setSearchQuery(e.target.value)}
@@ -68,70 +140,7 @@ function SearchBar({
 						)}
 					</div>
 
-					<div className="flex items-center gap-2 pl-2">
-						{isGenerateMode ? (
-							<>
-								<div className="h-8 w-px bg-border" />
-								<Button variant="ghost" size="sm" onClick={() => onSetMode(null)} className="text-muted-foreground">
-									Cancel
-								</Button>
-								<Button
-									size="sm"
-									onClick={onGenerateCourse}
-									disabled={!searchQuery.trim() || isGenerating}
-									className="bg-course hover:bg-course-accent text-white"
-								>
-									{isGenerating ? "Generating..." : "Generate"}
-								</Button>
-							</>
-						) : isYoutubeMode ? (
-							<>
-								<div className="h-8 w-px bg-border" />
-								<Button variant="ghost" size="sm" onClick={() => onSetMode(null)} className="text-muted-foreground">
-									Cancel
-								</Button>
-								<Button
-									size="sm"
-									onClick={() => {
-										if (searchQuery.trim()) {
-											onYoutubeAdd(searchQuery)
-											onSetMode(null)
-										}
-									}}
-									disabled={!searchQuery.trim()}
-									className="bg-video hover:bg-video-accent text-white"
-								>
-									Add Video
-								</Button>
-							</>
-						) : (
-							<>
-								<Button
-									onClick={onGenerateCourse}
-									size="sm"
-									className="bg-linear-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white flex items-center gap-1"
-								>
-									<Sparkles className="size-3.5 " />
-									Generate Course
-								</Button>
-								<div className="h-8 w-px bg-border" />
-								<FilterPopover
-									filterOptions={filterOptions}
-									sortOptions={sortOptions}
-									activeFilter={activeFilter}
-									setActiveFilter={setActiveFilter}
-									archiveFilter={archiveFilter}
-									setArchiveFilter={setArchiveFilter}
-									tagFilter={tagFilter}
-									setTagFilter={setTagFilter}
-									activeSort={activeSort}
-									setActiveSort={setActiveSort}
-									sortDirection={sortDirection}
-									toggleSortDirection={toggleSortDirection}
-								/>
-							</>
-						)}
-					</div>
+					<div className="flex items-center gap-2 pl-2">{renderActionControls()}</div>
 				</div>
 			</div>
 		</motion.div>

@@ -13,7 +13,7 @@ import {
 	getUserSettings,
 	listMcpServers,
 	updateCustomInstructions,
-} from "@/api/personalizationApi.js"
+} from "@/api/personalizationApi"
 import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/Dialog"
 import { Input } from "@/components/Input"
@@ -401,13 +401,16 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 	)
 
 	// Memories view content
-	const renderMemoriesView = () => (
-		<div className="space-y-3">
-			{isLoadingMemories ? (
+	const renderMemoriesView = () => {
+		let memoriesContent = null
+		if (isLoadingMemories) {
+			memoriesContent = (
 				<div className="flex items-center justify-center py-16">
 					<Loader2 className="size-5  animate-spin text-muted-foreground" />
 				</div>
-			) : memories.length === 0 ? (
+			)
+		} else if (memories.length === 0) {
+			memoriesContent = (
 				<div className="py-16 text-center">
 					<div className="inline-flex items-center justify-center size-14  rounded-2xl bg-muted/50 mb-4">
 						<Zap className="size-6  text-muted-foreground/50" />
@@ -415,7 +418,9 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 					<p className="text-sm text-muted-foreground">No memories yet</p>
 					<p className="text-xs text-muted-foreground/70 mt-1">Memories are created as you learn</p>
 				</div>
-			) : (
+			)
+		} else {
+			memoriesContent = (
 				<div className="space-y-2">
 					{memories.map((memory, index) => (
 						<div
@@ -461,9 +466,11 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 						</div>
 					)}
 				</div>
-			)}
-		</div>
-	)
+			)
+		}
+
+		return <div className="space-y-3">{memoriesContent}</div>
+	}
 
 	// MCP servers list view
 	const renderMcpView = () => (

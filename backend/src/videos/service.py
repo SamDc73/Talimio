@@ -27,6 +27,7 @@ from src.videos.schemas import (
     VideoTranscriptResponse,
     VideoUpdate,
 )
+from src.videos.services.video_progress_service import VideoProgressService
 
 
 logger = logging.getLogger(__name__)
@@ -583,14 +584,17 @@ class VideoService:
                 total = len(all_chapters)
                 completion_pct = (len(completed_chapter_ids) / total) * 100 if total > 0 else 0.0
 
-                # Persist unified progress for this user/video via facade (imports locally to avoid circular deps)
-                from src.videos.facade import VideosFacade
-
-                await VideosFacade(db).update_video_progress(
+                progress_result = await VideoProgressService(db).update_progress(
                     video.id,
                     user_id,
                     {"completion_percentage": completion_pct, "completed_chapters": completed_chapter_ids},
                 )
+                if "error" in progress_result:
+                    logger.warning(
+                        "Failed to update unified progress for video %s after chapter status change: %s",
+                        video_id,
+                        progress_result["error"],
+                    )
         except Exception as e:
             logger.warning(f"Failed to update unified progress for video {video_id} after chapter status change: {e}")
 
@@ -624,15 +628,15 @@ class VideoService:
         completed_count = len(completed_chapter_ids)
         completion_percentage = (completed_count / total_chapters) * 100
 
-        # Update progress using facade if user_id is provided
+        # Update progress if user_id is provided
         if user_id:
             progress_data = {
                 "completion_percentage": completion_percentage,
                 "completed_chapters": completed_chapter_ids,
             }
-            from src.videos.facade import VideosFacade
-
-            await VideosFacade(db).update_video_progress(parse_video_id(video_id), user_id, progress_data)
+            progress_result = await VideoProgressService(db).update_progress(video.id, user_id, progress_data)
+            if "error" in progress_result:
+                logger.warning("Failed to sync chapter progress for video %s: %s", video_id, progress_result["error"])
 
         # Update video timestamp
         video.updated_at = datetime.now(UTC)

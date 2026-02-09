@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useState } from "react"
 import { useCourseService } from "@/api/courseApi"
 import logger from "@/lib/logger"
-import { useCourseProgress } from "./useCourseProgress.js"
-import { useLectorReview } from "./useLectorReview.js"
+import { useCourseProgress } from "./use-course-progress"
+import { useLectorReview } from "./use-lector-review"
 
 const LOW_FRICTION_MAX_ATTEMPTS = 1
 const LOW_FRICTION_MAX_MS = 30_000

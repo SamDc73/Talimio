@@ -3,8 +3,8 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router-dom"
 
 import { useCourseService } from "@/api/courseApi"
-import { useCourseData } from "@/features/course/hooks/useCourseData"
-import { useOutlineData } from "@/features/course/hooks/useOutlineData"
+import { useCourseData } from "@/features/course/hooks/use-course-data"
+import { useOutlineData } from "@/features/course/hooks/use-outline-data"
 
 const CourseContext = createContext(null)
 

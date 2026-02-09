@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/Button"
-import { JXGBoard } from "@/components/JXGBoard.jsx"
-import { useLatexPracticeReview } from "../hooks/useLatexPracticeReview.js"
+import { JXGBoard } from "@/components/JXGBoard"
+import { useLatexPracticeReview } from "../hooks/use-latex-practice-review"
 
 const isObjectRecord = (value) => {
 	return Boolean(value) && typeof value === "object" && !Array.isArray(value)

@@ -2,8 +2,8 @@ import { Files, FileText, GitBranch, MessageSquare, PanelLeft } from "lucide-rea
 import { Link } from "react-router-dom"
 import { UserAvatarMenu } from "@/components/header/MainHeader"
 import { TooltipButton } from "@/components/TooltipButton"
-import { useChatSidebar } from "@/contexts/chatSidebarContext"
-import { useCourseProgress } from "@/features/course/hooks/useCourseProgress"
+import { useChatSidebar } from "@/contexts/ChatSidebarContext"
+import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
 import { cn } from "@/lib/utils"
 
 export function CourseHeader({
@@ -19,16 +19,23 @@ export function CourseHeader({
 	const { toggleChat } = useChatSidebar()
 
 	const { progress: courseProgress } = useCourseProgress(courseId)
-	const computedProgressRaw =
-		adaptiveEnabled && typeof progress === "number"
-			? progress
-			: typeof courseProgress?.percentage === "number"
-				? courseProgress.percentage
-				: progress
+	let computedProgressRaw = progress
+	if (!adaptiveEnabled && typeof courseProgress?.percentage === "number") {
+		computedProgressRaw = courseProgress.percentage
+	}
 	const computedProgress = Math.max(
 		0,
 		Math.min(100, Math.round(Number.isFinite(computedProgressRaw) ? computedProgressRaw : 0))
 	)
+	let nextModeLabel = "Outline"
+	let currentModeIcon = <Files className="size-4 " />
+	if (mode === "outline") {
+		nextModeLabel = "Track"
+		currentModeIcon = <FileText className="size-4 " />
+	} else if (mode === "track") {
+		nextModeLabel = "Documents"
+		currentModeIcon = <GitBranch className="size-4 " />
+	}
 
 	return (
 		<header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-b border-border shadow-sm">
@@ -108,17 +115,9 @@ export function CourseHeader({
 									const nextIndex = (currentIndex + 1) % modes.length
 									onModeChange(modes[nextIndex])
 								}}
-								tooltipContent={`Switch View (${
-									mode === "outline" ? "Track" : mode === "track" ? "Documents" : "Outline"
-								} next)`}
+								tooltipContent={`Switch View (${nextModeLabel} next)`}
 							>
-								{mode === "outline" ? (
-									<FileText className="size-4 " />
-								) : mode === "track" ? (
-									<GitBranch className="size-4 " />
-								) : (
-									<Files className="size-4 " />
-								)}
+								{currentModeIcon}
 							</TooltipButton>
 						</div>
 

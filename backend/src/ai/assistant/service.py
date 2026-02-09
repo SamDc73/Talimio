@@ -8,6 +8,7 @@ from typing import Any
 from uuid import UUID
 
 import fitz  # PyMuPDF
+from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,7 @@ from src.ai import AGENT_ID_ASSISTANT
 from src.ai.client import LLMClient
 from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT
 from src.books.models import Book
-from src.courses.facade import CoursesFacade
+from src.courses.services.course_query_service import CourseQueryService
 from src.storage.factory import get_storage_provider
 from src.videos.models import Video
 
@@ -383,13 +384,19 @@ async def _course_context(
     user_id = context_meta["user_id"]
     lesson_id = context_meta.get("lesson_id")
 
-    course_service = CoursesFacade(session)
-    result = await course_service.get_course(resource_id, user_id)
-
-    if not result.get("success") or not result.get("course"):
+    course_query_service = CourseQueryService(session)
+    try:
+        course_response = await course_query_service.get_course(resource_id, user_id)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_404_NOT_FOUND:
+            return None
+        logger.exception("Failed to load course context for course %s", resource_id)
+        return None
+    except Exception:
+        logger.exception("Failed to load course context for course %s", resource_id)
         return None
 
-    course = result["course"]
+    course = course_response.model_dump()
 
     # Build course header
     parts = [
@@ -429,11 +436,11 @@ async def _course_context(
         parts.extend(["", f"Current lesson: {current_lesson.get('title', 'Untitled')}"])
 
         content = current_lesson.get("content")
-        status = current_lesson.get("status")
+        lesson_status = current_lesson.get("status")
 
         if content:
             parts.append(content)
-        elif status in ["pending", "generating"]:
+        elif lesson_status in ["pending", "generating"]:
             parts.append("[Lesson is being generated...]")
         else:
             parts.append("[No content available]")

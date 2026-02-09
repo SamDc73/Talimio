@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/Button"
 import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
-import { useAdaptiveSession } from "../hooks/useAdaptiveSession.js"
-import { useLectorReview } from "../hooks/useLectorReview.js"
+import { useAdaptiveSession } from "../hooks/use-adaptive-session"
+import { useLectorReview } from "../hooks/use-lector-review"
 
 const RATING_OPTIONS = [
 	{ value: 1, label: "Again", tone: "border-destructive/40 text-destructive" },

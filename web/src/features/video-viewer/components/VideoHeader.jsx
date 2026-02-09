@@ -2,8 +2,8 @@ import { MessageSquare, PanelRight } from "lucide-react"
 import { Link } from "react-router-dom"
 import { UserAvatarMenu } from "@/components/header/MainHeader"
 import { TooltipButton } from "@/components/TooltipButton"
-import { useChatSidebar } from "@/contexts/chatSidebarContext"
-import { useVideoProgress } from "@/features/video-viewer/hooks/useVideoProgress"
+import { useChatSidebar } from "@/contexts/ChatSidebarContext"
+import { useVideoProgress } from "@/features/video-viewer/hooks/use-video-progress"
 import { formatProgressText } from "@/utils/progressUtils"
 
 export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {

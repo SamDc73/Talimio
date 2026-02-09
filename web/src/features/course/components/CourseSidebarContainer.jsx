@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { useCourseService } from "@/api/courseApi"
 import CourseSidebar from "@/components/sidebar/CourseSidebar"
-import { useCourseProgress } from "@/features/course/hooks/useCourseProgress"
+import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
 
 export default function CourseSidebarContainer({
 	modules = [],

@@ -17,17 +17,20 @@ export default function ContentGrid({
 	onAddYoutube,
 	_progressLoading,
 }) {
+	let gridContent = (
+		<EmptyState onGenerateCourse={onGenerateCourse} onUploadBook={onUploadBook} onAddYoutube={onAddYoutube} />
+	)
+	if (isLoading) {
+		gridContent = <SkeletonGrid count={6} />
+	} else if (filteredAndSortedContent.length > 0) {
+		gridContent = (
+			<AnimatePresence mode="popLayout">{visible.map((item, index) => renderCard(item, index))}</AnimatePresence>
+		)
+	}
+
 	return (
 		<>
-			<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-				{isLoading ? (
-					<SkeletonGrid count={6} />
-				) : filteredAndSortedContent.length > 0 ? (
-					<AnimatePresence mode="popLayout">{visible.map((item, index) => renderCard(item, index))}</AnimatePresence>
-				) : (
-					<EmptyState onGenerateCourse={onGenerateCourse} onUploadBook={onUploadBook} onAddYoutube={onAddYoutube} />
-				)}
-			</div>
+			<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{gridContent}</div>
 
 			{!isLoading && unpinned.length > 3 && (
 				<div className="mt-8">

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId } from "react"
-import { LatexExpression } from "@/components/quiz/LatexExpression.jsx"
-import { usePracticeRegistry } from "../hooks/use-practice-registry.js"
-import { useLatexPracticeReview } from "../hooks/useLatexPracticeReview.js"
+import { LatexExpression } from "@/components/quiz/LatexExpression"
+import { useLatexPracticeReview } from "../hooks/use-latex-practice-review"
+import { usePracticeRegistry } from "../hooks/use-practice-registry"
 
 export function LatexExpressionPractice({
 	question,
