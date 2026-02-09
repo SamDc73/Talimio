@@ -906,26 +906,22 @@ class CodeExecutionService:
             return
 
         try:
-            try:
-                lesson = await self._session.get(Lesson, lesson_uuid)
-                if lesson is None:
-                    logging.debug("Lesson not found for patch persistence lesson_id=%s", lesson_id)
-                    return
+            lesson = await self._session.get(Lesson, lesson_uuid)
+            if lesson is None:
+                logging.debug("Lesson not found for patch persistence lesson_id=%s", lesson_id)
+                return
 
-                existing_content = lesson.content or ""
-                updated_content = self._replace_source_with_patch(existing_content, original, replacement)
+            existing_content = lesson.content or ""
+            updated_content = self._replace_source_with_patch(existing_content, original, replacement)
 
-                if existing_content == updated_content:
-                    if original:
-                        logging.debug("Original snippet not found in lesson content lesson_id=%s", lesson_id)
-                    return
+            if existing_content == updated_content:
+                if original:
+                    logging.debug("Original snippet not found in lesson content lesson_id=%s", lesson_id)
+                return
 
-                lesson.content = updated_content
-                await self._session.commit()
-                logging.info("Persisted AI patch to lesson lesson_id=%s", lesson_id)
-            except Exception:
-                await self._session.rollback()
-                raise
+            lesson.content = updated_content
+            await self._session.flush()
+            logging.info("Persisted AI patch to lesson lesson_id=%s", lesson_id)
         except Exception:
             logging.exception("Failed to persist patch for lesson lesson_id=%s", lesson_id)
 

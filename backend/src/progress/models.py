@@ -45,7 +45,7 @@ class ProgressUpdate(BaseModel):
 class ProgressResponse(BaseModel):
     """Response model for progress data."""
 
-    id: UUID
+    id: UUID | None
     content_id: UUID
     content_type: ContentType
     progress_percentage: float

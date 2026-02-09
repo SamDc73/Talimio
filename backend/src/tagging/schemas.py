@@ -28,6 +28,8 @@ class TagSchema(TagBase):
 class TagWithConfidence(BaseModel):
     """Tag with confidence score."""
 
+    model_config = ConfigDict(extra="forbid")
+
     tag: str
     confidence: float = Field(..., ge=0.0, le=1.0)
 
@@ -47,4 +49,3 @@ class TaggingResponse(BaseModel):
     auto_generated: bool = True
     success: bool = True
     error: str | None = None
-

@@ -8,7 +8,6 @@ from uuid import UUID
 
 from sqlalchemy import and_, bindparam, select, text, update
 from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.rag.embeddings import VectorRAG
@@ -100,16 +99,21 @@ class ConceptGraphService:
             raise ValueError(msg)
 
         await self._assert_no_cycle(concept_id=concept_id, prereq_id=prereq_id)
-
-        link = ConceptPrerequisite(concept_id=concept_id, prereq_id=prereq_id)
-        self._session.add(link)
-        try:
-            await self._session.flush()
-        except IntegrityError as error:
-            await self._session.rollback()
+        result = await self._session.execute(
+            text(
+                """
+                INSERT INTO concept_prerequisites (concept_id, prereq_id)
+                VALUES (:concept_id, :prereq_id)
+                ON CONFLICT (concept_id, prereq_id) DO NOTHING
+                """
+            ),
+            {"concept_id": concept_id, "prereq_id": prereq_id},
+        )
+        if int(getattr(result, "rowcount", 0) or 0) == 0:
             logger.debug("Prerequisite already exists for concept %s -> %s", concept_id, prereq_id)
             msg = "Prerequisite already exists"
-            raise ValueError(msg) from error
+            raise ValueError(msg)
+        await self._session.flush()
 
     async def add_prerequisites_bulk(self, edges: Sequence[tuple[UUID, UUID]]) -> int:
         """Insert prerequisite edges in bulk, ignoring duplicates."""

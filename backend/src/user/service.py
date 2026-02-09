@@ -71,7 +71,7 @@ async def _save_user_preferences(user_id: UUID, preferences: UserPreferences, db
             db_preferences = UserPreferencesModel(user_id=user_uuid, preferences=preferences_dict)
             db_session.add(db_preferences)
 
-        await db_session.commit()
+        await db_session.flush()
         return True
 
     except HTTPException:
@@ -79,7 +79,6 @@ async def _save_user_preferences(user_id: UUID, preferences: UserPreferences, db
         raise
     except Exception as e:
         logger.exception(f"Failed to save preferences for user {user_id}: {e}")
-        await db_session.rollback()
         # Check for foreign key violations
         if "foreign key violation" in str(e).lower() or "23503" in str(e):
             from fastapi import HTTPException

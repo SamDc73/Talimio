@@ -2,7 +2,7 @@ import logging
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from src.auth import CurrentAuth
 from src.videos.facade import VideosFacade
@@ -28,14 +28,11 @@ router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_video(
     video_data: VideoCreate,
-    background_tasks: BackgroundTasks,
     auth: CurrentAuth,
 ) -> VideoResponse:
     """Add a YouTube video to the library."""
     try:
-        return await video_service.create_video(
-            db=auth.session, video_data=video_data, background_tasks=background_tasks, user_id=auth.user_id
-        )
+        return await video_service.create_video(db=auth.session, video_data=video_data, user_id=auth.user_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:

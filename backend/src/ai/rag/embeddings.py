@@ -73,6 +73,7 @@ class VectorRAG:
         chunks: Sequence[str],
         course_id: uuid.UUID | None = None,
         extra_metadata: dict[str, Any] | None = None,
+        per_chunk_metadata: Sequence[dict[str, Any]] | None = None,
     ) -> None:
         """Store document chunks with their embeddings in pgvector."""
         try:
@@ -94,6 +95,8 @@ class VectorRAG:
                     metadata["course_id"] = str(course_id)
                 if extra_metadata:
                     metadata.update(extra_metadata)
+                if per_chunk_metadata and index < len(per_chunk_metadata):
+                    metadata.update(per_chunk_metadata[index])
 
                 metadata = self._normalize_metadata(metadata)
                 chunk_payloads.append((index, chunk_text, metadata))
@@ -140,7 +143,7 @@ class VectorRAG:
                         },
                     )
 
-            await session.commit()
+            await session.flush()
             logger.info(
                 "Persisted %s chunks for doc_id=%s doc_type=%s",
                 len(chunk_payloads),
@@ -150,7 +153,6 @@ class VectorRAG:
 
         except Exception:
             logger.exception("Failed to store chunks with embeddings for doc_id=%s", doc_id)
-            await session.rollback()
             raise
 
     async def search(

@@ -35,24 +35,27 @@ class ContentArchiveService:
 
         logger.info(f"🗃️ Archiving {content_type} {content_id} in table {table_name}")
 
-        # Handle different ID column names
-        id_column = "uuid" if content_type == ContentType.YOUTUBE else "id"
+        id_column = "id"
+
+        set_clause = "archived = true"
+        params: dict[str, UUID | datetime] = {"content_id": content_id, "user_id": user_id}
+        if content_type in {ContentType.BOOK, ContentType.YOUTUBE}:
+            set_clause = "archived = true, archived_at = :archived_at"
+            params["archived_at"] = datetime.now(UTC)
 
         # Update with user validation
         query = f"""
             UPDATE {table_name}
-            SET archived = true, archived_at = :archived_at
+            SET {set_clause}
             WHERE {id_column} = :content_id AND user_id = :user_id
         """
 
         logger.info(f"🔍 Executing query: {query}")
         logger.info(f"🔍 With params: content_id={content_id}, user_id={user_id}")
 
-        result = await db.execute(
-            text(query), {"content_id": content_id, "user_id": user_id, "archived_at": datetime.now(UTC)}
-        )
+        result = await db.execute(text(query), params)
         affected_rows = int(getattr(result, "rowcount", 0) or 0)
-        await db.commit()
+        await db.flush()
 
         logger.info(f"📊 Archive operation affected {affected_rows} rows")
 
@@ -79,13 +82,16 @@ class ContentArchiveService:
 
         logger.info(f"📤 Unarchiving {content_type} {content_id} in table {table_name}")
 
-        # Handle different ID column names
-        id_column = "uuid" if content_type == ContentType.YOUTUBE else "id"
+        id_column = "id"
+
+        set_clause = "archived = false"
+        if content_type in {ContentType.BOOK, ContentType.YOUTUBE}:
+            set_clause = "archived = false, archived_at = NULL"
 
         # Update with user validation
         query = f"""
             UPDATE {table_name}
-            SET archived = false, archived_at = NULL
+            SET {set_clause}
             WHERE {id_column} = :content_id AND user_id = :user_id
         """
 
@@ -94,7 +100,7 @@ class ContentArchiveService:
 
         result = await db.execute(text(query), {"content_id": content_id, "user_id": user_id})
         affected_rows = int(getattr(result, "rowcount", 0) or 0)
-        await db.commit()
+        await db.flush()
 
         logger.info(f"📊 Unarchive operation affected {affected_rows} rows")
 

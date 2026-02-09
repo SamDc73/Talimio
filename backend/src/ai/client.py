@@ -42,6 +42,36 @@ from src.database.session import async_session_maker
 T = TypeVar("T", bound=BaseModel)
 
 
+def _iter_exception_chain(error: Exception, max_depth: int = 6) -> list[Exception]:
+    """Return the exception chain (cause/context) up to max_depth."""
+    chain: list[Exception] = []
+    current: Exception | None = error
+    depth = 0
+    while current is not None and depth < max_depth:
+        chain.append(current)
+        next_error = current.__cause__ if current.__cause__ is not None else current.__context__
+        if not isinstance(next_error, Exception):
+            break
+        current = next_error
+        depth += 1
+    return chain
+
+
+def _is_litellm_rate_limit_or_quota_error(error: Exception) -> bool:
+    """Return True when the exception chain indicates provider quota/rate limiting."""
+    for current in _iter_exception_chain(error):
+        if isinstance(current, litellm.RateLimitError):
+            return True
+        lowered = str(current).lower()
+        if "insufficient_quota" in lowered:
+            return True
+        if "ratelimiterror" in lowered:
+            return True
+        if "rate limit" in lowered:
+            return True
+    return False
+
+
 class LLMClient:
     """Manages LLM completion requests with memory integration and RAG support."""
 
@@ -69,12 +99,7 @@ class LLMClient:
         which shows up as "idle in transaction" (and can be especially painful with transaction poolers).
         """
         async with async_session_maker() as session:
-            try:
-                yield session
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
+            yield session
 
     def _parse_tool_filters(self) -> tuple[set[str] | None, set[str]]:
         settings = get_settings()
@@ -94,6 +119,7 @@ class LLMClient:
         response_format: Any | None = None,
         stream: bool = False,
         model: str | None = None,
+        num_retries: int | None = None,
     ) -> Any:
         """Low-level completion method using LiteLLM directly."""
         try:
@@ -122,11 +148,16 @@ class LLMClient:
                 kwargs["user"] = str(user_id)
             if stream:
                 kwargs["stream"] = stream
+            if num_retries is not None:
+                kwargs["num_retries"] = num_retries
 
             return await asyncio.wait_for(litellm.acompletion(**kwargs), timeout=settings.ai_request_timeout)
 
         except Exception as e:
-            self._logger.exception("Error in model completion")
+            if _is_litellm_rate_limit_or_quota_error(e):
+                self._logger.warning("Model completion limited by provider quota/rate limit: %s", e)
+            else:
+                self._logger.exception("Error in model completion")
             msg = f"Model completion failed: {e}"
             raise RuntimeError(msg) from e
 
@@ -139,6 +170,7 @@ class LLMClient:
         tool_choice: str | None = None,
         user_id: str | UUID | None = None,
         model: str | None = None,
+        num_retries: int | None = None,
     ) -> Any:
         """Get completion with optional memory integration and structured output."""
         try:
@@ -174,6 +206,7 @@ class LLMClient:
                     model=request_model,
                     tools=tool_schemas,
                     tool_choice=effective_tool_choice,
+                    num_retries=num_retries,
                 )
 
                 return _finalize(schema_instance)
@@ -186,6 +219,7 @@ class LLMClient:
                     tools=tool_schemas,
                     tool_choice=effective_tool_choice,
                     user_id=normalized_user_id,
+                    num_retries=num_retries,
                 )
 
                 # Process function calls
@@ -205,6 +239,7 @@ class LLMClient:
                 temperature=temperature,
                 user_id=normalized_user_id,
                 model=model,
+                num_retries=num_retries,
             )
 
             content = response.choices[0].message.content
@@ -218,7 +253,10 @@ class LLMClient:
             return content
 
         except Exception as e:
-            self._logger.exception("Error in get_completion")
+            if _is_litellm_rate_limit_or_quota_error(e):
+                self._logger.warning("Completion skipped due to provider quota/rate limit: %s", e)
+            else:
+                self._logger.exception("Error in get_completion")
             msg = f"Completion failed: {e}"
             raise RuntimeError(msg) from e
 
@@ -243,6 +281,7 @@ class LLMClient:
         model: str,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | None = None,
+        num_retries: int | None = None,
     ) -> BaseModel:
         last_error: Exception | None = None
         attempt = 0
@@ -256,6 +295,7 @@ class LLMClient:
                 model=model,
                 tools=tools,
                 tool_choice=tool_choice,
+                num_retries=num_retries,
             )
             assistant_message = response.choices[0].message
             tool_calls = getattr(assistant_message, "tool_calls", None)

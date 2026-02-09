@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
-import contextlib
 import json
 import logging
 import re
+from collections.abc import Coroutine
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -36,6 +37,7 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+_DETACHED_TASKS: set[asyncio.Task[Any]] = set()
 
 _SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
 _DOC_EXTENSIONS = {".pdf", ".epub"}
@@ -45,6 +47,13 @@ _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 def _canonical_slug(value: str) -> str:
     text = (value or "").strip().lower()
     return _SLUG_PATTERN.sub("-", text).strip("-")
+
+
+def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
+    """Run background work outside FastAPI response-bound BackgroundTasks."""
+    task = asyncio.create_task(coro)
+    _DETACHED_TASKS.add(task)
+    task.add_done_callback(_DETACHED_TASKS.discard)
 
 
 @dataclass(slots=True)
@@ -102,59 +111,55 @@ class CourseContentService:
         session.add(course)
         await session.flush()
 
-        course_id = course.id
-
         prompt = session_data.pop("prompt", None)
         prompt_text = self._normalize_prompt_text(prompt)
         attachments = attachments or []
         normalized_modules: list[dict[str, Any]] = []
         inserted_lessons = 0
 
-        try:
-            rag_service = RAGService()
-            auth = AuthContext(user_id=user_id, session=session)
-            image_data_urls = await self._ingest_course_attachments(
-                rag_service=rag_service,
-                auth=auth,
-                course_id=course.id,
-                attachments=attachments,
-            )
-            augmented_prompt = await self._build_augmented_prompt(
-                rag_service=rag_service,
-                auth=auth,
-                course_id=course.id,
-                prompt_text=prompt_text,
-            )
-            prompt_payload = self._build_prompt_payload(augmented_prompt, image_data_urls)
+        rag_service = RAGService()
+        auth = AuthContext(user_id=user_id, session=session)
+        image_data_urls = await self._ingest_course_attachments(
+            rag_service=rag_service,
+            auth=auth,
+            course_id=course.id,
+            attachments=attachments,
+        )
+        augmented_prompt = await self._build_augmented_prompt(
+            rag_service=rag_service,
+            auth=auth,
+            course_id=course.id,
+            prompt_text=prompt_text,
+        )
+        prompt_payload = self._build_prompt_payload(augmented_prompt, image_data_urls)
 
-            adaptive_structure = await self._build_adaptive_structure(
-                is_adaptive=is_adaptive,
-                prompt=prompt_payload,
-                prompt_text=prompt_text,
-                session_data=session_data,
-                user_id=user_id,
-            )
+        adaptive_structure = await self._build_adaptive_structure(
+            is_adaptive=is_adaptive,
+            prompt=prompt_payload,
+            prompt_text=prompt_text,
+            session_data=session_data,
+            user_id=user_id,
+        )
 
-            modules_payload = session_data.pop("modules", [])
-            lessons_payload = session_data.pop("lessons", [])
+        modules_payload = session_data.pop("modules", [])
+        lessons_payload = session_data.pop("lessons", [])
 
-            self._serialize_payload_fields(session_data)
-            self._apply_course_updates(course, session_data)
+        self._serialize_payload_fields(session_data)
+        self._apply_course_updates(course, session_data)
 
-            normalized_modules = await self._prepare_course_modules(
-                session=session,
-                course=course,
-                adaptive_structure=adaptive_structure,
-                modules_payload=modules_payload,
-                lessons_payload=lessons_payload,
-            )
-            inserted_lessons = await self._insert_lessons(session, course.id, normalized_modules)
+        normalized_modules = await self._prepare_course_modules(
+            session=session,
+            course=course,
+            adaptive_structure=adaptive_structure,
+            modules_payload=modules_payload,
+            lessons_payload=lessons_payload,
+        )
+        inserted_lessons = await self._insert_lessons(session, course.id, normalized_modules)
+        if background_tasks is not None:
+            # Ensure background tasks can read committed course/lesson rows.
             await session.commit()
-
-        except Exception:
-            await session.rollback()
-            await self._delete_draft_course(session, course_id)
-            raise
+        else:
+            await session.flush()
 
         await session.refresh(course)
 
@@ -297,11 +302,6 @@ class CourseContentService:
             if key in session_data and session_data[key] is not None:
                 setattr(course, key, session_data[key])
 
-    async def _delete_draft_course(self, session: AsyncSession, course_id: UUID) -> None:
-        """Delete the draft course if creation fails."""
-        await session.execute(text("DELETE FROM courses WHERE id = :course_id"), {"course_id": str(course_id)})
-        await session.commit()
-
     async def _prepare_course_modules(
         self,
         *,
@@ -345,7 +345,7 @@ class CourseContentService:
 
         try:
             if background_tasks is not None:
-                self._schedule_background_tagging(background_tasks, course.id, user_id)
+                self._schedule_background_tagging(course.id, user_id)
             else:
                 await self._auto_tag_course(session, course, user_id)
         except Exception as exc:
@@ -353,11 +353,10 @@ class CourseContentService:
 
     def _schedule_background_embeddings(
         self,
-        background_tasks: BackgroundTasks,
         course_id: UUID,
     ) -> None:
         """Enqueue background embedding generation so the response can return immediately."""
-        background_tasks.add_task(self._run_background_embeddings, course_id)
+        _spawn_detached_task(self._run_background_embeddings(course_id))
 
     async def _handle_adaptive_embeddings(
         self,
@@ -367,7 +366,7 @@ class CourseContentService:
         background_tasks: BackgroundTasks | None,
     ) -> None:
         if background_tasks is not None:
-            self._schedule_background_embeddings(background_tasks, course_id)
+            self._schedule_background_embeddings(course_id)
             return
         await self._run_embedding_pipeline(session, course_id)
 
@@ -383,7 +382,7 @@ class CourseContentService:
         except Exception as conf_exc:
             logger.exception("Confusor recompute failed for course %s: %s", course_id, conf_exc)
             pairs = 0
-        await session.commit()
+        await session.flush()
         return updated, pairs
 
     async def _run_background_embeddings(self, course_id: UUID) -> None:
@@ -395,6 +394,7 @@ class CourseContentService:
         try:
             async with async_session_maker() as embedding_session:
                 updated, pairs = await self._run_embedding_pipeline(embedding_session, course_id)
+                await embedding_session.commit()
                 logger.info(
                     "Background embedding task backfilled %s concepts and computed %s confusor pairs for course %s",
                     updated,
@@ -406,12 +406,11 @@ class CourseContentService:
 
     def _schedule_background_tagging(
         self,
-        background_tasks: BackgroundTasks,
         course_id: UUID,
         user_id: UUID,
     ) -> None:
         """Enqueue background tagging so the request can return immediately."""
-        background_tasks.add_task(self._run_background_auto_tagging, course_id, user_id)
+        _spawn_detached_task(self._run_background_auto_tagging(course_id, user_id))
 
     async def _run_background_auto_tagging(self, course_id: UUID, user_id: UUID) -> None:
         """Run auto-tagging in a new session after the response is sent."""
@@ -438,7 +437,6 @@ class CourseContentService:
             course_id,
             data,
             user_id,
-            commit=False,
         )
 
     async def _update_course_with_session(
@@ -447,8 +445,6 @@ class CourseContentService:
         course_id: UUID,
         data: dict[str, Any],
         user_id: UUID,
-        *,
-        commit: bool,
     ) -> Course:
         query = select(Course).where(Course.id == course_id, Course.user_id == user_id)
         result = await session.execute(query)
@@ -468,8 +464,6 @@ class CourseContentService:
         course.updated_at = datetime.now(UTC)
 
         await session.flush()
-        if commit:
-            await session.commit()
         await session.refresh(course)
         return course
 
@@ -477,9 +471,8 @@ class CourseContentService:
         """Generate and persist tags for a course.
 
         Uses SQLAlchemy Core UPDATE to avoid ORM stale update errors when the row
-        is concurrently deleted/updated. Commits before slow external calls to
-        avoid holding an "idle in transaction" connection open via the session
-        pooler.
+        is concurrently deleted/updated while keeping commit/rollback ownership
+        in the caller.
         """
         course_id_str = str(course.id)
         try:
@@ -491,11 +484,6 @@ class CourseContentService:
             if not content_data:
                 logger.info("Skipping auto-tagging for missing/empty course %s", course_id_str)
                 return []
-
-            # Close the read-only transaction before making slow external calls (LLM tagging).
-            # This avoids holding an "idle in transaction" connection open via the session pooler.
-            # Use COMMIT (not ROLLBACK) so ORM instances are not expired.
-            await session.commit()
 
             tagging_service = TaggingService(session)
             tags = await tagging_service.tag_content(
@@ -509,11 +497,21 @@ class CourseContentService:
             if not tags:
                 return []
 
-            # Double-check existence to avoid orphan tag associations if the course
-            # disappeared after tag generation. Roll back to discard flushed inserts.
+            # Double-check existence to avoid orphan tag associations if the course disappeared after tag generation.
             exists_result = await session.execute(select(Course.id).where(Course.id == course.id))
             if exists_result.scalar_one_or_none() is None:
-                await session.rollback()
+                await session.execute(
+                    text(
+                        """
+                        DELETE FROM tag_associations
+                        WHERE content_id = :content_id
+                          AND content_type = 'course'
+                          AND user_id = :user_id
+                        """
+                    ),
+                    {"content_id": str(course.id), "user_id": str(user_id)},
+                )
+                await session.flush()
                 logger.info("Skipping tag persist for deleted course %s", course_id_str)
                 return []
 
@@ -521,18 +519,26 @@ class CourseContentService:
             update_stmt = update(Course).where(Course.id == course.id).values(tags=json.dumps(tags))
             upd_result = await session.execute(update_stmt)
 
-            # If the row vanished between the existence check and UPDATE, drop changes
+            # If the row vanished between the existence check and UPDATE, drop tag associations from this run.
             if getattr(upd_result, "rowcount", 0) == 0:
-                await session.rollback()
+                await session.execute(
+                    text(
+                        """
+                        DELETE FROM tag_associations
+                        WHERE content_id = :content_id
+                          AND content_type = 'course'
+                          AND user_id = :user_id
+                        """
+                    ),
+                    {"content_id": str(course.id), "user_id": str(user_id)},
+                )
+                await session.flush()
                 logger.info("Course %s disappeared before update; tags not saved", course_id_str)
                 return []
 
-            await session.commit()
+            await session.flush()
             return tags
         except Exception as exc:
-            # Always rollback before any further interaction with the session
-            with contextlib.suppress(Exception):
-                await session.rollback()
             logger.exception("Auto-tagging error for course %s: %s", course_id_str, exc)
             return []
 

@@ -54,7 +54,7 @@ class VideoHighlightService(HighlightInterface):
 
         try:
             self.session.add(highlight)
-            await self.session.commit()
+            await self.session.flush()
             await self.session.refresh(highlight)
         except IntegrityError as e:
             logger.exception(f"Integrity constraint violation creating video highlight: {e}")
@@ -144,7 +144,7 @@ class VideoHighlightService(HighlightInterface):
         highlight.highlight_data = validated_data
 
         try:
-            await self.session.commit()
+            await self.session.flush()
             await self.session.refresh(highlight)
         except SQLAlchemyError as e:
             logger.exception(f"Database error updating video highlight {highlight_id}: {e}")
@@ -170,7 +170,7 @@ class VideoHighlightService(HighlightInterface):
 
         try:
             result = await self.session.execute(stmt)
-            await self.session.commit()
+            await self.session.flush()
         except SQLAlchemyError as e:
             logger.exception(f"Database error deleting video highlight {highlight_id}: {e}")
             raise HTTPException(

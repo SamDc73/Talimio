@@ -110,9 +110,11 @@ class RAGService:
 
                 doc.file_path = str(file_path)
 
-            await auth.session.commit()
+            await auth.session.flush()
 
             if process_in_background and not is_image:
+                # Persist only after file_path/status are finalized and right before scheduling.
+                await auth.session.commit()
                 # Process the document in a background task to avoid blocking uploads.
                 doc_id = doc.id  # Capture ID before potential session issues
                 task = asyncio.create_task(self._process_document_background(doc_id))
@@ -143,7 +145,7 @@ class RAGService:
                 text("UPDATE course_documents SET status = 'processing' WHERE id = :doc_id"),
                 {"doc_id": document_id},
             )
-            await session.commit()
+            await session.flush()
 
             # Get document
             result = await session.execute(
@@ -201,7 +203,7 @@ class RAGService:
                 """),
                 {"doc_id": document_id},
             )
-            await session.commit()
+            await session.flush()
 
             logger.info("Successfully processed document %s", document_id)
 
@@ -222,7 +224,7 @@ class RAGService:
             await session.execute(
                 text("UPDATE course_documents SET status = 'failed' WHERE id = :doc_id"), {"doc_id": document_id}
             )
-            await session.commit()
+            await session.flush()
             raise
 
     async def _process_document_background(self, document_id: int) -> None:
@@ -230,9 +232,15 @@ class RAGService:
         async with async_session_maker() as session:
             try:
                 await self.process_document(session, document_id)
+                await session.commit()
             except Exception:
+                try:
+                    await session.commit()
+                except Exception:
+                    logger.debug(
+                        "Failed to commit failed status for document %s in background", document_id, exc_info=True
+                    )
                 logger.exception("Failed to process document %s in background", document_id)
-                await session.rollback()
 
     async def _cleanup_course_source_file(
         self, session: AsyncSession, document_id: int, file_path_str: str | None
@@ -248,7 +256,7 @@ class RAGService:
             text("UPDATE course_documents SET file_path = NULL WHERE id = :doc_id"),
             {"doc_id": document_id},
         )
-        await session.commit()
+        await session.flush()
 
     async def _cleanup_book_source_file(self, session: AsyncSession, book_id: uuid.UUID) -> None:
         """Delete a stored book file via storage provider and clear file_path in DB."""
@@ -261,7 +269,7 @@ class RAGService:
             await storage.delete(book.file_path)
         # Clear DB reference
         book.file_path = ""
-        await session.commit()
+        await session.flush()
 
     async def process_book(self, session: AsyncSession, book_id: uuid.UUID) -> None:
         """Process a book (parse, chunk, embed, index) with unified RAG pipeline."""
@@ -278,12 +286,12 @@ class RAGService:
                 book.rag_status = "failed"
                 with contextlib.suppress(Exception):
                     book.rag_error = "missing_file"  # type: ignore[attr-defined]
-                await session.commit()
+                await session.flush()
                 return
 
             # Mark processing
             book.rag_status = "processing"
-            await session.commit()
+            await session.flush()
 
             # Download file
             storage = get_storage_provider()
@@ -322,16 +330,14 @@ class RAGService:
             # Mark completed
             book.rag_status = "completed"
             book.rag_processed_at = datetime.now(UTC)
-            await session.commit()
+            await session.flush()
 
             logger.info("Successfully processed book %s", book_id)
 
             # Note: We do not delete the original book file here; keep for user access
 
         except StaleDataError:
-            # Book row was deleted between load and commit; treat as benign and exit quietly
-            with contextlib.suppress(Exception):
-                await session.rollback()
+            # Book row was deleted between load and flush; treat as benign and exit quietly
             logger.info("Book %s was deleted during processing; aborting embedding", book_id)
             return
         except Exception:
@@ -341,9 +347,9 @@ class RAGService:
                 book = await session.get(Book, book_id)
                 if book:
                     book.rag_status = "failed"
-                    await session.commit()
+                    await session.flush()
             except Exception:
-                await session.rollback()
+                logger.debug("Failed to set book %s failed status after processing error", book_id, exc_info=True)
             raise
 
     async def process_video(self, session: AsyncSession, video_id: uuid.UUID) -> None:
@@ -356,37 +362,47 @@ class RAGService:
 
             # Mark processing
             video.rag_status = "processing"
+            await session.flush()
+            # Commit status before long-running embedding work to avoid holding row locks.
             await session.commit()
+
+            video = await session.get(Video, video_id)
+            if not video:
+                logger.info("Video %s was deleted before transcript processing started", video_id)
+                return
 
             # Collect transcript chunks
             chunks, per_chunk_meta = await self._collect_video_transcript_chunks(video)
 
             if not chunks:
                 video.rag_status = "failed"
-                await session.commit()
+                await session.flush()
                 return
 
-            # Store chunks (current API: per-chunk to preserve per-chunk metadata)
             if not hasattr(self, "_vector_rag"):
                 from src.ai.rag.embeddings import VectorRAG
 
                 self._vector_rag = VectorRAG()
 
-            for idx, chunk in enumerate(chunks):
-                meta = per_chunk_meta[idx] if idx < len(per_chunk_meta) else {}
-                await self._vector_rag.store_document_chunks_with_embeddings(
-                    session=session,
-                    doc_type="video",
-                    doc_id=video.id,
-                    title=video.title or "",
-                    chunks=[chunk],
-                    extra_metadata=meta,
-                )
+            await self._vector_rag.store_document_chunks_with_embeddings(
+                session=session,
+                doc_type="video",
+                doc_id=video.id,
+                title=video.title or "",
+                chunks=chunks,
+                per_chunk_metadata=per_chunk_meta,
+            )
+
+            video = await session.get(Video, video_id)
+            if not video:
+                # Video was deleted while embedding; clean up any chunks written in this run.
+                await self.delete_chunks_by_doc_id(session, str(video_id), doc_type="video")
+                return
 
             # Mark completed
             video.rag_status = "completed"
             video.rag_processed_at = datetime.now(UTC)
-            await session.commit()
+            await session.flush()
 
             logger.info("Successfully processed video %s", video_id)
 
@@ -396,9 +412,9 @@ class RAGService:
                 video = await session.get(Video, video_id)
                 if video:
                     video.rag_status = "failed"
-                    await session.commit()
+                    await session.flush()
             except Exception:
-                await session.rollback()
+                logger.debug("Failed to set video %s failed status after processing error", video_id, exc_info=True)
             raise
 
     async def _collect_video_transcript_chunks(self, video: Video) -> tuple[list[str], list[dict]]:
@@ -594,7 +610,7 @@ class RAGService:
             # Delete document
             await auth.session.execute(text("DELETE FROM course_documents WHERE id = :doc_id"), {"doc_id": document_id})
 
-            await auth.session.commit()
+            await auth.session.flush()
             logger.info("Successfully deleted document %s", document_id)
 
         except Exception:
@@ -660,7 +676,7 @@ class RAGService:
                     {"doc_uuid": str(doc_uuid), "doc_type": doc_type},
                 )
 
-            await session.commit()
+            await session.flush()
             rowcount = int(getattr(result, "rowcount", 0) or 0)
 
             elapsed_time = time.time() - start_time
@@ -676,7 +692,6 @@ class RAGService:
 
         except Exception:
             logger.exception("Error deleting RAG chunks for document %s", document_id)
-            await session.rollback()
             # Don't raise - this is best-effort cleanup
             return 0
 
@@ -704,7 +719,7 @@ class RAGService:
                 {"course_id": course_id},
             )
 
-            await session.commit()
+            await session.flush()
             rowcount = int(getattr(result, "rowcount", 0) or 0)
 
             elapsed_time = time.time() - start_time
@@ -719,7 +734,6 @@ class RAGService:
 
         except Exception:
             logger.exception("Error deleting RAG chunks for course %s", course_id)
-            await session.rollback()
             # Don't raise - this is best-effort cleanup
             return 0
 

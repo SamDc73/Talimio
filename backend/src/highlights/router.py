@@ -72,7 +72,7 @@ async def create_book_highlight(
         )
 
         auth.session.add(highlight)
-        await auth.session.commit()
+        await auth.session.flush()
         await auth.session.refresh(highlight)
 
         return HighlightResponse(
@@ -113,7 +113,7 @@ async def delete_highlight(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Highlight not found")
 
         await auth.session.delete(highlight)
-        await auth.session.commit()
+        await auth.session.flush()
 
     except HTTPException:
         raise
@@ -149,7 +149,7 @@ async def update_highlight(
         # Update the highlight data
         highlight.highlight_data = highlight_update.source_data
 
-        await auth.session.commit()
+        await auth.session.flush()
         await auth.session.refresh(highlight)
 
         return HighlightResponse(

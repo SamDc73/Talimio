@@ -92,12 +92,11 @@ class ProgressService:
         )
 
         row = result.first()
-        await self.session.commit()
-
         if row is None:
             msg = "Progress upsert did not return a row"
             raise RuntimeError(msg)
 
+        await self.session.flush()
         return self._row_to_progress_response(row)
 
     async def delete_progress(self, user_id: UUID, content_id: UUID) -> bool:
@@ -106,8 +105,8 @@ class ProgressService:
             text(DELETE_PROGRESS_QUERY), {"user_id": str(user_id), "content_id": str(content_id)}
         )
 
-        await self.session.commit()
         affected = getattr(result, "rowcount", 0)
+        await self.session.flush()
         return bool(affected and affected > 0)
 
     @staticmethod
