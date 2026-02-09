@@ -1,6 +1,5 @@
 """Main content service."""
 
-import contextlib
 import logging
 from typing import Any
 from uuid import UUID
@@ -166,19 +165,18 @@ class ContentService:
                 text("DELETE FROM tags t WHERE NOT EXISTS (SELECT 1 FROM tag_associations ta WHERE ta.tag_id = t.id)")
             )
         except Exception:
-            with contextlib.suppress(Exception):
-                await session.rollback()
+            logger.debug("Non-fatal: failed to prune orphan tags", exc_info=True)
 
-    def _get_model_and_doc_type(self, content_type: ContentType) -> tuple[Any, str]:
-        """Map content type to ORM model and doc_type string."""
+    def _get_model(self, content_type: ContentType) -> Any:
+        """Map content type to ORM model."""
         from src.books.models import Book
         from src.courses.models import Course
         from src.videos.models import Video
 
-        mapping: dict[ContentType, tuple[Any, str]] = {
-            ContentType.BOOK: (Book, "book"),
-            ContentType.YOUTUBE: (Video, "video"),
-            ContentType.COURSE: (Course, "course"),
+        mapping: dict[ContentType, Any] = {
+            ContentType.BOOK: Book,
+            ContentType.YOUTUBE: Video,
+            ContentType.COURSE: Course,
         }
         if content_type not in mapping:
             msg = f"Unsupported content type: {content_type}"
@@ -193,8 +191,7 @@ class ContentService:
                 {"user_id": str(user_id), "content_id": str(row_id)},
             )
         except Exception:
-            with contextlib.suppress(Exception):
-                await session.rollback()
+            logger.debug("Non-fatal: failed to delete user progress for content %s", row_id, exc_info=True)
 
     async def _delete_tag_associations(
         self,
@@ -225,7 +222,7 @@ class ContentService:
     ) -> None:
         """Delete a content item and all related references."""
         session = self._session
-        model, _doc_type = self._get_model_and_doc_type(content_type)
+        model = self._get_model(content_type)
 
         # Parse UUID and load row with ownership check
         obj_id = UUID(content_id)
@@ -234,10 +231,7 @@ class ContentService:
             msg = f"{content_type.value.capitalize()} {content_id} not found"
             raise ValueError(msg)
 
-        # Remove RAG chunks and any stored files
-        from src.ai.rag.service import RAGService
-
-        await RAGService.purge_for_content(session, content_type.value, str(obj_id))
+        # Remove any stored files that rely on row attributes before deleting the row.
         if content_type == ContentType.BOOK:
             await self._delete_book_file(row)
         elif content_type == ContentType.COURSE:
@@ -249,6 +243,10 @@ class ContentService:
         await self._delete_tag_associations(session, content_type, obj_id)
         await self._prune_orphan_tags(session)
 
-        # Delete the content row and commit once
+        from src.ai.rag.service import RAGService
+
+        await RAGService.purge_for_content(session, content_type.value, str(obj_id))
+
+        # Delete the content row and let the request boundary commit.
         await session.delete(row)
-        await session.commit()
+        await session.flush()

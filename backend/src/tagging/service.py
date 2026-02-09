@@ -5,7 +5,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,8 +20,16 @@ from .schemas import TagWithConfidence
 logger = logging.getLogger(__name__)
 
 
+def _is_rate_limit_or_quota_error(error: Exception) -> bool:
+    """Return True when the error indicates provider-side rate limiting/quota exhaustion."""
+    lowered = str(error).lower()
+    return "insufficient_quota" in lowered or "ratelimiterror" in lowered or "rate limit" in lowered
+
+
 class TaggedContent(BaseModel):
     """Structured tagging response enforced by LiteLLM json mode."""
+
+    model_config = ConfigDict(extra="forbid")
 
     tags: list[TagWithConfidence] = Field(
         ..., description="List of tags with confidence scores", min_length=1, max_length=10
@@ -64,9 +72,13 @@ class TaggingService:
                 temperature=0,
                 user_id=None,
                 model=model,
+                num_retries=0,
             )
         except Exception as exc:
-            logger.exception("Error generating tags via LiteLLM: %s", exc)
+            if _is_rate_limit_or_quota_error(exc):
+                logger.warning("Skipping auto-tag generation due to provider quota/rate limit: %s", exc)
+            else:
+                logger.exception("Error generating tags via LiteLLM: %s", exc)
             return []
 
         if not isinstance(result, TaggedContent):
@@ -132,7 +144,6 @@ class TaggingService:
 
         except Exception as e:
             logger.exception(f"Error tagging content {content_id}: {e}")
-            await self.session.rollback()
             return []
 
     async def suggest_tags(

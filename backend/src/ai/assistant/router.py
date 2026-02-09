@@ -44,7 +44,7 @@ async def get_models() -> dict[str, list[dict[str, Any]]]:
     """Return list of available assistant models.
 
     Minimal payload for UI model picker:
-    - id: full model identifier (e.g., "openrouter/openai/gpt-4o")
+    - id: full model identifier (e.g., "gpt-5-nano")
     - isDefault: whether this is the primary model
     """
     try:

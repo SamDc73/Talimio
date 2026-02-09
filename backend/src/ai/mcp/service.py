@@ -180,7 +180,7 @@ async def create_user_mcp_server(
         enabled=payload.enabled,
     )
     session.add(server)
-    await session.commit()
+    await session.flush()
     await session.refresh(server)
     return server
 
@@ -191,7 +191,7 @@ async def delete_user_mcp_server(session: AsyncSession, *, user_id: UUID, server
     if server is None or server.user_id != user_id:
         return False
     await session.delete(server)
-    await session.commit()
+    await session.flush()
     return True
 
 

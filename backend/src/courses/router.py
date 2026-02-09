@@ -387,7 +387,7 @@ async def submit_adaptive_reviews(
             "next_review_at": next_review.isoformat() if next_review else None,
         }
 
-    await session.commit()
+    await session.flush()
 
     if last_review_snapshot is not None:
         progress_payload: dict[str, Any] = {

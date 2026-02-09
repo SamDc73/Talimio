@@ -291,7 +291,7 @@ class LessonService:
             updated_rows = getattr(update_result, "rowcount", None)
 
             if updated_rows and updated_rows > 0:
-                await self.session.commit()
+                await self.session.flush()
                 await self.session.refresh(lesson)
                 logger.info(
                     "Lesson content generated and saved",

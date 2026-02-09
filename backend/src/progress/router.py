@@ -1,7 +1,7 @@
 """Progress tracking API endpoints."""
 
 import logging
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Response, status
 
@@ -91,7 +91,7 @@ async def get_single_progress(
         computed = await CourseProgressService(auth.session).get_progress(content_id, auth.user_id)
         metadata = {k: v for k, v in computed.items() if k != "completion_percentage"}
         return ProgressResponse(
-            id=row.id if row else uuid4(),
+            id=row.id if row else None,
             content_id=content_id,
             content_type="course",
             progress_percentage=computed.get("completion_percentage", 0.0),
@@ -104,7 +104,7 @@ async def get_single_progress(
     progress = await service.get_single_progress(auth.user_id, content_id)
     if not progress:
         return ProgressResponse(
-            id=uuid4(),
+            id=None,
             content_id=content_id,
             content_type=content_type,
             progress_percentage=0.0,

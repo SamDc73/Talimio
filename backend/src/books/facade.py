@@ -16,7 +16,6 @@ from sqlalchemy import select
 
 from src.books.models import Book
 from src.books.schemas import BookResponse, BookWithProgress
-from src.database.session import async_session_maker
 
 from .services.book_content_service import BookContentService
 from .services.book_progress_service import BookProgressService
@@ -115,16 +114,6 @@ class BooksFacade:
             book_id = getattr(book, "id", None)
             total_pages = getattr(book, "total_pages", 0)
 
-            # Auto-tag the created book (align with video flow)
-            try:
-                if book_id:
-                    await self._auto_tag_book(book_id, user_id)
-            except Exception as e:
-                logger.warning(
-                    "Automatic tagging failed",
-                    extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)},
-                )
-
             # Initialize progress tracking (non-fatal on failure)
             try:
                 if book_id:
@@ -150,54 +139,6 @@ class BooksFacade:
         except Exception as e:
             logger.exception("Error uploading book", extra={"user_id": str(user_id), "title": title, "error": str(e)})
             return {"error": f"Failed to upload book: {e!s}", "success": False}
-
-    async def _auto_tag_book(self, book_id: UUID, user_id: UUID) -> list[str]:
-        """Generate tags for a book using its content preview and store them."""
-        try:
-            # Defer imports to avoid circular dependencies and keep facade lightweight
-            from src.tagging.processors.book_processor import process_book_for_tagging
-            from src.tagging.service import TaggingService
-
-            # Use a short-lived dedicated session for slow tagging work so request session state stays stable.
-            async with async_session_maker() as tagging_session:
-                content_data = await process_book_for_tagging(book_id, user_id, tagging_session)
-                if not content_data:
-                    logger.warning(
-                        "Book not found or no content data for tagging",
-                        extra={"user_id": str(user_id), "book_id": str(book_id)},
-                    )
-                    return []
-
-                tagging_service = TaggingService(tagging_session)
-                tags = await tagging_service.tag_content(
-                    content_id=book_id,
-                    content_type="book",
-                    user_id=user_id,
-                    title=content_data.get("title", ""),
-                    content_preview=content_data.get("content_preview", ""),
-                )
-
-                # Persist tags onto the Book model for backward compatibility.
-                if tags:
-                    db_book = await tagging_session.get(Book, book_id)
-                    if db_book:
-                        db_book.tags = json.dumps(tags)
-                        await tagging_session.commit()
-                        logger.info(
-                            "Book tagged successfully",
-                            extra={"user_id": str(user_id), "book_id": str(book_id), "tag_count": len(tags)},
-                        )
-                else:
-                    # Still commit any flushed tag associations inside TaggingService.
-                    await tagging_session.commit()
-
-                return tags or []
-
-        except Exception as e:
-            logger.exception(
-                "Auto-tagging error", extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)}
-            )
-            return []
 
     async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update book reading progress."""

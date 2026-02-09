@@ -46,7 +46,7 @@ class BookContentService:
         book = Book(**data, user_id=user_id, created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
 
         session.add(book)
-        await session.commit()
+        await session.flush()
         await session.refresh(book)
 
         logger.info("Book created", extra={"user_id": str(user_id), "book_id": str(book.id), "title": book.title})
@@ -76,7 +76,7 @@ class BookContentService:
 
         book.updated_at = datetime.now(UTC)
 
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(book)
 
         logger.info("Book updated", extra={"user_id": str(user_id), "book_id": str(book.id)})

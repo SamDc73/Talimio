@@ -2,13 +2,13 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import Coroutine
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
 import aiohttp
 import yt_dlp
-from fastapi import BackgroundTasks
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +35,14 @@ logger = logging.getLogger(__name__)
 CHAPTER_EXTRACTION_MAX_RETRIES = 3
 CHAPTER_EXTRACTION_RETRY_DELAY_SECONDS = 2
 VIDEO_RAG_SEARCH_LIMIT = 5
+_DETACHED_TASKS: set[asyncio.Task[Any]] = set()
+
+
+def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
+    """Run background work outside FastAPI response-bound BackgroundTasks."""
+    task = asyncio.create_task(coro)
+    _DETACHED_TASKS.add(task)
+    task.add_done_callback(_DETACHED_TASKS.discard)
 
 
 def parse_video_id(video_id: str) -> UUID:
@@ -53,13 +61,87 @@ def _create_downloader(options: dict[str, Any]) -> yt_dlp.YoutubeDL:
     return yt_dlp.YoutubeDL(options)
 
 
+def _extract_info_sync(url: str, options: dict[str, Any]) -> Any:
+    """Run yt-dlp extraction synchronously (thread target)."""
+    with _create_downloader(options) as ydl:
+        return ydl.extract_info(url, download=False, process=False)
+
+
+async def _extract_info_async(url: str, options: dict[str, Any]) -> Any:
+    """Run yt-dlp extraction without blocking the asyncio event loop."""
+    return await asyncio.to_thread(_extract_info_sync, url, options)
+
+
 async def _embed_video_background(video_id: str) -> None:
     """Background task to embed a video."""
-    try:
-        async with async_session_maker() as session:
+    async with async_session_maker() as session:
+        try:
             await RAGService().process_video(session, parse_video_id(video_id))
+            await session.commit()
+        except Exception:
+            try:
+                await session.commit()
+            except Exception:
+                logger.debug("Failed to commit failed RAG status for video %s", video_id, exc_info=True)
+            logger.exception("Failed to embed video %s", video_id)
+
+
+def _parse_json_tags(raw_tags: str | None) -> list[str]:
+    """Parse serialized tags JSON into a list."""
+    if not raw_tags:
+        return []
+    try:
+        parsed = json.loads(raw_tags)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(tag) for tag in parsed if isinstance(tag, str)]
+
+
+def _merge_tags(existing_tags: list[str], generated_tags: list[str]) -> list[str]:
+    """Merge existing and generated tags while keeping insertion order."""
+    return list(dict.fromkeys([*existing_tags, *generated_tags]))
+
+
+async def _auto_tag_video_background(video_id: UUID, user_id: UUID) -> None:
+    """Generate and persist video tags in a dedicated background session."""
+    try:
+        from src.tagging.processors.video_processor import process_video_for_tagging
+        from src.tagging.service import update_content_tags_json
+
+        async with async_session_maker() as db:
+            tagging_service = TaggingService(db)
+            content_data = await process_video_for_tagging(video_id, db)
+            if not content_data:
+                logger.warning("Skipping tagging for missing video %s", video_id)
+                return
+
+            tags = await tagging_service.tag_content(
+                content_id=video_id,
+                content_type="video",
+                user_id=user_id,
+                title=content_data.get("title", ""),
+                content_preview=content_data.get("content_preview", ""),
+            )
+
+            db_video = await db.get(Video, video_id)
+            if db_video is None:
+                logger.warning("Skipping tag JSON update for missing video %s", video_id)
+                return
+
+            merged_tags = _merge_tags(_parse_json_tags(db_video.tags), tags)
+            await update_content_tags_json(
+                session=db,
+                content_id=video_id,
+                content_type="video",
+                tags=merged_tags,
+                user_id=user_id,
+            )
+            await db.commit()
+            logger.info("Successfully tagged video %s with tags: %s", video_id, tags)
     except Exception:
-        logger.exception("Failed to embed video %s", video_id)
+        logger.exception("Failed to tag video %s", video_id)
 
 
 async def _mark_video_status(video_id: str, status: str, error_context: str = "") -> None:
@@ -98,9 +180,11 @@ async def _try_extract_chapters(video_id: str, user_id: UUID) -> bool:
         video = video_result.scalar_one_or_none()
         if video:
             video.chapters_status = "processing"
+            # Commit status update before yt-dlp network calls to avoid holding row locks.
             await db.commit()
 
         chapters = await video_service.extract_and_create_video_chapters(db, video_id, user_id)
+        await db.commit()
         logger.info(f"Successfully extracted {len(chapters)} chapters for video {video_id}")
         return True
 
@@ -216,9 +300,7 @@ class VideoService:
             "updated_at": video.updated_at,
         }
 
-    async def create_video(
-        self, db: AsyncSession, video_data: VideoCreate, background_tasks: BackgroundTasks, user_id: UUID
-    ) -> VideoResponse:
+    async def create_video(self, db: AsyncSession, video_data: VideoCreate, user_id: UUID) -> VideoResponse:
         """Create a new video by fetching metadata from YouTube."""
         # Get the user ID for creation
         user_id_for_creation = user_id
@@ -252,64 +334,45 @@ class VideoService:
             published_at=video_info.get("published_at"),
         )
 
+        existing_global = await db.execute(
+            select(Video).where(Video.youtube_id == video_info["youtube_id"]),
+        )
+        existing_global_video = existing_global.scalar_one_or_none()
+        if existing_global_video is not None:
+            if existing_global_video.user_id != user_id:
+                msg = "Video already exists and cannot be duplicated for another user"
+                raise ValueError(msg)
+            video_dict = self._video_to_dict(existing_global_video)
+            video_dict["already_exists"] = True
+            return VideoResponse.model_validate(video_dict)
+
         db.add(video)
         try:
-            await db.commit()
-        except IntegrityError:
-            # Handle race condition - video was created by another request between check and insert
+            await db.flush()
+        except IntegrityError as e:
             await db.rollback()
-            # Fetch the existing video that was just created
-            existing = await db.execute(
-                select(Video).where(Video.youtube_id == video_info["youtube_id"]),
-            )
-            existing_video = existing.scalar_one_or_none()
-            if existing_video:
-                video_dict = self._video_to_dict(existing_video)
-                video_dict["already_exists"] = True
-                return VideoResponse.model_validate(video_dict)
-            # If we still can't find it, something else is wrong
-            raise
+
+            existing_global = await db.execute(select(Video).where(Video.youtube_id == video_info["youtube_id"]))
+            existing_global_video = existing_global.scalar_one_or_none()
+            if existing_global_video is None:
+                raise
+
+            if existing_global_video.user_id != user_id:
+                msg = "Video already exists and cannot be duplicated for another user"
+                raise ValueError(msg) from e
+
+            video_dict = self._video_to_dict(existing_global_video)
+            video_dict["already_exists"] = True
+            return VideoResponse.model_validate(video_dict)
 
         video_id = video.id
+        # Persist before queuing background tasks so they can load the row.
+        await db.commit()
 
-        # Trigger automatic tagging
-        try:
-            from src.tagging.processors.video_processor import process_video_for_tagging
-
-            tagging_service = TaggingService(db)
-            content_data = await process_video_for_tagging(video_id, db)
-            if not content_data:
-                logger.warning("Skipping tagging for missing video %s", video_id)
-            else:
-                # Close the read transaction before making slow external calls (LLM tagging).
-                # This avoids holding an "idle in transaction" connection open via the session pooler.
-                await db.rollback()
-                tags = await tagging_service.tag_content(
-                    content_id=video_id,
-                    content_type="video",
-                    user_id=user_id,
-                    title=content_data.get("title", ""),
-                    content_preview=content_data.get("content_preview", ""),
-                )
-
-                # Update video's tags field with both YouTube and generated tags
-                if tags:
-                    existing_tags = video_info.get("tags", [])
-                    all_tags = list(set(existing_tags + tags))  # Combine and deduplicate
-                    video.tags = json.dumps(all_tags)
-                    await db.commit()
-
-                logger.info("Successfully tagged video %s with tags: %s", video_id, tags)
-
-        except Exception as e:
-            # Don't fail video creation if tagging fails
-            logger.exception("Failed to tag video %s: %s", video_id, e)
-
-        # Trigger background chapter extraction
-        background_tasks.add_task(_extract_chapters_background, str(video_id), user_id)
-
-        # Trigger background transcript segment processing
-        background_tasks.add_task(_process_transcript_to_jsonb, video_id)
+        # Trigger background jobs detached from response-bound BackgroundTasks.
+        _spawn_detached_task(_auto_tag_video_background(video_id, user_id))
+        _spawn_detached_task(_extract_chapters_background(str(video_id), user_id))
+        _spawn_detached_task(_process_transcript_to_jsonb(video_id))
 
         # Reload to ensure server-default timestamps are loaded
         refreshed_video = await db.get(Video, video_id, populate_existing=True)
@@ -398,7 +461,7 @@ class VideoService:
         for field, value in update_dict.items():
             setattr(video, field, value)
 
-        await db.commit()
+        await db.flush()
         await db.refresh(video)
 
         return VideoResponse.model_validate(self._video_to_dict(video))
@@ -420,35 +483,34 @@ class VideoService:
         }
 
         try:
-            with _create_downloader(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False, process=False)
+            info = await _extract_info_async(url, ydl_opts)
 
-                if not info:
-                    msg = "Could not extract video information"
-                    raise ValueError(msg)
+            if not info:
+                msg = "Could not extract video information"
+                raise ValueError(msg)
 
-                # Extract relevant fields
-                # Parse upload_date from YYYYMMDD format to datetime
-                upload_date_str = info.get("upload_date")
-                published_at = None
-                if upload_date_str and len(upload_date_str) == 8:
-                    try:
-                        published_at = datetime.strptime(upload_date_str, "%Y%m%d").replace(tzinfo=UTC)
-                    except ValueError:
-                        logger.warning(f"Failed to parse upload date: {upload_date_str}")
+            # Extract relevant fields
+            # Parse upload_date from YYYYMMDD format to datetime
+            upload_date_str = info.get("upload_date")
+            published_at = None
+            if upload_date_str and len(upload_date_str) == 8:
+                try:
+                    published_at = datetime.strptime(upload_date_str, "%Y%m%d").replace(tzinfo=UTC)
+                except ValueError:
+                    logger.warning(f"Failed to parse upload date: {upload_date_str}")
 
-                return {
-                    "youtube_id": info.get("id", ""),
-                    "url": url,
-                    "title": info.get("title", "Unknown Title"),
-                    "channel": info.get("uploader", "Unknown Channel"),
-                    "channel_id": info.get("uploader_id", ""),
-                    "duration": int(info.get("duration") or 0),
-                    "thumbnail_url": info.get("thumbnail"),
-                    "description": info.get("description"),
-                    "tags": info.get("tags", []),
-                    "published_at": published_at,
-                }
+            return {
+                "youtube_id": info.get("id", ""),
+                "url": url,
+                "title": info.get("title", "Unknown Title"),
+                "channel": info.get("uploader", "Unknown Channel"),
+                "channel_id": info.get("uploader_id", ""),
+                "duration": int(info.get("duration") or 0),
+                "thumbnail_url": info.get("thumbnail"),
+                "description": info.get("description"),
+                "tags": info.get("tags", []),
+                "published_at": published_at,
+            }
         except Exception as e:
             logger.exception(f"Error fetching video info: {e}")
             # Return minimal info instead of failing completely
@@ -502,7 +564,7 @@ class VideoService:
                 # Mark as failed so we don't keep retrying
                 video.chapters_status = "failed"
                 video.chapters_extracted_at = datetime.now(UTC)
-                await db.commit()
+                await db.flush()
                 # Return empty list - frontend will fall back to description extraction
                 return []
 
@@ -598,7 +660,7 @@ class VideoService:
         except Exception as e:
             logger.warning(f"Failed to update unified progress for video {video_id} after chapter status change: {e}")
 
-        await db.commit()
+        await db.flush()
         await db.refresh(chapter)
 
         return VideoChapterResponse.model_validate(chapter)
@@ -641,7 +703,7 @@ class VideoService:
         # Update video timestamp
         video.updated_at = datetime.now(UTC)
 
-        await db.commit()
+        await db.flush()
         await db.refresh(video)
 
         return VideoResponse.model_validate(self._video_to_dict(video))
@@ -697,7 +759,7 @@ class VideoService:
         video.chapters_status = "completed"
         video.chapters_extracted_at = datetime.now(UTC)
 
-        await db.commit()
+        await db.flush()
 
         # Refresh chapters to get IDs
         for chapter in chapters:
@@ -784,7 +846,7 @@ class VideoService:
                     "total_segments": len(segments),
                     "processed_at": datetime.now(UTC).isoformat(),
                 }
-                await db.commit()
+                await db.flush()
                 logger.info(f"Stored {len(segments)} transcript segments in JSONB for video {video_id}")
 
             response_payload = {
@@ -811,39 +873,37 @@ class VideoService:
                 "allow_unplayable_formats": True,
             }
 
-            with _create_downloader(ydl_opts) as ydl:
-                # Get video info with subtitles (avoid format selection)
-                info = ydl.extract_info(video_url, download=False, process=False)
+            info = await _extract_info_async(video_url, ydl_opts)
 
-                # Try to get subtitles
-                subtitles = info.get("subtitles", {})
-                automatic_captions = info.get("automatic_captions", {})
+            # Try to get subtitles
+            subtitles = info.get("subtitles", {})
+            automatic_captions = info.get("automatic_captions", {})
 
-                # Prefer manual subtitles over automatic ones
-                subs_to_use = subtitles.get("en") or automatic_captions.get("en")
+            # Prefer manual subtitles over automatic ones
+            subs_to_use = subtitles.get("en") or automatic_captions.get("en")
 
-                if not subs_to_use:
-                    return []
+            if not subs_to_use:
+                return []
 
-                # Find the best subtitle format (prefer SRT to avoid VTT issues)
-                subtitle_url = None
-                for sub in subs_to_use:
-                    if sub.get("ext") == "srt":
-                        subtitle_url = sub.get("url")
-                        break
+            # Find the best subtitle format (prefer SRT to avoid VTT issues)
+            subtitle_url = None
+            for sub in subs_to_use:
+                if sub.get("ext") == "srt":
+                    subtitle_url = sub.get("url")
+                    break
 
-                # Fallback to any available subtitle
-                if not subtitle_url and subs_to_use:
-                    subtitle_url = subs_to_use[0].get("url")
+            # Fallback to any available subtitle
+            if not subtitle_url and subs_to_use:
+                subtitle_url = subs_to_use[0].get("url")
 
-                if not subtitle_url:
-                    return []
+            if not subtitle_url:
+                return []
 
-                # Download and parse subtitle content
-                async with aiohttp.ClientSession() as session, session.get(subtitle_url) as response:
-                    if response.status == 200:
-                        content = await response.text()
-                        return self._parse_srt_segments(content)
+            # Download and parse subtitle content
+            async with aiohttp.ClientSession() as session, session.get(subtitle_url) as response:
+                if response.status == 200:
+                    content = await response.text()
+                    return self._parse_srt_segments(content)
 
         except Exception as e:
             logger.exception(f"Failed to extract transcript segments for {video_url}: {e}")
@@ -893,25 +953,24 @@ class VideoService:
         }
 
         try:
-            with _create_downloader(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False, process=False)
+            info = await _extract_info_async(url, ydl_opts)
 
-                if not info:
-                    return []
+            if not info:
+                return []
 
-                # Extract chapters if available
-                chapters = info.get("chapters", [])
-                if not chapters:
-                    return []
+            # Extract chapters if available
+            chapters = info.get("chapters", [])
+            if not chapters:
+                return []
 
-                return [
-                    {
-                        "title": chapter.get("title", "Unknown Chapter"),
-                        "start_time": int(chapter.get("start_time", 0)),
-                        "end_time": int(chapter.get("end_time", 0)),
-                    }
-                    for chapter in chapters
-                ]
+            return [
+                {
+                    "title": chapter.get("title", "Unknown Chapter"),
+                    "start_time": int(chapter.get("start_time", 0)),
+                    "end_time": int(chapter.get("end_time", 0)),
+                }
+                for chapter in chapters
+            ]
 
         except Exception as e:
             logger.exception(f"Error fetching video chapters: {e}")

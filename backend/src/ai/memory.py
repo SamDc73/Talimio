@@ -56,7 +56,8 @@ def _get_memory_config() -> dict[str, Any]:
     """Build mem0 configuration from environment."""
     settings = get_settings()
 
-    # Convert database URL for psycopg3
+    # mem0 expects a plain postgresql:// URL even when the app uses SQLAlchemy's
+    # postgresql+psycopg:// DSN. Keep this conversion local to mem0 only.
     database_url = settings.DATABASE_URL
     if database_url.startswith("postgresql+psycopg://"):
         connection_string = database_url.replace("postgresql+psycopg://", "postgresql://")

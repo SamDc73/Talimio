@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Coroutine
 from typing import Annotated, Any
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -36,17 +37,94 @@ from .services.book_response_builder import BookResponseBuilder
 
 
 logger = logging.getLogger(__name__)
+_DETACHED_TASKS: set[asyncio.Task[Any]] = set()
 
 router = APIRouter(prefix="/api/v1/books", tags=["books"], dependencies=[Depends(books_rate_limit)])
 
 
 async def _embed_book_background(book_id: UUID) -> None:
     """Background task to embed a book."""
-    try:
-        async with async_session_maker() as session:
+    async with async_session_maker() as session:
+        try:
             await RAGService().process_book(session, book_id)
+            await session.commit()
+        except Exception:
+            try:
+                await session.commit()
+            except Exception:
+                logger.debug("Failed to commit failed RAG status for book %s", book_id, exc_info=True)
+            logger.exception("Failed to embed book %s", book_id)
+
+
+def _parse_json_tags(raw_tags: str | None) -> list[str]:
+    """Parse serialized tags JSON into a list."""
+    if not raw_tags:
+        return []
+    try:
+        parsed = json.loads(raw_tags)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(tag) for tag in parsed if isinstance(tag, str)]
+
+
+def _merge_tags(existing_tags: list[str], generated_tags: list[str]) -> list[str]:
+    """Merge existing and generated tags while keeping insertion order."""
+    return list(dict.fromkeys([*existing_tags, *generated_tags]))
+
+
+async def _auto_tag_book_background(book_id: UUID, user_id: UUID) -> None:
+    """Generate and persist book tags in a dedicated background session."""
+    try:
+        from src.tagging.processors.book_processor import process_book_for_tagging
+        from src.tagging.service import TaggingService, update_content_tags_json
+
+        async with async_session_maker() as session:
+            content_data = await process_book_for_tagging(book_id, user_id, session)
+            if not content_data:
+                logger.warning("Skipping tagging for missing book %s", book_id)
+                return
+
+            generated_tags = await TaggingService(session).tag_content(
+                content_id=book_id,
+                content_type="book",
+                user_id=user_id,
+                title=content_data.get("title", ""),
+                content_preview=content_data.get("content_preview", ""),
+            )
+
+            book = await session.get(Book, book_id)
+            if book is None:
+                logger.warning("Skipping tag JSON update for missing book %s", book_id)
+                return
+
+            merged_tags = _merge_tags(_parse_json_tags(book.tags), generated_tags)
+            await update_content_tags_json(
+                session=session,
+                content_id=book_id,
+                content_type="book",
+                tags=merged_tags,
+                user_id=user_id,
+            )
+            await session.commit()
+            logger.info("Successfully tagged book %s with tags: %s", book_id, generated_tags)
     except Exception:
-        logger.exception("Failed to embed book %s", book_id)
+        logger.exception("Failed to tag book %s", book_id)
+
+
+def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
+    """Run background work outside FastAPI response-bound BackgroundTasks."""
+    task = asyncio.create_task(coro)
+    _DETACHED_TASKS.add(task)
+    task.add_done_callback(_DETACHED_TASKS.discard)
+
+
+async def _schedule_book_background_tasks(auth: CurrentAuth, book_id: UUID) -> None:
+    """Commit the created book row before running detached embed/tag tasks."""
+    await auth.session.commit()
+    _spawn_detached_task(_embed_book_background(book_id))
+    _spawn_detached_task(_auto_tag_book_background(book_id, auth.user_id))
 
 
 def _build_progress_dict(progress_data: BookProgressUpdate) -> dict:
@@ -172,7 +250,6 @@ async def create_book_endpoint(
     publication_year: Annotated[int | None, Form(description="Publication year")] = None,
     publisher: Annotated[str | None, Form(description="Publisher")] = None,
     tags: Annotated[str, Form(description="Tags as JSON array string")] = "[]",
-    background_tasks: BackgroundTasks = BackgroundTasks(),
 ) -> BookResponse:
     """Add a new book (PDF, EPUB)."""
     try:
@@ -276,13 +353,11 @@ async def create_book_endpoint(
         book_id = result.get("book_id")
 
         if book_id:
-            background_tasks.add_task(_embed_book_background, book_id)
+            await _schedule_book_background_tasks(auth, book_id)
 
-        if isinstance(book_response, BookResponse):
-            return book_response
-
-        msg = "Failed to build book response"
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=msg)
+        if not isinstance(book_response, BookResponse):
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to build book response")
+        return book_response
 
     except HTTPException:
         raise
