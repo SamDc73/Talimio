@@ -13,6 +13,7 @@ import logger from "@/lib/logger"
 function CourseSidebar({
 	modules = [],
 	onLessonClick,
+	onPracticeClick,
 	activeLessonId = null,
 	courseId,
 	adaptiveEnabled = false,
@@ -59,15 +60,10 @@ function CourseSidebar({
 		}
 		const listify = (arr) => (Array.isArray(arr) ? arr : [])
 		const mapItem = (c) => {
-			const lessonId = c.lessonIdRef || c.lesson_id_ref || c.lessonId || c.lesson_id
 			return {
 				id: c.id,
 				name: c.name,
-				description: c.description,
-				lessonId,
 				mastery: typeof c.mastery === "number" ? c.mastery : null,
-				due: Boolean(c.nextReviewAt || c.next_review_at),
-				locked: false,
 			}
 		}
 		return {
@@ -116,33 +112,42 @@ function CourseSidebar({
 			<SidebarNav>
 				{adaptiveEnabled ? (
 					<>
-						{adaptiveLists.due.length > 0 && (
-							<ExpandableSection
-								key="practice-now"
-								title="Practice Now"
-								isExpanded={practiceExpanded}
-								onToggle={() => setPracticeExpanded((v) => !v)}
-								variant="course"
-							>
-								<ol>
-									{adaptiveLists.due.map((item) => (
-										<SidebarItem
-											key={String(item.id)}
-											title={item.name}
-											isActive={item.lessonId === activeLessonId}
-											isLocked={false}
-											onClick={() => onLessonClick?.(null, item.lessonId)}
-											variant="course"
-											leftContent={
-												<span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-800">
-													DUE
-												</span>
-											}
-										/>
-									))}
-								</ol>
-							</ExpandableSection>
-						)}
+						<ExpandableSection
+							key="practice-now"
+							title="Practice Now"
+							isExpanded={practiceExpanded}
+							onToggle={() => setPracticeExpanded((v) => !v)}
+							variant="course"
+						>
+							<ol>
+								<SidebarItem
+									key="practice-scheduled"
+									title="Open scheduled session"
+									isActive={false}
+									isLocked={false}
+									onClick={() => onPracticeClick?.()}
+									variant="course"
+								/>
+								{adaptiveLists.due.map((item) => (
+									<SidebarItem
+										key={String(item.id)}
+										title={item.name}
+										isActive={false}
+										isLocked={false}
+										onClick={() => onPracticeClick?.(item.id)}
+										variant="course"
+										leftContent={
+											<span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-800">
+												DUE
+											</span>
+										}
+									/>
+								))}
+							</ol>
+							{adaptiveLists.due.length === 0 ? (
+								<p className="text-xs text-muted-foreground">No concepts are currently due.</p>
+							) : null}
+						</ExpandableSection>
 
 						<ExpandableSection
 							key="ready-to-learn"
@@ -156,9 +161,9 @@ function CourseSidebar({
 									<SidebarItem
 										key={String(item.id)}
 										title={item.name}
-										isActive={item.lessonId === activeLessonId}
+										isActive={false}
 										isLocked={false}
-										onClick={() => onLessonClick?.(null, item.lessonId)}
+										onClick={() => onPracticeClick?.(item.id)}
 										variant="course"
 										leftContent={
 											item.mastery === null ? null : (
@@ -178,7 +183,7 @@ function CourseSidebar({
 						</ExpandableSection>
 					</>
 				) : (
-					modules.map((module, _index) => {
+					modules.map((module) => {
 						const isExpanded = expandedModules.includes(module.id)
 
 						return (

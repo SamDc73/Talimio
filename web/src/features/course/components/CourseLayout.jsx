@@ -68,6 +68,18 @@ export default function CourseLayout() {
 		navigate(`/course/${courseId}/lesson/${clickedLessonId}`)
 	}
 
+	const handlePracticeClick = (conceptId = null) => {
+		if (!courseId) {
+			return
+		}
+		if (!conceptId) {
+			navigate(`/course/${courseId}/practice`)
+			return
+		}
+		const encodedConceptId = encodeURIComponent(String(conceptId))
+		navigate(`/course/${courseId}/practice?focusConceptId=${encodedConceptId}`)
+	}
+
 	const contentClasses = cn("flex flex-1 pt-16 pb-8 transition-all duration-300 ease-in-out", isOpen ? "ml-80" : "ml-0")
 
 	if (isLoading) {
@@ -101,6 +113,7 @@ export default function CourseLayout() {
 				<CourseSidebarContainer
 					modules={modules || []}
 					onLessonClick={handleLessonClick}
+					onPracticeClick={handlePracticeClick}
 					courseId={courseId}
 					activeLessonId={lessonId}
 					adaptiveEnabled={adaptiveEnabled}

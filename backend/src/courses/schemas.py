@@ -178,9 +178,30 @@ class ReviewRequest(BaseModel):
     """Single concept review submission."""
 
     concept_id: UUID = Field(..., description="Concept being reviewed")
+    question: str | None = Field(
+        None,
+        min_length=1,
+        description="Optional learner-facing prompt text used for duplicate detection in practice generation",
+    )
     rating: int = Field(..., ge=1, le=4, description="Review quality rating (1-4)")
     review_duration_ms: int = Field(..., ge=0, description="Duration spent reviewing in milliseconds")
     latency_ms: int | None = Field(None, ge=0, description="Optional latency before answering in milliseconds")
+    structure_signature: str | None = Field(
+        None,
+        min_length=1,
+        description="Optional question structure signature used for practice duplicate/cadence analysis",
+    )
+    predicted_p_correct: float | None = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Optional model-estimated probability of correctness for this probe",
+    )
+    core_model: str | None = Field(
+        None,
+        min_length=1,
+        description="Optional provider/model id used to generate the practice question",
+    )
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
@@ -380,6 +401,43 @@ class GradeResponse(BaseModel):
     )
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class PracticeDrillRequest(BaseModel):
+    """Request payload for adaptive practice drill generation."""
+
+    concept_id: UUID = Field(..., description="Concept to generate drill questions for")
+    count: int = Field(..., ge=1, le=10, description="Number of drill items to generate")
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class PracticeDrillItem(BaseModel):
+    """Single generated practice drill item."""
+
+    concept_id: UUID = Field(..., description="Concept this drill belongs to")
+    lesson_id: UUID = Field(..., description="Deterministic lesson id mapped from concept")
+    question: str = Field(..., min_length=1, description="Learner-facing drill question")
+    expected_latex: str = Field(..., min_length=1, description="Expected answer in LaTeX-compatible text")
+    hints: list[str] = Field(default_factory=list, description="Optional hints for this drill")
+    structure_signature: str = Field(..., min_length=1, description="Normalized structural signature for duplicate checks")
+    predicted_p_correct: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Model-estimated probability that the learner answers correctly",
+    )
+    core_model: str = Field(..., min_length=1, description="Provider/model id used for generation")
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class PracticeDrillResponse(BaseModel):
+    """Response payload for adaptive practice drill generation."""
+
+    drills: list[PracticeDrillItem] = Field(default_factory=list, description="Generated drill items")
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
 
 class ExecutionFilePayload(BaseModel):

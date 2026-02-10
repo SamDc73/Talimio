@@ -52,6 +52,45 @@ Rules:
 - Only include errorHighlight when you can point to a specific LaTeX fragment to check; otherwise omit it.
 """
 
+PRACTICE_GENERATION_PROMPT = """
+Generate {count} practice questions for: {concept}.
+
+Concept description: {concept_description}
+
+Avoid questions similar to these:
+{history}
+
+Return JSON:
+{{
+  "questions": [
+    {{"question": "...", "expected_answer": "..."}}
+  ]
+}}
+"""
+
+PRACTICE_PREDICTION_PROMPT = """
+You are estimating the probability that a specific learner will answer each question correctly.
+
+LEARNER PROFILE:
+- Current mastery of "{concept}": {mastery:.2f}
+- Recent performance: {recent_correct}/{recent_total}
+- Learning speed: {learning_speed}
+- Strengths: {strengths}
+- Weaknesses: {weaknesses}
+
+QUESTIONS (return probabilities in this exact order):
+{questions}
+
+Output rules:
+- Return ONLY valid JSON (no markdown fences, no commentary)
+- Return probabilities between 0.0 and 1.0
+
+Return JSON:
+{{
+  "predicted_p_correct": [{predictions_example}]
+}}
+"""
+
 # Course Generation Prompts
 COURSE_GENERATION_PROMPT = """
 You are Curriculum Architect.

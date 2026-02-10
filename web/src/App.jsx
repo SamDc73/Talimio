@@ -11,6 +11,7 @@ import CourseLayout from "@/features/course/components/CourseLayout"
 import DocumentsView from "@/features/course/views/DocumentsView"
 import LessonContent from "@/features/course/views/LessonContent"
 import OutlineView from "@/features/course/views/OutlineView"
+import PracticeView from "@/features/course/views/PracticeView"
 import TrackView from "@/features/course/views/TrackView"
 import HomePage from "@/features/home"
 import { VideoViewer } from "@/features/video-viewer/VideoViewer"
@@ -47,6 +48,7 @@ function App() {
 						>
 							<Route index element={<OutlineView />} />
 							<Route path="track" element={<TrackView />} />
+							<Route path="practice" element={<PracticeView />} />
 							<Route path="documents" element={<DocumentsView />} />
 							<Route path="lesson/:lessonId" element={<LessonContent />} />
 							{/* Fallback: unknown nested path redirects to outline */}

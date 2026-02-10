@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowRight, CheckCircle, RotateCcw } from "lucide-react"
 import { useMemo, useRef } from "react"
+import { Link } from "react-router-dom"
 import { Button } from "@/components/Button"
 import { AdaptiveReviewPanel } from "./AdaptiveReviewPanel"
 import { ContentRenderer } from "./ContentRenderer"
@@ -115,6 +116,15 @@ export function LessonViewer({
 							</Button>
 
 							<div className="flex items-center gap-2">
+								{adaptiveEnabled && courseId && lesson?.concept_id && (
+									<Link
+										to={`/course/${courseId}/practice?focusConceptId=${encodeURIComponent(String(lesson.concept_id))}`}
+									>
+										<Button variant="outline" size="sm">
+											Practice Concept
+										</Button>
+									</Link>
+								)}
 								{onRegenerate && (
 									<Button onClick={() => onRegenerate(lesson.id)} variant="outline" size="sm">
 										<RotateCcw className="size-4 " />

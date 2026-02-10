@@ -22,6 +22,7 @@ export function useCourseService(courseId = null) {
 	const updateCourse = useApi("/courses/{courseId}", { method: "PATCH" })
 	const selfAssessmentQuestions = useApi("/courses/self-assessment/questions", { method: "POST" })
 	const getConceptFrontier = useApi("/courses/{courseId}/concepts")
+	const generatePracticeDrillsEndpoint = useApi("/courses/{courseId}/practice/drills", { method: "POST" })
 	const submitReviewsEndpoint = useApi("/courses/{courseId}/lessons/{lessonId}/reviews", { method: "POST" })
 	const getConceptNextReview = useApi("/courses/{courseId}/concepts/{conceptId}/next-review")
 	const gradeLessonAnswerEndpoint = useApi("/courses/{courseId}/lessons/{lessonId}/grade", { method: "POST" })
@@ -72,6 +73,29 @@ export function useCourseService(courseId = null) {
 				throw new Error("Course ID required")
 			}
 			return await getConceptFrontier.execute(null, { pathParams: { courseId } })
+		},
+
+		/**
+		 * Generate adaptive practice drills for a concept.
+		 * @param {Object} payload
+		 * @param {string} payload.conceptId - Concept ID
+		 * @param {number} payload.count - Number of drill items
+		 */
+		async fetchPracticeDrills(payload) {
+			if (!courseId) {
+				throw new Error("Course ID required")
+			}
+			if (!payload?.conceptId) {
+				throw new Error("conceptId is required")
+			}
+			if (typeof payload?.count !== "number" || Number.isNaN(payload.count)) {
+				throw new TypeError("count must be a number")
+			}
+
+			return await generatePracticeDrillsEndpoint.execute(
+				{ conceptId: payload.conceptId, count: payload.count },
+				{ pathParams: { courseId } }
+			)
 		},
 
 		/**
@@ -253,6 +277,7 @@ export function useCourseService(courseId = null) {
 				getCourse.isLoading ||
 				updateCourse.isLoading ||
 				getConceptFrontier.isLoading ||
+				generatePracticeDrillsEndpoint.isLoading ||
 				getLessons.isLoading ||
 				getLesson.isLoading ||
 				generateLesson.isLoading ||
@@ -274,6 +299,7 @@ export function useCourseService(courseId = null) {
 				getCourse.error ||
 				updateCourse.error ||
 				getConceptFrontier.error ||
+				generatePracticeDrillsEndpoint.error ||
 				getLessons.error ||
 				getLesson.error ||
 				generateLesson.error ||
