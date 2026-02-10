@@ -31,6 +31,8 @@ from src.courses.schemas import (
     GradeResponse,
     LessonDetailResponse,
     NextReviewResponse,
+    PracticeDrillRequest,
+    PracticeDrillResponse,
     ReviewBatchRequest,
     ReviewBatchResponse,
     ReviewOutcome,
@@ -46,6 +48,7 @@ from src.courses.services.course_query_service import CourseQueryService
 from src.courses.services.frontier_builder import build_course_frontier
 from src.courses.services.grading_service import GradingService
 from src.courses.services.lesson_service import LessonService
+from src.courses.services.practice_drill_service import PracticeDrillService
 from src.middleware.security import ai_rate_limit
 
 
@@ -80,6 +83,11 @@ def get_code_execution_service(auth: CurrentAuth) -> CodeExecutionService:
 def get_grading_service(auth: CurrentAuth) -> GradingService:
     """Get grading service instance."""
     return GradingService(auth.session)
+
+
+def get_practice_drill_service(auth: CurrentAuth) -> PracticeDrillService:
+    """Get adaptive practice drill generation service."""
+    return PracticeDrillService(auth.session)
 
 
 def get_ai_service_dependency() -> AIService:
@@ -282,6 +290,44 @@ async def get_course_concept_frontier(
     )
 
 
+@router.post("/{course_id}/practice/drills")
+async def generate_practice_drills(
+    course_id: UUID,
+    payload: PracticeDrillRequest,
+    auth: CurrentAuth,
+    drill_service: Annotated[PracticeDrillService, Depends(get_practice_drill_service)],
+) -> PracticeDrillResponse:
+    """Generate adaptive drill items for one concept."""
+    course = await auth.get_or_404(Course, course_id, "course")
+    if not course.adaptive_enabled:
+        raise HTTPException(status_code=400, detail="Adaptive scheduling is not enabled for this course")
+
+    try:
+        drills = await drill_service.generate_drills(
+            user_id=auth.user_id,
+            course_id=course.id,
+            concept_id=payload.concept_id,
+            count=payload.count,
+        )
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        logger.exception(
+            "PRACTICE_DRILL_GENERATION_FAILED",
+            extra={
+                "course_id": str(course.id),
+                "user_id": str(auth.user_id),
+                "concept_id": str(payload.concept_id),
+                "count": payload.count,
+            },
+        )
+        raise HTTPException(status_code=502, detail="Failed to generate practice drills") from error
+
+    return PracticeDrillResponse(drills=drills)
+
+
 @router.post("/{course_id}/lessons/{lesson_id}/reviews")
 async def submit_adaptive_reviews(
     course_id: UUID,
@@ -325,6 +371,15 @@ async def submit_adaptive_reviews(
             correct=correct,
             latency_ms=review.latency_ms,
         )
+        review_extra: dict[str, Any] = {"rating": review.rating}
+        if review.question:
+            review_extra["question"] = review.question
+        if review.structure_signature:
+            review_extra["structure_signature"] = review.structure_signature
+        if review.predicted_p_correct is not None:
+            review_extra["predicted_p_correct"] = float(review.predicted_p_correct)
+        if review.core_model:
+            review_extra["core_model"] = review.core_model
         await state_service.log_probe_event(
             user_id=auth.user_id,
             concept_id=review.concept_id,
@@ -333,7 +388,7 @@ async def submit_adaptive_reviews(
             correct=correct,
             latency_ms=review.latency_ms,
             context_tag=f"lesson:{lesson_id}",
-            extra={"rating": review.rating},
+            extra=review_extra,
         )
         next_review = await scheduler_service.calculate_next_review(
             user_id=auth.user_id,

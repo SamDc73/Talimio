@@ -6,6 +6,7 @@ import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
 export default function CourseSidebarContainer({
 	modules = [],
 	onLessonClick,
+	onPracticeClick,
 	activeLessonId = null,
 	courseId,
 	adaptiveEnabled = false,
@@ -26,6 +27,7 @@ export default function CourseSidebarContainer({
 		<CourseSidebar
 			modules={modules}
 			onLessonClick={onLessonClick}
+			onPracticeClick={onPracticeClick}
 			activeLessonId={activeLessonId}
 			courseId={courseId}
 			adaptiveEnabled={adaptiveEnabled}

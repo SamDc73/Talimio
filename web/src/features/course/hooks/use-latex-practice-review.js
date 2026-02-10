@@ -117,6 +117,7 @@ export function useLatexPracticeReview({
 			durationMs,
 			hintsUsed,
 			practiceContext: contextOverride,
+			reviewMetadata,
 		} = {}) => {
 			if (!courseId || !lessonId) {
 				throw new Error("Course ID and Lesson ID required for LaTeX practice grading")
@@ -167,6 +168,7 @@ export function useLatexPracticeReview({
 						conceptId: resolvedConceptId,
 						rating,
 						reviewDurationMs: normalizedDuration,
+						reviewMetadata,
 					})
 
 					await persistPracticeMetadata({
@@ -217,6 +219,7 @@ export function useLatexPracticeReview({
 			durationMs,
 			hintsUsed,
 			practiceContext: contextOverride,
+			reviewMetadata,
 		} = {}) => {
 			if (!courseId || !lessonId) {
 				throw new Error("Course ID and Lesson ID required for JSXGraph practice grading")
@@ -269,6 +272,7 @@ export function useLatexPracticeReview({
 						conceptId: resolvedConceptId,
 						rating,
 						reviewDurationMs: normalizedDuration,
+						reviewMetadata,
 					})
 
 					await persistPracticeMetadata({
@@ -307,7 +311,7 @@ export function useLatexPracticeReview({
 	)
 
 	const submitSkip = useCallback(
-		async ({ conceptId, attempts, durationMs, hintsUsed, practiceContext: contextOverride } = {}) => {
+		async ({ conceptId, attempts, durationMs, hintsUsed, practiceContext: contextOverride, reviewMetadata } = {}) => {
 			if (!courseId || !lessonId) {
 				throw new Error("Course ID and Lesson ID required for LaTeX practice review")
 			}
@@ -333,6 +337,7 @@ export function useLatexPracticeReview({
 					conceptId: resolvedConceptId,
 					rating,
 					reviewDurationMs: normalizedDuration,
+					reviewMetadata,
 				})
 
 				await persistPracticeMetadata({
