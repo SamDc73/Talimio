@@ -1,5 +1,6 @@
 /* Import Tailwind */
 @import "tailwindcss";
+@import "tw-animate-css";
 @import "katex/dist/katex.min.css";
 @import "mathlive/fonts.css";
 @import "../node_modules/jsxgraph/distrib/jsxgraph.css";
