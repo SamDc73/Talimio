@@ -5,12 +5,11 @@ eliminating the need to pass user_id in the URL.
 """
 
 import logging
-from typing import Annotated, Any
+from typing import Annotated, Any, NoReturn
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from src.auth import CurrentAuth
-from src.middleware.security import api_rate_limit, create_rate_limit_dependency
 from src.user.schemas import (
     ClearMemoryResponse,
     CustomInstructionsRequest,
@@ -21,6 +20,8 @@ from src.user.schemas import (
     UserSettingsResponse,
 )
 from src.user.service import (
+    UserNotFoundError,
+    UserServiceError,
     _load_user_preferences,
     clear_user_memories,
     delete_user_memory,
@@ -36,13 +37,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/v1/user",
     tags=["current-user"],
-    dependencies=[Depends(create_rate_limit_dependency(api_rate_limit))]
 )
+
+
+def _raise_user_service_error(error: Exception, *, detail: str) -> NoReturn:
+    """Map typed user-service domain errors to stable HTTP responses."""
+    if isinstance(error, UserNotFoundError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") from error
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=detail) from error
 
 
 @router.get("/settings")
 async def get_current_user_settings(
-    auth: CurrentAuth
+    auth: CurrentAuth,
 ) -> UserSettingsResponse:
     """
     Get current user settings including custom instructions and memory count.
@@ -53,16 +60,15 @@ async def get_current_user_settings(
     """
     try:
         return await get_user_settings(auth.user_id, auth.session)
-    except Exception as e:
-        logger.exception(f"Error in get_current_user_settings for user {auth.user_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get user settings: {e}"
-        ) from e
+    except UserServiceError as error:
+        logger.exception("Error in get_current_user_settings for user %s", auth.user_id)
+        _raise_user_service_error(error, detail="Failed to get user settings")
 
 
 @router.put("/settings/instructions")
 async def update_current_user_instructions(
-    auth: CurrentAuth, request: CustomInstructionsRequest
+    auth: CurrentAuth,
+    request: CustomInstructionsRequest,
 ) -> CustomInstructionsResponse:
     """
     Update custom instructions for AI personalization for current user.
@@ -76,11 +82,9 @@ async def update_current_user_instructions(
     """
     try:
         return await update_custom_instructions(auth.user_id, request.instructions, auth.session)
-    except Exception as e:
-        logger.exception(f"Error in update_current_user_instructions for user {auth.user_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update instructions: {e}"
-        ) from e
+    except UserServiceError as error:
+        logger.exception("Error in update_current_user_instructions for user %s", auth.user_id)
+        _raise_user_service_error(error, detail="Failed to update instructions")
 
 
 @router.get("/memories")
@@ -98,11 +102,9 @@ async def get_current_user_memories(
     try:
         memories = await get_user_memories(auth.user_id, limit=limit)
         return {"memories": memories, "total": len(memories)}
-    except Exception as e:
-        logger.exception(f"Error in get_current_user_memories for user {auth.user_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get memories: {e}"
-        ) from e
+    except UserServiceError as error:
+        logger.exception("Error in get_current_user_memories for user %s", auth.user_id)
+        _raise_user_service_error(error, detail="Failed to get memories")
 
 
 @router.delete("/memories")
@@ -115,11 +117,9 @@ async def clear_current_user_memories(auth: CurrentAuth) -> ClearMemoryResponse:
         return ClearMemoryResponse(cleared=True, message="All memories cleared successfully")
     except HTTPException:
         raise
-    except Exception as e:
-        logger.exception(f"Error in clear_current_user_memories for user {auth.user_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to clear memories: {e}"
-        ) from e
+    except UserServiceError as error:
+        logger.exception("Error in clear_current_user_memories for user %s", auth.user_id)
+        _raise_user_service_error(error, detail="Failed to clear memories")
 
 
 @router.delete("/memories/{memory_id}")
@@ -141,11 +141,9 @@ async def delete_current_user_memory(auth: CurrentAuth, memory_id: str) -> dict[
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Memory not found or deletion failed")
     except HTTPException:
         raise
-    except Exception as e:
-        logger.exception(f"Error in delete_current_user_memory for user {auth.user_id}, memory {memory_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete memory: {e}"
-        ) from e
+    except UserServiceError as error:
+        logger.exception("Error in delete_current_user_memory for user %s, memory %s", auth.user_id, memory_id)
+        _raise_user_service_error(error, detail="Failed to delete memory")
 
 
 @router.put("/preferences")
@@ -168,11 +166,9 @@ async def update_current_user_preferences(
     """
     try:
         return await update_user_preferences(auth.user_id, preferences_request.preferences, auth.session)
-    except Exception as e:
-        logger.exception(f"Error in update_current_user_preferences for user {auth.user_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update preferences: {e}"
-        ) from e
+    except UserServiceError as error:
+        logger.exception("Error in update_current_user_preferences for user %s", auth.user_id)
+        _raise_user_service_error(error, detail="Failed to update preferences")
 
 
 @router.get("/preferences")
@@ -188,8 +184,6 @@ async def get_current_user_preferences(
     """
     try:
         return await _load_user_preferences(auth.user_id, auth.session)
-    except Exception as e:
-        logger.exception(f"Error in get_current_user_preferences for user {auth.user_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get preferences: {e}"
-        ) from e
+    except UserServiceError as error:
+        logger.exception("Error in get_current_user_preferences for user %s", auth.user_id)
+        _raise_user_service_error(error, detail="Failed to get preferences")

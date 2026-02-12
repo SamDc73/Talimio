@@ -8,6 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 # AI imports removed - using facades instead
 from src.auth import CurrentAuth
+from src.books.models import Book
+from src.courses.models import Course
+from src.videos.models import Video
 
 from .schemas import (
     ContentTagsUpdate,
@@ -51,6 +54,24 @@ def validate_content_type(content_type: str) -> str:
             detail=f"Invalid content type: {content_type}. Must be one of: {', '.join(VALID_CONTENT_TYPES)}",
         )
     return content_type
+
+
+async def validate_owned_content(auth: CurrentAuth, content_type: str, content_id: UUID) -> None:
+    """Validate ownership for tagged content without auth-module cross-coupling."""
+    if content_type == "book":
+        await auth.get_or_404(Book, content_id, "book")
+        return
+    if content_type == "video":
+        await auth.get_or_404(Video, content_id, "video")
+        return
+    if content_type == "course":
+        await auth.get_or_404(Course, content_id, "course")
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Unknown resource type: {content_type}",
+    )
 
 
 @router.get("/tags")
@@ -124,7 +145,7 @@ async def update_content_tags(
     # Validate content type
     content_type = validate_content_type(content_type)
 
-    await auth.validate_resource(content_type, content_id)
+    await validate_owned_content(auth, content_type, content_id)
 
     try:
         await service.update_manual_tags(
@@ -159,4 +180,3 @@ async def update_content_tags(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update tags: {e!s}",
         ) from e
-

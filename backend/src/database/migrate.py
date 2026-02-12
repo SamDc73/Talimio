@@ -1,4 +1,4 @@
-"""Lightweight SQL migration runner for Supabase session pooler."""
+"""Lightweight SQL migration runner for PostgreSQL session poolers."""
 
 import logging
 from collections.abc import Iterable

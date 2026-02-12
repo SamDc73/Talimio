@@ -31,10 +31,12 @@ logger = logging.getLogger(__name__)
 def _token_cipher() -> Fernet:
     """Return a configured Fernet cipher for token encryption."""
     settings = get_settings()
-    if settings.MCP_TOKEN_ENCRYPTION_KEY:
-        key_bytes = settings.MCP_TOKEN_ENCRYPTION_KEY.encode("utf-8")
+    mcp_token_encryption_key = settings.MCP_TOKEN_ENCRYPTION_KEY
+    if mcp_token_encryption_key and mcp_token_encryption_key.get_secret_value().strip():
+        key_bytes = mcp_token_encryption_key.get_secret_value().encode("utf-8")
     else:
-        digest = hashlib.sha256(settings.SECRET_KEY.encode("utf-8")).digest()
+        auth_secret_key = settings.AUTH_SECRET_KEY.get_secret_value()
+        digest = hashlib.sha256(auth_secret_key.encode("utf-8")).digest()
         key_bytes = base64.urlsafe_b64encode(digest)
     try:
         return Fernet(key_bytes)

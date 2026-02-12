@@ -25,12 +25,6 @@ from sqlalchemy.exc import (
     OperationalError,
 )
 
-from src.auth.exceptions import (
-    InvalidCredentialsError,
-    InvalidTokenError,
-    TokenExpiredError,
-)
-
 
 logger = logging.getLogger(__name__)
 
@@ -41,29 +35,16 @@ logger = logging.getLogger(__name__)
 class ErrorCategory:
     """Error category constants."""
 
-    AUTHENTICATION = "AUTHENTICATION_ERROR"
-    AUTHORIZATION = "AUTHORIZATION_ERROR"
     VALIDATION = "VALIDATION_ERROR"
     DATABASE = "DATABASE_ERROR"
     RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND"
     CONFLICT = "CONFLICT_ERROR"
     EXTERNAL_SERVICE = "EXTERNAL_SERVICE_ERROR"
-    RATE_LIMIT = "RATE_LIMIT_ERROR"
     INTERNAL = "INTERNAL_ERROR"
 
 
 class ErrorCode:
     """Specific error codes for better client handling."""
-
-    # Authentication errors
-    AUTH_REQUIRED = "AUTH_REQUIRED"
-    INVALID_TOKEN = "INVALID_TOKEN"  # noqa: S105
-    TOKEN_EXPIRED = "TOKEN_EXPIRED"  # noqa: S105
-    INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
-
-    # Authorization errors
-    ACCESS_DENIED = "ACCESS_DENIED"
-    INSUFFICIENT_PERMISSIONS = "INSUFFICIENT_PERMISSIONS"
 
     # Validation errors
     INVALID_INPUT = "INVALID_INPUT"
@@ -84,21 +65,11 @@ class ErrorCode:
     SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
     TIMEOUT = "TIMEOUT"
 
-    # Rate limiting
-    RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
-
     # Internal errors
     INTERNAL = "INTERNAL_ERROR"
 
 
 # === Custom Exception Classes ===
-
-
-class AuthorizationError(HTTPException):
-    """User is authenticated but lacks permissions."""
-
-    def __init__(self, detail: str = "Insufficient permissions") -> None:
-        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
 class DatabaseConnectionError(HTTPException):
@@ -113,17 +84,6 @@ class ExternalServiceError(HTTPException):
 
     def __init__(self, service: str, detail: str) -> None:
         super().__init__(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"{service} service error: {detail}")
-
-
-class RateLimitError(HTTPException):
-    """Rate limit exceeded."""
-
-    def __init__(self, detail: str = "Rate limit exceeded", retry_after: int | None = None) -> None:
-        super().__init__(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=detail,
-            headers={"Retry-After": str(retry_after)} if retry_after else None,
-        )
 
 
 # === Error Response Formatting ===
@@ -153,67 +113,6 @@ def format_error_response(
         content["error"]["metadata"] = metadata
 
     return JSONResponse(status_code=status_code, content=content)
-
-
-# === Exception Handlers ===
-
-
-async def handle_authentication_errors(request: Request, exc: Exception) -> JSONResponse:
-    """Handle authentication-related errors."""
-    # Use debug level for expected token issues, warning for unexpected auth errors
-    log_level = logging.DEBUG if isinstance(exc, (InvalidTokenError, TokenExpiredError)) else logging.WARNING
-    logger.log(
-        log_level,
-        f"Authentication error on {request.method} {request.url.path}: {exc}",
-        extra={
-            "client_host": request.client.host if request.client else "unknown",
-            "error_type": type(exc).__name__,
-        },
-    )
-
-    if isinstance(exc, InvalidTokenError):
-        code = ErrorCode.INVALID_TOKEN
-        detail = "The provided token is invalid"
-        suggestions = ["Check your authentication token", "Try logging in again"]
-    elif isinstance(exc, TokenExpiredError):
-        code = ErrorCode.TOKEN_EXPIRED
-        detail = "Your session has expired"
-        suggestions = ["Please log in again to continue"]
-    elif isinstance(exc, InvalidCredentialsError):
-        code = ErrorCode.INVALID_CREDENTIALS
-        detail = "Invalid email or password"
-        suggestions = ["Check your credentials and try again"]
-    else:
-        code = ErrorCode.AUTH_REQUIRED
-        detail = str(exc) or "Authentication required"
-        suggestions = ["Please log in to access this resource"]
-
-    return format_error_response(
-        category=ErrorCategory.AUTHENTICATION,
-        code=code,
-        detail=detail,
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        suggestions=suggestions,
-    )
-
-
-async def handle_authorization_errors(request: Request, exc: AuthorizationError) -> JSONResponse:
-    """Handle authorization errors (403)."""
-    logger.warning(
-        f"Authorization error on {request.method} {request.url.path}: {exc.detail}",
-        extra={
-            "client_host": request.client.host if request.client else "unknown",
-            "user_id": getattr(request.state, "user_id", None),
-        },
-    )
-
-    return format_error_response(
-        category=ErrorCategory.AUTHORIZATION,
-        code=ErrorCode.ACCESS_DENIED,
-        detail=exc.detail,
-        status_code=status.HTTP_403_FORBIDDEN,
-        suggestions=["You don't have permission to access this resource"],
-    )
 
 
 async def handle_validation_errors(request: Request, exc: Exception) -> JSONResponse:
@@ -305,26 +204,6 @@ async def handle_external_service_errors(request: Request, exc: ExternalServiceE
         detail=exc.detail,
         status_code=exc.status_code,
         suggestions=["The service is temporarily unavailable", "Please try again later"],
-    )
-
-
-async def handle_rate_limit_errors(request: Request, exc: RateLimitError) -> JSONResponse:
-    """Handle rate limiting."""
-    logger.warning(
-        f"Rate limit exceeded on {request.method} {request.url.path}",
-        extra={
-            "client_host": request.client.host if request.client else "unknown",
-            "user_id": getattr(request.state, "user_id", None),
-        },
-    )
-
-    return format_error_response(
-        category=ErrorCategory.RATE_LIMIT,
-        code=ErrorCode.RATE_LIMIT_EXCEEDED,
-        detail=exc.detail,
-        status_code=exc.status_code,
-        suggestions=["Please wait before making more requests"],
-        metadata={"retry_after": exc.headers.get("Retry-After")} if exc.headers else None,
     )
 
 

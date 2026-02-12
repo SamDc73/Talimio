@@ -7,7 +7,6 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from src.auth import CurrentAuth
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_service import ContentService
-from src.middleware.security import api_rate_limit
 
 
 logger = logging.getLogger(__name__)
@@ -32,7 +31,7 @@ async def get_all_content(
 
     Returns a unified list of content items with consistent structure.
     Uses ultra-optimized single query with database-level sorting and pagination.
-    Requires authentication when Supabase auth is configured.
+    Requires authentication when local auth is configured.
     """
     logger.info(f"🔍 Getting content for authenticated user: {auth.user_id}")
     content_service = ContentService(session=auth.session)
@@ -47,9 +46,7 @@ async def get_all_content(
 
 
 @router.patch("/{content_type}/{content_id}/archive", status_code=204)
-@api_rate_limit
 async def archive_content_endpoint(
-    request: Request,  # noqa: ARG001
     content_type: ContentType,
     content_id: UUID,
     auth: CurrentAuth,
@@ -64,9 +61,7 @@ async def archive_content_endpoint(
 
 
 @router.patch("/{content_type}/{content_id}/unarchive", status_code=204)
-@api_rate_limit
 async def unarchive_content_endpoint(
-    request: Request,  # noqa: ARG001
     content_type: ContentType,
     content_id: UUID,
     auth: CurrentAuth,
@@ -81,9 +76,7 @@ async def unarchive_content_endpoint(
 
 
 @router.delete("/{content_type}/{content_id}", status_code=204)
-@api_rate_limit
 async def delete_content(
-    request: Request,  # noqa: ARG001
     content_type: str,
     content_id: str,
     auth: CurrentAuth,

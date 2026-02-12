@@ -3,70 +3,21 @@
 from fastapi import HTTPException, status
 
 
-class AuthenticationError(HTTPException):
-    """Base authentication error."""
-
-    def __init__(self, detail: str = "Authentication failed") -> None:
-        super().__init__(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=detail,
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-
-class InvalidCredentialsError(AuthenticationError):
-    """Invalid credentials provided."""
-
-    def __init__(self) -> None:
-        super().__init__(detail="Invalid email or password")
-
-
-class TokenExpiredError(AuthenticationError):
-    """Token has expired."""
-
-    def __init__(self) -> None:
-        super().__init__(detail="Token has expired")
-
-
-class InvalidTokenError(AuthenticationError):
+class InvalidTokenError(HTTPException):
     """Invalid token provided."""
 
     def __init__(self) -> None:
-        super().__init__(detail="Invalid token")
-
-
-# Removed unused exceptions: UserNotFoundError, UserAlreadyExistsError, AuthProviderNotConfiguredError
-
-
-class MissingTokenError(AuthenticationError):
-    """Raised when authentication token is missing."""
-
-    def __init__(self) -> None:
-        super().__init__(detail="Missing or invalid Authorization header")
-
-
-class SupabaseConfigError(HTTPException):
-    """Raised when Supabase is not properly configured."""
-
-    def __init__(self) -> None:
         super().__init__(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Supabase not configured for multi-user mode"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
         )
 
 
-class UnknownAuthProviderError(HTTPException):
-    """Raised when an unknown auth provider is configured."""
+class TokenExpiredError(HTTPException):
+    """Token has expired."""
 
-    def __init__(self, provider: str) -> None:
-        super().__init__(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unknown AUTH_PROVIDER: {provider}")
-
-
-class NotFoundError(HTTPException):
-    """Standard 404 error for missing or unauthorized resources.
-
-    Use this for ownership-guarded lookups where the resource either
-    doesn't exist or isn't accessible to the current user.
-    """
-
-    def __init__(self, detail: str = "Resource not found") -> None:
-        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired",
+        )

@@ -20,7 +20,7 @@ from src.ai.rag.parser import DocumentProcessor
 from src.ai.rag.schemas import DocumentResponse, SearchResult
 from src.auth import AuthContext
 from src.books.models import Book
-from src.courses.models import CourseDocument
+from src.courses.models import Course, CourseDocument
 from src.database.session import async_session_maker
 from src.storage.factory import get_storage_provider
 from src.videos.models import Video
@@ -60,7 +60,7 @@ class RAGService:
     ) -> DocumentResponse:
         """Upload a document to a course, ensuring user ownership."""
         # Validate user owns the course
-        await auth.validate_resource("course", course_id)
+        await auth.get_or_404(Course, course_id, "course")
 
         try:
             is_image = document_type == "image"
@@ -494,7 +494,7 @@ class RAGService:
         self, auth: AuthContext, course_id: uuid.UUID, query: str, top_k: int | None = None
     ) -> list[SearchResult]:
         """Search documents using AuthContext, ensuring user ownership."""
-        await auth.validate_resource("course", course_id)
+        await auth.get_or_404(Course, course_id, "course")
         return await self.search_course_documents(auth.session, course_id, query, top_k)
 
     async def search_course_documents(
@@ -528,7 +528,7 @@ class RAGService:
     ) -> list[DocumentResponse]:
         """Get documents for a course, ensuring user ownership."""
         # Verify user owns the course - this will throw 404 if not found or not owned
-        await auth.validate_resource("course", course_id)
+        await auth.get_or_404(Course, course_id, "course")
 
         try:
             # Now we know the user owns the course, we can query its documents directly
@@ -553,7 +553,7 @@ class RAGService:
     async def count_documents(self, auth: AuthContext, course_id: uuid.UUID) -> int:
         """Count documents for a course, ensuring user ownership."""
         # Verify user owns the course - this will throw 404 if not found or not owned
-        await auth.validate_resource("course", course_id)
+        await auth.get_or_404(Course, course_id, "course")
 
         try:
             # Now we know the user owns the course, we can count its documents directly
@@ -587,7 +587,7 @@ class RAGService:
                 raise HTTPException(status_code=404, detail="Document not found")
 
             # Verify user owns the course that contains this document
-            await auth.validate_resource("course", doc.course_id)
+            await auth.get_or_404(Course, doc.course_id, "course")
 
             # Delete file from filesystem if it exists
             if doc.file_path:
@@ -634,7 +634,7 @@ class RAGService:
                 raise HTTPException(status_code=404, detail="Document not found")
 
             # Verify user owns the course that contains this document
-            await auth.validate_resource("course", row_map["course_id"])
+            await auth.get_or_404(Course, row_map["course_id"], "course")
 
             return DocumentResponse.model_validate(row_map)
         except HTTPException:

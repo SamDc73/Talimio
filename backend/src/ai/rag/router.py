@@ -15,6 +15,7 @@ from src.ai.rag.schemas import (
 )
 from src.ai.rag.service import RAGService
 from src.auth import CurrentAuth
+from src.courses.models import Course
 
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ async def upload_document(
 ) -> dict:
     """Upload a document to a course."""
     # Validate course access via AuthContext
-    await auth.validate_resource("course", course_id)
+    await auth.get_or_404(Course, course_id, "course")
 
     # Only file uploads supported in MVP
     if not file:
@@ -96,7 +97,7 @@ async def list_documents(
 ) -> dict:
     """List documents for a course - with graceful failure handling."""
     # Validate course access via AuthContext
-    await auth.validate_resource("course", course_id)
+    await auth.get_or_404(Course, course_id, "course")
 
     try:
         documents = await rag_service.get_documents(auth, course_id, skip=skip, limit=limit)
@@ -123,7 +124,7 @@ async def search_documents(
 ) -> dict:
     """Search documents within a course using RAG."""
     # Validate course access via AuthContext
-    await auth.validate_resource("course", course_id)
+    await auth.get_or_404(Course, course_id, "course")
 
     try:
         results = await rag_service.search_documents(

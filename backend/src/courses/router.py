@@ -49,7 +49,6 @@ from src.courses.services.frontier_builder import build_course_frontier
 from src.courses.services.grading_service import GradingService
 from src.courses.services.lesson_service import LessonService
 from src.courses.services.practice_drill_service import PracticeDrillService
-from src.middleware.security import ai_rate_limit
 
 
 router = APIRouter(
@@ -93,7 +92,6 @@ def get_practice_drill_service(auth: CurrentAuth) -> PracticeDrillService:
 def get_ai_service_dependency() -> AIService:
     """Provide AI service singleton for dependency injection."""
     return get_ai_service()
-
 
 
 # Course operations
@@ -516,8 +514,8 @@ async def get_concept_next_review(
 # NOTE: Quiz submission removed - quizzes are part of lesson content and handled via lesson progress updates
 # Quiz results should be submitted through the lesson status update endpoints, not as separate entities
 
+
 # --- Code Execution (E2B) ---
-@ai_rate_limit
 @router.post("/code/execute")
 async def execute_code(
     request: CodeExecuteRequest,

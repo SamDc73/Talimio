@@ -1,32 +1,27 @@
+import ipaddress
 import logging
+import re
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError, IntegrityError, OperationalError
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette_csrf import CSRFMiddleware
 
 from .ai.assistant.router import router as assistant_router
 from .ai.mcp.router import router as mcp_router
 from .ai.rag.router import router as rag_router
-from .auth.exceptions import (
-    AuthenticationError,
-    InvalidCredentialsError,
-    InvalidTokenError,
-    TokenExpiredError,
-)
-from .auth.middleware import AuthInjectionMiddleware
 from .auth.router import router as auth_router
+from .auth.security import get_csrf_signing_key, get_session_signing_key
 from .books.router import router as books_router
 
 # Setup logging
@@ -39,21 +34,16 @@ from .database.session import DbSession, engine
 from .exceptions import ResourceNotFoundError, ValidationError as CustomValidationError
 from .highlights.router import router as highlights_router
 from .middleware.error_handlers import (
-    AuthorizationError,
     ErrorCategory,
     ErrorCode,
     ExternalServiceError,
-    RateLimitError,
     format_error_response,
-    handle_authentication_errors,
-    handle_authorization_errors,
     handle_database_errors,
     handle_external_service_errors,
-    handle_rate_limit_errors,
     handle_validation_errors,
     log_error_context,
 )
-from .middleware.security import SimpleSecurityMiddleware, limiter
+from .middleware.security import SimpleSecurityMiddleware
 from .progress.router import router as progress_router
 from .tagging.router import router as tagging_router
 from .user.router import router as user_router
@@ -102,14 +92,6 @@ async def _startup() -> None:
         raise
 
     try:
-        from src.auth.validation import validate_auth_on_startup
-
-        validate_auth_on_startup()
-    except Exception:
-        logger.exception("Auth configuration validation failed")
-        raise
-
-    try:
         await apply_migrations(engine)
         logger.info("Database migrations applied")
     except Exception:
@@ -150,11 +132,51 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     await _shutdown()
 
 
+def _get_cors_allow_origins(settings: Any) -> list[str]:
+    configured = (getattr(settings, "CORS_ALLOW_ORIGINS", "") or "").strip()
+    if configured:
+        origins = [origin.strip() for origin in configured.split(",") if origin.strip()]
+        if origins:
+            return origins
+
+    origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    frontend_url = getattr(settings, "FRONTEND_URL", "")
+    if isinstance(frontend_url, str) and frontend_url:
+        parsed = urlsplit(frontend_url)
+        if parsed.scheme and parsed.netloc:
+            frontend_origin = f"{parsed.scheme}://{parsed.netloc}"
+            if frontend_origin not in origins:
+                origins.append(frontend_origin)
+    return origins
+
+
+def _get_csrf_cookie_domain(frontend_url: str) -> str | None:
+    """Return a cookie domain that works for frontend/api subdomains when possible."""
+    parsed = urlsplit(frontend_url)
+    hostname = parsed.hostname
+    if not hostname:
+        return None
+    if hostname in {"localhost", "127.0.0.1"}:
+        return None
+    try:
+        ipaddress.ip_address(hostname)
+        return None
+    except ValueError:
+        pass
+
+    host_parts = hostname.split(".")
+    if len(host_parts) < 2:
+        return None
+    return ".".join(host_parts[-2:])
+
+
 def _configure_middlewares(app: FastAPI, settings: Any) -> None:
-    """Register built-in middlewares and rate limiting."""
+    """Register built-in middlewares."""
+    session_secret = get_session_signing_key()
+    csrf_secret = get_csrf_signing_key()
     app.add_middleware(
         cast("Any", CORSMiddleware),
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_origins=_get_cors_allow_origins(settings),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -162,22 +184,24 @@ def _configure_middlewares(app: FastAPI, settings: Any) -> None:
     app.add_middleware(cast("Any", GZipMiddleware), minimum_size=1000)
     app.add_middleware(
         cast("Any", SessionMiddleware),
-        secret_key=settings.SECRET_KEY,
+        secret_key=session_secret,
         https_only=settings.ENVIRONMENT == "production",
     )
+    app.add_middleware(
+        cast("Any", CSRFMiddleware),
+        secret=csrf_secret,
+        exempt_urls=[
+            re.compile(r"^/api/v1/auth/(login|signup|forgot-password|reset-password|verify|resend-verification)$")
+        ],
+        sensitive_cookies={settings.AUTH_COOKIE_NAME},
+        cookie_domain=_get_csrf_cookie_domain(settings.FRONTEND_URL),
+        cookie_secure=settings.ENVIRONMENT == "production",
+    )
     app.add_middleware(cast("Any", SimpleSecurityMiddleware))
-    app.state.limiter = limiter
-    # Rate limit handler for RateLimitExceeded is registered in create_app()
-    app.add_middleware(cast("Any", AuthInjectionMiddleware))
 
 
 def _register_exception_handlers(app: FastAPI) -> None:
     """Attach all exception handlers to app."""
-
-    def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Response:
-        return _rate_limit_exceeded_handler(request, exc)
-
-    app.add_exception_handler(RateLimitExceeded, cast("ExceptionHandler", _rate_limit_handler))
 
     def resource_not_found_handler(_request: Request, exc: ResourceNotFoundError) -> JSONResponse:
         return format_error_response(
@@ -190,17 +214,6 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
     app.add_exception_handler(ResourceNotFoundError, cast("ExceptionHandler", resource_not_found_handler))
 
-    auth_handler = cast("ExceptionHandler", handle_authentication_errors)
-    for exc_type in (
-        AuthenticationError,
-        InvalidTokenError,
-        TokenExpiredError,
-        InvalidCredentialsError,
-    ):
-        app.add_exception_handler(exc_type, auth_handler)
-
-    app.add_exception_handler(AuthorizationError, cast("ExceptionHandler", handle_authorization_errors))
-
     validation_handler = cast("ExceptionHandler", handle_validation_errors)
     for exc_type in (ValidationError, CustomValidationError):
         app.add_exception_handler(exc_type, validation_handler)
@@ -210,7 +223,6 @@ def _register_exception_handlers(app: FastAPI) -> None:
         app.add_exception_handler(exc_type, database_handler)
 
     app.add_exception_handler(ExternalServiceError, cast("ExceptionHandler", handle_external_service_errors))
-    app.add_exception_handler(RateLimitError, cast("ExceptionHandler", handle_rate_limit_errors))
 
 
 def create_app() -> FastAPI:
@@ -229,7 +241,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan if settings.ENVIRONMENT != "test" else None,
     )
 
-    # Middleware and rate limiting
+    # Middleware
     _configure_middlewares(app, settings)
 
     # Exception handlers

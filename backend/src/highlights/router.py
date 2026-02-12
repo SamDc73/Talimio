@@ -3,11 +3,10 @@
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import and_, select
 
 from src.auth import CurrentAuth
-from src.middleware.security import api_rate_limit, create_rate_limit_dependency
 
 from .models import Highlight
 from .schemas import HighlightCreate, HighlightResponse
@@ -15,7 +14,7 @@ from .schemas import HighlightCreate, HighlightResponse
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["highlights"], dependencies=[Depends(create_rate_limit_dependency(api_rate_limit))])
+router = APIRouter(tags=["highlights"])
 
 
 @router.get("/api/v1/books/{book_id}/highlights")

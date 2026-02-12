@@ -5,6 +5,8 @@ import { AuthProvider } from "@/contexts/AuthProvider"
 import { ThemeProvider } from "@/contexts/ThemeContext"
 import { ChatSidebarProvider } from "@/features/assistant/contexts/ChatSidebarProvider"
 import AuthPage from "@/features/auth/AuthPage"
+import ResetPasswordPage from "@/features/auth/ResetPasswordPage"
+import VerifyEmailPage from "@/features/auth/VerifyEmailPage"
 import BookViewer from "@/features/book-viewer/BookViewer"
 import { CourseProvider } from "@/features/course/CourseContext"
 import CourseLayout from "@/features/course/components/CourseLayout"
@@ -24,6 +26,8 @@ function App() {
 					<Routes>
 						{/* Public routes */}
 						<Route path="/auth" element={<AuthPage />} />
+						<Route path="/reset-password" element={<ResetPasswordPage />} />
+						<Route path="/verify-email" element={<VerifyEmailPage />} />
 
 						{/* Protected routes */}
 						<Route
