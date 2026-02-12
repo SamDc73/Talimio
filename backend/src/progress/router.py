@@ -7,7 +7,6 @@ from fastapi import APIRouter, HTTPException, Response, status
 
 from src.auth import CurrentAuth
 from src.courses.services.course_progress_service import CourseProgressService
-from src.middleware.security import limiter
 
 from .models import (
     BatchProgressRequest,
@@ -24,10 +23,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/progress", tags=["progress"])
 
 MAX_BATCH_SIZE = 100  # Prevent unbounded requests
-
-# Create a specific rate limiter for progress updates
-# 10 updates per minute per user
-progress_rate_limit = limiter.limit("10/minute")
 
 
 @router.post("/batch")

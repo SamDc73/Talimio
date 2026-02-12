@@ -1,6 +1,9 @@
 import logger from "@/lib/logger"
 
 const BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1"
+const CSRF_COOKIE_NAME = "csrftoken"
+const CSRF_HEADER_NAME = "x-csrftoken"
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"])
 
 // In-flight request cache for deduplication
 const inFlightRequests = new Map()
@@ -16,6 +19,14 @@ const isFormData = (data) => typeof FormData !== "undefined" && data instanceof 
 const isBinaryBody = (data) =>
 	(typeof Blob !== "undefined" && data instanceof Blob) ||
 	(typeof ArrayBuffer !== "undefined" && data instanceof ArrayBuffer)
+
+const getCookieValue = (cookieName) => {
+	if (typeof document === "undefined" || !document.cookie) return null
+	const encodedKey = `${encodeURIComponent(cookieName)}=`
+	const cookiePair = document.cookie.split("; ").find((item) => item.startsWith(encodedKey))
+	if (!cookiePair) return null
+	return decodeURIComponent(cookiePair.slice(encodedKey.length))
+}
 
 const parseResponseBody = async (response, responseType) => {
 	// FastAPI uses 204 for many mutation endpoints (archive/delete/etc.)
@@ -34,6 +45,21 @@ const parseResponseBody = async (response, responseType) => {
 	return looksLikeJson ? JSON.parse(text) : text
 }
 
+const getErrorMessage = (errorData, fallbackMessage) => {
+	if (typeof errorData === "string") return errorData
+	if (!errorData || typeof errorData !== "object") return fallbackMessage
+
+	const detail = errorData.detail
+	if (Array.isArray(detail)) {
+		const messages = detail.map((item) => item?.msg).filter(Boolean)
+		return messages.join(", ") || fallbackMessage
+	}
+
+	if (typeof detail === "string") return detail
+	if (typeof errorData.message === "string") return errorData.message
+	return fallbackMessage
+}
+
 // Helper function to handle API responses
 const handleResponse = async (response, endpoint, responseType) => {
 	if (!response.ok) {
@@ -46,14 +72,7 @@ const handleResponse = async (response, endpoint, responseType) => {
 		}
 		if (!errorData) errorData = { message: response.statusText }
 
-		if (response.status === 401 && !endpoint.includes("/auth/")) {
-			if (window.location.pathname !== "/auth") {
-				window.location.href = "/auth"
-			}
-		}
-
-		const errorMessage =
-			typeof errorData === "string" ? errorData : errorData?.detail || errorData?.message || response.statusText
+		const errorMessage = getErrorMessage(errorData, response.statusText)
 		const error = new Error(`API Error: ${response.status} ${errorMessage}`)
 		error.status = response.status
 		error.data = errorData
@@ -100,6 +119,13 @@ const executeRequest = async (method, endpoint, data = null, options = {}) => {
 	const makeRequest = async () => {
 		const url = absoluteUrl ? endpoint : joinUrl(BASE_URL, endpoint)
 		const headers = { ...optionHeaders }
+		const hasCsrfHeader = Object.keys(headers).some((key) => key.toLowerCase() === CSRF_HEADER_NAME)
+		if (!SAFE_METHODS.has(method) && !hasCsrfHeader) {
+			const csrfToken = getCookieValue(CSRF_COOKIE_NAME)
+			if (csrfToken) {
+				headers[CSRF_HEADER_NAME] = csrfToken
+			}
+		}
 		const requestOptions = {
 			method,
 			headers,

@@ -1,6 +1,7 @@
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import field_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,19 +13,57 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     ENVIRONMENT: str = "development"  # "development", "production"
     PLATFORM_MODE: str = "oss"  # "oss" or "cloud"
-    SECRET_KEY: str = "your-secret-key-change-in-production"  # For session middleware  # noqa: S105
-    MCP_TOKEN_ENCRYPTION_KEY: str | None = None
+    AUTH_SECRET_KEY: SecretStr = SecretStr("")  # Required for JWT/session/CSRF signing
+    MCP_TOKEN_ENCRYPTION_KEY: SecretStr | None = None
 
     # Server Configuration (used when running src/main.py directly)
     API_HOST: str = "127.0.0.1"
     API_PORT: int = 8080
 
     # Auth settings
-    AUTH_PROVIDER: str = "none"  # "none" (single-user mode) or "supabase" (multi-user mode)
+    AUTH_PROVIDER: str = "none"  # "none" (single-user) | "local" (email/password in DB)
 
-    # Supabase Auth (2025 API patterns)
-    SUPABASE_URL: str = ""
-    SUPABASE_PUBLISHABLE_KEY: str = ""  # Safe for client-side
+    # Local (template-style) Auth
+    # 60 minutes is a common access-token/session lifetime when paired with refresh/rotation.
+    # You can increase this in production if you want "stay logged in" behavior.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    AUTH_REQUIRE_EMAIL_VERIFICATION: bool = False
+    TRUSTED_PROXY_CIDRS: str = ""
+
+    # Password policy
+    AUTH_PASSWORD_MIN_LENGTH: int = 12
+    AUTH_PASSWORD_REQUIRE_UPPERCASE: bool = True
+    AUTH_PASSWORD_REQUIRE_LOWERCASE: bool = True
+    AUTH_PASSWORD_REQUIRE_DIGIT: bool = True
+    AUTH_PASSWORD_REQUIRE_SYMBOL: bool = True
+    AUTH_PASSWORD_DISALLOW_WHITESPACE: bool = True
+
+    # Cookie config
+    AUTH_COOKIE_NAME: str = "access_token"
+    AUTH_COOKIE_SECURE: bool = False  # True in production
+    AUTH_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
+    AUTH_COOKIE_HTTPONLY: bool = True
+
+    # Frontend URL (used for auth redirects / emails)
+    FRONTEND_URL: str = "http://localhost:5173"
+
+    # CORS (for browser-based clients)
+    # Comma-separated list of allowed origins (e.g. "https://talimio.com,http://localhost:5173").
+    # If empty, the app allows localhost dev origins + the origin derived from FRONTEND_URL.
+    CORS_ALLOW_ORIGINS: str = ""
+
+    # Resend API (password reset + verification emails)
+    RESEND_API_KEY: SecretStr = SecretStr("")
+    EMAILS_FROM_EMAIL: str = ""
+    EMAILS_FROM_NAME: str = "Talimio"
+
+    # Password reset tokens
+    # 1 hour is a common password reset link lifetime.
+    EMAIL_RESET_TOKEN_EXPIRE_HOURS: int = 1
+
+    # Google OAuth
+    GOOGLE_OAUTH_CLIENT_ID: str = ""
+    GOOGLE_OAUTH_CLIENT_SECRET: SecretStr = SecretStr("")
 
     # Storage settings
     STORAGE_PROVIDER: str = "local"  # "r2" or "local"
@@ -76,9 +115,6 @@ class Settings(BaseSettings):
     TAGGING_LLM_MODEL: str | None = None
     GRADING_COACH_LLM_MODEL: str | None = None
 
-    # Security / rate-limits
-    DISABLE_RATE_LIMITS: bool = False
-
     # Code Execution (E2B)
     E2B_SANDBOX_TTL: int = 600
     E2B_SDK_LOG_LEVEL: str = "WARNING"
@@ -96,6 +132,27 @@ class Settings(BaseSettings):
             msg = "DATABASE_URL must use postgresql+psycopg:// for psycopg3"
             raise ValueError(msg)
         return value
+
+    @field_validator(
+        "ACCESS_TOKEN_EXPIRE_MINUTES",
+        "AUTH_PASSWORD_MIN_LENGTH",
+    )
+    @classmethod
+    def validate_positive_integers(cls, value: int) -> int:
+        """Ensure integer auth settings are positive."""
+        if value <= 0:
+            msg = "Auth settings integer values must be greater than zero"
+            raise ValueError(msg)
+        return value
+
+    @model_validator(mode="after")
+    def validate_auth_secret_key_required(self) -> "Settings":
+        """Require AUTH_SECRET_KEY to be configured and non-empty."""
+        auth_secret_key = self.AUTH_SECRET_KEY
+        if not auth_secret_key.get_secret_value().strip():
+            msg = "AUTH_SECRET_KEY environment variable is required"
+            raise ValueError(msg)
+        return self
 
     @property
     def primary_llm_model(self) -> str:

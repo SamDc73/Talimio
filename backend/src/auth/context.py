@@ -7,50 +7,31 @@ prefer passing `CurrentAuth` instead of separate user_id/session pairs over time
 
 from __future__ import annotations
 
-import contextlib
-import logging
-from typing import TYPE_CHECKING, Annotated, Any, TypeVar, cast
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Annotated, Any, TypeVar
 from uuid import UUID
 
-from fastapi import Depends
-from sqlalchemy import select, text
+from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import select
 
-from src.auth.dependencies import _get_user_id
-from src.auth.exceptions import NotFoundError
+import src.auth.crud as local_crud
+from src.auth.dependencies import (
+    _get_user_id_dependency,
+    get_local_session_id_from_state,
+    get_local_token_version_from_state,
+)
+from src.auth.exceptions import InvalidTokenError
+from src.config.settings import get_settings
 from src.database.session import DbSession
 
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
-    from sqlalchemy.orm.attributes import QueryableAttribute
+
+    from src.user.models import User
 
 
 T = TypeVar("T")
-logger = logging.getLogger(__name__)
-
-
-async def _ensure_local_user(session: AsyncSession, user_id: UUID) -> None:
-    """Ensure the current user exists in the local users table when available."""
-    try:
-        table_check = await session.execute(text("SELECT to_regclass('users')"))
-        if table_check.scalar() is None:
-            return
-
-        username_hint = str(user_id)
-        await session.execute(
-            text(
-                """
-                INSERT INTO users (id, username, password_hash, role)
-                VALUES (:uid, :uname, :pwd, 'user')
-                ON CONFLICT (id) DO NOTHING
-                """
-            ),
-            {"uid": str(user_id), "uname": username_hint, "pwd": "not_used_in_single_user_mode"},
-        )
-    except Exception:
-        with contextlib.suppress(Exception):
-            await session.rollback()
-        logger.debug("User ensure step failed for %s", user_id, exc_info=True)
 
 
 class AuthContext:
@@ -61,31 +42,10 @@ class AuthContext:
     explicit, safe check (e.g., via joins). This prevents silent under-scoping.
     """
 
-    def __init__(self, user_id: UUID, session: AsyncSession) -> None:
+    def __init__(self, user_id: UUID, session: AsyncSession, local_user: User | None = None) -> None:
         self.user_id = user_id
         self.session = session
-
-    async def query_owned(self, model: type[T], /, **filters: Any) -> list[T]:
-        """Return all rows for `model` owned by current user, with extra filters.
-
-        Requires `model.user_id` to exist. If missing, raises to prevent unsafe
-        queries.
-        """
-        if not hasattr(model, "user_id"):
-            msg = f"Model {model.__name__} has no user_id attribute; implement explicit ownership logic"
-            raise NotImplementedError(msg)
-
-        user_id_attr = cast("QueryableAttribute[UUID]", model.user_id)
-        stmt = select(model).where(user_id_attr == self.user_id)
-        for key, value in filters.items():
-            if not hasattr(model, key):
-                msg = f"{model.__name__} has no attribute '{key}' for filtering"
-                raise AttributeError(msg)
-            column_attr = cast("QueryableAttribute[Any]", getattr(model, key))
-            stmt = stmt.where(column_attr == value)
-
-        result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        self.local_user = local_user
 
     async def get_owned(
         self,
@@ -105,9 +65,9 @@ class AuthContext:
             msg = f"{model.__name__} has no id field '{id_field}'"
             raise AttributeError(msg)
 
-        record_attr = cast("QueryableAttribute[Any]", getattr(model, id_field))
-        user_id_attr = cast("QueryableAttribute[UUID]", model.user_id)
-        stmt = select(model).where(record_attr == record_id, user_id_attr == self.user_id)
+        record_attr = getattr(model, id_field)
+        user_id_attr = model.user_id
+        stmt = select(model).where(record_attr == record_id, user_id_attr == self.user_id)  # ty: ignore[invalid-argument-type]
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
@@ -122,74 +82,39 @@ class AuthContext:
         """Fetch a single row by id or raise 404 if not owned/missing."""
         row = await self.get_owned(model, record_id, id_field=id_field)
         if not row:
-            raise NotFoundError(detail=f"{resource_name.capitalize()} not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"{resource_name.capitalize()} not found",
+            )
         return row
-
-    async def exists_owned(self, model: type[T], record_id: Any, *, id_field: str = "id") -> bool:
-        """Return True if a row exists and is owned by the current user."""
-        return (await self.get_owned(model, record_id, id_field=id_field)) is not None
-
-    async def validate_resource(self, resource_type: str, resource_id: Any) -> Any:
-        """Validate user has access to a resource by type name.
-
-        This method allows validation without importing domain models directly,
-        preventing circular dependencies in infrastructure modules like ai/rag.
-        """
-        if resource_type == "course":
-            from src.courses.models import Course
-
-            model_class = Course
-        elif resource_type == "book":
-            from src.books.models import Book
-
-            model_class = Book
-        elif resource_type == "video":
-            from src.videos.models import Video
-
-            model_class = Video
-        else:
-            raise NotFoundError(detail=f"Unknown resource type: {resource_type}")
-
-        return await self.get_or_404(model_class, resource_id, resource_type)
-
 
 # FastAPI DI helpers
 async def get_auth_context(
-    user_id: Annotated[UUID, Depends(_get_user_id)],
+    request: Request,
+    user_id: Annotated[UUID, Depends(_get_user_id_dependency)],
     session: DbSession,
 ) -> AuthContext:
     """Build an AuthContext for the current request (preferred)."""
-    await _ensure_local_user(session, user_id)
+    if get_settings().AUTH_PROVIDER.lower() == "local":
+        from src.user.models import User
+
+        user = await session.get(User, user_id)
+        if not user or not user.is_active:
+            raise InvalidTokenError
+        token_version = get_local_token_version_from_state(request)
+        if token_version is None or token_version != user.auth_token_version:
+            raise InvalidTokenError
+        token_session_id = get_local_session_id_from_state(request)
+        if token_session_id is not None:
+            auth_session = await local_crud.get_auth_session(session, session_id=token_session_id, user_id=user_id)
+            if not auth_session:
+                raise InvalidTokenError
+            if not local_crud.is_auth_session_active(auth_session, now=datetime.now(UTC)):
+                raise InvalidTokenError
+            await local_crud.touch_auth_session(session, auth_session)
+        return AuthContext(user_id=user_id, session=session, local_user=user)
+
     return AuthContext(user_id=user_id, session=session)
 
 
 CurrentAuth = Annotated[AuthContext, Depends(get_auth_context)]
-
-
-# Centralized list of paths that bypass auth enforcement in the middleware
-# Kept here to give ownership of auth concerns to the auth module
-AUTH_SKIP_PATHS: list[str] = [
-    # Health check
-    "/health",
-    # Auth routes (these handle their own auth or are public entrypoints)
-    "/api/v1/auth/login",
-    "/api/v1/auth/signup",
-    "/api/v1/auth/refresh",
-    "/api/v1/auth/logout",
-    "/api/v1/auth/callback",
-    "/api/v1/auth/verify",
-    "/api/v1/auth/request-password-reset",
-    "/api/v1/auth/reset-password",
-    # NOTE: /api/v1/auth/me is NOT in skip paths - it needs authentication
-    # Public model list for unauthenticated UI model picker
-    "/api/v1/assistant/models",
-    # Docs/OpenAPI
-    "/docs",
-    "/redoc",
-    "/openapi.json",
-]
-
-
-def is_auth_skip_path(path: str) -> bool:
-    """Return True when the request path should bypass auth enforcement."""
-    return any(path == skip or path.startswith(f"{skip}/") for skip in AUTH_SKIP_PATHS)

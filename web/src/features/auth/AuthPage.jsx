@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { LoginHeader } from "@/components/header/LoginHeader"
 import { useAuth } from "@/hooks/use-auth"
+import { api } from "@/lib/apiClient"
 import LoginForm from "./components/LoginForm"
 import PasswordResetForm from "./components/PasswordResetForm"
 import SignupForm from "./components/SignupForm"
@@ -10,12 +11,40 @@ function AuthPage() {
 	const [view, setView] = useState("login") // "login", "signup", "reset"
 	const [error, setError] = useState("")
 	const [successMessage, setSuccessMessage] = useState("")
+	const [authOptions, setAuthOptions] = useState(null)
 	const navigate = useNavigate()
 	const [searchParams] = useSearchParams()
-	const { login, signup, isAuthenticated } = useAuth()
+	const { login, signup, resendVerification, isAuthenticated } = useAuth()
 
 	// Get redirect URL from query params
 	const redirectUrl = searchParams.get("redirect") || "/"
+
+	const switchView = (nextView) => {
+		setError("")
+		setSuccessMessage("")
+		setView(nextView)
+	}
+
+	useEffect(() => {
+		let isMounted = true
+
+		const loadAuthOptions = async () => {
+			try {
+				const options = await api.get("/auth/options")
+				if (isMounted) {
+					setAuthOptions(options)
+				}
+			} catch {
+				// Best-effort only: auth still works without options.
+			}
+		}
+
+		loadAuthOptions()
+
+		return () => {
+			isMounted = false
+		}
+	}, [])
 
 	// If already authenticated, redirect immediately
 	useEffect(() => {
@@ -36,17 +65,16 @@ function AuthPage() {
 		}
 	}
 
-	const handleSignup = async (email, password, username) => {
+	const handleSignup = async (fullName, email, password, username) => {
 		setError("")
 		setSuccessMessage("")
-		const result = await signup(email, password, username)
+		const result = await signup(fullName, email, password, username)
 
 		if (result.success) {
 			if (result.emailConfirmationRequired) {
 				setSuccessMessage(result.message)
-				// Optionally switch to login form after showing message
 				setTimeout(() => {
-					setView("login")
+					switchView("login")
 					setSuccessMessage("")
 				}, 5000)
 			} else {
@@ -57,33 +85,43 @@ function AuthPage() {
 		}
 	}
 
+	const handleGoogleOAuth = () => {
+		const baseUrl = import.meta.env.VITE_API_BASE || "/api/v1"
+		const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl
+		window.location.href = `${normalizedBase}/auth/google/authorize`
+	}
+
+	const showGoogleOAuth = Boolean(authOptions?.googleOauthAvailable)
+
 	return (
 		<>
 			<LoginHeader />
 
-			{error && (
-				<div className="fixed top-4 right-4 bg-destructive text-destructive-foreground px-4 py-2 rounded-lg shadow-lg z-50">
-					{error}
-				</div>
-			)}
-
-			{successMessage && (
-				<div className="fixed top-4 right-4 bg-completed text-completed-text px-4 py-2 rounded-lg shadow-lg z-50">
-					{successMessage}
-				</div>
-			)}
-
 			{view === "login" && (
 				<LoginForm
-					onSignUp={() => setView("signup")}
-					onForgotPassword={() => setView("reset")}
+					onSignUp={() => switchView("signup")}
+					onForgotPassword={() => switchView("reset")}
 					onSubmit={handleLogin}
+					showGoogleOAuth={showGoogleOAuth}
+					onGoogle={handleGoogleOAuth}
+					errorMessage={error}
+					successMessage={successMessage}
+					onResendVerification={resendVerification}
 				/>
 			)}
 
-			{view === "signup" && <SignupForm onSignIn={() => setView("login")} onSubmit={handleSignup} />}
+			{view === "signup" && (
+				<SignupForm
+					onSignIn={() => switchView("login")}
+					onSubmit={handleSignup}
+					showGoogleOAuth={showGoogleOAuth}
+					onGoogle={handleGoogleOAuth}
+					errorMessage={error}
+					successMessage={successMessage}
+				/>
+			)}
 
-			{view === "reset" && <PasswordResetForm onBack={() => setView("login")} />}
+			{view === "reset" && <PasswordResetForm onBack={() => switchView("login")} />}
 		</>
 	)
 }

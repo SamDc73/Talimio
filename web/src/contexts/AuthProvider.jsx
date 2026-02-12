@@ -2,7 +2,6 @@ import { useEffect, useState } from "react"
 
 import { api } from "@/lib/apiClient"
 import logger from "@/lib/logger"
-import { securityMonitor } from "@/utils/securityConfig"
 import { AuthContext } from "./AuthContext"
 
 export function AuthProvider({ children }) {
@@ -83,25 +82,19 @@ export function AuthProvider({ children }) {
 
 	const login = async (email, password) => {
 		try {
-			// Check rate limiting
-			if (!securityMonitor.trackLoginAttempt(email, false)) {
-				return {
-					success: false,
-					error: "Too many failed login attempts. Please try again later.",
-				}
-			}
+			const normalizedEmail = email.trim().toLowerCase()
 
-			const response = await api.post("/auth/login", {
-				email,
-				password,
+			const formData = new URLSearchParams()
+			formData.append("grant_type", "password") // Required by OAuth2 spec
+			formData.append("username", normalizedEmail) // OAuth2 spec uses 'username'
+			formData.append("password", password)
+			const response = await api.post("/auth/login", formData.toString(), {
+				headers: { "Content-Type": "application/x-www-form-urlencoded" },
 			})
 
 			// No need to handle tokens - they're in httpOnly cookies now!
 			// Handle the response - it now returns data directly
 			const { user } = response
-
-			// Track successful login
-			securityMonitor.trackLoginAttempt(email, true)
 
 			// Update state (no token handling needed)
 			setUser(user)
@@ -109,9 +102,6 @@ export function AuthProvider({ children }) {
 
 			return { success: true }
 		} catch (error) {
-			// Track failed login
-			securityMonitor.trackLoginAttempt(email, false)
-
 			return {
 				success: false,
 				error: error.data?.detail || error.message || "Login failed",
@@ -119,23 +109,27 @@ export function AuthProvider({ children }) {
 		}
 	}
 
-	const signup = async (email, password, username) => {
+	const signup = async (fullName, email, password, username) => {
 		try {
+			const normalizedFullName = fullName.trim()
+			const normalizedEmail = email.trim().toLowerCase()
+			const normalizedUsername = (username || "").trim()
 			const response = await api.post("/auth/signup", {
-				email,
+				fullName: normalizedFullName,
+				email: normalizedEmail,
 				password,
-				username,
+				username: normalizedUsername || null,
 			})
 
 			// Handle the response - it now returns data directly
 			const responseData = response
 
 			// Check if email confirmation is required
-			if (responseData.email_confirmation_required) {
+			if (responseData.emailConfirmationRequired || !responseData.user) {
 				return {
 					success: true,
 					emailConfirmationRequired: true,
-					message: responseData.message || "Please check your email to confirm your account",
+					message: responseData.message || "Signup request received. Please sign in if your account is ready.",
 				}
 			}
 
@@ -170,7 +164,7 @@ export function AuthProvider({ children }) {
 
 	const resetPassword = async (email) => {
 		try {
-			const response = await api.post("/auth/reset-password", { email })
+			const response = await api.post("/auth/forgot-password", { email: email.trim().toLowerCase() })
 			return {
 				success: true,
 				message: response.message || "Password reset instructions sent to your email",
@@ -183,6 +177,40 @@ export function AuthProvider({ children }) {
 		}
 	}
 
+	const applyPasswordReset = async (token, newPassword) => {
+		try {
+			const response = await api.post("/auth/reset-password", { token, newPassword })
+			return {
+				success: true,
+				message: response?.message || "Password updated",
+			}
+		} catch (error) {
+			return {
+				success: false,
+				error: error.data?.detail || error.message || "Failed to reset password",
+			}
+		}
+	}
+
+	const resendVerification = async (email) => {
+		try {
+			const normalizedEmail = email.trim().toLowerCase()
+			const response = await api.post("/auth/resend-verification", { email: normalizedEmail })
+			return {
+				success: true,
+				message: response.message || "If the account exists, a verification email has been sent",
+				cooldownSeconds: 60,
+			}
+		} catch (error) {
+			const detail = error.data?.detail
+			const detailMessage = typeof detail === "string" ? detail : detail?.message
+			return {
+				success: false,
+				error: detailMessage || error.message || "Failed to resend verification email",
+			}
+		}
+	}
+
 	const value = {
 		user,
 		loading,
@@ -191,6 +219,8 @@ export function AuthProvider({ children }) {
 		signup,
 		logout,
 		resetPassword,
+		applyPasswordReset,
+		resendVerification,
 		// Removed checkAuth and handleTokenExpiration to prevent misuse
 	}
 

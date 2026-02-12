@@ -9,7 +9,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -17,7 +17,6 @@ from src.ai.rag.service import RAGService
 from src.auth import CurrentAuth
 from src.books.models import Book
 from src.database.session import async_session_maker
-from src.middleware.security import books_rate_limit
 from src.storage.factory import get_storage_provider
 
 # Import the facade
@@ -39,7 +38,7 @@ from .services.book_response_builder import BookResponseBuilder
 logger = logging.getLogger(__name__)
 _DETACHED_TASKS: set[asyncio.Task[Any]] = set()
 
-router = APIRouter(prefix="/api/v1/books", tags=["books"], dependencies=[Depends(books_rate_limit)])
+router = APIRouter(prefix="/api/v1/books", tags=["books"])
 
 
 async def _embed_book_background(book_id: UUID) -> None:
