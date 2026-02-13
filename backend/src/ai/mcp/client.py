@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import importlib
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
+
+import httpx
 
 from src.ai.mcp.config import MCPConfig, MCPServerConfig
 
@@ -28,33 +29,27 @@ class ClientSession(Protocol):
 
 
 _ClientSession: type[ClientSession] | None
-_streamablehttp_client: Callable[..., Any] | None
+_streamable_http_client: Callable[..., Any] | None
 _import_error: ModuleNotFoundError | None
 
 try:
-    mcp_module = importlib.import_module("mcp")
-    streamable_module = importlib.import_module("mcp.client.streamable_http")
+    from mcp import ClientSession as _MCPClientSession
+    from mcp.client.streamable_http import streamable_http_client as _sdk_streamable_http_client
 except ModuleNotFoundError as exc:
     _ClientSession = None
-    _streamablehttp_client = None
+    _streamable_http_client = None
     _import_error = exc
 else:
-    try:
-        _ClientSession = cast("type[ClientSession]", mcp_module.ClientSession)
-        _streamablehttp_client = cast("Callable[..., Any]", streamable_module.streamablehttp_client)
-    except AttributeError as exc:
-        _ClientSession = None
-        _streamablehttp_client = None
-        _import_error = ModuleNotFoundError(str(exc))
-    else:
-        _import_error = None
+    _ClientSession = _MCPClientSession
+    _streamable_http_client = _sdk_streamable_http_client
+    _import_error = None
 
 
 def _ensure_mcp_sdk() -> tuple[type[ClientSession], Callable[..., Any]]:
-    if _ClientSession is None or _streamablehttp_client is None:
+    if _ClientSession is None or _streamable_http_client is None:
         msg = "The 'mcp' Python package is required for MCP client support. Install it with `uv pip install mcp`."
         raise MCPClientDependencyError(msg) from _import_error
-    return _ClientSession, _streamablehttp_client
+    return _ClientSession, _streamable_http_client
 
 
 @dataclass
@@ -128,10 +123,11 @@ class MCPClient:
 
     @asynccontextmanager
     async def _session(self, server: MCPServerConfig) -> AsyncIterator[ClientSession]:
-        client_session_cls, http_client = _ensure_mcp_sdk()
+        client_session_cls, http_transport_client = _ensure_mcp_sdk()
         timeout = self._default_timeout
         async with (
-            http_client(str(server.url), headers=server.headers()) as (read, write, _),
+            httpx.AsyncClient(headers=server.headers()) as http_client,
+            http_transport_client(str(server.url), http_client=http_client) as (read, write, _),
             client_session_cls(read, write) as session,
         ):
             try:
@@ -148,10 +144,11 @@ class MCPServerNotConfiguredError(RuntimeError):
 
 async def probe_mcp_server(url: str, headers: dict[str, str] | None = None) -> MCPServerInfo:
     """Connect to an MCP server URL and return its metadata from initialize."""
-    client_session_cls, http_client = _ensure_mcp_sdk()
+    client_session_cls, http_transport_client = _ensure_mcp_sdk()
     timeout = 10.0
     async with (
-        http_client(url, headers=headers or {}) as (read, write, _),
+        httpx.AsyncClient(headers=headers or {}) as http_client,
+        http_transport_client(url, http_client=http_client) as (read, write, _),
         client_session_cls(read, write) as session,
     ):
         try:
