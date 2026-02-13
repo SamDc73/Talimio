@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 from collections.abc import AsyncGenerator, Coroutine
+from contextlib import suppress
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -286,8 +287,6 @@ async def create_book_endpoint(
         # Upload the file (returns None, we use the key as the path)
         await storage.upload(file_content, storage_key)
 
-        logger.info(f"File uploaded with key: {storage_key}")
-
         # Extract metadata if needed
         metadata_service = BookMetadataService()
         metadata = metadata_service.extract_metadata(file_content, f".{file_extension}")
@@ -340,12 +339,16 @@ async def create_book_endpoint(
 
         if not result.get("success"):
             # Clean up uploaded file on failure
-            try:
+            with suppress(Exception):
                 await storage.delete(storage_key)
-            except Exception:
-                logger.debug("Failed to clean up uploaded file")
+            if result.get("error_code") == "duplicate_file":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="This file already exists in your library",
+                )
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result.get("error", "Failed to create book")
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Failed to create book"),
             )
 
         book_response = result.get("book")
