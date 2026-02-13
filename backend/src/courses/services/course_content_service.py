@@ -20,7 +20,6 @@ from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID, insert
 from src.ai.models import AdaptiveCourseStructure
 from src.ai.rag.service import RAGService
 from src.ai.service import AIService
-from src.auth import AuthContext
 from src.courses.models import (
     Concept,
     Course,
@@ -118,16 +117,17 @@ class CourseContentService:
         inserted_lessons = 0
 
         rag_service = RAGService()
-        auth = AuthContext(user_id=user_id, session=session)
         image_data_urls = await self._ingest_course_attachments(
             rag_service=rag_service,
-            auth=auth,
+            session=session,
+            user_id=user_id,
             course_id=course.id,
             attachments=attachments,
         )
         augmented_prompt = await self._build_augmented_prompt(
             rag_service=rag_service,
-            auth=auth,
+            session=session,
+            user_id=user_id,
             course_id=course.id,
             prompt_text=prompt_text,
         )
@@ -225,7 +225,8 @@ class CourseContentService:
         self,
         *,
         rag_service: RAGService,
-        auth: AuthContext,
+        session: AsyncSession,
+        user_id: UUID,
         course_id: UUID,
         attachments: list[UploadFile],
     ) -> list[str]:
@@ -239,7 +240,8 @@ class CourseContentService:
             if extension in _DOC_EXTENSIONS:
                 document_type = extension.lstrip(".")
                 document = await rag_service.upload_document(
-                    auth=auth,
+                    session=session,
+                    user_id=user_id,
                     course_id=course_id,
                     document_type=document_type,
                     title=filename,
@@ -247,13 +249,14 @@ class CourseContentService:
                     filename=filename,
                     process_in_background=False,
                 )
-                await rag_service.process_document(auth.session, document.id)
+                await rag_service.process_document(session, document.id)
                 continue
             if extension in _IMAGE_EXTENSIONS:
                 data_url = self._build_image_data_url(file_content, attachment.content_type, extension)
                 image_data_urls.append(data_url)
                 await rag_service.upload_document(
-                    auth=auth,
+                    session=session,
+                    user_id=user_id,
                     course_id=course_id,
                     document_type="image",
                     title=filename,
@@ -267,14 +270,15 @@ class CourseContentService:
         self,
         *,
         rag_service: RAGService,
-        auth: AuthContext,
+        session: AsyncSession,
+        user_id: UUID,
         course_id: UUID,
         prompt_text: str,
     ) -> str:
         """Append RAG context to the prompt if available."""
         if not prompt_text:
             return ""
-        results = await rag_service.search_documents(auth, course_id, query=prompt_text, top_k=5)
+        results = await rag_service.search_documents(session, user_id, course_id, query=prompt_text, top_k=5)
         chunks = [result.content for result in results if result.content]
         if not chunks:
             return prompt_text
@@ -741,6 +745,7 @@ class CourseContentService:
         return AdaptiveConceptBuildResult(
             concepts_by_index=concepts_by_index,
         )
+
     async def _insert_course_concepts(
         self,
         *,
@@ -897,6 +902,7 @@ class CourseContentService:
             },
         )
         return len(confusor_pairs)
+
     def _build_adaptive_modules_payload(
         self,
         *,
@@ -976,6 +982,7 @@ class CourseContentService:
             order_cursor += 1
 
         return lessons
+
     def _build_concept_description(self, title: str, tags: list[str]) -> str:
         """Compose a concise description from title and tags."""
         clean_title = title.strip()

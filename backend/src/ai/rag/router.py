@@ -15,7 +15,6 @@ from src.ai.rag.schemas import (
 )
 from src.ai.rag.service import RAGService
 from src.auth import CurrentAuth
-from src.courses.models import Course
 
 
 logger = logging.getLogger(__name__)
@@ -29,9 +28,6 @@ def get_rag_service() -> RAGService:
     return RAGService()
 
 
-# Ownership validation is handled via AuthContext in each endpoint
-
-
 @router.post("/courses/{course_id}/documents", response_model=DocumentResponse)
 async def upload_document(
     course_id: uuid.UUID,
@@ -42,9 +38,6 @@ async def upload_document(
     file: Annotated[UploadFile | None, File()] = None,
 ) -> dict:
     """Upload a document to a course."""
-    # Validate course access via AuthContext
-    await auth.get_or_404(Course, course_id, "course")
-
     # Only file uploads supported in MVP
     if not file:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File upload required")
@@ -57,15 +50,15 @@ async def upload_document(
 
     try:
         result = await rag_service.upload_document(
-            auth,
-            course_id,
-            document_type,
-            title,
-            file_content,
-            filename,
+            session=auth.session,
+            user_id=auth.user_id,
+            course_id=course_id,
+            document_type=document_type,
+            title=title,
+            file_content=file_content,
+            filename=filename,
         )
         return result.model_dump(by_alias=True) if hasattr(result, "model_dump") else result
-
     except HTTPException:
         raise
     except ValueError as e:
@@ -96,18 +89,20 @@ async def list_documents(
     limit: int = 20,
 ) -> dict:
     """List documents for a course - with graceful failure handling."""
-    # Validate course access via AuthContext
-    await auth.get_or_404(Course, course_id, "course")
-
     try:
-        documents = await rag_service.get_documents(auth, course_id, skip=skip, limit=limit)
-
-        # Get total count
-        total = await rag_service.count_documents(auth, course_id)
+        documents, total = await rag_service.list_documents_with_count(
+            auth.session,
+            auth.user_id,
+            course_id,
+            skip=skip,
+            limit=limit,
+        )
 
         result = DocumentList(documents=documents, total=total, page=skip // limit + 1, size=limit)
         return result.model_dump(by_alias=True)
 
+    except HTTPException:
+        raise
     except Exception:  # pragma: no cover - defensive logging
         # Log but don't crash - return empty list
         logger.exception("Error listing documents for course %s", course_id)
@@ -123,12 +118,10 @@ async def search_documents(
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
 ) -> dict:
     """Search documents within a course using RAG."""
-    # Validate course access via AuthContext
-    await auth.get_or_404(Course, course_id, "course")
-
     try:
         results = await rag_service.search_documents(
-            auth,
+            auth.session,
+            auth.user_id,
             course_id,
             search_request.query,
             search_request.top_k,
@@ -137,6 +130,8 @@ async def search_documents(
         result = SearchResponse(results=results, total=len(results))
         return result.model_dump(by_alias=True)
 
+    except HTTPException:
+        raise
     except ValueError as e:
         # Validation errors
         logger.exception("Validation error searching documents: %s", str(e))
@@ -165,7 +160,7 @@ async def delete_document(
     """Delete a document by id, enforcing ownership."""
     try:
         # Validate user owns the document and delete it
-        await rag_service.delete_document(auth, document_id)
+        await rag_service.delete_document(auth.session, auth.user_id, document_id)
         result = DefaultResponse(
             status=True,
             message="Document deleted successfully",
@@ -202,7 +197,7 @@ async def get_document(
 ) -> dict:
     """Get document details by id, enforcing ownership."""
     try:
-        result = await rag_service.get_document(auth, document_id)
+        result = await rag_service.get_document(auth.session, auth.user_id, document_id)
         return result.model_dump(by_alias=True) if hasattr(result, "model_dump") else result
     except HTTPException:
         # Propagate explicit HTTP errors from the service (e.g., 404)

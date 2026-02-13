@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -18,7 +18,6 @@ from src.ai.rag.chunker import chunk_text_async
 from src.ai.rag.config import rag_config
 from src.ai.rag.parser import DocumentProcessor
 from src.ai.rag.schemas import DocumentResponse, SearchResult
-from src.auth import AuthContext
 from src.books.models import Book
 from src.courses.models import Course, CourseDocument
 from src.database.session import async_session_maker
@@ -48,9 +47,22 @@ class RAGService:
             self._document_processor = DocumentProcessor()
         return self._document_processor
 
+    async def _ensure_course_owned(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+    ) -> None:
+        """Ensure the given course belongs to the specified user."""
+        stmt = select(Course.id).where(Course.id == course_id, Course.user_id == user_id)
+        result = await session.execute(stmt)
+        if result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Course not found")
+
     async def upload_document(
         self,
-        auth: AuthContext,
+        session: AsyncSession,
+        user_id: uuid.UUID,
         course_id: uuid.UUID,
         document_type: str,
         title: str,
@@ -60,7 +72,7 @@ class RAGService:
     ) -> DocumentResponse:
         """Upload a document to a course, ensuring user ownership."""
         # Validate user owns the course
-        await auth.get_or_404(Course, course_id, "course")
+        await self._ensure_course_owned(session, user_id, course_id)
 
         try:
             is_image = document_type == "image"
@@ -74,8 +86,8 @@ class RAGService:
                 processed_at=now if is_image else None,
                 embedded_at=now if is_image else None,
             )
-            auth.session.add(doc)
-            await auth.session.flush()
+            session.add(doc)
+            await session.flush()
 
             # Store file if provided
             if file_content and filename:
@@ -110,11 +122,11 @@ class RAGService:
 
                 doc.file_path = str(file_path)
 
-            await auth.session.flush()
+            await session.flush()
 
             if process_in_background and not is_image:
                 # Persist only after file_path/status are finalized and right before scheduling.
-                await auth.session.commit()
+                await session.commit()
                 # Process the document in a background task to avoid blocking uploads.
                 doc_id = doc.id  # Capture ID before potential session issues
                 task = asyncio.create_task(self._process_document_background(doc_id))
@@ -122,8 +134,8 @@ class RAGService:
                 task.add_done_callback(self._background_tasks.discard)
 
             # Re-query to get a Row object that works with model_validate
-            # This matches the pattern used in get_document() and get_documents()
-            result = await auth.session.execute(
+            # This matches the pattern used in get_document() and list_documents_with_count()
+            result = await session.execute(
                 text("SELECT * FROM course_documents WHERE id = :doc_id"), {"doc_id": doc.id}
             )
             row_map = result.mappings().first()
@@ -491,11 +503,11 @@ class RAGService:
             raise
 
     async def search_documents(
-        self, auth: AuthContext, course_id: uuid.UUID, query: str, top_k: int | None = None
+        self, session: AsyncSession, user_id: uuid.UUID, course_id: uuid.UUID, query: str, top_k: int | None = None
     ) -> list[SearchResult]:
-        """Search documents using AuthContext, ensuring user ownership."""
-        await auth.get_or_404(Course, course_id, "course")
-        return await self.search_course_documents(auth.session, course_id, query, top_k)
+        """Search documents scoped by session and user ownership."""
+        await self._ensure_course_owned(session, user_id, course_id)
+        return await self.search_course_documents(session, course_id, query, top_k)
 
     async def search_course_documents(
         self, session: AsyncSession, course_id: uuid.UUID, query: str, top_k: int | None = None
@@ -523,57 +535,67 @@ class RAGService:
             logger.exception("Failed to search documents")
             return []
 
-    async def get_documents(
-        self, auth: AuthContext, course_id: uuid.UUID, skip: int = 0, limit: int = 20
+    async def _query_documents_for_course(
+        self,
+        session: AsyncSession,
+        course_id: uuid.UUID,
+        *,
+        skip: int,
+        limit: int,
     ) -> list[DocumentResponse]:
-        """Get documents for a course, ensuring user ownership."""
-        # Verify user owns the course - this will throw 404 if not found or not owned
-        await auth.get_or_404(Course, course_id, "course")
-
-        try:
-            # Now we know the user owns the course, we can query its documents directly
-            # No need to join with courses again since ownership is already verified
-            result = await auth.session.execute(
-                text("""
+        """Return paginated document rows for a course without ownership checks."""
+        result = await session.execute(
+            text(
+                """
                     SELECT * FROM course_documents
                     WHERE course_id = :course_id
                     ORDER BY created_at DESC
                     LIMIT :limit OFFSET :skip
-                """),
-                {"course_id": str(course_id), "limit": limit, "skip": skip},
-            )
+                """
+            ),
+            {"course_id": str(course_id), "limit": limit, "skip": skip},
+        )
+        rows = result.mappings().all()
+        return [DocumentResponse.model_validate(row_map) for row_map in rows]
 
-            rows = result.mappings().all()
-            return [DocumentResponse.model_validate(row_map) for row_map in rows]
-        except Exception:
-            logger.exception("Failed to get documents")
-            # Return empty list instead of crashing
-            return []
-
-    async def count_documents(self, auth: AuthContext, course_id: uuid.UUID) -> int:
-        """Count documents for a course, ensuring user ownership."""
-        # Verify user owns the course - this will throw 404 if not found or not owned
-        await auth.get_or_404(Course, course_id, "course")
-
-        try:
-            # Now we know the user owns the course, we can count its documents directly
-            result = await auth.session.execute(
-                text("""
+    async def _query_document_count_for_course(self, session: AsyncSession, course_id: uuid.UUID) -> int:
+        """Return total document count for a course without ownership checks."""
+        result = await session.execute(
+            text(
+                """
                     SELECT COUNT(*) FROM course_documents
                     WHERE course_id = :course_id
-                """),
-                {"course_id": str(course_id)},
-            )
-            return result.scalar_one_or_none() or 0
-        except Exception:
-            logger.exception("Failed to count documents")
-            return 0
+                """
+            ),
+            {"course_id": str(course_id)},
+        )
+        return result.scalar_one_or_none() or 0
 
-    async def delete_document(self, auth: AuthContext, document_id: int) -> None:
+    async def list_documents_with_count(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        *,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[DocumentResponse], int]:
+        """List documents with total count using a single ownership validation."""
+        await self._ensure_course_owned(session, user_id, course_id)
+
+        try:
+            documents = await self._query_documents_for_course(session, course_id, skip=skip, limit=limit)
+            total = await self._query_document_count_for_course(session, course_id)
+            return documents, total
+        except Exception:
+            logger.exception("Failed to list documents for course %s", course_id)
+            return [], 0
+
+    async def delete_document(self, session: AsyncSession, user_id: uuid.UUID, document_id: int) -> None:
         """Delete a document and its chunks, ensuring user ownership."""
         try:
             # First get the document to find its course_id
-            result = await auth.session.execute(
+            result = await session.execute(
                 text("""
                     SELECT id, file_path, course_id
                     FROM course_documents
@@ -587,7 +609,7 @@ class RAGService:
                 raise HTTPException(status_code=404, detail="Document not found")
 
             # Verify user owns the course that contains this document
-            await auth.get_or_404(Course, doc.course_id, "course")
+            await self._ensure_course_owned(session, user_id, doc.course_id)
 
             # Delete file from filesystem if it exists
             if doc.file_path:
@@ -599,7 +621,7 @@ class RAGService:
                     logger.warning("Failed to delete file %s: %s", doc.file_path, e)
 
             doc_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"document_{document_id}")
-            chunks_result = await auth.session.execute(
+            chunks_result = await session.execute(
                 text("DELETE FROM rag_document_chunks WHERE doc_id = :doc_uuid AND doc_type = 'course'"),
                 {"doc_uuid": str(doc_uuid)},
             )
@@ -608,20 +630,20 @@ class RAGService:
                 logger.info(f"Deleted {chunks_deleted} RAG chunks for document {document_id}")
 
             # Delete document
-            await auth.session.execute(text("DELETE FROM course_documents WHERE id = :doc_id"), {"doc_id": document_id})
+            await session.execute(text("DELETE FROM course_documents WHERE id = :doc_id"), {"doc_id": document_id})
 
-            await auth.session.flush()
+            await session.flush()
             logger.info("Successfully deleted document %s", document_id)
 
         except Exception:
             logger.exception("Failed to delete document %s", document_id)
             raise
 
-    async def get_document(self, auth: AuthContext, document_id: int) -> DocumentResponse:
+    async def get_document(self, session: AsyncSession, user_id: uuid.UUID, document_id: int) -> DocumentResponse:
         """Get a single document, ensuring user ownership."""
         try:
             # First get the document
-            result = await auth.session.execute(
+            result = await session.execute(
                 text("""
                     SELECT * FROM course_documents
                     WHERE id = :doc_id
@@ -634,7 +656,7 @@ class RAGService:
                 raise HTTPException(status_code=404, detail="Document not found")
 
             # Verify user owns the course that contains this document
-            await auth.get_or_404(Course, row_map["course_id"], "course")
+            await self._ensure_course_owned(session, user_id, row_map["course_id"])
 
             return DocumentResponse.model_validate(row_map)
         except HTTPException:
