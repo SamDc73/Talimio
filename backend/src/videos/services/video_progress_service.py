@@ -1,7 +1,7 @@
 """Video progress service implementing the ProgressTracker protocol.
 
 This provides a simplified interface for progress tracking that doesn't
-depend on AuthContext or session management.
+depend on request-scoped auth context or router-layer dependencies.
 """
 
 import logging
@@ -146,7 +146,9 @@ class VideoProgressService(ProgressTracker):
             metadata = current_progress.metadata.copy()
             metadata.update(settings)
 
-            progress_update = ProgressUpdate(progress_percentage=current_progress.progress_percentage, metadata=metadata)
+            progress_update = ProgressUpdate(
+                progress_percentage=current_progress.progress_percentage, metadata=metadata
+            )
 
             await progress_service.update_progress(user_id, content_id, "video", progress_update)
 
