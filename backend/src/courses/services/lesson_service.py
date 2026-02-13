@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.client import LLMClient
-from src.auth.context import AuthContext
 from src.courses.models import Course, Lesson
 from src.courses.schemas import LessonDetailResponse
 
@@ -92,7 +91,6 @@ class LessonService:
     async def _build_rag_context(
         self,
         *,
-        auth: AuthContext,
         course_id: UUID,
         title: str,
         description: str,
@@ -105,7 +103,13 @@ class LessonService:
             from src.ai.rag.service import RAGService
 
             rag_service = RAGService()
-            search_results = await rag_service.search_documents(auth=auth, course_id=course_id, query=search_query, top_k=5)
+            search_results = await rag_service.search_documents(
+                session=self.session,
+                user_id=self.user_id,
+                course_id=course_id,
+                query=search_query,
+                top_k=5,
+            )
             if not search_results:
                 return ""
 
@@ -148,7 +152,6 @@ class LessonService:
         *,
         lesson: Lesson,
         course: Course,
-        auth: AuthContext,
     ) -> str:
         outline_window: list[dict[str, Any]] = []
         lesson_position: int | None = None
@@ -189,7 +192,6 @@ class LessonService:
             context_sections.append("## Course Outline (Near Term)\n" + outline_text)
 
         rag_context = await self._build_rag_context(
-            auth=auth,
             course_id=course.id,
             title=lesson.title,
             description=lesson.description or "",
@@ -276,9 +278,7 @@ class LessonService:
                     "lesson_title": lesson.title,
                 },
             )
-
-            auth = AuthContext(self.user_id, self.session)
-            lesson_context = await self._prepare_lesson_context(lesson=lesson, course=course, auth=auth)
+            lesson_context = await self._prepare_lesson_context(lesson=lesson, course=course)
             content = await self._generate_lesson_body(lesson_context=lesson_context)
 
             conditions = [Lesson.id == lesson.id]
