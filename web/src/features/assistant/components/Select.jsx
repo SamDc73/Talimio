@@ -2,12 +2,10 @@
 
 import * as SelectPrimitive from "@radix-ui/react-select"
 import { cva } from "class-variance-authority"
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
+import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const SelectRoot = SelectPrimitive.Root
-const SelectGroup = SelectPrimitive.Group
-const SelectValue = SelectPrimitive.Value
 
 const selectTriggerVariants = cva(
 	"flex w-fit items-center justify-between gap-2 whitespace-nowrap rounded-md text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-placeholder:text-muted-foreground [&>span]:line-clamp-1 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
@@ -105,94 +103,4 @@ function SelectContent({ className, children, position = "popper", ...props }) {
 	)
 }
 
-function SelectLabel({ className, ...props }) {
-	return (
-		<SelectPrimitive.Label
-			data-slot="select-label"
-			className={cn("px-2 py-1.5 text-muted-foreground text-xs", className)}
-			{...props}
-		/>
-	)
-}
-
-function SelectItem({ className, children, ...props }) {
-	return (
-		<SelectPrimitive.Item
-			data-slot="select-item"
-			className={cn(
-				"relative flex w-full cursor-default select-none items-center gap-2 rounded-lg py-2 pr-9 pl-3 text-sm outline-none",
-				"focus:bg-accent focus:text-accent-foreground",
-				"data-disabled:pointer-events-none data-disabled:opacity-50",
-				"[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
-				className
-			)}
-			{...props}
-		>
-			<span className="absolute right-3 flex size-4 items-center justify-center">
-				<SelectPrimitive.ItemIndicator>
-					<CheckIcon className="size-4" />
-				</SelectPrimitive.ItemIndicator>
-			</span>
-			<SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
-		</SelectPrimitive.Item>
-	)
-}
-
-function SelectSeparator({ className, ...props }) {
-	return (
-		<SelectPrimitive.Separator
-			data-slot="select-separator"
-			className={cn("-mx-1 my-1 h-px bg-border", className)}
-			{...props}
-		/>
-	)
-}
-
-function Select({ options, placeholder, className, ...props }) {
-	const selectedOption = options.find((opt) => opt.value === props.value)
-
-	return (
-		<SelectRoot {...props}>
-			<SelectPrimitive.Trigger
-				className={cn(
-					"flex items-center gap-1.5 rounded-md py-1 pr-2 pl-3 text-sm outline-none transition-colors",
-					"text-muted-foreground hover:bg-muted hover:text-foreground",
-					"focus-visible:ring-2 focus-visible:ring-ring/50",
-					"disabled:cursor-not-allowed disabled:opacity-50",
-					!selectedOption && placeholder && "italic opacity-70",
-					className
-				)}
-			>
-				<span>{selectedOption?.label ?? placeholder}</span>
-				<ChevronDownIcon className="size-3.5 opacity-50" />
-			</SelectPrimitive.Trigger>
-
-			<SelectContent>
-				{options.map(({ label, disabled, textValue, ...itemProps }) => (
-					<SelectItem
-						key={itemProps.value}
-						{...itemProps}
-						{...(disabled === undefined ? {} : { disabled })}
-						textValue={textValue ?? (typeof label === "string" ? label : itemProps.value)}
-					>
-						{label}
-					</SelectItem>
-				))}
-			</SelectContent>
-		</SelectRoot>
-	)
-}
-
-export {
-	Select,
-	SelectRoot,
-	SelectGroup,
-	SelectValue,
-	SelectTrigger,
-	SelectContent,
-	SelectLabel,
-	SelectItem,
-	SelectSeparator,
-	SelectScrollUpButton,
-	SelectScrollDownButton,
-}
+export { SelectRoot, SelectTrigger, SelectContent }

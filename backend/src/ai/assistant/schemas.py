@@ -1,4 +1,4 @@
-"""Schemas for the assistant module - dead simple."""
+"""Schemas for the assistant chat data-stream endpoint."""
 
 from typing import Any, Literal
 from uuid import UUID
@@ -6,25 +6,30 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-class ChatMessage(BaseModel):
-    """Simple chat message."""
+class LanguageModelMessage(BaseModel):
+    """Message shape received from assistant-ui data stream runtime."""
 
-    role: Literal["user", "assistant"]
-    content: str
+    role: Literal["system", "user", "assistant", "tool"]
+    content: Any
 
 
 class ChatRequest(BaseModel):
-    """Request schema for chat endpoint."""
+    """Request schema for data-stream runtime chat endpoint."""
 
-    message: str = Field(..., min_length=1, description="User message to send to assistant")
-    conversation_history: list[ChatMessage] = Field(
+    messages: list[LanguageModelMessage] = Field(
         default_factory=list,
-        description="Previous messages in the conversation",
+        description="Conversation history + latest user message",
     )
-    stream: bool = Field(default=False, description="Whether to stream the response")
-    model: str | None = Field(None, description="Optional model override")
+    system: str | None = Field(default=None, description="Optional system message")
+    tools: list[dict[str, Any]] | dict[str, Any] | None = Field(default=None)
+    runConfig: dict[str, Any] | None = Field(default=None)
+    state: dict[str, Any] | None = Field(default=None)
 
-    # Optional context fields
+    # Model context from assistant-ui runtime
+    modelName: str | None = Field(default=None, description="Model override from model context")
+    model: str | None = Field(default=None, description="Fallback model override key")
+
+    # Optional domain context fields
     context_type: Literal["book", "video", "course"] | None = Field(
         None, description="Type of resource providing context"
     )
@@ -32,3 +37,4 @@ class ChatRequest(BaseModel):
     context_meta: dict[str, Any] | None = Field(
         None, description="Additional context metadata (page number, timestamp, etc.)"
     )
+    pending_quote: str | None = Field(default=None, description="Optional one-time quoted selection to prefix")

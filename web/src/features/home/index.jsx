@@ -26,7 +26,7 @@ import { usePinning } from "@/features/home/hooks/use-pinning"
 import { useProgress } from "@/hooks/use-progress"
 
 export default function HomePage() {
-	const [isGenerating, setIsGenerating] = useState(false)
+	const isGenerating = false
 	const [isFabExpanded, setIsFabExpanded] = useState(false)
 	const [page, setPage] = useState(0)
 	const itemsPerPage = 20
@@ -75,7 +75,6 @@ export default function HomePage() {
 		pinning,
 		setContentItems,
 		loadContentData,
-		setIsGenerating,
 	})
 
 	// Use content progress sync hook for all content types

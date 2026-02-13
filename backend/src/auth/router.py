@@ -16,6 +16,7 @@ from starlette.responses import RedirectResponse
 
 from src.auth import crud as local_crud
 from src.auth.context import CurrentAuth
+from src.auth.csrf import set_csrf_cookie
 from src.auth.dependencies import (
     CookieTokenOptional,
     decode_local_token_claims_optional,
@@ -295,13 +296,15 @@ async def _resolve_signup_username(session: DbSession, *, full_name: str, userna
 
 
 @router.get("/options")
-async def get_auth_options() -> AuthOptionsResponse:
+async def get_auth_options(response: Response) -> AuthOptionsResponse:
     """Return frontend-safe auth options."""
     settings = get_settings()
     google_client_secret = settings.GOOGLE_OAUTH_CLIENT_SECRET.get_secret_value()
     google_oauth_available = settings.AUTH_PROVIDER == "local" and bool(
         settings.GOOGLE_OAUTH_CLIENT_ID and google_client_secret
     )
+    set_csrf_cookie(response)
+    response.headers["Cache-Control"] = "no-store"
     return AuthOptionsResponse(provider=settings.AUTH_PROVIDER, google_oauth_available=google_oauth_available)
 
 

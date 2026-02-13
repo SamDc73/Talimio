@@ -1,4 +1,3 @@
-import ipaddress
 import logging
 import re
 from collections.abc import AsyncGenerator
@@ -20,6 +19,7 @@ from starlette_csrf import CSRFMiddleware
 from .ai.assistant.router import router as assistant_router
 from .ai.mcp.router import router as mcp_router
 from .ai.rag.router import router as rag_router
+from .auth.csrf import get_csrf_cookie_domain
 from .auth.router import router as auth_router
 from .auth.security import get_csrf_signing_key, get_session_signing_key
 from .books.router import router as books_router
@@ -150,26 +150,6 @@ def _get_cors_allow_origins(settings: Any) -> list[str]:
     return origins
 
 
-def _get_csrf_cookie_domain(frontend_url: str) -> str | None:
-    """Return a cookie domain that works for frontend/api subdomains when possible."""
-    parsed = urlsplit(frontend_url)
-    hostname = parsed.hostname
-    if not hostname:
-        return None
-    if hostname in {"localhost", "127.0.0.1"}:
-        return None
-    try:
-        ipaddress.ip_address(hostname)
-        return None
-    except ValueError:
-        pass
-
-    host_parts = hostname.split(".")
-    if len(host_parts) < 2:
-        return None
-    return ".".join(host_parts[-2:])
-
-
 def _configure_middlewares(app: FastAPI, settings: Any) -> None:
     """Register built-in middlewares."""
     session_secret = get_session_signing_key()
@@ -194,7 +174,7 @@ def _configure_middlewares(app: FastAPI, settings: Any) -> None:
             re.compile(r"^/api/v1/auth/(login|signup|forgot-password|reset-password|verify|resend-verification)$")
         ],
         sensitive_cookies={settings.AUTH_COOKIE_NAME},
-        cookie_domain=_get_csrf_cookie_domain(settings.FRONTEND_URL),
+        cookie_domain=get_csrf_cookie_domain(settings.FRONTEND_URL),
         cookie_secure=settings.ENVIRONMENT == "production",
     )
     app.add_middleware(cast("Any", SimpleSecurityMiddleware))

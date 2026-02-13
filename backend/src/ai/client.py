@@ -171,6 +171,7 @@ class LLMClient:
         user_id: str | UUID | None = None,
         model: str | None = None,
         num_retries: int | None = None,
+        stream: bool = False,
     ) -> Any:
         """Get completion with optional memory integration and structured output."""
         try:
@@ -188,6 +189,9 @@ class LLMClient:
             effective_tool_choice = tool_choice or ("auto" if tool_schemas else None)
 
             if response_model:
+                if stream:
+                    msg = "Streaming is not supported for structured outputs"
+                    raise ValueError(msg)
 
                 def _finalize(structured: BaseModel) -> BaseModel:
                     if normalized_user_id:
@@ -210,6 +214,17 @@ class LLMClient:
                 )
 
                 return _finalize(schema_instance)
+
+            if stream:
+                return self._stream_unstructured_completion(
+                    messages=messages,
+                    temperature=temperature,
+                    tools=tool_schemas,
+                    tool_choice=effective_tool_choice,
+                    user_id=normalized_user_id,
+                    model=request_model,
+                    num_retries=num_retries,
+                )
 
             # Handle function calling
             if tool_schemas:
@@ -259,6 +274,118 @@ class LLMClient:
                 self._logger.exception("Error in get_completion")
             msg = f"Completion failed: {e}"
             raise RuntimeError(msg) from e
+
+    async def _stream_unstructured_completion(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        temperature: float | None,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: str | None,
+        user_id: UUID | None,
+        model: str,
+        num_retries: int | None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream an unstructured chat completion, optionally executing tool calls.
+
+        Yields plain text deltas (not SSE). The caller owns transport formatting.
+        """
+        conversation = list(messages)
+        full_text: list[str] = []
+        tool_round = 0
+
+        while True:
+            tool_round += 1
+            if tool_round > 6:
+                self._logger.warning("Stopping tool loop after %s rounds for user %s", tool_round - 1, user_id)
+                break
+
+            # Stream from the model.
+            stream = await self.complete(
+                messages=conversation,
+                temperature=temperature,
+                tools=tools,
+                tool_choice=tool_choice,
+                user_id=user_id,
+                stream=True,
+                model=model,
+                num_retries=num_retries,
+            )
+
+            chunks: list[Any] = []
+            round_text: list[str] = []
+            async for chunk in stream:
+                chunks.append(chunk)
+                delta = self._extract_stream_delta_content(chunk)
+                if delta:
+                    full_text.append(delta)
+                    round_text.append(delta)
+                    yield delta
+
+            # Rebuild final message (content + tool_calls) from chunks.
+            built = None
+            try:
+                built = litellm.stream_chunk_builder(chunks, messages=conversation)
+            except Exception:
+                self._logger.debug("stream_chunk_builder failed; continuing without rebuilt message", exc_info=True)
+
+            built_message = None
+            try:
+                built_choices = getattr(built, "choices", None) if built is not None else None
+                built_message = built_choices[0].message if built_choices else None
+            except Exception:
+                built_message = None
+
+            tool_calls = getattr(built_message, "tool_calls", None) if built_message is not None else None
+            assistant_content = ""
+            if built_message is not None and getattr(built_message, "content", None):
+                assistant_content = cast("str", built_message.content) or ""
+
+            # If we didn't get rebuilt content, fall back to what we already streamed this round.
+            if not assistant_content:
+                assistant_content = "".join(round_text)
+
+            if tool_calls:
+                if user_id is None:
+                    self._logger.warning("Model attempted to call MCP tools without a user context")
+                    break
+
+                await self._append_tool_calls(
+                    conversation,
+                    assistant_content=assistant_content,
+                    tool_calls=tool_calls,
+                    user_id=user_id,
+                )
+                continue
+
+            break
+
+        # Save conversation to memory (non-blocking). Keep this best-effort.
+        if user_id is not None:
+            task = asyncio.create_task(self._save_conversation_to_memory(user_id, conversation, "".join(full_text)))
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+
+    def _extract_stream_delta_content(self, chunk: Any) -> str:
+        """Extract the streamed text delta from a LiteLLM/OpenAI-style chunk."""
+        try:
+            choices = getattr(chunk, "choices", None)
+            if not choices and isinstance(chunk, dict):
+                choices = chunk.get("choices")
+            if not choices:
+                return ""
+            choice0 = choices[0]
+            delta = getattr(choice0, "delta", None)
+            if delta is None and isinstance(choice0, dict):
+                delta = choice0.get("delta")
+            if delta is None:
+                return ""
+            content = getattr(delta, "content", None)
+            if content is None and isinstance(delta, dict):
+                content = delta.get("content")
+            return content if isinstance(content, str) else ""
+        except Exception:
+            return ""
 
     def _normalize_user_id(self, user_id: str | UUID | None) -> UUID | None:
         if user_id is None:

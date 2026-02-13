@@ -1,9 +1,7 @@
+import { CSRF_HEADER_NAME, ensureCsrfToken, isCsrfVerificationFailure, SAFE_METHODS } from "@/lib/csrf"
 import logger from "@/lib/logger"
 
 const BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1"
-const CSRF_COOKIE_NAME = "csrftoken"
-const CSRF_HEADER_NAME = "x-csrftoken"
-const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"])
 
 // In-flight request cache for deduplication
 const inFlightRequests = new Map()
@@ -19,14 +17,6 @@ const isFormData = (data) => typeof FormData !== "undefined" && data instanceof 
 const isBinaryBody = (data) =>
 	(typeof Blob !== "undefined" && data instanceof Blob) ||
 	(typeof ArrayBuffer !== "undefined" && data instanceof ArrayBuffer)
-
-const getCookieValue = (cookieName) => {
-	if (typeof document === "undefined" || !document.cookie) return null
-	const encodedKey = `${encodeURIComponent(cookieName)}=`
-	const cookiePair = document.cookie.split("; ").find((item) => item.startsWith(encodedKey))
-	if (!cookiePair) return null
-	return decodeURIComponent(cookiePair.slice(encodedKey.length))
-}
 
 const parseResponseBody = async (response, responseType) => {
 	// FastAPI uses 204 for many mutation endpoints (archive/delete/etc.)
@@ -116,12 +106,12 @@ const secureRequest = async (method, endpoint, data = null, options = {}) => {
 const executeRequest = async (method, endpoint, data = null, options = {}) => {
 	const { headers: optionHeaders, responseType, absoluteUrl, ...restOptions } = options
 
-	const makeRequest = async () => {
+	const makeRequest = async ({ forceRefreshCsrf = false } = {}) => {
 		const url = absoluteUrl ? endpoint : joinUrl(BASE_URL, endpoint)
 		const headers = { ...optionHeaders }
 		const hasCsrfHeader = Object.keys(headers).some((key) => key.toLowerCase() === CSRF_HEADER_NAME)
 		if (!SAFE_METHODS.has(method) && !hasCsrfHeader) {
-			const csrfToken = getCookieValue(CSRF_COOKIE_NAME)
+			const csrfToken = await ensureCsrfToken({ forceRefresh: forceRefreshCsrf })
 			if (csrfToken) {
 				headers[CSRF_HEADER_NAME] = csrfToken
 			}
@@ -152,7 +142,10 @@ const executeRequest = async (method, endpoint, data = null, options = {}) => {
 		return fetch(url, requestOptions)
 	}
 
-	const response = await makeRequest()
+	let response = await makeRequest()
+	if (!SAFE_METHODS.has(method) && (await isCsrfVerificationFailure(response))) {
+		response = await makeRequest({ forceRefreshCsrf: true })
+	}
 	return handleResponse(response, endpoint, responseType)
 }
 
