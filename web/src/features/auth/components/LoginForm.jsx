@@ -73,69 +73,6 @@ function LoginForm({
 		return Object.keys(newErrors).length === 0
 	}
 
-	const tokenizeLowerAlphanumeric = (input) => {
-		const normalizedInput = input.toLowerCase()
-		const tokens = []
-		let currentToken = ""
-
-		for (const character of normalizedInput) {
-			const isLetter = character >= "a" && character <= "z"
-			const isNumber = character >= "0" && character <= "9"
-			if (isLetter || isNumber) {
-				currentToken += character
-				continue
-			}
-
-			if (currentToken) {
-				tokens.push(currentToken)
-				currentToken = ""
-			}
-		}
-
-		if (currentToken) {
-			tokens.push(currentToken)
-		}
-
-		return tokens
-	}
-
-	const isDigitsOnly = (value) => {
-		if (!value) {
-			return false
-		}
-
-		for (const character of value) {
-			if (character < "0" || character > "9") {
-				return false
-			}
-		}
-
-		return true
-	}
-
-	const extractRetryAfterSeconds = (message) => {
-		if (!message) {
-			return 0
-		}
-
-		const tokens = tokenizeLowerAlphanumeric(message)
-		for (let index = 0; index < tokens.length - 1; index += 1) {
-			const maybeSecondsValue = tokens[index]
-			const maybeUnit = tokens[index + 1]
-			if (!isDigitsOnly(maybeSecondsValue) || (maybeUnit !== "second" && maybeUnit !== "seconds")) {
-				continue
-			}
-
-			const parsed = Number.parseInt(maybeSecondsValue, 10)
-			if (Number.isNaN(parsed) || parsed <= 0) {
-				continue
-			}
-			return parsed
-		}
-
-		return 0
-	}
-
 	const handleSubmit = async (e) => {
 		e.preventDefault()
 
@@ -172,9 +109,8 @@ function LoginForm({
 
 			const errorText = result.error || "Failed to resend verification email"
 			setResendError(errorText)
-			const retryAfterSeconds = extractRetryAfterSeconds(errorText)
-			if (retryAfterSeconds > 0) {
-				setResendCooldownSeconds(retryAfterSeconds)
+			if (result.cooldownSeconds > 0) {
+				setResendCooldownSeconds(result.cooldownSeconds)
 			}
 		} catch (error) {
 			logger.error("Resend verification failed", error)

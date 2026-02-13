@@ -2,7 +2,7 @@ import logging
 import re
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI
@@ -48,10 +48,6 @@ from .progress.router import router as progress_router
 from .tagging.router import router as tagging_router
 from .user.router import router as user_router
 from .videos.router import router as videos_router
-
-
-if TYPE_CHECKING:
-    from starlette.types import ExceptionHandler
 
 
 setup_logging()
@@ -192,17 +188,17 @@ def _register_exception_handlers(app: FastAPI) -> None:
             suggestions=["The requested resource does not exist"],
         )
 
-    app.add_exception_handler(ResourceNotFoundError, cast("ExceptionHandler", resource_not_found_handler))
+    app.add_exception_handler(ResourceNotFoundError, cast("Any", resource_not_found_handler))
 
-    validation_handler = cast("ExceptionHandler", handle_validation_errors)
+    validation_handler = cast("Any", handle_validation_errors)
     for exc_type in (ValidationError, CustomValidationError):
         app.add_exception_handler(exc_type, validation_handler)
 
-    database_handler = cast("ExceptionHandler", handle_database_errors)
+    database_handler = cast("Any", handle_database_errors)
     for exc_type in (IntegrityError, DatabaseError, OperationalError):
         app.add_exception_handler(exc_type, database_handler)
 
-    app.add_exception_handler(ExternalServiceError, cast("ExceptionHandler", handle_external_service_errors))
+    app.add_exception_handler(ExternalServiceError, cast("Any", handle_external_service_errors))
 
 
 def create_app() -> FastAPI:

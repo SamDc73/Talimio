@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom"
 import ErrorBoundary from "@/components/ErrorBoundary"
 import { BookHeader } from "@/components/header/BookHeader"
 import BookSidebarContainer from "@/features/book-viewer/components/BookSidebarContainer"
+import { getApiUrl } from "@/lib/apiBase"
 import { booksApi } from "./api/booksApi"
 import EpubViewer from "./components/EpubViewer"
 import PdfViewer from "./components/PdfViewer"
@@ -43,7 +44,7 @@ function BookViewerContent() {
 	const { setBookZoom } = useBookActions()
 	const sidebarOpen = useSidebarOpen()
 	const toggleSidebar = useToggleSidebar()
-	const bookUrl = bookId ? `/api/v1/books/${bookId}/content` : null
+	const bookUrl = bookId ? getApiUrl(`/books/${bookId}/content`) : null
 
 	const {
 		data: book,
