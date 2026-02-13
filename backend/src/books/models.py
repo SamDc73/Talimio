@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID as POSTGRES_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,6 +12,10 @@ class Book(Base):
     """Model for books."""
 
     __tablename__ = "books"
+    __table_args__ = (
+        # Allow different users to upload the same file, but prevent duplicate uploads per user.
+        UniqueConstraint("user_id", "file_hash", name="books_user_id_file_hash_key"),
+    )
 
     id: Mapped[UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), nullable=False, index=True)
@@ -29,7 +33,7 @@ class Book(Base):
     publisher: Mapped[str | None] = mapped_column(String(200), nullable=True)
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     table_of_contents: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
-    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     rag_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="pending"
     )  # pending, processing, completed, failed

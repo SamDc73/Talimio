@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from src.books.models import Book
 from src.books.schemas import BookResponse, BookWithProgress
@@ -43,7 +44,7 @@ class BooksFacade:
         self._progress_service = BookProgressService(session)
 
     async def get_content_with_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
-        """Get book with progress in a dict structure (parity with other facades)."""
+        """Get book with progress in IntegrityErrora dict structure (parity with other facades)."""
         try:
             book_with = await self.get_book(content_id, user_id)
         except Exception:
@@ -135,6 +136,29 @@ class BooksFacade:
                 "book_id": book_id,
                 "success": True,
             }
+
+        except IntegrityError as e:
+            # Most common conflict is a duplicate file in the same user's library.
+            # Keep this sanitized so we don't leak SQL internals to clients.
+            constraint_name: str | None = None
+            orig = getattr(e, "orig", None)
+            diag = getattr(orig, "diag", None) if orig is not None else None
+            if diag is not None:
+                constraint_name = getattr(diag, "constraint_name", None)
+
+            if constraint_name == "books_user_id_file_hash_key" or "books_user_id_file_hash_key" in str(e).lower():
+                logger.info(
+                    "BOOK_UPLOAD_DUPLICATE_FILE",
+                    extra={"user_id": str(user_id), "title": title},
+                )
+                return {
+                    "error": "Duplicate file upload",
+                    "error_code": "duplicate_file",
+                    "success": False,
+                }
+
+            logger.exception("Book upload failed due to integrity error", extra={"user_id": str(user_id)})
+            return {"error": "Failed to upload book", "success": False}
 
         except Exception as e:
             logger.exception("Error uploading book", extra={"user_id": str(user_id), "title": title, "error": str(e)})
