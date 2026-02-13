@@ -5,10 +5,4 @@ export const assistantApi = {
 	async getAvailableModels() {
 		return api.get("/assistant/models")
 	},
-	async createChatStream(body, abortSignal) {
-		return api.rawPost("/assistant/chat", body, {
-			headers: { Accept: "text/event-stream" },
-			signal: abortSignal,
-		})
-	},
 }

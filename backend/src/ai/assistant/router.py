@@ -9,8 +9,8 @@ from fastapi.responses import StreamingResponse
 from src.auth import CurrentAuth
 from src.config.settings import get_settings
 
+from . import service as assistant_service
 from .schemas import ChatRequest
-from .service import chat_with_assistant
 
 
 logger = logging.getLogger(__name__)
@@ -20,18 +20,19 @@ router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
 
 
 @router.post("/chat")
-async def chat_endpoint(
+async def assistant_chat(
     request: ChatRequest,
     auth: CurrentAuth,
 ) -> StreamingResponse:
     """Stream chat responses from the AI assistant."""
     try:
         return StreamingResponse(
-            chat_with_assistant(request, user_id=auth.user_id, session=auth.session),
+            assistant_service.assistant_chat(request, user_id=auth.user_id, session=auth.session),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
+                "x-vercel-ai-ui-message-stream": "v1",
             },
         )
     except Exception as e:

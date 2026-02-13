@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_COURSE_PLANNER
 from src.ai.client import LLMClient
 from src.ai.models import AdaptiveCourseStructure, CourseStructure, ExecutionPlan, SelfAssessmentQuiz
-from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT
 from src.ai.rag.embeddings import VectorRAG
 from src.ai.rag.service import RAGService
 from src.books.models import Book
@@ -76,38 +75,6 @@ class AIService:
         except Exception:
             logger.exception("Failed to generate self-assessment for topic '%s'", topic)
             raise
-
-    # General operations
-    async def assistant_chat(
-        self,
-        user_id: UUID,
-        message: str,
-        context: dict | None = None,
-        history: list[dict] | None = None,
-        **_kwargs: Any) -> str:
-        """General assistant chat with optional context."""
-        # Build messages
-        messages = [{"role": "system", "content": ASSISTANT_CHAT_SYSTEM_PROMPT}]
-
-        if history:
-            messages.extend(history)
-
-        if context:
-            # Add any additional context messages if needed
-            if "messages" in context:
-                # Use the provided messages instead of building our own
-                messages = context["messages"]
-            else:
-                # Add context as text to the user message
-                context_str = f"\n\nCurrent context: {context}"
-                message += context_str
-
-        messages.append({"role": "user", "content": message})
-
-        # Use completion with user context
-        response = await self._assistant_llm.get_completion(messages=messages, user_id=str(user_id))
-
-        return str(response)
 
     # Code execution operations
     async def generate_execution_plan(

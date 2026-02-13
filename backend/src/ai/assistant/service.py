@@ -3,13 +3,14 @@
 import asyncio
 import json
 import logging
+import uuid
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 import fitz  # PyMuPDF
 from fastapi import HTTPException, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,45 +42,149 @@ class ContextData(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
-async def chat_with_assistant(
+class NormalizedChatRequest(BaseModel):
+    """Assistant request normalized from assistant-ui data stream payload."""
+
+    message: str = Field(min_length=1)
+    conversation_history: list[dict[str, str]] = Field(default_factory=list)
+    model: str | None = None
+    context_type: Literal["book", "video", "course"] | None = None
+    context_id: uuid.UUID | None = None
+    context_meta: dict[str, Any] | None = None
+
+    model_config = ConfigDict(frozen=True)
+
+
+def _sse_event(payload: dict[str, Any] | str) -> str:
+    """Return a single SSE event line block."""
+    encoded = payload if isinstance(payload, str) else json.dumps(payload)
+    return f"data: {encoded}\n\n"
+
+
+def _extract_message_text(content: Any) -> str:
+    """Extract plain text from assistant-ui language model message content."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+
+    text_parts: list[str] = []
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        part_type = part.get("type")
+        if part_type == "text" and isinstance(part.get("text"), str):
+            text_parts.append(part["text"])
+
+    return "".join(text_parts).strip()
+
+
+def _normalize_chat_request(request: ChatRequest) -> NormalizedChatRequest:
+    """Normalize assistant-ui runtime request body into assistant domain request."""
+    flattened: list[dict[str, str]] = []
+
+    for item in request.messages:
+        if item.role not in {"user", "assistant"}:
+            continue
+        text = _extract_message_text(item.content)
+        if not text:
+            continue
+        flattened.append({"role": item.role, "content": text})
+
+    if not flattened:
+        msg = "No user/assistant messages were provided"
+        raise ValueError(msg)
+
+    last_user_index = -1
+    for index in range(len(flattened) - 1, -1, -1):
+        if flattened[index]["role"] == "user":
+            last_user_index = index
+            break
+
+    if last_user_index < 0:
+        msg = "Latest user message is required"
+        raise ValueError(msg)
+
+    message = flattened[last_user_index]["content"].strip()
+    if not message:
+        msg = "Latest user message cannot be empty"
+        raise ValueError(msg)
+
+    if request.pending_quote and request.pending_quote.strip():
+        message = f"{request.pending_quote.strip()}\n\n{message}"
+
+    return NormalizedChatRequest(
+        message=message,
+        conversation_history=flattened[:last_user_index],
+        model=request.modelName or request.model,
+        context_type=request.context_type,
+        context_id=request.context_id,
+        context_meta=request.context_meta,
+    )
+
+
+async def assistant_chat(
     request: ChatRequest,
     user_id: UUID,
     session: AsyncSession,
 ) -> AsyncGenerator[str, None]:
-    """
-    Stream chat responses with optional context.
-
-    Yields SSE-formatted JSON chunks with structure:
-    - data: {"content": "text", "done": false}
-    - data: {"content": "", "done": true}
-    - data: {"error": "message", "done": true}
-    """
+    """Stream chat responses with optional context using ui-message-stream protocol."""
+    message_id = str(uuid.uuid4())
     try:
+        # Emit start immediately so the client can render streaming state while prep runs.
+        yield _sse_event({"type": "start", "messageId": message_id})
+
+        normalized_request = _normalize_chat_request(request)
+
         # Build messages with context if available
-        messages = await _build_messages(request, user_id, session)
+        messages = await _build_messages(normalized_request, user_id, session)
 
         # Run completion through shared LLM client so memories and MCP tools are available
         llm_client = LLMClient(agent_id=AGENT_ID_ASSISTANT)
-        response_payload = await llm_client.get_completion(
+        stream = await llm_client.get_completion(
             messages=messages,
             user_id=user_id,
-            model=request.model,
+            model=normalized_request.model,
+            stream=True,
         )
 
-        text_response = response_payload if isinstance(response_payload, str) else str(response_payload or "")
-        for chunk in _iter_sse_chunks(text_response):
-            yield chunk
+        saw_any_content = False
 
-        # Send completion signal
-        yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
+        async for delta in stream:
+            if not delta:
+                continue
+            saw_any_content = True
+            yield _sse_event({"type": "text-delta", "textDelta": delta})
+
+        if not saw_any_content:
+            logger.warning("Assistant returned empty streamed response for user %s", user_id)
+            fallback_content = "I couldn't retrieve results right now. Please try again."
+            yield _sse_event({"type": "text-delta", "textDelta": fallback_content})
+
+        yield _sse_event(
+            {
+                "type": "finish",
+                "finishReason": "stop",
+                "usage": {"promptTokens": 0, "completionTokens": 0},
+            }
+        )
+        yield _sse_event("[DONE]")
 
     except Exception:
         logger.exception("Chat failed for user %s", user_id)
         error_msg = "Sorry, I'm having trouble responding right now. Please try again."
-        yield f"data: {json.dumps({'error': error_msg, 'done': True})}\n\n"
+        yield _sse_event({"type": "error", "errorText": error_msg})
+        yield _sse_event(
+            {
+                "type": "finish",
+                "finishReason": "error",
+                "usage": {"promptTokens": 0, "completionTokens": 0},
+            }
+        )
+        yield _sse_event("[DONE]")
 
 
-async def _build_messages(request: ChatRequest, user_id: UUID, session: AsyncSession) -> list[dict[str, str]]:
+async def _build_messages(request: NormalizedChatRequest, user_id: UUID, session: AsyncSession) -> list[dict[str, str]]:
     """Build message list with optional context."""
     context_parts = []
 
@@ -133,7 +238,7 @@ async def _build_messages(request: ChatRequest, user_id: UUID, session: AsyncSes
     messages = [{"role": "system", "content": system_prompt}]
 
     # Add conversation history
-    messages.extend({"role": msg.role, "content": msg.content} for msg in request.conversation_history)
+    messages.extend(request.conversation_history)
 
     # Build user message with context
     user_message = request.message
@@ -144,17 +249,6 @@ async def _build_messages(request: ChatRequest, user_id: UUID, session: AsyncSes
     messages.append({"role": "user", "content": user_message})
 
     return messages
-
-
-def _iter_sse_chunks(content: str, chunk_size: int = 400) -> list[str]:
-    """Yield SSE-ready chunks from the final assistant response."""
-    if not content:
-        return [f"data: {json.dumps({'content': '', 'done': False})}\n\n"]
-    chunks: list[str] = []
-    for start in range(0, len(content), chunk_size):
-        piece = content[start : start + chunk_size]
-        chunks.append(f"data: {json.dumps({'content': piece, 'done': False})}\n\n")
-    return chunks
 
 
 def _extract_leading_blockquote(text: str) -> str:
@@ -183,7 +277,7 @@ def _extract_leading_blockquote(text: str) -> str:
         return ""
 
 
-async def _get_rag_context(request: ChatRequest, user_id: UUID, session: AsyncSession) -> list:
+async def _get_rag_context(request: NormalizedChatRequest, user_id: UUID, session: AsyncSession) -> list:
     """Get semantic search results for any context type.
 
     Uses the user's quoted selection (if present) as the primary query, falling back to the full message.

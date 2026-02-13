@@ -1,6 +1,4 @@
 import { useNavigate } from "react-router-dom"
-import { api } from "@/lib/apiClient"
-import logger from "@/lib/logger"
 
 /**
  * Content Handlers Hook:
@@ -11,28 +9,8 @@ import logger from "@/lib/logger"
  * - Server data handled by React Query (loadContentData)
  * - UI state updates are optimistic
  */
-export function useContentHandlers({ filters, pinning, setContentItems, loadContentData, setIsGenerating }) {
+export function useContentHandlers({ filters, pinning, setContentItems, loadContentData }) {
 	const navigate = useNavigate()
-
-	const handleGenerateCourse = async () => {
-		if (!filters.searchQuery.trim()) return
-
-		setIsGenerating(true)
-
-		try {
-			await api.post("/assistant/generate-course", {
-				topic: filters.searchQuery,
-				level: "beginner",
-			})
-
-			// Clear search after generating
-			filters.setSearchQuery("")
-		} catch (error) {
-			logger.error("Failed to generate course", error)
-		} finally {
-			setIsGenerating(false)
-		}
-	}
 
 	// Event handler: user created course
 	const handleCourseCreated = async (newCourse) => {
@@ -118,7 +96,6 @@ export function useContentHandlers({ filters, pinning, setContentItems, loadCont
 	}
 
 	return {
-		handleGenerateCourse,
 		handleCourseCreated,
 		handleCardClick,
 		handleDeleteItem,
