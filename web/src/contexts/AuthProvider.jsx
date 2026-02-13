@@ -199,14 +199,17 @@ export function AuthProvider({ children }) {
 			return {
 				success: true,
 				message: response.message || "If the account exists, a verification email has been sent",
-				cooldownSeconds: 60,
+				cooldownSeconds: response.cooldownSeconds || 0,
 			}
 		} catch (error) {
 			const detail = error.data?.detail
 			const detailMessage = typeof detail === "string" ? detail : detail?.message
+			const retryAfter = error.headers?.get?.("retry-after")
+			const retryAfterSeconds = Number.parseInt(retryAfter || "", 10)
 			return {
 				success: false,
 				error: detailMessage || error.message || "Failed to resend verification email",
+				cooldownSeconds: Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0 ? retryAfterSeconds : 0,
 			}
 		}
 	}

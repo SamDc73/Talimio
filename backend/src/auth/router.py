@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from starlette.responses import RedirectResponse
 
 from src.auth import crud as local_crud
-from src.auth.context import CurrentAuth
+from src.auth.context import CurrentAuth, validate_local_auth_state
 from src.auth.csrf import set_csrf_cookie
 from src.auth.dependencies import (
     CookieTokenOptional,
@@ -53,6 +53,7 @@ from src.auth.schemas import (
     PasswordResetRequest,
     RefreshResponse,
     ResendVerificationRequest,
+    ResendVerificationResponse,
     SignupRequest,
     SignupResponse,
     UserResponse,
@@ -380,14 +381,17 @@ async def signup(request: Request, response: Response, session: DbSession, data:
         Depends(_require_local_provider),
     ],
 )
-async def resend_verification(session: DbSession, data: ResendVerificationRequest) -> MessageResponse:
+async def resend_verification(session: DbSession, data: ResendVerificationRequest) -> ResendVerificationResponse:
     """Resend account verification instructions when local email verification is enabled."""
     settings = get_settings()
     normalized_email = local_crud.normalize_email(str(data.email))
     user = await local_crud.get_user_by_email(session, normalized_email)
 
     if not (user and user.is_active and not user.is_verified and settings.AUTH_REQUIRE_EMAIL_VERIFICATION):
-        return MessageResponse(message=_GENERIC_RESEND_VERIFICATION_MESSAGE)
+        return ResendVerificationResponse(
+            message=_GENERIC_RESEND_VERIFICATION_MESSAGE,
+            cooldown_seconds=_VERIFICATION_RESEND_COOLDOWN_SECONDS,
+        )
 
     now = datetime.now(UTC)
     window_started_at = user.verification_email_resend_window_started_at
@@ -409,6 +413,7 @@ async def resend_verification(session: DbSession, data: ResendVerificationReques
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=f"Please wait {retry_after_seconds} seconds before requesting another verification email.",
+                headers={"Retry-After": str(retry_after_seconds)},
             )
 
     verification_token = generate_email_verification_token(normalized_email)
@@ -426,7 +431,10 @@ async def resend_verification(session: DbSession, data: ResendVerificationReques
     session.add(user)
     await session.commit()
 
-    return MessageResponse(message=_GENERIC_RESEND_VERIFICATION_MESSAGE)
+    return ResendVerificationResponse(
+        message=_GENERIC_RESEND_VERIFICATION_MESSAGE,
+        cooldown_seconds=_VERIFICATION_RESEND_COOLDOWN_SECONDS,
+    )
 
 
 @router.post("/login")
@@ -471,17 +479,19 @@ async def logout(
     if settings.AUTH_PROVIDER == "local":
         claims = decode_local_token_claims_optional(auth_token, jwt_secret=get_jwt_signing_key())
         if claims:
-            user = await session.get(User, claims.user_id)
-            if user and user.is_active and claims.token_version == user.auth_token_version:
-                token_session_id = claims.session_id
-                if token_session_id is not None:
-                    auth_session = await local_crud.get_auth_session(
-                        session,
-                        session_id=token_session_id,
-                        user_id=user.id,
-                    )
-                    if auth_session:
-                        await local_crud.revoke_auth_session(session, auth_session)
+            try:
+                _user, auth_session = await validate_local_auth_state(
+                    session,
+                    user_id=claims.user_id,
+                    token_version=claims.token_version,
+                    token_session_id=claims.session_id,
+                    touch_session=False,
+                )
+            except HTTPException:
+                auth_session = None
+
+            if auth_session is not None:
+                await local_crud.revoke_auth_session(session, auth_session)
         clear_auth_cookie(response)
         return LogoutResponse(message="Successfully logged out")
 
@@ -528,30 +538,18 @@ async def refresh_token(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
         try:
             user_id = await get_user_id(request, token=auth_token)
+            token_version = get_local_token_version_from_state(request)
+            token_session_id = get_local_session_id_from_state(request)
+            user, _auth_session = await validate_local_auth_state(
+                session,
+                user_id=user_id,
+                token_version=token_version,
+                token_session_id=token_session_id,
+                touch_session=False,
+            )
         except HTTPException:
             clear_auth_cookie(response)
             raise
-
-        user = await session.get(User, user_id)
-        if not user or not user.is_active:
-            clear_auth_cookie(response)
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-        token_version = get_local_token_version_from_state(request)
-        if token_version is None or token_version != user.auth_token_version:
-            clear_auth_cookie(response)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Session expired. Please sign in again.",
-            )
-
-        token_session_id = get_local_session_id_from_state(request)
-        if token_session_id is not None:
-            auth_session = await local_crud.get_auth_session(session, session_id=token_session_id, user_id=user.id)
-            if not auth_session or not local_crud.is_auth_session_active(auth_session):
-                clear_auth_cookie(response)
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired. Please sign in again."
-                )
 
         await _issue_local_auth_cookie(
             request,

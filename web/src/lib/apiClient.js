@@ -1,16 +1,9 @@
-import { CSRF_HEADER_NAME, ensureCsrfToken, isCsrfVerificationFailure, SAFE_METHODS } from "@/lib/csrf"
+import { API_BASE, joinApiUrl } from "@/lib/apiBase"
+import { CSRF_HEADER_NAME, getCsrfHeaders, isCsrfVerificationFailure, SAFE_METHODS } from "@/lib/csrf"
 import logger from "@/lib/logger"
-
-const BASE_URL = import.meta.env.VITE_API_BASE || "/api/v1"
 
 // In-flight request cache for deduplication
 const inFlightRequests = new Map()
-
-const joinUrl = (baseUrl, endpoint) => {
-	if (baseUrl.endsWith("/") && endpoint.startsWith("/")) return `${baseUrl.slice(0, -1)}${endpoint}`
-	if (!baseUrl.endsWith("/") && !endpoint.startsWith("/")) return `${baseUrl}/${endpoint}`
-	return `${baseUrl}${endpoint}`
-}
 
 const isFormData = (data) => typeof FormData !== "undefined" && data instanceof FormData
 
@@ -66,6 +59,7 @@ const handleResponse = async (response, endpoint, responseType) => {
 		const error = new Error(`API Error: ${response.status} ${errorMessage}`)
 		error.status = response.status
 		error.data = errorData
+		error.headers = response.headers
 		throw error
 	}
 
@@ -107,14 +101,11 @@ const executeRequest = async (method, endpoint, data = null, options = {}) => {
 	const { headers: optionHeaders, responseType, absoluteUrl, ...restOptions } = options
 
 	const makeRequest = async ({ forceRefreshCsrf = false } = {}) => {
-		const url = absoluteUrl ? endpoint : joinUrl(BASE_URL, endpoint)
+		const url = absoluteUrl ? endpoint : joinApiUrl(API_BASE, endpoint)
 		const headers = { ...optionHeaders }
 		const hasCsrfHeader = Object.keys(headers).some((key) => key.toLowerCase() === CSRF_HEADER_NAME)
 		if (!SAFE_METHODS.has(method) && !hasCsrfHeader) {
-			const csrfToken = await ensureCsrfToken({ forceRefresh: forceRefreshCsrf })
-			if (csrfToken) {
-				headers[CSRF_HEADER_NAME] = csrfToken
-			}
+			Object.assign(headers, await getCsrfHeaders({ forceRefresh: forceRefreshCsrf }))
 		}
 		const requestOptions = {
 			method,

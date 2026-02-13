@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { LoginHeader } from "@/components/header/LoginHeader"
 import { useAuth } from "@/hooks/use-auth"
+import { getApiUrl } from "@/lib/apiBase"
 import { api } from "@/lib/apiClient"
 import LoginForm from "./components/LoginForm"
 import PasswordResetForm from "./components/PasswordResetForm"
@@ -86,9 +87,7 @@ function AuthPage() {
 	}
 
 	const handleGoogleOAuth = () => {
-		const baseUrl = import.meta.env.VITE_API_BASE || "/api/v1"
-		const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl
-		window.location.href = `${normalizedBase}/auth/google/authorize`
+		window.location.href = getApiUrl("/auth/google/authorize")
 	}
 
 	const showGoogleOAuth = Boolean(authOptions?.googleOauthAvailable)

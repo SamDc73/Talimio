@@ -1,8 +1,10 @@
+import { getApiUrl } from "@/lib/apiBase"
+
 const CSRF_COOKIE_NAME = "csrftoken"
 export const CSRF_HEADER_NAME = "x-csrftoken"
 export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"])
 
-const CSRF_REFRESH_ENDPOINT = "/api/v1/auth/options"
+const CSRF_REFRESH_ENDPOINT = getApiUrl("/auth/options")
 const CSRF_FAILURE_TEXT = "csrf token verification failed"
 
 let csrfRefreshPromise = null
@@ -40,6 +42,11 @@ export const ensureCsrfToken = async ({ forceRefresh = false } = {}) => {
 	const existing = getCsrfToken()
 	if (existing && !forceRefresh) return existing
 	return refreshCsrfToken()
+}
+
+export const getCsrfHeaders = async ({ forceRefresh = false } = {}) => {
+	const csrfToken = await ensureCsrfToken({ forceRefresh })
+	return csrfToken ? { [CSRF_HEADER_NAME]: csrfToken } : {}
 }
 
 export const isCsrfVerificationFailure = async (response) => {

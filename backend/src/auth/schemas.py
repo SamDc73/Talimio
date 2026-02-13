@@ -145,6 +145,15 @@ class ResendVerificationRequest(BaseModel):
     model_config = _AUTH_SCHEMA_CONFIG
 
 
+class ResendVerificationResponse(BaseModel):
+    """Response model for email verification resend."""
+
+    message: str
+    cooldown_seconds: int | None = None
+
+    model_config = _AUTH_SCHEMA_CONFIG
+
+
 class VerifyEmailRequest(BaseModel):
     """Apply email verification token."""
 

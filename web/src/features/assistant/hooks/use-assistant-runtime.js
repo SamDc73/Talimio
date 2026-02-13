@@ -1,7 +1,8 @@
 import { useDataStreamRuntime } from "@assistant-ui/react-data-stream"
 import { useCallback, useMemo } from "react"
 import { useChatSidebar } from "@/contexts/ChatSidebarContext"
-import { CSRF_HEADER_NAME, ensureCsrfToken } from "@/lib/csrf"
+import { getApiUrl } from "@/lib/apiBase"
+import { getCsrfHeaders } from "@/lib/csrf"
 import logger from "@/lib/logger"
 import { useContextualChat } from "./use-contextual-chat"
 
@@ -23,8 +24,7 @@ export const useAssistantRuntime = () => {
 
 	const headers = useCallback(async () => {
 		// Always refresh before chat sends so data-stream requests do not fail on stale CSRF after server restarts.
-		const csrfToken = await ensureCsrfToken({ forceRefresh: true })
-		return csrfToken ? { [CSRF_HEADER_NAME]: csrfToken } : {}
+		return getCsrfHeaders({ forceRefresh: true })
 	}, [])
 
 	const body = useCallback(async () => {
@@ -47,7 +47,7 @@ export const useAssistantRuntime = () => {
 
 	const runtimeOptions = useMemo(
 		() => ({
-			api: "/api/v1/assistant/chat",
+			api: getApiUrl("/assistant/chat"),
 			credentials: "include",
 			headers,
 			body,

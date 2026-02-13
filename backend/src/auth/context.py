@@ -28,6 +28,7 @@ from src.database.session import DbSession
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from src.auth.models import AuthSession
     from src.user.models import User
 
 
@@ -88,6 +89,38 @@ class AuthContext:
             )
         return row
 
+
+async def validate_local_auth_state(
+    session: DbSession,
+    *,
+    user_id: UUID,
+    token_version: int | None,
+    token_session_id: UUID | None,
+    touch_session: bool = False,
+) -> tuple[User, AuthSession | None]:
+    """Validate local user/token/session state and optionally touch the active session."""
+    from src.user.models import User
+
+    user = await session.get(User, user_id)
+    if not user or not user.is_active:
+        raise InvalidTokenError
+
+    if token_version is None or token_version != user.auth_token_version:
+        raise InvalidTokenError
+
+    auth_session: AuthSession | None = None
+    if token_session_id is not None:
+        auth_session = await local_crud.get_auth_session(session, session_id=token_session_id, user_id=user_id)
+        if not auth_session:
+            raise InvalidTokenError
+        if not local_crud.is_auth_session_active(auth_session, now=datetime.now(UTC)):
+            raise InvalidTokenError
+        if touch_session:
+            await local_crud.touch_auth_session(session, auth_session)
+
+    return user, auth_session
+
+
 # FastAPI DI helpers
 async def get_auth_context(
     request: Request,
@@ -96,22 +129,15 @@ async def get_auth_context(
 ) -> AuthContext:
     """Build an AuthContext for the current request (preferred)."""
     if get_settings().AUTH_PROVIDER.lower() == "local":
-        from src.user.models import User
-
-        user = await session.get(User, user_id)
-        if not user or not user.is_active:
-            raise InvalidTokenError
         token_version = get_local_token_version_from_state(request)
-        if token_version is None or token_version != user.auth_token_version:
-            raise InvalidTokenError
         token_session_id = get_local_session_id_from_state(request)
-        if token_session_id is not None:
-            auth_session = await local_crud.get_auth_session(session, session_id=token_session_id, user_id=user_id)
-            if not auth_session:
-                raise InvalidTokenError
-            if not local_crud.is_auth_session_active(auth_session, now=datetime.now(UTC)):
-                raise InvalidTokenError
-            await local_crud.touch_auth_session(session, auth_session)
+        user, _auth_session = await validate_local_auth_state(
+            session,
+            user_id=user_id,
+            token_version=token_version,
+            token_session_id=token_session_id,
+            touch_session=True,
+        )
         return AuthContext(user_id=user_id, session=session, local_user=user)
 
     return AuthContext(user_id=user_id, session=session)
