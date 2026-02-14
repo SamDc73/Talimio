@@ -15,7 +15,6 @@ from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_COURSE_PLANNER
 from src.ai.client import LLMClient
 from src.ai.models import AdaptiveCourseStructure, CourseStructure, ExecutionPlan, SelfAssessmentQuiz
 from src.ai.rag.embeddings import VectorRAG
-from src.ai.rag.service import RAGService
 from src.books.models import Book
 from src.videos.models import Video
 
@@ -27,8 +26,7 @@ class AIService:
     """ALL AI operations go through here."""
 
     def __init__(self) -> None:
-        self._rag_service = RAGService()
-        self._course_llm = LLMClient(rag_service=self._rag_service, agent_id=AGENT_ID_COURSE_PLANNER)
+        self._course_llm = LLMClient(agent_id=AGENT_ID_COURSE_PLANNER)
         self._assistant_llm = LLMClient(agent_id=AGENT_ID_ASSISTANT)
 
     # Course operations

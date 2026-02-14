@@ -4,6 +4,7 @@ import logging
 from collections import Counter
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Any, TypeVar, cast
 from uuid import UUID
 
@@ -12,6 +13,14 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai import AGENT_ID_DEFAULT
+from src.ai.errors import (
+    AIProviderError,
+    AIRateLimitOrQuotaError,
+    AIRuntimeError,
+    AISchemaValidationError,
+    AITimeoutError,
+    AIToolExecutionError,
+)
 from src.ai.mcp.service import get_user_mcp_config
 from src.ai.mcp.tooling import (
     MCPToolBinding,
@@ -31,8 +40,11 @@ from src.ai.prompts import (
     ADAPTIVE_COURSE_GENERATION_PROMPT,
     COURSE_GENERATION_PROMPT,
     E2B_EXECUTION_SYSTEM_PROMPT,
+    GRADING_COACH_PROMPT,
     LESSON_GENERATION_PROMPT,
     MEMORY_CONTEXT_SYSTEM_PROMPT,
+    PRACTICE_GENERATION_PROMPT,
+    PRACTICE_PREDICTION_PROMPT,
     SELF_ASSESSMENT_QUESTIONS_PROMPT,
 )
 from src.config.settings import get_settings
@@ -40,6 +52,25 @@ from src.database.session import async_session_maker
 
 
 T = TypeVar("T", bound=BaseModel)
+
+_MAX_AUTONOMY_ROUNDS = 6
+_MAX_SCHEMA_REPAIR_ATTEMPTS = 2
+
+
+@dataclass(slots=True)
+class _LLMRequest:
+    """Internal request contract consumed by the shared orchestration pipeline."""
+
+    messages: list[dict[str, Any]]
+    response_model: type[BaseModel] | None
+    temperature: float | None
+    tools: list[dict[str, Any]] | list[MCPToolBinding] | None
+    tool_choice: str | None
+    user_id: UUID | None
+    model: str
+    num_retries: int | None
+    stream: bool
+    tool_schemas: list[dict[str, Any]] | None = None
 
 
 def _iter_exception_chain(error: Exception, max_depth: int = 6) -> list[Exception]:
@@ -57,11 +88,8 @@ def _iter_exception_chain(error: Exception, max_depth: int = 6) -> list[Exceptio
     return chain
 
 
-def _is_litellm_rate_limit_or_quota_error(error: Exception) -> bool:
-    """Return True when the exception chain indicates provider quota/rate limiting."""
+def _contains_rate_limit_or_quota_hint(error: Exception) -> bool:
     for current in _iter_exception_chain(error):
-        if isinstance(current, litellm.RateLimitError):
-            return True
         lowered = str(current).lower()
         if "insufficient_quota" in lowered:
             return True
@@ -69,22 +97,29 @@ def _is_litellm_rate_limit_or_quota_error(error: Exception) -> bool:
             return True
         if "rate limit" in lowered:
             return True
+        if "quota" in lowered and "exceed" in lowered:
+            return True
+    return False
+
+
+def _contains_timeout_hint(error: Exception) -> bool:
+    for current in _iter_exception_chain(error):
+        lowered = str(current).lower()
+        if "timeout" in lowered or "timed out" in lowered:
+            return True
     return False
 
 
 class LLMClient:
-    """Manages LLM completion requests with memory integration and RAG support."""
+    """Manages LLM completion requests with memory and tool integration."""
 
-    def __init__(self, rag_service: Any | None = None, agent_id: str = AGENT_ID_DEFAULT) -> None:
+    def __init__(self, agent_id: str = AGENT_ID_DEFAULT) -> None:
         """Initialize LLMClient.
 
         Args:
-            rag_service: Optional RAGService instance for dependency injection.
-                        If not provided, RAG functionality will be skipped or create a new instance.
             agent_id: Logical identifier for the caller so memories can be scoped per module.
         """
         self._logger = logging.getLogger(__name__)
-        self._rag_service = rag_service
         self._agent_id = agent_id
         self._tool_maps: dict[UUID, dict[str, tuple[str, str]]] = {}
         self._tool_filters = self._parse_tool_filters()
@@ -108,6 +143,132 @@ class LLMClient:
         blocked_env = settings.AI_DISABLED_TOOLS
         blocked = {token.strip().lower() for token in blocked_env.split(",") if token.strip()} if blocked_env else set()
         return allowed, blocked
+
+    def _build_request(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        response_model: type[BaseModel] | None,
+        temperature: float | None,
+        tools: list[dict[str, Any]] | list[MCPToolBinding] | None,
+        tool_choice: str | None,
+        user_id: str | UUID | None,
+        model: str | None,
+        num_retries: int | None,
+        stream: bool,
+    ) -> _LLMRequest:
+        settings = get_settings()
+        return _LLMRequest(
+            messages=list(messages),
+            response_model=response_model,
+            temperature=temperature,
+            tools=tools,
+            tool_choice=tool_choice,
+            user_id=self._normalize_user_id(user_id),
+            model=model or settings.primary_llm_model,
+            num_retries=num_retries,
+            stream=stream,
+        )
+
+    def _map_runtime_error(self, error: Exception, *, default_message: str) -> AIRuntimeError:
+        if isinstance(error, AIRuntimeError):
+            return error
+
+        for current in _iter_exception_chain(error):
+            if isinstance(current, litellm.RateLimitError) or _contains_rate_limit_or_quota_hint(current):
+                return AIRateLimitOrQuotaError("LLM provider quota or rate limit reached")
+
+            if isinstance(current, (litellm.Timeout, TimeoutError, asyncio.TimeoutError)) or _contains_timeout_hint(
+                current
+            ):
+                return AITimeoutError("LLM request timed out")
+
+            if isinstance(current, (ValidationError, litellm.JSONSchemaValidationError, litellm.APIResponseValidationError)):
+                return AISchemaValidationError("Structured response failed schema validation")
+
+            provider_error_types = (
+                litellm.APIError,
+                litellm.APIConnectionError,
+                litellm.AuthenticationError,
+                litellm.BadGatewayError,
+                litellm.BadRequestError,
+                litellm.BudgetExceededError,
+                litellm.ContentPolicyViolationError,
+                litellm.ContextWindowExceededError,
+                litellm.InternalServerError,
+                litellm.InvalidRequestError,
+                litellm.NotFoundError,
+                litellm.RouterRateLimitError,
+                litellm.ServiceUnavailableError,
+                litellm.UnprocessableEntityError,
+                litellm.UnsupportedParamsError,
+            )
+            if isinstance(current, provider_error_types):
+                return AIProviderError(default_message)
+
+        return AIProviderError(default_message)
+
+    def _log_runtime_error(self, error: AIRuntimeError, *, operation: str) -> None:
+        if isinstance(error, (AIRateLimitOrQuotaError, AITimeoutError)):
+            self._logger.warning("%s failed: %s (%s)", operation, error, error.category.value)
+            return
+        self._logger.exception("%s failed: %s (%s)", operation, error, error.category.value)
+
+    async def _assemble_request_context(self, request: _LLMRequest) -> None:
+        """Ordered context assembly: normalize -> memory -> tools."""
+        if request.user_id is not None:
+            request.messages = await self._inject_memory_into_messages(request.messages, request.user_id)
+
+        tool_sources: list[dict[str, Any]] | list[MCPToolBinding] | None = request.tools
+        if tool_sources is None and request.user_id is not None:
+            tool_sources = await self._load_user_tool_bindings(request.user_id)
+
+        tool_schemas, tool_instruction = self._prepare_tool_context(tool_sources, request.user_id)
+        request.tool_schemas = tool_schemas
+        request.tool_choice = request.tool_choice or ("auto" if tool_schemas else None)
+
+        if tool_instruction:
+            request.messages = self._inject_tool_instruction(request.messages, tool_instruction)
+
+    def _prepare_tool_context(
+        self,
+        tools: list[dict[str, Any]] | list[MCPToolBinding] | None,
+        user_id: UUID | None,
+    ) -> tuple[list[dict[str, Any]] | None, str | None]:
+        if not tools:
+            if user_id is not None:
+                self._tool_maps.pop(user_id, None)
+            return None, None
+
+        first = tools[0]
+        if isinstance(first, MCPToolBinding):
+            if user_id is None:
+                self._logger.debug("MCP tools provided but user_id is missing; skipping tool wiring")
+                return None, None
+            bindings = cast("list[MCPToolBinding]", tools)
+            filtered_bindings = self._filter_tool_bindings(bindings)
+            if not filtered_bindings:
+                self._tool_maps.pop(user_id, None)
+                return None, None
+            return self._assign_tool_schemas(user_id, filtered_bindings), build_tool_instruction(filtered_bindings)
+
+        schema_list = cast("list[dict[str, Any]]", tools)
+        return self._filter_schema_list(schema_list), None
+
+    def _inject_tool_instruction(self, messages: list[dict[str, Any]], instruction: str) -> list[dict[str, Any]]:
+        if not instruction:
+            return messages
+        tool_message = {"role": "system", "content": instruction}
+        if messages and messages[0].get("role") == "system":
+            return [messages[0], tool_message, *messages[1:]]
+        return [tool_message, *messages]
+
+    def _schedule_memory_save(self, user_id: UUID | None, messages: list[dict[str, Any]], response: Any) -> None:
+        if user_id is None:
+            return
+        task = asyncio.create_task(self._save_conversation_to_memory(user_id, messages, response))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
     async def complete(
         self,
@@ -153,13 +314,10 @@ class LLMClient:
 
             return await asyncio.wait_for(litellm.acompletion(**kwargs), timeout=settings.ai_request_timeout)
 
-        except Exception as e:
-            if _is_litellm_rate_limit_or_quota_error(e):
-                self._logger.warning("Model completion limited by provider quota/rate limit: %s", e)
-            else:
-                self._logger.exception("Error in model completion")
-            msg = f"Model completion failed: {e}"
-            raise RuntimeError(msg) from e
+        except Exception as error:
+            mapped = self._map_runtime_error(error, default_message="Model completion failed")
+            self._log_runtime_error(mapped, operation="Model completion")
+            raise mapped from error
 
     async def get_completion(
         self,
@@ -173,107 +331,121 @@ class LLMClient:
         num_retries: int | None = None,
         stream: bool = False,
     ) -> Any:
-        """Get completion with optional memory integration and structured output."""
+        """Shared execution engine for free-form and structured generation."""
+        request = self._build_request(
+            messages=messages,
+            response_model=response_model,
+            temperature=temperature,
+            tools=tools,
+            tool_choice=tool_choice,
+            user_id=user_id,
+            model=model,
+            num_retries=num_retries,
+            stream=stream,
+        )
+
+        if request.response_model and request.stream:
+            msg = "Streaming is not supported for structured outputs"
+            raise ValueError(msg)
+
         try:
-            normalized_user_id = self._normalize_user_id(user_id)
-            settings = get_settings()
-            request_model = model or settings.primary_llm_model
-            if normalized_user_id:
-                messages = await self._inject_memory_into_messages(messages, normalized_user_id)
+            await self._assemble_request_context(request)
 
-            # Handle structured output via LiteLLM json schema with Instructor fallback
-            tool_sources: list[dict[str, Any]] | list[MCPToolBinding] | None = tools
-            if tool_sources is None and normalized_user_id is not None:
-                tool_sources = await self._load_user_tool_bindings(normalized_user_id)
-            tool_schemas: list[dict[str, Any]] | None = self._prepare_tool_schemas(tool_sources, normalized_user_id)
-            effective_tool_choice = tool_choice or ("auto" if tool_schemas else None)
-
-            if response_model:
-                if stream:
-                    msg = "Streaming is not supported for structured outputs"
-                    raise ValueError(msg)
-
-                def _finalize(structured: BaseModel) -> BaseModel:
-                    if normalized_user_id:
-                        task = asyncio.create_task(
-                            self._save_conversation_to_memory(normalized_user_id, messages, structured)
-                        )
-                        self._background_tasks.add(task)
-                        task.add_done_callback(self._background_tasks.discard)
-                    return structured
-
-                schema_instance = await self._complete_with_litellm_schema(
-                    messages=messages,
-                    schema_model=response_model,
-                    temperature=temperature,
-                    user_id=normalized_user_id,
-                    model=request_model,
-                    tools=tool_schemas,
-                    tool_choice=effective_tool_choice,
-                    num_retries=num_retries,
-                )
-
-                return _finalize(schema_instance)
-
-            if stream:
+            if request.stream:
                 return self._stream_unstructured_completion(
-                    messages=messages,
-                    temperature=temperature,
-                    tools=tool_schemas,
-                    tool_choice=effective_tool_choice,
-                    user_id=normalized_user_id,
-                    model=request_model,
-                    num_retries=num_retries,
+                    messages=request.messages,
+                    temperature=request.temperature,
+                    tools=request.tool_schemas,
+                    tool_choice=request.tool_choice,
+                    user_id=request.user_id,
+                    model=request.model,
+                    num_retries=request.num_retries,
                 )
 
-            # Handle function calling
-            if tool_schemas:
-                response = await self.complete(
-                    messages=messages,
-                    temperature=temperature,
-                    tools=tool_schemas,
-                    tool_choice=effective_tool_choice,
-                    user_id=normalized_user_id,
-                    num_retries=num_retries,
-                )
+            result, conversation = await self._run_autonomy_loop(request)
+            self._schedule_memory_save(request.user_id, conversation, result)
+            return result
 
-                # Process function calls
-                if response.choices[0].message.tool_calls:
-                    return await self._handle_function_calling(
-                        response,
-                        messages,
-                        temperature,
-                        normalized_user_id,
-                    )
+        except ValueError:
+            raise
+        except Exception as error:
+            mapped = self._map_runtime_error(error, default_message="Completion failed")
+            self._log_runtime_error(mapped, operation="Completion")
+            raise mapped from error
 
-                return response.choices[0].message.content
+    async def _run_autonomy_loop(self, request: _LLMRequest) -> tuple[Any, list[dict[str, Any]]]:
+        """Run the shared non-stream autonomy loop for structured and free-form calls."""
+        conversation = list(request.messages)
+        schema_attempts = 0
+        tool_round = 0
 
-            # Regular completion
+        while True:
+            tool_round += 1
+            if tool_round > _MAX_AUTONOMY_ROUNDS:
+                msg = f"Tool autonomy loop exceeded {_MAX_AUTONOMY_ROUNDS} rounds"
+                raise AIToolExecutionError(msg)
+
             response = await self.complete(
-                messages=messages,
-                temperature=temperature,
-                user_id=normalized_user_id,
-                model=model,
-                num_retries=num_retries,
+                messages=conversation,
+                temperature=request.temperature,
+                tools=request.tool_schemas,
+                tool_choice=request.tool_choice,
+                user_id=request.user_id,
+                response_format=self._build_response_format(request.response_model)
+                if request.response_model is not None
+                else None,
+                model=request.model,
+                num_retries=request.num_retries,
             )
 
-            content = response.choices[0].message.content
+            assistant_message = response.choices[0].message
+            assistant_content = assistant_message.content or ""
+            tool_calls = getattr(assistant_message, "tool_calls", None)
 
-            # Save conversation to memory (non-blocking)
-            if normalized_user_id and response:
-                task = asyncio.create_task(self._save_conversation_to_memory(normalized_user_id, messages, content))
-                self._background_tasks.add(task)
-                task.add_done_callback(self._background_tasks.discard)
+            if tool_calls:
+                if request.user_id is None:
+                    self._logger.warning("Model attempted to call MCP tools without a user context")
+                    if request.response_model is not None:
+                        msg = "Structured completion attempted tool calls without user context"
+                        raise AIToolExecutionError(msg)
+                    conversation.append({"role": "assistant", "content": assistant_content})
+                    return assistant_content, conversation
 
-            return content
+                await self._append_tool_calls(
+                    conversation,
+                    assistant_content=assistant_content,
+                    tool_calls=tool_calls,
+                    user_id=request.user_id,
+                )
+                continue
 
-        except Exception as e:
-            if _is_litellm_rate_limit_or_quota_error(e):
-                self._logger.warning("Completion skipped due to provider quota/rate limit: %s", e)
-            else:
-                self._logger.exception("Error in get_completion")
-            msg = f"Completion failed: {e}"
-            raise RuntimeError(msg) from e
+            conversation.append({"role": "assistant", "content": assistant_content})
+            if request.response_model is None:
+                return assistant_content, conversation
+
+            try:
+                parsed = self._coerce_response_model(response, request.response_model)
+                return parsed, conversation
+            except Exception as parse_error:
+                schema_attempts += 1
+                self._logger.warning(
+                    "Structured response validation failed on attempt %s: %s",
+                    schema_attempts,
+                    parse_error,
+                )
+                if schema_attempts >= _MAX_SCHEMA_REPAIR_ATTEMPTS:
+                    msg = "Structured response failed schema validation"
+                    raise AISchemaValidationError(msg) from parse_error
+                conversation.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Your previous response did not match the required JSON schema. "
+                            "Reply again with ONLY valid JSON that matches the schema exactly "
+                            "(no markdown, no commentary, no extra keys)."
+                        ),
+                    }
+                )
 
     async def _stream_unstructured_completion(
         self,
@@ -296,7 +468,7 @@ class LLMClient:
 
         while True:
             tool_round += 1
-            if tool_round > 6:
+            if tool_round > _MAX_AUTONOMY_ROUNDS:
                 self._logger.warning("Stopping tool loop after %s rounds for user %s", tool_round - 1, user_id)
                 break
 
@@ -361,10 +533,7 @@ class LLMClient:
             break
 
         # Save conversation to memory (non-blocking). Keep this best-effort.
-        if user_id is not None:
-            task = asyncio.create_task(self._save_conversation_to_memory(user_id, conversation, "".join(full_text)))
-            self._background_tasks.add(task)
-            task.add_done_callback(self._background_tasks.discard)
+        self._schedule_memory_save(user_id, conversation, "".join(full_text))
 
     def _extract_stream_delta_content(self, chunk: Any) -> str:
         """Extract the streamed text delta from a LiteLLM/OpenAI-style chunk."""
@@ -397,71 +566,6 @@ class LLMClient:
         except (ValueError, TypeError):
             self._logger.warning("Ignoring invalid user_id: %s", user_id)
             return None
-
-    async def _complete_with_litellm_schema(
-        self,
-        *,
-        messages: list[dict[str, Any]],
-        schema_model: type[BaseModel],
-        temperature: float | None,
-        user_id: UUID | None,
-        model: str,
-        tools: list[dict[str, Any]] | None = None,
-        tool_choice: str | None = None,
-        num_retries: int | None = None,
-    ) -> BaseModel:
-        last_error: Exception | None = None
-        attempt = 0
-        conversation = list(messages)
-        while attempt < 2:
-            response = await self.complete(
-                messages=conversation,
-                temperature=temperature,
-                user_id=user_id,
-                response_format=self._build_response_format(schema_model),
-                model=model,
-                tools=tools,
-                tool_choice=tool_choice,
-                num_retries=num_retries,
-            )
-            assistant_message = response.choices[0].message
-            tool_calls = getattr(assistant_message, "tool_calls", None)
-            if tool_calls:
-                await self._append_tool_calls(
-                    conversation,
-                    assistant_content=assistant_message.content or "",
-                    tool_calls=tool_calls,
-                    user_id=user_id,
-                )
-                if user_id is None:
-                    self._logger.warning("Structured output invoked MCP tools without a user context")
-                    break
-                continue
-            try:
-                return self._coerce_response_model(response, schema_model)
-            except Exception as parse_error:
-                last_error = parse_error
-                attempt += 1
-                self._logger.warning(
-                    "Structured response validation failed on attempt %s: %s",
-                    attempt,
-                    parse_error,
-                )
-                if attempt < 2:
-                    conversation.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                "Your previous response did not match the required JSON schema. "
-                                "Reply again with ONLY valid JSON that matches the schema exactly "
-                                "(no markdown, no commentary, no extra keys)."
-                            ),
-                        }
-                    )
-        if last_error is None:
-            msg = "Structured response validation failed"
-            raise RuntimeError(msg)
-        raise last_error
 
     def _build_response_format(self, response_model: type[BaseModel]) -> dict[str, Any]:
         schema = response_model.model_json_schema()
@@ -590,6 +694,7 @@ class LLMClient:
                 user_id=user_id,
                 query=query_text,
                 limit=6,
+                agent_id=self._agent_id,
             )
 
             if not memories:
@@ -612,8 +717,8 @@ class LLMClient:
                 return [messages[0], memory_message, *messages[1:]]
             return [memory_message, *messages]
 
-        except Exception as e:
-            self._logger.warning(f"Failed to inject memory for user {user_id}: {e}")
+        except Exception as error:
+            self._logger.warning("Failed to inject memory for user %s: %s", user_id, error)
             return messages
 
     def _build_memory_query(self, messages: list[dict[str, Any]]) -> str | None:
@@ -628,59 +733,8 @@ class LLMClient:
                     return normalized
         return None
 
-    async def _handle_function_calling(
-        self,
-        response: Any,
-        messages: list[dict[str, Any]],
-        temperature: float | None,
-        user_id: UUID | None,
-    ) -> str:
-        """Handle function calling responses."""
-        assistant_message = response.choices[0].message
-        await self._append_tool_calls(
-            messages,
-            assistant_content=assistant_message.content or "",
-            tool_calls=assistant_message.tool_calls,
-            user_id=user_id,
-        )
-
-        if user_id is None:
-            self._logger.warning("Model attempted to call MCP tools without a user context")
-            return assistant_message.content or ""
-
-        final_response = await self.complete(
-            messages=messages,
-            temperature=temperature,
-            user_id=user_id,
-        )
-
-        return final_response.choices[0].message.content
-
-    def _prepare_tool_schemas(
-        self,
-        tools: list[dict[str, Any]] | list[MCPToolBinding] | None,
-        user_id: UUID | None,
-    ) -> list[dict[str, Any]] | None:
-        if not tools:
-            if user_id is not None:
-                self._tool_maps.pop(user_id, None)
-            return None
-        first = tools[0]
-        if isinstance(first, MCPToolBinding):
-            if user_id is None:
-                self._logger.debug("MCP tools provided but user_id is missing; skipping tool wiring")
-                return None
-            bindings = cast("list[MCPToolBinding]", tools)
-            filtered = self._filter_tool_bindings(bindings)
-            if not filtered:
-                self._tool_maps.pop(user_id, None)
-                return None
-            return self._assign_tool_schemas(user_id, filtered)
-        schema_list = cast("list[dict[str, Any]]", tools)
-        return self._filter_schema_list(schema_list)
-
     def _filter_schema_list(self, schemas: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
-        allowed, blocked = self._get_tool_filters()
+        allowed, blocked = self._tool_filters
         filtered: list[dict[str, Any]] = []
         for schema in schemas:
             if not isinstance(schema, dict):
@@ -715,7 +769,7 @@ class LLMClient:
         self,
         bindings: list[MCPToolBinding],
     ) -> list[MCPToolBinding]:
-        allowed, blocked = self._get_tool_filters()
+        allowed, blocked = self._tool_filters
         filtered: list[MCPToolBinding] = []
         for binding in bindings:
             key = binding.tool_name.lower()
@@ -729,9 +783,6 @@ class LLMClient:
     def _slug_tool_key(self, server_name: str, tool_name: str) -> str:
         base = f"{server_name}_{tool_name}".lower()
         return "".join(char if char.isalnum() or char == "_" else "_" for char in base)
-
-    def _get_tool_filters(self) -> tuple[set[str] | None, set[str]]:
-        return self._tool_filters
 
     async def _load_user_tool_bindings(self, user_id: UUID) -> list[MCPToolBinding]:
         async with self._mcp_session() as session:
@@ -768,22 +819,27 @@ class LLMClient:
                 },
             )
         if pending:
-            # Load config once, then run all tool calls concurrently without DB sessions
-            async with self._mcp_session() as session:
-                config = await get_user_mcp_config(session, user_id)
+            try:
+                # Load config once, then run all tool calls concurrently without DB sessions
+                async with self._mcp_session() as session:
+                    config = await get_user_mcp_config(session, user_id)
 
-            tasks = [
-                execute_user_tool_call(
-                    user_id=user_id,
-                    server_name=target[0],
-                    tool_name=target[1],
-                    encoded_name=tool_call.function.name,
-                    arguments=args_dict,
-                    config=config,
-                )
-                for (_idx, tool_call, args_dict, target) in pending
-            ]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+                tasks = [
+                    execute_user_tool_call(
+                        user_id=user_id,
+                        server_name=target[0],
+                        tool_name=target[1],
+                        encoded_name=tool_call.function.name,
+                        arguments=args_dict,
+                        config=config,
+                    )
+                    for (_idx, tool_call, args_dict, target) in pending
+                ]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+            except Exception as error:
+                msg = "Tool execution orchestration failed"
+                raise AIToolExecutionError(msg) from error
+
             for (idx, tool_call, _args_dict, target), result in zip(pending, results, strict=False):
                 if isinstance(result, Exception):
                     content = f"Error: {result!s}"
@@ -829,38 +885,15 @@ class LLMClient:
                 return str(result)
         return str(result)
 
-    def _build_tooling_instruction(self, bindings: list[MCPToolBinding]) -> str | None:
-        return build_tool_instruction(bindings)
-
-    async def _apply_user_tooling(
-        self,
-        messages: list[dict[str, Any]],
-        *,
-        user_id: UUID | None,
-    ) -> tuple[list[dict[str, Any]], list[MCPToolBinding]]:
-        tool_bindings: list[MCPToolBinding] = []
-        if user_id is not None:
-            tool_bindings = await self._load_user_tool_bindings(user_id)
-        tool_instruction = self._build_tooling_instruction(tool_bindings)
-        if tool_instruction:
-            messages = [messages[0], {"role": "system", "content": tool_instruction}, *messages[1:]]
-        return messages, tool_bindings
-
-    async def _generate_structure_payload(
-        self,
-        *,
-        system_prompt: str,
-        user_prompt: str | list[dict[str, Any]],
-        response_model: type[T],
-        user_id: str | UUID | None,
-    ) -> T:
+    def _normalize_user_prompt_content(self, user_prompt: str | list[dict[str, Any]]) -> str | list[dict[str, Any]]:
         if isinstance(user_prompt, str):
             prompt_text = user_prompt.strip()
             if not prompt_text:
                 msg = "User prompt must not be empty"
                 raise ValueError(msg)
-            user_content: str | list[dict[str, Any]] = prompt_text
-        elif isinstance(user_prompt, list):
+            return prompt_text
+
+        if isinstance(user_prompt, list):
             text_parts = [
                 part.get("text", "").strip()
                 for part in user_prompt
@@ -870,36 +903,10 @@ class LLMClient:
             if not prompt_text:
                 msg = "User prompt must not be empty"
                 raise ValueError(msg)
-            user_content = user_prompt
-        else:
-            msg = "User prompt must be a string or list of content parts"
-            raise TypeError(msg)
+            return user_prompt
 
-        normalized_user_id = self._normalize_user_id(user_id)
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ]
-
-        messages, tool_bindings = await self._apply_user_tooling(
-            messages,
-            user_id=normalized_user_id,
-        )
-
-        result = await self.get_completion(
-            messages,
-            response_model=response_model,
-            user_id=normalized_user_id,
-            tools=tool_bindings or None,
-            tool_choice="auto" if tool_bindings else None,
-        )
-
-        if not isinstance(result, response_model):
-            msg = f"Expected {response_model.__name__} from structured output"
-            raise TypeError(msg)
-
-        return result
+        msg = "User prompt must be a string or list of content parts"
+        raise TypeError(msg)
 
     async def generate_course_structure(
         self,
@@ -908,18 +915,26 @@ class LLMClient:
     ) -> CourseStructure:
         """Generate a structured learning course using LiteLLM structured output (Pydantic)."""
         try:
-            return await self._generate_structure_payload(
-                system_prompt=COURSE_GENERATION_PROMPT,
-                user_prompt=user_prompt,
+            normalized_content = self._normalize_user_prompt_content(user_prompt)
+            messages = [
+                {"role": "system", "content": COURSE_GENERATION_PROMPT},
+                {"role": "user", "content": normalized_content},
+            ]
+            result = await self.get_completion(
+                messages,
                 response_model=CourseStructure,
                 user_id=user_id,
             )
+            if not isinstance(result, CourseStructure):
+                msg = "Expected CourseStructure from structured output"
+                raise TypeError(msg)
+            return result
         except ValueError:
             raise
-        except Exception as e:
+        except Exception as error:
             self._logger.exception("Error generating course structure")
             msg = "Failed to generate course outline"
-            raise RuntimeError(msg) from e
+            raise RuntimeError(msg) from error
 
     async def generate_adaptive_course_structure(
         self,
@@ -928,18 +943,26 @@ class LLMClient:
     ) -> AdaptiveCourseStructure:
         """Generate the unified adaptive course payload used by ConceptFlow."""
         try:
-            return await self._generate_structure_payload(
-                system_prompt=ADAPTIVE_COURSE_GENERATION_PROMPT,
-                user_prompt=user_prompt,
+            normalized_content = self._normalize_user_prompt_content(user_prompt)
+            messages = [
+                {"role": "system", "content": ADAPTIVE_COURSE_GENERATION_PROMPT},
+                {"role": "user", "content": normalized_content},
+            ]
+            result = await self.get_completion(
+                messages,
                 response_model=AdaptiveCourseStructure,
                 user_id=user_id,
             )
+            if not isinstance(result, AdaptiveCourseStructure):
+                msg = "Expected AdaptiveCourseStructure from structured output"
+                raise TypeError(msg)
+            return result
         except ValueError:
             raise
-        except Exception as e:
+        except Exception as error:
             self._logger.exception("Error generating adaptive course structure")
             msg = "Failed to generate adaptive course structure"
-            raise RuntimeError(msg) from e
+            raise RuntimeError(msg) from error
 
     async def generate_self_assessment_questions(
         self,
@@ -1006,17 +1029,10 @@ class LLMClient:
             {"role": "user", "content": context_text},
         ]
 
-        messages, tool_bindings = await self._apply_user_tooling(
-            messages,
-            user_id=normalized_user_id,
-        )
-
         try:
             response_content = await self.get_completion(
                 messages,
                 user_id=normalized_user_id,
-                tools=tool_bindings or None,
-                tool_choice="auto" if tool_bindings else None,
             )
 
             content = response_content if isinstance(response_content, str) else str(response_content or "")
@@ -1081,6 +1097,113 @@ class LLMClient:
             msg = "Execution planning failed"
             raise RuntimeError(msg) from exc
 
+    async def generate_grading_coach_feedback(
+        self,
+        *,
+        payload: dict[str, Any],
+        response_model: type[T],
+        user_id: str | UUID | None = None,
+        model: str | None = None,
+    ) -> T:
+        """Generate grading coach feedback with a strict structured contract."""
+        messages = [
+            {"role": "system", "content": GRADING_COACH_PROMPT},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=True)},
+        ]
+
+        result = await self.get_completion(
+            messages,
+            response_model=response_model,
+            temperature=0,
+            user_id=user_id,
+            model=model,
+        )
+        if not isinstance(result, response_model):
+            msg = f"Expected {response_model.__name__} from grading coach structured output"
+            raise TypeError(msg)
+        return result
+
+    async def generate_practice_question_batch(
+        self,
+        *,
+        concept: str,
+        concept_description: str | None,
+        history: str,
+        count: int,
+        response_model: type[T],
+        user_id: str | UUID | None = None,
+        model: str | None = None,
+    ) -> T:
+        """Generate a structured batch of practice questions."""
+        prompt = PRACTICE_GENERATION_PROMPT.format(
+            count=count,
+            concept=concept,
+            concept_description=concept_description or "",
+            history=history,
+        )
+        messages = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": "Generate the questions now."},
+        ]
+
+        result = await self.get_completion(
+            messages,
+            response_model=response_model,
+            temperature=0,
+            user_id=user_id,
+            model=model,
+        )
+        if not isinstance(result, response_model):
+            msg = f"Expected {response_model.__name__} from practice generation structured output"
+            raise TypeError(msg)
+        return result
+
+    async def predict_practice_correctness_batch(
+        self,
+        *,
+        concept: str,
+        mastery: float,
+        recent_correct: int,
+        recent_total: int,
+        learning_speed: float,
+        strengths: list[str],
+        weaknesses: list[str],
+        questions: list[str],
+        predictions_example: str,
+        response_model: type[T],
+        user_id: str | UUID | None = None,
+        model: str | None = None,
+    ) -> T:
+        """Predict p(correct) values for a batch of candidate practice questions."""
+        questions_block = "\n".join(f"{index + 1}. {question}" for index, question in enumerate(questions))
+        prompt = PRACTICE_PREDICTION_PROMPT.format(
+            concept=concept,
+            mastery=mastery,
+            recent_correct=recent_correct,
+            recent_total=recent_total,
+            learning_speed=learning_speed,
+            strengths=strengths,
+            weaknesses=weaknesses,
+            questions=questions_block,
+            predictions_example=predictions_example,
+        )
+        messages = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": "Return predicted probabilities."},
+        ]
+
+        result = await self.get_completion(
+            messages,
+            response_model=response_model,
+            temperature=0,
+            user_id=user_id,
+            model=model,
+        )
+        if not isinstance(result, response_model):
+            msg = f"Expected {response_model.__name__} from practice prediction structured output"
+            raise TypeError(msg)
+        return result
+
     async def _save_conversation_to_memory(
         self, user_id: UUID | None, messages: list[dict[str, Any]], response: Any
     ) -> None:
@@ -1095,9 +1218,7 @@ class LLMClient:
 
             from src.ai.memory import add_memory
 
-            user_message = messages[-1].get("content", "") if messages else ""
-            if not isinstance(user_message, str):
-                user_message = str(user_message)
+            user_message = self._build_memory_query(messages) or ""
 
             if isinstance(response, str):
                 ai_response = response[:1000]  # Limit to first 1000 chars
@@ -1123,9 +1244,10 @@ class LLMClient:
             await add_memory(
                 user_id=user_id,
                 messages=memory_messages,
+                agent_id=self._agent_id,
             )
 
-        except Exception as e:
+        except Exception as error:
             # Never fail the main request due to memory issues
-            self._logger.warning(f"Failed to save conversation to memory: {e}")
+            self._logger.warning("Failed to save conversation to memory: %s", error)
             # Don't re-raise - this is a background task

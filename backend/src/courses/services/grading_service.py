@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from dataclasses import asdict
@@ -11,7 +10,6 @@ from typing import TYPE_CHECKING, Any, cast
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.ai.client import LLMClient
-from src.ai.prompts import GRADING_COACH_PROMPT
 from src.config.settings import get_settings
 from src.courses.schemas import GradeErrorHighlight, GradeRequest, GradeResponse, VerifierInfo
 from src.courses.services.jxg_state_verifier import JXGStateVerifier
@@ -188,16 +186,11 @@ class GradingService:
             },
             "verifierDiagnostics": asdict(verification.diagnostics),
         }
-        messages = [
-            {"role": "system", "content": GRADING_COACH_PROMPT},
-            {"role": "user", "content": json.dumps(payload, ensure_ascii=True)},
-        ]
 
         try:
-            result = await self._llm_client.get_completion(
-                messages=messages,
+            result = await self._llm_client.generate_grading_coach_feedback(
+                payload=payload,
                 response_model=GradingCoachFeedback,
-                temperature=0,
                 user_id=user_id,
                 model=model,
             )

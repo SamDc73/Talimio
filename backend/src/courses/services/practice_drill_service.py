@@ -11,7 +11,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, select
 
 from src.ai.client import LLMClient
-from src.ai.prompts import PRACTICE_GENERATION_PROMPT, PRACTICE_PREDICTION_PROMPT
 from src.config.settings import get_settings
 from src.courses.models import Concept, CourseConcept, ProbeEvent, UserConceptState
 from src.courses.schemas import PracticeDrillItem
@@ -257,21 +256,12 @@ class PracticeDrillService:
         count: int,
         user_id: UUID,
     ) -> list[_QuestionPayload]:
-        prompt = PRACTICE_GENERATION_PROMPT.format(
-            count=count,
+        payload = await self._llm_client.generate_practice_question_batch(
             concept=concept.name,
             concept_description=concept.description,
             history=history,
-        )
-        messages = [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": "Generate the questions now."},
-        ]
-
-        payload = await self._llm_client.get_completion(
-            messages,
+            count=count,
             response_model=_QuestionBatchPayload,
-            temperature=0,
             user_id=user_id,
             model=self._request_model,
         )
@@ -291,10 +281,8 @@ class PracticeDrillService:
         if not questions:
             return []
 
-        questions_block = "\n".join(f"{index + 1}. {question}" for index, question in enumerate(questions))
         prediction_example = ", ".join(["0.70"] * len(questions))
-
-        prompt = PRACTICE_PREDICTION_PROMPT.format(
+        payload = await self._llm_client.predict_practice_correctness_batch(
             concept=concept_name,
             mastery=learner.mastery,
             recent_correct=learner.recent_correct,
@@ -302,19 +290,9 @@ class PracticeDrillService:
             learning_speed=learner.learning_speed,
             strengths=learner.strengths,
             weaknesses=learner.weaknesses,
-            questions=questions_block,
+            questions=questions,
             predictions_example=prediction_example,
-        )
-
-        messages = [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": "Return predicted probabilities."},
-        ]
-
-        payload = await self._llm_client.get_completion(
-            messages,
             response_model=_PredictionBatchPayload,
-            temperature=0,
             user_id=user_id,
             model=self._request_model,
         )
