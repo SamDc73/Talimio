@@ -6,7 +6,6 @@ import asyncio
 import base64
 import json
 import logging
-import re
 from collections.abc import Coroutine
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -14,16 +13,19 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from sqlalchemy import DateTime, Float, Integer, bindparam, select, text, update
-from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID, insert
+from sqlalchemy import select, text, update
+from sqlalchemy.dialects.postgresql import insert
 
 from src.ai.models import AdaptiveCourseStructure
 from src.ai.rag.service import RAGService
 from src.ai.service import AIService
 from src.courses.models import (
     Concept,
+    ConceptSimilarity,
     Course,
+    CourseConcept,
     Lesson,
+    UserConceptState,
 )
 from src.database.session import async_session_maker
 
@@ -38,14 +40,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 _DETACHED_TASKS: set[asyncio.Task[Any]] = set()
 
-_SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
 _DOC_EXTENSIONS = {".pdf", ".epub"}
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
-
-
-def _canonical_slug(value: str) -> str:
-    text = (value or "").strip().lower()
-    return _SLUG_PATTERN.sub("-", text).strip("-")
 
 
 def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
@@ -97,69 +93,104 @@ class CourseContentService:
         """Create a course using the provided session."""
         session_data = dict(data)
         is_adaptive = bool(session_data.get("adaptive_enabled"))
-
-        draft_title = str(session_data.get("title") or "Draft course")
-        draft_description = str(session_data.get("description") or "Draft course description")
-        course = Course(
-            user_id=user_id,
-            title=draft_title,
-            description=draft_description,
-            adaptive_enabled=is_adaptive,
-            archived=bool(session_data.get("archived", False)),
-        )
-        session.add(course)
-        await session.flush()
-
         prompt = session_data.pop("prompt", None)
         prompt_text = self._normalize_prompt_text(prompt)
         attachments = attachments or []
         normalized_modules: list[dict[str, Any]] = []
         inserted_lessons = 0
+        course: Course
+        adaptive_structure: AdaptiveCourseStructure | None
+        modules_payload: list[Any]
+        lessons_payload: list[Any]
 
-        rag_service = RAGService()
-        image_data_urls = await self._ingest_course_attachments(
-            rag_service=rag_service,
-            session=session,
-            user_id=user_id,
-            course_id=course.id,
-            attachments=attachments,
-        )
-        augmented_prompt = await self._build_augmented_prompt(
-            rag_service=rag_service,
-            session=session,
-            user_id=user_id,
-            course_id=course.id,
-            prompt_text=prompt_text,
-        )
-        prompt_payload = self._build_prompt_payload(augmented_prompt, image_data_urls)
+        if not attachments:
+            if background_tasks is not None and session.in_transaction():
+                await session.commit()
+            # Keep DB transactions short: run prompt generation before first DB write/flush.
+            prompt_payload = self._build_prompt_payload(prompt_text, [])
+            adaptive_structure = await self._build_adaptive_structure(
+                is_adaptive=is_adaptive,
+                prompt=prompt_payload,
+                prompt_text=prompt_text,
+                session_data=session_data,
+                user_id=user_id,
+            )
 
-        adaptive_structure = await self._build_adaptive_structure(
-            is_adaptive=is_adaptive,
-            prompt=prompt_payload,
-            prompt_text=prompt_text,
-            session_data=session_data,
-            user_id=user_id,
-        )
+            course = self._build_draft_course(session_data=session_data, user_id=user_id, is_adaptive=is_adaptive)
+            modules_payload = session_data.pop("modules", [])
+            lessons_payload = session_data.pop("lessons", [])
 
-        modules_payload = session_data.pop("modules", [])
-        lessons_payload = session_data.pop("lessons", [])
-
-        self._serialize_payload_fields(session_data)
-        self._apply_course_updates(course, session_data)
-
-        normalized_modules = await self._prepare_course_modules(
-            session=session,
-            course=course,
-            adaptive_structure=adaptive_structure,
-            modules_payload=modules_payload,
-            lessons_payload=lessons_payload,
-        )
-        inserted_lessons = await self._insert_lessons(session, course.id, normalized_modules)
-        if background_tasks is not None:
-            # Ensure background tasks can read committed course/lesson rows.
-            await session.commit()
+            if background_tasks is not None:
+                # Request path: persist all course rows in one short explicit transaction.
+                async with session.begin():
+                    session.add(course)
+                    await session.flush()
+                    normalized_modules, inserted_lessons = await self._persist_course_structure(
+                        session=session,
+                        course=course,
+                        session_data=session_data,
+                        adaptive_structure=adaptive_structure,
+                        modules_payload=modules_payload,
+                        lessons_payload=lessons_payload,
+                    )
+            else:
+                session.add(course)
+                await session.flush()
+                normalized_modules, inserted_lessons = await self._persist_course_structure(
+                    session=session,
+                    course=course,
+                    session_data=session_data,
+                    adaptive_structure=adaptive_structure,
+                    modules_payload=modules_payload,
+                    lessons_payload=lessons_payload,
+                )
+                await session.flush()
         else:
+            course = self._build_draft_course(session_data=session_data, user_id=user_id, is_adaptive=is_adaptive)
+            session.add(course)
             await session.flush()
+
+            rag_service = RAGService()
+            image_data_urls = await self._ingest_course_attachments(
+                rag_service=rag_service,
+                session=session,
+                user_id=user_id,
+                course_id=course.id,
+                attachments=attachments,
+            )
+            augmented_prompt = await self._build_augmented_prompt(
+                rag_service=rag_service,
+                session=session,
+                user_id=user_id,
+                course_id=course.id,
+                prompt_text=prompt_text,
+            )
+            prompt_payload = self._build_prompt_payload(augmented_prompt, image_data_urls)
+
+            adaptive_structure = await self._build_adaptive_structure(
+                is_adaptive=is_adaptive,
+                prompt=prompt_payload,
+                prompt_text=prompt_text,
+                session_data=session_data,
+                user_id=user_id,
+            )
+
+            modules_payload = session_data.pop("modules", [])
+            lessons_payload = session_data.pop("lessons", [])
+
+            normalized_modules, inserted_lessons = await self._persist_course_structure(
+                session=session,
+                course=course,
+                session_data=session_data,
+                adaptive_structure=adaptive_structure,
+                modules_payload=modules_payload,
+                lessons_payload=lessons_payload,
+            )
+            if background_tasks is not None:
+                # Ensure background tasks can read committed course/lesson rows.
+                await session.commit()
+            else:
+                await session.flush()
 
         await session.refresh(course)
 
@@ -179,6 +210,47 @@ class CourseContentService:
         )
 
         return course
+
+    def _build_draft_course(
+        self,
+        *,
+        session_data: dict[str, Any],
+        user_id: UUID,
+        is_adaptive: bool,
+    ) -> Course:
+        """Build a draft course object from session payload data."""
+        draft_title = str(session_data.get("title") or "Draft course")
+        draft_description = str(session_data.get("description") or "Draft course description")
+        return Course(
+            user_id=user_id,
+            title=draft_title,
+            description=draft_description,
+            adaptive_enabled=is_adaptive,
+            archived=bool(session_data.get("archived", False)),
+        )
+
+    async def _persist_course_structure(
+        self,
+        *,
+        session: AsyncSession,
+        course: Course,
+        session_data: dict[str, Any],
+        adaptive_structure: AdaptiveCourseStructure | None,
+        modules_payload: list[Any],
+        lessons_payload: list[Any],
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Persist generated course fields, module structure, and lesson rows."""
+        self._serialize_payload_fields(session_data)
+        self._apply_course_updates(course, session_data)
+        normalized_modules = await self._prepare_course_modules(
+            session=session,
+            course=course,
+            adaptive_structure=adaptive_structure,
+            modules_payload=modules_payload,
+            lessons_payload=lessons_payload,
+        )
+        inserted_lessons = await self._insert_lessons(session, course.id, normalized_modules)
+        return normalized_modules, inserted_lessons
 
     async def _build_adaptive_structure(
         self,
@@ -755,35 +827,10 @@ class CourseContentService:
         if not rows:
             return
 
-        course_ids = [item["course_id"] for item in rows]
-        concept_ids = [item["concept_id"] for item in rows]
-        order_hints = [cast("int | None", item.get("order_hint")) for item in rows]
-
-        stmt = text(
-            """
-            INSERT INTO course_concepts (course_id, concept_id, order_hint)
-            SELECT *
-            FROM UNNEST(
-                :course_ids,
-                :concept_ids,
-                :order_hints
-            )
-            ON CONFLICT DO NOTHING
-            """
-        ).bindparams(
-            bindparam("course_ids", type_=ARRAY(PGUUID(as_uuid=True))),
-            bindparam("concept_ids", type_=ARRAY(PGUUID(as_uuid=True))),
-            bindparam("order_hints", type_=ARRAY(Integer())),
+        stmt = insert(CourseConcept).values(rows).on_conflict_do_nothing(
+            index_elements=[CourseConcept.course_id, CourseConcept.concept_id]
         )
-
-        await session.execute(
-            stmt,
-            {
-                "course_ids": course_ids,
-                "concept_ids": concept_ids,
-                "order_hints": order_hints,
-            },
-        )
+        await session.execute(stmt)
 
     async def _seed_owner_states(
         self,
@@ -794,35 +841,19 @@ class CourseContentService:
         if not state_rows:
             return 0
 
-        user_ids = [item["user_id"] for item in state_rows]
-        concept_ids = [item["concept_id"] for item in state_rows]
-        mastery_scores = [float(item["s_mastery"]) for item in state_rows]
-
-        state_stmt = text(
-            """
-            INSERT INTO user_concept_state (user_id, concept_id, s_mastery, exposures, learner_profile)
-            SELECT u, c, s, 0, '{"success_rate": 0.5, "learning_speed": 1.0, "retention_rate": 0.8, "semantic_sensitivity": 1.0}'::jsonb
-            FROM UNNEST(
-                :user_ids,
-                :concept_ids,
-                :mastery_scores
-            ) AS t(u, c, s)
-            ON CONFLICT DO NOTHING
-            """
-        ).bindparams(
-            bindparam("user_ids", type_=ARRAY(PGUUID(as_uuid=True))),
-            bindparam("concept_ids", type_=ARRAY(PGUUID(as_uuid=True))),
-            bindparam("mastery_scores", type_=ARRAY(Float())),
-        )
-        await session.execute(
-            state_stmt,
+        insert_rows = [
             {
-                "user_ids": user_ids,
-                "concept_ids": concept_ids,
-                "mastery_scores": mastery_scores,
-            },
+                "user_id": item["user_id"],
+                "concept_id": item["concept_id"],
+                "s_mastery": float(item["s_mastery"]),
+            }
+            for item in state_rows
+        ]
+        stmt = insert(UserConceptState).values(insert_rows).on_conflict_do_nothing(
+            index_elements=[UserConceptState.user_id, UserConceptState.concept_id]
         )
-        return len(state_rows)
+        await session.execute(stmt)
+        return len(insert_rows)
 
     async def _persist_confusors(
         self,
@@ -868,40 +899,19 @@ class CourseContentService:
             logger.debug("No LLM confusors provided for adaptive course %s", course_id)
             return 0
 
-        now = datetime.now(UTC)
-        concept_a_ids = [pair[0] for pair in confusor_pairs]
-        concept_b_ids = [pair[1] for pair in confusor_pairs]
-        similarities = [float(confusor_pairs[pair]) for pair in confusor_pairs]
-        timestamps = [now for _ in confusor_pairs]
-
-        stmt = text(
-            """
-            INSERT INTO concept_similarities (concept_a_id, concept_b_id, similarity, computed_at)
-            SELECT *
-            FROM UNNEST(
-                :concept_a_ids,
-                :concept_b_ids,
-                :similarities,
-                :timestamps
-            )
-            ON CONFLICT DO NOTHING
-            """
-        ).bindparams(
-            bindparam("concept_a_ids", type_=ARRAY(PGUUID(as_uuid=True))),
-            bindparam("concept_b_ids", type_=ARRAY(PGUUID(as_uuid=True))),
-            bindparam("similarities", type_=ARRAY(Float())),
-            bindparam("timestamps", type_=ARRAY(DateTime(timezone=True))),
-        )
-        await session.execute(
-            stmt,
+        insert_rows = [
             {
-                "concept_a_ids": concept_a_ids,
-                "concept_b_ids": concept_b_ids,
-                "similarities": similarities,
-                "timestamps": timestamps,
-            },
+                "concept_a_id": pair[0],
+                "concept_b_id": pair[1],
+                "similarity": float(similarity),
+            }
+            for pair, similarity in confusor_pairs.items()
+        ]
+        stmt = insert(ConceptSimilarity).values(insert_rows).on_conflict_do_nothing(
+            index_elements=[ConceptSimilarity.concept_a_id, ConceptSimilarity.concept_b_id]
         )
-        return len(confusor_pairs)
+        await session.execute(stmt)
+        return len(insert_rows)
 
     def _build_adaptive_modules_payload(
         self,
@@ -1047,12 +1057,7 @@ class CourseContentService:
         """Ensure value is serialized to a JSON string."""
         if isinstance(value, str):
             return value
-        if isinstance(value, (list, tuple)):
-            return json.dumps(list(value))
-        try:
-            return json.dumps(value)
-        except Exception:
-            return json.dumps(str(value))
+        return json.dumps(value, default=str)
 
     async def _generate_course_from_prompt(
         self,
