@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -175,13 +176,13 @@ class RAGService:
             if doc_dict["file_path"]:
                 # Process file using temp copy for efficient memory usage
                 stored_file_path = Path(doc_dict["file_path"])
-                if not stored_file_path.exists():
+                if not await run_in_threadpool(stored_file_path.exists):
                     msg = f"Stored file not found: {stored_file_path}"
                     raise ValueError(msg)
 
                 # Create temp file and copy content
                 with tempfile.NamedTemporaryFile(delete=False, suffix=stored_file_path.suffix) as temp_file:
-                    temp_file.write(stored_file_path.read_bytes())
+                    temp_file.write(await run_in_threadpool(stored_file_path.read_bytes))
                     temp_file_path = temp_file.name
 
                 try:
@@ -192,7 +193,8 @@ class RAGService:
                 finally:
                     # Always clean up temp file
                     with contextlib.suppress(OSError):
-                        Path(temp_file_path).unlink()
+                        cleanup_path = Path(temp_file_path)
+                        await run_in_threadpool(cleanup_path.unlink)
             else:
                 msg = "No file path to process"
                 raise ValueError(msg)
@@ -224,10 +226,10 @@ class RAGService:
             if doc_dict.get("file_path"):
                 try:
                     file_path = Path(doc_dict["file_path"])
-                    if file_path.exists():
-                        file_path.unlink()
+                    if await run_in_threadpool(file_path.exists):
+                        await run_in_threadpool(file_path.unlink)
                         logger.debug("Cleaned up source file for document %s", document_id)
-                except Exception:
+                except OSError:
                     # Do not fail the request if cleanup fails
                     logger.debug("Post-process source cleanup failed for document %s", document_id)
 
@@ -248,7 +250,7 @@ class RAGService:
             except Exception:
                 try:
                     await session.commit()
-                except Exception:
+                except SQLAlchemyError:
                     logger.debug(
                         "Failed to commit failed status for document %s in background", document_id, exc_info=True
                     )
@@ -261,9 +263,9 @@ class RAGService:
         if not file_path_str:
             return
         fp = Path(file_path_str)
-        if fp.exists():
+        if await run_in_threadpool(fp.exists):
             with contextlib.suppress(Exception):
-                fp.unlink()
+                await run_in_threadpool(fp.unlink)
         await session.execute(
             text("UPDATE course_documents SET file_path = NULL WHERE id = :doc_id"),
             {"doc_id": document_id},
@@ -296,8 +298,6 @@ class RAGService:
             if not getattr(book, "file_path", None):
                 logger.warning("Book %s has no file path; marking as failed", book_id)
                 book.rag_status = "failed"
-                with contextlib.suppress(Exception):
-                    book.rag_error = "missing_file"  # type: ignore[attr-defined]
                 await session.flush()
                 return
 
@@ -320,7 +320,8 @@ class RAGService:
             finally:
                 # Always clean up temp file
                 with contextlib.suppress(OSError):
-                    Path(temp_path).unlink()
+                    temp_file_path = Path(temp_path)
+                    await run_in_threadpool(temp_file_path.unlink)
 
             # Chunk
             chunks = await chunk_text_async(text_content)
@@ -360,7 +361,7 @@ class RAGService:
                 if book:
                     book.rag_status = "failed"
                     await session.flush()
-            except Exception:
+            except SQLAlchemyError:
                 logger.debug("Failed to set book %s failed status after processing error", book_id, exc_info=True)
             raise
 
@@ -425,7 +426,7 @@ class RAGService:
                 if video:
                     video.rag_status = "failed"
                     await session.flush()
-            except Exception:
+            except SQLAlchemyError:
                 logger.debug("Failed to set video %s failed status after processing error", video_id, exc_info=True)
             raise
 
@@ -615,9 +616,9 @@ class RAGService:
             if doc.file_path:
                 try:
                     file_path = Path(doc.file_path)
-                    if file_path.exists():
-                        file_path.unlink()
-                except Exception as e:
+                    if await run_in_threadpool(file_path.exists):
+                        await run_in_threadpool(file_path.unlink)
+                except OSError as e:
                     logger.warning("Failed to delete file %s: %s", doc.file_path, e)
 
             doc_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"document_{document_id}")

@@ -10,7 +10,7 @@ from uuid import UUID
 import aiohttp
 import yt_dlp
 from sqlalchemy import or_, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.rag.service import RAGService
@@ -81,7 +81,7 @@ async def _embed_video_background(video_id: str) -> None:
         except Exception:
             try:
                 await session.commit()
-            except Exception:
+            except SQLAlchemyError:
                 logger.debug("Failed to commit failed RAG status for video %s", video_id, exc_info=True)
             logger.exception("Failed to embed video %s", video_id)
 
@@ -154,7 +154,7 @@ async def _mark_video_status(video_id: str, status: str, error_context: str = ""
                 video.chapters_status = status
                 video.chapters_extracted_at = datetime.now(UTC)
                 await db.commit()
-    except Exception as update_error:
+    except SQLAlchemyError as update_error:
         logger.warning(f"Failed to mark video {video_id} as {status}{error_context}: {update_error}")
 
 
@@ -559,7 +559,7 @@ class VideoService:
                 chapters = await self.extract_and_create_video_chapters(db, video_id, user_id)
                 logger.info(f"Successfully extracted {len(chapters)} chapters as fallback for video {video_id}")
                 return chapters
-            except Exception as e:
+            except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
                 logger.warning(f"Fallback chapter extraction failed for video {video_id}: {e}")
                 # Mark as failed so we don't keep retrying
                 video.chapters_status = "failed"
@@ -657,7 +657,7 @@ class VideoService:
                         video_id,
                         progress_result["error"],
                     )
-        except Exception as e:
+        except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
             logger.warning(f"Failed to update unified progress for video {video_id} after chapter status change: {e}")
 
         await db.flush()

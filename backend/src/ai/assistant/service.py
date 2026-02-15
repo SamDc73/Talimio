@@ -428,7 +428,7 @@ def _extract_leading_blockquote(text: str) -> str:
                 continue
             break
         return "\n".join(out).strip()
-    except Exception:
+    except (AttributeError, TypeError):
         return ""
 
 

@@ -89,7 +89,7 @@ class BookProgressService(ProgressTracker):
                 progress_percentage = await self.get_book_toc_progress_percentage(
                     content_id, user_id, book, toc_progress
                 )
-            except Exception as e:  # pragma: no cover - best-effort fallback
+            except (TypeError, ValueError, ZeroDivisionError) as e:
                 logger.warning(
                     "Failed to calculate book progress percentage",
                     extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(e)},
@@ -156,7 +156,7 @@ class BookProgressService(ProgressTracker):
                     completion_percentage = await self.get_book_toc_progress_percentage(
                         content_id, user_id, book, metadata["toc_progress"]
                     )
-                except Exception as e:  # pragma: no cover - best-effort fallback
+                except (TypeError, ValueError, ZeroDivisionError) as e:
                     logger.warning(
                         "Failed to recalculate book progress percentage",
                         extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(e)},
@@ -233,7 +233,7 @@ class BookProgressService(ProgressTracker):
                 completion_percentage = await self.get_book_toc_progress_percentage(
                     content_id, user_id, book, toc_progress
                 )
-            except Exception as e:  # pragma: no cover - best-effort fallback
+            except (TypeError, ValueError, ZeroDivisionError) as e:
                 logger.warning(
                     "Failed to recalculate book progress percentage",
                     extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(e)},

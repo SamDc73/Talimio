@@ -11,7 +11,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from sqlalchemy import text
-from sqlalchemy.exc import DatabaseError, IntegrityError, OperationalError
+from sqlalchemy.exc import DatabaseError, IntegrityError, OperationalError, SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette_csrf import CSRFMiddleware
@@ -99,7 +99,7 @@ async def _startup() -> None:
 
         await warm_memory_client()
         logger.info("AsyncMemory client warmed")
-    except Exception:
+    except (RuntimeError, TimeoutError, TypeError, ValueError):
         logger.warning("AsyncMemory client warm-up failed", exc_info=True)
 
 
@@ -110,13 +110,13 @@ async def _shutdown() -> None:
 
         await cleanup_memory_client()
         logger.info("Memory wrapper cleaned up")
-    except Exception:
+    except (RuntimeError, TimeoutError, TypeError, ValueError):
         logger.warning("Error cleaning up memory wrapper", exc_info=True)
 
     try:
         await engine.dispose()
         logger.info("Database engine disposed")
-    except Exception:
+    except SQLAlchemyError:
         logger.warning("Error disposing database engine", exc_info=True)
 
 
@@ -251,7 +251,7 @@ def create_app() -> FastAPI:
         try:
             await session.execute(text("SELECT 1"))
             return JSONResponse({"status": "healthy", "db": "connected"}, status_code=200)
-        except Exception:
+        except (DatabaseError, OperationalError):
             return JSONResponse({"status": "unhealthy", "db": "disconnected"}, status_code=503)
 
     # Register all routers

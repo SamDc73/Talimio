@@ -109,7 +109,7 @@ def _evaluate_numeric(
         if evaluated.free_symbols:
             return None
         numeric = complex(evaluated.evalf())
-    except Exception:
+    except (TypeError, ValueError, ZeroDivisionError, OverflowError):
         return None
     if not math.isfinite(numeric.real) or not math.isfinite(numeric.imag):
         return None

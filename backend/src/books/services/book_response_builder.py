@@ -71,7 +71,7 @@ class BookResponseBuilder:
         """Convert Book model to BookWithProgress with optional progress."""
         book_response = BookResponseBuilder.build_book_response(book)
 
-        progress_response = progress if progress else None
+        progress_response = progress or None
         payload = book_response.model_dump()
         payload["progress"] = progress_response
 

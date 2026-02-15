@@ -1,11 +1,11 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class ContentType(str, Enum):
+class ContentType(StrEnum):
     """Enumeration of content types available in the learning platform."""
 
     YOUTUBE = "youtube"

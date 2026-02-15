@@ -455,7 +455,7 @@ async def submit_adaptive_reviews(
         try:
             progress_service = CourseProgressService(session)
             await progress_service.update_progress(course.id, auth.user_id, progress_payload)
-        except Exception:  # pragma: no cover - diagnostic logging only
+        except Exception:
             logger.exception(
                 "COURSE_PROGRESS_UPDATE_FAILED",
                 extra={
@@ -536,7 +536,7 @@ async def execute_code(
             if result.get("success") and "course" in result:
                 course = result["course"]
                 setup_commands = course.setup_commands or []
-        except Exception:
+        except (RuntimeError, ValueError):
             logger.debug("Could not fetch course setup_commands for course_id=%s", request.course_id)
 
     workspace_files: list[WorkspaceFile] | None = None

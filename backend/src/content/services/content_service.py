@@ -4,7 +4,9 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import text
+from fastapi.concurrency import run_in_threadpool
+from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.content.schemas import ContentListResponse, ContentType
@@ -90,12 +92,14 @@ class ContentService:
         user_id: UUID | None = None,
     ) -> list[Any]:
         """Get paginated results."""
-        final_query = f"""            SELECT * FROM ({combined_query}) as combined
-            ORDER BY last_accessed DESC
-            LIMIT :limit OFFSET :offset
-        """
-
-        params: dict[str, Any] = {"limit": page_size, "offset": offset}
+        combined_subquery = QueryBuilderService.build_combined_subquery(combined_query)
+        statement = (
+            select(combined_subquery)
+            .order_by(combined_subquery.c.last_accessed.desc())
+            .limit(page_size)
+            .offset(offset)
+        )
+        params: dict[str, Any] = {}
         if search_term:
             params["search"] = search_term
         # Only include user_id if it's not None (since we build different queries based on user_id)
@@ -105,7 +109,7 @@ class ContentService:
         else:
             logger.info("Executing query without user_id")
 
-        result = await session.execute(text(final_query), params)
+        result = await session.execute(statement, params)
         return list(result.all())
 
     async def _delete_book_file(self, row: Any) -> None:
@@ -146,11 +150,11 @@ class ContentService:
                     from pathlib import Path
 
                     p = Path(file_path)
-                    if p.exists():
-                        p.unlink()
-                except Exception:
+                    if await run_in_threadpool(p.exists):
+                        await run_in_threadpool(p.unlink)
+                except OSError:
                     logger.debug("Non-fatal: failed to delete course doc file %s", file_path)
-        except Exception:
+        except SQLAlchemyError:
             # Don't block overall deletion if this best-effort cleanup fails
             logger.debug("Course document file cleanup failed for course %s", course_id)
 
@@ -164,7 +168,7 @@ class ContentService:
             await session.execute(
                 text("DELETE FROM tags t WHERE NOT EXISTS (SELECT 1 FROM tag_associations ta WHERE ta.tag_id = t.id)")
             )
-        except Exception:
+        except SQLAlchemyError:
             logger.debug("Non-fatal: failed to prune orphan tags", exc_info=True)
 
     def _get_model(self, content_type: ContentType) -> Any:
@@ -190,7 +194,7 @@ class ContentService:
                 text("DELETE FROM user_progress WHERE user_id = :user_id AND content_id = :content_id"),
                 {"user_id": str(user_id), "content_id": str(row_id)},
             )
-        except Exception:
+        except SQLAlchemyError:
             logger.debug("Non-fatal: failed to delete user progress for content %s", row_id, exc_info=True)
 
     async def _delete_tag_associations(

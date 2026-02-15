@@ -47,13 +47,13 @@ class BooksFacade:
         """Get book with progress in IntegrityErrora dict structure (parity with other facades)."""
         try:
             book_with = await self.get_book(content_id, user_id)
-        except Exception:
+        except ValueError:
             return {"error": "Book not found", "success": False}
 
         # Also retrieve unified progress to ensure core fields are present
         try:
             progress = await self._progress_service.get_progress(content_id, user_id)
-        except Exception:
+        except (RuntimeError, ValueError):
             progress = None
 
         return {
@@ -119,7 +119,7 @@ class BooksFacade:
             try:
                 if book_id:
                     await self._progress_service.initialize_progress(book_id, user_id, total_pages=total_pages)
-            except Exception as e:
+            except (RuntimeError, TypeError, ValueError) as e:
                 logger.warning(
                     "Failed to initialize progress tracking",
                     extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)},
@@ -235,9 +235,10 @@ class BooksFacade:
                 return {"error": f"Book {book_id} not found", "success": False}
 
             chapters: list[dict] = []
-            if getattr(book, "table_of_contents", None):
+            table_of_contents = book.table_of_contents
+            if isinstance(table_of_contents, str) and table_of_contents:
                 try:
-                    toc = json.loads(book.table_of_contents)  # type: ignore[arg-type]
+                    toc = json.loads(table_of_contents)
                     if isinstance(toc, list):
                         chapters = toc
                 except (json.JSONDecodeError, TypeError):

@@ -118,7 +118,7 @@ async def get_user_settings(user_id: UUID, db_session: AsyncSession) -> UserSett
     try:
         memories = await get_memories(user_id)
         memory_count = len(memories)
-    except Exception:
+    except (RuntimeError, TimeoutError, TypeError, ValueError):
         logger.warning("Failed to count memories for user %s", user_id, exc_info=True)
 
     return UserSettingsResponse(
@@ -168,7 +168,7 @@ async def update_custom_instructions(
                         "timestamp": "now",
                     },
                 )
-            except Exception:
+            except (RuntimeError, TimeoutError, TypeError, ValueError):
                 logger.warning("Failed to log instruction update in memory for user %s", user_id, exc_info=True)
 
         return CustomInstructionsResponse(instructions=instructions, updated=success)

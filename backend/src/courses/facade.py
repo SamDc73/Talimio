@@ -230,7 +230,7 @@ class CoursesFacade:
                     try:
                         progress = await self._progress_service.get_progress(cr.id, user_id)
                         cd["progress"] = progress
-                    except Exception as e:
+                    except (RuntimeError, ValueError) as e:
                         logger.warning(f"Failed to get progress for course {cr.id}: {e}")
                         cd["progress"] = {"completion_percentage": 0, "completed_lessons": {}}
                 course_dicts.append(cd)

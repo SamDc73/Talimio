@@ -55,7 +55,7 @@ async def load_user_tool_bindings(session: AsyncSession, user_id: UUID) -> list[
                 server_name=server.name,
                 config=config,
             )
-        except Exception as exc:
+        except (TypeError, ValueError, RuntimeError) as exc:
             logger.warning("Failed to load MCP tools for server %s: %s", server.name, exc)
             continue
         for tool in tool_descriptors:

@@ -158,7 +158,7 @@ class LatexExpressionVerifier:
     def _parse_latex(self, value: str) -> tuple[sympy.Expr | Relational | None, str | None]:
         try:
             parsed = latex2sympy(value)
-        except Exception as exc:
+        except (TypeError, ValueError, SyntaxError) as exc:
             return None, str(exc)
         return parsed, None
 
@@ -182,7 +182,7 @@ class LatexExpressionVerifier:
     def _equals_zero(self, expr: sympy.Expr) -> bool:
         try:
             return bool(expr.equals(0))
-        except Exception:  # pragma: no cover - sympy equality can raise on edge cases
+        except (TypeError, ValueError, NotImplementedError):
             return False
 
     def _build_diagnostics(
@@ -198,7 +198,7 @@ class LatexExpressionVerifier:
                 likely_mistake = "sign-error"
             elif not sympy.simplify(expected_expr - answer_expr).free_symbols:
                 likely_mistake = "constant-offset"
-        except Exception:
+        except (TypeError, ValueError, NotImplementedError):
             likely_mistake = None
 
         return LatexExpressionVerificationDiagnostics(

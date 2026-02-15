@@ -270,7 +270,7 @@ class CourseContentService:
 
         goal_source = prompt_text or session_data.get("title") or ""
         goal_payload = str(goal_source).strip() or "Adaptive course outline"
-        user_prompt_payload = prompt if prompt else goal_payload
+        user_prompt_payload = prompt or goal_payload
         adaptive_structure = await self.ai_service.generate_adaptive_course_structure(
             user_id=user_id,
             user_prompt=user_prompt_payload,
@@ -424,7 +424,7 @@ class CourseContentService:
                 self._schedule_background_tagging(course.id, user_id)
             else:
                 await self._auto_tag_course(session, course, user_id)
-        except Exception as exc:
+        except (RuntimeError, TimeoutError, TypeError, ValueError) as exc:
             logger.warning("Automatic tagging failed for course %s: %s", course.id, exc)
 
     def _schedule_background_embeddings(
@@ -477,7 +477,7 @@ class CourseContentService:
                     pairs,
                     course_id,
                 )
-        except Exception as exc:  # pragma: no cover - best-effort background task
+        except Exception as exc:
             logger.exception("Background embedding task failed for course %s: %s", course_id, exc)
 
     def _schedule_background_tagging(
@@ -664,12 +664,7 @@ class CourseContentService:
                 slug_value = payload.get("slug")
                 if lesson_uuid is None and isinstance(slug_value, str) and slug_value.strip():
                     slug_text = slug_value.strip().lower()
-                    try:
-                        lesson_uuid = uuid5(NAMESPACE_URL, f"outline-lesson:{course_id}:{slug_text}")
-                    except Exception:  # pragma: no cover - uuid5 should not fail, but guard anyway
-                        logger.warning(
-                            "Failed to derive deterministic id from slug %s for course %s", slug_value, course_id
-                        )
+                    lesson_uuid = uuid5(NAMESPACE_URL, f"outline-lesson:{course_id}:{slug_text}")
 
                 lesson_kwargs: dict[str, Any] = {
                     "course_id": course_id,

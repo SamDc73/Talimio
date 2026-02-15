@@ -145,7 +145,7 @@ async def add_memory(
         logger.debug(f"Added memory for user {user_id}")
         return result or {}
 
-    except Exception as e:
+    except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
         logger.warning(f"Failed to add memory for user {user_id}: {e}")
         return {}  # Don't break the flow
 
@@ -173,7 +173,7 @@ async def get_memories(
             return results.get("results", [])
         return []
 
-    except Exception as e:
+    except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
         logger.warning(f"Failed to get memories for user {user_id}: {e}")
         return []
 
@@ -208,7 +208,7 @@ async def search_memories(
             return results.get("results", [])
         return []
 
-    except Exception as e:
+    except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
         logger.warning(f"Memory search failed for user {user_id}: {e}")
         return []
 
@@ -223,7 +223,7 @@ async def delete_memory(user_id: UUID, memory_id: str) -> bool:
         logger.info(f"Deleted memory {memory_id} for user {user_id}")
         return True
 
-    except Exception as e:
+    except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
         logger.warning(f"Failed to delete memory {memory_id}: {e}")
         return False
 
@@ -246,7 +246,7 @@ async def delete_all_memories(
         )
         logger.info(f"Cleared memories for user {user_id}")
         return True
-    except Exception as e:
+    except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
         logger.warning(f"Failed to clear memories for user {user_id}: {e}")
         return False
 

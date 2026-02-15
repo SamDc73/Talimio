@@ -214,7 +214,7 @@ async def get_video_details(
         # Get chapters
         try:
             chapters = await video_service.get_video_chapters(auth.session, video_id, auth.user_id)
-        except Exception:
+        except (RuntimeError, ValueError):
             chapters = []
 
         # Get transcript info (not the full segments, just metadata)
@@ -224,7 +224,7 @@ async def get_video_details(
         try:
             progress_result = await VideosFacade(auth.session).get_video(UUID(video_id), auth.user_id)
             progress = progress_result.get("progress") if progress_result.get("success") else None
-        except Exception:
+        except (RuntimeError, ValueError):
             progress = None
 
         # Build response

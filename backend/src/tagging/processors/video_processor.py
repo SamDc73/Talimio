@@ -59,7 +59,7 @@ class VideoProcessor:
                 existing_tags = json.loads(video.tags)
                 if existing_tags:
                     content_parts.append(f"YouTube tags: {', '.join(existing_tags[:10])}")
-            except Exception as exc:
+            except (TypeError, ValueError) as exc:
                 logger.debug("Failed to parse existing video tags: %s", exc)
 
         return {
