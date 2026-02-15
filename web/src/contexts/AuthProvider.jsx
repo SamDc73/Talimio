@@ -15,27 +15,9 @@ export function AuthProvider({ children }) {
 		const performAuthCheck = async () => {
 			try {
 				// Try to get current user - httpOnly cookies are sent automatically
-				try {
-					const response = await api.get("/auth/me")
-					setUser(response)
-					setIsAuthenticated(true)
-				} catch (authError) {
-					// If it's a 401, try to refresh the token first
-					if (authError.status === 401) {
-						try {
-							const refreshResponse = await api.post("/auth/refresh")
-							if (refreshResponse?.user) {
-								setUser(refreshResponse.user)
-								setIsAuthenticated(true)
-								return
-							}
-						} catch (refreshError) {
-							logger.error("Auth refresh failed", refreshError)
-						}
-					}
-					setUser(null)
-					setIsAuthenticated(false)
-				}
+				const response = await api.get("/auth/me")
+				setUser(response)
+				setIsAuthenticated(true)
 			} catch (error) {
 				logger.error("Auth check failed", error)
 				setUser(null)
@@ -47,38 +29,6 @@ export function AuthProvider({ children }) {
 
 		performAuthCheck()
 	}, [])
-
-	// Set up periodic token refresh for authenticated users
-	useEffect(() => {
-		if (!isAuthenticated || user?.email === "demo@talimio.com") {
-			return
-		}
-
-		// Refresh token 5 minutes before expiry (tokens expire in 60 minutes)
-		const refreshInterval = 50 * 60 * 1000 // 50 minutes
-
-		const intervalId = setInterval(async () => {
-			try {
-				const response = await api.post("/auth/refresh")
-				if (response) {
-					// Update user data if it changed
-					if (response.user) {
-						setUser(response.user)
-					}
-				}
-			} catch (error) {
-				// If refresh fails, check auth again
-				if (error.status === 401) {
-					setUser(null)
-					setIsAuthenticated(false)
-				} else {
-					logger.error("Token refresh failed", error)
-				}
-			}
-		}, refreshInterval)
-
-		return () => clearInterval(intervalId)
-	}, [isAuthenticated, user?.email])
 
 	const login = async (email, password) => {
 		try {

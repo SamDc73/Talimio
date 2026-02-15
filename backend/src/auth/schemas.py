@@ -94,15 +94,6 @@ class LogoutResponse(BaseModel):
     model_config = _AUTH_SCHEMA_CONFIG
 
 
-class RefreshResponse(BaseModel):
-    """Token refresh response model."""
-
-    message: str
-    user: UserResponse
-
-    model_config = _AUTH_SCHEMA_CONFIG
-
-
 class MessageResponse(BaseModel):
     """Generic message response."""
 

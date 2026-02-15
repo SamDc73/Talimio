@@ -7,7 +7,6 @@ prefer passing `CurrentAuth` instead of separate user_id/session pairs over time
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Any, TypeVar
 from uuid import UUID
 
@@ -113,7 +112,7 @@ async def validate_local_auth_state(
         auth_session = await local_crud.get_auth_session(session, session_id=token_session_id, user_id=user_id)
         if not auth_session:
             raise InvalidTokenError
-        if not local_crud.is_auth_session_active(auth_session, now=datetime.now(UTC)):
+        if not local_crud.is_auth_session_active(auth_session):
             raise InvalidTokenError
         if touch_session:
             await local_crud.touch_auth_session(session, auth_session)

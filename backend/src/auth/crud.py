@@ -186,12 +186,9 @@ async def list_auth_sessions(
     return list(result.scalars().all())
 
 
-def is_auth_session_active(auth_session: AuthSession, *, now: datetime | None = None) -> bool:
+def is_auth_session_active(auth_session: AuthSession) -> bool:
     """Return whether a local auth session is active."""
-    current_time = now or datetime.now(UTC)
-    if auth_session.revoked_at is not None:
-        return False
-    return auth_session.expires_at > current_time
+    return auth_session.revoked_at is None
 
 
 async def touch_auth_session(
@@ -207,25 +204,6 @@ async def touch_auth_session(
     if last_seen_at is not None and current_time - last_seen_at < min_update_interval:
         return
     auth_session.last_seen_at = current_time
-    session.add(auth_session)
-    await session.flush()
-
-
-async def renew_auth_session(
-    session: AsyncSession,
-    auth_session: AuthSession,
-    *,
-    expires_at: datetime,
-    user_agent: str | None,
-    ip_address: str | None,
-    now: datetime | None = None,
-) -> None:
-    """Renew session expiry and mark it recently seen."""
-    current_time = now or datetime.now(UTC)
-    auth_session.expires_at = expires_at
-    auth_session.last_seen_at = current_time
-    auth_session.user_agent = user_agent
-    auth_session.ip_address = ip_address
     session.add(auth_session)
     await session.flush()
 
