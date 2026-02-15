@@ -20,9 +20,6 @@ from src.auth.csrf import set_csrf_cookie
 from src.auth.dependencies import (
     CookieTokenOptional,
     decode_local_token_claims_optional,
-    get_local_session_id_from_state,
-    get_local_token_version_from_state,
-    get_user_id,
 )
 from src.auth.emails import (
     generate_email_verification_token,
@@ -32,7 +29,7 @@ from src.auth.emails import (
     verify_email_verification_token,
     verify_password_reset_token,
 )
-from src.auth.models import AuthSession, OAuthAccount
+from src.auth.models import OAuthAccount
 from src.auth.oauth import (
     consume_google_oauth_state,
     exchange_google_code_for_identity,
@@ -51,7 +48,6 @@ from src.auth.schemas import (
     MessageResponse,
     NewPasswordRequest,
     PasswordResetRequest,
-    RefreshResponse,
     ResendVerificationRequest,
     ResendVerificationResponse,
     SignupRequest,
@@ -81,6 +77,7 @@ _VERIFICATION_RESEND_LIMIT_MESSAGE = (
     "Too many verification email requests. Please contact support if you still haven't received the email."
 )
 _GENERIC_RESEND_VERIFICATION_MESSAGE = "If the account exists, a verification email has been sent"
+_AUTH_SESSION_SENTINEL_EXPIRES_AT = datetime(9999, 12, 31, tzinfo=UTC)
 
 
 async def _require_local_provider() -> None:
@@ -104,7 +101,6 @@ def set_auth_cookie(response: Response, token: str) -> None:
         secure=secure_cookie,
         # In development, don't set SameSite to avoid proxy/localhost friction.
         samesite=settings.AUTH_COOKIE_SAMESITE if is_production else None,
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",  # Ensure cookie is available for all paths
     )
 
@@ -136,41 +132,21 @@ async def _issue_local_auth_cookie(
     response: Response,
     session: DbSession,
     user: User,
-    *,
-    existing_session_id: UUID | None = None,
 ) -> UUID:
-    """Create or renew a local auth session and set the cookie JWT."""
-    settings = get_settings()
-    expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    expires_at = datetime.now(UTC) + expires_delta
+    """Create a local auth session and set the cookie JWT."""
     user_agent = _get_request_user_agent(request)
     ip_address = get_client_ip(request)[:64]
 
-    auth_session: AuthSession | None = None
-    if existing_session_id is not None:
-        current_session = await local_crud.get_auth_session(session, session_id=existing_session_id, user_id=user.id)
-        if current_session and local_crud.is_auth_session_active(current_session):
-            await local_crud.renew_auth_session(
-                session,
-                current_session,
-                expires_at=expires_at,
-                user_agent=user_agent,
-                ip_address=ip_address,
-            )
-            auth_session = current_session
-
-    if auth_session is None:
-        auth_session = await local_crud.create_auth_session(
-            session,
-            user_id=user.id,
-            expires_at=expires_at,
-            user_agent=user_agent,
-            ip_address=ip_address,
-        )
+    auth_session = await local_crud.create_auth_session(
+        session,
+        user_id=user.id,
+        expires_at=_AUTH_SESSION_SENTINEL_EXPIRES_AT,
+        user_agent=user_agent,
+        ip_address=ip_address,
+    )
 
     jwt_token = create_access_token(
         user.id,
-        expires_delta,
         token_version=user.auth_token_version,
         session_id=auth_session.id,
     )
@@ -519,50 +495,6 @@ async def get_current_user(_request: Request, _auth: CurrentAuth) -> UserRespons
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail="Authentication provider is not supported",
-    )
-
-
-@router.post("/refresh")
-async def refresh_token(
-    request: Request,
-    response: Response,
-    session: DbSession,
-    auth_token: CookieTokenOptional,
-) -> RefreshResponse:
-    """Refresh the access token (local mode only)."""
-    settings = get_settings()
-
-    if settings.AUTH_PROVIDER == "local":
-        if not auth_token:
-            clear_auth_cookie(response)
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-        try:
-            user_id = await get_user_id(request, token=auth_token)
-            token_version = get_local_token_version_from_state(request)
-            token_session_id = get_local_session_id_from_state(request)
-            user, _auth_session = await validate_local_auth_state(
-                session,
-                user_id=user_id,
-                token_version=token_version,
-                token_session_id=token_session_id,
-                touch_session=False,
-            )
-        except HTTPException:
-            clear_auth_cookie(response)
-            raise
-
-        await _issue_local_auth_cookie(
-            request,
-            response,
-            session,
-            user,
-            existing_session_id=token_session_id,
-        )
-        return RefreshResponse(message="Token refreshed successfully", user=UserResponse.from_model(user))
-
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Token refresh is not available in current auth mode",
     )
 
 

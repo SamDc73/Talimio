@@ -24,9 +24,6 @@ class Settings(BaseSettings):
     AUTH_PROVIDER: str = "none"  # "none" (single-user) | "local" (email/password in DB)
 
     # Local (template-style) Auth
-    # 60 minutes is a common access-token/session lifetime when paired with refresh/rotation.
-    # You can increase this in production if you want "stay logged in" behavior.
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     AUTH_REQUIRE_EMAIL_VERIFICATION: bool = False
     TRUSTED_PROXY_CIDRS: str = ""
 
@@ -134,7 +131,6 @@ class Settings(BaseSettings):
         return value
 
     @field_validator(
-        "ACCESS_TOKEN_EXPIRE_MINUTES",
         "AUTH_PASSWORD_MIN_LENGTH",
     )
     @classmethod

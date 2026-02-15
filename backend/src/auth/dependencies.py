@@ -15,7 +15,6 @@ from fastapi.security import APIKeyCookie
 
 from src.auth.exceptions import (
     InvalidTokenError,
-    TokenExpiredError,
 )
 from src.auth.security import get_jwt_signing_key
 from src.config.settings import get_settings
@@ -111,8 +110,6 @@ def decode_local_token_claims(token: str, *, jwt_secret: str) -> LocalTokenClaim
     """Decode and validate local auth JWT claims."""
     try:
         payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
-    except jwt.ExpiredSignatureError as error:
-        raise TokenExpiredError from error
     except jwt.InvalidTokenError as error:
         raise InvalidTokenError from error
 
@@ -132,7 +129,7 @@ def decode_local_token_claims_optional(token: str | None, *, jwt_secret: str) ->
         return None
     try:
         return decode_local_token_claims(token, jwt_secret=jwt_secret)
-    except (InvalidTokenError, TokenExpiredError):
+    except InvalidTokenError:
         return None
 
 

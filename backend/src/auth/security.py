@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 import jwt
@@ -46,15 +46,13 @@ def get_csrf_signing_key() -> str:
 
 def create_access_token(
     subject: str | Any,
-    expires_delta: timedelta,
     *,
     token_version: int = 0,
     session_id: str | Any | None = None,
 ) -> str:
     """Create a signed JWT access token for cookie transport."""
     now = datetime.now(UTC)
-    expire = now + expires_delta
-    to_encode = {"exp": expire, "iat": now, "nbf": now, "sub": str(subject), "ver": token_version}
+    to_encode = {"iat": now, "nbf": now, "sub": str(subject), "ver": token_version}
     if session_id is not None:
         to_encode["sid"] = str(session_id)
     return jwt.encode(to_encode, get_jwt_signing_key(), algorithm=ALGORITHM)
