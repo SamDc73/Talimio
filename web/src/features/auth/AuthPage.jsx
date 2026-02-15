@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { LoginHeader } from "@/components/header/LoginHeader"
+import { useAuthOptions } from "@/features/auth/hooks/use-auth-options"
 import { useAuth } from "@/hooks/use-auth"
 import { getApiUrl } from "@/lib/apiBase"
-import { api } from "@/lib/apiClient"
 import LoginForm from "./components/LoginForm"
 import PasswordResetForm from "./components/PasswordResetForm"
 import SignupForm from "./components/SignupForm"
@@ -12,10 +12,10 @@ function AuthPage() {
 	const [view, setView] = useState("login") // "login", "signup", "reset"
 	const [error, setError] = useState("")
 	const [successMessage, setSuccessMessage] = useState("")
-	const [authOptions, setAuthOptions] = useState(null)
 	const navigate = useNavigate()
 	const [searchParams] = useSearchParams()
 	const { login, signup, resendVerification, isAuthenticated } = useAuth()
+	const { authOptions } = useAuthOptions()
 
 	// Get redirect URL from query params
 	const redirectUrl = searchParams.get("redirect") || "/"
@@ -25,27 +25,6 @@ function AuthPage() {
 		setSuccessMessage("")
 		setView(nextView)
 	}
-
-	useEffect(() => {
-		let isMounted = true
-
-		const loadAuthOptions = async () => {
-			try {
-				const options = await api.get("/auth/options")
-				if (isMounted) {
-					setAuthOptions(options)
-				}
-			} catch {
-				// Best-effort only: auth still works without options.
-			}
-		}
-
-		loadAuthOptions()
-
-		return () => {
-			isMounted = false
-		}
-	}, [])
 
 	// If already authenticated, redirect immediately
 	useEffect(() => {
@@ -117,6 +96,7 @@ function AuthPage() {
 					onGoogle={handleGoogleOAuth}
 					errorMessage={error}
 					successMessage={successMessage}
+					passwordPolicy={authOptions?.passwordPolicy}
 				/>
 			)}
 

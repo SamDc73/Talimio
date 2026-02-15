@@ -47,6 +47,7 @@ from src.auth.schemas import (
     LogoutResponse,
     MessageResponse,
     NewPasswordRequest,
+    PasswordPolicyResponse,
     PasswordResetRequest,
     ResendVerificationRequest,
     ResendVerificationResponse,
@@ -165,10 +166,18 @@ _AUTO_USERNAME_MAX_ATTEMPTS = 30
 _AUTO_USERNAME_BASE_MAX_LENGTH = _USERNAME_MAX_LENGTH - _AUTO_USERNAME_SUFFIX_DIGITS - 1
 
 
-def _validate_password_or_raise(password: str) -> None:
+def _validate_password_or_raise(password: str, *, context: str) -> None:
     try:
         validate_password_policy(password)
     except PasswordPolicyError as error:
+        logger.warning(
+            "Password requirements not met",
+            extra={
+                "context": context,
+                "password_length": len(password),
+                "policy_error": str(error),
+            },
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
 
@@ -282,7 +291,18 @@ async def get_auth_options(response: Response) -> AuthOptionsResponse:
     )
     set_csrf_cookie(response)
     response.headers["Cache-Control"] = "no-store"
-    return AuthOptionsResponse(provider=settings.AUTH_PROVIDER, google_oauth_available=google_oauth_available)
+    return AuthOptionsResponse(
+        provider=settings.AUTH_PROVIDER,
+        google_oauth_available=google_oauth_available,
+        password_policy=PasswordPolicyResponse(
+            min_length=settings.AUTH_PASSWORD_MIN_LENGTH,
+            require_uppercase=settings.AUTH_PASSWORD_REQUIRE_UPPERCASE,
+            require_lowercase=settings.AUTH_PASSWORD_REQUIRE_LOWERCASE,
+            require_digit=settings.AUTH_PASSWORD_REQUIRE_DIGIT,
+            require_symbol=settings.AUTH_PASSWORD_REQUIRE_SYMBOL,
+            disallow_whitespace=settings.AUTH_PASSWORD_DISALLOW_WHITESPACE,
+        ),
+    )
 
 
 @router.post("/signup")
@@ -299,7 +319,7 @@ async def signup(request: Request, response: Response, session: DbSession, data:
                 email_confirmation_required=True,
             )
 
-        _validate_password_or_raise(data.password)
+        _validate_password_or_raise(data.password, context="signup")
 
         username = await _resolve_signup_username(session, full_name=data.full_name, username=data.username)
         try:
@@ -539,7 +559,7 @@ async def reset_password(session: DbSession, data: NewPasswordRequest) -> Messag
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
 
-    _validate_password_or_raise(data.new_password)
+    _validate_password_or_raise(data.new_password, context="reset_password")
     user.password_hash = get_password_hash(data.new_password)
     session.add(user)
     await local_crud.increment_auth_token_version(session, user)
@@ -603,7 +623,7 @@ async def change_password(
     if not verified:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
 
-    _validate_password_or_raise(data.new_password)
+    _validate_password_or_raise(data.new_password, context="change_password")
     user.password_hash = get_password_hash(data.new_password)
     auth.session.add(user)
     await local_crud.increment_auth_token_version(auth.session, user)

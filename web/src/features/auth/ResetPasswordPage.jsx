@@ -5,6 +5,8 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 import { LoginHeader } from "@/components/header/LoginHeader"
 import AuthPageShell from "@/features/auth/components/AuthPageShell"
 import PasswordStrengthMeter from "@/features/auth/components/PasswordStrengthMeter"
+import { useAuthOptions } from "@/features/auth/hooks/use-auth-options"
+import { getPasswordPolicyValidationMessage } from "@/features/auth/passwordPolicy"
 import { useAuth } from "@/hooks/use-auth"
 import logger from "@/lib/logger"
 import { getPasswordStrength } from "./passwordStrength"
@@ -26,6 +28,7 @@ function ResetPasswordPage() {
 
 	const navigate = useNavigate()
 	const { applyPasswordReset } = useAuth()
+	const { authOptions } = useAuthOptions()
 
 	const handleSubmit = async (e) => {
 		e.preventDefault()
@@ -42,6 +45,11 @@ function ResetPasswordPage() {
 
 		if (!newPassword) {
 			newErrors.newPassword = REQUIRED_FIELD_MESSAGE
+		} else {
+			const passwordValidationMessage = getPasswordPolicyValidationMessage(newPassword, authOptions?.passwordPolicy)
+			if (passwordValidationMessage) {
+				newErrors.newPassword = passwordValidationMessage
+			}
 		}
 
 		if (!confirmPassword) {
