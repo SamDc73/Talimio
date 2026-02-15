@@ -203,6 +203,7 @@ class AdaptiveCourseMeta(BaseModel):
 
     slug: str | None = None
     title: str
+    description: str | None = None
     setup_commands: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
