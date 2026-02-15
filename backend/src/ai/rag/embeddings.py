@@ -171,7 +171,6 @@ class VectorRAG:
             query_embedding = await self.generate_embedding(query)
             embedding_str = self._format_vector(query_embedding)
 
-            filters: list[str] = ["doc_type = :doc_type", "embedding IS NOT NULL"]
             params: dict[str, Any] = {
                 "doc_type": doc_type,
                 "query_embedding": embedding_str,
@@ -179,10 +178,8 @@ class VectorRAG:
             }
 
             if doc_id:
-                filters.append("doc_id = :doc_id")
                 params["doc_id"] = str(doc_id)
             if course_id:
-                filters.append("metadata->>'course_id' = :course_id")
                 params["course_id"] = str(course_id)
 
             # Ensure HNSW search quality is configurable per-query
@@ -193,10 +190,8 @@ class VectorRAG:
             ef_val = int(rag_config.hnsw_ef_search)
             await session.execute(text(f"SET LOCAL hnsw.ef_search = {ef_val}"))
 
-            filter_clause = " AND ".join(filters)
-            result = await session.execute(
-                text(
-                    f"""
+            if doc_id and course_id:
+                query_sql = """
                     SELECT
                         doc_id,
                         doc_type,
@@ -205,11 +200,62 @@ class VectorRAG:
                         metadata,
                         1 - (embedding <=> CAST(:query_embedding AS vector)) AS similarity
                     FROM rag_document_chunks
-                    WHERE {filter_clause}
+                    WHERE doc_type = :doc_type
+                      AND embedding IS NOT NULL
+                      AND doc_id = :doc_id
+                      AND metadata->>'course_id' = :course_id
                     ORDER BY embedding <=> CAST(:query_embedding AS vector)
                     LIMIT :limit
-                    """
-                ),
+                """
+            elif doc_id:
+                query_sql = """
+                    SELECT
+                        doc_id,
+                        doc_type,
+                        chunk_index,
+                        content,
+                        metadata,
+                        1 - (embedding <=> CAST(:query_embedding AS vector)) AS similarity
+                    FROM rag_document_chunks
+                    WHERE doc_type = :doc_type
+                      AND embedding IS NOT NULL
+                      AND doc_id = :doc_id
+                    ORDER BY embedding <=> CAST(:query_embedding AS vector)
+                    LIMIT :limit
+                """
+            elif course_id:
+                query_sql = """
+                    SELECT
+                        doc_id,
+                        doc_type,
+                        chunk_index,
+                        content,
+                        metadata,
+                        1 - (embedding <=> CAST(:query_embedding AS vector)) AS similarity
+                    FROM rag_document_chunks
+                    WHERE doc_type = :doc_type
+                      AND embedding IS NOT NULL
+                      AND metadata->>'course_id' = :course_id
+                    ORDER BY embedding <=> CAST(:query_embedding AS vector)
+                    LIMIT :limit
+                """
+            else:
+                query_sql = """
+                    SELECT
+                        doc_id,
+                        doc_type,
+                        chunk_index,
+                        content,
+                        metadata,
+                        1 - (embedding <=> CAST(:query_embedding AS vector)) AS similarity
+                    FROM rag_document_chunks
+                    WHERE doc_type = :doc_type
+                      AND embedding IS NOT NULL
+                    ORDER BY embedding <=> CAST(:query_embedding AS vector)
+                    LIMIT :limit
+                """
+            result = await session.execute(
+                text(query_sql),
                 params,
             )
 

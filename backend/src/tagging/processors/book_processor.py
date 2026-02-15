@@ -115,13 +115,13 @@ class BookProcessor:
                         toc_text = self._format_toc_for_tagging(toc)
                         if toc_text:
                             content_parts.insert(0, f"Table of Contents:\n{toc_text}\n")
-            except (AttributeError, Exception):
+            except (AttributeError, TypeError):
                 # get_toc() method might not be available in some versions
                 logger.debug("get_toc() method not available for this PDF")
 
             pdf_document.close()
 
-        except Exception as e:
+        except (RuntimeError, TypeError, ValueError) as e:
             logger.warning(f"Failed to extract PDF content: {e}")
 
         return "\n\n".join(content_parts)
@@ -168,7 +168,7 @@ class BookProcessor:
 
             epub_document.close()
 
-        except Exception as e:
+        except (OSError, RuntimeError, TypeError, ValueError) as e:
             logger.warning(f"Failed to extract EPUB content: {e}")
 
         return "\n\n".join(content_parts)
@@ -226,7 +226,7 @@ class BookProcessor:
                 existing_tags = json.loads(book.tags)
                 if existing_tags:
                     parts.append(f"Existing tags: {', '.join(existing_tags)}")
-            except Exception as e:
+            except (TypeError, ValueError) as e:
                 logger.debug(f"Failed to parse existing tags: {e}")
 
         # Add extracted content

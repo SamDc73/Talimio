@@ -73,7 +73,7 @@ class ConceptGraphService:
             try:
                 embedding_text = _compose_embedding_text(name, description)
                 embedding = await self._vector.generate_embedding(embedding_text)
-            except Exception:
+            except (RuntimeError, TimeoutError, TypeError, ValueError):
                 logger.warning("Failed to generate concept embedding for %s", name, exc_info=True)
         else:
             logger.debug("Deferring embedding generation for concept '%s'", name)

@@ -141,7 +141,7 @@ class CourseProgressService(ProgressTracker):
                     progress_percentage = self._calculate_lesson_progress_percentage_dictsafe(
                         completed_list, total_lessons
                     )
-                except Exception as e:
+                except (TypeError, ValueError, ZeroDivisionError) as e:
                     logger.warning(f"Failed to calculate course progress percentage: {e}")
                     progress_percentage = 0
 

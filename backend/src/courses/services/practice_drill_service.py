@@ -70,8 +70,8 @@ class PracticeDrillService:
         self._llm_client = llm_client or LLMClient()
         settings = get_settings()
         configured_core_model = (settings.PRIMARY_LLM_MODEL or "").strip()
-        self._request_model: str | None = configured_core_model if configured_core_model else None
-        self._core_model = configured_core_model if configured_core_model else "unknown-model"
+        self._request_model: str | None = configured_core_model or None
+        self._core_model = configured_core_model or "unknown-model"
 
     async def generate_drills(
         self,

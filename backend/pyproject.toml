@@ -79,31 +79,20 @@ docstring-code-line-length = 80
 select = ["ALL"]
 ignore = [
     "E501",    # line too long (handled by formatter)
-    "B008",    # do not perform function call in argument defaults (FastAPI uses this pattern)
-    "A003",    # shadowing python builtins (common in FastAPI path operations)
-    "RUF012",  # annotated with classvar (conflicts with Pydantic models)
     "D100",    # Missing docstring in public module
     "D104",    # Missing docstring in public package
-    "LOG015",   # root-logger-calls
     "G004",     # logging-f-string
     "TRY300",   # try-else-block
     "TRY301",   # abstract-raise
     "TRY401",   # redundant-exception-object
-    "BLE001",   # blind-except
     "INP001",   # implicit-namespace-package
     "PLR0913",  # too-many-arguments
-    "PLC0206",  # dict-index-missing-items
     "PLC0415",  # import-outside-top-level
-    "S608",     # sql-injection-warning
     "COM812",   # conflicts with Ruff’s formatter
     "PLR2004",  # magic-value-comparison (many are contextually appropriate)
-    "TD002",    # missing-todo-author (common pattern in this codebase)
-    "TD003",    # missing-todo-link (common pattern in this codebase)
-    "FIX002",   # line-contains-todo (allow TODOs in code)
     "ANN401",   # **kwargs typing (common pattern in Pydantic overrides)
     "FBT001",   # boolean-typed-positional-argument (often acceptable for internal APIs)
     "FBT002",   # boolean-default-positional-argument (often acceptable for internal APIs)
-    "N815",     # variable should be lowercase (mixedCase in Pydantic models with aliases)
     "E402",     # module-import-not-at-top-of-file
     "TC001",    # typing-only-first-party-import (we use from __future__ import annotations)
     "TC003"     # typing-only-standard-library-import  (we use from __future__ import annotations)

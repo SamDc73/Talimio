@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class AIRuntimeErrorCategory(str, Enum):
+class AIRuntimeErrorCategory(StrEnum):
     """Stable categories used across the LLM runtime path."""
 
     RATE_LIMIT_OR_QUOTA = "rate_limit_or_quota"

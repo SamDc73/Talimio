@@ -169,7 +169,7 @@ class GradingService:
             try:
                 model = settings.primary_llm_model
                 self._logger.info("GRADING_COACH_LLM_MODEL not set; falling back to PRIMARY_LLM_MODEL: %s", model)
-            except Exception:
+            except (AttributeError, RuntimeError, ValueError):
                 return None, [], None
 
         payload = {

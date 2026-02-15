@@ -494,24 +494,9 @@ class LLMClient:
                     round_text.append(delta)
                     yield delta
 
-            # Rebuild final message (content + tool_calls) from chunks.
-            built = None
-            try:
-                built = litellm.stream_chunk_builder(chunks, messages=conversation)
-            except Exception:
-                self._logger.debug("stream_chunk_builder failed; continuing without rebuilt message", exc_info=True)
-
-            built_message = None
-            try:
-                built_choices = getattr(built, "choices", None) if built is not None else None
-                built_message = built_choices[0].message if built_choices else None
-            except Exception:
-                built_message = None
-
-            tool_calls = getattr(built_message, "tool_calls", None) if built_message is not None else None
-            assistant_content = ""
-            if built_message is not None and getattr(built_message, "content", None):
-                assistant_content = cast("str", built_message.content) or ""
+            built_message = self._rebuild_stream_message(chunks, conversation)
+            tool_calls = self._extract_message_tool_calls(built_message)
+            assistant_content = self._extract_message_content(built_message)
 
             # If we didn't get rebuilt content, fall back to what we already streamed this round.
             if not assistant_content:
@@ -535,26 +520,62 @@ class LLMClient:
         # Save conversation to memory (non-blocking). Keep this best-effort.
         self._schedule_memory_save(user_id, conversation, "".join(full_text))
 
+    def _rebuild_stream_message(self, chunks: list[Any], conversation: list[dict[str, Any]]) -> Any | None:
+        try:
+            built = litellm.stream_chunk_builder(chunks, messages=conversation)
+        except litellm.APIError:
+            self._logger.debug("stream_chunk_builder failed; continuing without rebuilt message", exc_info=True)
+            return None
+        return self._extract_first_choice_message(built)
+
+    def _extract_first_choice_message(self, payload: Any) -> Any | None:
+        choices = getattr(payload, "choices", None)
+        if choices is None and isinstance(payload, dict):
+            choices = payload.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return None
+
+        choice0 = choices[0]
+        message = getattr(choice0, "message", None)
+        if message is None and isinstance(choice0, dict):
+            message = choice0.get("message")
+        return message
+
+    def _extract_message_tool_calls(self, message: Any) -> Any | None:
+        if message is None:
+            return None
+        tool_calls = getattr(message, "tool_calls", None)
+        if tool_calls is None and isinstance(message, dict):
+            tool_calls = message.get("tool_calls")
+        return tool_calls
+
+    def _extract_message_content(self, message: Any) -> str:
+        if message is None:
+            return ""
+        content = getattr(message, "content", None)
+        if content is None and isinstance(message, dict):
+            content = message.get("content")
+        return content if isinstance(content, str) else ""
+
     def _extract_stream_delta_content(self, chunk: Any) -> str:
         """Extract the streamed text delta from a LiteLLM/OpenAI-style chunk."""
-        try:
-            choices = getattr(chunk, "choices", None)
-            if not choices and isinstance(chunk, dict):
-                choices = chunk.get("choices")
-            if not choices:
-                return ""
-            choice0 = choices[0]
-            delta = getattr(choice0, "delta", None)
-            if delta is None and isinstance(choice0, dict):
-                delta = choice0.get("delta")
-            if delta is None:
-                return ""
-            content = getattr(delta, "content", None)
-            if content is None and isinstance(delta, dict):
-                content = delta.get("content")
-            return content if isinstance(content, str) else ""
-        except Exception:
+        choices = getattr(chunk, "choices", None)
+        if choices is None and isinstance(chunk, dict):
+            choices = chunk.get("choices")
+        if not isinstance(choices, list) or not choices:
             return ""
+
+        choice0 = choices[0]
+        delta = getattr(choice0, "delta", None)
+        if delta is None and isinstance(choice0, dict):
+            delta = choice0.get("delta")
+        if delta is None:
+            return ""
+
+        content = getattr(delta, "content", None)
+        if content is None and isinstance(delta, dict):
+            content = delta.get("content")
+        return content if isinstance(content, str) else ""
 
     def _normalize_user_id(self, user_id: str | UUID | None) -> UUID | None:
         if user_id is None:
@@ -582,19 +603,19 @@ class LLMClient:
         raw_response: Any,
         response_model: type[BaseModel],
     ) -> BaseModel:
-        choices = getattr(raw_response, "choices", None)
-        if choices:
-            first_choice = choices[0]
-            message = getattr(first_choice, "message", None)
-            if message is not None:
-                parsed_candidate = getattr(message, "parsed", None)
-                parsed_result = self._try_convert_payload(parsed_candidate, response_model)
-                if parsed_result is not None:
-                    return parsed_result
-                content_candidate = getattr(message, "content", None)
-                parsed_result = self._try_convert_payload(content_candidate, response_model)
-                if parsed_result is not None:
-                    return parsed_result
+        message = self._extract_first_choice_message(raw_response)
+        if message is not None:
+            parsed_candidate = getattr(message, "parsed", None)
+            if parsed_candidate is None and isinstance(message, dict):
+                parsed_candidate = message.get("parsed")
+            parsed_result = self._try_convert_payload(parsed_candidate, response_model)
+            if parsed_result is not None:
+                return parsed_result
+
+            content_candidate = self._extract_message_content(message)
+            parsed_result = self._try_convert_payload(content_candidate, response_model)
+            if parsed_result is not None:
+                return parsed_result
 
             msg = f"Unable to coerce structured response into {response_model.__name__}"
             raise TypeError(msg)
@@ -682,13 +703,12 @@ class LLMClient:
 
     async def _inject_memory_into_messages(self, messages: list[dict[str, Any]], user_id: UUID) -> list[dict[str, Any]]:
         """Inject user memory context into the conversation."""
-        try:
-            # Get user memory
-            from src.ai.memory import search_memories
+        query_text = self._build_memory_query(messages)
+        if not query_text:
+            return messages
 
-            query_text = self._build_memory_query(messages)
-            if not query_text:
-                return messages
+        try:
+            from src.ai.memory import search_memories
 
             memories = await search_memories(
                 user_id=user_id,
@@ -696,30 +716,37 @@ class LLMClient:
                 limit=6,
                 agent_id=self._agent_id,
             )
-
-            if not memories:
-                return messages
-
-            # Format memories as context
-            user_memory = "\n".join(
-                [f"• {m.get('memory', m.get('content', ''))}" for m in memories if m.get("memory") or m.get("content")]
-            )
-
-            if not user_memory:
-                return messages
-
-            # Create memory context message
-            memory_context = MEMORY_CONTEXT_SYSTEM_PROMPT.format(memory_context=user_memory)
-            memory_message = {"role": "system", "content": memory_context}
-
-            # Insert after the first system message (if exists) or at the beginning
-            if messages and messages[0].get("role") == "system":
-                return [messages[0], memory_message, *messages[1:]]
-            return [memory_message, *messages]
-
-        except Exception as error:
+        except (ImportError, RuntimeError, TimeoutError, TypeError, ValueError) as error:
             self._logger.warning("Failed to inject memory for user %s: %s", user_id, error)
             return messages
+
+        if not memories:
+            return messages
+
+        memory_lines: list[str] = []
+        for memory in memories:
+            if not isinstance(memory, dict):
+                continue
+
+            candidate = memory.get("memory")
+            if not isinstance(candidate, str):
+                candidate = memory.get("content")
+            if not isinstance(candidate, str):
+                continue
+
+            normalized = candidate.strip()
+            if normalized:
+                memory_lines.append(f"• {normalized}")
+
+        if not memory_lines:
+            return messages
+
+        memory_context = MEMORY_CONTEXT_SYSTEM_PROMPT.format(memory_context="\n".join(memory_lines))
+        memory_message = {"role": "system", "content": memory_context}
+
+        if messages and messages[0].get("role") == "system":
+            return [messages[0], memory_message, *messages[1:]]
+        return [memory_message, *messages]
 
     def _build_memory_query(self, messages: list[dict[str, Any]]) -> str | None:
         """Return the most recent user utterance to drive mem0 vector search."""
@@ -894,7 +921,7 @@ class LLMClient:
         if isinstance(result, (dict, list)):
             try:
                 return json.dumps(result, default=str)
-            except Exception:
+            except (OverflowError, TypeError, ValueError):
                 return str(result)
         return str(result)
 
@@ -1225,42 +1252,45 @@ class LLMClient:
         This runs async in background - never blocks the user response.
         mem0 handles all the intelligent extraction, deduplication, and preference detection.
         """
+        if user_id is None:
+            return
+
         try:
-            if user_id is None:
-                return
-
             from src.ai.memory import add_memory
+        except ImportError as error:
+            self._logger.warning("Failed to save conversation to memory: %s", error)
+            return
 
-            user_message = self._build_memory_query(messages) or ""
+        user_message = self._build_memory_query(messages) or ""
+        ai_response = self._extract_memory_response_text(response)
 
-            if isinstance(response, str):
-                ai_response = response[:1000]  # Limit to first 1000 chars
-            elif hasattr(response, "choices"):
-                # Raw completion response (LiteLLM / OpenAI-style)
-                ai_response = response.choices[0].message.content[:1000] if response.choices else ""
-            elif hasattr(response, "model_dump"):
-                # Pydantic model (structured output)
-                ai_response = str(response.model_dump())[:1000]
-            else:
-                ai_response = str(response)[:1000]
+        memory_messages: list[dict[str, Any]] = []
+        if user_message:
+            memory_messages.append({"role": "user", "content": user_message})
+        if ai_response:
+            memory_messages.append({"role": "assistant", "content": ai_response})
 
-            memory_messages: list[dict[str, Any]] = []
-            if user_message:
-                memory_messages.append({"role": "user", "content": user_message})
-            if ai_response:
-                memory_messages.append({"role": "assistant", "content": ai_response})
+        if not memory_messages:
+            return
 
-            if not memory_messages:
-                return
-
+        try:
             # Let mem0 handle everything - extraction, deduplication, relevance filtering
             await add_memory(
                 user_id=user_id,
                 messages=memory_messages,
                 agent_id=self._agent_id,
             )
-
-        except Exception as error:
+        except (RuntimeError, TimeoutError, TypeError, ValueError) as error:
             # Never fail the main request due to memory issues
             self._logger.warning("Failed to save conversation to memory: %s", error)
-            # Don't re-raise - this is a background task
+
+    def _extract_memory_response_text(self, response: Any) -> str:
+        if isinstance(response, str):
+            return response[:1000]
+        if hasattr(response, "choices"):
+            message = self._extract_first_choice_message(response)
+            content = self._extract_message_content(message)
+            return content[:1000]
+        if hasattr(response, "model_dump"):
+            return str(response.model_dump())[:1000]
+        return str(response)[:1000]

@@ -19,7 +19,7 @@ import shlex
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 from uuid import UUID
 
 from src.ai.models import PlanAction
@@ -68,12 +68,13 @@ RateLimitException = _RateLimitException
 TimeoutException = _TimeoutException
 SandboxException = _SandboxException
 CommandExitException = _CommandExitException
+logger = logging.getLogger(__name__)
 
 # Trim noisy SDK logs by default; configurable via env
 E2B_SDK_LOG_LEVEL = get_settings().E2B_SDK_LOG_LEVEL.upper()
 try:
     _e2b_level = getattr(logging, E2B_SDK_LOG_LEVEL, logging.WARNING)
-except Exception:
+except (AttributeError, TypeError):
     _e2b_level = logging.WARNING
 for _name in ("e2b.api", "e2b.sandbox_async.main"):
     logging.getLogger(_name).setLevel(_e2b_level)
@@ -147,11 +148,11 @@ class CodeExecutionService:
     """AI-powered E2B execution service - handles any language autonomously."""
 
     # In-memory session cache: key -> (created_time, sandbox)
-    _sessions: dict[str, tuple[float, Any]] = {}
+    _sessions: ClassVar[dict[str, tuple[float, Any]]] = {}
     # In-memory plan cache: cache_key -> ExecutionPlan (simple dict, no Redis)
-    _plan_cache: dict[str, Any] = {}
+    _plan_cache: ClassVar[dict[str, Any]] = {}
     # Course setup tracking: course_id -> bool
-    _course_setup_done: dict[str, bool] = {}
+    _course_setup_done: ClassVar[dict[str, bool]] = {}
 
     def __init__(self, session: AsyncSession) -> None:
         ttl = get_settings().E2B_SANDBOX_TTL
@@ -185,12 +186,12 @@ class CodeExecutionService:
                     if callable(acloser):
                         await _maybe_await(acloser())
             except Exception:
-                logging.exception("Failed to close sandbox for key %s", k)
+                logger.exception("Failed to close sandbox for key %s", k)
 
         # Reuse if present
         if key in self._sessions:
             sbx = self._sessions[key][1]
-            logging.debug("Reusing E2B sandbox for key=%s", key)
+            logger.debug("Reusing E2B sandbox for key=%s", key)
             return sbx
 
         if AsyncSandbox is None:
@@ -199,12 +200,12 @@ class CodeExecutionService:
 
         # Create fresh sandbox
         # We allow internet access to enable on-demand installs later if desired.
-        logging.info("Creating new E2B sandbox key=%s ttl=%s", key, self.sandbox_ttl)
+        logger.info("Creating new E2B sandbox key=%s ttl=%s", key, self.sandbox_ttl)
         try:
             sbx = await AsyncSandbox.create(timeout=self.sandbox_ttl)
-        except Exception as exc:
+        except (OSError, RuntimeError, SandboxException, TimeoutException, RateLimitException) as exc:
             # Retry once on transient network/loop cleanup issues
-            logging.warning("Sandbox create failed once for key=%s: %s; retrying", key, exc)
+            logger.warning("Sandbox create failed once for key=%s: %s; retrying", key, exc)
             await asyncio.sleep(0.2)
             sbx = await AsyncSandbox.create(timeout=self.sandbox_ttl)
         self._sessions[key] = (now, sbx)
@@ -252,7 +253,7 @@ class CodeExecutionService:
             )
 
         code_sig = hashlib.sha256(source_code.encode("utf-8")).hexdigest()[:8]
-        logging.debug("Run start key=%s lang=%s code_sig=%s size=%d", key, language, code_sig, len(source_code))
+        logger.debug("Run start key=%s lang=%s code_sig=%s size=%d", key, language, code_sig, len(source_code))
 
         is_workspace_mode = workspace_context is not None
 
@@ -262,16 +263,26 @@ class CodeExecutionService:
 
         # Try fast-path first (instant for common languages)
         if not is_workspace_mode and norm_lang in FAST_PATH_TEMPLATES:
-            logging.info("Fast-path provisioning check lang=%s key=%s", norm_lang, key)
+            logger.info("Fast-path provisioning check lang=%s key=%s", norm_lang, key)
             try:
                 result = await self._fast_path_execute(sbx, norm_lang, source_code, stdin)
                 if result.status != "error":
-                    logging.debug("Fast-path success lang=%s", norm_lang)
+                    logger.debug("Fast-path success lang=%s", norm_lang)
                     return result
                 # Fast-path failed, fall through to AI
-                logging.debug("Fast-path failed lang=%s, trying AI", norm_lang)
-            except Exception:
-                logging.debug("Fast-path exception lang=%s, trying AI", norm_lang, exc_info=True)
+                logger.debug("Fast-path failed lang=%s, trying AI", norm_lang)
+            except (
+                OSError,
+                RuntimeError,
+                TimeoutException,
+                RateLimitException,
+                InvalidArgumentException,
+                NotEnoughSpaceException,
+                AuthenticationException,
+                SandboxException,
+                CommandExitException,
+            ):
+                logger.debug("Fast-path exception lang=%s, trying AI", norm_lang, exc_info=True)
 
         # Try cached plan
         cache_key: str | None = None
@@ -280,7 +291,7 @@ class CodeExecutionService:
             cache_key = self._plan_cache_key(course_id, language, source_code)
             cached_plan = self._plan_cache.get(cache_key)
             if cached_plan:
-                logging.debug("Using cached plan cache_key=%s", cache_key)
+                logger.debug("Using cached plan cache_key=%s", cache_key)
                 result = await self._apply_execution_plan(
                     sbx=sbx,
                     plan=cached_plan,
@@ -291,7 +302,7 @@ class CodeExecutionService:
                 )
                 if result.status != "error":
                     return result
-                logging.debug("Cached plan failed, trying AI")
+                logger.debug("Cached plan failed, trying AI")
 
         # AI fallback
         result = await self._plan_and_execute_with_ai(
@@ -311,7 +322,7 @@ class CodeExecutionService:
 
         # Detect sandbox context restarts and reset the session to keep things healthy
         if self._is_context_restart(result):
-            logging.warning("E2B context restarted during run key=%s lang=%s code_sig=%s", key, language, code_sig)
+            logger.warning("E2B context restarted during run key=%s lang=%s code_sig=%s", key, language, code_sig)
             await self._reset_session(key)
             # Return actionable message
             hint = (
@@ -440,7 +451,7 @@ class CodeExecutionService:
                     if callable(acloser):
                         await _maybe_await(acloser())
             except Exception:
-                logging.exception("Failed to close sandbox during reset key=%s", key)
+                logger.exception("Failed to close sandbox during reset key=%s", key)
 
     def _plan_cache_key(self, course_id: str | None, language: str, source_code: str) -> str:
         """Generate cache key for execution plans."""
@@ -451,14 +462,14 @@ class CodeExecutionService:
 
     async def _run_course_setup(self, sbx: Any, course_id: str, setup_commands: list[str]) -> None:
         """Run course setup commands once per sandbox."""
-        logging.info("Running course setup course_id=%s commands=%d", course_id, len(setup_commands))
+        logger.info("Running course setup course_id=%s commands=%d", course_id, len(setup_commands))
         for cmd in setup_commands:
             try:
                 result = await sbx.commands.run(cmd)
                 if result.exit_code != 0:
-                    logging.warning("Setup command failed: %s (exit=%d)", cmd, result.exit_code)
+                    logger.warning("Setup command failed: %s (exit=%d)", cmd, result.exit_code)
             except Exception:
-                logging.exception("Setup command exception: %s", cmd)
+                logger.exception("Setup command exception: %s", cmd)
         self._course_setup_done[course_id] = True
 
     async def _ensure_runtime(self, sbx: Any, language: str) -> None:
@@ -471,8 +482,8 @@ class CodeExecutionService:
         try:
             await sbx.files.read(sentinel_path)
             return
-        except Exception:
-            logging.debug("Runtime sentinel missing for %s, proceeding with provisioning", language, exc_info=True)
+        except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+            logger.debug("Runtime sentinel missing for %s, proceeding with provisioning", language, exc_info=True)
 
         runtime_binary = "rustc" if language == "rust" else language
         try:
@@ -480,10 +491,10 @@ class CodeExecutionService:
             if getattr(result, "exit_code", None) == 0:
                 await sbx.files.write(sentinel_path, "present")
                 return
-        except Exception:
-            logging.debug("Runtime presence check failed for %s", language, exc_info=True)
+        except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+            logger.debug("Runtime presence check failed for %s", language, exc_info=True)
 
-        logging.info("Installing runtime lang=%s commands=%s", language, installers)
+        logger.info("Installing runtime lang=%s commands=%s", language, installers)
         stdout_chunks: list[str] = []
         stderr_chunks: list[str] = []
         await self._run_command_list(
@@ -551,7 +562,7 @@ class CodeExecutionService:
         # Cache the plan for future use
         if cache_key:
             self._plan_cache[cache_key] = plan
-            logging.debug("Cached execution plan cache_key=%s", cache_key)
+            logger.debug("Cached execution plan cache_key=%s", cache_key)
 
         return await self._apply_execution_plan(
             sbx=sbx,
@@ -569,7 +580,7 @@ class CodeExecutionService:
         try:
             await sbx.files.read(self._apt_sentinel)
             state["apt_updated"] = True
-        except Exception:
+        except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
             state["apt_updated"] = False
         return state
 
@@ -628,7 +639,7 @@ class CodeExecutionService:
             try:
                 await sbx.files.write(path=file_entry.path, data=file_entry.content)
             except Exception:
-                logging.exception("Failed to write file %s", file_entry.path)
+                logger.exception("Failed to write file %s", file_entry.path)
                 raise
 
     async def _apply_plan_actions(
@@ -761,7 +772,7 @@ class CodeExecutionService:
             if not normalized_command:
                 continue
             run_user = user or "user"
-            logging.info("Sandbox command user=%s cmd=%s", run_user, normalized_command)
+            logger.info("Sandbox command user=%s cmd=%s", run_user, normalized_command)
             try:
                 try:
                     result = await sbx.commands.run(
@@ -791,7 +802,7 @@ class CodeExecutionService:
                     error_code="command_failed",
                 ) from exc
             except Exception as exc:
-                logging.exception("Command execution failed: %s", command)
+                logger.exception("Command execution failed: %s", command)
                 error_message = f"Command execution failed: {normalized_command}"
                 raise CodeExecutionError(
                     error_message,
@@ -808,7 +819,7 @@ class CodeExecutionService:
                 try:
                     await sbx.files.write(self._apt_sentinel, "updated")
                 except Exception:
-                    logging.exception("Failed to record apt sentinel")
+                    logger.exception("Failed to record apt sentinel")
 
     async def _apply_actions(
         self,
@@ -826,7 +837,7 @@ class CodeExecutionService:
             if action.type == "command":
                 command = action.command or ""
                 if not command.strip():
-                    logging.debug("Skipping empty command action")
+                    logger.debug("Skipping empty command action")
                     continue
                 await self._run_command_list(
                     sbx,
@@ -856,7 +867,7 @@ class CodeExecutionService:
         lesson_id: str | None,
     ) -> str:
         if not action.replacement:
-            logging.warning("Patch action missing replacement text path=%s", action.path)
+            logger.warning("Patch action missing replacement text path=%s", action.path)
             return current_source
 
         path = action.path
@@ -866,8 +877,8 @@ class CodeExecutionService:
         if path:
             try:
                 existing = await sbx.files.read(path)
-            except Exception:
-                logging.debug("Patch target missing, creating file path=%s", path, exc_info=True)
+            except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+                logger.debug("Patch target missing, creating file path=%s", path, exc_info=True)
                 existing = None
 
             if existing and original and original in existing:
@@ -877,12 +888,12 @@ class CodeExecutionService:
 
             try:
                 await sbx.files.write(path=path, data=new_content)
-                logging.info("Applied sandbox patch path=%s", path)
+                logger.info("Applied sandbox patch path=%s", path)
             except Exception:
-                logging.exception("Failed to write patched file path=%s", path)
+                logger.exception("Failed to write patched file path=%s", path)
                 raise
         else:
-            logging.warning("Patch action missing path; skipping file write")
+            logger.warning("Patch action missing path; skipping file write")
 
         updated_source = self._replace_source_with_patch(current_source, original, replacement)
 
@@ -902,13 +913,13 @@ class CodeExecutionService:
         try:
             lesson_uuid = UUID(lesson_id)
         except (ValueError, TypeError):
-            logging.debug("Invalid lesson_id for patch persistence lesson_id=%s", lesson_id)
+            logger.debug("Invalid lesson_id for patch persistence lesson_id=%s", lesson_id)
             return
 
         try:
             lesson = await self._session.get(Lesson, lesson_uuid)
             if lesson is None:
-                logging.debug("Lesson not found for patch persistence lesson_id=%s", lesson_id)
+                logger.debug("Lesson not found for patch persistence lesson_id=%s", lesson_id)
                 return
 
             existing_content = lesson.content or ""
@@ -916,14 +927,14 @@ class CodeExecutionService:
 
             if existing_content == updated_content:
                 if original:
-                    logging.debug("Original snippet not found in lesson content lesson_id=%s", lesson_id)
+                    logger.debug("Original snippet not found in lesson content lesson_id=%s", lesson_id)
                 return
 
             lesson.content = updated_content
             await self._session.flush()
-            logging.info("Persisted AI patch to lesson lesson_id=%s", lesson_id)
+            logger.info("Persisted AI patch to lesson lesson_id=%s", lesson_id)
         except Exception:
-            logging.exception("Failed to persist patch for lesson lesson_id=%s", lesson_id)
+            logger.exception("Failed to persist patch for lesson lesson_id=%s", lesson_id)
 
     async def _prepare_workspace(
         self,

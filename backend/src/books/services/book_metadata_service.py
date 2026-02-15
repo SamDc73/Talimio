@@ -95,7 +95,7 @@ class BookMetadataService:
 
             pdf_document.close()
 
-        except Exception as e:
+        except (RuntimeError, TypeError, ValueError) as e:
             logger.warning(f"Failed to extract PDF metadata: {e}")
 
         return metadata
@@ -140,7 +140,7 @@ class BookMetadataService:
 
             epub_document.close()
 
-        except Exception as e:
+        except (OSError, RuntimeError, TypeError, ValueError) as e:
             logger.warning(f"Failed to extract EPUB metadata: {e}")
 
         return metadata

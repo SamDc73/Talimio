@@ -72,7 +72,7 @@ async def upload_document(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Document upload temporarily unavailable",
         ) from e
-    except Exception as e:  # pragma: no cover - unexpected safety net
+    except Exception as e:
         logger.exception("Unexpected error uploading document")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -103,7 +103,7 @@ async def list_documents(
 
     except HTTPException:
         raise
-    except Exception:  # pragma: no cover - defensive logging
+    except Exception:
         # Log but don't crash - return empty list
         logger.exception("Error listing documents for course %s", course_id)
         result = DocumentList(documents=[], total=0, page=1, size=limit)
@@ -143,7 +143,7 @@ async def search_documents(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Document search temporarily unavailable",
         ) from e
-    except Exception as e:  # pragma: no cover - unexpected safety net
+    except Exception as e:
         logger.exception("Unexpected error searching documents")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -181,7 +181,7 @@ async def delete_document(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Document deletion temporarily unavailable",
         ) from e
-    except Exception as e:  # pragma: no cover - unexpected safety net
+    except Exception as e:
         logger.exception("Unexpected error deleting document")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -213,7 +213,7 @@ async def get_document(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Document retrieval temporarily unavailable",
         ) from e
-    except Exception as e:  # pragma: no cover - unexpected safety net
+    except Exception as e:
         logger.exception("Unexpected error getting document")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

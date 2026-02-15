@@ -13,6 +13,7 @@ import httpx
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai.rag.service import RAGService
 from src.auth import CurrentAuth
@@ -51,7 +52,7 @@ async def _embed_book_background(book_id: UUID) -> None:
         except Exception:
             try:
                 await session.commit()
-            except Exception:
+            except SQLAlchemyError:
                 logger.debug("Failed to commit failed RAG status for book %s", book_id, exc_info=True)
             logger.exception("Failed to embed book %s", book_id)
 
@@ -541,7 +542,7 @@ async def _handle_range_request(
                 }
 
                 return StreamingResponse(stream_func(), status_code=206, media_type=media_type, headers=headers)
-        except Exception as e:
+        except (httpx.HTTPError, ValueError) as e:
             logger.warning(f"Range request failed: {e}")
     return None
 
@@ -718,7 +719,7 @@ async def get_book_rag_status(book_id: UUID, auth: CurrentAuth) -> RAGStatusResp
                 text("SELECT COUNT(*) FROM rag_document_chunks WHERE doc_id = :doc_id"), {"doc_id": str(book_id)}
             )
             chunk_count = count_result.scalar()
-        except Exception:
+        except SQLAlchemyError:
             logger.debug("Could not count RAG chunks")
 
     # Get error details if failed

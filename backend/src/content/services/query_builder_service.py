@@ -3,8 +3,9 @@
 import logging
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import column, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.selectable import Subquery
 
 from src.content.schemas import ContentType
 
@@ -14,6 +15,27 @@ logger = logging.getLogger(__name__)
 
 class QueryBuilderService:
     """Service for building SQL queries for content operations."""
+
+    @staticmethod
+    def build_combined_subquery(combined_query: str) -> Subquery:
+        """Build a typed subquery wrapper for the combined raw SQL content query."""
+        return text(combined_query).columns(
+            column("id"),
+            column("title"),
+            column("description"),
+            column("type"),
+            column("last_accessed"),
+            column("created_at"),
+            column("tags"),
+            column("extra1"),
+            column("extra2"),
+            column("progress"),
+            column("count1"),
+            column("count2"),
+            column("archived"),
+            column("toc_progress"),
+            column("table_of_contents"),
+        ).subquery("combined")
 
     @staticmethod
     def build_content_queries(
@@ -217,15 +239,13 @@ class QueryBuilderService:
         session: AsyncSession, combined_query: str, search_term: str | None, user_id: UUID | None = None
     ) -> int:
         """Get total count of results."""
-        count_query = f"SELECT COUNT(*) FROM ({combined_query}) as combined"
+        combined_subquery = QueryBuilderService.build_combined_subquery(combined_query)
         params = {}
         if search_term:
             params["search"] = search_term
         # Include user_id if provided
         if user_id is not None:
             params["user_id"] = user_id
-        count_result = await session.execute(
-            text(count_query),
-            params,
-        )
+        statement = select(func.count()).select_from(combined_subquery)
+        count_result = await session.execute(statement, params)
         return count_result.scalar() or 0

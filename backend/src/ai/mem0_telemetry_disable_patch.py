@@ -56,7 +56,7 @@ def _install_noop_posthog_module() -> None:
         return
 
     module = types.ModuleType("posthog")
-    module.Posthog = _NoOpPosthog  # type: ignore[attr-defined]
+    module.__dict__["Posthog"] = _NoOpPosthog
     sys.modules["posthog"] = module
 
 

@@ -137,7 +137,7 @@ class CourseProcessor:
                 existing_tags = json.loads(course.tags)
                 if existing_tags:
                     parts.append(f"Existing tags: {', '.join(existing_tags)}")
-            except Exception as e:
+            except (TypeError, ValueError) as e:
                 logger.debug(f"Failed to parse existing tags: {e}")
 
     def _add_module_outline(self, modules: list[dict[str, Any]], parts: list[str]) -> None:

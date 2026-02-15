@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from cryptography.fernet import Fernet, InvalidToken
+from pydantic import ValidationError
 from sqlalchemy import Select, select
 
 from src.ai.mcp.client import get_mcp_client, probe_mcp_server
@@ -218,7 +219,7 @@ def build_user_mcp_config(user_servers: Iterable[UserMCPServer]) -> MCPConfig:
             continue
         try:
             config = _to_mcp_config(server)
-        except Exception as exc:
+        except (TypeError, ValueError, ValidationError) as exc:
             logger.warning("Skipping invalid MCP server '%s': %s", server.name, exc)
             continue
         servers[config.name] = config

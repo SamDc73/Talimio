@@ -111,7 +111,7 @@ class R2Storage(AbstractStorage):
             async with await self._get_client() as client:
                 await client.delete_object(Bucket=self.bucket_name, Key=key)
         except ClientError as e:
-            msg = f"Failed to delete from R2: {key}"
+            msg = "Failed to delete object from R2 storage"
             raise FileDeleteError(msg) from e
 
     async def download(self, key: str) -> bytes:

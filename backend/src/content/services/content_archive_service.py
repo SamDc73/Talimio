@@ -21,39 +21,43 @@ class ContentArchiveService:
     @staticmethod
     async def archive_content(db: AsyncSession, content_type: ContentType, content_id: UUID, user_id: UUID) -> None:
         """Archive content by type and ID with user validation."""
-        table_map = {
-            ContentType.BOOK: "books",
-            ContentType.YOUTUBE: "videos",
-            ContentType.COURSE: "courses",
-        }
+        logger.info(f"🗃️ Archiving {content_type} {content_id}")
 
-        table_name = table_map.get(content_type)
-        if not table_name:
+        statement = None
+        params: dict[str, UUID | datetime] = {"content_id": content_id, "user_id": user_id}
+        if content_type == ContentType.BOOK:
+            statement = text(
+                """
+                UPDATE books
+                SET archived = true, archived_at = :archived_at
+                WHERE id = :content_id AND user_id = :user_id
+                """
+            )
+            params["archived_at"] = datetime.now(UTC)
+        elif content_type == ContentType.YOUTUBE:
+            statement = text(
+                """
+                UPDATE videos
+                SET archived = true, archived_at = :archived_at
+                WHERE id = :content_id AND user_id = :user_id
+                """
+            )
+            params["archived_at"] = datetime.now(UTC)
+        elif content_type == ContentType.COURSE:
+            statement = text(
+                """
+                UPDATE courses
+                SET archived = true
+                WHERE id = :content_id AND user_id = :user_id
+                """
+            )
+        else:
             msg = f"Unsupported content type: {content_type}"
             logger.error(msg)
             raise ValueError(msg)
 
-        logger.info(f"🗃️ Archiving {content_type} {content_id} in table {table_name}")
-
-        id_column = "id"
-
-        set_clause = "archived = true"
-        params: dict[str, UUID | datetime] = {"content_id": content_id, "user_id": user_id}
-        if content_type in {ContentType.BOOK, ContentType.YOUTUBE}:
-            set_clause = "archived = true, archived_at = :archived_at"
-            params["archived_at"] = datetime.now(UTC)
-
-        # Update with user validation
-        query = f"""
-            UPDATE {table_name}
-            SET {set_clause}
-            WHERE {id_column} = :content_id AND user_id = :user_id
-        """
-
-        logger.info(f"🔍 Executing query: {query}")
         logger.info(f"🔍 With params: content_id={content_id}, user_id={user_id}")
-
-        result = await db.execute(text(query), params)
+        result = await db.execute(statement, params)
         affected_rows = int(getattr(result, "rowcount", 0) or 0)
         await db.flush()
 
@@ -68,37 +72,41 @@ class ContentArchiveService:
     @staticmethod
     async def unarchive_content(db: AsyncSession, content_type: ContentType, content_id: UUID, user_id: UUID) -> None:
         """Unarchive content by type and ID with user validation."""
-        table_map = {
-            ContentType.BOOK: "books",
-            ContentType.YOUTUBE: "videos",
-            ContentType.COURSE: "courses",
-        }
+        logger.info(f"📤 Unarchiving {content_type} {content_id}")
 
-        table_name = table_map.get(content_type)
-        if not table_name:
+        statement = None
+        params: dict[str, UUID] = {"content_id": content_id, "user_id": user_id}
+        if content_type == ContentType.BOOK:
+            statement = text(
+                """
+                UPDATE books
+                SET archived = false, archived_at = NULL
+                WHERE id = :content_id AND user_id = :user_id
+                """
+            )
+        elif content_type == ContentType.YOUTUBE:
+            statement = text(
+                """
+                UPDATE videos
+                SET archived = false, archived_at = NULL
+                WHERE id = :content_id AND user_id = :user_id
+                """
+            )
+        elif content_type == ContentType.COURSE:
+            statement = text(
+                """
+                UPDATE courses
+                SET archived = false
+                WHERE id = :content_id AND user_id = :user_id
+                """
+            )
+        else:
             msg = f"Unsupported content type: {content_type}"
             logger.error(msg)
             raise ValueError(msg)
 
-        logger.info(f"📤 Unarchiving {content_type} {content_id} in table {table_name}")
-
-        id_column = "id"
-
-        set_clause = "archived = false"
-        if content_type in {ContentType.BOOK, ContentType.YOUTUBE}:
-            set_clause = "archived = false, archived_at = NULL"
-
-        # Update with user validation
-        query = f"""
-            UPDATE {table_name}
-            SET {set_clause}
-            WHERE {id_column} = :content_id AND user_id = :user_id
-        """
-
-        logger.info(f"🔍 Executing unarchive query: {query}")
         logger.info(f"🔍 With params: content_id={content_id}, user_id={user_id}")
-
-        result = await db.execute(text(query), {"content_id": content_id, "user_id": user_id})
+        result = await db.execute(statement, params)
         affected_rows = int(getattr(result, "rowcount", 0) or 0)
         await db.flush()
 

@@ -56,7 +56,7 @@ class TaggingService:
             try:
                 model = settings.primary_llm_model
                 logger.info("TAGGING_LLM_MODEL not set; falling back to PRIMARY_LLM_MODEL: %s", model)
-            except Exception:
+            except (AttributeError, RuntimeError, ValueError):
                 logger.warning("No TAGGING_LLM_MODEL and PRIMARY_LLM_MODEL unavailable; skipping tag generation")
                 return []
 
@@ -217,7 +217,7 @@ class TaggingService:
                     }
                 )
                 successful += 1
-            except Exception as exc:
+            except (RuntimeError, TypeError, ValueError) as exc:
                 results.append(
                     {
                         "content_id": str(item.get("content_id", "")),
