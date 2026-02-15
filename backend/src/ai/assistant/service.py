@@ -5,8 +5,8 @@ import json
 import logging
 import uuid
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 from typing import Any, Literal
-from uuid import UUID
 
 import fitz  # PyMuPDF
 from fastapi import HTTPException, status
@@ -22,6 +22,7 @@ from src.courses.services.course_query_service import CourseQueryService
 from src.storage.factory import get_storage_provider
 from src.videos.models import Video
 
+from . import conversations_service
 from .schemas import ChatRequest
 
 
@@ -31,6 +32,9 @@ ASSISTANT_RAG_TOP_K = 5
 ASSISTANT_RAG_MAX_RESULTS = 3
 ASSISTANT_PDF_CONTEXT_RADIUS_PAGES = 2
 ASSISTANT_VIDEO_CONTEXT_WINDOW_SECONDS = 120
+ASSISTANT_MAX_USER_MESSAGE_LENGTH = 8_000
+ASSISTANT_MAX_HISTORY_MESSAGES = 40
+ASSISTANT_REQUIRE_THREAD_ID = True
 
 
 class ContextData(BaseModel):
@@ -45,9 +49,11 @@ class ContextData(BaseModel):
 class NormalizedChatRequest(BaseModel):
     """Assistant request normalized from assistant-ui data stream payload."""
 
-    message: str = Field(min_length=1)
-    conversation_history: list[dict[str, str]] = Field(default_factory=list)
+    latest_user_text: str = Field(default="")
+    latest_user_blocks: list[dict[str, Any]] = Field(default_factory=list)
+    conversation_history: list[dict[str, Any]] = Field(default_factory=list)
     model: str | None = None
+    thread_id: uuid.UUID
     context_type: Literal["book", "video", "course"] | None = None
     context_id: uuid.UUID | None = None
     context_meta: dict[str, Any] | None = None
@@ -62,9 +68,9 @@ def _sse_event(payload: dict[str, Any] | str) -> str:
 
 
 def _extract_message_text(content: Any) -> str:
-    """Extract plain text from assistant-ui language model message content."""
+    """Extract plain text from AI SDK-style message content parts."""
     if isinstance(content, str):
-        return content
+        return content.strip()
     if not isinstance(content, list):
         return ""
 
@@ -74,67 +80,179 @@ def _extract_message_text(content: Any) -> str:
             continue
         part_type = part.get("type")
         if part_type == "text" and isinstance(part.get("text"), str):
-            text_parts.append(part["text"])
+            normalized = part["text"].strip()
+            if normalized:
+                text_parts.append(normalized)
 
-    return "".join(text_parts).strip()
+    return " ".join(text_parts).replace("\n", " ").replace("\t", " ").strip()
+
+
+def _is_image_file_part(media_type: Any, data_url: str) -> bool:
+    if isinstance(media_type, str) and media_type.startswith("image/"):
+        return True
+    return data_url.startswith("data:image/")
+
+
+def _convert_user_content_to_openai_blocks(content: Any) -> list[dict[str, Any]]:
+    if isinstance(content, str):
+        normalized = content.strip()
+        if not normalized:
+            return []
+        return [{"type": "text", "text": normalized}]
+
+    if not isinstance(content, list):
+        return []
+
+    blocks: list[dict[str, Any]] = []
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+
+        part_type = part.get("type")
+        if part_type == "text":
+            text = part.get("text")
+            if isinstance(text, str) and text.strip():
+                blocks.append({"type": "text", "text": text})
+            continue
+
+        if part_type == "file":
+            data = part.get("data")
+            if not isinstance(data, str) or not data.strip():
+                continue
+
+            media_type = part.get("mediaType")
+            if not isinstance(media_type, str) or not media_type.strip():
+                media_type = part.get("mimeType")
+
+            if not _is_image_file_part(media_type, data):
+                continue
+
+            blocks.append({"type": "image_url", "image_url": {"url": data}})
+
+    return blocks
 
 
 def _normalize_chat_request(request: ChatRequest) -> NormalizedChatRequest:
     """Normalize assistant-ui runtime request body into assistant domain request."""
-    flattened: list[dict[str, str]] = []
+    if ASSISTANT_REQUIRE_THREAD_ID and request.thread_id is None:
+        msg = "threadId is required"
+        raise ValueError(msg)
+
+    normalized_messages: list[dict[str, Any]] = []
+    latest_user_blocks: list[dict[str, Any]] = []
+    latest_user_text = ""
+    last_user_index = -1
 
     for item in request.messages:
         if item.role not in {"user", "assistant"}:
             continue
-        text = _extract_message_text(item.content)
-        if not text:
+
+        if item.role == "assistant":
+            text = _extract_message_text(item.content)
+            if not text:
+                continue
+            normalized_messages.append({"role": "assistant", "content": text})
             continue
-        flattened.append({"role": item.role, "content": text})
 
-    if not flattened:
-        msg = "No user/assistant messages were provided"
-        raise ValueError(msg)
+        blocks = _convert_user_content_to_openai_blocks(item.content)
+        if not blocks:
+            continue
 
-    last_user_index = -1
-    for index in range(len(flattened) - 1, -1, -1):
-        if flattened[index]["role"] == "user":
-            last_user_index = index
-            break
+        latest_user_text = _extract_message_text(item.content)
+        latest_user_blocks = blocks
+        normalized_messages.append({"role": "user", "content": blocks})
+        last_user_index = len(normalized_messages) - 1
 
-    if last_user_index < 0:
+    if last_user_index < 0 or not latest_user_blocks:
         msg = "Latest user message is required"
         raise ValueError(msg)
 
-    message = flattened[last_user_index]["content"].strip()
-    if not message:
-        msg = "Latest user message cannot be empty"
+    if latest_user_text and len(latest_user_text) > ASSISTANT_MAX_USER_MESSAGE_LENGTH:
+        msg = f"Latest user message exceeds max length of {ASSISTANT_MAX_USER_MESSAGE_LENGTH} characters"
         raise ValueError(msg)
 
-    if request.pending_quote and request.pending_quote.strip():
-        message = f"{request.pending_quote.strip()}\n\n{message}"
+    pending_quote = request.pending_quote.strip() if request.pending_quote else ""
+    if pending_quote:
+        latest_user_blocks = [{"type": "text", "text": f"{pending_quote}\n\n"}, *latest_user_blocks]
+        latest_user_text = f"{pending_quote}\n\n{latest_user_text}" if latest_user_text else pending_quote
+
+    history_start_index = max(last_user_index - ASSISTANT_MAX_HISTORY_MESSAGES, 0)
 
     return NormalizedChatRequest(
-        message=message,
-        conversation_history=flattened[:last_user_index],
-        model=request.modelName or request.model,
+        latest_user_text=latest_user_text,
+        latest_user_blocks=latest_user_blocks,
+        conversation_history=normalized_messages[history_start_index:last_user_index],
+        model=request.model_name or request.model,
+        thread_id=request.thread_id,
         context_type=request.context_type,
         context_id=request.context_id,
         context_meta=request.context_meta,
     )
 
 
+def _build_thread_message_payload(message: Any) -> dict[str, Any]:
+    payload = message.model_dump(by_alias=True, exclude_none=True, mode="json")
+    message_id = payload.get("id")
+    if not isinstance(message_id, str) or not message_id.strip():
+        payload["id"] = str(uuid.uuid4())
+    created_at = payload.get("createdAt")
+    if not isinstance(created_at, str) or not created_at.strip():
+        payload["createdAt"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    return payload
+
+
+def _extract_latest_user_history_item(request: ChatRequest) -> tuple[dict[str, Any] | None, str | None]:
+    last_user_index = -1
+    for index in range(len(request.messages) - 1, -1, -1):
+        if request.messages[index].role == "user":
+            last_user_index = index
+            break
+    if last_user_index < 0:
+        return None, None
+
+    parent_id: str | None = None
+    for index in range(last_user_index - 1, -1, -1):
+        candidate_id = request.messages[index].id
+        if isinstance(candidate_id, str) and candidate_id.strip():
+            parent_id = candidate_id
+            break
+
+    return _build_thread_message_payload(request.messages[last_user_index]), parent_id
+
+
 async def assistant_chat(
     request: ChatRequest,
-    user_id: UUID,
+    user_id: uuid.UUID,
     session: AsyncSession,
 ) -> AsyncGenerator[str, None]:
     """Stream chat responses with optional context using ui-message-stream protocol."""
     message_id = str(uuid.uuid4())
+    normalized_request: NormalizedChatRequest | None = None
+    latest_user_message_id: str | None = None
     try:
         # Emit start immediately so the client can render streaming state while prep runs.
         yield _sse_event({"type": "start", "messageId": message_id})
 
         normalized_request = _normalize_chat_request(request)
+        await conversations_service.assert_conversation_ownership(
+            session=session,
+            user_id=user_id,
+            conversation_id=normalized_request.thread_id,
+        )
+
+        latest_user_message, latest_user_parent_id = _extract_latest_user_history_item(request)
+        if latest_user_message is not None:
+            await conversations_service.append_assistant_conversation_history_item(
+                session=session,
+                user_id=user_id,
+                conversation_id=normalized_request.thread_id,
+                message=latest_user_message,
+                parent_id=latest_user_parent_id,
+                run_config=request.run_config,
+            )
+            raw_user_message_id = latest_user_message.get("id")
+            if isinstance(raw_user_message_id, str) and raw_user_message_id.strip():
+                latest_user_message_id = raw_user_message_id
 
         # Build messages with context if available
         messages = await _build_messages(normalized_request, user_id, session)
@@ -170,8 +288,41 @@ async def assistant_chat(
         )
         yield _sse_event("[DONE]")
 
+    except (ValueError, conversations_service.AssistantConversationValidationError) as error:
+        logger.warning("Chat validation failed for user %s: %s", user_id, error)
+        yield _sse_event({"type": "error", "errorText": str(error)})
+        yield _sse_event(
+            {
+                "type": "finish",
+                "finishReason": "error",
+                "usage": {"promptTokens": 0, "completionTokens": 0},
+            }
+        )
+        yield _sse_event("[DONE]")
     except Exception:
         logger.exception("Chat failed for user %s", user_id)
+        if normalized_request and latest_user_message_id:
+            incomplete_message = {
+                "id": str(uuid.uuid4()),
+                "role": "assistant",
+                "createdAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                "content": [],
+                "status": {"type": "incomplete", "reason": "error"},
+            }
+            try:
+                await conversations_service.append_assistant_conversation_history_item(
+                    session=session,
+                    user_id=user_id,
+                    conversation_id=normalized_request.thread_id,
+                    message=incomplete_message,
+                    parent_id=latest_user_message_id,
+                    run_config=request.run_config,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to persist incomplete assistant message for thread %s",
+                    normalized_request.thread_id,
+                )
         error_msg = "Sorry, I'm having trouble responding right now. Please try again."
         yield _sse_event({"type": "error", "errorText": error_msg})
         yield _sse_event(
@@ -184,7 +335,11 @@ async def assistant_chat(
         yield _sse_event("[DONE]")
 
 
-async def _build_messages(request: NormalizedChatRequest, user_id: UUID, session: AsyncSession) -> list[dict[str, str]]:
+async def _build_messages(
+    request: NormalizedChatRequest,
+    user_id: uuid.UUID,
+    session: AsyncSession,
+) -> list[dict[str, Any]]:
     """Build message list with optional context."""
     context_parts = []
 
@@ -235,18 +390,18 @@ async def _build_messages(request: NormalizedChatRequest, user_id: UUID, session
     system_prompt = ASSISTANT_CHAT_SYSTEM_PROMPT
 
     # Build message list
-    messages = [{"role": "system", "content": system_prompt}]
+    messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
 
     # Add conversation history
     messages.extend(request.conversation_history)
 
     # Build user message with context
-    user_message = request.message
+    user_blocks = list(request.latest_user_blocks)
     if context_parts:
         context_text = "\n\n---\n\n".join(context_parts)
-        user_message = f"{request.message}\n\n[Context:\n{context_text}\n]"
+        user_blocks.append({"type": "text", "text": f"\n\n[Context:\n{context_text}\n]"})
 
-    messages.append({"role": "user", "content": user_message})
+    messages.append({"role": "user", "content": user_blocks})
 
     return messages
 
@@ -277,7 +432,7 @@ def _extract_leading_blockquote(text: str) -> str:
         return ""
 
 
-async def _get_rag_context(request: NormalizedChatRequest, user_id: UUID, session: AsyncSession) -> list:
+async def _get_rag_context(request: NormalizedChatRequest, user_id: uuid.UUID, session: AsyncSession) -> list:
     """Get semantic search results for any context type.
 
     Uses the user's quoted selection (if present) as the primary query, falling back to the full message.
@@ -286,8 +441,11 @@ async def _get_rag_context(request: NormalizedChatRequest, user_id: UUID, sessio
         return []
 
     # Prefer leading blockquote as query for better retrieval relevance
-    query_text = _extract_leading_blockquote(request.message) or request.message
+    query_text = _extract_leading_blockquote(request.latest_user_text) or request.latest_user_text
+    if not query_text:
+        return []
 
+    results: list[Any] = []
     try:
         if request.context_type == "course":
             from src.ai.rag.service import RAGService
@@ -307,11 +465,7 @@ async def _get_rag_context(request: NormalizedChatRequest, user_id: UUID, sessio
             logger.info("Retrieved %d RAG results for course %s", len(results), request.context_id)
             if results:
                 logger.debug("First result preview: %s", results[0].content[:100])
-            return results
-
-        if request.context_type in ("book", "video"):
-            from uuid import UUID as _UUID
-
+        elif request.context_type in ("book", "video"):
             from sqlalchemy import select as _select
 
             from src.ai.rag.embeddings import VectorRAG
@@ -328,21 +482,20 @@ async def _get_rag_context(request: NormalizedChatRequest, user_id: UUID, sessio
             # Ownership check
             resource = await session.scalar(
                 _select(model_class).where(
-                    model_class.id == _UUID(str(request.context_id)), model_class.user_id == user_id
+                    model_class.id == uuid.UUID(str(request.context_id)),
+                    model_class.user_id == user_id,
                 )
             )
-            if not resource:
-                return []
+            if resource:
+                results = await rag.search(
+                    session,
+                    doc_type=request.context_type,
+                    query=query_text,
+                    limit=ASSISTANT_RAG_TOP_K,
+                    doc_id=resource.id,
+                )
 
-            return await rag.search(
-                session,
-                doc_type=request.context_type,
-                query=query_text,
-                limit=ASSISTANT_RAG_TOP_K,
-                doc_id=resource.id,
-            )
-
-        return []
+        return results
 
     except Exception:
         logger.exception("RAG search failed for %s_id: %s", request.context_type, request.context_id)
@@ -350,7 +503,7 @@ async def _get_rag_context(request: NormalizedChatRequest, user_id: UUID, sessio
 
 
 async def _book_context(
-    resource_id: UUID,
+    resource_id: uuid.UUID,
     context_meta: dict[str, Any],
     session: AsyncSession,
 ) -> ContextData | None:
@@ -415,7 +568,7 @@ async def _book_context(
 
 
 async def _video_context(
-    resource_id: UUID,
+    resource_id: uuid.UUID,
     context_meta: dict[str, Any],
     session: AsyncSession,
 ) -> ContextData | None:
@@ -467,7 +620,7 @@ async def _video_context(
 
 
 async def _course_context(
-    resource_id: UUID,
+    resource_id: uuid.UUID,
     context_meta: dict[str, Any],
     session: AsyncSession,
 ) -> ContextData | None:
@@ -554,7 +707,7 @@ _HANDLERS = {
 
 async def get_context(
     context_type: str,
-    resource_id: UUID,
+    resource_id: uuid.UUID,
     context_meta: dict[str, Any] | None = None,
     session: AsyncSession | None = None,
 ) -> ContextData | None:

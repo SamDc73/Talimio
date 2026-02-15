@@ -37,14 +37,14 @@ import { cn } from "@/lib/utils"
 export function AssistantThread() {
 	return (
 		<ThreadPrimitive.Root
-			className="aui-root aui-thread-root @container flex h-full flex-col bg-background"
+			className="aui-root aui-thread-root @container flex h-full min-h-0 flex-col bg-background"
 			style={{
 				"--thread-max-width": "44rem",
 			}}
 		>
 			<ThreadPrimitive.Viewport
-				turnAnchor="top"
-				className="aui-thread-viewport relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth px-4 pt-4"
+				autoScroll
+				className="aui-thread-viewport relative flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-auto px-4 pt-4"
 			>
 				<AuiIf condition={(s) => s.thread.isEmpty}>
 					<ThreadWelcome />

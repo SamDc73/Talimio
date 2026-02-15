@@ -1,9 +1,10 @@
-import { AssistantRuntimeProvider } from "@assistant-ui/react"
-import { AnimatePresence, motion, useDragControls } from "framer-motion"
-import { GripVertical, Pin, X } from "lucide-react"
+import { AssistantRuntimeProvider, ThreadListPrimitive } from "@assistant-ui/react"
+import { AnimatePresence, motion } from "framer-motion"
+import { GripVertical, Pin, PlusIcon, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { Button } from "@/components/Button"
 import ErrorBoundary from "@/components/ErrorBoundary"
+import { AssistantConversationDropdown } from "@/features/assistant/components/AssistantConversationDropdown"
 import { AssistantThread } from "@/features/assistant/components/AssistantThread"
 import {
 	useAssistantPinned,
@@ -35,9 +36,6 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 
 	// Responsive design
 	const [isMobile, setIsMobile] = useState(false)
-
-	// Drag controls for resize
-	const dragControls = useDragControls()
 
 	// Check if mobile
 	useEffect(() => {
@@ -198,7 +196,6 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 							"flex items-center justify-center"
 						)}
 						drag="x"
-						dragControls={dragControls}
 						dragMomentum={false}
 						dragElastic={0}
 						onDrag={handleResize}
@@ -210,54 +207,79 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 					</motion.div>
 				)}
 
-				{/* Content container with header */}
-				<div className="flex h-full flex-col">
-					{/* Header with controls */}
-					<div className="flex items-center justify-end gap-1.5 px-3 py-2 border-b border-border/40">
-						{/* Pin button */}
-						{!isMobile && (
-							<motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-								<Button
-									variant="ghost"
-									size="icon"
-									onClick={handleTogglePin}
-									disabled={isPending}
-									className={cn(
-										"size-8  rounded-md transition-all duration-200",
-										assistantSidebarPinned ? "bg-primary/10 hover:bg-primary/20 text-primary" : "hover:bg-muted"
-									)}
-									aria-label={assistantSidebarPinned ? "Unpin sidebar" : "Pin sidebar"}
-								>
-									<Pin
-										className={cn("size-3.5  transition-transform duration-200", assistantSidebarPinned && "rotate-45")}
-									/>
-								</Button>
-							</motion.div>
-						)}
+				<ErrorBoundary>
+					<AssistantRuntimeProvider runtime={runtime}>
+						{/* Content container with header */}
+						<div className="flex h-full flex-col">
+							{/* Header with controls - Wrapped in ThreadListPrimitive.Root */}
+							<ThreadListPrimitive.Root className="flex min-h-0 min-w-0 flex-1 flex-col">
+								<div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border/20 bg-background/50 backdrop-blur-sm sticky top-0 z-10">
+									<AssistantConversationDropdown />
 
-						{/* Close button */}
-						<motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-							<Button
-								variant="ghost"
-								size="icon"
-								onClick={onClose}
-								className="size-8  rounded-md hover:bg-muted"
-								aria-label="Close assistant"
-							>
-								<X className="size-3.5 " />
-							</Button>
-						</motion.div>
-					</div>
+									<div className="flex items-center gap-1">
+										{/* New Chat Button */}
+										<ThreadListPrimitive.New asChild>
+											<motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+												<Button
+													variant="ghost"
+													size="icon"
+													className="size-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+													aria-label="New chat"
+												>
+													<PlusIcon className="size-4" />
+												</Button>
+											</motion.div>
+										</ThreadListPrimitive.New>
 
-					{/* Assistant content */}
-					<div className="flex-1 overflow-hidden">
-						<ErrorBoundary>
-							<AssistantRuntimeProvider runtime={runtime}>
-								<AssistantThread />
-							</AssistantRuntimeProvider>
-						</ErrorBoundary>
-					</div>
-				</div>
+										{/* Pin button */}
+										{!isMobile && (
+											<motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+												<Button
+													variant="ghost"
+													size="icon"
+													onClick={handleTogglePin}
+													disabled={isPending}
+													className={cn(
+														"size-8 rounded-full transition-all duration-200",
+														assistantSidebarPinned
+															? "bg-primary/10 text-primary hover:bg-primary/20"
+															: "text-muted-foreground hover:bg-muted hover:text-foreground"
+													)}
+													aria-label={assistantSidebarPinned ? "Unpin sidebar" : "Pin sidebar"}
+												>
+													<Pin
+														className={cn(
+															"size-3.5 transition-transform duration-200",
+															assistantSidebarPinned && "rotate-45"
+														)}
+													/>
+												</Button>
+											</motion.div>
+										)}
+
+										{/* Close button */}
+										<motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+											<Button
+												variant="ghost"
+												size="icon"
+												onClick={onClose}
+												className="size-8 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+												aria-label="Close assistant"
+											>
+												<X className="size-4" />
+											</Button>
+										</motion.div>
+									</div>
+								</div>
+
+								{/* Assistant content */}
+								<div className="relative min-h-0 flex-1 overflow-hidden">
+									<AssistantThread />
+								</div>
+							</ThreadListPrimitive.Root>
+						</div>
+					</AssistantRuntimeProvider>
+				</ErrorBoundary>
 			</motion.aside>
 
 			{/* Edge hint when closed */}

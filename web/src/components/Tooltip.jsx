@@ -1,6 +1,7 @@
 "use client"
 
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
+import { forwardRef } from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -10,9 +11,11 @@ const TooltipProvider = TooltipPrimitive.Provider
 // Root, Trigger, and Content primitives
 const Tooltip = TooltipPrimitive.Root
 
-function TooltipTrigger({ ...props }) {
-	return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
-}
+const TooltipTrigger = forwardRef(function TooltipTrigger({ ...props }, ref) {
+	return <TooltipPrimitive.Trigger ref={ref} data-slot="tooltip-trigger" {...props} />
+})
+
+TooltipTrigger.displayName = "TooltipTrigger"
 
 function TooltipContent({ className, sideOffset = 0, children, ...props }) {
 	return (

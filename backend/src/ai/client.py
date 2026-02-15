@@ -731,6 +731,19 @@ class LLMClient:
                 normalized = content.strip()
                 if normalized:
                     return normalized
+            if isinstance(content, list):
+                text_parts: list[str] = []
+                for part in content:
+                    if not isinstance(part, dict):
+                        continue
+                    if part.get("type") != "text":
+                        continue
+                    text = part.get("text")
+                    if isinstance(text, str) and text.strip():
+                        text_parts.append(text.strip())
+                normalized = " ".join(text_parts).strip()
+                if normalized:
+                    return normalized
         return None
 
     def _filter_schema_list(self, schemas: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
