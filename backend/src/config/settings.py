@@ -27,13 +27,13 @@ class Settings(BaseSettings):
     AUTH_REQUIRE_EMAIL_VERIFICATION: bool = False
     TRUSTED_PROXY_CIDRS: str = ""
 
-    # Password policy
-    AUTH_PASSWORD_MIN_LENGTH: int = 12
-    AUTH_PASSWORD_REQUIRE_UPPERCASE: bool = True
-    AUTH_PASSWORD_REQUIRE_LOWERCASE: bool = True
-    AUTH_PASSWORD_REQUIRE_DIGIT: bool = True
-    AUTH_PASSWORD_REQUIRE_SYMBOL: bool = True
-    AUTH_PASSWORD_DISALLOW_WHITESPACE: bool = True
+    # Password policy defaults aligned with frontend behavior (min length + zxcvbn feedback).
+    AUTH_PASSWORD_MIN_LENGTH: int = 8
+    AUTH_PASSWORD_REQUIRE_UPPERCASE: bool = False
+    AUTH_PASSWORD_REQUIRE_LOWERCASE: bool = False
+    AUTH_PASSWORD_REQUIRE_DIGIT: bool = False
+    AUTH_PASSWORD_REQUIRE_SYMBOL: bool = False
+    AUTH_PASSWORD_DISALLOW_WHITESPACE: bool = False
 
     # Cookie config
     AUTH_COOKIE_NAME: str = "access_token"

@@ -117,14 +117,19 @@ def format_error_response(
 
 async def handle_validation_errors(request: Request, exc: Exception) -> JSONResponse:
     """Handle validation errors from Pydantic and custom validators."""
-    logger.info(f"Validation error on {request.method} {request.url.path}", extra={"error": str(exc)})
-
     if isinstance(exc, PydanticValidationError):
         # Extract field errors from Pydantic
         errors = []
         for error in exc.errors():
             field = " -> ".join(str(loc) for loc in error["loc"])
             errors.append({"field": field, "message": error["msg"], "type": error["type"]})
+
+        logger.warning(
+            "Validation requirements not met on %s %s",
+            request.method,
+            request.url.path,
+            extra={"validation_errors": errors},
+        )
 
         return format_error_response(
             category=ErrorCategory.VALIDATION,
@@ -134,6 +139,12 @@ async def handle_validation_errors(request: Request, exc: Exception) -> JSONResp
             metadata={"errors": errors},
         )
     # Custom validation error
+    logger.warning(
+        "Validation requirements not met on %s %s",
+        request.method,
+        request.url.path,
+        extra={"error": str(exc)},
+    )
     return format_error_response(
         category=ErrorCategory.VALIDATION,
         code=ErrorCode.INVALID_INPUT,

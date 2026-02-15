@@ -3,6 +3,7 @@ import { useState } from "react"
 import AuthPageShell from "@/features/auth/components/AuthPageShell"
 import PasswordStrengthMeter from "@/features/auth/components/PasswordStrengthMeter"
 import { isValidEmail } from "@/features/auth/emailValidation"
+import { getPasswordPolicyValidationMessage } from "@/features/auth/passwordPolicy"
 import logger from "@/lib/logger"
 import { getPasswordStrength } from "../passwordStrength"
 
@@ -19,6 +20,7 @@ function SignupForm({
 	onGoogle = () => {},
 	errorMessage = "",
 	successMessage = "",
+	passwordPolicy = null,
 }) {
 	const [fullName, setFullName] = useState("")
 	const [email, setEmail] = useState("")
@@ -68,6 +70,11 @@ function SignupForm({
 
 		if (!password) {
 			newErrors.password = REQUIRED_FIELD_MESSAGE
+		} else {
+			const passwordValidationMessage = getPasswordPolicyValidationMessage(password, passwordPolicy)
+			if (passwordValidationMessage) {
+				newErrors.password = passwordValidationMessage
+			}
 		}
 
 		const usernameError = validateUsername(normalizedUsername)

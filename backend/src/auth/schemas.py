@@ -153,10 +153,24 @@ class VerifyEmailRequest(BaseModel):
     model_config = _AUTH_SCHEMA_CONFIG
 
 
+class PasswordPolicyResponse(BaseModel):
+    """Password policy configuration exposed for frontend validation parity."""
+
+    min_length: int
+    require_uppercase: bool
+    require_lowercase: bool
+    require_digit: bool
+    require_symbol: bool
+    disallow_whitespace: bool
+
+    model_config = _AUTH_SCHEMA_CONFIG
+
+
 class AuthOptionsResponse(BaseModel):
     """Public auth configuration for the frontend."""
 
     provider: str
     google_oauth_available: bool
+    password_policy: PasswordPolicyResponse
 
     model_config = _AUTH_SCHEMA_CONFIG

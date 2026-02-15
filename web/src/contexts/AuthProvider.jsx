@@ -4,6 +4,23 @@ import { api } from "@/lib/apiClient"
 import logger from "@/lib/logger"
 import { AuthContext } from "./AuthContext"
 
+const getErrorDetailMessage = (error) => {
+	const detail = error?.data?.detail
+	if (typeof detail === "string") {
+		return detail
+	}
+	if (Array.isArray(detail)) {
+		const messages = detail.map((item) => item?.msg).filter(Boolean)
+		if (messages.length > 0) {
+			return messages.join(", ")
+		}
+	}
+	if (detail && typeof detail === "object" && typeof detail.message === "string") {
+		return detail.message
+	}
+	return null
+}
+
 export function AuthProvider({ children }) {
 	const [user, setUser] = useState(null)
 	const [loading, setLoading] = useState(true)
@@ -92,9 +109,10 @@ export function AuthProvider({ children }) {
 
 			return { success: true }
 		} catch (error) {
+			const detailMessage = getErrorDetailMessage(error)
 			return {
 				success: false,
-				error: error.data?.detail || error.message || "Signup failed",
+				error: detailMessage || error.message || "Signup failed",
 			}
 		}
 	}
