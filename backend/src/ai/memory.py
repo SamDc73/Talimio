@@ -1,17 +1,23 @@
 """
 Simplified async memory manager using mem0's AsyncMemory.
 
-Key optimizations:
-- Single initialization - reuses AsyncMemory client across all calls
-- Let mem0 handle all connection pooling internally
-- Minimal wrapper - rely on mem0's built-in features
-- Proper error handling without breaking the flow
+Key design:
+- Single initialization -- reuses AsyncMemory client across all calls
+- One database source of truth from DATABASE_URL
+- Checked psycopg3 connection pool injected into mem0
+- Retry once on transient DB connection errors by resetting the memory client
+- Proper error handling: best-effort -- memory failures never break the
+  primary request flow
 """
 
 import logging
+from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from typing import Any
 from uuid import UUID
+
+import psycopg
+from psycopg_pool import ConnectionPool
 
 from src.ai.mem0_telemetry_disable_patch import apply_mem0_telemetry_disable_patch
 
@@ -33,6 +39,10 @@ logger = logging.getLogger(__name__)
 
 # Module-level instance - initialized once at startup
 _memory_client: AsyncMemory | None = None
+
+_MEMORY_POOL_MIN_CONNECTIONS = 1
+_MEMORY_POOL_MAX_CONNECTIONS = 3
+_MEMORY_DB_MAX_ATTEMPTS = 2
 
 
 def _memory_is_configured() -> bool:
@@ -72,8 +82,6 @@ def _get_memory_config() -> dict[str, Any]:
     vector_store_config: dict[str, Any] = {
         "connection_string": connection_string,
         "collection_name": "learning_memories",
-        "minconn": 1,
-        "maxconn": 3,
     }
     if embedding_dims is not None:
         vector_store_config["embedding_model_dims"] = embedding_dims
@@ -98,6 +106,17 @@ def _get_memory_config() -> dict[str, Any]:
     }
 
 
+def _build_checked_connection_pool(connection_string: str) -> ConnectionPool:
+    """Create a psycopg3 pool that validates connections on checkout."""
+    return ConnectionPool(
+        conninfo=connection_string,
+        min_size=_MEMORY_POOL_MIN_CONNECTIONS,
+        max_size=_MEMORY_POOL_MAX_CONNECTIONS,
+        check=ConnectionPool.check_connection,
+        open=True,
+    )
+
+
 async def get_memory_client() -> AsyncMemory:
     """Get or create the singleton AsyncMemory client."""
     global _memory_client  # noqa: PLW0603
@@ -107,16 +126,65 @@ async def get_memory_client() -> AsyncMemory:
             # Memory explicitly disabled via missing config; do nothing
             msg = "Memory disabled (MEMORY_* not set)"
             raise RuntimeError(msg)
+        pool: ConnectionPool | None = None
         try:
             apply_mem0_litellm_embedder_patch()
             config = _get_memory_config()
+            vector_store = config.get("vector_store")
+            vector_store_config = vector_store.get("config") if isinstance(vector_store, dict) else None
+            if not isinstance(vector_store_config, dict):
+                msg = "Invalid mem0 vector store configuration type"
+                raise TypeError(msg)
+            connection_string = vector_store_config.get("connection_string")
+            if not isinstance(connection_string, str):
+                msg = "Invalid mem0 vector store connection string type"
+                raise TypeError(msg)
+            if not connection_string:
+                msg = "Missing mem0 vector store connection string"
+                raise ValueError(msg)
+            pool = _build_checked_connection_pool(connection_string)
+            vector_store_config["connection_pool"] = pool
             _memory_client = AsyncMemory(config=MemoryConfig(**config))
-            logger.info("AsyncMemory client initialized with connection pooling")
+            logger.info("AsyncMemory client initialized with checked psycopg connection pool")
         except Exception:
+            if pool is not None:
+                with suppress(Exception):
+                    pool.close()
             logger.exception("Failed to initialize AsyncMemory")
             raise
 
     return _memory_client
+
+
+async def _run_memory_operation[MemoryResultT](
+    *,
+    operation: str,
+    execute: Callable[[AsyncMemory], Awaitable[MemoryResultT]],
+    fallback: MemoryResultT,
+) -> MemoryResultT:
+    """Execute a mem0 operation and retry once after transient DB failures."""
+    for attempt in range(1, _MEMORY_DB_MAX_ATTEMPTS + 1):
+        try:
+            client = await get_memory_client()
+            return await execute(client)
+        except (TimeoutError, ConnectionError, OSError, psycopg.Error) as error:
+            if attempt < _MEMORY_DB_MAX_ATTEMPTS:
+                logger.warning(
+                    "Memory %s failed with transient DB error on attempt %s/%s: %s",
+                    operation,
+                    attempt,
+                    _MEMORY_DB_MAX_ATTEMPTS,
+                    error,
+                )
+                await cleanup_memory_client()
+                continue
+            logger.warning("Memory %s failed after retry: %s", operation, error)
+            return fallback
+        except (RuntimeError, TypeError, ValueError) as error:
+            logger.warning("Memory %s failed: %s", operation, error)
+            return fallback
+
+    return fallback
 
 
 async def add_memory(
@@ -130,10 +198,8 @@ async def add_memory(
     """Add memory for a user."""
     if not _memory_is_configured():
         return {}
-    try:
-        client = await get_memory_client()
 
-        # Add memory using mem0's async method
+    async def _execute(client: AsyncMemory) -> dict[str, Any]:
         result = await client.add(
             messages=messages,
             user_id=str(user_id),
@@ -141,13 +207,14 @@ async def add_memory(
             run_id=run_id,
             metadata=metadata,
         )
-
-        logger.debug(f"Added memory for user {user_id}")
+        logger.debug("Added memory for user %s", user_id)
         return result or {}
 
-    except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
-        logger.warning(f"Failed to add memory for user {user_id}: {e}")
-        return {}  # Don't break the flow
+    return await _run_memory_operation(
+        operation=f"add for user {user_id}",
+        execute=_execute,
+        fallback={},
+    )
 
 
 async def get_memories(
@@ -160,8 +227,8 @@ async def get_memories(
     """Get all memories for a user."""
     if not _memory_is_configured():
         return []
-    try:
-        client = await get_memory_client()
+
+    async def _execute(client: AsyncMemory) -> list[dict[str, Any]]:
         results = await client.get_all(
             user_id=str(user_id),
             agent_id=agent_id,
@@ -173,9 +240,11 @@ async def get_memories(
             return results.get("results", [])
         return []
 
-    except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
-        logger.warning(f"Failed to get memories for user {user_id}: {e}")
-        return []
+    return await _run_memory_operation(
+        operation=f"get all for user {user_id}",
+        execute=_execute,
+        fallback=[],
+    )
 
 
 async def search_memories(
@@ -193,8 +262,7 @@ async def search_memories(
     if not query or not query.strip():
         return []
 
-    try:
-        client = await get_memory_client()
+    async def _execute(client: AsyncMemory) -> list[dict[str, Any]]:
         results = await client.search(
             query=query,
             user_id=str(user_id),
@@ -208,24 +276,28 @@ async def search_memories(
             return results.get("results", [])
         return []
 
-    except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
-        logger.warning(f"Memory search failed for user {user_id}: {e}")
-        return []
+    return await _run_memory_operation(
+        operation=f"search for user {user_id}",
+        execute=_execute,
+        fallback=[],
+    )
 
 
 async def delete_memory(user_id: UUID, memory_id: str) -> bool:
     """Delete a specific memory."""
     if not _memory_is_configured():
         return False
-    try:
-        client = await get_memory_client()
+
+    async def _execute(client: AsyncMemory) -> bool:
         await client.delete(memory_id)
-        logger.info(f"Deleted memory {memory_id} for user {user_id}")
+        logger.info("Deleted memory %s for user %s", memory_id, user_id)
         return True
 
-    except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
-        logger.warning(f"Failed to delete memory {memory_id}: {e}")
-        return False
+    return await _run_memory_operation(
+        operation=f"delete memory {memory_id}",
+        execute=_execute,
+        fallback=False,
+    )
 
 
 async def delete_all_memories(
@@ -237,18 +309,21 @@ async def delete_all_memories(
     """Delete all memories for a user (optionally scoped by agent/run)."""
     if not _memory_is_configured():
         return True
-    try:
-        client = await get_memory_client()
+
+    async def _execute(client: AsyncMemory) -> bool:
         await client.delete_all(
             user_id=str(user_id),
             agent_id=agent_id,
             run_id=run_id,
         )
-        logger.info(f"Cleared memories for user {user_id}")
+        logger.info("Cleared memories for user %s", user_id)
         return True
-    except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
-        logger.warning(f"Failed to clear memories for user {user_id}: {e}")
-        return False
+
+    return await _run_memory_operation(
+        operation=f"clear all for user {user_id}",
+        execute=_execute,
+        fallback=False,
+    )
 
 
 async def cleanup_memory_client() -> None:
