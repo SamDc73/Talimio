@@ -183,7 +183,9 @@ class LLMClient:
             ):
                 return AITimeoutError("LLM request timed out")
 
-            if isinstance(current, (ValidationError, litellm.JSONSchemaValidationError, litellm.APIResponseValidationError)):
+            if isinstance(
+                current, (ValidationError, litellm.JSONSchemaValidationError, litellm.APIResponseValidationError)
+            ):
                 return AISchemaValidationError("Structured response failed schema validation")
 
             provider_error_types = (
@@ -385,15 +387,26 @@ class LLMClient:
                 msg = f"Tool autonomy loop exceeded {_MAX_AUTONOMY_ROUNDS} rounds"
                 raise AIToolExecutionError(msg)
 
+            effective_tool_choice = request.tool_choice
+            if request.response_model is not None and schema_attempts > 0:
+                effective_tool_choice = "none"
+
+            response_format: dict[str, Any] | None = None
+            if request.response_model is not None:
+                should_enforce_provider_schema = (
+                    effective_tool_choice in (None, "none")
+                    or not request.tool_schemas
+                )
+                if should_enforce_provider_schema:
+                    response_format = self._build_response_format(request.response_model)
+
             response = await self.complete(
                 messages=conversation,
                 temperature=request.temperature,
                 tools=request.tool_schemas,
-                tool_choice=request.tool_choice,
+                tool_choice=effective_tool_choice,
                 user_id=request.user_id,
-                response_format=self._build_response_format(request.response_model)
-                if request.response_model is not None
-                else None,
+                response_format=response_format,
                 model=request.model,
                 num_retries=request.num_retries,
             )
@@ -442,7 +455,7 @@ class LLMClient:
                         "content": (
                             "Your previous response did not match the required JSON schema. "
                             "Reply again with ONLY valid JSON that matches the schema exactly "
-                            "(no markdown, no commentary, no extra keys)."
+                            "(no markdown, no commentary, no extra keys, do not call tools)."
                         ),
                     }
                 )
