@@ -263,9 +263,11 @@ class CourseContentService:
     ) -> AdaptiveCourseStructure | None:
         """Populate session data via adaptive or prompt-based generation."""
         if not is_adaptive:
-            if prompt:
-                generated = await self._generate_course_from_prompt(prompt, prompt_text, user_id)
-                session_data.update(generated)
+            if not prompt:
+                msg = "Course generation prompt is required for non-adaptive courses"
+                raise ValueError(msg)
+            generated = await self._generate_course_from_prompt(prompt, prompt_text, user_id)
+            session_data.update(generated)
             return None
 
         goal_source = prompt_text or session_data.get("title") or ""
