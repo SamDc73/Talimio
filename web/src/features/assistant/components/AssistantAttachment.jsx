@@ -7,7 +7,7 @@ import {
 	useAssistantApi,
 	useAssistantState,
 } from "@assistant-ui/react"
-import { FileText, PlusIcon, XIcon } from "lucide-react"
+import { PlusIcon, XIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useShallow } from "zustand/shallow"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/Avatar"
@@ -20,7 +20,7 @@ const useFileSrc = (file) => {
 	const [src, setSrc] = useState()
 
 	useEffect(() => {
-		if (!file) {
+		if (!(file instanceof Blob)) {
 			setSrc(undefined)
 			return
 		}
@@ -40,7 +40,7 @@ const useAttachmentSrc = () => {
 	const { file, src } = useAssistantState(
 		useShallow(({ attachment }) => {
 			if (attachment.type !== "image") return {}
-			if (attachment.file) return { file: attachment.file }
+			if (attachment.file instanceof Blob) return { file: attachment.file }
 			const src = attachment.content?.find((c) => c.type === "image")?.image
 			if (!src) return {}
 			return { src }
@@ -51,19 +51,13 @@ const useAttachmentSrc = () => {
 }
 
 function AttachmentPreview({ src }) {
-	const [isLoaded, setIsLoaded] = useState(false)
 	return (
 		<img
 			src={src}
 			alt="Attachment preview"
-			className={
-				isLoaded
-					? "aui-attachment-preview-image-loaded block size-auto max-h-[80vh]  max-w-full object-contain"
-					: "aui-attachment-preview-image-loading hidden"
-			}
-			onLoad={() => setIsLoaded(true)}
+			className="aui-attachment-preview-image block size-auto max-h-[80vh] max-w-full object-contain"
 			decoding="async"
-			loading="lazy"
+			loading="eager"
 		/>
 	)
 }
@@ -92,14 +86,13 @@ function AttachmentPreviewDialog({ children }) {
 }
 
 function AttachmentThumb() {
-	const isImage = useAssistantState(({ attachment }) => attachment.type === "image")
 	const src = useAttachmentSrc()
 
 	return (
 		<Avatar className="aui-attachment-tile-avatar size-full  rounded-none">
 			<AvatarImage src={src} alt="Attachment preview" className="aui-attachment-tile-image object-cover" />
-			<AvatarFallback delayMs={isImage ? 200 : 0}>
-				<FileText className="aui-attachment-tile-fallback-icon size-8 text-muted-foreground" />
+			<AvatarFallback delayMs={200}>
+				<span className="text-muted-foreground text-xs font-medium">IMG</span>
 			</AvatarFallback>
 		</Avatar>
 	)
@@ -109,33 +102,10 @@ function AttachmentUI() {
 	const api = useAssistantApi()
 	const isComposer = api.attachment.source === "composer"
 
-	const isImage = useAssistantState(({ attachment }) => attachment.type === "image")
-	const typeLabel = useAssistantState(({ attachment }) => {
-		const type = attachment.type
-		switch (type) {
-			case "image": {
-				return "Image"
-			}
-			case "document": {
-				return "Document"
-			}
-			case "file": {
-				return "File"
-			}
-			default: {
-				const ExhaustiveCheck = type
-				throw new Error(`Unknown attachment type: ${ExhaustiveCheck}`)
-			}
-		}
-	})
-
 	return (
 		<Tooltip>
 			<AttachmentPrimitive.Root
-				className={cn(
-					"aui-attachment-root relative",
-					isImage && "aui-attachment-root-composer only:[&>#attachment-tile]:size-24"
-				)}
+				className={cn("aui-attachment-root relative", "aui-attachment-root-composer only:[&>#attachment-tile]:size-24")}
 			>
 				<AttachmentPreviewDialog>
 					<TooltipTrigger asChild>
@@ -146,7 +116,7 @@ function AttachmentUI() {
 								isComposer && "aui-attachment-tile-composer border-foreground/20"
 							)}
 							id="attachment-tile"
-							aria-label={`${typeLabel} attachment`}
+							aria-label="Image attachment"
 						>
 							<AttachmentThumb />
 						</button>
@@ -165,7 +135,7 @@ function AttachmentRemove() {
 	return (
 		<AttachmentPrimitive.Remove asChild>
 			<TooltipIconButton
-				tooltip="Remove file"
+				tooltip="Remove image"
 				className="aui-attachment-tile-remove absolute top-1.5 right-1.5 size-3.5 rounded-full bg-background text-muted-foreground opacity-100 shadow-sm hover:bg-background! [&_svg]:text-black hover:[&_svg]:text-destructive"
 				side="top"
 			>
