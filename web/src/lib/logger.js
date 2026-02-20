@@ -49,11 +49,31 @@ class LoggerService {
 	 * Send data to endpoint or console
 	 */
 	async send(data) {
-		// In dev, just log to console with nice formatting
+		// In dev, use plain console logging
 		if (import.meta.env.DEV) {
-			const style = this.getConsoleStyle(data.type)
-			// biome-ignore lint/suspicious/noConsole: Development logging
-			console.log(`%c[${data.type.toUpperCase()}] ${data.event || data.message}`, style, data.data || data)
+			const message = `[${String(data.type || "info").toUpperCase()}] ${data.event || data.message || ""}`
+			const payload = data.data || data
+			switch (data.type) {
+				case "error": {
+					// biome-ignore lint/suspicious/noConsole: Development logging
+					console.error(message, payload)
+					break
+				}
+				case "warn": {
+					// biome-ignore lint/suspicious/noConsole: Development logging
+					console.warn(message, payload)
+					break
+				}
+				case "info": {
+					// biome-ignore lint/suspicious/noConsole: Development logging
+					console.info(message, payload)
+					break
+				}
+				default: {
+					// biome-ignore lint/suspicious/noConsole: Development logging
+					console.log(message, payload)
+				}
+			}
 			return
 		}
 
@@ -77,20 +97,6 @@ class LoggerService {
 		} catch {
 			// Silent fail in production
 		}
-	}
-
-	/**
-	 * Get console styling based on log type
-	 */
-	getConsoleStyle(type) {
-		const styles = {
-			track: "color: #00d4ff; font-weight: bold;",
-			warn: "color: #ffb020; font-weight: bold;",
-			error: "color: #ff5555; font-weight: bold;",
-			info: "color: #00d4ff; font-weight: bold;",
-			timing: "color: #ffff00; font-weight: bold;",
-		}
-		return styles[type] || styles.info
 	}
 
 	/**
@@ -119,8 +125,6 @@ class LoggerService {
 
 		// In dev, also use console.error for better stack traces
 		if (import.meta.env.DEV) {
-			// biome-ignore lint/suspicious/noConsole: Development error logging
-			console.error(`[ERROR] ${message}`, error, context)
 		} else {
 			this.send(errorData)
 		}
