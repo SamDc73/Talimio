@@ -57,6 +57,8 @@ Thumbs.db
 .env.development.local
 .env.test.local
 .env.production.local
+backend/.env.prod
+web/.env.prod
 backend/.env.test
 
 # Compiled output
