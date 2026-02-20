@@ -29,28 +29,6 @@ export default defineConfig(({ mode }) => {
 		optimizeDeps: {
 			include: ["three", "@react-three/fiber", "@react-three/drei", "@react-three/postprocessing", "postprocessing"],
 		},
-		build: {
-			// The PDF engine and app bundle are large; split vendor libs into separate chunks
-			chunkSizeWarningLimit: 3000,
-			rollupOptions: {
-				output: {
-					manualChunks(id) {
-						if (!id.includes("node_modules")) return undefined
-						if (id.includes("@embedpdf") || id.includes("pdfium")) return "pdf"
-						if (id.includes("@uiw") || id.includes("@codemirror") || id.includes("codemirror")) return "codemirror"
-						if (id.includes("@assistant-ui")) return "assistant"
-						if (id.includes("@tanstack")) return "react-query"
-						if (id.includes("framer-motion")) return "framer-motion"
-						if (id.includes("katex") || id.includes("rehype-katex")) return "katex"
-						if (id.includes("@mdx-js") || id.includes("remark") || id.includes("rehype")) return "mdx"
-						if (id.includes("lucide-react")) return "icons"
-						if (id.includes("three") || id.includes("@react-three") || id.includes("postprocessing")) return "three"
-						if (id.includes("react-force-graph") || id.includes("reagraph") || id.includes("@cosmograph")) return "viz"
-						return undefined
-					},
-				},
-			},
-		},
 		server: {
 			port: Number.parseInt(env.VITE_DEV_SERVER_PORT || "5173"),
 			fs: {
