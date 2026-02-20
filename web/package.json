@@ -6,13 +6,13 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "vite build",
+		"cf:build": "pnpm --dir ../landing build && VITE_BASE_PATH=/app/ VITE_ROUTER_BASENAME=/app VITE_API_BASE=https://api.talimio.com/api/v1 pnpm run build && rm -rf ../dist && mkdir -p ../dist/app && cp -R ../landing/dist/. ../dist/ && cp -R dist/. ../dist/app/",
+		"cf:dev": "pnpm run cf:build && npx wrangler pages dev ../dist --local-protocol=https",
 		"lint": "biome check --write",
+		"lint:knip": "pnpm run knip",
 		"lint:eslint": "eslint --fix",
 		"lint:all": "pnpm run lint src && pnpm run lint:eslint src",
-		"preview": "vite preview",
-		"knip": "knip",
-		"knip:fix": "knip --fix",
-		"dead-code": "knip --reporter compact"
+		"preview": "vite preview"
 	},
 	"dependencies": {
 		"@assistant-ui/react": "^0.11.41",
