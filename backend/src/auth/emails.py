@@ -131,6 +131,13 @@ def _build_idempotency_key(*, purpose: str, email: str, token: str) -> str:
     return f"{purpose}/{digest}"
 
 
+def _build_frontend_auth_link(*, path: str, token: str) -> str:
+    settings = get_settings()
+    base = settings.frontend_app_url.rstrip("/")
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    return f"{base}{normalized_path}?token={token}"
+
+
 async def send_email(
     *,
     email_to: str,
@@ -239,7 +246,7 @@ def verify_email_verification_token(token: str) -> EmailVerificationClaims | Non
 async def send_reset_email(*, email: str, token: str) -> None:
     """Send password reset email."""
     settings = get_settings()
-    link = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={token}"
+    link = _build_frontend_auth_link(path="/reset-password", token=token)
     expires_in = settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS
     expires_text = "1 hour" if expires_in == 1 else f"{expires_in} hours"
 
@@ -264,8 +271,7 @@ async def send_reset_email(*, email: str, token: str) -> None:
 
 async def send_verification_email(*, email: str, token: str) -> None:
     """Send email verification email."""
-    settings = get_settings()
-    link = f"{settings.FRONTEND_URL.rstrip('/')}/verify-email?token={token}"
+    link = _build_frontend_auth_link(path="/verify-email", token=token)
     body = f"""\
 <p style="margin:0; font-size:14px; line-height:1.6; color:#475569;">
   Confirm your email to finish setting up your account.

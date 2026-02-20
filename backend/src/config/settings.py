@@ -43,6 +43,9 @@ class Settings(BaseSettings):
 
     # Frontend URL (used for auth redirects / emails)
     FRONTEND_URL: str = "http://localhost:5173"
+    # App URL for auth user-facing flows (email links, OAuth callback redirect).
+    # Defaults to FRONTEND_URL when unset.
+    FRONTEND_APP_URL: str = ""
 
     # CORS (for browser-based clients)
     # Comma-separated list of allowed origins (e.g. "https://talimio.com,http://localhost:5173").
@@ -163,6 +166,12 @@ class Settings(BaseSettings):
     def ai_request_timeout(self) -> int:
         """Get AI request timeout from environment."""
         return self.AI_REQUEST_TIMEOUT
+
+    @property
+    def frontend_app_url(self) -> str:
+        """Get the frontend app URL used for user-facing auth navigation."""
+        configured = self.FRONTEND_APP_URL.strip()
+        return configured or self.FRONTEND_URL
 
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.local"),

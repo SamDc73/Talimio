@@ -741,7 +741,7 @@ async def google_callback(
         )
         session.add(oauth_account)
 
-    redirect_response = RedirectResponse(settings.FRONTEND_URL)
+    redirect_response = RedirectResponse(settings.frontend_app_url)
     await _issue_local_auth_cookie(request, redirect_response, session, user)
     await session.commit()
     return redirect_response
