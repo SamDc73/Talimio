@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@localhost:5432/talimio"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"  # "development", "production"
-    PLATFORM_MODE: str = "oss"  # "oss" or "cloud"
+    PLATFORM_MODE: Literal["cloud", "oss"] = "cloud"
     AUTH_SECRET_KEY: SecretStr = SecretStr("")  # Required for JWT/session/CSRF signing
     MCP_TOKEN_ENCRYPTION_KEY: SecretStr | None = None
 
@@ -123,6 +123,7 @@ class Settings(BaseSettings):
     MIGRATIONS_AUTO_APPLY: bool = True
     MIGRATIONS_VERBOSE: bool = False
     MIGRATIONS_DIR: str | None = None
+    _OSS_DEFAULT_SIGNING_SEED = "talimio-oss-local-dev-signing-seed"
 
     @field_validator("DATABASE_URL")
     @classmethod
@@ -143,6 +144,32 @@ class Settings(BaseSettings):
             msg = "Auth settings integer values must be greater than zero"
             raise ValueError(msg)
         return value
+
+    @model_validator(mode="after")
+    def apply_platform_mode_defaults(self) -> "Settings":
+        """Apply mode-specific defaults when values are not explicitly configured."""
+        model_fields_set = self.model_fields_set
+
+        if self.PLATFORM_MODE == "cloud":
+            if "AUTH_PROVIDER" not in model_fields_set:
+                self.AUTH_PROVIDER = "local"
+            return self
+
+        # PLATFORM_MODE == "oss": local-first defaults for self-hosting.
+        if "AUTH_PROVIDER" not in model_fields_set:
+            self.AUTH_PROVIDER = "local"
+
+        if "AUTH_REQUIRE_EMAIL_VERIFICATION" not in model_fields_set:
+            self.AUTH_REQUIRE_EMAIL_VERIFICATION = False
+
+        if "STORAGE_PROVIDER" not in model_fields_set:
+            self.STORAGE_PROVIDER = "local"
+
+        auth_secret_key = self.AUTH_SECRET_KEY.get_secret_value().strip()
+        if not auth_secret_key and "AUTH_SECRET_KEY" not in model_fields_set:
+            self.AUTH_SECRET_KEY = SecretStr(self._OSS_DEFAULT_SIGNING_SEED)
+
+        return self
 
     @model_validator(mode="after")
     def validate_auth_secret_key_required(self) -> "Settings":
