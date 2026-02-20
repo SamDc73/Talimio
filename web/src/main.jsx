@@ -10,6 +10,21 @@ import "./app.css"
 
 // Create a single QueryClient instance for the entire app
 const queryClient = new QueryClient()
+const getRouterBasename = () => {
+	const configuredBasename = import.meta.env.VITE_ROUTER_BASENAME
+	if (configuredBasename) {
+		return configuredBasename
+	}
+
+	const viteBaseUrl = import.meta.env.BASE_URL || "/"
+	if (viteBaseUrl === "/") {
+		return "/"
+	}
+
+	return viteBaseUrl.endsWith("/") ? viteBaseUrl.slice(0, -1) : viteBaseUrl
+}
+
+const routerBasename = getRouterBasename()
 
 try {
 	const rootElement = document.getElementById("root")
@@ -22,7 +37,7 @@ try {
 		<StrictMode>
 			<ErrorBoundary>
 				<QueryClientProvider client={queryClient}>
-					<BrowserRouter>
+					<BrowserRouter basename={routerBasename}>
 						<TooltipProvider>
 							<App />
 						</TooltipProvider>

@@ -1,0 +1,18 @@
+# Keep Cloud Run source upload minimal for backend deploys.
+.git
+.gitignore
+.gcloudignore
+
+.venv
+.ruff_cache
+.pytest_cache
+.mypy_cache
+__pycache__
+*.log
+
+.env
+.env.*
+
+tests
+uploads
+backend
