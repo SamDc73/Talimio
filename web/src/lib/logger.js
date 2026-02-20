@@ -85,6 +85,7 @@ class LoggerService {
 	getConsoleStyle(type) {
 		const styles = {
 			track: "color: #00d4ff; font-weight: bold;",
+			warn: "color: #ffb020; font-weight: bold;",
 			error: "color: #ff5555; font-weight: bold;",
 			info: "color: #00d4ff; font-weight: bold;",
 			timing: "color: #ffff00; font-weight: bold;",
@@ -130,6 +131,13 @@ class LoggerService {
 	 */
 	info(message, data = {}) {
 		this.send({ type: "info", message, data })
+	}
+
+	/**
+	 * Log warnings
+	 */
+	warn(message, data = {}) {
+		this.send({ type: "warn", message, data })
 	}
 
 	/**
