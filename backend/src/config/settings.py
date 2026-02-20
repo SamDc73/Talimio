@@ -120,7 +120,7 @@ class Settings(BaseSettings):
     E2B_SDK_LOG_LEVEL: str = "WARNING"
 
     # Migrations
-    MIGRATIONS_AUTO_APPLY: bool = True
+    MIGRATIONS_AUTO_APPLY: bool = False
     MIGRATIONS_VERBOSE: bool = False
     MIGRATIONS_DIR: str | None = None
     _OSS_DEFAULT_SIGNING_SEED = "talimio-oss-local-dev-signing-seed"
@@ -164,6 +164,9 @@ class Settings(BaseSettings):
 
         if "STORAGE_PROVIDER" not in model_fields_set:
             self.STORAGE_PROVIDER = "local"
+
+        if "MIGRATIONS_AUTO_APPLY" not in model_fields_set:
+            self.MIGRATIONS_AUTO_APPLY = True
 
         auth_secret_key = self.AUTH_SECRET_KEY.get_secret_value().strip()
         if not auth_secret_key and "AUTH_SECRET_KEY" not in model_fields_set:
