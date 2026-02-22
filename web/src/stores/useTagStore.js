@@ -39,7 +39,7 @@ const useTagStore = create(
 				})
 
 				try {
-					const tags = await api.get("/tags/tags")
+					const tags = await api.get("/tags")
 
 					set((state) => {
 						state.tags = {}
@@ -111,7 +111,7 @@ const useTagStore = create(
 					throw new Error(`Unsupported content type: ${contentType}`)
 				}
 
-				const tags = await api.get(`/tags/${normalizedType}/${contentId}/tags`)
+				const tags = await api.get(`/tags/${normalizedType}/${contentId}`)
 
 				set((state) => {
 					if (!state.contentTags[contentType]) {
@@ -135,7 +135,7 @@ const useTagStore = create(
 					throw new Error(`Unsupported content type: ${contentType}`)
 				}
 
-				const result = await api.put(`/tags/${normalizedType}/${contentId}/tags`, {
+				const result = await api.put(`/tags/${normalizedType}/${contentId}`, {
 					tags: tagNames,
 				})
 
