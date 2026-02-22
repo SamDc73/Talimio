@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from src.config.schema_casing import build_camel_config
 from src.config.settings import get_settings
 
 
@@ -17,13 +18,7 @@ _MIN_PASSWORD_LENGTH = get_settings().AUTH_PASSWORD_MIN_LENGTH
 _MAX_PASSWORD_LENGTH = 128
 
 
-def _to_camel(string: str) -> str:
-    """Convert snake_case names to camelCase for API payloads."""
-    parts = string.split("_")
-    return parts[0] + "".join(part.capitalize() for part in parts[1:])
-
-
-_AUTH_SCHEMA_CONFIG = ConfigDict(alias_generator=_to_camel, populate_by_name=True)
+_AUTH_SCHEMA_CONFIG = build_camel_config()
 
 
 class SignupRequest(BaseModel):

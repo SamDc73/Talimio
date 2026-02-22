@@ -3,13 +3,15 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
+
+from src.config.schema_casing import build_camel_config
 
 
 class VideoBase(BaseModel):
     """Base schema for video data."""
 
-    model_config = ConfigDict(populate_by_name=True, str_strip_whitespace=True)
+    model_config = build_camel_config(str_strip_whitespace=True)
 
     youtube_id: str = Field(..., min_length=1, max_length=20, alias="youtubeId")
     url: str = Field(..., min_length=1, max_length=255)
@@ -41,7 +43,7 @@ class VideoCreate(BaseModel):
 class VideoUpdate(BaseModel):
     """Schema for updating video data."""
 
-    model_config = ConfigDict(str_strip_whitespace=True, populate_by_name=True)
+    model_config = build_camel_config(str_strip_whitespace=True)
 
     title: str | None = Field(None, min_length=1, max_length=500)
     description: str | None = None
@@ -58,7 +60,7 @@ class VideoInDB(VideoBase):
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = build_camel_config(from_attributes=True)
 
     @field_validator("tags", mode="before")
     @classmethod
@@ -92,6 +94,8 @@ class VideoResponse(VideoInDB):
 class VideoListResponse(BaseModel):
     """Schema for paginated video list response."""
 
+    model_config = build_camel_config()
+
     items: list[VideoResponse]
     total: int
     page: int
@@ -101,7 +105,7 @@ class VideoListResponse(BaseModel):
 class VideoChapterBase(BaseModel):
     """Base schema for video chapter."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = build_camel_config()
 
     chapter_number: int = Field(..., ge=1, alias="chapterNumber")
     title: str = Field(..., max_length=500)
@@ -113,7 +117,7 @@ class VideoChapterBase(BaseModel):
 class VideoChapterResponse(VideoChapterBase):
     """Schema for video chapter response."""
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = build_camel_config(from_attributes=True)
 
     id: UUID
     video_id: UUID = Field(alias="videoId")
@@ -124,11 +128,15 @@ class VideoChapterResponse(VideoChapterBase):
 class VideoChapterStatusUpdate(BaseModel):
     """Schema for updating video chapter status."""
 
+    model_config = build_camel_config()
+
     status: str = Field(..., pattern="^(not_started|in_progress|completed)$")
 
 
 class VideoChapterProgressSync(BaseModel):
     """Schema for syncing chapter progress from web app."""
+
+    model_config = build_camel_config()
 
     completed_chapter_ids: list[str] = Field(
         ..., description="List of completed chapter IDs", alias="completedChapterIds"
@@ -139,7 +147,7 @@ class VideoChapterProgressSync(BaseModel):
 class TranscriptSegment(BaseModel):
     """Schema for video transcript segment with timestamp."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = build_camel_config()
 
     start_time: float = Field(..., ge=0, description="Start time in seconds", alias="startTime")
     end_time: float = Field(..., ge=0, description="End time in seconds", alias="endTime")
@@ -149,7 +157,7 @@ class TranscriptSegment(BaseModel):
 class VideoTranscriptResponse(BaseModel):
     """Schema for video transcript response."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = build_camel_config()
 
     video_id: UUID = Field(..., alias="videoId")
     segments: list[TranscriptSegment] = Field(..., description="List of transcript segments")
@@ -159,11 +167,10 @@ class VideoTranscriptResponse(BaseModel):
 class RAGStatusResponse(BaseModel):
     """Response model for RAG embedding status."""
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = build_camel_config(from_attributes=True)
 
     video_id: UUID
     rag_status: str  # pending, processing, completed, failed
     rag_processed_at: str | None = None
     message: str
-
 

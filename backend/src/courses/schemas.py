@@ -8,16 +8,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
-def _to_camel(string: str) -> str:
-    parts = string.split("_")
-    if len(parts) == 1:
-        return string
-    head, *tail = parts
-    return head + "".join(word.capitalize() for word in tail)
+from src.config.schema_casing import to_camel
 
 
-_CAMEL_CONFIG = {"alias_generator": _to_camel, "populate_by_name": True}
+_CAMEL_CONFIG = {"alias_generator": to_camel, "populate_by_name": True}
 
 
 class LessonSummary(BaseModel):

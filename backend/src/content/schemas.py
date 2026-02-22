@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from src.config.schema_casing import build_camel_config
+
 
 class ContentType(StrEnum):
     """Enumeration of content types available in the learning platform."""
@@ -20,7 +22,7 @@ class ProgressData(BaseModel):
     completed_items: int = Field(ge=0)
     total_items: int = Field(ge=0)
 
-    model_config = {"populate_by_name": True}
+    model_config = build_camel_config()
 
 
 class ContentMetadata(BaseModel):
@@ -38,7 +40,7 @@ class ContentMetadata(BaseModel):
     pages: int | None = None
     file_type: str | None = None
 
-    model_config = {"extra": "allow", "populate_by_name": True}
+    model_config = build_camel_config(extra="allow")
 
 
 class ContentItemBase(BaseModel):
@@ -66,7 +68,7 @@ class ContentItemBase(BaseModel):
     # Type-specific metadata
     metadata: ContentMetadata = Field(default_factory=ContentMetadata)
 
-    model_config = {"populate_by_name": True}
+    model_config = build_camel_config()
 
 
 class YoutubeContent(ContentItemBase):
@@ -77,7 +79,7 @@ class YoutubeContent(ContentItemBase):
     length: int | None = None  # Duration in seconds
     thumbnail_url: str | None = None
 
-    model_config = {"populate_by_name": True}
+    model_config = build_camel_config()
 
 
 
@@ -90,7 +92,7 @@ class BookContent(ContentItemBase):
     current_page: int = 0
     toc_progress: dict[str, Any] | None = None  # Internal use
 
-    model_config = {"populate_by_name": True}
+    model_config = build_camel_config()
 
 
 class CourseContent(ContentItemBase):
@@ -101,7 +103,7 @@ class CourseContent(ContentItemBase):
     lesson_count: int = 0
     completed_lessons: int = 0
 
-    model_config = {"populate_by_name": True}
+    model_config = build_camel_config()
 
 
 class ContentListResponse(BaseModel):
@@ -112,4 +114,4 @@ class ContentListResponse(BaseModel):
     page: int
     per_page: int  # Changed from page_size to match spec
 
-    model_config = {"populate_by_name": True}
+    model_config = build_camel_config()
