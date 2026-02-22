@@ -14,10 +14,10 @@ from .schemas import HighlightCreate, HighlightResponse
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["highlights"])
+router = APIRouter(prefix="/api/v1", tags=["highlights"])
 
 
-@router.get("/api/v1/books/{book_id}/highlights")
+@router.get("/books/{book_id}/highlights")
 async def get_book_highlights(
     book_id: UUID,
     auth: CurrentAuth,
@@ -54,7 +54,7 @@ async def get_book_highlights(
         ) from e
 
 
-@router.post("/api/v1/books/{book_id}/highlights", status_code=status.HTTP_201_CREATED)
+@router.post("/books/{book_id}/highlights", status_code=status.HTTP_201_CREATED)
 async def create_book_highlight(
     book_id: UUID,
     highlight_create: HighlightCreate,
@@ -90,7 +90,7 @@ async def create_book_highlight(
         ) from e
 
 
-@router.delete("/api/v1/highlights/{highlight_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/highlights/{highlight_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_highlight(
     highlight_id: UUID,
     auth: CurrentAuth,
@@ -123,7 +123,7 @@ async def delete_highlight(
         ) from e
 
 
-@router.put("/api/v1/highlights/{highlight_id}")
+@router.put("/highlights/{highlight_id}")
 async def update_highlight(
     highlight_id: UUID,
     highlight_update: HighlightCreate,

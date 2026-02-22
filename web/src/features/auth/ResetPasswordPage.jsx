@@ -43,13 +43,13 @@ function ResetPasswordPage() {
 
 		const newErrors = {}
 
-		if (!newPassword) {
-			newErrors.newPassword = REQUIRED_FIELD_MESSAGE
-		} else {
+		if (newPassword) {
 			const passwordValidationMessage = getPasswordPolicyValidationMessage(newPassword, authOptions?.passwordPolicy)
 			if (passwordValidationMessage) {
 				newErrors.newPassword = passwordValidationMessage
 			}
+		} else {
+			newErrors.newPassword = REQUIRED_FIELD_MESSAGE
 		}
 
 		if (!confirmPassword) {

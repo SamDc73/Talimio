@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from sqlalchemy import text
@@ -204,7 +204,7 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
 
 def _register_frontend_routes(app: FastAPI) -> None:
-    """Serve built frontend files when a bundled SPA is present."""
+    """Serve built frontend files when a bundled web app is present."""
     frontend_dist_dir = Path(__file__).resolve().parent.parent / "frontend_dist"
     index_file_path = frontend_dist_dir / "index.html"
     if not index_file_path.exists():
@@ -214,22 +214,18 @@ def _register_frontend_routes(app: FastAPI) -> None:
     assets_dir = frontend_dist_dir / "assets"
     if assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="frontend-assets")
-    app.mount("/app", StaticFiles(directory=str(frontend_dist_dir)), name="frontend-app-root")
 
-    @app.get("/{full_path:path}", include_in_schema=False, response_model=None)
-    async def serve_frontend_app(full_path: str) -> Response:
-        reserved_paths = {"api", "health", "docs", "redoc", "openapi.json"}
-        if full_path in reserved_paths or full_path.startswith("api/"):
-            return JSONResponse({"detail": "Not Found"}, status_code=status.HTTP_404_NOT_FOUND)
+    logo_path = frontend_dist_dir / "logo.png"
 
-        if full_path:
-            requested_file_path = (frontend_dist_dir / full_path).resolve()
-            if not requested_file_path.is_relative_to(frontend_dist_dir):
-                return JSONResponse({"detail": "Not Found"}, status_code=status.HTTP_404_NOT_FOUND)
-            if requested_file_path.is_file():
-                return FileResponse(requested_file_path)
-
+    @app.get("/", include_in_schema=False, response_model=None)
+    async def serve_frontend_index() -> FileResponse:
         return FileResponse(index_file_path)
+
+    @app.get("/logo.png", include_in_schema=False, response_model=None)
+    async def serve_frontend_logo() -> FileResponse | JSONResponse:
+        if not logo_path.exists():
+            return JSONResponse({"detail": "Not Found"}, status_code=status.HTTP_404_NOT_FOUND)
+        return FileResponse(logo_path)
 
 
 def create_app() -> FastAPI:
