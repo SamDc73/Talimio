@@ -7,9 +7,10 @@ import uuid
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from src.ai.client import LLMClient
+from src.config.schema_casing import build_camel_config
 from src.config.settings import get_settings
 from src.courses.schemas import GradeErrorHighlight, GradeRequest, GradeResponse, VerifierInfo
 from src.courses.services.jxg_state_verifier import JXGStateVerifier
@@ -19,14 +20,6 @@ from src.courses.services.latex_expression_verifier import (
 )
 
 
-def _to_camel(string: str) -> str:
-    parts = string.split("_")
-    if len(parts) == 1:
-        return string
-    head, *tail = parts
-    return head + "".join(word.capitalize() for word in tail)
-
-
 class GradingCoachFeedback(BaseModel):
     """Structured output from the grading coach LLM."""
 
@@ -34,7 +27,7 @@ class GradingCoachFeedback(BaseModel):
     tags: list[str] = Field(default_factory=list)
     error_highlight: GradeErrorHighlight | None = None
 
-    model_config = ConfigDict(alias_generator=_to_camel, populate_by_name=True, extra="forbid")
+    model_config = build_camel_config(extra="forbid")
 
 
 ALLOWED_GRADING_TAGS = {

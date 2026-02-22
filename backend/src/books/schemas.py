@@ -2,13 +2,15 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
+
+from src.config.schema_casing import build_camel_config
 
 
 class BookUpdate(BaseModel):
     """Schema for updating a book."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = build_camel_config()
 
     title: str | None = Field(None, max_length=500)
     subtitle: str | None = Field(None, max_length=500)
@@ -25,7 +27,7 @@ class BookUpdate(BaseModel):
 class TableOfContentsItem(BaseModel):
     """Schema for table of contents item."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = build_camel_config()
 
     id: str
     title: str
@@ -36,10 +38,25 @@ class TableOfContentsItem(BaseModel):
     children: list["TableOfContentsItem"] = Field(default_factory=list)
 
 
+class BookTocChapterResponse(BaseModel):
+    """Canonical chapter response for book table-of-contents endpoints."""
+
+    model_config = build_camel_config()
+
+    id: str
+    title: str
+    page: int | None = None
+    start_page: int | None = Field(default=None, alias="startPage")
+    end_page: int | None = Field(default=None, alias="endPage")
+    level: int = 0
+    completed: bool = False
+    children: list["BookTocChapterResponse"] = Field(default_factory=list)
+
+
 class BookResponse(BaseModel):
     """Schema for book response."""
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = build_camel_config(from_attributes=True)
 
     id: UUID
     title: str
@@ -101,7 +118,7 @@ class BookResponse(BaseModel):
 class BookProgressBase(BaseModel):
     """Base schema for book progress."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = build_camel_config()
 
     current_page: int = Field(default=1, ge=1, alias="currentPage")
     progress_percentage: float = Field(default=0.0, ge=0.0, le=100.0, alias="progressPercentage")
@@ -117,7 +134,7 @@ class BookProgressBase(BaseModel):
 class BookProgressUpdate(BaseModel):
     """Schema for updating book progress."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = build_camel_config()
 
     current_page: int | None = Field(None, ge=1, alias="currentPage")
     total_pages: int | None = Field(None, ge=1, alias="totalPages")
@@ -132,7 +149,7 @@ class BookProgressUpdate(BaseModel):
 class BookProgressResponse(BookProgressBase):
     """Schema for book progress response."""
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = build_camel_config(from_attributes=True)
 
     id: UUID | None = None  # Optional - might not exist for unsaved progress
     book_id: UUID = Field(alias="bookId")
@@ -203,6 +220,8 @@ class BookWithProgress(BookResponse):
 class BookListResponse(BaseModel):
     """Schema for book list response."""
 
+    model_config = build_camel_config()
+
     items: list[BookResponse]
     total: int
     page: int
@@ -211,6 +230,8 @@ class BookListResponse(BaseModel):
 
 class BookChapterBase(BaseModel):
     """Base schema for book chapter."""
+
+    model_config = build_camel_config()
 
     chapter_number: int = Field(..., ge=1, alias="chapterNumber")
     title: str = Field(..., max_length=500)
@@ -222,7 +243,7 @@ class BookChapterBase(BaseModel):
 class BookChapterResponse(BookChapterBase):
     """Schema for book chapter response."""
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = build_camel_config(from_attributes=True)
 
     id: UUID
     book_id: UUID = Field(alias="bookId")
@@ -233,11 +254,15 @@ class BookChapterResponse(BookChapterBase):
 class BookChapterStatusUpdate(BaseModel):
     """Schema for updating book chapter status."""
 
+    model_config = build_camel_config()
+
     status: str = Field(..., pattern="^(not_started|in_progress|completed)$")
 
 
 class BookChapterBatchStatusUpdate(BaseModel):
     """Schema for batch updating book chapter statuses."""
+
+    model_config = build_camel_config()
 
     chapter_id: UUID = Field(..., alias="chapterId")
     status: str = Field(..., pattern="^(not_started|in_progress|completed)$")
@@ -245,3 +270,4 @@ class BookChapterBatchStatusUpdate(BaseModel):
 
 # Update forward references
 TableOfContentsItem.model_rebuild()
+BookTocChapterResponse.model_rebuild()
