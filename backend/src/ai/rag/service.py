@@ -8,7 +8,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -58,7 +58,7 @@ class RAGService:
         stmt = select(Course.id).where(Course.id == course_id, Course.user_id == user_id)
         result = await session.execute(stmt)
         if result.scalar_one_or_none() is None:
-            raise HTTPException(status_code=404, detail="Course not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
     async def upload_document(
         self,
@@ -99,7 +99,7 @@ class RAGService:
                         "File %s too large: %.2fMB > %dMB limit", filename, file_size_mb, self.config.max_file_size_mb
                     )
                     raise HTTPException(
-                        status_code=413,
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                         detail=f"File too large: {file_size_mb:.1f}MB exceeds {self.config.max_file_size_mb}MB limit",
                     )
 
@@ -142,13 +142,15 @@ class RAGService:
             row_map = result.mappings().first()
             if row_map is None:
                 msg = f"Course document {doc.id} not found after creation"
-                raise HTTPException(status_code=404, detail=msg)
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
 
             return DocumentResponse.model_validate(row_map)
 
-        except Exception as e:
+        except HTTPException:
+            raise
+        except Exception as error:
             logger.exception("Failed to upload document")
-            raise HTTPException(status_code=500, detail=str(e)) from e
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
 
     async def process_document(self, session: AsyncSession, document_id: int) -> None:
         """Process a document (parse, chunk, embed, index)."""
@@ -607,7 +609,7 @@ class RAGService:
             doc = result.fetchone()
 
             if not doc:
-                raise HTTPException(status_code=404, detail="Document not found")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
             # Verify user owns the course that contains this document
             await self._ensure_course_owned(session, user_id, doc.course_id)
@@ -628,7 +630,7 @@ class RAGService:
             )
             chunks_deleted = int(getattr(chunks_result, "rowcount", 0) or 0)
             if chunks_deleted > 0:
-                logger.info(f"Deleted {chunks_deleted} RAG chunks for document {document_id}")
+                logger.info("Deleted %s RAG chunks for document %s", chunks_deleted, document_id)
 
             # Delete document
             await session.execute(text("DELETE FROM course_documents WHERE id = :doc_id"), {"doc_id": document_id})
@@ -654,7 +656,7 @@ class RAGService:
             row_map = result.mappings().first()
 
             if row_map is None:
-                raise HTTPException(status_code=404, detail="Document not found")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
             # Verify user owns the course that contains this document
             await self._ensure_course_owned(session, user_id, row_map["course_id"])
@@ -662,9 +664,9 @@ class RAGService:
             return DocumentResponse.model_validate(row_map)
         except HTTPException:
             raise
-        except Exception as e:
+        except Exception as error:
             logger.exception("Error getting document %s", document_id)
-            raise HTTPException(status_code=500, detail="Failed to get document") from e
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get document") from error
 
     @staticmethod
     async def delete_chunks_by_doc_id(

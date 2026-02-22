@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Annotated, Any, cast
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 
 from src.ai.service import AIService, get_ai_service
@@ -54,7 +54,7 @@ from src.courses.services.practice_drill_service import PracticeDrillService
 router = APIRouter(
     prefix="/api/v1/courses",
     tags=["courses"],
-    responses={404: {"description": "Not found"}},
+    responses={status.HTTP_404_NOT_FOUND: {"description": "Not found"}},
 )
 
 
@@ -104,7 +104,7 @@ async def generate_self_assessment_questions(
     """Return optional self-assessment questions for course personalization."""
     topic = request.topic.strip()
     if not topic:
-        raise HTTPException(status_code=422, detail="Topic must not be empty")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Topic must not be empty")
 
     level = request.level.strip() if request.level and request.level.strip() else None
 
@@ -115,7 +115,7 @@ async def generate_self_assessment_questions(
             user_id=auth.user_id,
         )
     except ValueError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
     except Exception as error:
         logger.exception(
             "SELF_ASSESSMENT_GENERATION_FAILED",
@@ -124,7 +124,7 @@ async def generate_self_assessment_questions(
                 "topic": topic,
             },
         )
-        raise HTTPException(status_code=502, detail="Failed to generate self-assessment questions") from error
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to generate self-assessment questions") from error
 
     return SelfAssessmentResponse.model_validate(quiz.model_dump())
 
@@ -141,15 +141,15 @@ async def create_course(
     """Create a new course using AI generation."""
     prompt_text = prompt.strip()
     if not prompt_text:
-        raise HTTPException(status_code=422, detail="Prompt must not be empty")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Prompt must not be empty")
 
     attachments = files or []
     for upload in attachments:
         if not upload.filename:
-            raise HTTPException(status_code=400, detail="Attachment filename required")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Attachment filename required")
         ext = Path(upload.filename).suffix.lower()
         if ext not in _COURSE_ATTACHMENT_EXTENSIONS:
-            raise HTTPException(status_code=400, detail="Unsupported attachment type")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported attachment type")
 
     result = await facade.create_course(
         {"prompt": prompt_text, "adaptive_enabled": adaptive_enabled},
@@ -158,7 +158,7 @@ async def create_course(
         attachments=attachments,
     )
     if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error", "Failed to create course"))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error", "Failed to create course"))
 
     return result["course"]
 
@@ -186,7 +186,7 @@ async def get_course(
     result = await facade.get_course(course_id, auth.user_id)
 
     if not result.get("success"):
-        raise HTTPException(status_code=404, detail=result.get("error", "Course not found"))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=result.get("error", "Course not found"))
 
     return result["course"]
 
@@ -203,7 +203,7 @@ async def update_course(
     result = await facade.update_course(course_id, auth.user_id, request.model_dump(exclude_none=True))
 
     if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error", "Failed to update course"))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error", "Failed to update course"))
 
     return result["course"]
 
@@ -233,10 +233,10 @@ async def grade_lesson_response(
 
     if payload.context.course_id != course_id:
         detail = "Context courseId does not match the request path"
-        raise HTTPException(status_code=422, detail=detail)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
     if payload.context.lesson_id != lesson_id:
         detail = "Context lessonId does not match the request path"
-        raise HTTPException(status_code=422, detail=detail)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
 
     lesson_exists = await session.scalar(
         select(Lesson.id).where(
@@ -246,7 +246,7 @@ async def grade_lesson_response(
     )
     if lesson_exists is None:
         detail = "Lesson not found"
-        raise HTTPException(status_code=404, detail=detail)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
 
     concept_link = await session.scalar(
         select(CourseConcept.concept_id).where(
@@ -256,7 +256,7 @@ async def grade_lesson_response(
     )
     if concept_link is None:
         detail = "Concept is not assigned to this course"
-        raise HTTPException(status_code=404, detail=detail)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
 
     return await grading_service.grade(payload, auth.user_id)
 
@@ -298,7 +298,7 @@ async def generate_practice_drills(
     """Generate adaptive drill items for one concept."""
     course = await auth.get_or_404(Course, course_id, "course")
     if not course.adaptive_enabled:
-        raise HTTPException(status_code=400, detail="Adaptive scheduling is not enabled for this course")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Adaptive scheduling is not enabled for this course")
 
     try:
         drills = await drill_service.generate_drills(
@@ -308,9 +308,9 @@ async def generate_practice_drills(
             count=payload.count,
         )
     except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     except ValueError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
     except Exception as error:
         logger.exception(
             "PRACTICE_DRILL_GENERATION_FAILED",
@@ -321,7 +321,7 @@ async def generate_practice_drills(
                 "count": payload.count,
             },
         )
-        raise HTTPException(status_code=502, detail="Failed to generate practice drills") from error
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to generate practice drills") from error
 
     return PracticeDrillResponse(drills=drills)
 
@@ -336,11 +336,11 @@ async def submit_adaptive_reviews(
     """Submit concept reviews for LECTOR scheduling."""
     session = auth.session
     if not payload.reviews:
-        raise HTTPException(status_code=422, detail="At least one review is required")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="At least one review is required")
 
     course = await auth.get_or_404(Course, course_id, "course")
     if not course.adaptive_enabled:
-        raise HTTPException(status_code=400, detail="Adaptive scheduling is not enabled for this course")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Adaptive scheduling is not enabled for this course")
 
     concept_ids = {review.concept_id for review in payload.reviews}
     existing = await session.execute(
@@ -352,7 +352,7 @@ async def submit_adaptive_reviews(
     found_ids = set(existing.scalars().all())
     missing = concept_ids - found_ids
     if missing:
-        raise HTTPException(status_code=404, detail="One or more concepts are not assigned to this course")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more concepts are not assigned to this course")
 
     state_service = ConceptStateService(session)
     scheduler_service = LectorSchedulerService(session)
@@ -478,7 +478,7 @@ async def get_concept_next_review(
     session = auth.session
     course = await auth.get_or_404(Course, course_id, "course")
     if not course.adaptive_enabled:
-        raise HTTPException(status_code=400, detail="Adaptive scheduling is not enabled for this course")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Adaptive scheduling is not enabled for this course")
 
     linkage = await session.execute(
         select(CourseConcept.concept_id).where(
@@ -487,7 +487,7 @@ async def get_concept_next_review(
         )
     )
     if linkage.scalar_one_or_none() is None:
-        raise HTTPException(status_code=404, detail="Concept is not assigned to this course")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept is not assigned to this course")
 
     state_service = ConceptStateService(session)
     state = await state_service.get_user_concept_state(
@@ -578,7 +578,7 @@ async def execute_code(
             },
             exc_info=True,
         )
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception(
             "CODE_EXECUTION_UNEXPECTED",
@@ -588,7 +588,7 @@ async def execute_code(
                 "language": request.language,
             },
         )
-        raise HTTPException(status_code=502, detail="Execution failed") from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Execution failed") from exc
 
     response = CodeExecuteResponse(
         stdout=result.stdout,

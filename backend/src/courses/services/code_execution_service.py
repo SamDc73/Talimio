@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 from uuid import UUID
 
+from fastapi import status
+
 from src.ai.models import PlanAction
 from src.ai.service import get_ai_service
 from src.config.settings import get_settings
@@ -347,22 +349,22 @@ class CodeExecutionService:
             return await self._run_code(sbx, source_code, language)
         except TimeoutException as exc:
             msg = "Execution timed out in the sandbox. Try simplifying the workload or increasing the timeout."
-            raise CodeExecutionError(msg, status_code=504, error_code="timeout") from exc
+            raise CodeExecutionError(msg, status_code=status.HTTP_504_GATEWAY_TIMEOUT, error_code="timeout") from exc
         except RateLimitException as exc:
             msg = "Sandbox rate limit exceeded. Please wait before retrying your code."
-            raise CodeExecutionError(msg, status_code=429, error_code="rate_limit") from exc
+            raise CodeExecutionError(msg, status_code=status.HTTP_429_TOO_MANY_REQUESTS, error_code="rate_limit") from exc
         except InvalidArgumentException as exc:
             msg = "Invalid execution request sent to the sandbox. Check language and inputs."
-            raise CodeExecutionError(msg, status_code=400, error_code="invalid_argument") from exc
+            raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="invalid_argument") from exc
         except NotEnoughSpaceException as exc:
             msg = "The sandbox ran out of available space while executing the code."
-            raise CodeExecutionError(msg, status_code=507, error_code="insufficient_storage") from exc
+            raise CodeExecutionError(msg, status_code=status.HTTP_507_INSUFFICIENT_STORAGE, error_code="insufficient_storage") from exc
         except AuthenticationException as exc:
             msg = "Sandbox authentication failed. Verify execution credentials."
-            raise CodeExecutionError(msg, status_code=502, error_code="authentication") from exc
+            raise CodeExecutionError(msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="authentication") from exc
         except SandboxException as exc:
             msg = "Sandbox returned an error while running the code."
-            raise CodeExecutionError(msg, status_code=502, error_code="sandbox_error") from exc
+            raise CodeExecutionError(msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="sandbox_error") from exc
 
     def _extract_result(self, exec_result: Any) -> ExecutionResult:
         """Extract normalized result from E2B Execution object."""
@@ -798,7 +800,7 @@ class CodeExecutionService:
                 error_message = f"Command failed: {normalized_command}"
                 raise CodeExecutionError(
                     error_message,
-                    status_code=400,
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     error_code="command_failed",
                 ) from exc
             except Exception as exc:
@@ -806,7 +808,7 @@ class CodeExecutionService:
                 error_message = f"Command execution failed: {normalized_command}"
                 raise CodeExecutionError(
                     error_message,
-                    status_code=500,
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     error_code="command_error",
                 ) from exc
 
