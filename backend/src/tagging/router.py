@@ -74,7 +74,7 @@ async def validate_owned_content(auth: CurrentAuth, content_type: str, content_i
     )
 
 
-@router.get("/tags")
+@router.get("")
 async def list_tags(
     service: Annotated[TaggingService, Depends(get_tagging_service)],
     category: str | None = None,
@@ -95,7 +95,7 @@ async def list_tags(
     return [TagSchema.model_validate(tag) for tag in tags]
 
 
-@router.get("/{content_type}/{content_id}/tags")
+@router.get("/{content_type}/{content_id}")
 async def get_content_tags(
     content_type: str,
     content_id: UUID,
@@ -121,7 +121,7 @@ async def get_content_tags(
     return [TagSchema.model_validate(tag) for tag in tags]
 
 
-@router.put("/{content_type}/{content_id}/tags")
+@router.put("/{content_type}/{content_id}")
 async def update_content_tags(
     content_type: str,
     content_id: UUID,
