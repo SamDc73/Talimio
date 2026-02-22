@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -243,7 +243,7 @@ class LessonService:
                 "LESSON_ACCESS_DENIED",
                 extra={"user_id": str(self.user_id), "lesson_id": str(lesson_id), "course_id": str(course_id)},
             )
-            raise HTTPException(status_code=404, detail="Lesson not found or access denied")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found or access denied")
 
         lesson, course = row
 
@@ -314,21 +314,25 @@ class LessonService:
                 str(exc),
                 extra={"user_id": str(self.user_id), "lesson_id": str(lesson.id)},
             )
-            raise HTTPException(status_code=400, detail=f"Invalid lesson content: {exc}") from exc
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid lesson content: {exc}") from exc
         except RuntimeError as exc:
             logger.exception(
                 "System error generating lesson content: %s",
                 str(exc),
                 extra={"user_id": str(self.user_id), "lesson_id": str(lesson.id)},
             )
-            raise HTTPException(status_code=503, detail="Unable to generate lesson content. Please try again.") from exc
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unable to generate lesson content. Please try again.",
+            ) from exc
         except Exception as exc:
             logger.exception(
                 "Unexpected error generating lesson content",
                 extra={"user_id": str(self.user_id), "lesson_id": str(lesson.id)},
             )
             raise HTTPException(
-                status_code=500, detail="An unexpected error occurred while generating lesson content"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An unexpected error occurred while generating lesson content",
             ) from exc
 
         return lesson

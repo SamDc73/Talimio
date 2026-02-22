@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -186,7 +186,7 @@ def _register_exception_handlers(app: FastAPI) -> None:
             category=ErrorCategory.RESOURCE_NOT_FOUND,
             code=ErrorCode.NOT_FOUND,
             detail=str(exc),
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             suggestions=["The requested resource does not exist"],
         )
 
@@ -220,12 +220,12 @@ def _register_frontend_routes(app: FastAPI) -> None:
     async def serve_frontend_app(full_path: str) -> Response:
         reserved_paths = {"api", "health", "docs", "redoc", "openapi.json"}
         if full_path in reserved_paths or full_path.startswith("api/"):
-            return JSONResponse({"detail": "Not Found"}, status_code=404)
+            return JSONResponse({"detail": "Not Found"}, status_code=status.HTTP_404_NOT_FOUND)
 
         if full_path:
             requested_file_path = (frontend_dist_dir / full_path).resolve()
             if not requested_file_path.is_relative_to(frontend_dist_dir):
-                return JSONResponse({"detail": "Not Found"}, status_code=404)
+                return JSONResponse({"detail": "Not Found"}, status_code=status.HTTP_404_NOT_FOUND)
             if requested_file_path.is_file():
                 return FileResponse(requested_file_path)
 
@@ -270,7 +270,7 @@ def create_app() -> FastAPI:
             category=ErrorCategory.INTERNAL,
             code=ErrorCode.INTERNAL,
             detail="An unexpected error occurred",
-            status_code=500,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             metadata={"error_id": str(error_id)},
             suggestions=["Please try again later", "If the problem persists, contact support with the error ID"],
         )
@@ -281,9 +281,9 @@ def create_app() -> FastAPI:
         """Check application health status."""
         try:
             await session.execute(text("SELECT 1"))
-            return JSONResponse({"status": "healthy", "db": "connected"}, status_code=200)
+            return JSONResponse({"status": "healthy", "db": "connected"}, status_code=status.HTTP_200_OK)
         except (DatabaseError, OperationalError):
-            return JSONResponse({"status": "unhealthy", "db": "disconnected"}, status_code=503)
+            return JSONResponse({"status": "unhealthy", "db": "disconnected"}, status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
 
     # Register all routers
     _register_routers(app)

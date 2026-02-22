@@ -2,7 +2,7 @@ import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 
 from src.auth import CurrentAuth
 from src.content.schemas import ContentListResponse, ContentType
@@ -33,7 +33,7 @@ async def get_all_content(
     Uses ultra-optimized single query with database-level sorting and pagination.
     Requires authentication when local auth is configured.
     """
-    logger.info(f"🔍 Getting content for authenticated user: {auth.user_id}")
+    logger.info("Getting content for authenticated user %s", auth.user_id)
     content_service = ContentService(session=auth.session)
     return await content_service.list_content_fast(
         user_id=auth.user_id,
@@ -45,8 +45,8 @@ async def get_all_content(
     )
 
 
-@router.patch("/{content_type}/{content_id}/archive", status_code=204)
-async def archive_content_endpoint(
+@router.patch("/{content_type}/{content_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
+async def archive_content(
     content_type: ContentType,
     content_id: UUID,
     auth: CurrentAuth,
@@ -57,11 +57,11 @@ async def archive_content_endpoint(
     try:
         await ContentArchiveService.archive_content(auth.session, content_type, content_id, auth.user_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.patch("/{content_type}/{content_id}/unarchive", status_code=204)
-async def unarchive_content_endpoint(
+@router.patch("/{content_type}/{content_id}/unarchive", status_code=status.HTTP_204_NO_CONTENT)
+async def unarchive_content(
     content_type: ContentType,
     content_id: UUID,
     auth: CurrentAuth,
@@ -72,10 +72,10 @@ async def unarchive_content_endpoint(
     try:
         await ContentArchiveService.unarchive_content(auth.session, content_type, content_id, auth.user_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
-@router.delete("/{content_type}/{content_id}", status_code=204)
+@router.delete("/{content_type}/{content_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_content(
     content_type: str,
     content_id: str,
@@ -92,7 +92,7 @@ async def delete_content(
     elif ct_value in (ContentType.YOUTUBE.value, ContentType.BOOK.value, ContentType.COURSE.value):
         mapped_type = ContentType(ct_value)
     else:
-        raise HTTPException(status_code=400, detail=f"Unsupported content type: {content_type}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported content type: {content_type}")
 
     content_service = ContentService(session=auth.session)
     try:
@@ -102,4 +102,4 @@ async def delete_content(
             user_id=auth.user_id,
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
