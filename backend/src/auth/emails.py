@@ -135,7 +135,7 @@ def _build_frontend_auth_link(*, path: str, token: str) -> str:
     settings = get_settings()
     base = settings.frontend_app_url.rstrip("/")
     normalized_path = path if path.startswith("/") else f"/{path}"
-    return f"{base}{normalized_path}?token={token}"
+    return f"{base}/#{normalized_path}?token={token}"
 
 
 async def send_email(

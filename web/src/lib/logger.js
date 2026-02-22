@@ -123,11 +123,7 @@ class LoggerService {
 			context,
 		}
 
-		// In dev, also use console.error for better stack traces
-		if (import.meta.env.DEV) {
-		} else {
-			this.send(errorData)
-		}
+		this.send(errorData)
 	}
 
 	/**

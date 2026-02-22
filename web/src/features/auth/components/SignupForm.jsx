@@ -68,13 +68,13 @@ function SignupForm({
 			newErrors.email = "Please enter a valid email address"
 		}
 
-		if (!password) {
-			newErrors.password = REQUIRED_FIELD_MESSAGE
-		} else {
+		if (password) {
 			const passwordValidationMessage = getPasswordPolicyValidationMessage(password, passwordPolicy)
 			if (passwordValidationMessage) {
 				newErrors.password = passwordValidationMessage
 			}
+		} else {
+			newErrors.password = REQUIRED_FIELD_MESSAGE
 		}
 
 		const usernameError = validateUsername(normalizedUsername)
