@@ -48,11 +48,7 @@ class ContentService:
         search_term = f"%{search}%" if search else None
 
         session = self._session
-        queries: list[str] = []
-
-        queries, _needs_user_id = QueryBuilderService.build_content_queries(
-            content_type, search, include_archived, user_id
-        )
+        queries = QueryBuilderService.build_content_queries(content_type, search, include_archived, user_id)
 
         if not queries:
             return ContentListResponse(items=[], total=0, page=page, per_page=page_size)
@@ -179,7 +175,7 @@ class ContentService:
 
         mapping: dict[ContentType, Any] = {
             ContentType.BOOK: Book,
-            ContentType.YOUTUBE: Video,
+            ContentType.VIDEO: Video,
             ContentType.COURSE: Course,
         }
         if content_type not in mapping:
@@ -208,12 +204,11 @@ class ContentService:
 
         from src.tagging.models import TagAssociation
 
-        tag_type = "video" if content_type == ContentType.YOUTUBE else content_type.value
         await session.execute(
             delete(TagAssociation).where(
                 and_(
                     TagAssociation.content_id == row_id,
-                    TagAssociation.content_type == tag_type,
+                    TagAssociation.content_type == content_type.value,
                 )
             )
         )
@@ -221,16 +216,15 @@ class ContentService:
     async def delete_content(
         self,
         content_type: ContentType,
-        content_id: str,
+        content_id: UUID,
         user_id: UUID,
     ) -> None:
         """Delete a content item and all related references."""
         session = self._session
         model = self._get_model(content_type)
 
-        # Parse UUID and load row with ownership check
-        obj_id = UUID(content_id)
-        row = await session.get(model, obj_id)
+        # Load row with ownership check
+        row = await session.get(model, content_id)
         if row is None or getattr(row, "user_id", None) != user_id:
             msg = f"{content_type.value.capitalize()} {content_id} not found"
             raise ValueError(msg)
@@ -240,16 +234,16 @@ class ContentService:
             await self._delete_book_file(row)
         elif content_type == ContentType.COURSE:
             # Also remove any lingering uploaded course document source files
-            await self._delete_course_document_files(session, obj_id)
+            await self._delete_course_document_files(session, content_id)
 
         # Cross-module cleanup
-        await self._delete_user_progress(session, user_id, obj_id)
-        await self._delete_tag_associations(session, content_type, obj_id)
+        await self._delete_user_progress(session, user_id, content_id)
+        await self._delete_tag_associations(session, content_type, content_id)
         await self._prune_orphan_tags(session)
 
         from src.ai.rag.service import RAGService
 
-        await RAGService.purge_for_content(session, content_type.value, str(obj_id))
+        await RAGService.purge_for_content(session, content_type.value, str(content_id))
 
         # Delete the content row and let the request boundary commit.
         await session.delete(row)

@@ -9,7 +9,7 @@ from src.content.schemas import (
     ContentMetadata,
     CourseContent,
     ProgressData,
-    YoutubeContent,
+    VideoContent,
 )
 
 
@@ -39,8 +39,8 @@ class ContentTransformService:
         """Transform database rows to content items."""
         items: list[Any] = []
         for row in rows:
-            if row.type == "youtube":
-                items.append(ContentTransformService._create_youtube_content(row))
+            if row.type == "video":
+                items.append(ContentTransformService._create_video_content(row))
             elif row.type == "book":
                 items.append(ContentTransformService._create_book_content(row))
             elif row.type == "course":
@@ -48,8 +48,8 @@ class ContentTransformService:
         return items
 
     @staticmethod
-    def _create_youtube_content(row: Any) -> YoutubeContent:
-        """Create YoutubeContent from row data."""
+    def _create_video_content(row: Any) -> VideoContent:
+        """Create VideoContent from row data."""
         # Extract video ID from extra2 if it's a YouTube URL/thumbnail
         video_id = None
         if row.extra2 and ("ytimg.com" in row.extra2 or "youtube.com" in row.extra2):
@@ -65,7 +65,7 @@ class ContentTransformService:
         # Progress will be calculated later by the progress service
         progress = _create_progress_data(percentage=row.progress or 0, completed_items=0, total_items=0)
 
-        return YoutubeContent(
+        return VideoContent(
             id=row.id,
             title=row.title,
             description=row.description,

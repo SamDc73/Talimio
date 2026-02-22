@@ -1,11 +1,15 @@
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
 from src.config.schema_casing import build_camel_config
+
+
+VideoRagStatus = Literal["pending", "processing", "completed", "failed"]
+VideoLearningStatus = Literal["not_started", "in_progress", "completed"]
 
 
 class VideoBase(BaseModel):
@@ -111,7 +115,7 @@ class VideoChapterBase(BaseModel):
     title: str = Field(..., max_length=500)
     start_time: int | None = Field(None, ge=0, description="Start time in seconds", alias="startTime")
     end_time: int | None = Field(None, ge=0, description="End time in seconds", alias="endTime")
-    status: str = Field(default="not_started", pattern="^(not_started|in_progress|completed)$")
+    status: VideoLearningStatus = "not_started"
 
 
 class VideoChapterResponse(VideoChapterBase):
@@ -130,7 +134,7 @@ class VideoChapterStatusUpdate(BaseModel):
 
     model_config = build_camel_config()
 
-    status: str = Field(..., pattern="^(not_started|in_progress|completed)$")
+    status: VideoLearningStatus
 
 
 class VideoChapterProgressSync(BaseModel):
@@ -170,7 +174,6 @@ class RAGStatusResponse(BaseModel):
     model_config = build_camel_config(from_attributes=True)
 
     video_id: UUID
-    rag_status: str  # pending, processing, completed, failed
+    rag_status: VideoRagStatus
     rag_processed_at: str | None = None
     message: str
-

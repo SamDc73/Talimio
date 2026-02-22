@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -10,9 +10,12 @@ from src.config.schema_casing import build_camel_config
 class ContentType(StrEnum):
     """Enumeration of content types available in the learning platform."""
 
-    YOUTUBE = "youtube"
+    VIDEO = "video"
     BOOK = "book"
     COURSE = "course"
+
+
+ContentItemStatus = Literal["active", "archived", "draft"]
 
 
 class ProgressData(BaseModel):
@@ -57,7 +60,7 @@ class ContentItemBase(BaseModel):
 
     # Common optional fields
     tags: list[str] = []
-    status: str = "active"  # active|archived|draft
+    status: ContentItemStatus = "active"
     estimated_time: int | None = None  # in minutes
 
     # Type-specific fields at root level
@@ -71,10 +74,10 @@ class ContentItemBase(BaseModel):
     model_config = build_camel_config()
 
 
-class YoutubeContent(ContentItemBase):
-    """Model for YouTube video content items."""
+class VideoContent(ContentItemBase):
+    """Model for video content items."""
 
-    type: ContentType = ContentType.YOUTUBE
+    type: ContentType = ContentType.VIDEO
     channel: str  # Required for videos
     length: int | None = None  # Duration in seconds
     thumbnail_url: str | None = None
@@ -109,7 +112,7 @@ class CourseContent(ContentItemBase):
 class ContentListResponse(BaseModel):
     """Response model for paginated content list."""
 
-    items: list[YoutubeContent | BookContent | CourseContent]
+    items: list[VideoContent | BookContent | CourseContent]
     total: int
     page: int
     per_page: int  # Changed from page_size to match spec

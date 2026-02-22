@@ -34,7 +34,7 @@ class ContentArchiveService:
                 """
             )
             params["archived_at"] = datetime.now(UTC)
-        elif content_type == ContentType.YOUTUBE:
+        elif content_type == ContentType.VIDEO:
             statement = text(
                 """
                 UPDATE videos
@@ -84,7 +84,7 @@ class ContentArchiveService:
                 WHERE id = :content_id AND user_id = :user_id
                 """
             )
-        elif content_type == ContentType.YOUTUBE:
+        elif content_type == ContentType.VIDEO:
             statement = text(
                 """
                 UPDATE videos
@@ -139,8 +139,8 @@ class ContentArchiveService:
 
         # Construct the combined query with archived filter
         if content_type:
-            if content_type == ContentType.YOUTUBE:
-                combined_query = QueryBuilderService.get_youtube_query(search, archived_only=True)
+            if content_type == ContentType.VIDEO:
+                combined_query = QueryBuilderService.get_video_query(search, archived_only=True)
             elif content_type == ContentType.BOOK:
                 combined_query = QueryBuilderService.get_books_query(
                     search, archived_only=True, user_id=current_user_id
@@ -155,7 +155,7 @@ class ContentArchiveService:
         else:
             # Union all content types with archived filter
             combined_query = f"""
-                {QueryBuilderService.get_youtube_query(search, archived_only=True)}
+                {QueryBuilderService.get_video_query(search, archived_only=True)}
                 UNION ALL
                 {QueryBuilderService.get_books_query(search, archived_only=True, user_id=current_user_id)}
                 UNION ALL

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -34,6 +34,8 @@ _DEFAULT_LEARNER_PROFILE = {
     "success_rate": 0.5,
     "semantic_sensitivity": 1.0,
 }
+
+CourseDocumentStatus = Literal["pending", "processing", "embedded", "failed"]
 
 
 class Course(Base):
@@ -139,7 +141,7 @@ class CourseDocument(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=lambda: datetime.now(UTC))
     processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     embedded_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
-    status: Mapped[str] = mapped_column(String(20), default="pending")
+    status: Mapped[CourseDocumentStatus] = mapped_column(String(20), default="pending")
 
     course: Mapped[Course] = relationship("Course", back_populates="documents")
 

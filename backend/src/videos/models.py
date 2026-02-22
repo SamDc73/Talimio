@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 from uuid import UUID as UUID_TYPE
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
@@ -9,6 +10,10 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.base import Base
+
+
+VideoPipelineStatus = Literal["pending", "processing", "completed", "failed"]
+VideoLearningStatus = Literal["not_started", "in_progress", "completed"]
 
 
 class Video(Base):
@@ -36,13 +41,13 @@ class Video(Base):
     )  # Structured transcript data with segments (JSONB)
 
     # RAG processing status
-    rag_status: Mapped[str] = mapped_column(
+    rag_status: Mapped[VideoPipelineStatus] = mapped_column(
         String(20), nullable=False, default="pending"
     )  # pending, processing, completed, failed
     rag_processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Chapter extraction status
-    chapters_status: Mapped[str] = mapped_column(
+    chapters_status: Mapped[VideoPipelineStatus] = mapped_column(
         String(20), nullable=False, default="pending"
     )  # pending, processing, completed, failed
     chapters_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -90,7 +95,7 @@ class VideoChapter(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     start_time: Mapped[int | None] = mapped_column(Integer, nullable=True)  # in seconds
     end_time: Mapped[int | None] = mapped_column(Integer, nullable=True)  # in seconds
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_started")
+    status: Mapped[VideoLearningStatus] = mapped_column(String(20), nullable=False, default="not_started")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -100,5 +105,4 @@ class VideoChapter(Base):
 
     # Relationships
     video: Mapped[Video] = relationship("Video", back_populates="chapters")
-
 

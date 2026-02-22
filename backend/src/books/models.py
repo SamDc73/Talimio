@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint, func
@@ -6,6 +7,9 @@ from sqlalchemy.dialects.postgresql import UUID as POSTGRES_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database.base import Base
+
+
+BookRagStatus = Literal["pending", "processing", "completed", "failed"]
 
 
 class Book(Base):
@@ -34,7 +38,7 @@ class Book(Base):
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     table_of_contents: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    rag_status: Mapped[str] = mapped_column(
+    rag_status: Mapped[BookRagStatus] = mapped_column(
         String(20), nullable=False, default="pending"
     )  # pending, processing, completed, failed
     rag_processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
