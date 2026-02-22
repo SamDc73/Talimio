@@ -1,10 +1,14 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
 from src.config.schema_casing import build_camel_config
+
+
+BookRagStatus = Literal["pending", "processing", "completed", "failed"]
+BookLearningStatus = Literal["not_started", "in_progress", "completed"]
 
 
 class BookUpdate(BaseModel):
@@ -91,7 +95,7 @@ class BookResponse(BaseModel):
     file_size: int = Field(alias="fileSize")
     total_pages: int | None = Field(None, alias="totalPages")
     table_of_contents: list[TableOfContentsItem] | None = Field(None, alias="tableOfContents")
-    rag_status: str = Field(alias="ragStatus")  # pending, processing, completed, failed
+    rag_status: BookRagStatus = Field(alias="ragStatus")
 
     @field_validator("table_of_contents", mode="before")
     @classmethod
@@ -123,7 +127,7 @@ class BookProgressBase(BaseModel):
     current_page: int = Field(default=1, ge=1, alias="currentPage")
     progress_percentage: float = Field(default=0.0, ge=0.0, le=100.0, alias="progressPercentage")
     reading_time_minutes: int = Field(default=0, ge=0, alias="readingTimeMinutes")
-    status: str = Field(default="not_started", pattern="^(not_started|reading|completed|paused)$")
+    status: BookLearningStatus = "not_started"
     notes: str | None = None
     bookmarks: list[int] = Field(default_factory=list)
     toc_progress: dict[str, bool] = Field(
@@ -140,7 +144,7 @@ class BookProgressUpdate(BaseModel):
     total_pages: int | None = Field(None, ge=1, alias="totalPages")
     progress_percentage: float | None = Field(None, ge=0.0, le=100.0, alias="progressPercentage")
     reading_time_minutes: int | None = Field(None, ge=0, alias="readingTimeMinutes")
-    status: str | None = Field(None, pattern="^(not_started|reading|completed|paused)$")
+    status: BookLearningStatus | None = None
     notes: str | None = None
     bookmarks: list[int] | None = None
     toc_progress: dict[str, bool] | None = Field(None, alias="tocProgress")  # Maps section IDs to completion status
@@ -237,7 +241,7 @@ class BookChapterBase(BaseModel):
     title: str = Field(..., max_length=500)
     start_page: int | None = Field(None, ge=1, alias="startPage")
     end_page: int | None = Field(None, ge=1, alias="endPage")
-    status: str = Field(default="not_started", pattern="^(not_started|in_progress|completed)$")
+    status: BookLearningStatus = "not_started"
 
 
 class BookChapterResponse(BookChapterBase):
@@ -256,7 +260,7 @@ class BookChapterStatusUpdate(BaseModel):
 
     model_config = build_camel_config()
 
-    status: str = Field(..., pattern="^(not_started|in_progress|completed)$")
+    status: BookLearningStatus
 
 
 class BookChapterBatchStatusUpdate(BaseModel):
@@ -265,7 +269,7 @@ class BookChapterBatchStatusUpdate(BaseModel):
     model_config = build_camel_config()
 
     chapter_id: UUID = Field(..., alias="chapterId")
-    status: str = Field(..., pattern="^(not_started|in_progress|completed)$")
+    status: BookLearningStatus
 
 
 # Update forward references

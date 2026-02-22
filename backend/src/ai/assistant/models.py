@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import (
     BigInteger,
@@ -23,6 +23,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database.base import Base
 
 
+AssistantConversationStatus = Literal["regular", "archived"]
+AssistantConversationContextType = Literal["book", "video", "course"]
+
+
 class AssistantConversation(Base):
     """Assistant conversation metadata owned by a single user."""
 
@@ -39,8 +43,10 @@ class AssistantConversation(Base):
     id: Mapped[uuid.UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), nullable=False, index=True)
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="regular", server_default="regular")
-    context_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    status: Mapped[AssistantConversationStatus] = mapped_column(
+        String(20), nullable=False, default="regular", server_default="regular"
+    )
+    context_type: Mapped[AssistantConversationContextType | None] = mapped_column(String(20), nullable=True)
     context_id: Mapped[uuid.UUID | None] = mapped_column(POSTGRES_UUID(as_uuid=True), nullable=True)
     context_meta: Mapped[dict[str, Any]] = mapped_column(
         JSONB,

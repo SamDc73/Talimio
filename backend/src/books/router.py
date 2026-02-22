@@ -28,6 +28,7 @@ from .schemas import (
     BookListResponse,
     BookProgressResponse,
     BookProgressUpdate,
+    BookRagStatus,
     BookResponse,
     BookTocChapterResponse,
     BookUpdate,
@@ -39,6 +40,20 @@ from .services.book_response_builder import BookResponseBuilder
 
 logger = logging.getLogger(__name__)
 _DETACHED_TASKS: set[asyncio.Task[Any]] = set()
+BOOK_RAG_STATUS_PENDING: BookRagStatus = "pending"
+BOOK_RAG_STATUS_PROCESSING: BookRagStatus = "processing"
+BOOK_RAG_STATUS_COMPLETED: BookRagStatus = "completed"
+BOOK_RAG_STATUS_FAILED: BookRagStatus = "failed"
+BOOK_RAG_CHUNK_COUNT_STATUSES: tuple[BookRagStatus, ...] = (
+    BOOK_RAG_STATUS_COMPLETED,
+    BOOK_RAG_STATUS_PROCESSING,
+)
+BOOK_RAG_STATUS_MESSAGES: dict[BookRagStatus, str] = {
+    BOOK_RAG_STATUS_PENDING: "Book is ready to read! AI chat will be available once processing completes.",
+    BOOK_RAG_STATUS_PROCESSING: "Book is being processed for AI chat. You can start reading now!",
+    BOOK_RAG_STATUS_COMPLETED: "Book is ready! AI chat is now available.",
+    BOOK_RAG_STATUS_FAILED: "Processing failed. AI chat is not available, but you can still read the book.",
+}
 
 router = APIRouter(prefix="/api/v1/books", tags=["books"])
 
@@ -700,7 +715,7 @@ class RAGStatusResponse(BaseModel):
     """Response model for RAG embedding status."""
 
     book_id: UUID
-    rag_status: str  # pending, processing, completed, failed
+    rag_status: BookRagStatus
     rag_processed_at: str | None = None
     message: str
     chunk_count: int | None = None  # Number of chunks processed (if available)
@@ -715,17 +730,9 @@ async def get_book_rag_status(book_id: UUID, auth: CurrentAuth) -> RAGStatusResp
     # Use auth context helper for ownership check
     book = await auth.get_or_404(Book, book_id, "book")
 
-    # Generate status message
-    status_messages = {
-        "pending": "Book is ready to read! AI chat will be available once processing completes.",
-        "processing": "Book is being processed for AI chat. You can start reading now!",
-        "completed": "Book is ready! AI chat is now available.",
-        "failed": "Processing failed. AI chat is not available, but you can still read the book.",
-    }
-
     # Get chunk count if available
     chunk_count = None
-    if book.rag_status in ["completed", "processing"]:
+    if book.rag_status in BOOK_RAG_CHUNK_COUNT_STATUSES:
         try:
             from sqlalchemy import text
 
@@ -738,14 +745,14 @@ async def get_book_rag_status(book_id: UUID, auth: CurrentAuth) -> RAGStatusResp
 
     # Get error details if failed
     error_details = None
-    if book.rag_status == "failed" and hasattr(book, "rag_error"):
+    if book.rag_status == BOOK_RAG_STATUS_FAILED and hasattr(book, "rag_error"):
         error_details = getattr(book, "rag_error", None)
 
     return RAGStatusResponse(
         book_id=book_id,
         rag_status=book.rag_status,
         rag_processed_at=book.rag_processed_at.isoformat() if book.rag_processed_at else None,
-        message=status_messages.get(book.rag_status, "Unknown status"),
+        message=BOOK_RAG_STATUS_MESSAGES.get(book.rag_status, "Unknown status"),
         chunk_count=chunk_count,
         error_details=error_details,
     )

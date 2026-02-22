@@ -18,6 +18,8 @@ DEFAULT_CONVERSATIONS_PAGE_SIZE = 20
 MAX_CONVERSATIONS_PAGE_SIZE = 100
 CONVERSATION_PREVIEW_LENGTH = 140
 ALLOWED_CONTEXT_TYPES = {"book", "video", "course"}
+CONVERSATION_STATUS_REGULAR = "regular"
+CONVERSATION_STATUS_ARCHIVED = "archived"
 
 
 class AssistantConversationNotFoundError(Exception):
@@ -214,7 +216,7 @@ async def create_assistant_conversation(
     conversation = AssistantConversation(
         user_id=user_id,
         title=_normalize_conversation_title(title),
-        status="regular",
+        status=CONVERSATION_STATUS_REGULAR,
         context_type=normalized_context_type,
         context_id=normalized_context_id,
         context_meta=normalized_context_meta,
@@ -352,7 +354,7 @@ async def archive_assistant_conversation(
 ) -> AssistantConversation:
     """Set a conversation status to archived."""
     conversation = await get_assistant_conversation(session=session, user_id=user_id, conversation_id=conversation_id)
-    conversation.status = "archived"
+    conversation.status = CONVERSATION_STATUS_ARCHIVED
     conversation.updated_at = datetime.now(UTC)
     await session.flush()
     await session.refresh(conversation)
@@ -367,7 +369,7 @@ async def unarchive_assistant_conversation(
 ) -> AssistantConversation:
     """Restore a conversation status back to regular."""
     conversation = await get_assistant_conversation(session=session, user_id=user_id, conversation_id=conversation_id)
-    conversation.status = "regular"
+    conversation.status = CONVERSATION_STATUS_REGULAR
     conversation.updated_at = datetime.now(UTC)
     await session.flush()
     await session.refresh(conversation)

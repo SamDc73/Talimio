@@ -43,21 +43,16 @@ class QueryBuilderService:
         search: str | None,
         include_archived: bool = False,
         user_id: UUID | None = None,
-    ) -> tuple[list[str], bool]:
-        """Build SQL queries for different content types. Returns queries and whether user_id is needed."""
+    ) -> list[str]:
+        """Build SQL queries for different content types."""
         queries: list[str] = []
-        needs_user_id = False
 
-        if not content_type or content_type == ContentType.YOUTUBE:
+        if not content_type or content_type == ContentType.VIDEO:
             queries.append(QueryBuilderService._get_video_query(search, include_archived, user_id))
-            if user_id:
-                needs_user_id = True
 
 
         if not content_type or content_type == ContentType.BOOK:
             queries.append(QueryBuilderService._get_book_query(search, include_archived, user_id))
-            if user_id:
-                needs_user_id = True
 
         if not content_type or content_type == ContentType.COURSE:
             queries.append(
@@ -65,20 +60,18 @@ class QueryBuilderService:
                     search, archived_only=False, include_archived=include_archived, user_id=user_id
                 )
             )
-            if user_id:
-                needs_user_id = True
 
-        return queries, needs_user_id
+        return queries
 
     @staticmethod
     def _get_video_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
         """Get SQL query for videos."""
-        return QueryBuilderService.get_youtube_query(
+        return QueryBuilderService.get_video_query(
             search, archived_only=False, include_archived=include_archived, user_id=user_id
         )
 
     @staticmethod
-    def get_youtube_query(
+    def get_video_query(
         search: str | None,
         archived_only: bool = False,
         include_archived: bool = False,
@@ -91,7 +84,7 @@ class QueryBuilderService:
                 v.id::text as id,
                 v.title,
                 COALESCE(v.description, '') as description,
-                'youtube' as type,
+                'video' as type,
                 COALESCE(v.updated_at, v.created_at) as last_accessed,
                 v.created_at,
                 COALESCE(v.tags, '[]') as tags,

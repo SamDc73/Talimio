@@ -28,6 +28,18 @@ from src.videos.models import Video
 
 logger = logging.getLogger(__name__)
 
+CONTENT_TYPE_BOOK = "book"
+CONTENT_TYPE_COURSE = "course"
+CONTENT_TYPE_VIDEO = "video"
+RAG_STATUS_PROCESSING = "processing"
+RAG_STATUS_COMPLETED = "completed"
+RAG_STATUS_FAILED = "failed"
+COURSE_DOCUMENT_STATUS_PENDING = "pending"
+COURSE_DOCUMENT_STATUS_PROCESSING = "processing"
+COURSE_DOCUMENT_STATUS_EMBEDDED = "embedded"
+COURSE_DOCUMENT_STATUS_FAILED = "failed"
+COURSE_IMAGE_DOCUMENT_TYPE = "image"
+
 
 class RAGService:
     """RAG service orchestrator built on LiteLLM embeddings and pgvector storage."""
@@ -76,14 +88,14 @@ class RAGService:
         await self._ensure_course_owned(session, user_id, course_id)
 
         try:
-            is_image = document_type == "image"
+            is_image = document_type == COURSE_IMAGE_DOCUMENT_TYPE
             now = datetime.now(UTC)
             # Create document record
             doc = CourseDocument(
                 course_id=course_id,
                 title=title,
                 document_type=document_type or "unknown",
-                status="embedded" if is_image else "pending",
+                status=COURSE_DOCUMENT_STATUS_EMBEDDED if is_image else COURSE_DOCUMENT_STATUS_PENDING,
                 processed_at=now if is_image else None,
                 embedded_at=now if is_image else None,
             )
@@ -157,8 +169,8 @@ class RAGService:
         try:
             # Update status to processing
             await session.execute(
-                text("UPDATE course_documents SET status = 'processing' WHERE id = :doc_id"),
-                {"doc_id": document_id},
+                text("UPDATE course_documents SET status = :status WHERE id = :doc_id"),
+                {"doc_id": document_id, "status": COURSE_DOCUMENT_STATUS_PROCESSING},
             )
             await session.flush()
 
@@ -212,12 +224,12 @@ class RAGService:
             await session.execute(
                 text("""
                     UPDATE course_documents
-                    SET status = 'embedded',
+                    SET status = :status,
                         processed_at = NOW(),
                         embedded_at = NOW()
                     WHERE id = :doc_id
                 """),
-                {"doc_id": document_id},
+                {"doc_id": document_id, "status": COURSE_DOCUMENT_STATUS_EMBEDDED},
             )
             await session.flush()
 
@@ -238,7 +250,8 @@ class RAGService:
         except Exception:
             logger.exception("Failed to process document %s", document_id)
             await session.execute(
-                text("UPDATE course_documents SET status = 'failed' WHERE id = :doc_id"), {"doc_id": document_id}
+                text("UPDATE course_documents SET status = :status WHERE id = :doc_id"),
+                {"doc_id": document_id, "status": COURSE_DOCUMENT_STATUS_FAILED},
             )
             await session.flush()
             raise
@@ -299,12 +312,12 @@ class RAGService:
             # Validate file
             if not getattr(book, "file_path", None):
                 logger.warning("Book %s has no file path; marking as failed", book_id)
-                book.rag_status = "failed"
+                book.rag_status = RAG_STATUS_FAILED
                 await session.flush()
                 return
 
             # Mark processing
-            book.rag_status = "processing"
+            book.rag_status = RAG_STATUS_PROCESSING
             await session.flush()
 
             # Download file
@@ -336,14 +349,14 @@ class RAGService:
 
             await self._vector_rag.store_document_chunks_with_embeddings(
                 session=session,
-                doc_type="book",
+                doc_type=CONTENT_TYPE_BOOK,
                 doc_id=book.id,
                 title=book.title or "",
                 chunks=chunks,
             )
 
             # Mark completed
-            book.rag_status = "completed"
+            book.rag_status = RAG_STATUS_COMPLETED
             book.rag_processed_at = datetime.now(UTC)
             await session.flush()
 
@@ -361,7 +374,7 @@ class RAGService:
             try:
                 book = await session.get(Book, book_id)
                 if book:
-                    book.rag_status = "failed"
+                    book.rag_status = RAG_STATUS_FAILED
                     await session.flush()
             except SQLAlchemyError:
                 logger.debug("Failed to set book %s failed status after processing error", book_id, exc_info=True)
@@ -376,7 +389,7 @@ class RAGService:
                 return
 
             # Mark processing
-            video.rag_status = "processing"
+            video.rag_status = RAG_STATUS_PROCESSING
             await session.flush()
             # Commit status before long-running embedding work to avoid holding row locks.
             await session.commit()
@@ -390,7 +403,7 @@ class RAGService:
             chunks, per_chunk_meta = await self._collect_video_transcript_chunks(video)
 
             if not chunks:
-                video.rag_status = "failed"
+                video.rag_status = RAG_STATUS_FAILED
                 await session.flush()
                 return
 
@@ -401,7 +414,7 @@ class RAGService:
 
             await self._vector_rag.store_document_chunks_with_embeddings(
                 session=session,
-                doc_type="video",
+                doc_type=CONTENT_TYPE_VIDEO,
                 doc_id=video.id,
                 title=video.title or "",
                 chunks=chunks,
@@ -411,11 +424,11 @@ class RAGService:
             video = await session.get(Video, video_id)
             if not video:
                 # Video was deleted while embedding; clean up any chunks written in this run.
-                await self.delete_chunks_by_doc_id(session, str(video_id), doc_type="video")
+                await self.delete_chunks_by_doc_id(session, str(video_id), doc_type=CONTENT_TYPE_VIDEO)
                 return
 
             # Mark completed
-            video.rag_status = "completed"
+            video.rag_status = RAG_STATUS_COMPLETED
             video.rag_processed_at = datetime.now(UTC)
             await session.flush()
 
@@ -426,7 +439,7 @@ class RAGService:
             try:
                 video = await session.get(Video, video_id)
                 if video:
-                    video.rag_status = "failed"
+                    video.rag_status = RAG_STATUS_FAILED
                     await session.flush()
             except SQLAlchemyError:
                 logger.debug("Failed to set video %s failed status after processing error", video_id, exc_info=True)
@@ -489,7 +502,7 @@ class RAGService:
             # Use VectorRAG's existing method to store chunks with embeddings
             await self._vector_rag.store_document_chunks_with_embeddings(
                 session=session,
-                doc_type="course",
+                doc_type=CONTENT_TYPE_COURSE,
                 doc_id=doc_uuid,
                 title=doc_info.title,
                 chunks=chunks,
@@ -528,7 +541,7 @@ class RAGService:
 
             return await self._vector_rag.search(
                 session=session,
-                doc_type="course",
+                doc_type=CONTENT_TYPE_COURSE,
                 query=query,
                 limit=top_k,
                 course_id=course_id,
@@ -687,7 +700,7 @@ class RAGService:
         start_time = time.time()
 
         try:
-            if doc_type in ("book", "video"):
+            if doc_type in (CONTENT_TYPE_BOOK, CONTENT_TYPE_VIDEO):
                 # For books and videos, doc_id is the row ID directly
                 result = await session.execute(
                     text("DELETE FROM rag_document_chunks WHERE doc_id = :doc_id AND doc_type = :doc_type"),
@@ -739,9 +752,9 @@ class RAGService:
         try:
             result = await session.execute(
                 text(
-                    "DELETE FROM rag_document_chunks WHERE metadata->>'course_id' = :course_id AND doc_type = 'course'"
+                    "DELETE FROM rag_document_chunks WHERE metadata->>'course_id' = :course_id AND doc_type = :doc_type"
                 ),
-                {"course_id": course_id},
+                {"course_id": course_id, "doc_type": CONTENT_TYPE_COURSE},
             )
 
             await session.flush()
@@ -772,17 +785,17 @@ class RAGService:
 
         - course: delete by metadata->>'course_id'
         - book: delete by doc_id + doc_type='book'
-        - video/youtube: delete by doc_id + doc_type='video'
+        - video: delete by doc_id + doc_type='video'
         Returns number of chunks deleted (best-effort).
         """
         try:
             t = content_type.lower()
-            if t == "course":
+            if t == CONTENT_TYPE_COURSE:
                 return await RAGService.delete_chunks_by_course_id(session, content_id)
-            if t == "book":
-                return await RAGService.delete_chunks_by_doc_id(session, content_id, doc_type="book")
-            if t in ("video", "youtube"):
-                return await RAGService.delete_chunks_by_doc_id(session, content_id, doc_type="video")
+            if t == CONTENT_TYPE_BOOK:
+                return await RAGService.delete_chunks_by_doc_id(session, content_id, doc_type=CONTENT_TYPE_BOOK)
+            if t == CONTENT_TYPE_VIDEO:
+                return await RAGService.delete_chunks_by_doc_id(session, content_id, doc_type=CONTENT_TYPE_VIDEO)
             return 0
         except Exception:
             logger.exception("RAG purge failed for %s %s", content_type, content_id)

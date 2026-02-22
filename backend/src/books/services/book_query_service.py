@@ -8,7 +8,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book
-from src.books.schemas import BookListResponse, BookResponse
+from src.books.schemas import BookLearningStatus, BookListResponse, BookResponse
 from src.books.services.book_response_builder import BookResponseBuilder
 
 
@@ -172,7 +172,7 @@ class BookQueryService:
 
     async def get_books_by_reading_status(
         self,
-        status: str,
+        status: BookLearningStatus,
         limit: int | None = None,
     ) -> list[BookResponse]:
         """Get books by reading status.

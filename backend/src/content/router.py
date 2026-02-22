@@ -77,27 +77,15 @@ async def unarchive_content(
 
 @router.delete("/{content_type}/{content_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_content(
-    content_type: str,
-    content_id: str,
+    content_type: ContentType,
+    content_id: UUID,
     auth: CurrentAuth,
 ) -> None:
-    """Delete a content item by type and ID.
-
-    Accepts both 'youtube' and 'video' for videos.
-    """
-    # Map alias 'video' to ContentType.YOUTUBE
-    ct_value = content_type.lower()
-    if ct_value == "video":
-        mapped_type = ContentType.YOUTUBE
-    elif ct_value in (ContentType.YOUTUBE.value, ContentType.BOOK.value, ContentType.COURSE.value):
-        mapped_type = ContentType(ct_value)
-    else:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported content type: {content_type}")
-
+    """Delete a content item by type and ID."""
     content_service = ContentService(session=auth.session)
     try:
         await content_service.delete_content(
-            content_type=mapped_type,
+            content_type=content_type,
             content_id=content_id,
             user_id=auth.user_id,
         )

@@ -4,7 +4,7 @@ import logging
 import re
 from collections.abc import Coroutine
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 import aiohttp
@@ -22,6 +22,7 @@ from src.videos.schemas import (
     TranscriptSegment,
     VideoChapterResponse,
     VideoCreate,
+    VideoLearningStatus,
     VideoListResponse,
     VideoResponse,
     VideoTranscriptResponse,
@@ -35,6 +36,18 @@ logger = logging.getLogger(__name__)
 CHAPTER_EXTRACTION_MAX_RETRIES = 3
 CHAPTER_EXTRACTION_RETRY_DELAY_SECONDS = 2
 VIDEO_RAG_SEARCH_LIMIT = 5
+VIDEO_PIPELINE_STATUS_PENDING = "pending"
+VIDEO_PIPELINE_STATUS_PROCESSING = "processing"
+VIDEO_PIPELINE_STATUS_COMPLETED = "completed"
+VIDEO_PIPELINE_STATUS_FAILED = "failed"
+VIDEO_CHAPTER_STATUS_NOT_STARTED = "not_started"
+VIDEO_CHAPTER_STATUS_IN_PROGRESS = "in_progress"
+VIDEO_CHAPTER_STATUS_COMPLETED = "completed"
+VALID_VIDEO_CHAPTER_STATUSES: tuple[VideoLearningStatus, ...] = (
+    VIDEO_CHAPTER_STATUS_NOT_STARTED,
+    VIDEO_CHAPTER_STATUS_IN_PROGRESS,
+    VIDEO_CHAPTER_STATUS_COMPLETED,
+)
 _DETACHED_TASKS: set[asyncio.Task[Any]] = set()
 
 
@@ -144,7 +157,10 @@ async def _auto_tag_video_background(video_id: UUID, user_id: UUID) -> None:
         logger.exception("Failed to tag video %s", video_id)
 
 
-async def _mark_video_status(video_id: str, status: str, error_context: str = "") -> None:
+VideoPipelineStatus = Literal["pending", "processing", "completed", "failed"]
+
+
+async def _mark_video_status(video_id: str, status: VideoPipelineStatus, error_context: str = "") -> None:
     """Mark video chapter extraction status."""
     try:
         async with async_session_maker() as db:
@@ -168,7 +184,7 @@ async def _handle_video_not_found_error(
         return True
 
     logger.exception(f"Video {video_id} not found after {max_retries} attempts: {e}")
-    await _mark_video_status(video_id, "failed")
+    await _mark_video_status(video_id, VIDEO_PIPELINE_STATUS_FAILED)
     return False
 
 
@@ -179,7 +195,7 @@ async def _try_extract_chapters(video_id: str, user_id: UUID) -> bool:
         video_result = await db.execute(select(Video).where(Video.id == video_id))
         video = video_result.scalar_one_or_none()
         if video:
-            video.chapters_status = "processing"
+            video.chapters_status = VIDEO_PIPELINE_STATUS_PROCESSING
             # Commit status update before yt-dlp network calls to avoid holding row locks.
             await db.commit()
 
@@ -205,7 +221,7 @@ async def _extract_chapters_background(video_id: str, user_id: UUID) -> None:
                 return
 
             logger.exception(f"Failed to extract chapters for video {video_id} on attempt {attempt + 1}: {e}")
-            await _mark_video_status(video_id, "failed", " after ValueError")
+            await _mark_video_status(video_id, VIDEO_PIPELINE_STATUS_FAILED, " after ValueError")
             return
         except Exception as e:
             if attempt < max_retries - 1:
@@ -216,7 +232,7 @@ async def _extract_chapters_background(video_id: str, user_id: UUID) -> None:
                 continue
 
             logger.exception(f"Failed to extract chapters for video {video_id} after {max_retries} attempts: {e}")
-            await _mark_video_status(video_id, "failed", " after final attempt")
+            await _mark_video_status(video_id, VIDEO_PIPELINE_STATUS_FAILED, " after final attempt")
             return
 
 
@@ -551,7 +567,7 @@ class VideoService:
         chapters = chapters_result.scalars().all()
 
         # If no chapters found and extraction hasn't been attempted, try to extract automatically
-        if not chapters and video.chapters_status == "pending":
+        if not chapters and video.chapters_status == VIDEO_PIPELINE_STATUS_PENDING:
             logger.info(
                 f"No chapters found for video {video_id} and status is pending, attempting automatic extraction as fallback"
             )
@@ -562,7 +578,7 @@ class VideoService:
             except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
                 logger.warning(f"Fallback chapter extraction failed for video {video_id}: {e}")
                 # Mark as failed so we don't keep retrying
-                video.chapters_status = "failed"
+                video.chapters_status = VIDEO_PIPELINE_STATUS_FAILED
                 video.chapters_extracted_at = datetime.now(UTC)
                 await db.flush()
                 # Return empty list - frontend will fall back to description extraction
@@ -598,7 +614,7 @@ class VideoService:
         db: AsyncSession,
         video_id: str,
         chapter_id: str,
-        status: str,
+        status: VideoLearningStatus,
         user_id: UUID,
     ) -> VideoChapterResponse:
         """Update the status of a video chapter."""
@@ -619,9 +635,8 @@ class VideoService:
             raise ValueError(msg)
 
         # Validate status
-        valid_statuses = ["not_started", "in_progress", "completed"]
-        if status not in valid_statuses:
-            msg = f"Invalid status '{status}'. Valid statuses are: {', '.join(valid_statuses)}"
+        if status not in VALID_VIDEO_CHAPTER_STATUSES:
+            msg = f"Invalid status '{status}'. Valid statuses are: {', '.join(VALID_VIDEO_CHAPTER_STATUSES)}"
             raise ValueError(msg)
 
         # Update status
@@ -642,7 +657,7 @@ class VideoService:
         # Compute completion percentage from completed chapters and persist via the unified progress service.
         try:
             if all_chapters:
-                completed_chapter_ids = [str(c.id) for c in all_chapters if c.status == "completed"]
+                completed_chapter_ids = [str(c.id) for c in all_chapters if c.status == VIDEO_CHAPTER_STATUS_COMPLETED]
                 total = len(all_chapters)
                 completion_pct = (len(completed_chapter_ids) / total) * 100 if total > 0 else 0.0
 
@@ -750,13 +765,13 @@ class VideoService:
                 title=chapter_info.get("title", f"Chapter {i + 1}"),
                 start_time=chapter_info.get("start_time"),
                 end_time=chapter_info.get("end_time"),
-                status="not_started",
+                status=VIDEO_CHAPTER_STATUS_NOT_STARTED,
             )
             db.add(chapter)
             chapters.append(chapter)
 
         # Update video chapter extraction status
-        video.chapters_status = "completed"
+        video.chapters_status = VIDEO_PIPELINE_STATUS_COMPLETED
         video.chapters_extracted_at = datetime.now(UTC)
 
         await db.flush()

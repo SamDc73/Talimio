@@ -2,9 +2,12 @@
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+
+CourseDocumentStatus = Literal["pending", "processing", "embedded", "failed"]
 
 
 class DocumentUpload(BaseModel):
@@ -27,7 +30,7 @@ class DocumentResponse(BaseModel):
     created_at: datetime
     processed_at: datetime | None = None
     embedded_at: datetime | None = None
-    status: str
+    status: CourseDocumentStatus
 
 
 class DocumentList(BaseModel):
