@@ -1,3 +1,4 @@
+
 """
 Interface contracts for highlighting services across different content types.
 
@@ -5,9 +6,9 @@ This module defines the common interface that all content-specific highlight ser
 must implement to ensure consistent behavior and UX across the application.
 """
 
+import uuid
 from abc import ABC, abstractmethod
 from typing import Any
-from uuid import UUID
 
 from .schemas import HighlightResponse
 
@@ -22,7 +23,7 @@ class HighlightInterface(ABC):
 
     @abstractmethod
     async def create_highlight(
-        self, content_id: UUID, user_id: UUID, highlight_data: dict[str, Any]
+        self, content_id: uuid.UUID, user_id: uuid.UUID, highlight_data: dict[str, Any]
     ) -> HighlightResponse:
         """
         Create a new highlight for the specified content.
@@ -42,7 +43,7 @@ class HighlightInterface(ABC):
         """
 
     @abstractmethod
-    async def get_highlights(self, content_id: UUID, user_id: UUID) -> list[HighlightResponse]:
+    async def get_highlights(self, content_id: uuid.UUID, user_id: uuid.UUID) -> list[HighlightResponse]:
         """
         Get all highlights for the specified content.
 
@@ -60,7 +61,7 @@ class HighlightInterface(ABC):
         """
 
     @abstractmethod
-    async def delete_highlight(self, highlight_id: UUID, user_id: UUID) -> bool:
+    async def delete_highlight(self, highlight_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         """
         Delete a specific highlight.
 
@@ -78,7 +79,7 @@ class HighlightInterface(ABC):
         """
 
     @abstractmethod
-    async def get_highlight(self, highlight_id: UUID, user_id: UUID) -> HighlightResponse:
+    async def get_highlight(self, highlight_id: uuid.UUID, user_id: uuid.UUID) -> HighlightResponse:
         """
         Get a specific highlight by ID.
 
@@ -97,7 +98,7 @@ class HighlightInterface(ABC):
 
     @abstractmethod
     async def update_highlight(
-        self, highlight_id: UUID, user_id: UUID, highlight_data: dict[str, Any]
+        self, highlight_id: uuid.UUID, user_id: uuid.UUID, highlight_data: dict[str, Any]
     ) -> HighlightResponse:
         """
         Update an existing highlight.

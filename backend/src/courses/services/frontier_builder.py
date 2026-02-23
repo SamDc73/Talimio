@@ -1,10 +1,11 @@
+
 """Utilities for assembling the course concept frontier response."""
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from uuid import NAMESPACE_URL, UUID, uuid5
 
 from src.courses.models import (
     Concept,
@@ -26,9 +27,9 @@ class _FrontierSnapshot:
     due_for_review: list[ConceptSummary]
     avg_mastery: float
     course_concepts: list[Concept]
-    concept_by_id: dict[UUID, Concept]
-    state_by_id: dict[UUID, UserConceptState]
-    due_ids: set[UUID]
+    concept_by_id: dict[uuid.UUID, Concept]
+    state_by_id: dict[uuid.UUID, UserConceptState]
+    due_ids: set[uuid.UUID]
 
 
 
@@ -38,14 +39,14 @@ def _to_concept_summary(
     concept: Concept,
     state: UserConceptState | None,
     *,
-    course_id: UUID,
-    prerequisites: list[UUID] | None = None,
+    course_id: uuid.UUID,
+    prerequisites: list[uuid.UUID] | None = None,
 ) -> ConceptSummary:
     mastery = state.s_mastery if state is not None else None
     next_review = state.next_review_at if state is not None else None
     exposures = state.exposures if state is not None else 0
     # Deterministic lesson id mapping for adaptive navigation (no DB writes here)
-    lesson_id = uuid5(NAMESPACE_URL, f"concept-lesson:{course_id}:{concept.id}")
+    lesson_id = uuid.uuid5(uuid.NAMESPACE_URL, f"concept-lesson:{course_id}:{concept.id}")
     return ConceptSummary(
         id=concept.id,
         name=concept.name,
@@ -68,7 +69,7 @@ def _prepare_frontier_snapshot(
     frontier_entries: Sequence[FrontierEntry],
     due_entries: Sequence[DueConceptEntry],
     *,
-    course_id: UUID,
+    course_id: uuid.UUID,
 ) -> _FrontierSnapshot:
     entries = list(frontier_entries)
     due_list = list(due_entries)
@@ -135,8 +136,8 @@ def _prepare_frontier_snapshot(
 
 async def build_course_frontier(
     *,
-    user_id: UUID,
-    course_id: UUID,
+    user_id: uuid.UUID,
+    course_id: uuid.UUID,
     graph_service: ConceptGraphService,
     scheduler_service: LectorSchedulerService,
 ) -> FrontierResponse:

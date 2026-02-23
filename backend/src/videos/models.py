@@ -3,10 +3,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import Literal
-from uuid import UUID as UUID_TYPE
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.base import Base
@@ -21,12 +20,12 @@ class Video(Base):
 
     __tablename__ = "videos"
 
-    id: Mapped[UUID_TYPE] = mapped_column(
-        UUID(as_uuid=True),
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
     )
-    user_id: Mapped[UUID_TYPE] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False, index=True)
     youtube_id: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
     url: Mapped[str] = mapped_column(String(255), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -84,9 +83,9 @@ class VideoChapter(Base):
 
     __tablename__ = "video_chapters"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     video_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("videos.id", ondelete="CASCADE"),
         nullable=False,
         index=True,

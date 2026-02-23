@@ -1,3 +1,4 @@
+
 """Service layer for user-managed MCP servers."""
 
 from __future__ import annotations
@@ -5,10 +6,10 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
+import uuid
 from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
-from uuid import UUID
 
 from cryptography.fernet import Fernet, InvalidToken
 from pydantic import ValidationError
@@ -109,11 +110,11 @@ def _derive_unique_name(base_name: str, existing_names: set[str]) -> str:
         counter += 1
 
 
-def _build_select(user_id: UUID) -> Select:
+def _build_select(user_id: uuid.UUID) -> Select:
     return select(UserMCPServer).where(UserMCPServer.user_id == user_id)
 
 
-async def list_user_mcp_servers(session: AsyncSession, user_id: UUID) -> list[UserMCPServer]:
+async def list_user_mcp_servers(session: AsyncSession, user_id: uuid.UUID) -> list[UserMCPServer]:
     """Return every MCP server owned by the specified user."""
     result = await session.scalars(_build_select(user_id))
     return list(result)
@@ -121,7 +122,7 @@ async def list_user_mcp_servers(session: AsyncSession, user_id: UUID) -> list[Us
 
 async def paginate_user_mcp_servers(
     session: AsyncSession,
-    user_id: UUID,
+    user_id: uuid.UUID,
     *,
     page: int,
     page_size: int,
@@ -135,7 +136,7 @@ async def paginate_user_mcp_servers(
 async def create_user_mcp_server(
     session: AsyncSession,
     *,
-    user_id: UUID,
+    user_id: uuid.UUID,
     payload: MCPServerCreateRequest,
 ) -> UserMCPServer:
     """Persist a new MCP server entry for the given user.
@@ -188,7 +189,7 @@ async def create_user_mcp_server(
     return server
 
 
-async def delete_user_mcp_server(session: AsyncSession, *, user_id: UUID, server_id: UUID) -> bool:
+async def delete_user_mcp_server(session: AsyncSession, *, user_id: uuid.UUID, server_id: uuid.UUID) -> bool:
     """Delete a server entry if it belongs to the user."""
     server = await session.get(UserMCPServer, server_id)
     if server is None or server.user_id != user_id:
@@ -226,13 +227,13 @@ def build_user_mcp_config(user_servers: Iterable[UserMCPServer]) -> MCPConfig:
     return MCPConfig(servers=servers)
 
 
-async def get_user_mcp_config(session: AsyncSession, user_id: UUID) -> MCPConfig:
+async def get_user_mcp_config(session: AsyncSession, user_id: uuid.UUID) -> MCPConfig:
     """Return a merged MCP config that includes a user's custom servers."""
     user_servers = await list_user_mcp_servers(session, user_id)
     return build_user_mcp_config(user_servers)
 
 
-async def get_user_mcp_server(session: AsyncSession, *, user_id: UUID, server_name: str) -> MCPServerConfig | None:
+async def get_user_mcp_server(session: AsyncSession, *, user_id: uuid.UUID, server_name: str) -> MCPServerConfig | None:
     """Return the MCP server config for a user."""
     config = await get_user_mcp_config(session, user_id)
     return config.get(server_name)
@@ -241,7 +242,7 @@ async def get_user_mcp_server(session: AsyncSession, *, user_id: UUID, server_na
 async def list_user_mcp_tools(
     session: AsyncSession,
     *,
-    user_id: UUID,
+    user_id: uuid.UUID,
     server_name: str,
     config: MCPConfig | None = None,
 ) -> list[Any]:

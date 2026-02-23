@@ -1,8 +1,9 @@
+
 """Video highlight service implementing the HighlightInterface contract."""
 
 import logging
+import uuid
 from typing import Any
-from uuid import UUID
 
 from fastapi import HTTPException, status
 from pydantic import ValidationError
@@ -29,8 +30,8 @@ class VideoHighlightService(HighlightInterface):
 
     async def create_highlight(
         self,
-        content_id: UUID,
-        user_id: UUID,
+        content_id: uuid.UUID,
+        user_id: uuid.UUID,
         highlight_data: dict[str, Any],
     ) -> HighlightResponse:
         """Create a new highlight for a video."""
@@ -77,8 +78,8 @@ class VideoHighlightService(HighlightInterface):
 
     async def get_highlights(
         self,
-        content_id: UUID,
-        user_id: UUID,
+        content_id: uuid.UUID,
+        user_id: uuid.UUID,
     ) -> list[HighlightResponse]:
         """Get all highlights for a video."""
         await self._verify_video_ownership(content_id, user_id)
@@ -103,8 +104,8 @@ class VideoHighlightService(HighlightInterface):
 
     async def get_highlight(
         self,
-        highlight_id: UUID,
-        user_id: UUID,
+        highlight_id: uuid.UUID,
+        user_id: uuid.UUID,
     ) -> HighlightResponse:
         """Get a specific highlight with ownership validation."""
         query = select(Highlight).where(and_(Highlight.id == highlight_id, Highlight.user_id == user_id))
@@ -119,8 +120,8 @@ class VideoHighlightService(HighlightInterface):
 
     async def update_highlight(
         self,
-        highlight_id: UUID,
-        user_id: UUID,
+        highlight_id: uuid.UUID,
+        user_id: uuid.UUID,
         highlight_data: dict[str, Any],
     ) -> HighlightResponse:
         """Update a highlight with ownership validation."""
@@ -162,8 +163,8 @@ class VideoHighlightService(HighlightInterface):
 
     async def delete_highlight(
         self,
-        highlight_id: UUID,
-        user_id: UUID,
+        highlight_id: uuid.UUID,
+        user_id: uuid.UUID,
     ) -> bool:
         """Delete a highlight with ownership validation."""
         stmt = delete(Highlight).where(and_(Highlight.id == highlight_id, Highlight.user_id == user_id))
@@ -189,7 +190,7 @@ class VideoHighlightService(HighlightInterface):
         logger.info(f"Deleted highlight {highlight_id}")
         return True
 
-    async def _verify_video_ownership(self, video_id: UUID, user_id: UUID) -> None:
+    async def _verify_video_ownership(self, video_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Verify that the user owns the video."""
         query = select(Video).where(and_(Video.id == video_id, Video.user_id == user_id))
 

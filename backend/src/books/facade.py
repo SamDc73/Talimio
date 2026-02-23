@@ -1,3 +1,4 @@
+
 """Books Module Facade.
 
 Single entry point for all book-related operations.
@@ -9,8 +10,8 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -43,7 +44,7 @@ class BooksFacade:
         self._content_service = BookContentService(session)
         self._progress_service = BookProgressService(session)
 
-    async def get_content_with_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
+    async def get_content_with_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
         """Get book with progress in IntegrityErrora dict structure (parity with other facades)."""
         try:
             book_with = await self.get_book(content_id, user_id)
@@ -63,7 +64,7 @@ class BooksFacade:
             "success": True,
         }
 
-    async def get_book(self, book_id: UUID, user_id: UUID) -> BookWithProgress:
+    async def get_book(self, book_id: uuid.UUID, user_id: uuid.UUID) -> BookWithProgress:
         """Get a single book with progress as a typed response."""
         try:
             # Ownership-checked book
@@ -95,7 +96,7 @@ class BooksFacade:
 
     async def upload_book(
         self,
-        user_id: UUID,
+        user_id: uuid.UUID,
         file_path: str,
         title: str,
         metadata: dict[str, Any] | None = None,
@@ -164,7 +165,7 @@ class BooksFacade:
             logger.exception("Error uploading book", extra={"user_id": str(user_id), "title": title, "error": str(e)})
             return {"error": f"Failed to upload book: {e!s}", "success": False}
 
-    async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
+    async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update book reading progress."""
         try:
             # Update progress using the progress tracker
@@ -182,7 +183,7 @@ class BooksFacade:
             )
             return {"error": f"Failed to update progress: {e!s}", "success": False}
 
-    async def update_book(self, book_id: UUID, user_id: UUID, update_data: dict[str, Any]) -> dict[str, Any]:
+    async def update_book(self, book_id: uuid.UUID, user_id: uuid.UUID, update_data: dict[str, Any]) -> dict[str, Any]:
         """Update book metadata."""
         try:
             # Update through content service which handles tags and reprocessing
@@ -196,7 +197,7 @@ class BooksFacade:
             )
             return {"error": "Failed to update book", "success": False}
 
-    async def get_user_books(self, user_id: UUID, include_progress: bool = True) -> dict[str, Any]:
+    async def get_user_books(self, user_id: uuid.UUID, include_progress: bool = True) -> dict[str, Any]:
         """Get all books for user. Optionally includes progress information."""
         try:
             # Fetch books for this user
@@ -221,7 +222,7 @@ class BooksFacade:
             logger.exception("Error getting books", extra={"user_id": str(user_id), "error": str(e)})
             return {"error": f"Failed to get books: {e!s}", "success": False}
 
-    async def get_book_chapters(self, book_id: UUID, user_id: UUID) -> dict[str, Any]:
+    async def get_book_chapters(self, book_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
         """Get book chapters/table of contents if available."""
         try:
             # Fetch book to read table_of_contents JSON
@@ -261,7 +262,7 @@ class BooksFacade:
             return {"error": "Failed to get chapters", "success": False}
 
     async def mark_chapter_complete(
-        self, book_id: UUID, user_id: UUID, chapter_id: str, completed: bool = True
+        self, book_id: uuid.UUID, user_id: uuid.UUID, chapter_id: str, completed: bool = True
     ) -> dict[str, Any]:
         """Mark a book chapter as completed."""
         try:

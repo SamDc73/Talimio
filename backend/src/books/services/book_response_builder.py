@@ -1,10 +1,11 @@
+
 """Book response builder service for consistent response formatting."""
 
 import json
 import logging
+import uuid
 from collections.abc import Mapping
 from typing import Any
-from uuid import UUID
 
 from src.books.models import Book
 from src.books.schemas import (
@@ -78,7 +79,7 @@ class BookResponseBuilder:
         return BookWithProgress.model_validate(payload)
 
     @staticmethod
-    def build_progress_response(progress: Mapping[str, Any], book_id: UUID) -> BookProgressResponse:
+    def build_progress_response(progress: Mapping[str, Any], book_id: uuid.UUID) -> BookProgressResponse:
         """Convert a progress dictionary into a BookProgressResponse."""
         current_page = progress.get("page", progress.get("current_page", 1)) or 1
         if isinstance(current_page, (int, float)) and current_page < 1:

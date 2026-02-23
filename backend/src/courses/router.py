@@ -1,3 +1,4 @@
+
 """Unified courses API router.
 
 This router exposes the consolidated course API that replaces the legacy
@@ -8,10 +9,10 @@ CoursesFacade now handles all endpoints including lesson-specific operations.
 """
 
 import logging
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, cast
-from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
@@ -183,7 +184,7 @@ async def list_courses(
 
 @router.get("/{course_id}")
 async def get_course(
-    course_id: UUID,
+    course_id: uuid.UUID,
     auth: CurrentAuth,
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CourseResponse:
@@ -198,7 +199,7 @@ async def get_course(
 
 @router.patch("/{course_id}")
 async def update_course(
-    course_id: UUID,
+    course_id: uuid.UUID,
     request: CourseUpdate,
     auth: CurrentAuth,
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
@@ -215,8 +216,8 @@ async def update_course(
 
 @router.get("/{course_id}/lessons/{lesson_id}")
 async def get_lesson(
-    course_id: UUID,
-    lesson_id: UUID,
+    course_id: uuid.UUID,
+    lesson_id: uuid.UUID,
     lesson_service: Annotated[LessonService, Depends(get_lesson_service)],
     generate: Annotated[bool, Query(description="Auto-generate if lesson doesn't exist")] = False,
 ) -> LessonDetailResponse:
@@ -226,8 +227,8 @@ async def get_lesson(
 
 @router.post("/{course_id}/lessons/{lesson_id}/grade")
 async def grade_lesson_response(
-    course_id: UUID,
-    lesson_id: UUID,
+    course_id: uuid.UUID,
+    lesson_id: uuid.UUID,
     payload: GradeRequest,
     auth: CurrentAuth,
     grading_service: Annotated[GradingService, Depends(get_grading_service)],
@@ -268,7 +269,7 @@ async def grade_lesson_response(
 
 @router.get("/{course_id}/concepts")
 async def get_course_concept_frontier(
-    course_id: UUID,
+    course_id: uuid.UUID,
     auth: CurrentAuth,
 ) -> FrontierResponse:
     """Return adaptive frontier data for a course."""
@@ -295,7 +296,7 @@ async def get_course_concept_frontier(
 
 @router.post("/{course_id}/practice/drills")
 async def generate_practice_drills(
-    course_id: UUID,
+    course_id: uuid.UUID,
     payload: PracticeDrillRequest,
     auth: CurrentAuth,
     drill_service: Annotated[PracticeDrillService, Depends(get_practice_drill_service)],
@@ -333,8 +334,8 @@ async def generate_practice_drills(
 
 @router.post("/{course_id}/lessons/{lesson_id}/reviews")
 async def submit_adaptive_reviews(
-    course_id: UUID,
-    lesson_id: UUID,
+    course_id: uuid.UUID,
+    lesson_id: uuid.UUID,
     payload: ReviewBatchRequest,
     auth: CurrentAuth,
 ) -> ReviewBatchResponse:
@@ -475,8 +476,8 @@ async def submit_adaptive_reviews(
 
 @router.get("/{course_id}/concepts/{concept_id}/next-review")
 async def get_concept_next_review(
-    course_id: UUID,
-    concept_id: UUID,
+    course_id: uuid.UUID,
+    concept_id: uuid.UUID,
     auth: CurrentAuth,
 ) -> NextReviewResponse:
     """Return the next scheduled review information for a concept."""

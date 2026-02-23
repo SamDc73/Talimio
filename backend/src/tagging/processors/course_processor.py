@@ -1,9 +1,10 @@
+
 """Course content processor for tag generation."""
 
 import json
 import logging
+import uuid
 from typing import Any
-from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -191,8 +192,8 @@ class CourseProcessor:
 
 
 async def process_course_for_tagging(
-    course_id: UUID,
-    user_id: UUID,
+    course_id: uuid.UUID,
+    user_id: uuid.UUID,
     session: AsyncSession,
 ) -> dict[str, str] | None:
     """Process a course to extract content for tagging.

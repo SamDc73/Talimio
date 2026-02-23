@@ -1,13 +1,14 @@
+
 """Course response builder service for constructing course responses."""
 
 from __future__ import annotations
 
 import contextlib
 import json
+import uuid
 from collections import defaultdict
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
-from uuid import NAMESPACE_URL, UUID, uuid5
 
 from src.courses.models import Course, Lesson
 from src.courses.schemas import CourseResponse, LessonSummary, ModuleResponse
@@ -15,23 +16,23 @@ from src.courses.schemas import CourseResponse, LessonSummary, ModuleResponse
 
 # Local, zero-dependency module id: stable UUIDv5 from name
 # NOTE: Keep this intentionally simple; we only need stability across responses.
-def compute_module_id(course_id: UUID, module_name: str | None) -> UUID:
-    """Return a deterministic UUID for a course module label.
+def compute_module_id(course_id: uuid.UUID, module_name: str | None) -> uuid.UUID:
+    """Return a deterministic uuid.UUID for a course module label.
 
     Parameters
     ----------
-    course_id : UUID
+    course_id : uuid.UUID
         Course identifier used as part of the deterministic key.
     module_name : str | None
         Human label for the module; when ``None``, the label defaults to ``"default"``.
 
     Returns
     -------
-    UUID
+    uuid.UUID
         A stable UUIDv5 derived from ``course_id`` and ``module_name``.
     """
     module_key = module_name or "default"
-    return uuid5(NAMESPACE_URL, f"course-module:{course_id}:{module_key}")
+    return uuid.uuid5(uuid.NAMESPACE_URL, f"course-module:{course_id}:{module_key}")
 
 
 if TYPE_CHECKING:

@@ -482,7 +482,7 @@ async def _get_rag_context(request: NormalizedChatRequest, user_id: uuid.UUID, s
             # Ownership check
             resource = await session.scalar(
                 _select(model_class).where(
-                    model_class.id == uuid.UUID(str(request.context_id)),
+                    model_class.id == request.context_id,
                     model_class.user_id == user_id,
                 )
             )

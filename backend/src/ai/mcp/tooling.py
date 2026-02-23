@@ -1,12 +1,13 @@
+
 """Helpers for exposing user MCP tools to the LLM client."""
 
 from __future__ import annotations
 
 import json
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
 
 from src.ai.mcp.client import get_mcp_client
 from src.ai.mcp.config import MCPConfig
@@ -43,7 +44,7 @@ class MCPToolBinding:
         }
 
 
-async def load_user_tool_bindings(session: AsyncSession, user_id: UUID) -> list[MCPToolBinding]:
+async def load_user_tool_bindings(session: AsyncSession, user_id: uuid.UUID) -> list[MCPToolBinding]:
     """Load and normalize every MCP tool configured by the user."""
     config = await get_user_mcp_config(session, user_id)
     bindings: list[MCPToolBinding] = []
@@ -77,7 +78,7 @@ async def load_user_tool_bindings(session: AsyncSession, user_id: UUID) -> list[
 
 async def execute_user_tool_call(
     *,
-    user_id: UUID,
+    user_id: uuid.UUID,
     server_name: str,
     tool_name: str,
     encoded_name: str,

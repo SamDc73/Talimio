@@ -1,3 +1,4 @@
+
 """AI-powered code execution service using E2B Code Interpreter sandboxes.
 
 Fully autonomous execution with fast-path optimization:
@@ -17,10 +18,10 @@ import logging
 import posixpath
 import shlex
 import time
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
-from uuid import UUID
 
 from fastapi import status
 
@@ -913,7 +914,7 @@ class CodeExecutionService:
 
     async def _persist_lesson_patch(self, lesson_id: str, original: str, replacement: str) -> None:
         try:
-            lesson_uuid = UUID(lesson_id)
+            lesson_uuid = uuid.UUID(lesson_id)
         except (ValueError, TypeError):
             logger.debug("Invalid lesson_id for patch persistence lesson_id=%s", lesson_id)
             return

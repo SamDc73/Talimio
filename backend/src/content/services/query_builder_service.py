@@ -1,7 +1,8 @@
+
 """Query builder service for content operations."""
 
 import logging
-from uuid import UUID
+import uuid
 
 from sqlalchemy import column, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,7 +43,7 @@ class QueryBuilderService:
         content_type: ContentType | None,
         search: str | None,
         include_archived: bool = False,
-        user_id: UUID | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> list[str]:
         """Build SQL queries for different content types."""
         queries: list[str] = []
@@ -64,7 +65,7 @@ class QueryBuilderService:
         return queries
 
     @staticmethod
-    def _get_video_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
+    def _get_video_query(search: str | None, include_archived: bool = False, user_id: uuid.UUID | None = None) -> str:
         """Get SQL query for videos."""
         return QueryBuilderService.get_video_query(
             search, archived_only=False, include_archived=include_archived, user_id=user_id
@@ -75,7 +76,7 @@ class QueryBuilderService:
         search: str | None,
         archived_only: bool = False,
         include_archived: bool = False,
-        user_id: UUID | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> str:
         """Get SQL query for videos WITHOUT progress (optimized for performance)."""
         # No more progress JOINs - progress is fetched separately
@@ -120,7 +121,7 @@ class QueryBuilderService:
 
 
     @staticmethod
-    def _get_book_query(search: str | None, include_archived: bool = False, user_id: UUID | None = None) -> str:
+    def _get_book_query(search: str | None, include_archived: bool = False, user_id: uuid.UUID | None = None) -> str:
         """Get SQL query for books."""
         return QueryBuilderService.get_books_query(
             search, archived_only=False, include_archived=include_archived, user_id=user_id
@@ -128,7 +129,7 @@ class QueryBuilderService:
 
     @staticmethod
     def get_books_query(
-        search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: UUID | None = None
+        search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: uuid.UUID | None = None
     ) -> str:
         """Get SQL query for books WITHOUT progress (optimized for performance)."""
         # No more progress JOINs - progress is fetched separately
@@ -178,7 +179,7 @@ class QueryBuilderService:
         search: str | None,
         archived_only: bool = False,
         include_archived: bool = False,
-        user_id: UUID | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> str:
         """Get SQL query for courses WITHOUT progress (optimized for performance)."""
         query = """
@@ -229,7 +230,7 @@ class QueryBuilderService:
 
     @staticmethod
     async def get_total_count(
-        session: AsyncSession, combined_query: str, search_term: str | None, user_id: UUID | None = None
+        session: AsyncSession, combined_query: str, search_term: str | None, user_id: uuid.UUID | None = None
     ) -> int:
         """Get total count of results."""
         combined_subquery = QueryBuilderService.build_combined_subquery(combined_query)

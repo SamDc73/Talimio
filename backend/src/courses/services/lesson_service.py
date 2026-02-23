@@ -1,9 +1,10 @@
+
 """Lesson service with SQL-first queries and mandatory user isolation."""
 
 import logging
+import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
-from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import select, update
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 class LessonService:
     """Lesson service with SQL-first queries and mandatory user isolation."""
 
-    def __init__(self, session: AsyncSession, user_id: UUID) -> None:
+    def __init__(self, session: AsyncSession, user_id: uuid.UUID) -> None:
         """Initialize with user context for security isolation."""
         self.session = session
         self.user_id = user_id
@@ -29,8 +30,8 @@ class LessonService:
     async def _build_course_outline_context(
         self,
         *,
-        course_id: UUID,
-        lesson_id: UUID,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
     ) -> tuple[list[dict[str, Any]], int | None, int | None, str | None]:
         outline_query = (
             select(
@@ -91,7 +92,7 @@ class LessonService:
     async def _build_rag_context(
         self,
         *,
-        course_id: UUID,
+        course_id: uuid.UUID,
         title: str,
         description: str,
     ) -> str:
@@ -205,15 +206,15 @@ class LessonService:
 
     async def get_lesson(
         self,
-        course_id: UUID,
-        lesson_id: UUID,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
         force_refresh: bool = False,
     ) -> LessonDetailResponse:
         """Get lesson with single query including user isolation.
 
         Args:
-            course_id: Course UUID
-            lesson_id: Lesson UUID
+            course_id: Course uuid.UUID
+            lesson_id: Lesson uuid.UUID
             force_refresh: Whether to regenerate content even if it already exists
 
         Returns

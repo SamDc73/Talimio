@@ -1,6 +1,6 @@
 import logging
+import uuid
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 
@@ -48,7 +48,7 @@ async def get_all_content(
 @router.patch("/{content_type}/{content_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
 async def archive_content(
     content_type: ContentType,
-    content_id: UUID,
+    content_id: uuid.UUID,
     auth: CurrentAuth,
 ) -> None:
     """Archive a content item by type and ID."""
@@ -63,7 +63,7 @@ async def archive_content(
 @router.patch("/{content_type}/{content_id}/unarchive", status_code=status.HTTP_204_NO_CONTENT)
 async def unarchive_content(
     content_type: ContentType,
-    content_id: UUID,
+    content_id: uuid.UUID,
     auth: CurrentAuth,
 ) -> None:
     """Unarchive a content item by type and ID."""
@@ -78,7 +78,7 @@ async def unarchive_content(
 @router.delete("/{content_type}/{content_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_content(
     content_type: ContentType,
-    content_id: UUID,
+    content_id: uuid.UUID,
     auth: CurrentAuth,
 ) -> None:
     """Delete a content item by type and ID."""

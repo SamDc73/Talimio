@@ -1,9 +1,10 @@
+
 """Business logic for progress tracking."""
 
 import json
 import logging
+import uuid
 from typing import Any
-from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +28,7 @@ class ProgressService:
         """Initialize progress service."""
         self.session = session
 
-    async def get_batch_progress(self, user_id: UUID, content_ids: list[UUID]) -> dict[str, dict[str, Any]]:
+    async def get_batch_progress(self, user_id: uuid.UUID, content_ids: list[uuid.UUID]) -> dict[str, dict[str, Any]]:
         """Get progress for multiple content items."""
         if not content_ids:
             return {}
@@ -53,7 +54,7 @@ class ProgressService:
 
         return progress_map
 
-    async def get_single_progress(self, user_id: UUID, content_id: UUID) -> ProgressResponse | None:
+    async def get_single_progress(self, user_id: uuid.UUID, content_id: uuid.UUID) -> ProgressResponse | None:
         """Get progress for a single content item."""
         result = await self.session.execute(
             text(GET_SINGLE_PROGRESS_QUERY), {"user_id": str(user_id), "content_id": str(content_id)}
@@ -67,8 +68,8 @@ class ProgressService:
 
     async def update_progress(
         self,
-        user_id: UUID,
-        content_id: UUID,
+        user_id: uuid.UUID,
+        content_id: uuid.UUID,
         content_type: ContentType,
         progress: ProgressUpdate,
     ) -> ProgressResponse:
@@ -99,7 +100,7 @@ class ProgressService:
         await self.session.flush()
         return self._row_to_progress_response(row)
 
-    async def delete_progress(self, user_id: UUID, content_id: UUID) -> bool:
+    async def delete_progress(self, user_id: uuid.UUID, content_id: uuid.UUID) -> bool:
         """Delete progress for a content item."""
         result = await self.session.execute(
             text(DELETE_PROGRESS_QUERY), {"user_id": str(user_id), "content_id": str(content_id)}
@@ -133,9 +134,9 @@ class ProgressService:
 
         return ProgressResponse.model_validate(payload)
 
-    async def get_content_type(self, content_id: UUID, user_id: UUID) -> ContentType | None:
+    async def get_content_type(self, content_id: uuid.UUID, user_id: uuid.UUID) -> ContentType | None:
         """Determine content type by checking which table contains the content AND user owns it."""
-        # Check books (uses id column which is UUID)
+        # Check books (uses id column which is uuid.UUID)
         result = await self.session.execute(
             text("SELECT 1 FROM books WHERE id = :content_id AND user_id = :user_id"),
             {"content_id": str(content_id), "user_id": str(user_id)},
@@ -143,7 +144,7 @@ class ProgressService:
         if result.first():
             return "book"
 
-        # Check videos (uses id column which is UUID)
+        # Check videos (uses id column which is uuid.UUID)
         result = await self.session.execute(
             text("SELECT 1 FROM videos WHERE id = :content_id AND user_id = :user_id"),
             {"content_id": str(content_id), "user_id": str(user_id)},
@@ -151,7 +152,7 @@ class ProgressService:
         if result.first():
             return "video"
 
-        # Check courses (uses id column which is UUID)
+        # Check courses (uses id column which is uuid.UUID)
         result = await self.session.execute(
             text("SELECT 1 FROM courses WHERE id = :content_id AND user_id = :user_id"),
             {"content_id": str(content_id), "user_id": str(user_id)},

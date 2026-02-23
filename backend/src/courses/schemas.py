@@ -1,10 +1,11 @@
+
 """Pydantic schemas for the unified courses API."""
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from typing import Any, Literal
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -17,7 +18,7 @@ _CAMEL_CONFIG = {"alias_generator": to_camel, "populate_by_name": True}
 class LessonSummary(BaseModel):
     """Lightweight lesson representation for course outlines."""
 
-    id: UUID = Field(..., description="Lesson ID")
+    id: uuid.UUID = Field(..., description="Lesson ID")
     title: str = Field(..., description="Lesson title")
     description: str | None = Field(None, description="Lesson description")
     order: int = Field(..., description="Lesson order within its module")
@@ -28,12 +29,12 @@ class LessonSummary(BaseModel):
 class LessonDetailResponse(BaseModel):
     """Schema for detailed lesson responses (content endpoint)."""
 
-    id: UUID = Field(..., description="Lesson ID")
-    course_id: UUID = Field(..., description="Course ID")
+    id: uuid.UUID = Field(..., description="Lesson ID")
+    course_id: uuid.UUID = Field(..., description="Course ID")
     title: str = Field(..., description="Lesson title")
     description: str | None = Field(None, description="Lesson description")
     content: str | None = Field(None, description="Lesson content (MDX format)")
-    concept_id: UUID | None = Field(None, description="Mapped concept ID for adaptive lessons")
+    concept_id: uuid.UUID | None = Field(None, description="Mapped concept ID for adaptive lessons")
     adaptive_enabled: bool | None = Field(None, description="Whether the parent course is adaptive")
     created_at: datetime = Field(..., description="Lesson creation timestamp")
     updated_at: datetime = Field(..., description="Lesson last update timestamp")
@@ -107,7 +108,7 @@ class CourseUpdate(BaseModel):
 class ModuleResponse(BaseModel):
     """Schema for synthesized module responses."""
 
-    id: UUID = Field(..., description="Module ID")
+    id: uuid.UUID = Field(..., description="Module ID")
     title: str = Field(..., description="Module title")
     description: str | None = Field(None, description="Module description")
     lessons: list[LessonSummary] = Field(default_factory=list, description="Module lessons")
@@ -118,8 +119,8 @@ class ModuleResponse(BaseModel):
 class CourseResponse(CourseBase):
     """Schema for course responses."""
 
-    id: UUID = Field(..., description="Course ID")
-    user_id: UUID | None = Field(None, description="Owner user ID")
+    id: uuid.UUID = Field(..., description="Course ID")
+    user_id: uuid.UUID | None = Field(None, description="Owner user ID")
     created_at: datetime = Field(..., description="Course creation timestamp")
     updated_at: datetime = Field(..., description="Course last update timestamp")
     modules: list[ModuleResponse] = Field(default_factory=list, description="Course modules")
@@ -141,16 +142,16 @@ class CourseListResponse(BaseModel):
 class ConceptSummary(BaseModel):
     """Summary of a concept for adaptive frontier responses."""
 
-    id: UUID = Field(..., description="Concept ID")
+    id: uuid.UUID = Field(..., description="Concept ID")
     name: str = Field(..., description="Concept display name")
     description: str = Field(..., description="Concept description")
     difficulty: int | None = Field(None, description="Optional difficulty indicator")
     mastery: float | None = Field(None, description="Current mastery score in [0,1]")
     next_review_at: datetime | None = Field(None, description="Next scheduled review timestamp")
     exposures: int = Field(0, description="Total review exposures")
-    lesson_id: UUID | None = Field(None, description="Deterministic lesson ID mapped to this concept")
-    lesson_id_ref: UUID | None = Field(None, description="Alias for lesson ID reference")
-    prerequisites: list[UUID] = Field(default_factory=list, description="List of prerequisite concept IDs")
+    lesson_id: uuid.UUID | None = Field(None, description="Deterministic lesson ID mapped to this concept")
+    lesson_id_ref: uuid.UUID | None = Field(None, description="Alias for lesson ID reference")
+    prerequisites: list[uuid.UUID] = Field(default_factory=list, description="List of prerequisite concept IDs")
     order: int | None = Field(None, description="Ordering hint within course graph")
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
@@ -171,7 +172,7 @@ class FrontierResponse(BaseModel):
 class ReviewRequest(BaseModel):
     """Single concept review submission."""
 
-    concept_id: UUID = Field(..., description="Concept being reviewed")
+    concept_id: uuid.UUID = Field(..., description="Concept being reviewed")
     question: str | None = Field(
         None,
         min_length=1,
@@ -211,7 +212,7 @@ class ReviewBatchRequest(BaseModel):
 class ReviewOutcome(BaseModel):
     """Per-concept outcome returned after submitting reviews."""
 
-    concept_id: UUID = Field(..., description="Reviewed concept ID")
+    concept_id: uuid.UUID = Field(..., description="Reviewed concept ID")
     next_review_at: datetime | None = Field(None, description="Scheduled next review timestamp")
     mastery: float | None = Field(None, description="Updated mastery score")
     exposures: int = Field(0, description="Total exposures after update")
@@ -230,7 +231,7 @@ class ReviewBatchResponse(BaseModel):
 class NextReviewResponse(BaseModel):
     """Response for concept next-review lookup."""
 
-    concept_id: UUID = Field(..., description="Concept ID")
+    concept_id: uuid.UUID = Field(..., description="Concept ID")
     next_review_at: datetime | None = Field(None, description="Next review timestamp")
     current_mastery: float | None = Field(None, description="Current mastery score")
     total_exposures: int = Field(0, description="Total exposures for the concept")
@@ -311,9 +312,9 @@ class GradeAnswerPayload(BaseModel):
 class GradeContextPayload(BaseModel):
     """Context payload for grading to enable adaptive wiring."""
 
-    course_id: UUID = Field(..., description="Course ID for the practice interaction")
-    lesson_id: UUID = Field(..., description="Lesson ID for the practice interaction")
-    concept_id: UUID = Field(..., description="Concept ID used for adaptive scheduling")
+    course_id: uuid.UUID = Field(..., description="Course ID for the practice interaction")
+    lesson_id: uuid.UUID = Field(..., description="Lesson ID for the practice interaction")
+    concept_id: uuid.UUID = Field(..., description="Concept ID used for adaptive scheduling")
     practice_context: PracticeContext = Field(..., description="Practice surface that collected the answer")
     hints_used: int | None = Field(
         None,
@@ -400,7 +401,7 @@ class GradeResponse(BaseModel):
 class PracticeDrillRequest(BaseModel):
     """Request payload for adaptive practice drill generation."""
 
-    concept_id: UUID = Field(..., description="Concept to generate drill questions for")
+    concept_id: uuid.UUID = Field(..., description="Concept to generate drill questions for")
     count: int = Field(..., ge=1, le=10, description="Number of drill items to generate")
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
@@ -409,8 +410,8 @@ class PracticeDrillRequest(BaseModel):
 class PracticeDrillItem(BaseModel):
     """Single generated practice drill item."""
 
-    concept_id: UUID = Field(..., description="Concept this drill belongs to")
-    lesson_id: UUID = Field(..., description="Deterministic lesson id mapped from concept")
+    concept_id: uuid.UUID = Field(..., description="Concept this drill belongs to")
+    lesson_id: uuid.UUID = Field(..., description="Deterministic lesson id mapped from concept")
     question: str = Field(..., min_length=1, description="Learner-facing drill question")
     expected_latex: str = Field(..., min_length=1, description="Expected answer in LaTeX-compatible text")
     hints: list[str] = Field(default_factory=list, description="Optional hints for this drill")
@@ -449,8 +450,8 @@ class CodeExecuteRequest(BaseModel):
     code: str = Field(..., min_length=1, description="Source code to execute")
     language: str = Field(..., min_length=1, description="Language name/alias, e.g., python, js, cpp")
     stdin: str | None = Field(None, description="Optional stdin input")
-    lesson_id: UUID | None = Field(None, description="Optional lesson id for analytics/logging")
-    course_id: UUID | None = Field(None, description="Course id for sandbox scoping and setup commands")
+    lesson_id: uuid.UUID | None = Field(None, description="Optional lesson id for analytics/logging")
+    course_id: uuid.UUID | None = Field(None, description="Course id for sandbox scoping and setup commands")
     files: list[ExecutionFilePayload] | None = Field(None, description="Optional multi-file workspace payload")
     entry_file: str | None = Field(None, description="Entry file path to run when workspace files are provided")
     workspace_id: str | None = Field(None, description="Logical workspace identifier for grouping files")

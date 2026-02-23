@@ -1,10 +1,11 @@
+
 """Database models for the tagging system."""
 
+import uuid
 from datetime import datetime
-from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, func
-from sqlalchemy.dialects.postgresql import UUID as POSTGRES_UUID
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.base import Base
@@ -15,7 +16,7 @@ class Tag(Base):
 
     __tablename__ = "tags"
 
-    id: Mapped[UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     color: Mapped[str | None] = mapped_column(String(7), nullable=True)  # hex color
@@ -40,12 +41,12 @@ class TagAssociation(Base):
 
     __tablename__ = "tag_associations"
 
-    id: Mapped[UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    tag_id: Mapped[UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), ForeignKey("tags.id"), nullable=False)
-    content_id: Mapped[UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), nullable=False, index=True)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tag_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("tags.id"), nullable=False)
+    content_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False, index=True)
     content_type: Mapped[str] = mapped_column(String(20), nullable=False)  # book, video, course
-    user_id: Mapped[UUID] = mapped_column(
-        POSTGRES_UUID(as_uuid=True), nullable=False, index=True
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=False, index=True
     )  # For personalized tags
     confidence_score: Mapped[float] = mapped_column(Float, default=1.0)
     auto_generated: Mapped[bool] = mapped_column(Boolean, default=True)

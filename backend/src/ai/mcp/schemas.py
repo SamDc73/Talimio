@@ -1,11 +1,12 @@
+
 """Pydantic schemas for MCP server management."""
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from typing import Any, Literal
 from urllib.parse import urlparse
-from uuid import UUID
 
 from pydantic import AliasChoices, AnyHttpUrl, BaseModel, ConfigDict, Field, SecretStr, field_validator
 
@@ -88,7 +89,7 @@ class MCPServerResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: uuid.UUID
     name: str
     url: AnyHttpUrl
     auth_type: AuthType

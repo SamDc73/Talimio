@@ -1,3 +1,4 @@
+
 """AuthContext and FastAPI dependencies for centralized auth/ownership.
 
 This introduces a thin AuthContext layer that pairs the authenticated user_id
@@ -7,8 +8,8 @@ prefer passing `CurrentAuth` instead of separate user_id/session pairs over time
 
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING, Annotated, Any, TypeVar
-from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -42,7 +43,7 @@ class AuthContext:
     explicit, safe check (e.g., via joins). This prevents silent under-scoping.
     """
 
-    def __init__(self, user_id: UUID, session: AsyncSession, local_user: User | None = None) -> None:
+    def __init__(self, user_id: uuid.UUID, session: AsyncSession, local_user: User | None = None) -> None:
         self.user_id = user_id
         self.session = session
         self.local_user = local_user
@@ -92,9 +93,9 @@ class AuthContext:
 async def validate_local_auth_state(
     session: DbSession,
     *,
-    user_id: UUID,
+    user_id: uuid.UUID,
     token_version: int | None,
-    token_session_id: UUID | None,
+    token_session_id: uuid.UUID | None,
     touch_session: bool = False,
 ) -> tuple[User, AuthSession | None]:
     """Validate local user/token/session state and optionally touch the active session."""
@@ -123,7 +124,7 @@ async def validate_local_auth_state(
 # FastAPI DI helpers
 async def get_auth_context(
     request: Request,
-    user_id: Annotated[UUID, Depends(_get_user_id_dependency)],
+    user_id: Annotated[uuid.UUID, Depends(_get_user_id_dependency)],
     session: DbSession,
 ) -> AuthContext:
     """Build an AuthContext for the current request (preferred)."""

@@ -1,8 +1,9 @@
+
 """Pydantic models for progress tracking."""
 
+import uuid
 from datetime import datetime
 from typing import Any, Literal
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -45,8 +46,8 @@ class ProgressUpdate(BaseModel):
 class ProgressResponse(BaseModel):
     """Response model for progress data."""
 
-    id: UUID | None
-    content_id: UUID
+    id: uuid.UUID | None
+    content_id: uuid.UUID
     content_type: ContentType
     progress_percentage: float
     metadata: dict[str, Any]
@@ -57,13 +58,13 @@ class ProgressResponse(BaseModel):
 class BatchProgressRequest(BaseModel):
     """Request model for batch progress fetching."""
 
-    content_ids: list[UUID] = Field(..., max_length=100, alias="contentIds")
+    content_ids: list[uuid.UUID] = Field(..., max_length=100, alias="contentIds")
 
     model_config = ConfigDict(populate_by_name=True)
 
     @field_validator("content_ids")
     @classmethod
-    def validate_content_ids(cls, v: list[UUID]) -> list[UUID]:
+    def validate_content_ids(cls, v: list[uuid.UUID]) -> list[uuid.UUID]:
         """Ensure unique content IDs."""
         return list(set(v))
 

@@ -1,8 +1,9 @@
+
 """Video content processor for tag generation."""
 
 import json
 import logging
-from uuid import UUID
+import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,13 +71,13 @@ class VideoProcessor:
 
 
 async def process_video_for_tagging(
-    video_id: UUID,
+    video_id: uuid.UUID,
     session: AsyncSession,
 ) -> dict[str, str] | None:
     """Process a video to extract content for tagging.
 
     Args:
-        video_id: UUID of the video to process
+        video_id: uuid.UUID of the video to process
         session: Database session
 
     Returns

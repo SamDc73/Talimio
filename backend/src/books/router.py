@@ -4,10 +4,10 @@ import asyncio
 import hashlib
 import json
 import logging
+import uuid
 from collections.abc import AsyncGenerator, Coroutine
 from contextlib import suppress
 from typing import Annotated, Any
-from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
@@ -58,7 +58,7 @@ BOOK_RAG_STATUS_MESSAGES: dict[BookRagStatus, str] = {
 router = APIRouter(prefix="/api/v1/books", tags=["books"])
 
 
-async def _embed_book_background(book_id: UUID) -> None:
+async def _embed_book_background(book_id: uuid.UUID) -> None:
     """Background task to embed a book."""
     async with async_session_maker() as session:
         try:
@@ -90,7 +90,7 @@ def _merge_tags(existing_tags: list[str], generated_tags: list[str]) -> list[str
     return list(dict.fromkeys([*existing_tags, *generated_tags]))
 
 
-async def _auto_tag_book_background(book_id: UUID, user_id: UUID) -> None:
+async def _auto_tag_book_background(book_id: uuid.UUID, user_id: uuid.UUID) -> None:
     """Generate and persist book tags in a dedicated background session."""
     try:
         from src.tagging.processors.book_processor import process_book_for_tagging
@@ -136,7 +136,7 @@ def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
     task.add_done_callback(_DETACHED_TASKS.discard)
 
 
-async def _schedule_book_background_tasks(auth: CurrentAuth, book_id: UUID) -> None:
+async def _schedule_book_background_tasks(auth: CurrentAuth, book_id: uuid.UUID) -> None:
     """Commit the created book row before running detached embed/tag tasks."""
     await auth.session.commit()
     _spawn_detached_task(_embed_book_background(book_id))
@@ -240,7 +240,7 @@ async def list_books(
 
 
 @router.get("/{book_id}")
-async def get_book(book_id: UUID, auth: CurrentAuth) -> BookWithProgress:
+async def get_book(book_id: uuid.UUID, auth: CurrentAuth) -> BookWithProgress:
     """Get book details with progress information."""
     try:
         facade = BooksFacade(auth.session)
@@ -388,7 +388,7 @@ async def create_book(
 
 
 @router.patch("/{book_id}")
-async def update_book(book_id: UUID, book_data: BookUpdate, auth: CurrentAuth) -> BookResponse:
+async def update_book(book_id: uuid.UUID, book_data: BookUpdate, auth: CurrentAuth) -> BookResponse:
     """Update book details."""
     try:
         # Convert Pydantic model to dict
@@ -413,7 +413,7 @@ async def update_book(book_id: UUID, book_data: BookUpdate, auth: CurrentAuth) -
 
 @router.put("/{book_id}/progress")
 async def update_book_progress(
-    book_id: UUID,
+    book_id: uuid.UUID,
     progress_data: BookProgressUpdate,
     auth: CurrentAuth,
 ) -> BookProgressResponse:
@@ -447,7 +447,7 @@ async def update_book_progress(
 
 @router.post("/{book_id}/progress")
 async def save_book_progress(
-    book_id: UUID,
+    book_id: uuid.UUID,
     progress_data: BookProgressUpdate,
     auth: CurrentAuth,
 ) -> BookProgressResponse:
@@ -457,7 +457,7 @@ async def save_book_progress(
 
 
 @router.get("/{book_id}/file", response_model=None)
-async def serve_book_file(book_id: UUID, auth: CurrentAuth) -> FileResponse | RedirectResponse:
+async def serve_book_file(book_id: uuid.UUID, auth: CurrentAuth) -> FileResponse | RedirectResponse:
     """Serve the actual book file for viewing."""
     from src.books.models import Book
 
@@ -486,7 +486,7 @@ async def serve_book_file(book_id: UUID, auth: CurrentAuth) -> FileResponse | Re
 
 
 @router.get("/{book_id}/presigned-url")
-async def get_book_presigned_url(book_id: UUID, auth: CurrentAuth) -> dict:
+async def get_book_presigned_url(book_id: uuid.UUID, auth: CurrentAuth) -> dict:
     """Get a presigned URL for direct book download from R2/storage.
 
     This is useful when you want the browser to directly download from R2
@@ -571,7 +571,7 @@ async def _handle_range_request(
 
 
 @router.get("/{book_id}/content", response_model=None)
-async def stream_book_content(book_id: UUID, request: Request, auth: CurrentAuth) -> StreamingResponse | FileResponse:
+async def stream_book_content(book_id: uuid.UUID, request: Request, auth: CurrentAuth) -> StreamingResponse | FileResponse:
     """Stream book PDF content through backend to avoid CORS issues.
 
     This endpoint acts as a proxy, fetching the book from storage and
@@ -640,7 +640,7 @@ async def stream_book_content(book_id: UUID, request: Request, auth: CurrentAuth
 
 
 @router.get("/{book_id}/chapters")
-async def get_book_chapters(book_id: UUID, auth: CurrentAuth) -> list[BookTocChapterResponse]:
+async def get_book_chapters(book_id: uuid.UUID, auth: CurrentAuth) -> list[BookTocChapterResponse]:
     """Get all chapters/table of contents for a book.
 
     Returns the table of contents structure, not database chapter records.
@@ -667,7 +667,7 @@ async def get_book_chapters(book_id: UUID, auth: CurrentAuth) -> list[BookTocCha
 
 @router.put("/{book_id}/chapters/{chapter_id}/status")
 async def update_book_chapter_status(
-    book_id: UUID,
+    book_id: uuid.UUID,
     chapter_id: str,
     status_data: BookChapterStatusUpdate,
     auth: CurrentAuth,
@@ -714,7 +714,7 @@ async def update_book_chapter_status(
 class RAGStatusResponse(BaseModel):
     """Response model for RAG embedding status."""
 
-    book_id: UUID
+    book_id: uuid.UUID
     rag_status: BookRagStatus
     rag_processed_at: str | None = None
     message: str
@@ -723,7 +723,7 @@ class RAGStatusResponse(BaseModel):
 
 
 @router.get("/{book_id}/rag-status")
-async def get_book_rag_status(book_id: UUID, auth: CurrentAuth) -> RAGStatusResponse:
+async def get_book_rag_status(book_id: uuid.UUID, auth: CurrentAuth) -> RAGStatusResponse:
     """Get the RAG embedding status for a book."""
     from src.books.models import Book
 

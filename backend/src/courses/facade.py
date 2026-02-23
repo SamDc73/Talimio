@@ -1,3 +1,4 @@
+
 """
 Courses Module Facade.
 
@@ -6,8 +7,8 @@ Coordinates internal course services and provides stable API for other modules.
 """
 
 import logging
+import uuid
 from typing import Any
-from uuid import UUID
 
 from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,7 +34,7 @@ class CoursesFacade:
         self._content_service = CourseContentService(session)
         self._progress_service = CourseProgressService(session)
 
-    async def get_content_with_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
+    async def get_content_with_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
         """
         Get course with progress information.
 
@@ -43,8 +44,8 @@ class CoursesFacade:
 
     async def get_course(
         self,
-        course_id: UUID,
-        user_id: UUID,
+        course_id: uuid.UUID,
+        user_id: uuid.UUID,
     ) -> dict[str, Any]:
         """
         Get complete course information with progress.
@@ -89,7 +90,7 @@ class CoursesFacade:
     async def create_course(
         self,
         course_data: dict[str, Any],
-        user_id: UUID,
+        user_id: uuid.UUID,
         background_tasks: BackgroundTasks | None = None,
         attachments: list[Any] | None = None,
     ) -> dict[str, Any]:
@@ -123,7 +124,7 @@ class CoursesFacade:
         self,
         topic: str,
         preferences: dict[str, Any],
-        user_id: UUID,
+        user_id: uuid.UUID,
         background_tasks: BackgroundTasks | None = None,
     ) -> dict[str, Any]:
         """
@@ -152,7 +153,7 @@ class CoursesFacade:
             logger.exception(f"Error generating AI course {topic} for user {user_id}: {e}")
             return {"error": f"Failed to generate course: {e!s}", "success": False}
 
-    async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
+    async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """
         Update course progress.
 
@@ -161,7 +162,7 @@ class CoursesFacade:
         return await self.update_course_progress(content_id, user_id, progress_data)
 
     async def update_course_progress(
-        self, course_id: UUID, user_id: UUID, progress_data: dict[str, Any]
+        self, course_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]
     ) -> dict[str, Any]:
         """
         Update course progress.
@@ -176,7 +177,7 @@ class CoursesFacade:
             logger.exception(f"Error updating progress for course {course_id}: {e}")
             return {"error": f"Failed to update progress: {e!s}", "success": False}
 
-    async def update_course(self, course_id: UUID, user_id: UUID, update_data: dict[str, Any]) -> dict[str, Any]:
+    async def update_course(self, course_id: uuid.UUID, user_id: uuid.UUID, update_data: dict[str, Any]) -> dict[str, Any]:
         """Update course metadata."""
         try:
             # Update through content service which handles tags and reprocessing
@@ -193,7 +194,7 @@ class CoursesFacade:
 
     async def list_courses(
         self,
-        user_id: UUID,
+        user_id: uuid.UUID,
         page: int = 1,
         per_page: int = 20,
         search: str | None = None,
@@ -213,7 +214,7 @@ class CoursesFacade:
             return {"error": "Failed to list courses", "success": False}
 
 
-    async def search_courses(self, query: str, user_id: UUID, filters: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def search_courses(self, query: str, user_id: uuid.UUID, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Search user's courses.
 
@@ -230,7 +231,7 @@ class CoursesFacade:
             logger.exception("Error searching courses for user %s", user_id)
             return {"error": "Search failed", "success": False}
 
-    async def get_user_courses(self, user_id: UUID, include_progress: bool = True) -> dict[str, Any]:
+    async def get_user_courses(self, user_id: uuid.UUID, include_progress: bool = True) -> dict[str, Any]:
         """
         Get all courses for user.
 
@@ -264,7 +265,7 @@ class CoursesFacade:
 
 
 
-    async def get_course_lessons(self, course_id: UUID, user_id: UUID) -> dict[str, Any]:
+    async def get_course_lessons(self, course_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
         """Get course lessons grouped by modules."""
         try:
             try:

@@ -1,8 +1,9 @@
+
 """API endpoints for tagging operations."""
 
 import logging
+import uuid
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -56,7 +57,7 @@ def validate_content_type(content_type: str) -> str:
     return content_type
 
 
-async def validate_owned_content(auth: CurrentAuth, content_type: str, content_id: UUID) -> None:
+async def validate_owned_content(auth: CurrentAuth, content_type: str, content_id: uuid.UUID) -> None:
     """Validate ownership for tagged content without auth-module cross-coupling."""
     if content_type == "book":
         await auth.get_or_404(Book, content_id, "book")
@@ -98,7 +99,7 @@ async def list_tags(
 @router.get("/{content_type}/{content_id}")
 async def get_content_tags(
     content_type: str,
-    content_id: UUID,
+    content_id: uuid.UUID,
     auth: CurrentAuth,
     service: Annotated[TaggingService, Depends(get_tagging_service)],
 ) -> list[TagSchema]:
@@ -106,7 +107,7 @@ async def get_content_tags(
 
     Args:
         content_type: Type of content (book, video, course)
-        content_id: UUID of the content
+        content_id: uuid.UUID of the content
         user_id: Current authenticated user
         service: Tagging service instance
 
@@ -124,7 +125,7 @@ async def get_content_tags(
 @router.put("/{content_type}/{content_id}")
 async def update_content_tags(
     content_type: str,
-    content_id: UUID,
+    content_id: uuid.UUID,
     request: ContentTagsUpdate,
     auth: CurrentAuth,
     service: Annotated[TaggingService, Depends(get_tagging_service)],
@@ -133,7 +134,7 @@ async def update_content_tags(
 
     Args:
         content_type: Type of content (book, video, course)
-        content_id: UUID of the content
+        content_id: uuid.UUID of the content
         request: Update request with new tags
         user_id: Current authenticated user
         service: Tagging service instance

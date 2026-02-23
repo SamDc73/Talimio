@@ -1,9 +1,9 @@
+import uuid
 from datetime import datetime
 from typing import Literal
-from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID as POSTGRES_UUID
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database.base import Base
@@ -21,8 +21,8 @@ class Book(Base):
         UniqueConstraint("user_id", "file_hash", name="books_user_id_file_hash_key"),
     )
 
-    id: Mapped[UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    user_id: Mapped[UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), nullable=False, index=True)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     subtitle: Mapped[str | None] = mapped_column(String(500), nullable=True)
     author: Mapped[str] = mapped_column(String(200), nullable=False)

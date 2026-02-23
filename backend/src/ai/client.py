@@ -1,12 +1,12 @@
 import asyncio
 import json
 import logging
+import uuid
 from collections import Counter
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, TypeVar, cast
-from uuid import UUID
 
 import litellm
 from pydantic import BaseModel, ValidationError
@@ -66,7 +66,7 @@ class _LLMRequest:
     temperature: float | None
     tools: list[dict[str, Any]] | list[MCPToolBinding] | None
     tool_choice: str | None
-    user_id: UUID | None
+    user_id: uuid.UUID | None
     model: str
     num_retries: int | None
     stream: bool
@@ -121,7 +121,7 @@ class LLMClient:
         """
         self._logger = logging.getLogger(__name__)
         self._agent_id = agent_id
-        self._tool_maps: dict[UUID, dict[str, tuple[str, str]]] = {}
+        self._tool_maps: dict[uuid.UUID, dict[str, tuple[str, str]]] = {}
         self._tool_filters = self._parse_tool_filters()
         self._background_tasks: set[asyncio.Task[Any]] = set()
 
@@ -152,7 +152,7 @@ class LLMClient:
         temperature: float | None,
         tools: list[dict[str, Any]] | list[MCPToolBinding] | None,
         tool_choice: str | None,
-        user_id: str | UUID | None,
+        user_id: str | uuid.UUID | None,
         model: str | None,
         num_retries: int | None,
         stream: bool,
@@ -235,7 +235,7 @@ class LLMClient:
     def _prepare_tool_context(
         self,
         tools: list[dict[str, Any]] | list[MCPToolBinding] | None,
-        user_id: UUID | None,
+        user_id: uuid.UUID | None,
     ) -> tuple[list[dict[str, Any]] | None, str | None]:
         if not tools:
             if user_id is not None:
@@ -265,7 +265,7 @@ class LLMClient:
             return [messages[0], tool_message, *messages[1:]]
         return [tool_message, *messages]
 
-    def _schedule_memory_save(self, user_id: UUID | None, messages: list[dict[str, Any]], response: Any) -> None:
+    def _schedule_memory_save(self, user_id: uuid.UUID | None, messages: list[dict[str, Any]], response: Any) -> None:
         if user_id is None:
             return
         task = asyncio.create_task(self._save_conversation_to_memory(user_id, messages, response))
@@ -278,7 +278,7 @@ class LLMClient:
         temperature: float | None = None,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | None = None,
-        user_id: str | UUID | None = None,
+        user_id: str | uuid.UUID | None = None,
         response_format: Any | None = None,
         stream: bool = False,
         model: str | None = None,
@@ -307,7 +307,7 @@ class LLMClient:
             if user_id:
                 # Pass user identifier for provider-side tracking / rate limits when supported
                 # Safe with litellm.drop_params=True across providers
-                # Convert UUID to string for JSON serialization
+                # Convert uuid.UUID to string for JSON serialization
                 kwargs["user"] = str(user_id)
             if stream:
                 kwargs["stream"] = stream
@@ -328,7 +328,7 @@ class LLMClient:
         temperature: float | None = None,
         tools: list[dict[str, Any]] | list[MCPToolBinding] | None = None,
         tool_choice: str | None = None,
-        user_id: str | UUID | None = None,
+        user_id: str | uuid.UUID | None = None,
         model: str | None = None,
         num_retries: int | None = None,
         stream: bool = False,
@@ -467,7 +467,7 @@ class LLMClient:
         temperature: float | None,
         tools: list[dict[str, Any]] | None,
         tool_choice: str | None,
-        user_id: UUID | None,
+        user_id: uuid.UUID | None,
         model: str,
         num_retries: int | None,
     ) -> AsyncGenerator[str, None]:
@@ -590,13 +590,13 @@ class LLMClient:
             content = delta.get("content")
         return content if isinstance(content, str) else ""
 
-    def _normalize_user_id(self, user_id: str | UUID | None) -> UUID | None:
+    def _normalize_user_id(self, user_id: str | uuid.UUID | None) -> uuid.UUID | None:
         if user_id is None:
             return None
-        if isinstance(user_id, UUID):
+        if isinstance(user_id, uuid.UUID):
             return user_id
         try:
-            return UUID(str(user_id))
+            return uuid.UUID(str(user_id))
         except (ValueError, TypeError):
             self._logger.warning("Ignoring invalid user_id: %s", user_id)
             return None
@@ -692,7 +692,7 @@ class LLMClient:
         *,
         assistant_content: str,
         tool_calls: list[Any],
-        user_id: UUID | None,
+        user_id: uuid.UUID | None,
     ) -> None:
         conversation.append(
             {
@@ -714,7 +714,7 @@ class LLMClient:
                 }
             )
 
-    async def _inject_memory_into_messages(self, messages: list[dict[str, Any]], user_id: UUID) -> list[dict[str, Any]]:
+    async def _inject_memory_into_messages(self, messages: list[dict[str, Any]], user_id: uuid.UUID) -> list[dict[str, Any]]:
         """Inject user memory context into the conversation."""
         query_text = self._build_memory_query(messages)
         if not query_text:
@@ -804,7 +804,7 @@ class LLMClient:
             filtered.append(schema)
         return filtered or None
 
-    def _assign_tool_schemas(self, user_id: UUID, bindings: list[MCPToolBinding]) -> list[dict[str, Any]]:
+    def _assign_tool_schemas(self, user_id: uuid.UUID, bindings: list[MCPToolBinding]) -> list[dict[str, Any]]:
         schemas: list[dict[str, Any]] = []
         mapping: dict[str, tuple[str, str]] = {}
         counts: Counter[str] = Counter()
@@ -837,14 +837,14 @@ class LLMClient:
         base = f"{server_name}_{tool_name}".lower()
         return "".join(char if char.isalnum() or char == "_" else "_" for char in base)
 
-    async def _load_user_tool_bindings(self, user_id: UUID) -> list[MCPToolBinding]:
+    async def _load_user_tool_bindings(self, user_id: uuid.UUID) -> list[MCPToolBinding]:
         async with self._mcp_session() as session:
             return await load_user_tool_bindings(session, user_id)
 
     async def _execute_tool_calls(
         self,
         tool_calls: list[Any],
-        user_id: UUID,
+        user_id: uuid.UUID,
     ) -> list[tuple[Any, str]]:
         formatted: list[tuple[Any, str] | None] = []
         pending: list[tuple[int, Any, dict[str, Any], tuple[str, str]]] = []
@@ -924,7 +924,7 @@ class LLMClient:
                 formatted[idx] = (tool_call, content)
         return [entry for entry in formatted if entry is not None]
 
-    def _resolve_tool_target(self, user_id: UUID, encoded_name: str) -> tuple[str, str] | None:
+    def _resolve_tool_target(self, user_id: uuid.UUID, encoded_name: str) -> tuple[str, str] | None:
         mapping = self._tool_maps.get(user_id)
         if not mapping:
             return None
@@ -964,7 +964,7 @@ class LLMClient:
     async def generate_course_structure(
         self,
         user_prompt: str | list[dict[str, Any]],
-        user_id: str | UUID | None = None,
+        user_id: str | uuid.UUID | None = None,
     ) -> CourseStructure:
         """Generate a structured learning course using LiteLLM structured output (Pydantic)."""
         try:
@@ -992,7 +992,7 @@ class LLMClient:
     async def generate_adaptive_course_structure(
         self,
         user_prompt: str | list[dict[str, Any]],
-        user_id: str | UUID | None = None,
+        user_id: str | uuid.UUID | None = None,
     ) -> AdaptiveCourseStructure:
         """Generate the unified adaptive course payload used by ConceptFlow."""
         try:
@@ -1022,7 +1022,7 @@ class LLMClient:
         *,
         topic: str,
         level: str | None = None,
-        user_id: str | UUID | None = None,
+        user_id: str | uuid.UUID | None = None,
     ) -> SelfAssessmentQuiz:
         """Generate optional self-assessment questions for a course topic."""
         normalized_topic = topic.strip()
@@ -1067,7 +1067,7 @@ class LLMClient:
     async def generate_lesson_content(
         self,
         lesson_context: str,
-        user_id: str | UUID | None = None,
+        user_id: str | uuid.UUID | None = None,
     ) -> LessonContent:
         """Generate a lesson body from a prepared LESSON_CONTEXT string."""
         context_text = lesson_context.strip()
@@ -1103,7 +1103,7 @@ class LLMClient:
         stderr: str | None = None,
         stdin: str | None = None,
         sandbox_state: dict[str, Any] | None = None,
-        user_id: str | UUID | None = None,
+        user_id: str | uuid.UUID | None = None,
         workspace_entry: str | None = None,
         workspace_root: str | None = None,
         workspace_files: list[str] | None = None,
@@ -1155,7 +1155,7 @@ class LLMClient:
         *,
         payload: dict[str, Any],
         response_model: type[T],
-        user_id: str | UUID | None = None,
+        user_id: str | uuid.UUID | None = None,
         model: str | None = None,
     ) -> T:
         """Generate grading coach feedback with a strict structured contract."""
@@ -1184,7 +1184,7 @@ class LLMClient:
         history: str,
         count: int,
         response_model: type[T],
-        user_id: str | UUID | None = None,
+        user_id: str | uuid.UUID | None = None,
         model: str | None = None,
     ) -> T:
         """Generate a structured batch of practice questions."""
@@ -1224,7 +1224,7 @@ class LLMClient:
         questions: list[str],
         predictions_example: str,
         response_model: type[T],
-        user_id: str | UUID | None = None,
+        user_id: str | uuid.UUID | None = None,
         model: str | None = None,
     ) -> T:
         """Predict p(correct) values for a batch of candidate practice questions."""
@@ -1258,7 +1258,7 @@ class LLMClient:
         return result
 
     async def _save_conversation_to_memory(
-        self, user_id: UUID | None, messages: list[dict[str, Any]], response: Any
+        self, user_id: uuid.UUID | None, messages: list[dict[str, Any]], response: Any
     ) -> None:
         """Save conversation to memory using mem0.
 

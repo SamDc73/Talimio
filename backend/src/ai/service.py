@@ -1,3 +1,4 @@
+
 """Centralized AI Service for all AI operations.
 
 This service acts as the single entry point for all AI-related functionality
@@ -5,8 +6,8 @@ in the application, providing a clean interface that hides implementation detail
 """
 
 import logging
+import uuid
 from typing import Any
-from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,7 +34,7 @@ class AIService:
     async def generate_course_structure(
         self,
         *,
-        user_id: UUID,
+        user_id: uuid.UUID,
         user_prompt: str | list[dict[str, Any]],
     ) -> CourseStructure:
         """Generate a course outline."""
@@ -45,7 +46,7 @@ class AIService:
     async def generate_adaptive_course_structure(
         self,
         *,
-        user_id: UUID,
+        user_id: uuid.UUID,
         user_prompt: str | list[dict[str, Any]],
     ) -> AdaptiveCourseStructure:
         """Generate the unified adaptive course payload."""
@@ -59,7 +60,7 @@ class AIService:
         *,
         topic: str,
         level: str | None,
-        user_id: UUID,
+        user_id: uuid.UUID,
     ) -> SelfAssessmentQuiz:
         """Generate optional self-assessment questions for the given topic."""
         try:
@@ -83,7 +84,7 @@ class AIService:
         stderr: str | None = None,
         stdin: str | None = None,
         sandbox_state: dict[str, Any] | None = None,
-        user_id: str | UUID | None = None,
+        user_id: str | uuid.UUID | None = None,
         workspace_entry: str | None = None,
         workspace_root: str | None = None,
         workspace_files: list[str] | None = None,
@@ -107,9 +108,9 @@ class AIService:
     async def get_book_rag_context(
         self,
         session: AsyncSession,
-        book_id: UUID,
+        book_id: uuid.UUID,
         query: str,
-        user_id: UUID,
+        user_id: uuid.UUID,
         limit: int = 5,
     ) -> list[dict]:
         """Search book chunks via VectorRAG.search with ownership enforcement.
@@ -128,9 +129,9 @@ class AIService:
     async def get_video_rag_context(
         self,
         session: AsyncSession,
-        video_id: UUID,
+        video_id: uuid.UUID,
         query: str,
-        user_id: UUID,
+        user_id: uuid.UUID,
         limit: int = 5,
     ) -> list[dict]:
         """Search video transcript chunks via VectorRAG.search with ownership enforcement.

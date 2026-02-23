@@ -1,11 +1,12 @@
+
 """Adaptive practice drill generation service using batched direct LLM IRT."""
 
 from __future__ import annotations
 
 import re
+import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, select
@@ -76,9 +77,9 @@ class PracticeDrillService:
     async def generate_drills(
         self,
         *,
-        user_id: UUID,
-        course_id: UUID,
-        concept_id: UUID,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        concept_id: uuid.UUID,
         count: int,
     ) -> list[PracticeDrillItem]:
         """Generate adaptive drills for a course concept."""
@@ -94,7 +95,7 @@ class PracticeDrillService:
         learner = await self._load_learner_profile(user_id=user_id, concept_id=concept_id)
         seen_questions, seen_signatures = await self._load_recent_seen_keys(user_id=user_id, concept_id=concept_id)
 
-        lesson_id = uuid5(NAMESPACE_URL, f"concept-lesson:{course_id}:{concept_id}")
+        lesson_id = uuid.uuid5(uuid.NAMESPACE_URL, f"concept-lesson:{course_id}:{concept_id}")
         drills: list[PracticeDrillItem] = []
         rounds = 0
 
@@ -154,7 +155,7 @@ class PracticeDrillService:
 
         return drills
 
-    async def _resolve_course_concept(self, *, course_id: UUID, concept_id: UUID) -> Concept | None:
+    async def _resolve_course_concept(self, *, course_id: uuid.UUID, concept_id: uuid.UUID) -> Concept | None:
         return await self._session.scalar(
             select(Concept)
             .join(CourseConcept, CourseConcept.concept_id == Concept.id)
@@ -166,7 +167,7 @@ class PracticeDrillService:
             )
         )
 
-    async def _load_learner_profile(self, *, user_id: UUID, concept_id: UUID) -> _LearnerProfile:
+    async def _load_learner_profile(self, *, user_id: uuid.UUID, concept_id: uuid.UUID) -> _LearnerProfile:
         state = await self._session.scalar(
             select(UserConceptState).where(
                 and_(
@@ -213,7 +214,7 @@ class PracticeDrillService:
             weaknesses=[],
         )
 
-    async def _load_recent_seen_keys(self, *, user_id: UUID, concept_id: UUID) -> tuple[set[str], set[str]]:
+    async def _load_recent_seen_keys(self, *, user_id: uuid.UUID, concept_id: uuid.UUID) -> tuple[set[str], set[str]]:
         rows = (
             (
                 await self._session.execute(
@@ -254,7 +255,7 @@ class PracticeDrillService:
         concept: Concept,
         history: str,
         count: int,
-        user_id: UUID,
+        user_id: uuid.UUID,
     ) -> list[_QuestionPayload]:
         payload = await self._llm_client.generate_practice_question_batch(
             concept=concept.name,
@@ -276,7 +277,7 @@ class PracticeDrillService:
         questions: list[str],
         learner: _LearnerProfile,
         concept_name: str,
-        user_id: UUID,
+        user_id: uuid.UUID,
     ) -> list[float]:
         if not questions:
             return []
