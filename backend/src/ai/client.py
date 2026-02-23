@@ -126,7 +126,7 @@ class LLMClient:
         self._background_tasks: set[asyncio.Task[Any]] = set()
 
     @asynccontextmanager
-    async def _mcp_session(self) -> AsyncGenerator[AsyncSession, None]:
+    async def _mcp_session(self) -> AsyncGenerator[AsyncSession]:
         """Return a short-lived DB session for MCP tooling.
 
         MCP tooling may need a DB session to load user configuration and tool bindings. If we reuse the
@@ -470,7 +470,7 @@ class LLMClient:
         user_id: uuid.UUID | None,
         model: str,
         num_retries: int | None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[str]:
         """Stream an unstructured chat completion, optionally executing tool calls.
 
         Yields plain text deltas (not SSE). The caller owns transport formatting.

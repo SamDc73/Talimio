@@ -39,7 +39,7 @@ class TableOfContentsItem(BaseModel):
     start_page: int | None = Field(None, alias="startPage")
     end_page: int | None = Field(None, alias="endPage")
     level: int = 0  # 0 for chapters, 1 for sections, etc.
-    children: list["TableOfContentsItem"] = Field(default_factory=list)
+    children: list[TableOfContentsItem] = Field(default_factory=list)
 
 
 class BookTocChapterResponse(BaseModel):
@@ -54,7 +54,7 @@ class BookTocChapterResponse(BaseModel):
     end_page: int | None = Field(default=None, alias="endPage")
     level: int = 0
     completed: bool = False
-    children: list["BookTocChapterResponse"] = Field(default_factory=list)
+    children: list[BookTocChapterResponse] = Field(default_factory=list)
 
 
 class BookResponse(BaseModel):

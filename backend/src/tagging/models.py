@@ -29,7 +29,7 @@ class Tag(Base):
     )
 
     # Relationships
-    associations: Mapped[list["TagAssociation"]] = relationship(
+    associations: Mapped[list[TagAssociation]] = relationship(
         "TagAssociation",
         back_populates="tag",
         cascade="all, delete-orphan",
@@ -53,4 +53,4 @@ class TagAssociation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
-    tag: Mapped["Tag"] = relationship("Tag", back_populates="associations")
+    tag: Mapped[Tag] = relationship("Tag", back_populates="associations")
