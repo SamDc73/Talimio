@@ -44,7 +44,6 @@ from src.courses.services.concept_graph_service import ConceptGraphService
 from src.courses.services.concept_scheduler_service import LectorSchedulerService
 from src.courses.services.concept_state_service import ConceptStateService
 from src.courses.services.course_progress_service import CourseProgressService
-from src.courses.services.course_query_service import CourseQueryService
 from src.courses.services.frontier_builder import build_course_frontier
 from src.courses.services.grading_service import GradingService
 from src.courses.services.lesson_service import LessonService
@@ -166,13 +165,19 @@ async def create_course(
 @router.get("/")
 async def list_courses(
     auth: CurrentAuth,
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     per_page: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
     search: Annotated[str | None, Query(description="Search query")] = None,
 ) -> CourseListResponse:
     """List courses with pagination and optional search (single source of truth)."""
-    qs = CourseQueryService(auth.session)
-    courses, total = await qs.list_courses(page=page, per_page=per_page, search=search, user_id=auth.user_id)
+    result = await facade.list_courses(user_id=auth.user_id, page=page, per_page=per_page, search=search)
+    if not result.get("success"):
+        detail = result.get("error", "Failed to list courses")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=detail)
+
+    courses = result.get("courses", [])
+    total = result.get("total", 0)
     return CourseListResponse(courses=courses, total=total, page=page, per_page=per_page)
 
 
