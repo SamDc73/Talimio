@@ -10,6 +10,15 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .schemas import (
+    VideoChapterResponse,
+    VideoCreate,
+    VideoLearningStatus,
+    VideoListResponse,
+    VideoResponse,
+    VideoTranscriptResponse,
+    VideoUpdate,
+)
 from .service import VideoService
 from .services.video_progress_service import VideoProgressService
 
@@ -37,9 +46,93 @@ class VideosFacade:
 
         Implements ContentFacade interface for consistent cross-module API.
         """
-        return await self.get_video(content_id, user_id)
+        return await self.get_video_with_progress(content_id, user_id)
 
-    async def get_video(self, video_id: UUID, user_id: UUID) -> dict[str, Any]:
+    async def create_video(self, video_data: VideoCreate, user_id: UUID) -> VideoResponse:
+        """Create a video record for the authenticated user."""
+        return await self._video_service.create_video(self._session, video_data, user_id)
+
+    async def get_videos(
+        self,
+        user_id: UUID,
+        page: int = 1,
+        size: int = 20,
+        channel: str | None = None,
+        search: str | None = None,
+        tags: list[str] | None = None,
+    ) -> VideoListResponse:
+        """List user videos with filtering and pagination."""
+        return await self._video_service.get_videos(
+            self._session,
+            user_id=user_id,
+            page=page,
+            size=size,
+            channel=channel,
+            search=search,
+            tags=tags,
+        )
+
+    async def get_video(self, video_id: str, user_id: UUID) -> VideoResponse:
+        """Get a single video with ownership checks."""
+        return await self._video_service.get_video(self._session, video_id, user_id)
+
+    async def update_video(self, video_id: str, update_data: VideoUpdate, user_id: UUID) -> VideoResponse:
+        """Update a single video owned by the authenticated user."""
+        return await self._video_service.update_video(self._session, video_id, update_data, user_id)
+
+    async def get_video_chapters(self, video_id: str, user_id: UUID) -> list[VideoChapterResponse]:
+        """Get chapters for a specific video."""
+        return await self._video_service.get_video_chapters(self._session, video_id, user_id)
+
+    async def get_video_chapter(self, video_id: str, chapter_id: str, user_id: UUID) -> VideoChapterResponse:
+        """Get one chapter for a specific video."""
+        return await self._video_service.get_video_chapter(self._session, video_id, chapter_id, user_id)
+
+    async def update_video_chapter_status(
+        self,
+        video_id: str,
+        chapter_id: str,
+        chapter_status: VideoLearningStatus,
+        user_id: UUID,
+    ) -> VideoChapterResponse:
+        """Update chapter learning status for a video."""
+        return await self._video_service.update_video_chapter_status(
+            self._session,
+            video_id,
+            chapter_id,
+            chapter_status,
+            user_id,
+        )
+
+    async def extract_and_create_video_chapters(self, video_id: str, user_id: UUID) -> list[VideoChapterResponse]:
+        """Extract chapters and persist them for a video."""
+        return await self._video_service.extract_and_create_video_chapters(self._session, video_id, user_id)
+
+    async def sync_chapter_progress(
+        self,
+        video_id: str,
+        completed_chapter_ids: list[str],
+        total_chapters: int,
+        user_id: UUID,
+    ) -> VideoResponse:
+        """Sync chapter completion payload into unified progress."""
+        return await self._video_service.sync_chapter_progress(
+            self._session,
+            video_id,
+            completed_chapter_ids,
+            total_chapters,
+            user_id=user_id,
+        )
+
+    async def get_video_transcript_segments(self, video_id: str, user_id: UUID) -> VideoTranscriptResponse:
+        """Get transcript segments for a video."""
+        return await self._video_service.get_video_transcript_segments(self._session, video_id, user_id)
+
+    async def get_transcript_info(self, video_id: str) -> dict[str, Any] | None:
+        """Get transcript metadata without loading transcript segments."""
+        return await self._video_service.get_transcript_info(self._session, video_id)
+
+    async def get_video_with_progress(self, video_id: UUID, user_id: UUID) -> dict[str, Any]:
         """
         Get complete video information with progress.
 
@@ -72,8 +165,6 @@ class VideosFacade:
             logger.exception(f"Error getting video {video_id} for user {user_id}: {e}")
             return {"error": "Failed to retrieve video"}
 
-    # NOTE: create_content and create_video methods removed - router uses service directly
-
     async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update video watching progress via ContentFacade contract."""
         return await self.update_video_progress(content_id, user_id, progress_data)
@@ -98,4 +189,3 @@ class VideosFacade:
         except Exception as e:
             logger.exception(f"Error updating progress for video {video_id}: {e}")
             return {"error": "Failed to update progress", "success": False}
-

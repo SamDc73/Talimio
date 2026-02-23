@@ -191,6 +191,27 @@ class CoursesFacade:
             logger.exception("Error updating course %s", course_id)
             return {"error": "Failed to update course", "success": False}
 
+    async def list_courses(
+        self,
+        user_id: UUID,
+        page: int = 1,
+        per_page: int = 20,
+        search: str | None = None,
+    ) -> dict[str, Any]:
+        """List user courses with pagination and optional search."""
+        try:
+            query_service = CourseQueryService(self._session)
+            courses, total = await query_service.list_courses(
+                page=page,
+                per_page=per_page,
+                search=search,
+                user_id=user_id,
+            )
+            return {"courses": courses, "total": total, "success": True}
+        except Exception:
+            logger.exception("Error listing courses for user %s", user_id)
+            return {"error": "Failed to list courses", "success": False}
+
 
     async def search_courses(self, query: str, user_id: UUID, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         """
