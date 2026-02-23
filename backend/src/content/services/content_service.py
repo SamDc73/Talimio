@@ -184,15 +184,38 @@ class ContentService:
             raise ValueError(msg)
         return mapping[content_type]
 
-    async def _delete_user_progress(self, session: AsyncSession, user_id: uuid.UUID, row_id: uuid.UUID) -> None:
-        """Delete user progress rows; tolerate absence."""
+    async def _delete_progress_for_content(self, session: AsyncSession, row_id: uuid.UUID) -> None:
+        """Delete all progress rows for a content item; tolerate absence."""
         try:
             await session.execute(
-                text("DELETE FROM user_progress WHERE user_id = :user_id AND content_id = :content_id"),
-                {"user_id": str(user_id), "content_id": str(row_id)},
+                text("DELETE FROM user_progress WHERE content_id = :content_id"),
+                {"content_id": str(row_id)},
             )
         except SQLAlchemyError:
             logger.debug("Non-fatal: failed to delete user progress for content %s", row_id, exc_info=True)
+
+    async def _delete_highlights(
+        self,
+        session: AsyncSession,
+        content_type: ContentType,
+        row_id: uuid.UUID,
+    ) -> None:
+        """Delete highlights for this content regardless of user_id."""
+        from sqlalchemy import and_, delete
+
+        from src.highlights.models import Highlight
+
+        try:
+            await session.execute(
+                delete(Highlight).where(
+                    and_(
+                        Highlight.content_id == row_id,
+                        Highlight.content_type == content_type.value,
+                    )
+                )
+            )
+        except SQLAlchemyError:
+            logger.debug("Non-fatal: failed to delete highlights for content %s", row_id, exc_info=True)
 
     async def _delete_tag_associations(
         self,
@@ -238,7 +261,8 @@ class ContentService:
             await self._delete_course_document_files(session, content_id)
 
         # Cross-module cleanup
-        await self._delete_user_progress(session, user_id, content_id)
+        await self._delete_progress_for_content(session, content_id)
+        await self._delete_highlights(session, content_type, content_id)
         await self._delete_tag_associations(session, content_type, content_id)
         await self._prune_orphan_tags(session)
 
