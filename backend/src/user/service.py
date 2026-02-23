@@ -1,7 +1,8 @@
+
 """User service for handling user settings and memory management."""
 
 import logging
-from uuid import UUID
+import uuid
 
 from psycopg.errors import ForeignKeyViolation
 from pydantic import ValidationError
@@ -43,7 +44,7 @@ class UserMemoryAccessError(UserServiceError):
     """Raised when user memory operations fail."""
 
 
-async def _load_user_preferences(user_id: UUID, db_session: AsyncSession) -> UserPreferences:
+async def _load_user_preferences(user_id: uuid.UUID, db_session: AsyncSession) -> UserPreferences:
     """Load user preferences from database."""
     try:
         stmt = select(UserPreferencesModel).where(UserPreferencesModel.user_id == user_id)
@@ -58,7 +59,7 @@ async def _load_user_preferences(user_id: UUID, db_session: AsyncSession) -> Use
         raise UserPreferencesLoadError from error
 
 
-async def _save_user_preferences(user_id: UUID, preferences: UserPreferences, db_session: AsyncSession) -> bool:
+async def _save_user_preferences(user_id: uuid.UUID, preferences: UserPreferences, db_session: AsyncSession) -> bool:
     """Save user preferences to database."""
     # CRITICAL: Check user exists first to prevent foreign key violations.
     from src.user.models import User
@@ -97,7 +98,7 @@ async def _save_user_preferences(user_id: UUID, preferences: UserPreferences, db
 # Use auth.users table directly for user operations
 
 
-async def get_user_settings(user_id: UUID, db_session: AsyncSession) -> UserSettingsResponse:
+async def get_user_settings(user_id: uuid.UUID, db_session: AsyncSession) -> UserSettingsResponse:
     """
     Get user settings including custom instructions, memory count, and preferences.
 
@@ -129,7 +130,7 @@ async def get_user_settings(user_id: UUID, db_session: AsyncSession) -> UserSett
 
 
 async def update_custom_instructions(
-    user_id: UUID, instructions: str, db_session: AsyncSession
+    user_id: uuid.UUID, instructions: str, db_session: AsyncSession
 ) -> CustomInstructionsResponse:
     """
     Update custom instructions for a user.
@@ -180,7 +181,7 @@ async def update_custom_instructions(
         raise UserPreferencesPersistenceError from error
 
 
-async def get_user_memories(user_id: UUID, agent_id: str | None = None, *, limit: int = 100) -> list[dict]:
+async def get_user_memories(user_id: uuid.UUID, agent_id: str | None = None, *, limit: int = 100) -> list[dict]:
     """
     Get memories for a user, optionally filtered to a specific agent scope.
 
@@ -212,7 +213,7 @@ async def get_user_memories(user_id: UUID, agent_id: str | None = None, *, limit
         raise UserMemoryAccessError from error
 
 
-async def delete_user_memory(user_id: UUID, memory_id: str) -> bool:
+async def delete_user_memory(user_id: uuid.UUID, memory_id: str) -> bool:
     """
     Delete a specific memory for a user.
 
@@ -231,7 +232,7 @@ async def delete_user_memory(user_id: UUID, memory_id: str) -> bool:
         raise UserMemoryAccessError from error
 
 
-async def clear_user_memories(user_id: UUID, agent_id: str | None = None) -> bool:
+async def clear_user_memories(user_id: uuid.UUID, agent_id: str | None = None) -> bool:
     """Clear all memories for a user, optionally scoped to a specific agent."""
     try:
         return await delete_all_memories(user_id, agent_id=agent_id)
@@ -241,7 +242,7 @@ async def clear_user_memories(user_id: UUID, agent_id: str | None = None) -> boo
 
 
 async def update_user_preferences(
-    user_id: UUID, partial_preferences: PartialUserPreferences, db_session: AsyncSession
+    user_id: uuid.UUID, partial_preferences: PartialUserPreferences, db_session: AsyncSession
 ) -> PreferencesUpdateResponse:
     """
     Update user preferences with partial updates.

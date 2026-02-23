@@ -1,11 +1,12 @@
+
 """Authentication routes for user login, signup, and session management."""
 
 import logging
 import re
 import secrets
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, cast
-from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -133,7 +134,7 @@ async def _issue_local_auth_cookie(
     response: Response,
     session: DbSession,
     user: User,
-) -> UUID:
+) -> uuid.UUID:
     """Create a local auth session and set the cookie JWT."""
     user_agent = _get_request_user_agent(request)
     ip_address = get_client_ip(request)[:64]

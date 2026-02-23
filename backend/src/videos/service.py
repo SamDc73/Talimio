@@ -2,10 +2,10 @@ import asyncio
 import json
 import logging
 import re
+import uuid
 from collections.abc import Coroutine
 from datetime import UTC, datetime
 from typing import Any, Literal
-from uuid import UUID
 
 import aiohttp
 import yt_dlp
@@ -58,17 +58,6 @@ def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
     task.add_done_callback(_DETACHED_TASKS.discard)
 
 
-def parse_video_id(video_id: str) -> UUID:
-    """Convert string UUID to UUID object with validation."""
-    from uuid import UUID
-
-    try:
-        return UUID(video_id)
-    except ValueError as e:
-        msg = f"Invalid UUID format: {video_id}"
-        raise ValueError(msg) from e
-
-
 def _create_downloader(options: dict[str, Any]) -> yt_dlp.YoutubeDL:
     """Return a YoutubeDL instance without strict typing complaints."""
     return yt_dlp.YoutubeDL(options)
@@ -85,11 +74,11 @@ async def _extract_info_async(url: str, options: dict[str, Any]) -> Any:
     return await asyncio.to_thread(_extract_info_sync, url, options)
 
 
-async def _embed_video_background(video_id: str) -> None:
+async def _embed_video_background(video_id: uuid.UUID) -> None:
     """Background task to embed a video."""
     async with async_session_maker() as session:
         try:
-            await RAGService().process_video(session, parse_video_id(video_id))
+            await RAGService().process_video(session, video_id)
             await session.commit()
         except Exception:
             try:
@@ -117,7 +106,7 @@ def _merge_tags(existing_tags: list[str], generated_tags: list[str]) -> list[str
     return list(dict.fromkeys([*existing_tags, *generated_tags]))
 
 
-async def _auto_tag_video_background(video_id: UUID, user_id: UUID) -> None:
+async def _auto_tag_video_background(video_id: uuid.UUID, user_id: uuid.UUID) -> None:
     """Generate and persist video tags in a dedicated background session."""
     try:
         from src.tagging.processors.video_processor import process_video_for_tagging
@@ -160,7 +149,7 @@ async def _auto_tag_video_background(video_id: UUID, user_id: UUID) -> None:
 VideoPipelineStatus = Literal["pending", "processing", "completed", "failed"]
 
 
-async def _mark_video_status(video_id: str, status: VideoPipelineStatus, error_context: str = "") -> None:
+async def _mark_video_status(video_id: uuid.UUID, status: VideoPipelineStatus, error_context: str = "") -> None:
     """Mark video chapter extraction status."""
     try:
         async with async_session_maker() as db:
@@ -175,7 +164,7 @@ async def _mark_video_status(video_id: str, status: VideoPipelineStatus, error_c
 
 
 async def _handle_video_not_found_error(
-    video_id: str, attempt: int, max_retries: int, retry_delay: int, e: ValueError
+    video_id: uuid.UUID, attempt: int, max_retries: int, retry_delay: int, e: ValueError
 ) -> bool:
     """Handle video not found error. Returns True if should retry, False if should stop."""
     if attempt < max_retries - 1:
@@ -188,7 +177,7 @@ async def _handle_video_not_found_error(
     return False
 
 
-async def _try_extract_chapters(video_id: str, user_id: UUID) -> bool:
+async def _try_extract_chapters(video_id: uuid.UUID, user_id: uuid.UUID) -> bool:
     """Try to extract chapters. Returns True if successful, False if failed."""
     async with async_session_maker() as db:
         # Mark as processing
@@ -205,7 +194,7 @@ async def _try_extract_chapters(video_id: str, user_id: UUID) -> bool:
         return True
 
 
-async def _extract_chapters_background(video_id: str, user_id: UUID) -> None:
+async def _extract_chapters_background(video_id: uuid.UUID, user_id: uuid.UUID) -> None:
     """Extract chapters in background after video creation with retry logic."""
     max_retries = CHAPTER_EXTRACTION_MAX_RETRIES
     retry_delay = CHAPTER_EXTRACTION_RETRY_DELAY_SECONDS
@@ -236,7 +225,7 @@ async def _extract_chapters_background(video_id: str, user_id: UUID) -> None:
             return
 
 
-async def _process_transcript_to_jsonb(video_id: UUID) -> None:
+async def _process_transcript_to_jsonb(video_id: uuid.UUID) -> None:
     """Process transcript segments into JSONB in background."""
     try:
         async with async_session_maker() as db:
@@ -265,7 +254,7 @@ async def _process_transcript_to_jsonb(video_id: UUID) -> None:
                 }
                 await db.commit()
                 logger.info(f"Stored {len(segments)} transcript segments for video {video_id}")
-                await _embed_video_background(str(video.id))
+                await _embed_video_background(video.id)
 
     except Exception as e:
         logger.exception(f"Failed to process transcript segments for video {video_id}: {e}")
@@ -277,12 +266,10 @@ class VideoService:
     def __init__(self) -> None:
         """Initialize the video service."""
 
-    async def _get_user_video(self, db: AsyncSession, video_id: str, user_id: UUID) -> Video:
+    async def _get_user_video(self, db: AsyncSession, video_id: uuid.UUID, user_id: uuid.UUID) -> Video:
         """Get video with optimized user ownership validation."""
-        video_id_obj = parse_video_id(video_id)
-
         # Single query with user filter
-        result = await db.execute(select(Video).where(Video.id == video_id_obj, Video.user_id == user_id))
+        result = await db.execute(select(Video).where(Video.id == video_id, Video.user_id == user_id))
         video = result.scalar_one_or_none()
 
         if not video:
@@ -316,7 +303,7 @@ class VideoService:
             "updated_at": video.updated_at,
         }
 
-    async def create_video(self, db: AsyncSession, video_data: VideoCreate, user_id: UUID) -> VideoResponse:
+    async def create_video(self, db: AsyncSession, video_data: VideoCreate, user_id: uuid.UUID) -> VideoResponse:
         """Create a new video by fetching metadata from YouTube."""
         # Get the user ID for creation
         user_id_for_creation = user_id
@@ -387,7 +374,7 @@ class VideoService:
 
         # Trigger background jobs detached from response-bound BackgroundTasks.
         _spawn_detached_task(_auto_tag_video_background(video_id, user_id))
-        _spawn_detached_task(_extract_chapters_background(str(video_id), user_id))
+        _spawn_detached_task(_extract_chapters_background(video_id, user_id))
         _spawn_detached_task(_process_transcript_to_jsonb(video_id))
 
         # Reload to ensure server-default timestamps are loaded
@@ -401,7 +388,7 @@ class VideoService:
     async def get_videos(
         self,
         db: AsyncSession,
-        user_id: UUID,
+        user_id: uuid.UUID,
         page: int = 1,
         size: int = 20,
         channel: str | None = None,
@@ -453,15 +440,15 @@ class VideoService:
             pages=pages,
         )
 
-    async def get_video(self, db: AsyncSession, video_id: str, user_id: UUID) -> VideoResponse:
-        """Get a single video by UUID."""
+    async def get_video(self, db: AsyncSession, video_id: uuid.UUID, user_id: uuid.UUID) -> VideoResponse:
+        """Get a single video by uuid.UUID."""
         # Get video with user validation (optimized single query)
         video = await self._get_user_video(db, video_id, user_id)
 
         return VideoResponse.model_validate(self._video_to_dict(video))
 
     async def update_video(
-        self, db: AsyncSession, video_id: str, update_data: VideoUpdate, user_id: UUID
+        self, db: AsyncSession, video_id: uuid.UUID, update_data: VideoUpdate, user_id: uuid.UUID
     ) -> VideoResponse:
         """Update video metadata."""
         # Get video with user validation (optimized single query)
@@ -533,9 +520,9 @@ class VideoService:
             # Extract video ID from URL
             video_id = ""
             if "youtube.com/watch?v=" in url:
-                video_id = url.split("v=")[1].split("&")[0]
+                video_id = url.split("v=")[1].split("&", maxsplit=1)[0]
             elif "youtu.be/" in url:
-                video_id = url.split("youtu.be/")[1].split("?")[0]
+                video_id = url.split("youtu.be/")[1].split("?", maxsplit=1)[0]
 
             # Return minimal required info
             return {
@@ -552,13 +539,15 @@ class VideoService:
                 "published_at": None,
             }
 
-    async def get_video_chapters(self, db: AsyncSession, video_id: str, user_id: UUID) -> list[VideoChapterResponse]:
+    async def get_video_chapters(
+        self, db: AsyncSession, video_id: uuid.UUID, user_id: uuid.UUID
+    ) -> list[VideoChapterResponse]:
         """Get all chapters for a video."""
         # Get video with user validation (optimized single query)
         video = await self._get_user_video(db, video_id, user_id)
 
         # Debug logging
-        logger.info(f"Getting chapters for video {video_id} (UUID: {video.id}) for user {user_id}")
+        logger.info(f"Getting chapters for video {video_id} (uuid.UUID: {video.id}) for user {user_id}")
 
         # Get chapters
         chapters_result = await db.execute(
@@ -588,7 +577,7 @@ class VideoService:
         return [VideoChapterResponse.model_validate(chapter) for chapter in chapters]
 
     async def get_video_chapter(
-        self, db: AsyncSession, video_id: str, chapter_id: str, user_id: UUID
+        self, db: AsyncSession, video_id: uuid.UUID, chapter_id: uuid.UUID, user_id: uuid.UUID
     ) -> VideoChapterResponse:
         """Get a specific chapter for a video."""
         # Get video with user validation (optimized single query)
@@ -612,10 +601,10 @@ class VideoService:
     async def update_video_chapter_status(
         self,
         db: AsyncSession,
-        video_id: str,
-        chapter_id: str,
+        video_id: uuid.UUID,
+        chapter_id: uuid.UUID,
         status: VideoLearningStatus,
-        user_id: UUID,
+        user_id: uuid.UUID,
     ) -> VideoChapterResponse:
         """Update the status of a video chapter."""
         # Get video with user validation (optimized single query)
@@ -683,10 +672,10 @@ class VideoService:
     async def sync_chapter_progress(
         self,
         db: AsyncSession,
-        video_id: str,
-        completed_chapter_ids: list[str],
+        video_id: uuid.UUID,
+        completed_chapter_ids: list[uuid.UUID],
         total_chapters: int,
-        user_id: UUID | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> VideoResponse:
         """Sync chapter progress from web app and update video completion percentage."""
         # If user_id is provided, verify ownership; otherwise just get the video
@@ -694,8 +683,7 @@ class VideoService:
             video = await self._get_user_video(db, video_id, user_id)
         else:
             # Background tasks without user context
-            video_id_obj = parse_video_id(video_id)
-            video_result = await db.execute(select(Video).where(Video.id == video_id_obj))
+            video_result = await db.execute(select(Video).where(Video.id == video_id))
             video = video_result.scalar_one_or_none()
             if not video:
                 msg = f"Video with ID {video_id} not found"
@@ -709,7 +697,7 @@ class VideoService:
         if user_id:
             progress_data = {
                 "completion_percentage": completion_percentage,
-                "completed_chapters": completed_chapter_ids,
+                "completed_chapters": [str(chapter_id) for chapter_id in completed_chapter_ids],
             }
             progress_result = await VideoProgressService(db).update_progress(video.id, user_id, progress_data)
             if "error" in progress_result:
@@ -724,7 +712,7 @@ class VideoService:
         return VideoResponse.model_validate(self._video_to_dict(video))
 
     async def extract_and_create_video_chapters(
-        self, db: AsyncSession, video_id: str, user_id: UUID
+        self, db: AsyncSession, video_id: uuid.UUID, user_id: uuid.UUID
     ) -> list[VideoChapterResponse]:
         """Extract chapters from YouTube video and create chapter records."""
         # Get video with user validation (optimized single query)
@@ -782,12 +770,10 @@ class VideoService:
 
         return [VideoChapterResponse.model_validate(chapter) for chapter in chapters]
 
-    async def get_transcript_info(self, db: AsyncSession, video_id: str) -> dict[str, Any] | None:
+    async def get_transcript_info(self, db: AsyncSession, video_id: uuid.UUID) -> dict[str, Any] | None:
         """Get transcript metadata without loading full segments."""
-        video_id_obj = parse_video_id(video_id)
-
         # Only fetch transcript_data field
-        result = await db.execute(select(Video.transcript_data).where(Video.id == video_id_obj))
+        result = await db.execute(select(Video.transcript_data).where(Video.id == video_id))
         row = result.first()
 
         if not row or not row.transcript_data:
@@ -800,7 +786,7 @@ class VideoService:
         }
 
     async def search_video(
-        self, db: AsyncSession, video_id: str, user_id: UUID, query: str, limit: int = VIDEO_RAG_SEARCH_LIMIT
+        self, db: AsyncSession, video_id: uuid.UUID, user_id: uuid.UUID, query: str, limit: int = VIDEO_RAG_SEARCH_LIMIT
     ) -> list[dict]:
         """Search this video's transcript chunks using pgvector."""
         # Ownership validation
@@ -814,14 +800,11 @@ class VideoService:
         return [r.model_dump() for r in results]
 
     async def get_video_transcript_segments(
-        self, db: AsyncSession, video_id: str, user_id: UUID | None = None
+        self, db: AsyncSession, video_id: uuid.UUID, user_id: uuid.UUID | None = None
     ) -> VideoTranscriptResponse:
         """Get transcript segments with timestamps for a video."""
-        # Convert string UUID to UUID object
-        video_id_obj = parse_video_id(video_id)
-
         # Get video to ensure it exists - ONLY load necessary fields
-        query = select(Video.id, Video.url, Video.transcript_data).where(Video.id == video_id_obj)
+        query = select(Video.id, Video.url, Video.transcript_data).where(Video.id == video_id)
         if user_id:
             query = query.where(Video.user_id == user_id)
         result = await db.execute(query)
@@ -854,7 +837,7 @@ class VideoService:
             # Store segments in JSONB for next time
             if segments:
                 # Need to update the actual video record
-                update_result = await db.execute(select(Video).where(Video.id == video_id_obj))
+                update_result = await db.execute(select(Video).where(Video.id == video_id))
                 video = update_result.scalar_one()
                 video.transcript_data = {
                     "segments": [{"start": seg.start_time, "end": seg.end_time, "text": seg.text} for seg in segments],

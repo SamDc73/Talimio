@@ -1,8 +1,9 @@
+
 """Content archive service."""
 
 import logging
+import uuid
 from datetime import UTC, datetime
-from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,12 +20,12 @@ class ContentArchiveService:
     """Service for archiving and unarchiving content."""
 
     @staticmethod
-    async def archive_content(db: AsyncSession, content_type: ContentType, content_id: UUID, user_id: UUID) -> None:
+    async def archive_content(db: AsyncSession, content_type: ContentType, content_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Archive content by type and ID with user validation."""
         logger.info(f"🗃️ Archiving {content_type} {content_id}")
 
         statement = None
-        params: dict[str, UUID | datetime] = {"content_id": content_id, "user_id": user_id}
+        params: dict[str, uuid.UUID | datetime] = {"content_id": content_id, "user_id": user_id}
         if content_type == ContentType.BOOK:
             statement = text(
                 """
@@ -70,12 +71,12 @@ class ContentArchiveService:
         logger.info(f"✅ Successfully archived {content_id}")
 
     @staticmethod
-    async def unarchive_content(db: AsyncSession, content_type: ContentType, content_id: UUID, user_id: UUID) -> None:
+    async def unarchive_content(db: AsyncSession, content_type: ContentType, content_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Unarchive content by type and ID with user validation."""
         logger.info(f"📤 Unarchiving {content_type} {content_id}")
 
         statement = None
-        params: dict[str, UUID] = {"content_id": content_id, "user_id": user_id}
+        params: dict[str, uuid.UUID] = {"content_id": content_id, "user_id": user_id}
         if content_type == ContentType.BOOK:
             statement = text(
                 """
@@ -125,7 +126,7 @@ class ContentArchiveService:
         content_type: ContentType | None = None,
         page: int = 1,
         page_size: int = 20,
-        current_user_id: UUID | None = None,
+        current_user_id: uuid.UUID | None = None,
     ) -> ContentListResponse:
         """
         List only archived content across different types.

@@ -1,3 +1,4 @@
+
 """LECTOR scheduling service implementing semantic-aware spaced repetition.
 
 Embedding-based confusors are computed and persisted at course creation (or
@@ -6,10 +7,10 @@ and does not compute on-the-fly fallback from embeddings.
 """
 
 import logging
+import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import TypedDict
-from uuid import UUID
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,7 +62,7 @@ class LectorSchedulerService:
     async def rank_frontier_entries(
         self,
         *,
-        user_id: UUID,
+        user_id: uuid.UUID,
         entries: Sequence[FrontierEntry],
         due_entries: Sequence[DueConceptEntry],
     ) -> list[FrontierEntry]:
@@ -121,17 +122,17 @@ class LectorSchedulerService:
             return baseline
 
     @staticmethod
-    def _coerce_uuid(value: object) -> UUID:
-        """Normalize database-returned identifiers to UUID instances."""
-        if isinstance(value, UUID):
+    def _coerce_uuid(value: object) -> uuid.UUID:
+        """Normalize database-returned identifiers to uuid.UUID instances."""
+        if isinstance(value, uuid.UUID):
             return value
         try:
-            return UUID(str(value))
+            return uuid.UUID(str(value))
         except (TypeError, ValueError) as exc:
-            message = f"Expected UUID-compatible value, got {value!r}"
+            message = f"Expected uuid.UUID-compatible value, got {value!r}"
             raise ValueError(message) from exc
 
-    async def _recent_concept_ids(self, user_id: UUID) -> list[UUID]:
+    async def _recent_concept_ids(self, user_id: uuid.UUID) -> list[uuid.UUID]:
         if self._risk_recent_k <= 0:
             return []
         rows = await self._session.execute(
@@ -141,7 +142,7 @@ class LectorSchedulerService:
             .limit(self._risk_recent_k)
         )
         concepts = []
-        seen: set[UUID] = set()
+        seen: set[uuid.UUID] = set()
         for concept_id in rows.scalars():
             if concept_id not in seen:
                 seen.add(concept_id)
@@ -150,9 +151,9 @@ class LectorSchedulerService:
 
     async def _sigma_for_concepts(
         self,
-        concept_ids: set[UUID],
-        context_ids: set[UUID],
-    ) -> dict[UUID, float]:
+        concept_ids: set[uuid.UUID],
+        context_ids: set[uuid.UUID],
+    ) -> dict[uuid.UUID, float]:
         if not concept_ids or not context_ids:
             return dict.fromkeys(concept_ids, 0.0)
 
@@ -178,7 +179,7 @@ class LectorSchedulerService:
             )
         )
 
-        sigma_map: dict[UUID, float] = dict.fromkeys(concept_ids, 0.0)
+        sigma_map: dict[uuid.UUID, float] = dict.fromkeys(concept_ids, 0.0)
         for concept_a_raw, concept_b_raw, similarity in result.all():
             concept_a_id = self._coerce_uuid(concept_a_raw)
             concept_b_id = self._coerce_uuid(concept_b_raw)
@@ -189,7 +190,7 @@ class LectorSchedulerService:
                 sigma_map[concept_b_id] = max(sigma_map[concept_b_id], similarity_value)
         return sigma_map
 
-    async def _due_concept_ids(self, *, user_id: UUID, course_id: UUID) -> set[UUID]:
+    async def _due_concept_ids(self, *, user_id: uuid.UUID, course_id: uuid.UUID) -> set[uuid.UUID]:
         now = datetime.now(UTC)
         rows = await self._session.execute(
             select(CourseConcept.concept_id)
@@ -213,9 +214,9 @@ class LectorSchedulerService:
     async def calculate_next_review(
         self,
         *,
-        user_id: UUID,
-        course_id: UUID,
-        concept_id: UUID,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        concept_id: uuid.UUID,
         rating: int,
         duration_ms: int | None = None,
     ) -> datetime:
@@ -264,7 +265,7 @@ class LectorSchedulerService:
         await self._session.flush()
         return next_review
 
-    async def get_due_concepts(self, *, user_id: UUID, course_id: UUID) -> list[DueConceptEntry]:
+    async def get_due_concepts(self, *, user_id: uuid.UUID, course_id: uuid.UUID) -> list[DueConceptEntry]:
         """Return concepts whose reviews are due."""
         now = datetime.now(UTC)
         rows = await self._session.execute(
@@ -300,8 +301,8 @@ class LectorSchedulerService:
     async def update_learner_profile(
         self,
         *,
-        user_id: UUID,
-        concept_id: UUID,
+        user_id: uuid.UUID,
+        concept_id: uuid.UUID,
         rating: int,
         duration_ms: int | None = None,
     ) -> dict[str, float]:

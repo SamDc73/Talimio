@@ -1,10 +1,11 @@
+
 """Book content processor for tag generation."""
 
 import logging
 import os
+import uuid
 from contextlib import redirect_stderr
 from pathlib import Path
-from uuid import UUID
 
 import fitz  # PyMuPDF
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -244,8 +245,8 @@ class BookProcessor:
 
 
 async def process_book_for_tagging(
-    book_id: UUID,
-    user_id: UUID,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
     session: AsyncSession,
 ) -> dict[str, str] | None:
     """Process a book to extract content for tagging.

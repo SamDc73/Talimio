@@ -1,3 +1,4 @@
+
 """Course progress service implementing the ProgressTracker protocol.
 
 Provides lesson-based progress tracking for courses with completion percentage calculations.
@@ -6,9 +7,9 @@ learning preferences, and adaptive settings.
 """
 
 import logging
+import uuid
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +29,7 @@ class CourseProgressService(ProgressTracker):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
+    async def get_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
         """Get progress data for specific course and user."""
 
         async def _inner(session: AsyncSession) -> dict[str, Any]:
@@ -158,12 +159,12 @@ class CourseProgressService(ProgressTracker):
 
         return await _inner(self._session)
 
-    async def calculate_completion_percentage(self, content_id: UUID, user_id: UUID) -> float:
+    async def calculate_completion_percentage(self, content_id: uuid.UUID, user_id: uuid.UUID) -> float:
         """Calculate completion percentage (0.0 to 100.0)."""
         progress = await self.get_progress(content_id, user_id)
         return progress.get("completion_percentage", 0.0)
 
-    async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
+    async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update progress data for specific course and user."""
 
         async def _inner(session: AsyncSession) -> dict[str, Any]:
@@ -207,7 +208,7 @@ class CourseProgressService(ProgressTracker):
         return await _inner(self._session)
 
     async def _get_progress_context(
-        self, session: Any, progress_service: Any, user_id: UUID, content_id: UUID
+        self, session: Any, progress_service: Any, user_id: uuid.UUID, content_id: uuid.UUID
     ) -> tuple[Any, Any, int]:
         """Get current progress, course, and lesson count."""
         current_progress = await progress_service.get_single_progress(user_id, content_id)

@@ -1,7 +1,8 @@
+
 """API router for highlights functionality."""
 
 import logging
-from uuid import UUID
+import uuid
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import and_, select
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/api/v1", tags=["highlights"])
 
 @router.get("/books/{book_id}/highlights")
 async def get_book_highlights(
-    book_id: UUID,
+    book_id: uuid.UUID,
     auth: CurrentAuth,
 ) -> list[HighlightResponse]:
     """Get all highlights for a specific book."""
@@ -56,7 +57,7 @@ async def get_book_highlights(
 
 @router.post("/books/{book_id}/highlights", status_code=status.HTTP_201_CREATED)
 async def create_book_highlight(
-    book_id: UUID,
+    book_id: uuid.UUID,
     highlight_create: HighlightCreate,
     auth: CurrentAuth,
 ) -> HighlightResponse:
@@ -92,7 +93,7 @@ async def create_book_highlight(
 
 @router.delete("/highlights/{highlight_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_highlight(
-    highlight_id: UUID,
+    highlight_id: uuid.UUID,
     auth: CurrentAuth,
 ) -> None:
     """Delete a highlight by ID."""
@@ -125,7 +126,7 @@ async def delete_highlight(
 
 @router.put("/highlights/{highlight_id}")
 async def update_highlight(
-    highlight_id: UUID,
+    highlight_id: uuid.UUID,
     highlight_update: HighlightCreate,
     auth: CurrentAuth,
 ) -> HighlightResponse:

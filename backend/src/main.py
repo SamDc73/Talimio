@@ -1,5 +1,6 @@
 import logging
 import re
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -253,10 +254,8 @@ def create_app() -> FastAPI:
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         """Global exception handler for unhandled errors."""
-        from uuid import uuid4
-
         # Generate error ID for tracking
-        error_id = uuid4()
+        error_id = uuid.uuid4()
 
         # Log comprehensive error context
         log_error_context(request, exc, error_id)

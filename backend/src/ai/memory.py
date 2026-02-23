@@ -1,3 +1,4 @@
+
 """
 Simplified async memory manager using mem0's AsyncMemory.
 
@@ -11,10 +12,10 @@ Key design:
 """
 
 import logging
+import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from typing import Any
-from uuid import UUID
 
 import psycopg
 from psycopg_pool import ConnectionPool
@@ -188,7 +189,7 @@ async def _run_memory_operation[MemoryResultT](
 
 
 async def add_memory(
-    user_id: UUID,
+    user_id: uuid.UUID,
     messages: str | dict[str, Any] | list[dict[str, Any]],
     metadata: dict[str, Any] | None = None,
     *,
@@ -218,7 +219,7 @@ async def add_memory(
 
 
 async def get_memories(
-    user_id: UUID,
+    user_id: uuid.UUID,
     limit: int = 100,
     *,
     agent_id: str | None = None,
@@ -248,7 +249,7 @@ async def get_memories(
 
 
 async def search_memories(
-    user_id: UUID,
+    user_id: uuid.UUID,
     query: str,
     limit: int = 100,
     threshold: float | None = None,
@@ -283,7 +284,7 @@ async def search_memories(
     )
 
 
-async def delete_memory(user_id: UUID, memory_id: str) -> bool:
+async def delete_memory(user_id: uuid.UUID, memory_id: str) -> bool:
     """Delete a specific memory."""
     if not _memory_is_configured():
         return False
@@ -301,7 +302,7 @@ async def delete_memory(user_id: UUID, memory_id: str) -> bool:
 
 
 async def delete_all_memories(
-    user_id: UUID,
+    user_id: uuid.UUID,
     *,
     agent_id: str | None = None,
     run_id: str | None = None,

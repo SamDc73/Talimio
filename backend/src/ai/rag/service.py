@@ -424,7 +424,7 @@ class RAGService:
             video = await session.get(Video, video_id)
             if not video:
                 # Video was deleted while embedding; clean up any chunks written in this run.
-                await self.delete_chunks_by_doc_id(session, str(video_id), doc_type=CONTENT_TYPE_VIDEO)
+                await self.delete_chunks_by_doc_id(session, video_id, doc_type=CONTENT_TYPE_VIDEO)
                 return
 
             # Mark completed
@@ -684,7 +684,7 @@ class RAGService:
     @staticmethod
     async def delete_chunks_by_doc_id(
         session: AsyncSession,
-        document_id: str,
+        document_id: uuid.UUID | int,
         doc_type: str = "course",
     ) -> int:
         """
@@ -711,7 +711,7 @@ class RAGService:
                 doc_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"document_{document_id}")
                 result = await session.execute(
                     text("DELETE FROM rag_document_chunks WHERE doc_id = :doc_uuid AND doc_type = :doc_type"),
-                    {"doc_uuid": str(doc_uuid), "doc_type": doc_type},
+                    {"doc_uuid": doc_uuid, "doc_type": doc_type},
                 )
 
             await session.flush()
@@ -736,7 +736,7 @@ class RAGService:
     @staticmethod
     async def delete_chunks_by_course_id(
         session: AsyncSession,
-        course_id: str,
+        course_id: uuid.UUID,
     ) -> int:
         """
         Delete all RAG chunks for a specific course using metadata.
@@ -754,7 +754,7 @@ class RAGService:
                 text(
                     "DELETE FROM rag_document_chunks WHERE metadata->>'course_id' = :course_id AND doc_type = :doc_type"
                 ),
-                {"course_id": course_id, "doc_type": CONTENT_TYPE_COURSE},
+                {"course_id": str(course_id), "doc_type": CONTENT_TYPE_COURSE},
             )
 
             await session.flush()
@@ -779,7 +779,7 @@ class RAGService:
     async def purge_for_content(
         session: AsyncSession,
         content_type: str,
-        content_id: str,
+        content_id: uuid.UUID,
     ) -> int:
         """Unified RAG purge entrypoint for content delete.
 

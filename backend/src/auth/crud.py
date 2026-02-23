@@ -1,11 +1,12 @@
+
 """Database-backed user CRUD for local auth."""
 
 from __future__ import annotations
 
 import secrets
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
-from uuid import UUID
 
 from sqlalchemy import delete, func, select
 
@@ -88,7 +89,7 @@ async def mark_password_reset_jti_used(
     session: AsyncSession,
     *,
     jti: str,
-    user_id: UUID,
+    user_id: uuid.UUID,
     email: str,
     expires_at: datetime,
 ) -> None:
@@ -144,7 +145,7 @@ async def cleanup_auth_operational_tables(
 async def create_auth_session(
     session: AsyncSession,
     *,
-    user_id: UUID,
+    user_id: uuid.UUID,
     expires_at: datetime,
     user_agent: str | None,
     ip_address: str | None,
@@ -164,8 +165,8 @@ async def create_auth_session(
 async def get_auth_session(
     session: AsyncSession,
     *,
-    session_id: UUID,
-    user_id: UUID,
+    session_id: uuid.UUID,
+    user_id: uuid.UUID,
 ) -> AuthSession | None:
     """Return a local auth session by ID and owner."""
     auth_session = await session.get(AuthSession, session_id)
@@ -177,7 +178,7 @@ async def get_auth_session(
 async def list_auth_sessions(
     session: AsyncSession,
     *,
-    user_id: UUID,
+    user_id: uuid.UUID,
 ) -> list[AuthSession]:
     """List auth sessions for a user, newest first."""
     result = await session.execute(
@@ -226,7 +227,7 @@ async def revoke_auth_session(
 async def revoke_all_auth_sessions(
     session: AsyncSession,
     *,
-    user_id: UUID,
+    user_id: uuid.UUID,
     revoked_at: datetime | None = None,
 ) -> int:
     """Revoke all active local auth sessions for a user."""

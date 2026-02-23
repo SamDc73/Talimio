@@ -1,7 +1,8 @@
+
 """Pydantic schemas for tagging API."""
 
+import uuid
 from datetime import datetime
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,7 +20,7 @@ class TagSchema(TagBase):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: uuid.UUID
     usage_count: int
     created_at: datetime
     updated_at: datetime
@@ -43,7 +44,7 @@ class ContentTagsUpdate(BaseModel):
 class TaggingResponse(BaseModel):
     """Response schema for tagging operations."""
 
-    content_id: UUID
+    content_id: uuid.UUID
     content_type: str
     tags: list[str]
     auto_generated: bool = True

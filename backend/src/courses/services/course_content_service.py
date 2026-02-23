@@ -1,3 +1,4 @@
+
 """Course content service for course-specific operations."""
 
 from __future__ import annotations
@@ -6,12 +7,12 @@ import asyncio
 import base64
 import json
 import logging
+import uuid
 from collections.abc import Coroutine
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
-from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
@@ -68,7 +69,7 @@ class CourseContentService:
     async def create_course(
         self,
         data: dict[str, Any],
-        user_id: UUID,
+        user_id: uuid.UUID,
         background_tasks: BackgroundTasks | None = None,
         attachments: list[UploadFile] | None = None,
     ) -> Course:
@@ -85,7 +86,7 @@ class CourseContentService:
         self,
         session: AsyncSession,
         data: dict[str, Any],
-        user_id: UUID,
+        user_id: uuid.UUID,
         *,
         background_tasks: BackgroundTasks | None = None,
         attachments: list[UploadFile] | None = None,
@@ -215,7 +216,7 @@ class CourseContentService:
         self,
         *,
         session_data: dict[str, Any],
-        user_id: UUID,
+        user_id: uuid.UUID,
         is_adaptive: bool,
     ) -> Course:
         """Build a draft course object from session payload data."""
@@ -259,7 +260,7 @@ class CourseContentService:
         prompt: str | list[dict[str, Any]] | None,
         prompt_text: str,
         session_data: dict[str, Any],
-        user_id: UUID,
+        user_id: uuid.UUID,
     ) -> AdaptiveCourseStructure | None:
         """Populate session data via adaptive or prompt-based generation."""
         if not is_adaptive:
@@ -300,8 +301,8 @@ class CourseContentService:
         *,
         rag_service: RAGService,
         session: AsyncSession,
-        user_id: UUID,
-        course_id: UUID,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
         attachments: list[UploadFile],
     ) -> list[str]:
         """Upload attachments and return image data URLs."""
@@ -345,8 +346,8 @@ class CourseContentService:
         *,
         rag_service: RAGService,
         session: AsyncSession,
-        user_id: UUID,
-        course_id: UUID,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
         prompt_text: str,
     ) -> str:
         """Append RAG context to the prompt if available."""
@@ -410,7 +411,7 @@ class CourseContentService:
         *,
         session: AsyncSession,
         course: Course,
-        user_id: UUID,
+        user_id: uuid.UUID,
         background_tasks: BackgroundTasks | None,
     ) -> None:
         """Kick off background work for embeddings and tagging."""
@@ -431,7 +432,7 @@ class CourseContentService:
 
     def _schedule_background_embeddings(
         self,
-        course_id: UUID,
+        course_id: uuid.UUID,
     ) -> None:
         """Enqueue background embedding generation so the response can return immediately."""
         _spawn_detached_task(self._run_background_embeddings(course_id))
@@ -440,7 +441,7 @@ class CourseContentService:
         self,
         *,
         session: AsyncSession,
-        course_id: UUID,
+        course_id: uuid.UUID,
         background_tasks: BackgroundTasks | None,
     ) -> None:
         if background_tasks is not None:
@@ -451,7 +452,7 @@ class CourseContentService:
     async def _run_embedding_pipeline(
         self,
         session: AsyncSession,
-        course_id: UUID,
+        course_id: uuid.UUID,
     ) -> tuple[int, int]:
         graph_service = ConceptGraphService(session)
         updated = await graph_service.backfill_embeddings_for_course(course_id)
@@ -463,7 +464,7 @@ class CourseContentService:
         await session.flush()
         return updated, pairs
 
-    async def _run_background_embeddings(self, course_id: UUID) -> None:
+    async def _run_background_embeddings(self, course_id: uuid.UUID) -> None:
         """Generate embeddings for any concepts that were deferred and compute confusors.
 
         Runs both steps in a single background task to ensure confusor computation
@@ -484,13 +485,13 @@ class CourseContentService:
 
     def _schedule_background_tagging(
         self,
-        course_id: UUID,
-        user_id: UUID,
+        course_id: uuid.UUID,
+        user_id: uuid.UUID,
     ) -> None:
         """Enqueue background tagging so the request can return immediately."""
         _spawn_detached_task(self._run_background_auto_tagging(course_id, user_id))
 
-    async def _run_background_auto_tagging(self, course_id: UUID, user_id: UUID) -> None:
+    async def _run_background_auto_tagging(self, course_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Run auto-tagging in a new session after the response is sent."""
         try:
             async with async_session_maker() as tagging_session:
@@ -505,9 +506,9 @@ class CourseContentService:
 
     async def update_course(
         self,
-        course_id: UUID,
+        course_id: uuid.UUID,
         data: dict[str, Any],
-        user_id: UUID,
+        user_id: uuid.UUID,
     ) -> Course:
         """Update an existing course."""
         return await self._update_course_with_session(
@@ -520,9 +521,9 @@ class CourseContentService:
     async def _update_course_with_session(
         self,
         session: AsyncSession,
-        course_id: UUID,
+        course_id: uuid.UUID,
         data: dict[str, Any],
-        user_id: UUID,
+        user_id: uuid.UUID,
     ) -> Course:
         query = select(Course).where(Course.id == course_id, Course.user_id == user_id)
         result = await session.execute(query)
@@ -545,7 +546,7 @@ class CourseContentService:
         await session.refresh(course)
         return course
 
-    async def _auto_tag_course(self, session: AsyncSession, course: Course, user_id: UUID) -> list[str]:
+    async def _auto_tag_course(self, session: AsyncSession, course: Course, user_id: uuid.UUID) -> list[str]:
         """Generate and persist tags for a course.
 
         Uses SQLAlchemy Core UPDATE to avoid ORM stale update errors when the row
@@ -623,7 +624,7 @@ class CourseContentService:
     async def _insert_lessons(
         self,
         session: AsyncSession,
-        course_id: UUID,
+        course_id: uuid.UUID,
         modules: list[dict[str, Any]],
     ) -> int:
         """Insert lessons for a course based on normalized module payload."""
@@ -650,11 +651,11 @@ class CourseContentService:
                 lesson_order = int(order_value) if isinstance(order_value, int) else lesson_index
 
                 lesson_id_value = payload.get("id")
-                lesson_uuid: UUID | None = None
+                lesson_uuid: uuid.UUID | None = None
                 if lesson_id_value is not None:
                     try:
                         lesson_uuid = (
-                            lesson_id_value if isinstance(lesson_id_value, UUID) else UUID(str(lesson_id_value))
+                            lesson_id_value if isinstance(lesson_id_value, uuid.UUID) else uuid.UUID(str(lesson_id_value))
                         )
                     except (TypeError, ValueError):
                         logger.warning(
@@ -666,7 +667,7 @@ class CourseContentService:
                 slug_value = payload.get("slug")
                 if lesson_uuid is None and isinstance(slug_value, str) and slug_value.strip():
                     slug_text = slug_value.strip().lower()
-                    lesson_uuid = uuid5(NAMESPACE_URL, f"outline-lesson:{course_id}:{slug_text}")
+                    lesson_uuid = uuid.uuid5(uuid.NAMESPACE_URL, f"outline-lesson:{course_id}:{slug_text}")
 
                 lesson_kwargs: dict[str, Any] = {
                     "course_id": course_id,
@@ -789,7 +790,7 @@ class CourseContentService:
         )
 
         node_count = len(concepts_by_index)
-        edge_pairs: list[tuple[UUID, UUID]] = []
+        edge_pairs: list[tuple[uuid.UUID, uuid.UUID]] = []
         for edge in concept_graph.edges:
             if edge.source_index >= node_count or edge.prereq_index >= node_count:
                 logger.warning(
@@ -858,9 +859,9 @@ class CourseContentService:
         session: AsyncSession,
         concept_graph: Any,
         concepts_by_index: list[Concept],
-        course_id: UUID,
+        course_id: uuid.UUID,
     ) -> int:
-        confusor_pairs: dict[tuple[UUID, UUID], float] = {}
+        confusor_pairs: dict[tuple[uuid.UUID, uuid.UUID], float] = {}
         node_count = len(concepts_by_index)
 
         for confusor_set in concept_graph.confusors:
@@ -882,7 +883,7 @@ class CourseContentService:
 
                 base_id = base_concept.id
                 other_id = other_concept.id
-                ordered: tuple[UUID, UUID] = (
+                ordered: tuple[uuid.UUID, uuid.UUID] = (
                     (base_id, other_id) if str(base_id) < str(other_id) else (other_id, base_id)
                 )
                 risk_value = float(confusor.risk)
@@ -961,7 +962,7 @@ class CourseContentService:
                 continue
 
             concept = concepts_by_index[node_index]
-            lesson_id = uuid5(NAMESPACE_URL, f"concept-lesson:{course.id}:{concept.id}")
+            lesson_id = uuid.uuid5(uuid.NAMESPACE_URL, f"concept-lesson:{course.id}:{concept.id}")
             lessons.append(
                 {
                     "id": lesson_id,
@@ -977,7 +978,7 @@ class CourseContentService:
             if node_index in assigned:
                 continue
 
-            lesson_id = uuid5(NAMESPACE_URL, f"concept-lesson:{course.id}:{concept.id}")
+            lesson_id = uuid.uuid5(uuid.NAMESPACE_URL, f"concept-lesson:{course.id}:{concept.id}")
             lessons.append(
                 {
                     "id": lesson_id,
@@ -1060,7 +1061,7 @@ class CourseContentService:
         self,
         user_prompt: str | list[dict[str, Any]],
         prompt_text: str,
-        user_id: UUID,
+        user_id: uuid.UUID,
     ) -> dict[str, Any]:
         """Generate course data from AI prompt."""
         ai_result = await self.ai_service.generate_course_structure(

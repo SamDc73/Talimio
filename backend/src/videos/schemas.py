@@ -1,7 +1,7 @@
 import json
+import uuid
 from datetime import datetime
 from typing import Any, Literal
-from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -60,7 +60,7 @@ class VideoUpdate(BaseModel):
 class VideoInDB(VideoBase):
     """Schema for video stored in database."""
 
-    id: UUID
+    id: uuid.UUID
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
 
@@ -123,8 +123,8 @@ class VideoChapterResponse(VideoChapterBase):
 
     model_config = build_camel_config(from_attributes=True)
 
-    id: UUID
-    video_id: UUID = Field(alias="videoId")
+    id: uuid.UUID
+    video_id: uuid.UUID = Field(alias="videoId")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
 
@@ -142,7 +142,7 @@ class VideoChapterProgressSync(BaseModel):
 
     model_config = build_camel_config()
 
-    completed_chapter_ids: list[str] = Field(
+    completed_chapter_ids: list[uuid.UUID] = Field(
         ..., description="List of completed chapter IDs", alias="completedChapterIds"
     )
     total_chapters: int = Field(..., gt=0, description="Total number of chapters", alias="totalChapters")
@@ -163,7 +163,7 @@ class VideoTranscriptResponse(BaseModel):
 
     model_config = build_camel_config()
 
-    video_id: UUID = Field(..., alias="videoId")
+    video_id: uuid.UUID = Field(..., alias="videoId")
     segments: list[TranscriptSegment] = Field(..., description="List of transcript segments")
     total_segments: int = Field(..., alias="totalSegments")
 
@@ -173,7 +173,7 @@ class RAGStatusResponse(BaseModel):
 
     model_config = build_camel_config(from_attributes=True)
 
-    video_id: UUID
+    video_id: uuid.UUID
     rag_status: VideoRagStatus
     rag_processed_at: str | None = None
     message: str

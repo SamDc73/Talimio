@@ -1,8 +1,9 @@
+
 """Book query service for complex database operations."""
 
 import logging
+import uuid
 from typing import Any, cast
-from uuid import UUID
 
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 class BookQueryService:
     """Service for complex book database queries and operations."""
 
-    def __init__(self, session: AsyncSession, user_id: UUID) -> None:
+    def __init__(self, session: AsyncSession, user_id: uuid.UUID) -> None:
         """Initialize the book query service.
 
         Args:

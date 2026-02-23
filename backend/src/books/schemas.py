@@ -1,6 +1,6 @@
+import uuid
 from datetime import datetime
 from typing import Any, Literal
-from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -62,7 +62,7 @@ class BookResponse(BaseModel):
 
     model_config = build_camel_config(from_attributes=True)
 
-    id: UUID
+    id: uuid.UUID
     title: str
     subtitle: str | None = None
     author: str
@@ -155,8 +155,8 @@ class BookProgressResponse(BookProgressBase):
 
     model_config = build_camel_config(from_attributes=True)
 
-    id: UUID | None = None  # Optional - might not exist for unsaved progress
-    book_id: UUID = Field(alias="bookId")
+    id: uuid.UUID | None = None  # Optional - might not exist for unsaved progress
+    book_id: uuid.UUID = Field(alias="bookId")
     total_pages_read: int = Field(alias="totalPagesRead")
     last_read_at: datetime | None = Field(alias="lastReadAt")
     created_at: datetime | None = Field(None, alias="createdAt")  # None if not yet saved
@@ -249,8 +249,8 @@ class BookChapterResponse(BookChapterBase):
 
     model_config = build_camel_config(from_attributes=True)
 
-    id: UUID
-    book_id: UUID = Field(alias="bookId")
+    id: uuid.UUID
+    book_id: uuid.UUID = Field(alias="bookId")
     created_at: datetime | None = Field(None, alias="createdAt")  # None if not from database
     updated_at: datetime | None = Field(None, alias="updatedAt")  # None if not from database
 
@@ -268,7 +268,7 @@ class BookChapterBatchStatusUpdate(BaseModel):
 
     model_config = build_camel_config()
 
-    chapter_id: UUID = Field(..., alias="chapterId")
+    chapter_id: uuid.UUID = Field(..., alias="chapterId")
     status: BookLearningStatus
 
 

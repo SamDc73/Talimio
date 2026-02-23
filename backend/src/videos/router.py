@@ -1,6 +1,6 @@
 import logging
+import uuid
 from typing import Annotated, Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -72,7 +72,7 @@ async def list_videos(
 
 @router.get("/{video_id}")
 async def get_video(
-    video_id: str,
+    video_id: uuid.UUID,
     auth: CurrentAuth,
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> VideoResponse:
@@ -88,7 +88,7 @@ async def get_video(
 
 @router.patch("/{video_id}")
 async def update_video(
-    video_id: str,
+    video_id: uuid.UUID,
     update_data: VideoUpdate,
     auth: CurrentAuth,
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
@@ -105,7 +105,7 @@ async def update_video(
 
 @router.get("/{video_id}/chapters")
 async def get_video_chapters(
-    video_id: str,
+    video_id: uuid.UUID,
     auth: CurrentAuth,
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> list[VideoChapterResponse]:
@@ -121,8 +121,8 @@ async def get_video_chapters(
 
 @router.get("/{video_id}/chapters/{chapter_id}")
 async def get_video_chapter(
-    video_id: str,
-    chapter_id: str,
+    video_id: uuid.UUID,
+    chapter_id: uuid.UUID,
     auth: CurrentAuth,
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> VideoChapterResponse:
@@ -138,8 +138,8 @@ async def get_video_chapter(
 
 @router.put("/{video_id}/chapters/{chapter_id}/status")
 async def update_video_chapter_status(
-    video_id: str,
-    chapter_id: str,
+    video_id: uuid.UUID,
+    chapter_id: uuid.UUID,
     status_data: VideoChapterStatusUpdate,
     auth: CurrentAuth,
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
@@ -163,7 +163,7 @@ async def update_video_chapter_status(
 
 @router.post("/{video_id}/extract-chapters")
 async def extract_video_chapters(
-    video_id: str,
+    video_id: uuid.UUID,
     auth: CurrentAuth,
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> dict[str, Any]:
@@ -182,7 +182,7 @@ async def extract_video_chapters(
 
 @router.post("/{video_id}/sync-chapter-progress")
 async def sync_video_chapter_progress(
-    video_id: str,
+    video_id: uuid.UUID,
     progress_data: VideoChapterProgressSync,
     auth: CurrentAuth,
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
@@ -204,7 +204,7 @@ async def sync_video_chapter_progress(
 
 @router.get("/{video_id}/transcript")
 async def get_video_transcript(
-    video_id: str,
+    video_id: uuid.UUID,
     auth: CurrentAuth,
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> VideoTranscriptResponse:
@@ -220,7 +220,7 @@ async def get_video_transcript(
 
 @router.get("/{video_id}/details")
 async def get_video_details(
-    video_id: str,
+    video_id: uuid.UUID,
     auth: CurrentAuth,
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> dict[str, Any]:
@@ -240,7 +240,7 @@ async def get_video_details(
 
         # Get progress
         try:
-            progress_result = await facade.get_video_with_progress(UUID(video_id), auth.user_id)
+            progress_result = await facade.get_video_with_progress(video_id, auth.user_id)
             progress = progress_result.get("progress") if progress_result.get("success") else None
         except (RuntimeError, ValueError):
             progress = None

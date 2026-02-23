@@ -1,12 +1,13 @@
+
 """Book progress service for tracking reading progress."""
 
 from __future__ import annotations
 
 import json
 import logging
+import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
 
 from sqlalchemy import select
 
@@ -28,7 +29,7 @@ class BookProgressService(ProgressTracker):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def initialize_progress(self, content_id: UUID, user_id: UUID, total_pages: int = 0) -> None:
+    async def initialize_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, total_pages: int = 0) -> None:
         """Initialize progress tracking for a new book."""
         progress_service = ProgressService(self._session)
 
@@ -50,7 +51,7 @@ class BookProgressService(ProgressTracker):
             extra={"user_id": str(user_id), "book_id": str(content_id), "total_pages": total_pages},
         )
 
-    async def get_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
+    async def get_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
         """Get progress data for specific book and user."""
         progress_service = ProgressService(self._session)
         progress_data = await progress_service.get_single_progress(user_id, content_id)
@@ -107,7 +108,7 @@ class BookProgressService(ProgressTracker):
             "updated_at": progress_data.updated_at,
         }
 
-    async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
+    async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update progress data for specific book and user."""
         progress_service = ProgressService(self._session)
 
@@ -196,13 +197,13 @@ class BookProgressService(ProgressTracker):
             "updated_at": updated.updated_at,
         }
 
-    async def calculate_completion_percentage(self, content_id: UUID, user_id: UUID) -> float:
+    async def calculate_completion_percentage(self, content_id: uuid.UUID, user_id: uuid.UUID) -> float:
         """Calculate completion percentage for a user's book progress."""
         progress = await self.get_progress(content_id, user_id)
         return float(progress.get("completion_percentage", 0.0))
 
     async def mark_chapter_complete(
-        self, content_id: UUID, user_id: UUID, chapter_id: str, completed: bool = True
+        self, content_id: uuid.UUID, user_id: uuid.UUID, chapter_id: str, completed: bool = True
     ) -> None:
         """Mark a book chapter as complete or incomplete."""
         progress_service = ProgressService(self._session)
@@ -257,7 +258,7 @@ class BookProgressService(ProgressTracker):
     # TOC Progress Calculation Methods
 
     async def get_book_toc_progress_percentage(
-        self, book_id: UUID, user_id: UUID, book: Any | None = None, toc_progress: dict | None = None
+        self, book_id: uuid.UUID, user_id: uuid.UUID, book: Any | None = None, toc_progress: dict | None = None
     ) -> int:
         """Calculate book progress based on completed leaf sections.
 

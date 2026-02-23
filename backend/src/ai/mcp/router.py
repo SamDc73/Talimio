@@ -1,9 +1,10 @@
+
 """API routes for managing user MCP servers."""
 
 from __future__ import annotations
 
+import uuid
 from typing import Annotated, Any
-from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import AnyHttpUrl, TypeAdapter
@@ -69,7 +70,7 @@ async def create_server(
 
 @router.delete("/servers/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_server(
-    server_id: UUID,
+    server_id: uuid.UUID,
     auth: CurrentAuth,
 ) -> None:
     """Remove a stored MCP server configuration."""

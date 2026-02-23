@@ -17,7 +17,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as POSTGRES_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.base import Base
@@ -40,14 +40,14 @@ class AssistantConversation(Base):
         Index("assistant_conversations_user_id_updated_at_idx", "user_id", "updated_at"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), nullable=False, index=True)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False, index=True)
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[AssistantConversationStatus] = mapped_column(
         String(20), nullable=False, default="regular", server_default="regular"
     )
     context_type: Mapped[AssistantConversationContextType | None] = mapped_column(String(20), nullable=True)
-    context_id: Mapped[uuid.UUID | None] = mapped_column(POSTGRES_UUID(as_uuid=True), nullable=True)
+    context_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     context_meta: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         nullable=False,
@@ -88,9 +88,9 @@ class AssistantConversationHistoryItem(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(POSTGRES_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     conversation_id: Mapped[uuid.UUID] = mapped_column(
-        POSTGRES_UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("assistant_conversations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,

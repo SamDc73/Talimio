@@ -1,10 +1,11 @@
+
 """Course query service for read operations on courses."""
 
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import TYPE_CHECKING
-from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -26,7 +27,7 @@ class CourseQueryService:
         self.response_builder = CourseResponseBuilder(session)
         self._logger = logging.getLogger(__name__)
 
-    async def get_course(self, course_id: UUID, user_id: UUID) -> CourseResponse:
+    async def get_course(self, course_id: uuid.UUID, user_id: uuid.UUID) -> CourseResponse:
         """Get a specific course by ID."""
         course_query = select(Course).where(Course.id == course_id, Course.user_id == user_id)
         course_result = await self.session.execute(course_query)
@@ -50,7 +51,7 @@ class CourseQueryService:
         page: int = 1,
         per_page: int = 20,
         search: str | None = None,
-        user_id: UUID | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> tuple[list[CourseResponse], int]:
         """List courses with pagination and optional search."""
         if not user_id:

@@ -1,3 +1,4 @@
+
 """Core authentication configuration, schemes, and dependencies.
 
 Provide cookie scheme definition, JWT token decoding, user ID resolution,
@@ -5,9 +6,9 @@ and FastAPI dependency injection for authentication.
 """
 
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import Annotated
-from uuid import UUID
 
 import jwt
 from fastapi import HTTPException, Request, Security, status
@@ -23,7 +24,7 @@ from src.config.settings import get_settings
 logger = logging.getLogger(__name__)
 
 # THE ONLY USER ID CONSTANT IN THE ENTIRE CODEBASE
-DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
+DEFAULT_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 # ---------------------------------------------------------------------------
 # Cookie scheme
@@ -49,9 +50,9 @@ CookieTokenOptional = Annotated[str | None, Security(_cookie_scheme)]
 class LocalTokenClaims:
     """Validated local JWT claims used by request auth flows."""
 
-    user_id: UUID
+    user_id: uuid.UUID
     token_version: int
-    session_id: UUID | None
+    session_id: uuid.UUID | None
 
 
 def get_local_token_version_from_state(request: Request) -> int | None:
@@ -62,10 +63,10 @@ def get_local_token_version_from_state(request: Request) -> int | None:
     return None
 
 
-def get_local_session_id_from_state(request: Request) -> UUID | None:
+def get_local_session_id_from_state(request: Request) -> uuid.UUID | None:
     """Read local auth session ID from request state."""
     session_id = getattr(request.state, "local_session_id", None)
-    if isinstance(session_id, UUID):
+    if isinstance(session_id, uuid.UUID):
         return session_id
     return None
 
@@ -85,23 +86,23 @@ def _parse_token_version(payload: dict[str, object]) -> int:
     raise InvalidTokenError
 
 
-def _parse_session_id(payload: dict[str, object]) -> UUID | None:
+def _parse_session_id(payload: dict[str, object]) -> uuid.UUID | None:
     """Parse and validate auth session ID claim."""
     raw_session_id = payload.get("sid")
     if raw_session_id is None:
         return None
     if isinstance(raw_session_id, str):
         try:
-            return UUID(raw_session_id)
+            return uuid.UUID(raw_session_id)
         except ValueError as error:
             raise InvalidTokenError from error
     raise InvalidTokenError
 
 
-def _parse_user_id(payload: dict[str, object]) -> UUID:
+def _parse_user_id(payload: dict[str, object]) -> uuid.UUID:
     """Parse and validate user ID subject claim."""
     try:
-        return UUID(str(payload["sub"]))
+        return uuid.UUID(str(payload["sub"]))
     except (ValueError, TypeError, KeyError) as error:
         raise InvalidTokenError from error
 
@@ -142,7 +143,7 @@ def _store_local_claims_on_request(request: Request, claims: LocalTokenClaims) -
 # ---------------------------------------------------------------------------
 # User ID resolution
 # ---------------------------------------------------------------------------
-async def get_user_id(request: Request, token: str) -> UUID:
+async def get_user_id(request: Request, token: str) -> uuid.UUID:
     """Resolve authenticated user ID.
 
     Single-user mode: always return DEFAULT_USER_ID.
@@ -161,12 +162,12 @@ async def get_user_id(request: Request, token: str) -> UUID:
     )
 
 
-def _get_single_user_mode_id() -> UUID:
+def _get_single_user_mode_id() -> uuid.UUID:
     """Return the default user ID in single-user mode."""
     return DEFAULT_USER_ID
 
 
-def _get_local_user_id(request: Request, *, token: str, jwt_secret: str) -> UUID:
+def _get_local_user_id(request: Request, *, token: str, jwt_secret: str) -> uuid.UUID:
     """Resolve authenticated user ID from local JWT cookie."""
     claims = decode_local_token_claims(token, jwt_secret=jwt_secret)
     _store_local_claims_on_request(request, claims)
@@ -179,7 +180,7 @@ def _get_local_user_id(request: Request, *, token: str, jwt_secret: str) -> UUID
 async def _get_user_id_dependency(
     request: Request,
     auth_token: CookieToken,
-) -> UUID:
+) -> uuid.UUID:
     """Get user ID dependency for FastAPI routes.
 
     Thin wrapper around get_user_id() for use as a FastAPI dependency.

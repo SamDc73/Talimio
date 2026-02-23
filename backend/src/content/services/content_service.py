@@ -1,8 +1,9 @@
+
 """Main content service."""
 
 import logging
+import uuid
 from typing import Any
-from uuid import UUID
 
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select, text
@@ -15,7 +16,7 @@ from src.content.services.query_builder_service import QueryBuilderService
 
 
 # Progress calculation imports removed - progress now fetched separately
-# AuthContext removed - using UUID directly
+# AuthContext removed - using uuid.UUID directly
 logger = logging.getLogger(__name__)
 
 
@@ -28,7 +29,7 @@ class ContentService:
 
     async def list_content_fast(
         self,
-        user_id: UUID,
+        user_id: uuid.UUID,
         search: str | None = None,
         content_type: ContentType | None = None,
         page: int = 1,
@@ -85,7 +86,7 @@ class ContentService:
         search_term: str | None,
         page_size: int,
         offset: int,
-        user_id: UUID | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> list[Any]:
         """Get paginated results."""
         combined_subquery = QueryBuilderService.build_combined_subquery(combined_query)
@@ -119,7 +120,7 @@ class ContentService:
             except Exception:
                 logger.exception("Non-fatal: failed to delete stored file for book")
 
-    async def _delete_course_document_files(self, session: AsyncSession, course_id: UUID) -> None:
+    async def _delete_course_document_files(self, session: AsyncSession, course_id: uuid.UUID) -> None:
         """Delete any local source files for course documents.
 
         Course reference docs (used for course RAG) are stored on the local filesystem
@@ -183,7 +184,7 @@ class ContentService:
             raise ValueError(msg)
         return mapping[content_type]
 
-    async def _delete_user_progress(self, session: AsyncSession, user_id: UUID, row_id: UUID) -> None:
+    async def _delete_user_progress(self, session: AsyncSession, user_id: uuid.UUID, row_id: uuid.UUID) -> None:
         """Delete user progress rows; tolerate absence."""
         try:
             await session.execute(
@@ -197,7 +198,7 @@ class ContentService:
         self,
         session: AsyncSession,
         content_type: ContentType,
-        row_id: UUID,
+        row_id: uuid.UUID,
     ) -> None:
         """Delete tag associations for this content regardless of user_id."""
         from sqlalchemy import and_, delete
@@ -216,8 +217,8 @@ class ContentService:
     async def delete_content(
         self,
         content_type: ContentType,
-        content_id: UUID,
-        user_id: UUID,
+        content_id: uuid.UUID,
+        user_id: uuid.UUID,
     ) -> None:
         """Delete a content item and all related references."""
         session = self._session
@@ -243,7 +244,7 @@ class ContentService:
 
         from src.ai.rag.service import RAGService
 
-        await RAGService.purge_for_content(session, content_type.value, str(content_id))
+        await RAGService.purge_for_content(session, content_type.value, content_id)
 
         # Delete the content row and let the request boundary commit.
         await session.delete(row)

@@ -1,7 +1,8 @@
+
 """Progress tracking API endpoints."""
 
 import logging
-from uuid import UUID
+import uuid
 
 from fastapi import APIRouter, HTTPException, Response, status
 
@@ -65,7 +66,7 @@ async def get_batch_progress(
 
 @router.get("/{content_id}")
 async def get_single_progress(
-    content_id: UUID,
+    content_id: uuid.UUID,
     auth: CurrentAuth,
 ) -> ProgressResponse:
     """Get progress for a single content item."""
@@ -112,7 +113,7 @@ async def get_single_progress(
 
 @router.put("/{content_id}")
 async def update_progress(
-    content_id: UUID,
+    content_id: uuid.UUID,
     progress: ProgressUpdate,
     auth: CurrentAuth,
 ) -> ProgressResponse:
@@ -137,7 +138,7 @@ async def update_progress(
 
 @router.delete("/{content_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_progress(
-    content_id: UUID,
+    content_id: uuid.UUID,
     auth: CurrentAuth,
 ) -> None:
     """Delete progress for a content item."""

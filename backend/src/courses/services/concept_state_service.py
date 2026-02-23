@@ -1,11 +1,12 @@
+
 """User concept state management for adaptive scheduling."""
 
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
 
 from sqlalchemy import and_, select
 
@@ -31,8 +32,8 @@ class ConceptStateService:
     async def get_user_concept_state(
         self,
         *,
-        user_id: UUID,
-        concept_id: UUID,
+        user_id: uuid.UUID,
+        concept_id: uuid.UUID,
         create: bool = True,
     ) -> UserConceptState | None:
         """Fetch or lazily create the concept state for a learner."""
@@ -55,8 +56,8 @@ class ConceptStateService:
     async def update_mastery(
         self,
         *,
-        user_id: UUID,
-        concept_id: UUID,
+        user_id: uuid.UUID,
+        concept_id: uuid.UUID,
         correct: bool,
         latency_ms: int | None = None,
     ) -> UserConceptState:
@@ -81,8 +82,8 @@ class ConceptStateService:
     async def log_probe_event(
         self,
         *,
-        user_id: UUID,
-        concept_id: UUID,
+        user_id: uuid.UUID,
+        concept_id: uuid.UUID,
         rating: int,
         review_duration_ms: int,
         correct: bool,

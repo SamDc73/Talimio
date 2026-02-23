@@ -1,9 +1,10 @@
+
 """Core tagging service for content classification."""
 
 import json
 import logging
+import uuid
 from typing import Any
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, select
@@ -91,9 +92,9 @@ class TaggingService:
 
     async def tag_content(
         self,
-        content_id: UUID,
+        content_id: uuid.UUID,
         content_type: str,
-        user_id: UUID,
+        user_id: uuid.UUID,
         title: str = "",
         content_preview: str = "",
     ) -> list[str]:
@@ -149,7 +150,7 @@ class TaggingService:
     async def suggest_tags(
         self,
         content_preview: str,
-        _user_id: UUID,
+        _user_id: uuid.UUID,
         _content_type: str,
         title: str = "",
     ) -> list[str]:
@@ -160,9 +161,9 @@ class TaggingService:
 
     async def get_content_tags(
         self,
-        content_id: UUID,
+        content_id: uuid.UUID,
         content_type: str,
-        user_id: UUID | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> list[Tag]:
         """Get tags for a content item for a specific user.
 
@@ -197,8 +198,8 @@ class TaggingService:
         successful = 0
         for item in content_items:
             try:
-                content_id = UUID(str(item.get("content_id")))
-                user_id = UUID(str(item.get("user_id")))
+                content_id = uuid.UUID(str(item.get("content_id")))
+                user_id = uuid.UUID(str(item.get("user_id")))
                 content_type = str(item.get("content_type", ""))
                 title = str(item.get("title", ""))
                 preview = str(item.get("preview", ""))
@@ -239,9 +240,9 @@ class TaggingService:
 
     async def update_manual_tags(
         self,
-        content_id: UUID,
+        content_id: uuid.UUID,
         content_type: str,
-        user_id: UUID,
+        user_id: uuid.UUID,
         tag_names: list[str],
     ) -> None:
         """Update manual tags for content, replacing auto-generated ones.
@@ -341,10 +342,10 @@ class TaggingService:
 
     async def _create_tag_association(
         self,
-        tag_id: UUID,
-        content_id: UUID,
+        tag_id: uuid.UUID,
+        content_id: uuid.UUID,
         content_type: str,
-        user_id: UUID,
+        user_id: uuid.UUID,
         confidence_score: float = 1.0,
         auto_generated: bool = True,
     ) -> TagAssociation:
@@ -396,10 +397,10 @@ class TaggingService:
 
 async def update_content_tags_json(
     session: AsyncSession,
-    content_id: UUID,
+    content_id: uuid.UUID,
     content_type: str,
     tags: list[str],
-    user_id: UUID,
+    user_id: uuid.UUID,
 ) -> None:
     """Update the tags_json field for a content item.
 

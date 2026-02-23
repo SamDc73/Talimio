@@ -22,7 +22,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as SA_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.base import Base
@@ -43,8 +43,8 @@ class Course(Base):
 
     __tablename__ = "courses"
 
-    id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), nullable=False, index=True)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False)
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -85,9 +85,9 @@ class Lesson(Base):
 
     __tablename__ = "lessons"
 
-    id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     course_id: Mapped[uuid.UUID] = mapped_column(
-        SA_UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("courses.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -131,7 +131,7 @@ class CourseDocument(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     course_id: Mapped[uuid.UUID] = mapped_column(
-        SA_UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("courses.id", ondelete="CASCADE"),
         nullable=False,
     )
@@ -154,7 +154,7 @@ class Concept(Base):
         Index("idx_concepts_slug", "slug", unique=True),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     domain: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -207,12 +207,12 @@ class ConceptPrerequisite(Base):
     )
 
     concept_id: Mapped[uuid.UUID] = mapped_column(
-        SA_UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("concepts.id", ondelete="CASCADE"),
         nullable=False,
     )
     prereq_id: Mapped[uuid.UUID] = mapped_column(
-        SA_UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("concepts.id", ondelete="CASCADE"),
         nullable=False,
     )
@@ -238,12 +238,12 @@ class CourseConcept(Base):
     )
 
     course_id: Mapped[uuid.UUID] = mapped_column(
-        SA_UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("courses.id", ondelete="CASCADE"),
         primary_key=True,
     )
     concept_id: Mapped[uuid.UUID] = mapped_column(
-        SA_UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("concepts.id", ondelete="CASCADE"),
         primary_key=True,
     )
@@ -263,12 +263,12 @@ class ConceptSimilarity(Base):
     )
 
     concept_a_id: Mapped[uuid.UUID] = mapped_column(
-        SA_UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("concepts.id", ondelete="CASCADE"),
         nullable=False,
     )
     concept_b_id: Mapped[uuid.UUID] = mapped_column(
-        SA_UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("concepts.id", ondelete="CASCADE"),
         nullable=False,
     )
@@ -291,12 +291,12 @@ class UserConceptState(Base):
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        SA_UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
     concept_id: Mapped[uuid.UUID] = mapped_column(
-        SA_UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("concepts.id", ondelete="CASCADE"),
         nullable=False,
     )
@@ -321,15 +321,15 @@ class ProbeEvent(Base):
         Index("idx_probe_events_user_ts", "user_id", "ts"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
-        SA_UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     concept_id: Mapped[uuid.UUID] = mapped_column(
-        SA_UUID(as_uuid=True),
+        PG_UUID(as_uuid=True),
         ForeignKey("concepts.id", ondelete="CASCADE"),
         nullable=False,
         index=True,

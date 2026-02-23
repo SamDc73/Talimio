@@ -1,13 +1,14 @@
+
 """Concept graph service providing DAG operations."""
 
 import logging
 import re
+import uuid
 from collections.abc import Sequence
 from typing import TypedDict
-from uuid import UUID
 
 from sqlalchemy import and_, bindparam, select, text, update
-from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID as PG_UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.rag.embeddings import VectorRAG
@@ -41,7 +42,7 @@ class FrontierEntry(TypedDict):
 
     concept: Concept
     state: UserConceptState | None
-    prerequisites: list[UUID]
+    prerequisites: list[uuid.UUID]
     unlocked: bool
 
 
@@ -92,7 +93,7 @@ class ConceptGraphService:
         logger.info("Created concept %s (%s)", concept.id, concept.slug)
         return concept
 
-    async def add_prerequisite(self, *, concept_id: UUID, prereq_id: UUID) -> None:
+    async def add_prerequisite(self, *, concept_id: uuid.UUID, prereq_id: uuid.UUID) -> None:
         """Add prerequisite relation while preventing cycles."""
         if concept_id == prereq_id:
             msg = "A concept cannot depend on itself"
@@ -115,10 +116,10 @@ class ConceptGraphService:
             raise ValueError(msg)
         await self._session.flush()
 
-    async def add_prerequisites_bulk(self, edges: Sequence[tuple[UUID, UUID]]) -> int:
+    async def add_prerequisites_bulk(self, edges: Sequence[tuple[uuid.UUID, uuid.UUID]]) -> int:
         """Insert prerequisite edges in bulk, ignoring duplicates."""
-        unique_edges: list[dict[str, UUID]] = []
-        seen: set[tuple[UUID, UUID]] = set()
+        unique_edges: list[dict[str, uuid.UUID]] = []
+        seen: set[tuple[uuid.UUID, uuid.UUID]] = set()
 
         for concept_id, prereq_id in edges:
             if concept_id == prereq_id:
@@ -146,8 +147,8 @@ class ConceptGraphService:
             ON CONFLICT DO NOTHING
             """
         ).bindparams(
-            bindparam("concept_ids", type_=ARRAY(PGUUID(as_uuid=True))),
-            bindparam("prereq_ids", type_=ARRAY(PGUUID(as_uuid=True))),
+            bindparam("concept_ids", type_=ARRAY(PG_UUID(as_uuid=True))),
+            bindparam("prereq_ids", type_=ARRAY(PG_UUID(as_uuid=True))),
         )
         await self._session.execute(
             stmt,
@@ -158,7 +159,7 @@ class ConceptGraphService:
         )
         return len(unique_edges)
 
-    async def backfill_embeddings_for_course(self, course_id: UUID) -> int:
+    async def backfill_embeddings_for_course(self, course_id: uuid.UUID) -> int:
         """Generate embeddings for all concepts in a course that lack vectors."""
         result = await self._session.execute(
             select(Concept.id, Concept.name, Concept.description)
@@ -196,7 +197,7 @@ class ConceptGraphService:
         )
         return total_updated
 
-    async def get_frontier(self, *, user_id: UUID, course_id: UUID) -> list[FrontierEntry]:
+    async def get_frontier(self, *, user_id: uuid.UUID, course_id: uuid.UUID) -> list[FrontierEntry]:
         """Return unlocked concepts for the learner."""
         concept_rows = await self._session.execute(
             select(Concept, UserConceptState)
@@ -222,7 +223,7 @@ class ConceptGraphService:
                 ConceptPrerequisite.concept_id.in_(concept_ids)
             )
         )
-        prereq_map: dict[UUID, set[UUID]] = {}
+        prereq_map: dict[uuid.UUID, set[uuid.UUID]] = {}
         for child_id, prereq_id in prereq_rows:
             prereq_map.setdefault(child_id, set()).add(prereq_id)
 
@@ -252,7 +253,7 @@ class ConceptGraphService:
 
         return frontier
 
-    async def get_concept_path(self, concept_id: UUID) -> Sequence[UUID]:
+    async def get_concept_path(self, concept_id: uuid.UUID) -> Sequence[uuid.UUID]:
         """Return ordered prerequisite chain for a concept (nearest first)."""
         query = text(
             """
@@ -271,7 +272,7 @@ class ConceptGraphService:
             """
         )
         result = await self._session.execute(query, {"concept_id": str(concept_id)})
-        return [UUID(row[0]) for row in result]
+        return [uuid.UUID(row[0]) for row in result]
 
     async def _ensure_unique_slug(self, base_slug: str) -> str:
         candidate = base_slug
@@ -283,7 +284,7 @@ class ConceptGraphService:
             suffix += 1
             candidate = f"{base_slug}-{suffix}"
 
-    async def _assert_no_cycle(self, *, concept_id: UUID, prereq_id: UUID) -> None:
+    async def _assert_no_cycle(self, *, concept_id: uuid.UUID, prereq_id: uuid.UUID) -> None:
         """Ensure adding the edge does not introduce a cycle."""
         cycle_check = text(
             """
@@ -307,7 +308,7 @@ class ConceptGraphService:
             msg = "Adding prerequisite would create a cycle"
             raise ValueError(msg)
 
-    async def recompute_embedding_confusors_for_course(self, course_id: UUID) -> int:
+    async def recompute_embedding_confusors_for_course(self, course_id: uuid.UUID) -> int:
         """Compute and upsert concept similarities for a course using embeddings only.
 
         This computes cosine similarity for all concept pairs in the course where both

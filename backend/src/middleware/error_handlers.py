@@ -1,3 +1,4 @@
+
 """Centralized error handling system with proper categorization.
 
 This module provides:
@@ -8,8 +9,8 @@ This module provides:
 """
 
 import logging
+import uuid
 from typing import Any
-from uuid import UUID
 
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -221,7 +222,7 @@ async def handle_external_service_errors(request: Request, exc: ExternalServiceE
 # === Utility Functions ===
 
 
-def log_error_context(request: Request, exc: Exception, error_id: UUID | None = None) -> None:
+def log_error_context(request: Request, exc: Exception, error_id: uuid.UUID | None = None) -> None:
     """Log comprehensive error context for debugging."""
     context = {
         "error_id": str(error_id) if error_id else None,

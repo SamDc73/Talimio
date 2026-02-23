@@ -1,3 +1,4 @@
+
 """Video progress service implementing the ProgressTracker protocol.
 
 This provides a simplified interface for progress tracking that doesn't
@@ -5,9 +6,9 @@ depend on request-scoped auth context or router-layer dependencies.
 """
 
 import logging
+import uuid
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +28,7 @@ class VideoProgressService(ProgressTracker):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_progress(self, content_id: UUID, user_id: UUID) -> dict[str, Any]:
+    async def get_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
         """Get progress data for specific video and user."""
         # Use unified progress service
         progress_service = ProgressService(self._session)
@@ -54,7 +55,7 @@ class VideoProgressService(ProgressTracker):
             "updated_at": progress_data.updated_at,
         }
 
-    async def update_progress(self, content_id: UUID, user_id: UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
+    async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update progress data for specific video and user."""
         # Check if video exists
         video_query = select(Video).where(Video.id == content_id)
@@ -109,12 +110,12 @@ class VideoProgressService(ProgressTracker):
             "updated_at": updated.updated_at,
         }
 
-    async def calculate_completion_percentage(self, content_id: UUID, user_id: UUID) -> float:
+    async def calculate_completion_percentage(self, content_id: uuid.UUID, user_id: uuid.UUID) -> float:
         """Calculate completion percentage (0.0 to 100.0)."""
         progress = await self.get_progress(content_id, user_id)
         return progress.get("completion_percentage", 0.0)
 
-    async def initialize_progress(self, content_id: UUID, user_id: UUID, total_duration: float | None = None) -> None:
+    async def initialize_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, total_duration: float | None = None) -> None:
         """Initialize progress tracking for a video."""
         # Check if progress already exists
         progress_service = ProgressService(self._session)
@@ -136,7 +137,7 @@ class VideoProgressService(ProgressTracker):
             await progress_service.update_progress(user_id, content_id, "video", progress_update)
 
     async def update_playback_settings(
-        self, content_id: UUID, user_id: UUID, settings: dict[str, Any]
+        self, content_id: uuid.UUID, user_id: uuid.UUID, settings: dict[str, Any]
     ) -> dict[str, Any]:
         """Update playback settings for a video."""
         progress_service = ProgressService(self._session)
