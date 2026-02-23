@@ -124,7 +124,7 @@ async def _shutdown() -> None:
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Application lifespan events."""
     await _startup()
     yield

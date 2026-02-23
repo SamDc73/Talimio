@@ -146,7 +146,7 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def apply_platform_mode_defaults(self) -> "Settings":
+    def apply_platform_mode_defaults(self) -> Settings:
         """Apply mode-specific defaults when values are not explicitly configured."""
         model_fields_set = self.model_fields_set
 
@@ -175,7 +175,7 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def validate_auth_secret_key_required(self) -> "Settings":
+    def validate_auth_secret_key_required(self) -> Settings:
         """Require AUTH_SECRET_KEY to be configured and non-empty."""
         auth_secret_key = self.AUTH_SECRET_KEY
         if not auth_secret_key.get_secret_value().strip():

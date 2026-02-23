@@ -224,7 +224,7 @@ async def assistant_chat(
     request: ChatRequest,
     user_id: uuid.UUID,
     session: AsyncSession,
-) -> AsyncGenerator[str, None]:
+) -> AsyncGenerator[str]:
     """Stream chat responses with optional context using ui-message-stream protocol."""
     message_id = str(uuid.uuid4())
     normalized_request: NormalizedChatRequest | None = None

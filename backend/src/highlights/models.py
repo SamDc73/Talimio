@@ -16,10 +16,10 @@ class Highlight(Base):
 
     __tablename__ = "highlights"
 
-    id: Mapped["uuid.UUID"] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    user_id: Mapped["uuid.UUID"] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     content_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    content_id: Mapped["uuid.UUID"] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    content_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     highlight_data: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("NOW()"))
     updated_at: Mapped[datetime] = mapped_column(

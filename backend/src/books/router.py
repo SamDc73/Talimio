@@ -600,7 +600,7 @@ async def stream_book_content(book_id: uuid.UUID, request: Request, auth: Curren
     # Check if this is a range request
     range_header = request.headers.get("range")
 
-    async def stream_content() -> AsyncGenerator[bytes, None]:
+    async def stream_content() -> AsyncGenerator[bytes]:
         """Stream content in chunks to avoid loading entire file in memory."""
         async with httpx.AsyncClient(timeout=60.0) as client:
             # Make request with range header if provided
