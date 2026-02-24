@@ -232,10 +232,17 @@ async def get_video_details(
         chapters = await facade.get_video_chapters(video_id=video_id, user_id=auth.user_id)
         transcript_info = await facade.get_transcript_info(video_id=video_id)
         progress_result = await facade.get_video_with_progress(video_id, auth.user_id)
-        if not progress_result.get("success"):
-            detail = str(progress_result.get("error") or "Failed to fetch video progress")
-            raise RuntimeError(detail)
-        progress = progress_result.get("progress")
+        if progress_result.get("success") is not True:
+            progress_error = progress_result.get("error")
+            if not isinstance(progress_error, str) or not progress_error.strip():
+                msg = "Video progress retrieval failed without a specific error detail"
+                raise RuntimeError(msg)
+            raise RuntimeError(progress_error)
+
+        if "progress" not in progress_result:
+            msg = "Video progress payload missing from successful response"
+            raise RuntimeError(msg)
+        progress = progress_result["progress"]
 
         return {
             **video.model_dump(),
