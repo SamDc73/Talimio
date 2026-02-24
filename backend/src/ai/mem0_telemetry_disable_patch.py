@@ -23,9 +23,12 @@ from __future__ import annotations
 
 import sys
 import types
-from collections.abc import Callable
 from contextlib import suppress
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 _POSTHOG_PATCHED = False

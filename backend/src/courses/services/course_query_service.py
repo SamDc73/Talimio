@@ -4,19 +4,21 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 
 from src.courses.models import Course, Lesson
-from src.courses.schemas import CourseResponse
 from src.courses.services.course_response_builder import CourseResponseBuilder
 
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.courses.schemas import CourseResponse
 
 
 class CourseQueryService:

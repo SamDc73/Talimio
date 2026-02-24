@@ -6,8 +6,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
-import uuid
-from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
 
@@ -18,14 +16,18 @@ from sqlalchemy import Select, select
 
 from src.ai.mcp.client import MCPClientDependencyError, get_mcp_client, probe_mcp_server
 from src.ai.mcp.config import MCPAuthConfig, MCPConfig, MCPServerConfig
-from src.ai.mcp.schemas import AuthType, MCPServerCreateRequest
 from src.config.settings import get_settings
 from src.database.pagination import Paginator
 from src.user.models import UserMCPServer
 
 
 if TYPE_CHECKING:
+    import uuid
+    from collections.abc import Iterable, Mapping
+
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.ai.mcp.schemas import AuthType, MCPServerCreateRequest
 
 
 logger = logging.getLogger(__name__)

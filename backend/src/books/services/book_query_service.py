@@ -1,6 +1,7 @@
 
 """Book query service for complex database operations."""
 
+
 import logging
 import uuid
 from typing import Any, cast

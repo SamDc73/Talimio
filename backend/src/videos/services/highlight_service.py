@@ -2,7 +2,6 @@
 """Video highlight service implementing the HighlightInterface contract."""
 
 import logging
-import uuid
 from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException, status
@@ -21,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 

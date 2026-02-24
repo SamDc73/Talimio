@@ -6,6 +6,7 @@ immediately after backfilling embeddings). The scheduler reads ConceptSimilarity
 and does not compute on-the-fly fallback from embeddings.
 """
 
+
 import logging
 import uuid
 from collections.abc import Sequence

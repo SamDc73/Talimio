@@ -19,14 +19,12 @@ import posixpath
 import shlex
 import time
 import uuid
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from fastapi import status
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.ai.models import PlanAction
 from src.ai.service import get_ai_service
 from src.config.settings import get_settings
 from src.courses.models import Lesson
@@ -42,7 +40,11 @@ with contextlib.suppress(Exception):  # e2b-code-interpreter >= 2.x
 AsyncSandbox: Any | None = _AsyncSandbox
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.ai.models import PlanAction
 
 _AuthenticationException: type[Exception] = Exception
 _InvalidArgumentException: type[Exception] = Exception

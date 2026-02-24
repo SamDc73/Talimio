@@ -1,6 +1,7 @@
 
 """Lesson service with SQL-first queries and mandatory user isolation."""
 
+
 import logging
 import uuid
 from datetime import UTC, datetime

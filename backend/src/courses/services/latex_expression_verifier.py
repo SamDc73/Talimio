@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import sympy
 from latex2sympy2_extended import latex2sympy
 from sympy.core.relational import Equality, Relational
 
-from src.courses.schemas import GradeStatus
 from src.courses.services.latex_expression_sampling import numeric_equivalence
+
+
+if TYPE_CHECKING:
+    from src.courses.schemas import GradeStatus
 
 
 _MAX_SAMPLE_COMBOS = 8

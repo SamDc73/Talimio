@@ -1,6 +1,7 @@
 
 """Concept graph service providing DAG operations."""
 
+
 import logging
 import re
 import uuid

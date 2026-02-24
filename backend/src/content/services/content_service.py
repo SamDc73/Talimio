@@ -1,7 +1,6 @@
 """Main content service."""
 
 import logging
-import uuid
 from typing import TYPE_CHECKING, Any
 
 from fastapi.concurrency import run_in_threadpool
@@ -14,6 +13,8 @@ from src.content.services.query_builder_service import QueryBuilderService
 
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 

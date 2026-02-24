@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import httpx
 
-from src.ai.mcp.config import MCPConfig, MCPServerConfig
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Callable
+
+    from src.ai.mcp.config import MCPConfig, MCPServerConfig
 
 
 class MCPClientDependencyError(RuntimeError):

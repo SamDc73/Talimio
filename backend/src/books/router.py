@@ -5,7 +5,7 @@ import json
 import logging
 import uuid
 from collections.abc import AsyncGenerator, Coroutine
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
@@ -14,11 +14,11 @@ from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.auth import CurrentAuth
-from src.books.models import Book
+from src.exceptions import ResourceNotFoundError
 from src.storage.factory import get_storage_provider
 
 # Import the facade
-from .facade import BooksFacade
+from .facade import BOOK_CHAPTERS_ERROR_CODE_NOT_FOUND, BooksFacade
 from .schemas import (
     BookChapterStatusUpdate,
     BookListResponse,
@@ -31,6 +31,10 @@ from .schemas import (
     BookWithProgress,
 )
 from .services.book_response_builder import BookResponseBuilder
+
+
+if TYPE_CHECKING:
+    from src.books.models import Book
 
 
 logger = logging.getLogger(__name__)
@@ -108,7 +112,7 @@ async def list_books(
         raise
     except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
         logger.exception("Error listing books: %s", error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list books") from error
 
 
 @router.get("/{book_id}")
@@ -118,11 +122,11 @@ async def get_book(book_id: uuid.UUID, auth: CurrentAuth) -> BookWithProgress:
         facade = BooksFacade(auth.session)
         # Facade returns a fully built BookWithProgress
         return await facade.get_book(book_id, auth.user_id)
-    except ValueError as error:
+    except ResourceNotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     except (SQLAlchemyError, RuntimeError, TypeError) as error:
         logger.exception("Error getting book %s: %s", book_id, error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve book") from error
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -158,7 +162,7 @@ async def create_book(
             )
 
         file_extension = (file.filename or "").lower().split(".")[-1]
-        if file_extension not in ["pdf", "epub"]:
+        if file_extension not in {"pdf", "epub"}:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Only PDF and EPUB files are supported",
@@ -204,7 +208,7 @@ async def create_book(
         raise
     except (SQLAlchemyError, RuntimeError, ValueError, OSError, TypeError) as error:
         logger.exception("Error creating book: %s", error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create book") from error
 
 
 @router.patch("/{book_id}")
@@ -224,11 +228,11 @@ async def update_book(book_id: uuid.UUID, book_data: BookUpdate, auth: CurrentAu
 
         book = result.get("book", {})
         return BookResponse.model_validate(book)
-    except ValueError as error:
+    except ResourceNotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     except (SQLAlchemyError, RuntimeError, TypeError) as error:
         logger.exception("Error updating book %s: %s", book_id, error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update book") from error
 
 
 @router.put("/{book_id}/progress")
@@ -262,7 +266,7 @@ async def update_book_progress(
         raise
     except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
         logger.exception("Error updating book progress: %s", error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update book progress") from error
 
 
 @router.post("/{book_id}/progress")
@@ -470,11 +474,10 @@ async def get_book_chapters(book_id: uuid.UUID, auth: CurrentAuth) -> list[BookT
         result = await facade.get_book_chapters(book_id, auth.user_id)
 
         if not result.get("success"):
-            # Check if it's a "not found" error
-            error_msg = result.get("error", "Failed to get chapters")
-            if "not found" in error_msg.lower():
+            error_code = result.get("error_code")
+            if error_code == BOOK_CHAPTERS_ERROR_CODE_NOT_FOUND:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Book {book_id} not found")
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_msg)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get chapters")
 
         raw_chapters = result.get("chapters", [])
         return [BookTocChapterResponse.model_validate(chapter) for chapter in raw_chapters]
@@ -482,7 +485,7 @@ async def get_book_chapters(book_id: uuid.UUID, auth: CurrentAuth) -> list[BookT
         raise
     except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
         logger.exception("Error getting book chapters: %s", error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get book chapters") from error
 
 
 @router.put("/{book_id}/chapters/{chapter_id}/status")
@@ -501,11 +504,13 @@ async def update_book_chapter_status(
             chapter_id=chapter_id,
             status=status_data.status,
         )
+    except ResourceNotFoundError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     except HTTPException:
         raise
     except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
         logger.exception("Error updating chapter status: %s", error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update chapter status") from error
 
 
 class RAGStatusResponse(BaseModel):
@@ -526,8 +531,8 @@ async def get_book_rag_status(book_id: uuid.UUID, auth: CurrentAuth) -> RAGStatu
         facade = BooksFacade(auth.session)
         payload = await facade.get_book_rag_status_payload(book_id=book_id, user_id=auth.user_id)
         return RAGStatusResponse.model_validate(payload)
-    except ValueError as error:
+    except ResourceNotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     except (SQLAlchemyError, RuntimeError, TypeError) as error:
         logger.exception("Error getting RAG status for book %s: %s", book_id, error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get book RAG status") from error

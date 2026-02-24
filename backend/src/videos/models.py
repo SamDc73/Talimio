@@ -104,4 +104,3 @@ class VideoChapter(Base):
 
     # Relationships
     video: Mapped[Video] = relationship("Video", back_populates="chapters")
-

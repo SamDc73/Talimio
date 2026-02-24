@@ -8,7 +8,6 @@ import base64
 import json
 import logging
 import uuid
-from collections.abc import Coroutine
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,7 +17,6 @@ from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.ai.models import AdaptiveCourseStructure
 from src.ai.rag.service import RAGService
 from src.ai.service import AIService
 from src.courses.models import (
@@ -35,8 +33,12 @@ from .concept_graph_service import ConceptGraphService
 
 
 if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
     from fastapi import BackgroundTasks, UploadFile
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.ai.models import AdaptiveCourseStructure
 
 
 logger = logging.getLogger(__name__)

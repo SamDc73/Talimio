@@ -1,6 +1,7 @@
 
 """Authentication routes for user login, signup, and session management."""
 
+
 import logging
 import re
 import secrets
@@ -439,7 +440,7 @@ async def login(
     request: Request,
     response: Response,
     session: DbSession,
-    form_data: Annotated[OAuth2PasswordRequestFormStrict, Depends()],
+    form_data: Annotated[OAuth2PasswordRequestFormStrict, Depends(OAuth2PasswordRequestFormStrict)],
 ) -> LoginResponse:
     """Login with email and password."""
     settings = get_settings()

@@ -1,5 +1,6 @@
 """Lightweight SQL migration runner for PostgreSQL session poolers."""
 
+
 import logging
 from collections.abc import Iterable
 from pathlib import Path

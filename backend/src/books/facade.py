@@ -9,8 +9,6 @@ Session-bound: uses the injected AsyncSession for all operations.
 import hashlib
 import json
 import logging
-import uuid
-from collections.abc import Callable, Coroutine
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
@@ -37,6 +35,9 @@ from .services.book_response_builder import BookResponseBuilder
 
 
 if TYPE_CHECKING:
+    import uuid
+    from collections.abc import Callable, Coroutine
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
