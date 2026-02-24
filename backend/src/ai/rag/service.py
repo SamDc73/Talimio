@@ -177,7 +177,7 @@ class RAGService:
             raise
         except (SQLAlchemyError, OSError, ValidationError) as error:
             logger.exception("Failed to upload document")
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to upload document") from error
 
     async def process_document(self, session: AsyncSession, document_id: int) -> None:
         """Process a document (parse, chunk, embed, index)."""
@@ -717,7 +717,7 @@ class RAGService:
         start_time = time.time()
 
         try:
-            if doc_type in (CONTENT_TYPE_BOOK, CONTENT_TYPE_VIDEO):
+            if doc_type in {CONTENT_TYPE_BOOK, CONTENT_TYPE_VIDEO}:
                 # For books and videos, doc_id is the row ID directly
                 result = await session.execute(
                     text("DELETE FROM rag_document_chunks WHERE doc_id = :doc_id AND doc_type = :doc_type"),

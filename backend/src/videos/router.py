@@ -44,7 +44,7 @@ async def create_video(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error creating video: %s", e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create video") from e
 
 
 @router.get("")
@@ -69,7 +69,7 @@ async def list_videos(
         )
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error listing videos: %s", e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list videos") from e
 
 
 @router.get("/{video_id}")
@@ -85,7 +85,7 @@ async def get_video(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error fetching video %s: %s", video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve video") from e
 
 
 @router.patch("/{video_id}")
@@ -102,7 +102,7 @@ async def update_video(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error updating video %s: %s", video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update video") from e
 
 
 @router.get("/{video_id}/chapters")
@@ -118,7 +118,7 @@ async def get_video_chapters(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error fetching chapters for video %s: %s", video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve video chapters") from e
 
 
 @router.get("/{video_id}/chapters/{chapter_id}")
@@ -135,7 +135,7 @@ async def get_video_chapter(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error fetching chapter %s for video %s: %s", chapter_id, video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve video chapter") from e
 
 
 @router.put("/{video_id}/chapters/{chapter_id}/status")
@@ -158,7 +158,10 @@ async def update_video_chapter_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error updating chapter %s status for video %s: %s", chapter_id, video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update video chapter status",
+        ) from e
 
 
 @router.post("/{video_id}/extract-chapters")
@@ -177,7 +180,7 @@ async def extract_video_chapters(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error extracting chapters for video %s: %s", video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to extract video chapters") from e
 
 
 @router.post("/{video_id}/sync-chapter-progress")
@@ -199,7 +202,7 @@ async def sync_video_chapter_progress(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error syncing chapter progress for video %s: %s", video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to sync chapter progress") from e
 
 
 @router.get("/{video_id}/transcript")
@@ -217,7 +220,7 @@ async def get_video_transcript(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error fetching transcript for video %s: %s", video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve video transcript") from e
 
 
 @router.get("/{video_id}/details")
@@ -255,4 +258,4 @@ async def get_video_details(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error fetching video details for %s: %s", video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve video details") from e
