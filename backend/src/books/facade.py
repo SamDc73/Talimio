@@ -133,7 +133,7 @@ class BooksFacade:
 
         except ValueError:
             raise
-        except Exception as e:
+        except (SQLAlchemyError, RuntimeError, TypeError) as e:
             logger.exception(
                 "Error getting book",
                 extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)},
@@ -395,7 +395,7 @@ class BooksFacade:
             logger.exception("Book upload failed due to integrity error", extra={"user_id": str(user_id)})
             return {"error": "Failed to upload book", "success": False}
 
-        except Exception as e:
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
             logger.exception("Error uploading book", extra={"user_id": str(user_id), "title": title, "error": str(e)})
             return {"error": f"Failed to upload book: {e!s}", "success": False}
 
@@ -410,7 +410,7 @@ class BooksFacade:
 
             return {"progress": updated_progress, "success": True}
 
-        except Exception as e:
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
             logger.exception(
                 "Error updating progress",
                 extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(e)},
@@ -425,7 +425,7 @@ class BooksFacade:
 
             return {"book": book, "success": True}
 
-        except Exception as e:
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
             logger.exception(
                 "Error updating book", extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)}
             )
@@ -452,7 +452,7 @@ class BooksFacade:
 
             return {"books": book_dicts, "success": True}
 
-        except Exception as e:
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
             logger.exception("Error getting books", extra={"user_id": str(user_id), "error": str(e)})
             return {"error": f"Failed to get books: {e!s}", "success": False}
 
@@ -488,7 +488,7 @@ class BooksFacade:
 
             return {"chapters": chapters or [], "success": True}
 
-        except Exception as e:
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
             logger.exception(
                 "Error getting chapters",
                 extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)},
@@ -561,7 +561,7 @@ class BooksFacade:
         try:
             await self._progress_service.mark_chapter_complete(book_id, user_id, chapter_id, completed)
             return {"result": True, "success": True}
-        except Exception as e:
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
             logger.exception(
                 "Error marking chapter complete",
                 extra={
