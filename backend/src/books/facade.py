@@ -48,6 +48,7 @@ BOOK_RAG_STATUS_PENDING: BookRagStatus = "pending"
 BOOK_RAG_STATUS_PROCESSING: BookRagStatus = "processing"
 BOOK_RAG_STATUS_COMPLETED: BookRagStatus = "completed"
 BOOK_RAG_STATUS_FAILED: BookRagStatus = "failed"
+BOOK_CHAPTERS_ERROR_CODE_NOT_FOUND = "book_not_found"
 BOOK_RAG_CHUNK_COUNT_STATUSES: tuple[BookRagStatus, ...] = (
     BOOK_RAG_STATUS_COMPLETED,
     BOOK_RAG_STATUS_PROCESSING,
@@ -475,7 +476,11 @@ class BooksFacade:
                     "BOOK_ACCESS_DENIED",
                     extra={"user_id": str(user_id), "book_id": str(book_id), "operation": "get_chapters"},
                 )
-                return {"error": f"Book {book_id} not found", "success": False}
+                return {
+                    "error": f"Book {book_id} not found",
+                    "error_code": BOOK_CHAPTERS_ERROR_CODE_NOT_FOUND,
+                    "success": False,
+                }
 
             chapters: list[dict] = []
             table_of_contents = book.table_of_contents
@@ -519,6 +524,9 @@ class BooksFacade:
 
         chapters_result = await self.get_book_chapters(book_id, user_id)
         if not chapters_result.get("success"):
+            error_code = chapters_result.get("error_code")
+            if error_code == BOOK_CHAPTERS_ERROR_CODE_NOT_FOUND:
+                raise ResourceNotFoundError(BOOK_RESOURCE_TYPE, str(book_id))
             msg = str(chapters_result.get("error", "Failed to load updated chapter data"))
             raise RuntimeError(msg)
 

@@ -28,6 +28,7 @@ from sqlalchemy.exc import (
 
 
 logger = logging.getLogger(__name__)
+POSTGRES_UNIQUE_VIOLATION_SQLSTATE = "23505"
 
 
 # === Error Categories ===
@@ -166,7 +167,7 @@ async def handle_database_errors(request: Request, exc: Exception) -> JSONRespon
     )
 
     # Map specific database errors to user-friendly messages
-    if isinstance(exc, (UniqueViolationError, IntegrityError)) and "unique" in str(exc).lower():
+    if _is_unique_violation_error(exc):
         return format_error_response(
             category=ErrorCategory.DATABASE,
             code=ErrorCode.DB_UNIQUE_VIOLATION,
@@ -207,6 +208,29 @@ async def handle_database_errors(request: Request, exc: Exception) -> JSONRespon
         detail="A database error occurred",
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
+
+
+def _is_unique_violation_error(exc: Exception) -> bool:
+    """Return True when exception resolves to SQLSTATE 23505."""
+    if isinstance(exc, UniqueViolationError):
+        return True
+
+    if not isinstance(exc, IntegrityError):
+        return False
+
+    original_error = getattr(exc, "orig", None)
+    if original_error is None:
+        return False
+
+    sqlstate = getattr(original_error, "sqlstate", None)
+    if isinstance(sqlstate, str):
+        return sqlstate == POSTGRES_UNIQUE_VIOLATION_SQLSTATE
+
+    pgcode = getattr(original_error, "pgcode", None)
+    if isinstance(pgcode, str):
+        return pgcode == POSTGRES_UNIQUE_VIOLATION_SQLSTATE
+
+    return False
 
 
 async def handle_external_service_errors(request: Request, exc: ExternalServiceError) -> JSONResponse:
