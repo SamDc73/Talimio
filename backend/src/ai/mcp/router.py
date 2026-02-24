@@ -25,42 +25,42 @@ _URL_ADAPTER = TypeAdapter(AnyHttpUrl)
 def _coerce_url(raw: str) -> AnyHttpUrl:
     return _URL_ADAPTER.validate_python(raw)
 
-def _serialize_server(server: Any) -> dict[str, Any]:
+def _serialize_server(server: Any) -> MCPServerResponse:
     """Serialize a stored MCP server into the API response shape."""
     url = str(_coerce_url(server.url))
     masked_headers = dict.fromkeys(server.static_headers or {}, "********")
-    return {
-        "id": server.id,
-        "name": server.name,
-        "url": url,
-        "auth_type": server.auth_type,
-        "headers": masked_headers,
-        "enabled": server.enabled,
-        "has_token": bool(server.auth_token),
-        "created_at": server.created_at,
-        "updated_at": server.updated_at,
-    }
+    return MCPServerResponse(
+        id=server.id,
+        name=server.name,
+        url=url,
+        auth_type=server.auth_type,
+        headers=masked_headers,
+        enabled=server.enabled,
+        has_token=bool(server.auth_token),
+        created_at=server.created_at,
+        updated_at=server.updated_at,
+    )
 
 @router.get("/servers", response_model=MCPServerListResponse)
 async def list_servers(
     auth: CurrentAuth,
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
-) -> dict[str, Any]:
+) -> MCPServerListResponse:
     """Return all MCP servers configured by the authenticated user."""
     servers, total = await paginate_user_mcp_servers(auth.session, auth.user_id, page=page, page_size=page_size)
-    return {
-        "items": [_serialize_server(server) for server in servers],
-        "total": total,
-        "page": page,
-        "per_page": page_size,
-    }
+    return MCPServerListResponse(
+        items=[_serialize_server(server) for server in servers],
+        total=total,
+        page=page,
+        per_page=page_size,
+    )
 
 @router.post("/servers", response_model=MCPServerResponse, status_code=status.HTTP_201_CREATED)
 async def create_server(
     payload: MCPServerCreateRequest,
     auth: CurrentAuth,
-) -> dict[str, Any]:
+) -> MCPServerResponse:
     """Create and persist a remote MCP server config for the user."""
     try:
         server = await create_user_mcp_server(auth.session, user_id=auth.user_id, payload=payload)
