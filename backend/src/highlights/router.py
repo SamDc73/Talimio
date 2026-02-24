@@ -49,7 +49,7 @@ async def get_book_highlights(
             for h in highlights
         ]
     except Exception as e:
-        logger.exception(f"Error fetching highlights for book {book_id}: {e}")
+        logger.exception("Error fetching highlights for book %s: %s", book_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch highlights"
         ) from e
@@ -85,7 +85,7 @@ async def create_book_highlight(
             updated_at=highlight.updated_at,
         )
     except Exception as e:
-        logger.exception(f"Error creating highlight for book {book_id}: {e}")
+        logger.exception("Error creating highlight for book %s: %s", book_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create highlight"
         ) from e
@@ -118,7 +118,7 @@ async def delete_highlight(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Error deleting highlight {highlight_id}: {e}")
+        logger.exception("Error deleting highlight %s: %s", highlight_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete highlight"
         ) from e
@@ -164,7 +164,7 @@ async def update_highlight(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Error updating highlight {highlight_id}: {e}")
+        logger.exception("Error updating highlight %s: %s", highlight_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update highlight"
         ) from e

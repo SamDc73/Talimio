@@ -176,7 +176,7 @@ async def update_content_tags(
         )
 
     except Exception as e:
-        logger.exception(f"Error updating tags for {content_type} {content_id}: {e}")
+        logger.exception("Error updating tags for %s %s: %s", content_type, content_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update tags: {e!s}",

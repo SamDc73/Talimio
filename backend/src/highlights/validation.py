@@ -218,11 +218,11 @@ def validate_highlight_data(data: dict[str, Any], _content_type: str | None = No
         result = validated_data.model_dump()
         result["_validation_type"] = detected_type
 
-        logger.debug(f"Successfully validated {detected_type} highlight data")
+        logger.debug("Successfully validated %s highlight data", detected_type)
         return result
 
     except ValidationError as e:
-        logger.exception(f"Validation failed for {detected_type} highlight: {e}")
+        logger.exception("Validation failed for %s highlight: %s", detected_type, e)
 
         # If strict validation fails, try generic schema as fallback
         if detected_type != "generic":

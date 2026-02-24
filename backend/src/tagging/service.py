@@ -144,7 +144,7 @@ class TaggingService:
             return tag_names
 
         except Exception as e:
-            logger.exception(f"Error tagging content {content_id}: {e}")
+            logger.exception("Error tagging content %s: %s", content_id, e)
             return []
 
     async def suggest_tags(
