@@ -149,7 +149,8 @@ function DocumentUploader({
 
 		try {
 			new URL(urlInput)
-		} catch {
+		} catch (error) {
+			logger.warn("Invalid document URL entered", { error, url: urlInput })
 			alert("Please enter a valid URL.")
 			return
 		}

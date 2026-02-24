@@ -17,7 +17,7 @@ from src.videos.schemas import (
     VideoTranscriptResponse,
     VideoUpdate,
 )
-from src.videos.service import InvalidVideoChapterStatusError, VideoChapterNotFoundError, VideoNotFoundError
+from src.videos.service import VideoChapterNotFoundError, VideoNotFoundError
 
 
 logger = logging.getLogger(__name__)
@@ -154,8 +154,6 @@ async def update_video_chapter_status(
             chapter_status=status_data.status,
             user_id=auth.user_id,
         )
-    except InvalidVideoChapterStatusError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except (VideoNotFoundError, VideoChapterNotFoundError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:

@@ -46,7 +46,6 @@ VIDEO_PIPELINE_STATUS_PROCESSING = "processing"
 VIDEO_PIPELINE_STATUS_COMPLETED = "completed"
 VIDEO_PIPELINE_STATUS_FAILED = "failed"
 VIDEO_CHAPTER_STATUS_NOT_STARTED = "not_started"
-VIDEO_CHAPTER_STATUS_IN_PROGRESS = "in_progress"
 VIDEO_CHAPTER_STATUS_COMPLETED = "completed"
 _DETACHED_TASKS: set[asyncio.Task[Any]] = set()
 
@@ -57,10 +56,6 @@ class VideoNotFoundError(ValueError):
 
 class VideoChapterNotFoundError(ValueError):
     """Raised when a chapter does not exist for the requested video."""
-
-
-class InvalidVideoChapterStatusError(ValueError):
-    """Raised when a chapter status value is not valid for video learning progress."""
 
 
 def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
