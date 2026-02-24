@@ -8,17 +8,79 @@ Coordinates internal course services and provides stable API for other modules.
 
 import logging
 import uuid
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, cast
 
-from fastapi import BackgroundTasks, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import BackgroundTasks, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
+from .models import Course, CourseConcept, Lesson
+from .schemas import (
+    FrontierResponse,
+    GradeRequest,
+    GradeResponse,
+    LessonDetailResponse,
+    NextReviewResponse,
+    PracticeDrillResponse,
+    ReviewBatchRequest,
+    ReviewBatchResponse,
+    ReviewOutcome,
+)
+from .services.concept_graph_service import ConceptGraphService
+from .services.concept_scheduler_service import LectorSchedulerService
+from .services.concept_state_service import ConceptStateService
 from .services.course_content_service import CourseContentService
 from .services.course_progress_service import CourseProgressService
 from .services.course_query_service import CourseQueryService
+from .services.frontier_builder import build_course_frontier
+from .services.grading_service import GradingService
+from .services.lesson_service import LessonService
+from .services.practice_drill_service import PracticeDrillService
 
 
 logger = logging.getLogger(__name__)
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+
+class CoursesFacadeError(Exception):
+    """Domain exception raised by course facade operations."""
+
+    def __init__(self, detail: Any, status_code: int) -> None:
+        super().__init__(str(detail))
+        self.detail = detail
+        self.status_code = status_code
+
+
+class CoursesFacadeNotFoundError(CoursesFacadeError):
+    """Facade error for missing course resources."""
+
+    def __init__(self, detail: str = "Resource not found") -> None:
+        super().__init__(detail=detail, status_code=status.HTTP_404_NOT_FOUND)
+
+
+class CoursesFacadeBadRequestError(CoursesFacadeError):
+    """Facade error for invalid domain state transitions."""
+
+    def __init__(self, detail: str = "Invalid request") -> None:
+        super().__init__(detail=detail, status_code=status.HTTP_400_BAD_REQUEST)
+
+
+class CoursesFacadeValidationError(CoursesFacadeError):
+    """Facade error for payload validation mismatches."""
+
+    def __init__(self, detail: str = "Validation failed") -> None:
+        super().__init__(detail=detail, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+
+class CoursesFacadeUpstreamError(CoursesFacadeError):
+    """Facade error for upstream provider failures."""
+
+    def __init__(self, detail: str = "Upstream request failed") -> None:
+        super().__init__(detail=detail, status_code=status.HTTP_502_BAD_GATEWAY)
 
 
 class CoursesFacade:
@@ -213,7 +275,6 @@ class CoursesFacade:
             logger.exception("Error listing courses for user %s", user_id)
             return {"error": "Failed to list courses", "success": False}
 
-
     async def search_courses(self, query: str, user_id: uuid.UUID, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Search user's courses.
@@ -263,8 +324,6 @@ class CoursesFacade:
             logger.exception("Error getting courses for user %s: %s", user_id, e)
             return {"error": f"Failed to get courses: {e!s}", "success": False}
 
-
-
     async def get_course_lessons(self, course_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
         """Get course lessons grouped by modules."""
         try:
@@ -294,3 +353,325 @@ class CoursesFacade:
         except Exception:
             logger.exception("Error getting lessons for course %s", course_id)
             return {"error": "Failed to get lessons", "success": False}
+
+    async def _require_owned_course(self, *, course_id: uuid.UUID, user_id: uuid.UUID) -> Course:
+        course = await self._session.scalar(
+            select(Course).where(
+                Course.id == course_id,
+                Course.user_id == user_id,
+            )
+        )
+        if course is None:
+            detail = "Course not found"
+            raise CoursesFacadeNotFoundError(detail)
+        return course
+
+    async def get_lesson(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+        user_id: uuid.UUID,
+        generate: bool = False,
+    ) -> LessonDetailResponse:
+        """Get a lesson detail payload for an owned course."""
+        lesson_service = LessonService(self._session, user_id)
+        try:
+            return await lesson_service.get_lesson(course_id, lesson_id, force_refresh=generate)
+        except HTTPException as exc:
+            raise CoursesFacadeError(detail=exc.detail, status_code=exc.status_code) from exc
+
+    async def grade_lesson_response(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+        payload: GradeRequest,
+        user_id: uuid.UUID,
+    ) -> GradeResponse:
+        """Grade a learner response with course, lesson, and concept validation."""
+        await self._require_owned_course(course_id=course_id, user_id=user_id)
+
+        if payload.context.course_id != course_id:
+            detail = "Context courseId does not match the request path"
+            raise CoursesFacadeValidationError(detail)
+        if payload.context.lesson_id != lesson_id:
+            detail = "Context lessonId does not match the request path"
+            raise CoursesFacadeValidationError(detail)
+
+        lesson_exists = await self._session.scalar(
+            select(Lesson.id).where(
+                Lesson.id == lesson_id,
+                Lesson.course_id == course_id,
+            )
+        )
+        if lesson_exists is None:
+            detail = "Lesson not found"
+            raise CoursesFacadeNotFoundError(detail)
+
+        concept_link = await self._session.scalar(
+            select(CourseConcept.concept_id).where(
+                CourseConcept.course_id == course_id,
+                CourseConcept.concept_id == payload.context.concept_id,
+            )
+        )
+        if concept_link is None:
+            detail = "Concept is not assigned to this course"
+            raise CoursesFacadeNotFoundError(detail)
+
+        grading_service = GradingService(self._session)
+        return await grading_service.grade(payload, user_id)
+
+    async def get_course_concept_frontier(
+        self,
+        *,
+        course_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> FrontierResponse:
+        """Return adaptive frontier data for a course."""
+        course = await self._require_owned_course(course_id=course_id, user_id=user_id)
+        if not course.adaptive_enabled:
+            return FrontierResponse(
+                frontier=[],
+                due_for_review=[],
+                coming_soon=[],
+                due_count=0,
+                avg_mastery=0.0,
+            )
+
+        graph_service = ConceptGraphService(self._session)
+        scheduler_service = LectorSchedulerService(self._session)
+        return await build_course_frontier(
+            user_id=user_id,
+            course_id=course_id,
+            graph_service=graph_service,
+            scheduler_service=scheduler_service,
+        )
+
+    async def generate_practice_drills(
+        self,
+        *,
+        course_id: uuid.UUID,
+        concept_id: uuid.UUID,
+        count: int,
+        user_id: uuid.UUID,
+    ) -> PracticeDrillResponse:
+        """Generate adaptive drill items for one concept in an owned course."""
+        course = await self._require_owned_course(course_id=course_id, user_id=user_id)
+        if not course.adaptive_enabled:
+            detail = "Adaptive scheduling is not enabled for this course"
+            raise CoursesFacadeBadRequestError(detail)
+
+        drill_service = PracticeDrillService(self._session)
+        try:
+            drills = await drill_service.generate_drills(
+                user_id=user_id,
+                course_id=course.id,
+                concept_id=concept_id,
+                count=count,
+            )
+        except LookupError as error:
+            raise CoursesFacadeNotFoundError(str(error)) from error
+        except ValueError as error:
+            raise CoursesFacadeValidationError(str(error)) from error
+        except (RuntimeError, TypeError) as error:
+            logger.exception(
+                "PRACTICE_DRILL_GENERATION_FAILED",
+                extra={
+                    "course_id": str(course.id),
+                    "user_id": str(user_id),
+                    "concept_id": str(concept_id),
+                    "count": count,
+                },
+            )
+            detail = "Failed to generate practice drills"
+            raise CoursesFacadeUpstreamError(detail) from error
+
+        return PracticeDrillResponse(drills=drills)
+
+    async def submit_adaptive_reviews(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+        payload: ReviewBatchRequest,
+        user_id: uuid.UUID,
+    ) -> ReviewBatchResponse:
+        """Submit concept reviews for LECTOR scheduling."""
+        if not payload.reviews:
+            detail = "At least one review is required"
+            raise CoursesFacadeValidationError(detail)
+
+        course = await self._require_owned_course(course_id=course_id, user_id=user_id)
+        if not course.adaptive_enabled:
+            detail = "Adaptive scheduling is not enabled for this course"
+            raise CoursesFacadeBadRequestError(detail)
+
+        concept_ids = {review.concept_id for review in payload.reviews}
+        existing = await self._session.execute(
+            select(CourseConcept.concept_id).where(
+                CourseConcept.course_id == course.id,
+                CourseConcept.concept_id.in_(concept_ids),
+            )
+        )
+        found_ids = set(existing.scalars().all())
+        if concept_ids - found_ids:
+            detail = "One or more concepts are not assigned to this course"
+            raise CoursesFacadeNotFoundError(detail)
+
+        state_service = ConceptStateService(self._session)
+        scheduler_service = LectorSchedulerService(self._session)
+
+        outcomes: list[ReviewOutcome] = []
+        concept_stats: dict[str, dict[str, Any]] = {}
+        last_review_snapshot: dict[str, Any] | None = None
+
+        for review in payload.reviews:
+            correct = review.rating >= 3
+            updated_state = await state_service.update_mastery(
+                user_id=user_id,
+                concept_id=review.concept_id,
+                correct=correct,
+                latency_ms=review.latency_ms,
+            )
+            review_extra: dict[str, Any] = {"rating": review.rating}
+            if review.question:
+                review_extra["question"] = review.question
+            if review.structure_signature:
+                review_extra["structure_signature"] = review.structure_signature
+            if review.predicted_p_correct is not None:
+                review_extra["predicted_p_correct"] = float(review.predicted_p_correct)
+            if review.core_model:
+                review_extra["core_model"] = review.core_model
+            await state_service.log_probe_event(
+                user_id=user_id,
+                concept_id=review.concept_id,
+                rating=review.rating,
+                review_duration_ms=review.review_duration_ms,
+                correct=correct,
+                latency_ms=review.latency_ms,
+                context_tag=f"lesson:{lesson_id}",
+                extra=review_extra,
+            )
+            next_review = await scheduler_service.calculate_next_review(
+                user_id=user_id,
+                course_id=course.id,
+                concept_id=review.concept_id,
+                rating=review.rating,
+                duration_ms=review.review_duration_ms,
+            )
+            await scheduler_service.update_learner_profile(
+                user_id=user_id,
+                concept_id=review.concept_id,
+                rating=review.rating,
+                duration_ms=review.review_duration_ms,
+            )
+
+            outcomes.append(
+                ReviewOutcome(
+                    concept_id=review.concept_id,
+                    next_review_at=next_review,
+                    mastery=updated_state.s_mastery,
+                    exposures=updated_state.exposures,
+                )
+            )
+
+            concept_key = str(review.concept_id)
+            stats = concept_stats.setdefault(
+                concept_key,
+                {
+                    "ratingCounts": {"1": 0, "2": 0, "3": 0, "4": 0},
+                    "totalDurationMs": 0,
+                },
+            )
+            rating_counts = cast("dict[str, int]", stats["ratingCounts"])
+            rating_key = str(review.rating)
+            rating_counts[rating_key] = rating_counts.get(rating_key, 0) + 1
+            stats["totalDurationMs"] = int(stats["totalDurationMs"]) + int(review.review_duration_ms)
+            stats.update(
+                {
+                    "lastRating": review.rating,
+                    "lastDurationMs": review.review_duration_ms,
+                    "lastReviewedAt": datetime.now(UTC).isoformat(),
+                    "lastNextReviewAt": next_review.isoformat() if next_review else None,
+                    "mastery": float(updated_state.s_mastery or 0.0),
+                    "exposures": int(updated_state.exposures),
+                }
+            )
+            last_review_snapshot = {
+                "concept_id": concept_key,
+                "rating": review.rating,
+                "duration_ms": review.review_duration_ms,
+                "next_review_at": next_review.isoformat() if next_review else None,
+            }
+
+        await self._session.flush()
+
+        if last_review_snapshot is not None:
+            progress_payload: dict[str, Any] = {
+                "current_lesson_id": str(lesson_id),
+                "last_reviewed_concept": last_review_snapshot["concept_id"],
+                "last_reviewed_rating": last_review_snapshot["rating"],
+                "last_review_duration_ms": last_review_snapshot["duration_ms"],
+                "last_reviewed_at": datetime.now(UTC).isoformat(),
+                "last_next_review_at": last_review_snapshot["next_review_at"],
+                "concept_review_stats": concept_stats,
+            }
+            try:
+                progress_service = CourseProgressService(self._session)
+                await progress_service.update_progress(course.id, user_id, progress_payload)
+            except SQLAlchemyError:
+                logger.exception(
+                    "COURSE_PROGRESS_UPDATE_FAILED",
+                    extra={
+                        "course_id": str(course.id),
+                        "user_id": str(user_id),
+                        "lesson_id": str(lesson_id),
+                    },
+                )
+
+        return ReviewBatchResponse(outcomes=outcomes)
+
+    async def get_concept_next_review(
+        self,
+        *,
+        course_id: uuid.UUID,
+        concept_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> NextReviewResponse:
+        """Return the next scheduled review information for a concept."""
+        course = await self._require_owned_course(course_id=course_id, user_id=user_id)
+        if not course.adaptive_enabled:
+            detail = "Adaptive scheduling is not enabled for this course"
+            raise CoursesFacadeBadRequestError(detail)
+
+        linkage = await self._session.execute(
+            select(CourseConcept.concept_id).where(
+                CourseConcept.course_id == course.id,
+                CourseConcept.concept_id == concept_id,
+            )
+        )
+        if linkage.scalar_one_or_none() is None:
+            detail = "Concept is not assigned to this course"
+            raise CoursesFacadeNotFoundError(detail)
+
+        state_service = ConceptStateService(self._session)
+        state = await state_service.get_user_concept_state(
+            user_id=user_id,
+            concept_id=concept_id,
+            create=False,
+        )
+        if state is None:
+            return NextReviewResponse(
+                concept_id=concept_id,
+                next_review_at=None,
+                current_mastery=None,
+                total_exposures=0,
+            )
+
+        return NextReviewResponse(
+            concept_id=concept_id,
+            next_review_at=state.next_review_at,
+            current_mastery=state.s_mastery,
+            total_exposures=state.exposures,
+        )

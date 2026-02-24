@@ -4,24 +4,21 @@
 This router exposes the consolidated course API that replaces the legacy
 course and lesson routes.
 
-NOTE: This router has been fully migrated to use CoursesFacade.
-CoursesFacade now handles all endpoints including lesson-specific operations.
+NOTE: Lesson, grading, frontier, practice drill, and review orchestration
+is delegated to CoursesFacade; this module keeps HTTP-layer handling only.
 """
 
 import logging
 import uuid
-from datetime import UTC, datetime
+from collections.abc import Awaitable
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
-from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai.service import AIService, get_ai_service
 from src.auth import CurrentAuth
-from src.courses.facade import CoursesFacade
-from src.courses.models import Course, CourseConcept, Lesson
+from src.courses.facade import CoursesFacade, CoursesFacadeError
 from src.courses.schemas import (
     CodeExecuteRequest,
     CodeExecuteResponse,
@@ -37,19 +34,10 @@ from src.courses.schemas import (
     PracticeDrillResponse,
     ReviewBatchRequest,
     ReviewBatchResponse,
-    ReviewOutcome,
     SelfAssessmentRequest,
     SelfAssessmentResponse,
 )
 from src.courses.services.code_execution_service import CodeExecutionError, CodeExecutionService, WorkspaceFile
-from src.courses.services.concept_graph_service import ConceptGraphService
-from src.courses.services.concept_scheduler_service import LectorSchedulerService
-from src.courses.services.concept_state_service import ConceptStateService
-from src.courses.services.course_progress_service import CourseProgressService
-from src.courses.services.frontier_builder import build_course_frontier
-from src.courses.services.grading_service import GradingService
-from src.courses.services.lesson_service import LessonService
-from src.courses.services.practice_drill_service import PracticeDrillService
 
 
 router = APIRouter(
@@ -70,29 +58,22 @@ def get_courses_facade(auth: CurrentAuth) -> CoursesFacade:
     return CoursesFacade(auth.session)
 
 
-def get_lesson_service(auth: CurrentAuth) -> LessonService:
-    """Get lesson service instance with user_id injection."""
-    return LessonService(auth.session, auth.user_id)
-
-
 def get_code_execution_service(auth: CurrentAuth) -> CodeExecutionService:
     """Get code execution service instance."""
     return CodeExecutionService(auth.session)
 
 
-def get_grading_service(auth: CurrentAuth) -> GradingService:
-    """Get grading service instance."""
-    return GradingService(auth.session)
-
-
-def get_practice_drill_service(auth: CurrentAuth) -> PracticeDrillService:
-    """Get adaptive practice drill generation service."""
-    return PracticeDrillService(auth.session)
-
-
 def get_ai_service_dependency() -> AIService:
     """Provide AI service singleton for dependency injection."""
     return get_ai_service()
+
+
+async def _call_courses_facade[T](operation: Awaitable[T]) -> T:
+    """Execute a facade operation and map facade errors to HTTP responses."""
+    try:
+        return await operation
+    except CoursesFacadeError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
 # Course operations
@@ -219,11 +200,19 @@ async def update_course(
 async def get_lesson(
     course_id: uuid.UUID,
     lesson_id: uuid.UUID,
-    lesson_service: Annotated[LessonService, Depends(get_lesson_service)],
+    auth: CurrentAuth,
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
     generate: Annotated[bool, Query(description="Auto-generate if lesson doesn't exist")] = False,
 ) -> LessonDetailResponse:
     """Get a specific lesson by course and lesson ID."""
-    return await lesson_service.get_lesson(course_id, lesson_id, force_refresh=generate)
+    return await _call_courses_facade(
+        facade.get_lesson(
+            course_id=course_id,
+            lesson_id=lesson_id,
+            user_id=auth.user_id,
+            generate=generate,
+        )
+    )
 
 
 @router.post("/{course_id}/lessons/{lesson_id}/grade")
@@ -232,66 +221,31 @@ async def grade_lesson_response(
     lesson_id: uuid.UUID,
     payload: GradeRequest,
     auth: CurrentAuth,
-    grading_service: Annotated[GradingService, Depends(get_grading_service)],
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> GradeResponse:
     """Grade a learner response for a lesson."""
-    session = auth.session
-    await auth.get_or_404(Course, course_id, "course")
-
-    if payload.context.course_id != course_id:
-        detail = "Context courseId does not match the request path"
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
-    if payload.context.lesson_id != lesson_id:
-        detail = "Context lessonId does not match the request path"
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
-
-    lesson_exists = await session.scalar(
-        select(Lesson.id).where(
-            Lesson.id == lesson_id,
-            Lesson.course_id == course_id,
+    return await _call_courses_facade(
+        facade.grade_lesson_response(
+            course_id=course_id,
+            lesson_id=lesson_id,
+            payload=payload,
+            user_id=auth.user_id,
         )
     )
-    if lesson_exists is None:
-        detail = "Lesson not found"
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
-
-    concept_link = await session.scalar(
-        select(CourseConcept.concept_id).where(
-            CourseConcept.course_id == course_id,
-            CourseConcept.concept_id == payload.context.concept_id,
-        )
-    )
-    if concept_link is None:
-        detail = "Concept is not assigned to this course"
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
-
-    return await grading_service.grade(payload, auth.user_id)
 
 
 @router.get("/{course_id}/concepts")
 async def get_course_concept_frontier(
     course_id: uuid.UUID,
     auth: CurrentAuth,
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> FrontierResponse:
     """Return adaptive frontier data for a course."""
-    session = auth.session
-    course = await auth.get_or_404(Course, course_id, "course")
-    if not course.adaptive_enabled:
-        return FrontierResponse(
-            frontier=[],
-            due_for_review=[],
-            coming_soon=[],
-            due_count=0,
-            avg_mastery=0.0,
+    return await _call_courses_facade(
+        facade.get_course_concept_frontier(
+            course_id=course_id,
+            user_id=auth.user_id,
         )
-
-    graph_service = ConceptGraphService(session)
-    scheduler_service = LectorSchedulerService(session)
-    return await build_course_frontier(
-        user_id=auth.user_id,
-        course_id=course_id,
-        graph_service=graph_service,
-        scheduler_service=scheduler_service,
     )
 
 
@@ -300,37 +254,17 @@ async def generate_practice_drills(
     course_id: uuid.UUID,
     payload: PracticeDrillRequest,
     auth: CurrentAuth,
-    drill_service: Annotated[PracticeDrillService, Depends(get_practice_drill_service)],
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> PracticeDrillResponse:
     """Generate adaptive drill items for one concept."""
-    course = await auth.get_or_404(Course, course_id, "course")
-    if not course.adaptive_enabled:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Adaptive scheduling is not enabled for this course")
-
-    try:
-        drills = await drill_service.generate_drills(
-            user_id=auth.user_id,
-            course_id=course.id,
+    return await _call_courses_facade(
+        facade.generate_practice_drills(
+            course_id=course_id,
             concept_id=payload.concept_id,
             count=payload.count,
+            user_id=auth.user_id,
         )
-    except LookupError as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
-    except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
-    except (RuntimeError, TypeError) as error:
-        logger.exception(
-            "PRACTICE_DRILL_GENERATION_FAILED",
-            extra={
-                "course_id": str(course.id),
-                "user_id": str(auth.user_id),
-                "concept_id": str(payload.concept_id),
-                "count": payload.count,
-            },
-        )
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to generate practice drills") from error
-
-    return PracticeDrillResponse(drills=drills)
+    )
 
 
 @router.post("/{course_id}/lessons/{lesson_id}/reviews")
@@ -339,140 +273,17 @@ async def submit_adaptive_reviews(
     lesson_id: uuid.UUID,
     payload: ReviewBatchRequest,
     auth: CurrentAuth,
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> ReviewBatchResponse:
     """Submit concept reviews for LECTOR scheduling."""
-    session = auth.session
-    if not payload.reviews:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="At least one review is required")
-
-    course = await auth.get_or_404(Course, course_id, "course")
-    if not course.adaptive_enabled:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Adaptive scheduling is not enabled for this course")
-
-    concept_ids = {review.concept_id for review in payload.reviews}
-    existing = await session.execute(
-        select(CourseConcept.concept_id).where(
-            CourseConcept.course_id == course.id,
-            CourseConcept.concept_id.in_(concept_ids),
+    return await _call_courses_facade(
+        facade.submit_adaptive_reviews(
+            course_id=course_id,
+            lesson_id=lesson_id,
+            payload=payload,
+            user_id=auth.user_id,
         )
     )
-    found_ids = set(existing.scalars().all())
-    missing = concept_ids - found_ids
-    if missing:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more concepts are not assigned to this course")
-
-    state_service = ConceptStateService(session)
-    scheduler_service = LectorSchedulerService(session)
-
-    outcomes: list[ReviewOutcome] = []
-    concept_stats: dict[str, dict[str, Any]] = {}
-    last_review_snapshot: dict[str, Any] | None = None
-
-    for review in payload.reviews:
-        correct = review.rating >= 3
-        updated_state = await state_service.update_mastery(
-            user_id=auth.user_id,
-            concept_id=review.concept_id,
-            correct=correct,
-            latency_ms=review.latency_ms,
-        )
-        review_extra: dict[str, Any] = {"rating": review.rating}
-        if review.question:
-            review_extra["question"] = review.question
-        if review.structure_signature:
-            review_extra["structure_signature"] = review.structure_signature
-        if review.predicted_p_correct is not None:
-            review_extra["predicted_p_correct"] = float(review.predicted_p_correct)
-        if review.core_model:
-            review_extra["core_model"] = review.core_model
-        await state_service.log_probe_event(
-            user_id=auth.user_id,
-            concept_id=review.concept_id,
-            rating=review.rating,
-            review_duration_ms=review.review_duration_ms,
-            correct=correct,
-            latency_ms=review.latency_ms,
-            context_tag=f"lesson:{lesson_id}",
-            extra=review_extra,
-        )
-        next_review = await scheduler_service.calculate_next_review(
-            user_id=auth.user_id,
-            course_id=course.id,
-            concept_id=review.concept_id,
-            rating=review.rating,
-            duration_ms=review.review_duration_ms,
-        )
-        await scheduler_service.update_learner_profile(
-            user_id=auth.user_id,
-            concept_id=review.concept_id,
-            rating=review.rating,
-            duration_ms=review.review_duration_ms,
-        )
-
-        outcomes.append(
-            ReviewOutcome(
-                concept_id=review.concept_id,
-                next_review_at=next_review,
-                mastery=updated_state.s_mastery,
-                exposures=updated_state.exposures,
-            )
-        )
-
-        concept_key = str(review.concept_id)
-        stats = concept_stats.setdefault(
-            concept_key,
-            {
-                "ratingCounts": {"1": 0, "2": 0, "3": 0, "4": 0},
-                "totalDurationMs": 0,
-            },
-        )
-        rating_counts = cast("dict[str, int]", stats["ratingCounts"])
-        rating_key = str(review.rating)
-        rating_counts[rating_key] = rating_counts.get(rating_key, 0) + 1
-        stats["totalDurationMs"] = int(stats["totalDurationMs"]) + int(review.review_duration_ms)
-        stats.update(
-            {
-                "lastRating": review.rating,
-                "lastDurationMs": review.review_duration_ms,
-                "lastReviewedAt": datetime.now(UTC).isoformat(),
-                "lastNextReviewAt": next_review.isoformat() if next_review else None,
-                "mastery": float(updated_state.s_mastery or 0.0),
-                "exposures": int(updated_state.exposures),
-            }
-        )
-        last_review_snapshot = {
-            "concept_id": concept_key,
-            "rating": review.rating,
-            "duration_ms": review.review_duration_ms,
-            "next_review_at": next_review.isoformat() if next_review else None,
-        }
-
-    await session.flush()
-
-    if last_review_snapshot is not None:
-        progress_payload: dict[str, Any] = {
-            "current_lesson_id": str(lesson_id),
-            "last_reviewed_concept": last_review_snapshot["concept_id"],
-            "last_reviewed_rating": last_review_snapshot["rating"],
-            "last_review_duration_ms": last_review_snapshot["duration_ms"],
-            "last_reviewed_at": datetime.now(UTC).isoformat(),
-            "last_next_review_at": last_review_snapshot["next_review_at"],
-            "concept_review_stats": concept_stats,
-        }
-        try:
-            progress_service = CourseProgressService(session)
-            await progress_service.update_progress(course.id, auth.user_id, progress_payload)
-        except SQLAlchemyError:
-            logger.exception(
-                "COURSE_PROGRESS_UPDATE_FAILED",
-                extra={
-                    "course_id": str(course.id),
-                    "user_id": str(auth.user_id),
-                    "lesson_id": str(lesson_id),
-                },
-            )
-
-    return ReviewBatchResponse(outcomes=outcomes)
 
 
 @router.get("/{course_id}/concepts/{concept_id}/next-review")
@@ -480,41 +291,15 @@ async def get_concept_next_review(
     course_id: uuid.UUID,
     concept_id: uuid.UUID,
     auth: CurrentAuth,
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> NextReviewResponse:
     """Return the next scheduled review information for a concept."""
-    session = auth.session
-    course = await auth.get_or_404(Course, course_id, "course")
-    if not course.adaptive_enabled:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Adaptive scheduling is not enabled for this course")
-
-    linkage = await session.execute(
-        select(CourseConcept.concept_id).where(
-            CourseConcept.course_id == course.id,
-            CourseConcept.concept_id == concept_id,
-        )
-    )
-    if linkage.scalar_one_or_none() is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Concept is not assigned to this course")
-
-    state_service = ConceptStateService(session)
-    state = await state_service.get_user_concept_state(
-        user_id=auth.user_id,
-        concept_id=concept_id,
-        create=False,
-    )
-    if state is None:
-        return NextReviewResponse(
+    return await _call_courses_facade(
+        facade.get_concept_next_review(
+            course_id=course_id,
             concept_id=concept_id,
-            next_review_at=None,
-            current_mastery=None,
-            total_exposures=0,
+            user_id=auth.user_id,
         )
-
-    return NextReviewResponse(
-        concept_id=concept_id,
-        next_review_at=state.next_review_at,
-        current_mastery=state.s_mastery,
-        total_exposures=state.exposures,
     )
 
 
