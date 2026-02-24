@@ -7,10 +7,8 @@ import contextlib
 import json
 import uuid
 from collections import defaultdict
-from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from src.courses.models import Course, Lesson
 from src.courses.schemas import CourseResponse, LessonSummary, ModuleResponse
 
 
@@ -36,7 +34,11 @@ def compute_module_id(course_id: uuid.UUID, module_name: str | None) -> uuid.UUI
 
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.courses.models import Course, Lesson
 
 
 class CourseResponseBuilder:

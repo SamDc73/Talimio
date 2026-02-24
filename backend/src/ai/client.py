@@ -3,7 +3,6 @@ import json
 import logging
 import uuid
 from collections import Counter
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar, cast
@@ -113,6 +112,8 @@ _GENERATION_WRAPPER_ERROR_TYPES = (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 

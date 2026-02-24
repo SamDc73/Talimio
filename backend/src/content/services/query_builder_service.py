@@ -1,6 +1,7 @@
 
 """Query builder service for content operations."""
 
+
 import logging
 import uuid
 

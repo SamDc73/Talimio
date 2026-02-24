@@ -1,5 +1,6 @@
 """Security middleware."""
 
+
 import ipaddress
 from collections.abc import Callable
 from functools import lru_cache

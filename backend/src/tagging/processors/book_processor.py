@@ -3,7 +3,6 @@
 
 import logging
 import os
-import uuid
 from contextlib import redirect_stderr
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 

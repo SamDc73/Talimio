@@ -1,6 +1,7 @@
 
 """Business logic for progress tracking."""
 
+
 import json
 import logging
 import uuid

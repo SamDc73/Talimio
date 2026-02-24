@@ -7,7 +7,6 @@ Coordinates internal course services and provides stable API for other modules.
 """
 
 import logging
-import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
@@ -43,6 +42,8 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 

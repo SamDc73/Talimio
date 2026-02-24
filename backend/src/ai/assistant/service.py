@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import uuid
-from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -24,7 +23,6 @@ from src.storage.factory import get_storage_provider
 from src.videos.models import Video
 
 from . import conversations_service
-from .schemas import ChatRequest
 
 
 logger = logging.getLogger(__name__)
@@ -38,7 +36,11 @@ ASSISTANT_MAX_HISTORY_MESSAGES = 40
 ASSISTANT_REQUIRE_THREAD_ID = True
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from .schemas import ChatRequest
 
 
 class ContextData(BaseModel):

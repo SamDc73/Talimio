@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from src.courses.schemas import GradeStatus, JXGBoardState
+
+if TYPE_CHECKING:
+    from src.courses.schemas import GradeStatus, JXGBoardState
 
 
 _DEFAULT_TOLERANCE = 0.05

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, cast
 
@@ -46,6 +45,8 @@ ALLOWED_GRADING_TAGS = {
 }
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 

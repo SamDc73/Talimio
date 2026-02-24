@@ -1,6 +1,7 @@
 
 """Book content service for book-specific operations."""
 
+
 import json
 import logging
 import uuid

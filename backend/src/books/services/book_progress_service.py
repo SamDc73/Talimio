@@ -3,7 +3,6 @@
 
 import json
 import logging
-import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -18,6 +17,8 @@ from src.progress.service import ProgressService
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 

@@ -1,7 +1,6 @@
 """Content archive service."""
 
 import logging
-import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -13,6 +12,8 @@ from src.content.services.query_builder_service import QueryBuilderService
 
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 

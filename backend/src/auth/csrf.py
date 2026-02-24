@@ -1,5 +1,6 @@
 """CSRF token/cookie helpers shared by middleware wiring and auth routes."""
 
+
 import ipaddress
 import secrets
 from urllib.parse import urlsplit

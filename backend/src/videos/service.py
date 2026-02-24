@@ -2,8 +2,6 @@ import asyncio
 import json
 import logging
 import re
-import uuid
-from collections.abc import Coroutine
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -35,6 +33,9 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
+    import uuid
+    from collections.abc import Coroutine
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 CHAPTER_EXTRACTION_MAX_RETRIES = 3

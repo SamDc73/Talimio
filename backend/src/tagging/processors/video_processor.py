@@ -1,6 +1,7 @@
 
 """Video content processor for tag generation."""
 
+
 import json
 import logging
 import uuid

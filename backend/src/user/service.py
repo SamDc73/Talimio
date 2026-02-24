@@ -2,7 +2,6 @@
 """User service for handling user settings and memory management."""
 
 import logging
-import uuid
 from typing import TYPE_CHECKING
 
 from psycopg.errors import ForeignKeyViolation
@@ -25,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 

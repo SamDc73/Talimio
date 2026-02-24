@@ -6,6 +6,7 @@ Handles course-specific progress patterns including lesson completion, quiz resu
 learning preferences, and adaptive settings.
 """
 
+
 import logging
 import uuid
 from datetime import UTC, datetime

@@ -5,28 +5,33 @@ Coordinates internal video services and provides stable API for other modules.
 """
 
 import logging
-import uuid
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from .schemas import (
-    VideoChapterResponse,
-    VideoCreate,
-    VideoLearningStatus,
-    VideoListResponse,
-    VideoResponse,
-    VideoTranscriptResponse,
-    VideoUpdate,
-)
-from .service import VideoService
+from .service import VideoNotFoundError, VideoService
 from .services.video_progress_service import VideoProgressService
 
 
 logger = logging.getLogger(__name__)
+VIDEO_FACADE_ERROR_CODE_NOT_FOUND = "video_not_found"
+VIDEO_FACADE_ERROR_CODE_GET_PROGRESS_FAILED = "video_get_progress_failed"
+VIDEO_FACADE_ERROR_CODE_UPDATE_PROGRESS_FAILED = "video_update_progress_failed"
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from .schemas import (
+        VideoChapterResponse,
+        VideoCreate,
+        VideoLearningStatus,
+        VideoListResponse,
+        VideoResponse,
+        VideoTranscriptResponse,
+        VideoUpdate,
+    )
 
 
 class VideosFacade:
@@ -152,7 +157,11 @@ class VideosFacade:
             video = video_response.model_dump() if video_response else None
 
             if not video:
-                return {"error": "Video not found", "success": False}
+                return {
+                    "error": "Video not found",
+                    "error_code": VIDEO_FACADE_ERROR_CODE_NOT_FOUND,
+                    "success": False,
+                }
 
             # Get progress information
             progress = await self._progress_service.get_progress(video_id, user_id)
@@ -168,9 +177,19 @@ class VideosFacade:
                 "success": True,
             }
 
-        except (ValueError, RuntimeError, SQLAlchemyError) as error:
+        except VideoNotFoundError:
+            return {
+                "error": "Video not found",
+                "error_code": VIDEO_FACADE_ERROR_CODE_NOT_FOUND,
+                "success": False,
+            }
+        except (ValueError, RuntimeError, SQLAlchemyError, TypeError) as error:
             logger.exception("Error getting video %s for user %s: %s", video_id, user_id, error)
-            return {"error": str(error), "success": False}
+            return {
+                "error": "Failed to get video with progress",
+                "error_code": VIDEO_FACADE_ERROR_CODE_GET_PROGRESS_FAILED,
+                "success": False,
+            }
 
     async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update video watching progress via ContentFacade contract."""
@@ -189,10 +208,24 @@ class VideosFacade:
             updated_progress = await self._progress_service.update_progress(video_id, user_id, progress_data)
 
             if "error" in updated_progress:
-                return {"error": updated_progress["error"], "success": False}
+                if updated_progress["error"] == "Video not found":
+                    return {
+                        "error": "Video not found",
+                        "error_code": VIDEO_FACADE_ERROR_CODE_NOT_FOUND,
+                        "success": False,
+                    }
+                return {
+                    "error": "Failed to update video progress",
+                    "error_code": VIDEO_FACADE_ERROR_CODE_UPDATE_PROGRESS_FAILED,
+                    "success": False,
+                }
 
             return {"progress": updated_progress, "success": True}
 
-        except (ValueError, RuntimeError, SQLAlchemyError) as error:
+        except (ValueError, RuntimeError, SQLAlchemyError, TypeError) as error:
             logger.exception("Error updating progress for video %s: %s", video_id, error)
-            return {"error": str(error), "success": False}
+            return {
+                "error": "Failed to update video progress",
+                "error_code": VIDEO_FACADE_ERROR_CODE_UPDATE_PROGRESS_FAILED,
+                "success": False,
+            }
