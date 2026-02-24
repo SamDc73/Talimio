@@ -2,7 +2,9 @@
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from src.config.schema_casing import build_camel_config
 
 
 class UserPreferences(BaseModel):
@@ -17,6 +19,8 @@ class UserPreferences(BaseModel):
     notifications_enabled: bool = True
     user_preferences: dict[str, Any] | None = None
 
+    model_config = build_camel_config()
+
 
 class PartialUserPreferences(BaseModel):
     """Partial user preferences model for safe partial updates."""
@@ -30,19 +34,25 @@ class PartialUserPreferences(BaseModel):
     notifications_enabled: bool | None = None
     user_preferences: dict[str, Any] | None = None
 
+    model_config = build_camel_config()
+
 
 class UserSettingsResponse(BaseModel):
     """Response schema for user settings."""
 
     custom_instructions: str
     memory_count: int = 0
-    preferences: UserPreferences = UserPreferences()
+    preferences: UserPreferences = Field(default_factory=UserPreferences)
+
+    model_config = build_camel_config()
 
 
 class CustomInstructionsRequest(BaseModel):
     """Request schema for updating custom instructions."""
 
     instructions: str
+
+    model_config = build_camel_config()
 
 
 class CustomInstructionsResponse(BaseModel):
@@ -51,6 +61,8 @@ class CustomInstructionsResponse(BaseModel):
     instructions: str
     updated: bool = True
 
+    model_config = build_camel_config()
+
 
 class ClearMemoryResponse(BaseModel):
     """Response schema for clearing user memory."""
@@ -58,11 +70,15 @@ class ClearMemoryResponse(BaseModel):
     cleared: bool = True
     message: str = "All memories cleared successfully"
 
+    model_config = build_camel_config()
+
 
 class PreferencesUpdateRequest(BaseModel):
     """Request schema for updating user preferences."""
 
     preferences: PartialUserPreferences
+
+    model_config = build_camel_config()
 
 
 class PreferencesUpdateResponse(BaseModel):
@@ -70,3 +86,5 @@ class PreferencesUpdateResponse(BaseModel):
 
     preferences: UserPreferences
     updated: bool = True
+
+    model_config = build_camel_config()

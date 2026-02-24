@@ -4,7 +4,9 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from src.config.schema_casing import build_camel_config
 
 
 class TagBase(BaseModel):
@@ -14,11 +16,13 @@ class TagBase(BaseModel):
     category: str | None = Field(None, max_length=50)
     color: str | None = Field(None, pattern="^#[0-9A-Fa-f]{6}$")  # Hex color validation
 
+    model_config = build_camel_config()
+
 
 class TagSchema(TagBase):
     """Schema for tag responses."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = build_camel_config(from_attributes=True)
 
     id: uuid.UUID
     usage_count: int
@@ -29,7 +33,7 @@ class TagSchema(TagBase):
 class TagWithConfidence(BaseModel):
     """Tag with confidence score."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = build_camel_config(extra="forbid")
 
     tag: str
     confidence: float = Field(..., ge=0.0, le=1.0)
@@ -39,6 +43,8 @@ class ContentTagsUpdate(BaseModel):
     """Schema for updating content tags."""
 
     tags: list[str] = Field(..., max_length=20)
+
+    model_config = build_camel_config()
 
 
 class TaggingResponse(BaseModel):
@@ -50,3 +56,5 @@ class TaggingResponse(BaseModel):
     auto_generated: bool = True
     success: bool = True
     error: str | None = None
+
+    model_config = build_camel_config()

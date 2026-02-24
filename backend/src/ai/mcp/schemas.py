@@ -8,7 +8,9 @@ from datetime import datetime
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-from pydantic import AliasChoices, AnyHttpUrl, BaseModel, ConfigDict, Field, SecretStr, field_validator
+from pydantic import AliasChoices, AnyHttpUrl, BaseModel, Field, SecretStr, field_validator
+
+from src.config.schema_casing import build_camel_config
 
 
 AuthType = Literal["none", "bearer"]
@@ -22,11 +24,13 @@ class MCPServerCreateRequest(BaseModel):
     auth_token: SecretStr | None = None
     static_headers: dict[str, SecretStr] | None = Field(
         default=None,
-        validation_alias=AliasChoices("static_headers", "headers"),
+        validation_alias=AliasChoices("static_headers", "staticHeaders", "headers"),
         serialization_alias="headers",
         description="Static headers to send with every MCP request",
     )
     enabled: bool = True
+
+    model_config = build_camel_config()
 
     @field_validator("url")
     @classmethod
@@ -87,7 +91,7 @@ class MCPServerCreateRequest(BaseModel):
 class MCPServerResponse(BaseModel):
     """Response payload for MCP server entries."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = build_camel_config(from_attributes=True)
 
     id: uuid.UUID
     name: str
@@ -103,7 +107,7 @@ class MCPServerResponse(BaseModel):
 class MCPServerListResponse(BaseModel):
     """Paginated MCP server collection."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = build_camel_config()
 
     items: list[MCPServerResponse]
     total: int
