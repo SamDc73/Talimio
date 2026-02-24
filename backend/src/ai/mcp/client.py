@@ -36,6 +36,8 @@ try:
     from mcp import ClientSession as _MCPClientSession
     from mcp.client.streamable_http import streamable_http_client as _sdk_streamable_http_client
 except ModuleNotFoundError as exc:
+    if exc.name not in {"mcp", "mcp.client.streamable_http"}:
+        raise
     _ClientSession = None
     _streamable_http_client = None
     _import_error = exc
