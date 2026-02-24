@@ -48,11 +48,6 @@ VIDEO_PIPELINE_STATUS_FAILED = "failed"
 VIDEO_CHAPTER_STATUS_NOT_STARTED = "not_started"
 VIDEO_CHAPTER_STATUS_IN_PROGRESS = "in_progress"
 VIDEO_CHAPTER_STATUS_COMPLETED = "completed"
-VALID_VIDEO_CHAPTER_STATUSES: tuple[VideoLearningStatus, ...] = (
-    VIDEO_CHAPTER_STATUS_NOT_STARTED,
-    VIDEO_CHAPTER_STATUS_IN_PROGRESS,
-    VIDEO_CHAPTER_STATUS_COMPLETED,
-)
 _DETACHED_TASKS: set[asyncio.Task[Any]] = set()
 
 
@@ -714,11 +709,6 @@ class VideoService:
         if not chapter:
             msg = f"Chapter {chapter_id} not found"
             raise VideoChapterNotFoundError(msg)
-
-        # Validate status
-        if status not in VALID_VIDEO_CHAPTER_STATUSES:
-            msg = f"Invalid status '{status}'. Valid statuses are: {', '.join(VALID_VIDEO_CHAPTER_STATUSES)}"
-            raise InvalidVideoChapterStatusError(msg)
 
         # Update status
         chapter.status = status

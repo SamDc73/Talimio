@@ -726,9 +726,6 @@ async def get_context(
     session: AsyncSession | None = None,
 ) -> ContextData | None:
     """Get context for any resource type."""
-    if not resource_id:
-        return None
-
     handler = _HANDLERS.get(context_type)
     if not handler:
         logger.error("Unknown context type: %s", context_type)

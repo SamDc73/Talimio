@@ -637,9 +637,6 @@ class CourseContentService:
             module_order = module_index if module_name is not None else None
             raw_lessons = module.get("lessons", [])
 
-            if not isinstance(raw_lessons, list):
-                raw_lessons = [raw_lessons]
-
             for lesson_index, payload in enumerate(raw_lessons):
                 if not isinstance(payload, dict):
                     continue

@@ -18,7 +18,6 @@ if TYPE_CHECKING:
 DEFAULT_CONVERSATIONS_PAGE_SIZE = 20
 MAX_CONVERSATIONS_PAGE_SIZE = 100
 CONVERSATION_PREVIEW_LENGTH = 140
-ALLOWED_CONTEXT_TYPES = {"book", "video", "course"}
 CONVERSATION_STATUS_REGULAR = "regular"
 CONVERSATION_STATUS_ARCHIVED = "archived"
 
@@ -36,10 +35,6 @@ def _normalize_context_seed(
     context_id: uuid.UUID | None,
     context_meta: dict[str, Any] | None,
 ) -> tuple[str | None, uuid.UUID | None, dict[str, Any]]:
-    if context_type is not None and context_type not in ALLOWED_CONTEXT_TYPES:
-        msg = "contextType must be one of: book, video, course"
-        raise AssistantConversationValidationError(msg)
-
     if context_id is not None and context_type is None:
         msg = "contextType is required when contextId is provided"
         raise AssistantConversationValidationError(msg)

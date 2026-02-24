@@ -192,9 +192,6 @@ class ContentService:
             ContentType.VIDEO: Video,
             ContentType.COURSE: Course,
         }
-        if content_type not in mapping:
-            msg = f"Unsupported content type: {content_type}"
-            raise ValueError(msg)
         return mapping[content_type]
 
     async def _delete_progress_for_content(self, session: AsyncSession, row_id: uuid.UUID) -> None:
