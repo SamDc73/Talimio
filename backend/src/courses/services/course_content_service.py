@@ -230,7 +230,7 @@ class CourseContentService:
             title=draft_title,
             description=draft_description,
             adaptive_enabled=is_adaptive,
-            archived=bool(session_data.get("archived", False)),
+            archived=bool(session_data.get("archived")),
         )
 
     async def _persist_course_structure(
@@ -1058,17 +1058,36 @@ class CourseContentService:
         user_id: uuid.UUID,
     ) -> dict[str, Any]:
         """Generate course data from AI prompt."""
-        try:
-            ai_result = await self.ai_service.generate_course_structure(
-                user_id=user_id,
-                user_prompt=user_prompt,
+        ai_result_or_error = (
+            await asyncio.gather(
+                self.ai_service.generate_course_structure(
+                    user_id=user_id,
+                    user_prompt=user_prompt,
+                ),
+                return_exceptions=True,
             )
-        except ValueError:
-            raise
-        except Exception as error:
-            logger.exception("Failed to generate course structure for prompt '%s'", prompt_text)
+        )[0]
+
+        if isinstance(ai_result_or_error, ValueError):
+            raise ai_result_or_error
+
+        if isinstance(ai_result_or_error, asyncio.CancelledError):
+            raise ai_result_or_error
+
+        if isinstance(ai_result_or_error, Exception):
+            logger.error(
+                "Failed to generate course structure for prompt '%s'",
+                prompt_text,
+                exc_info=(type(ai_result_or_error), ai_result_or_error, ai_result_or_error.__traceback__),
+            )
             error_msg = "Failed to generate course outline"
-            raise RuntimeError(error_msg) from error
+            raise RuntimeError(error_msg) from ai_result_or_error  # noqa: TRY004
+
+        if isinstance(ai_result_or_error, BaseException):
+            raise ai_result_or_error
+
+        ai_result = ai_result_or_error
+
         if not ai_result:
             error_msg = "Invalid AI response format for course generation"
             raise TypeError(error_msg)
