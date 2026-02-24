@@ -1,4 +1,3 @@
-
 """Videos Module Facade.
 
 Single entry point for all video-related operations.
@@ -7,9 +6,9 @@ Coordinates internal video services and provides stable API for other modules.
 
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 
 from .schemas import (
     VideoChapterResponse,
@@ -25,6 +24,9 @@ from .services.video_progress_service import VideoProgressService
 
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class VideosFacade:
@@ -150,7 +152,7 @@ class VideosFacade:
             video = video_response.model_dump() if video_response else None
 
             if not video:
-                return {"error": "Video not found"}
+                return {"error": "Video not found", "success": False}
 
             # Get progress information
             progress = await self._progress_service.get_progress(video_id, user_id)
@@ -166,9 +168,9 @@ class VideosFacade:
                 "success": True,
             }
 
-        except Exception as e:
-            logger.exception("Error getting video %s for user %s: %s", video_id, user_id, e)
-            return {"error": "Failed to retrieve video"}
+        except (ValueError, RuntimeError, SQLAlchemyError) as error:
+            logger.exception("Error getting video %s for user %s: %s", video_id, user_id, error)
+            return {"error": str(error), "success": False}
 
     async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update video watching progress via ContentFacade contract."""
@@ -191,6 +193,6 @@ class VideosFacade:
 
             return {"progress": updated_progress, "success": True}
 
-        except Exception as e:
-            logger.exception("Error updating progress for video %s: %s", video_id, e)
-            return {"error": "Failed to update progress", "success": False}
+        except (ValueError, RuntimeError, SQLAlchemyError) as error:
+            logger.exception("Error updating progress for video %s: %s", video_id, error)
+            return {"error": str(error), "success": False}
