@@ -315,7 +315,9 @@ class BookProgressService(ProgressTracker):
         if not safe_toc_progress:
             return 0
 
-        assert book is not None  # noqa: S101 - Ensured above
+        if not book or not book.table_of_contents:
+            return 0
+
         percentage = self._calculate_toc_percentage(book, safe_toc_progress)
 
         elapsed_ms = int((datetime.now(UTC) - start_time).total_seconds() * 1000)
