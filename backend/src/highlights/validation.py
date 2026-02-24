@@ -221,23 +221,23 @@ def validate_highlight_data(data: dict[str, Any], _content_type: str | None = No
         logger.debug("Successfully validated %s highlight data", detected_type)
         return result
 
-    except ValidationError as e:
-        logger.exception("Validation failed for %s highlight: %s", detected_type, e)
+    except ValidationError as validation_error:
+        logger.exception("Validation failed for %s highlight: %s", detected_type, validation_error)
 
         # If strict validation fails, try generic schema as fallback
         if detected_type != "generic":
+            logger.info("Attempting fallback to generic validation")
             try:
-                logger.info("Attempting fallback to generic validation")
                 validated_data = GenericHighlightData(**data)
                 result = validated_data.model_dump()
                 result["_validation_type"] = "generic"
                 return result
-            except ValidationError:
-                pass
+            except ValidationError as fallback_error:
+                logger.exception("Fallback generic validation failed: %s", fallback_error)
+                raise fallback_error from validation_error
 
         # Re-raise the original validation error
-        msg = f"Invalid highlight data: {e}"
-        raise ValidationError(msg) from e
+        raise
 
 
 def validate_json_highlight_data(json_data: str | dict[str, Any], _content_type: str | None = None) -> dict[str, Any]:

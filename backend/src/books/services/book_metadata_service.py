@@ -8,6 +8,10 @@ import fitz  # PyMuPDF
 logger = logging.getLogger(__name__)
 
 
+class BookMetadataExtractionError(RuntimeError):
+    """Raised when metadata extraction fails for a supported file type."""
+
+
 class BookMetadata:
     """Container for extracted book metadata."""
 
@@ -73,30 +77,28 @@ class BookMetadataService:
         -------
             BookMetadata object with extracted information
         """
-        metadata = BookMetadata()
-        metadata.file_type = "pdf"
+        metadata = BookMetadata(file_type="pdf")
 
         try:
-            pdf_document = fitz.open(stream=file_content, filetype="pdf")
-            metadata.total_pages = pdf_document.page_count
+            with fitz.open(stream=file_content, filetype="pdf") as pdf_document:
+                metadata.total_pages = pdf_document.page_count
 
-            pdf_metadata = pdf_document.metadata
-            if pdf_metadata:
-                self._extract_document_basic_fields(metadata, pdf_metadata)
-                self._extract_document_publication_year(metadata, pdf_metadata)
+                pdf_metadata = pdf_document.metadata
+                if pdf_metadata:
+                    self._extract_document_basic_fields(metadata, pdf_metadata)
+                    self._extract_document_publication_year(metadata, pdf_metadata)
 
-            # Extract table of contents
-            try:
-                toc = pdf_document.get_toc()
-                if toc:
-                    metadata.table_of_contents = self._process_toc(toc)
-            except AttributeError:
-                logger.debug("PDF document does not support get_toc method")
-
-            pdf_document.close()
-
-        except (RuntimeError, TypeError, ValueError) as e:
-            logger.warning("Failed to extract PDF metadata: %s", e)
+                # Extract table of contents
+                try:
+                    toc = pdf_document.get_toc()
+                    if toc:
+                        metadata.table_of_contents = self._process_toc(toc)
+                except AttributeError:
+                    logger.debug("PDF document does not support get_toc method")
+        except (RuntimeError, TypeError, ValueError) as error:
+            message = "Failed to extract PDF metadata"
+            logger.warning("%s: %s", message, error)
+            raise BookMetadataExtractionError(message) from error
 
         return metadata
 
@@ -111,37 +113,34 @@ class BookMetadataService:
         -------
             BookMetadata object with extracted information
         """
-        metadata = BookMetadata()
-        metadata.file_type = "epub"
+        metadata = BookMetadata(file_type="epub")
 
         try:
             # Open EPUB with PyMuPDF (suppress MuPDF CSS warnings)
             import os
             from contextlib import redirect_stderr
-            with redirect_stderr(open(os.devnull, "w")):  # noqa: PTH123
-                epub_document = fitz.open(stream=file_content, filetype="epub")
 
-            # Get page count (EPUBs in PyMuPDF are treated as pages)
-            metadata.total_pages = epub_document.page_count
+            with redirect_stderr(open(os.devnull, "w")), fitz.open(stream=file_content, filetype="epub") as epub_document:  # noqa: PTH123
+                # Get page count (EPUBs in PyMuPDF are treated as pages)
+                metadata.total_pages = epub_document.page_count
 
-            # Extract metadata (similar to PDF)
-            epub_metadata = epub_document.metadata
-            if epub_metadata:
-                self._extract_document_basic_fields(metadata, epub_metadata)
-                self._extract_document_publication_year(metadata, epub_metadata)
+                # Extract metadata (similar to PDF)
+                epub_metadata = epub_document.metadata
+                if epub_metadata:
+                    self._extract_document_basic_fields(metadata, epub_metadata)
+                    self._extract_document_publication_year(metadata, epub_metadata)
 
-            # Extract table of contents - this works for EPUB too!
-            try:
-                toc = epub_document.get_toc()
-                if toc:
-                    metadata.table_of_contents = self._process_toc(toc)
-            except AttributeError:
-                logger.debug("EPUB document does not support get_toc method")
-
-            epub_document.close()
-
-        except (OSError, RuntimeError, TypeError, ValueError) as e:
-            logger.warning("Failed to extract EPUB metadata: %s", e)
+                # Extract table of contents - this works for EPUB too!
+                try:
+                    toc = epub_document.get_toc()
+                    if toc:
+                        metadata.table_of_contents = self._process_toc(toc)
+                except AttributeError:
+                    logger.debug("EPUB document does not support get_toc method")
+        except (OSError, RuntimeError, TypeError, ValueError) as error:
+            message = "Failed to extract EPUB metadata"
+            logger.warning("%s: %s", message, error)
+            raise BookMetadataExtractionError(message) from error
 
         return metadata
 
@@ -167,13 +166,21 @@ class BookMetadataService:
         if not doc_metadata.get("creationDate"):
             return
 
-        try:
-            date_str = doc_metadata["creationDate"]
-            if date_str.startswith("D:"):
-                year_str = date_str[2:6]
-                metadata.publication_year = int(year_str)
-        except (ValueError, IndexError):
-            pass
+        date_str = doc_metadata["creationDate"]
+        if not isinstance(date_str, str):
+            logger.debug("Skipping publication year extraction for non-string creationDate: %r", date_str)
+            return
+
+        if not date_str.startswith("D:") or len(date_str) < 6:
+            logger.debug("Skipping publication year extraction for unsupported creationDate format: %s", date_str)
+            return
+
+        year_str = date_str[2:6]
+        if not year_str.isdigit():
+            logger.debug("Skipping publication year extraction for non-numeric year in creationDate: %s", date_str)
+            return
+
+        metadata.publication_year = int(year_str)
 
     def _process_toc(self, toc: list) -> list[dict]:
         """
