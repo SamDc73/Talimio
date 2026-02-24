@@ -1,4 +1,5 @@
 import { getApiUrl } from "@/lib/apiBase"
+import logger from "@/lib/logger"
 
 const CSRF_COOKIE_NAME = "csrftoken"
 export const CSRF_HEADER_NAME = "x-csrftoken"
@@ -28,7 +29,10 @@ export const refreshCsrfToken = async () => {
 			credentials: "include",
 			cache: "no-store",
 		})
-			.catch(() => null)
+			.catch((error) => {
+				logger.warn("Failed to refresh CSRF token", { error, endpoint: CSRF_REFRESH_ENDPOINT })
+				return null
+			})
 			.finally(() => {
 				csrfRefreshPromise = null
 			})
@@ -63,7 +67,8 @@ export const isCsrfVerificationFailure = async (response) => {
 
 		const text = await response.clone().text()
 		return text.toLowerCase().includes(CSRF_FAILURE_TEXT)
-	} catch {
+	} catch (error) {
+		logger.warn("Failed to parse CSRF verification failure response", { error })
 		return false
 	}
 }

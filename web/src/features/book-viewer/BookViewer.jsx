@@ -86,10 +86,6 @@ function BookViewerContent() {
 		viewerApiRef.current = api
 	}
 
-	if (!bookId) {
-		return <BookViewerStatus tone="error" title="Missing book identifier" />
-	}
-
 	if (isLoading) {
 		return <BookViewerStatus tone="loading" title="Loading book..." />
 	}

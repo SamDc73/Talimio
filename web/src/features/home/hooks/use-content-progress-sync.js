@@ -42,10 +42,6 @@ export function useContentProgressSync(setContentItems) {
 	const updateTimeoutRef = useRef(null)
 
 	useEffect(() => {
-		if (!setContentItems) {
-			return
-		}
-
 		const handleProgressUpdated = (event) => {
 			const detail = event?.detail || {}
 			const { contentId, progress, metadata } = detail

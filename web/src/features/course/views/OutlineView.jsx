@@ -7,6 +7,7 @@ import { MasteryCircle } from "@/components/MasteryCircle"
 import { useCourseContext } from "@/features/course/CourseContext"
 import OutlineNode from "@/features/course/components/navigation/OutlineNode"
 import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
+import logger from "@/lib/logger"
 import { useCourseNavigation } from "@/utils/navigationUtils"
 
 function extractLessonId(item) {
@@ -238,14 +239,17 @@ function OutlineView() {
 	const [focusMode] = useState(() => {
 		try {
 			return localStorage.getItem("talmio_focus_mode") === "1"
-		} catch {
+		} catch (error) {
+			logger.warn("Unable to read focus mode preference from localStorage", { error })
 			return false
 		}
 	})
 	useEffect(() => {
 		try {
 			localStorage.setItem("talmio_focus_mode", focusMode ? "1" : "0")
-		} catch {}
+		} catch (error) {
+			logger.warn("Unable to persist focus mode preference to localStorage", { error, focusMode })
+		}
 	}, [focusMode])
 
 	const [showAllUpcoming, setShowAllUpcoming] = useState(false)
@@ -256,7 +260,7 @@ function OutlineView() {
 
 	// Non-adaptive: return the original minimal outline view
 	if (!adaptiveEnabled) {
-		const showModules = !focusMode && modules && modules.length > 0
+		const showModules = !focusMode && modules.length > 0
 		return (
 			<div className="flex-1 bg-background">
 				<div className="mx-auto w-full max-w-4xl px-4 py-6 md:px-6 md:py-8 lg:px-8 lg:py-10">

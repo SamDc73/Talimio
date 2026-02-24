@@ -300,8 +300,6 @@ function BookSidebar({
 		}
 	}, [currentPage, book?.tableOfContents, ApiChapters])
 
-	if (!book) return null
-
 	const chapters = book.tableOfContents?.length > 0 ? book.tableOfContents : ApiChapters
 
 	const overallProgress = progress?.percentage || progressPercentage || 0

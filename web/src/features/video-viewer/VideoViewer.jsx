@@ -39,12 +39,6 @@ function VideoViewerContent() {
 	// Load video on mount
 	useEffect(() => {
 		const loadVideo = async () => {
-			if (!videoId) {
-				setError("No video ID provided")
-				setLoading(false)
-				return
-			}
-
 			try {
 				setLoading(true)
 				setError(null)
@@ -67,9 +61,7 @@ function VideoViewerContent() {
 			}
 		}
 
-		if (videoId) {
-			loadVideo()
-		}
+		loadVideo()
 	}, [videoId])
 
 	// Handle YouTube player ready - memoized to prevent recreating player

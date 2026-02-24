@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import logger from "@/lib/logger"
 
 /**
  * Custom hook for polling functionality
@@ -30,9 +31,8 @@ export function usePolling(callback, interval) {
 		const poll = async () => {
 			try {
 				await callbackRef.current()
-			} catch {
-				// Silently catch polling errors to prevent crashes
-				// The callback should handle its own errors
+			} catch (error) {
+				logger.warn("Polling callback failed", { error, interval })
 			}
 
 			// Schedule next poll only if still active

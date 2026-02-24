@@ -177,28 +177,26 @@ export default function HomePage() {
 							toggleSortDirection={filters.toggleSortDirection}
 						/>
 
-						{filters && (
-							<FilterBadges
-								activeFilter={filters.activeFilter}
-								archiveFilter={filters.archiveFilter}
-								activeSort={filters.activeSort}
-								sortDirection={filters.sortDirection}
-								tagFilter={filters.tagFilter}
-								getActiveFilterLabel={getActiveFilterLabel}
-								getActiveSortLabel={getActiveSortLabel}
-								onFilterChange={filters.setActiveFilter}
-								onArchiveFilterChange={filters.setArchiveFilter}
-								onSortChange={filters.setActiveSort}
-								onSortDirectionChange={filters.setSortDirection}
-								onTagFilterChange={filters.setTagFilter}
-								onResetAll={() => {
-									filters.setActiveFilter("all")
-									filters.setActiveSort("last-accessed")
-									filters.setSortDirection("desc")
-									filters.setTagFilter("")
-								}}
-							/>
-						)}
+						<FilterBadges
+							activeFilter={filters.activeFilter}
+							archiveFilter={filters.archiveFilter}
+							activeSort={filters.activeSort}
+							sortDirection={filters.sortDirection}
+							tagFilter={filters.tagFilter}
+							getActiveFilterLabel={getActiveFilterLabel}
+							getActiveSortLabel={getActiveSortLabel}
+							onFilterChange={filters.setActiveFilter}
+							onArchiveFilterChange={filters.setArchiveFilter}
+							onSortChange={filters.setActiveSort}
+							onSortDirectionChange={filters.setSortDirection}
+							onTagFilterChange={filters.setTagFilter}
+							onResetAll={() => {
+								filters.setActiveFilter("all")
+								filters.setActiveSort("last-accessed")
+								filters.setSortDirection("desc")
+								filters.setTagFilter("")
+							}}
+						/>
 
 						<motion.div
 							initial={{ opacity: 0, y: 20 }}

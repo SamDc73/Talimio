@@ -241,17 +241,17 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 
 	const formatTimestamp = (timestamp) => {
 		if (!timestamp) return ""
-		try {
-			const date = new Date(timestamp)
-			const now = new Date()
-			const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24))
-			if (diffDays === 0) return "Today"
-			if (diffDays === 1) return "Yesterday"
-			if (diffDays < 7) return `${diffDays} days ago`
-			return date.toLocaleDateString()
-		} catch {
+		const date = new Date(timestamp)
+		if (Number.isNaN(date.getTime())) {
+			logger.warn("Invalid memory timestamp; unable to format", { timestamp })
 			return ""
 		}
+		const now = new Date()
+		const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24))
+		if (diffDays === 0) return "Today"
+		if (diffDays === 1) return "Yesterday"
+		if (diffDays < 7) return `${diffDays} days ago`
+		return date.toLocaleDateString()
 	}
 
 	const handleDeleteMemory = async (memoryId) => {
