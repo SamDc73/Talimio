@@ -63,7 +63,7 @@ class VideoProgressService(ProgressTracker):
         video = video_result.scalar_one_or_none()
 
         if not video:
-            logger.error(f"Video {content_id} not found")
+            logger.error("Video %s not found", content_id)
             return {"error": "Video not found"}
 
         # Get current progress to merge metadata

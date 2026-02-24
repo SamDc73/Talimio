@@ -167,7 +167,7 @@ class VideosFacade:
             }
 
         except Exception as e:
-            logger.exception(f"Error getting video {video_id} for user {user_id}: {e}")
+            logger.exception("Error getting video %s for user %s: %s", video_id, user_id, e)
             return {"error": "Failed to retrieve video"}
 
     async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
@@ -192,5 +192,5 @@ class VideosFacade:
             return {"progress": updated_progress, "success": True}
 
         except Exception as e:
-            logger.exception(f"Error updating progress for video {video_id}: {e}")
+            logger.exception("Error updating progress for video %s: %s", video_id, e)
             return {"error": "Failed to update progress", "success": False}

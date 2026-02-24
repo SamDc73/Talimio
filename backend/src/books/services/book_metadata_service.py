@@ -59,7 +59,7 @@ class BookMetadataService:
             return self._extract_pdf_metadata(file_content)
         if file_extension == ".epub":
             return self._extract_epub_metadata(file_content)
-        logger.warning(f"Unsupported file type for metadata extraction: {file_extension}")
+        logger.warning("Unsupported file type for metadata extraction: %s", file_extension)
         return BookMetadata()
 
     def _extract_pdf_metadata(self, file_content: bytes) -> BookMetadata:
@@ -96,7 +96,7 @@ class BookMetadataService:
             pdf_document.close()
 
         except (RuntimeError, TypeError, ValueError) as e:
-            logger.warning(f"Failed to extract PDF metadata: {e}")
+            logger.warning("Failed to extract PDF metadata: %s", e)
 
         return metadata
 
@@ -141,7 +141,7 @@ class BookMetadataService:
             epub_document.close()
 
         except (OSError, RuntimeError, TypeError, ValueError) as e:
-            logger.warning(f"Failed to extract EPUB metadata: {e}")
+            logger.warning("Failed to extract EPUB metadata: %s", e)
 
         return metadata
 

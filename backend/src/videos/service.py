@@ -160,7 +160,7 @@ async def _mark_video_status(video_id: uuid.UUID, status: VideoPipelineStatus, e
                 video.chapters_extracted_at = datetime.now(UTC)
                 await db.commit()
     except SQLAlchemyError as update_error:
-        logger.warning(f"Failed to mark video {video_id} as {status}{error_context}: {update_error}")
+        logger.warning("Failed to mark video %s as %s%s: %s", video_id, status, error_context, update_error)
 
 
 async def _handle_video_not_found_error(
@@ -168,11 +168,11 @@ async def _handle_video_not_found_error(
 ) -> bool:
     """Handle video not found error. Returns True if should retry, False if should stop."""
     if attempt < max_retries - 1:
-        logger.warning(f"Video {video_id} not found on attempt {attempt + 1}, retrying in {retry_delay}s...")
+        logger.warning("Video %s not found on attempt %s, retrying in %ss...", video_id, attempt + 1, retry_delay)
         await asyncio.sleep(retry_delay)
         return True
 
-    logger.exception(f"Video {video_id} not found after {max_retries} attempts: {e}")
+    logger.exception("Video %s not found after %s attempts: %s", video_id, max_retries, e)
     await _mark_video_status(video_id, VIDEO_PIPELINE_STATUS_FAILED)
     return False
 
@@ -190,7 +190,7 @@ async def _try_extract_chapters(video_id: uuid.UUID, user_id: uuid.UUID) -> bool
 
         chapters = await video_service.extract_and_create_video_chapters(db, video_id, user_id)
         await db.commit()
-        logger.info(f"Successfully extracted {len(chapters)} chapters for video {video_id}")
+        logger.info("Successfully extracted %s chapters for video %s", len(chapters), video_id)
         return True
 
 
@@ -209,18 +209,22 @@ async def _extract_chapters_background(video_id: uuid.UUID, user_id: uuid.UUID) 
                     continue
                 return
 
-            logger.exception(f"Failed to extract chapters for video {video_id} on attempt {attempt + 1}: {e}")
+            logger.exception("Failed to extract chapters for video %s on attempt %s: %s", video_id, attempt + 1, e)
             await _mark_video_status(video_id, VIDEO_PIPELINE_STATUS_FAILED, " after ValueError")
             return
         except Exception as e:
             if attempt < max_retries - 1:
                 logger.warning(
-                    f"Chapter extraction failed for video {video_id} on attempt {attempt + 1}, retrying in {retry_delay}s: {e}"
+                    "Chapter extraction failed for video %s on attempt %s, retrying in %ss: %s",
+                    video_id,
+                    attempt + 1,
+                    retry_delay,
+                    e,
                 )
                 await asyncio.sleep(retry_delay)
                 continue
 
-            logger.exception(f"Failed to extract chapters for video {video_id} after {max_retries} attempts: {e}")
+            logger.exception("Failed to extract chapters for video %s after %s attempts: %s", video_id, max_retries, e)
             await _mark_video_status(video_id, VIDEO_PIPELINE_STATUS_FAILED, " after final attempt")
             return
 
@@ -237,10 +241,10 @@ async def _process_transcript_to_jsonb(video_id: uuid.UUID) -> None:
 
             # Check if already processed
             if video.transcript_data and video.transcript_data.get("segments"):
-                logger.info(f"Video {video_id} already has transcript segments")
+                logger.info("Video %s already has transcript segments", video_id)
                 return
 
-            logger.info(f"Processing transcript segments for video {video_id}")
+            logger.info("Processing transcript segments for video %s", video_id)
 
             # Extract segments with timestamps
             segments = await video_service.extract_video_transcript_segments(video.url)
@@ -253,11 +257,11 @@ async def _process_transcript_to_jsonb(video_id: uuid.UUID) -> None:
                     "processed_at": datetime.now(UTC).isoformat(),
                 }
                 await db.commit()
-                logger.info(f"Stored {len(segments)} transcript segments for video {video_id}")
+                logger.info("Stored %s transcript segments for video %s", len(segments), video_id)
                 await _embed_video_background(video.id)
 
     except Exception as e:
-        logger.exception(f"Failed to process transcript segments for video {video_id}: {e}")
+        logger.exception("Failed to process transcript segments for video %s: %s", video_id, e)
 
 
 class VideoService:
@@ -500,7 +504,7 @@ class VideoService:
                 try:
                     published_at = datetime.strptime(upload_date_str, "%Y%m%d").replace(tzinfo=UTC)
                 except ValueError:
-                    logger.warning(f"Failed to parse upload date: {upload_date_str}")
+                    logger.warning("Failed to parse upload date: %s", upload_date_str)
 
             return {
                 "youtube_id": info.get("id", ""),
@@ -515,7 +519,7 @@ class VideoService:
                 "published_at": published_at,
             }
         except Exception as e:
-            logger.exception(f"Error fetching video info: {e}")
+            logger.exception("Error fetching video info: %s", e)
             # Return minimal info instead of failing completely
             # Extract video ID from URL
             video_id = ""
@@ -547,7 +551,7 @@ class VideoService:
         video = await self._get_user_video(db, video_id, user_id)
 
         # Debug logging
-        logger.info(f"Getting chapters for video {video_id} (uuid.UUID: {video.id}) for user {user_id}")
+        logger.info("Getting chapters for video %s (uuid.UUID: %s) for user %s", video_id, video.id, user_id)
 
         # Get chapters
         chapters_result = await db.execute(
@@ -558,14 +562,15 @@ class VideoService:
         # If no chapters found and extraction hasn't been attempted, try to extract automatically
         if not chapters and video.chapters_status == VIDEO_PIPELINE_STATUS_PENDING:
             logger.info(
-                f"No chapters found for video {video_id} and status is pending, attempting automatic extraction as fallback"
+                "No chapters found for video %s and status is pending, attempting automatic extraction as fallback",
+                video_id,
             )
             try:
                 chapters = await self.extract_and_create_video_chapters(db, video_id, user_id)
-                logger.info(f"Successfully extracted {len(chapters)} chapters as fallback for video {video_id}")
+                logger.info("Successfully extracted %s chapters as fallback for video %s", len(chapters), video_id)
                 return chapters
             except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
-                logger.warning(f"Fallback chapter extraction failed for video {video_id}: {e}")
+                logger.warning("Fallback chapter extraction failed for video %s: %s", video_id, e)
                 # Mark as failed so we don't keep retrying
                 video.chapters_status = VIDEO_PIPELINE_STATUS_FAILED
                 video.chapters_extracted_at = datetime.now(UTC)
@@ -662,7 +667,7 @@ class VideoService:
                         progress_result["error"],
                     )
         except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
-            logger.warning(f"Failed to update unified progress for video {video_id} after chapter status change: {e}")
+            logger.warning("Failed to update unified progress for video %s after chapter status change: %s", video_id, e)
 
         await db.flush()
         await db.refresh(chapter)
@@ -722,7 +727,7 @@ class VideoService:
         try:
             chapters_info = await self._fetch_video_chapters(video.url)
         except Exception as e:
-            logger.exception(f"Failed to extract chapters for video {video_id}")
+            logger.exception("Failed to extract chapters for video %s", video_id)
             msg = f"Failed to extract chapters: {e!s}"
             raise ValueError(msg) from e
 
@@ -831,7 +836,7 @@ class VideoService:
                 return VideoTranscriptResponse.model_validate(response_payload)
 
             # Fallback: extract segments from video URL (backward compatibility)
-            logger.info(f"No JSONB data found for video {video_id}, extracting segments from URL")
+            logger.info("No JSONB data found for video %s, extracting segments from URL", video_id)
             segments = await self.extract_video_transcript_segments(video_data.url)
 
             # Store segments in JSONB for next time
@@ -845,7 +850,7 @@ class VideoService:
                     "processed_at": datetime.now(UTC).isoformat(),
                 }
                 await db.flush()
-                logger.info(f"Stored {len(segments)} transcript segments in JSONB for video {video_id}")
+                logger.info("Stored %s transcript segments in JSONB for video %s", len(segments), video_id)
 
             response_payload = {
                 "video_id": video_data.id,
@@ -854,7 +859,7 @@ class VideoService:
             }
             return VideoTranscriptResponse.model_validate(response_payload)
         except Exception as e:
-            logger.exception(f"Failed to get transcript segments for video {video_id}")
+            logger.exception("Failed to get transcript segments for video %s", video_id)
             msg = f"Failed to get transcript segments: {e!s}"
             raise ValueError(msg) from e
 
@@ -904,7 +909,7 @@ class VideoService:
                     return self._parse_srt_segments(content)
 
         except Exception as e:
-            logger.exception(f"Failed to extract transcript segments for {video_url}: {e}")
+            logger.exception("Failed to extract transcript segments for %s: %s", video_url, e)
             return []
 
         return []
@@ -971,7 +976,7 @@ class VideoService:
             ]
 
         except Exception as e:
-            logger.exception(f"Error fetching video chapters: {e}")
+            logger.exception("Error fetching video chapters: %s", e)
             return []
 
 

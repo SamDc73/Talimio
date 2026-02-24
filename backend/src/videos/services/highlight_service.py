@@ -40,10 +40,12 @@ class VideoHighlightService(HighlightInterface):
         try:
             validated_data = validate_highlight_data(highlight_data, _content_type="video")
             logger.debug(
-                f"Validated highlight data for video {content_id}: type={validated_data.get('_validation_type')}"
+                "Validated highlight data for video %s: type=%s",
+                content_id,
+                validated_data.get("_validation_type"),
             )
         except ValidationError as e:
-            logger.warning(f"Invalid highlight data for video {content_id}: {e}")
+            logger.warning("Invalid highlight data for video %s: %s", content_id, e)
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid highlight data: {e!s}") from e
 
         highlight = Highlight(
@@ -58,22 +60,22 @@ class VideoHighlightService(HighlightInterface):
             await self.session.flush()
             await self.session.refresh(highlight)
         except IntegrityError as e:
-            logger.exception(f"Integrity constraint violation creating video highlight: {e}")
+            logger.exception("Integrity constraint violation creating video highlight: %s", e)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid highlight data or duplicate entry"
             ) from e
         except SQLAlchemyError as e:
-            logger.exception(f"Database error creating video highlight: {e}")
+            logger.exception("Database error creating video highlight: %s", e)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
             ) from e
         except Exception as e:
-            logger.exception(f"Unexpected error creating video highlight: {e}")
+            logger.exception("Unexpected error creating video highlight: %s", e)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"
             ) from e
 
-        logger.info(f"Created video highlight {highlight.id} for video {content_id} by user {user_id}")
+        logger.info("Created video highlight %s for video %s by user %s", highlight.id, content_id, user_id)
         return HighlightResponse.model_validate(highlight)
 
     async def get_highlights(
@@ -99,7 +101,7 @@ class VideoHighlightService(HighlightInterface):
         result = await self.session.execute(query)
         highlights = result.scalars().all()
 
-        logger.info(f"Retrieved {len(highlights)} highlights for video {content_id}")
+        logger.info("Retrieved %s highlights for video %s", len(highlights), content_id)
         return [HighlightResponse.model_validate(h) for h in highlights]
 
     async def get_highlight(
@@ -136,10 +138,12 @@ class VideoHighlightService(HighlightInterface):
         try:
             validated_data = validate_highlight_data(highlight_data, _content_type="video")
             logger.debug(
-                f"Validated highlight data for update {highlight_id}: type={validated_data.get('_validation_type')}"
+                "Validated highlight data for update %s: type=%s",
+                highlight_id,
+                validated_data.get("_validation_type"),
             )
         except ValidationError as e:
-            logger.warning(f"Invalid highlight data for update {highlight_id}: {e}")
+            logger.warning("Invalid highlight data for update %s: %s", highlight_id, e)
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid highlight data: {e!s}") from e
 
         highlight.highlight_data = validated_data
@@ -148,17 +152,17 @@ class VideoHighlightService(HighlightInterface):
             await self.session.flush()
             await self.session.refresh(highlight)
         except SQLAlchemyError as e:
-            logger.exception(f"Database error updating video highlight {highlight_id}: {e}")
+            logger.exception("Database error updating video highlight %s: %s", highlight_id, e)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
             ) from e
         except Exception as e:
-            logger.exception(f"Unexpected error updating video highlight {highlight_id}: {e}")
+            logger.exception("Unexpected error updating video highlight %s: %s", highlight_id, e)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"
             ) from e
 
-        logger.info(f"Updated highlight {highlight_id}")
+        logger.info("Updated highlight %s", highlight_id)
         return HighlightResponse.model_validate(highlight)
 
     async def delete_highlight(
@@ -173,12 +177,12 @@ class VideoHighlightService(HighlightInterface):
             result = await self.session.execute(stmt)
             await self.session.flush()
         except SQLAlchemyError as e:
-            logger.exception(f"Database error deleting video highlight {highlight_id}: {e}")
+            logger.exception("Database error deleting video highlight %s: %s", highlight_id, e)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
             ) from e
         except Exception as e:
-            logger.exception(f"Unexpected error deleting video highlight {highlight_id}: {e}")
+            logger.exception("Unexpected error deleting video highlight %s: %s", highlight_id, e)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"
             ) from e
@@ -187,7 +191,7 @@ class VideoHighlightService(HighlightInterface):
         if affected == 0:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Highlight {highlight_id} not found")
 
-        logger.info(f"Deleted highlight {highlight_id}")
+        logger.info("Deleted highlight %s", highlight_id)
         return True
 
     async def _verify_video_ownership(self, video_id: uuid.UUID, user_id: uuid.UUID) -> None:
