@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 from pydantic import BaseModel, Field
 
 from src.ai.client import LLMClient
+from src.ai.errors import AIRuntimeError
 from src.config.schema_casing import build_camel_config
 from src.config.settings import get_settings
 from src.courses.schemas import GradeErrorHighlight, GradeRequest, GradeResponse, VerifierInfo
@@ -187,7 +188,7 @@ class GradingService:
                 user_id=user_id,
                 model=model,
             )
-        except Exception:
+        except (AIRuntimeError, TypeError, ValueError):
             self._logger.exception("Grading coach LLM feedback failed.")
             return None, [], None
 

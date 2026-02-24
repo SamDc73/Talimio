@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from fastapi import status
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai.models import PlanAction
 from src.ai.service import get_ai_service
@@ -188,7 +189,7 @@ class CodeExecutionService:
                     acloser = getattr(sbx, "aclose", None)
                     if callable(acloser):
                         await _maybe_await(acloser())
-            except Exception:
+            except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
                 logger.exception("Failed to close sandbox for key %s", k)
 
         # Reuse if present
@@ -449,7 +450,7 @@ class CodeExecutionService:
                     acloser = getattr(sbx, "aclose", None)
                     if callable(acloser):
                         await _maybe_await(acloser())
-            except Exception:
+            except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
                 logger.exception("Failed to close sandbox during reset key=%s", key)
 
     def _plan_cache_key(self, course_id: str | None, language: str, source_code: str) -> str:
@@ -467,7 +468,17 @@ class CodeExecutionService:
                 result = await sbx.commands.run(cmd)
                 if result.exit_code != 0:
                     logger.warning("Setup command failed: %s (exit=%d)", cmd, result.exit_code)
-            except Exception:
+            except (
+                OSError,
+                RuntimeError,
+                TimeoutException,
+                RateLimitException,
+                InvalidArgumentException,
+                NotEnoughSpaceException,
+                AuthenticationException,
+                SandboxException,
+                CommandExitException,
+            ):
                 logger.exception("Setup command exception: %s", cmd)
         self._course_setup_done[course_id] = True
 
@@ -637,7 +648,7 @@ class CodeExecutionService:
         for file_entry in plan.files:
             try:
                 await sbx.files.write(path=file_entry.path, data=file_entry.content)
-            except Exception:
+            except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
                 logger.exception("Failed to write file %s", file_entry.path)
                 raise
 
@@ -752,6 +763,38 @@ class CodeExecutionService:
 
         return cwd, template.format(entry=entry_q)
 
+    def _summarize_stderr(self, stderr_text: str | None) -> str | None:
+        if not stderr_text:
+            return None
+
+        first_line = ""
+        for raw_line in str(stderr_text).splitlines():
+            candidate = raw_line.strip()
+            if candidate:
+                first_line = candidate
+                break
+
+        if not first_line:
+            return None
+
+        if len(first_line) > 200:
+            return f"{first_line[:197]}..."
+        return first_line
+
+    def _command_failure_message(self, command: str, stderr_text: str | None) -> str:
+        base_message = f"Command failed: {command}"
+        diagnostic = self._summarize_stderr(stderr_text)
+        if diagnostic is None:
+            return base_message
+        return f"{base_message}. stderr: {diagnostic}"
+
+    def _command_exception_message(self, command: str, stderr_text: str | None, error: Exception) -> str:
+        base_message = f"Command execution failed: {command}"
+        diagnostic = self._summarize_stderr(stderr_text) or self._summarize_stderr(str(error))
+        if diagnostic is None:
+            return base_message
+        return f"{base_message}. detail: {diagnostic}"
+
     async def _run_command_list(
         self,
         sbx: Any,
@@ -794,15 +837,28 @@ class CodeExecutionService:
                 stderr_text = getattr(exc, "stderr", "")
                 if stderr_text:
                     stderr_chunks.append(stderr_text)
-                error_message = f"Command failed: {normalized_command}"
+                error_message = self._command_failure_message(normalized_command, stderr_text)
                 raise CodeExecutionError(
                     error_message,
                     status_code=status.HTTP_400_BAD_REQUEST,
                     error_code="command_failed",
                 ) from exc
-            except Exception as exc:
+            except (
+                OSError,
+                RuntimeError,
+                TimeoutException,
+                RateLimitException,
+                InvalidArgumentException,
+                NotEnoughSpaceException,
+                AuthenticationException,
+                SandboxException,
+                TypeError,
+            ) as exc:
                 logger.exception("Command execution failed: %s", command)
-                error_message = f"Command execution failed: {normalized_command}"
+                stderr_text = getattr(exc, "stderr", "")
+                if stderr_text:
+                    stderr_chunks.append(stderr_text)
+                error_message = self._command_exception_message(normalized_command, stderr_text, exc)
                 raise CodeExecutionError(
                     error_message,
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -817,7 +873,7 @@ class CodeExecutionService:
             if "apt-get update" in normalized_command:
                 try:
                     await sbx.files.write(self._apt_sentinel, "updated")
-                except Exception:
+                except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
                     logger.exception("Failed to record apt sentinel")
 
     async def _apply_actions(
@@ -888,7 +944,7 @@ class CodeExecutionService:
             try:
                 await sbx.files.write(path=path, data=new_content)
                 logger.info("Applied sandbox patch path=%s", path)
-            except Exception:
+            except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
                 logger.exception("Failed to write patched file path=%s", path)
                 raise
         else:
@@ -932,7 +988,7 @@ class CodeExecutionService:
             lesson.content = updated_content
             await self._session.flush()
             logger.info("Persisted AI patch to lesson lesson_id=%s", lesson_id)
-        except Exception:
+        except SQLAlchemyError:
             logger.exception("Failed to persist patch for lesson lesson_id=%s", lesson_id)
 
     async def _prepare_workspace(
