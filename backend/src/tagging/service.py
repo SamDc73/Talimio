@@ -159,7 +159,7 @@ class TaggingService:
         self,
         content_id: uuid.UUID,
         content_type: str,
-        user_id: uuid.UUID | None = None,
+        user_id: uuid.UUID,
     ) -> list[Tag]:
         """Get tags for a content item for a specific user.
 
@@ -172,10 +172,6 @@ class TaggingService:
         -------
             List of Tag objects
         """
-        if not user_id:
-            # No user_id means no tags in a user-specific system
-            return []
-
         # Get user-specific tags only
         query_conditions = and_(
             TagAssociation.content_id == content_id,
