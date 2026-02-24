@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.auth import CurrentAuth
-from src.videos.facade import VideosFacade
+from src.videos.facade import VIDEO_FACADE_ERROR_CODE_NOT_FOUND, VideosFacade
 from src.videos.schemas import (
     VideoChapterProgressSync,
     VideoChapterResponse,
@@ -236,11 +236,12 @@ async def get_video_details(
         transcript_info = await facade.get_transcript_info(video_id=video_id)
         progress_result = await facade.get_video_with_progress(video_id, auth.user_id)
         if progress_result.get("success") is not True:
-            progress_error = progress_result.get("error")
-            if not isinstance(progress_error, str) or not progress_error.strip():
-                msg = "Video progress retrieval failed without a specific error detail"
-                raise RuntimeError(msg)
-            raise RuntimeError(progress_error)
+            progress_error_code = progress_result.get("error_code")
+            if progress_error_code == VIDEO_FACADE_ERROR_CODE_NOT_FOUND:
+                msg = f"Video with ID {video_id} not found"
+                raise VideoNotFoundError(msg)
+            msg = "Failed to retrieve video progress"
+            raise RuntimeError(msg)
 
         if "progress" not in progress_result:
             msg = "Video progress payload missing from successful response"
