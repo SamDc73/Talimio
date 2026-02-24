@@ -4,10 +4,10 @@ import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, status
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -16,6 +16,7 @@ from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError, IntegrityError, OperationalError, SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.routing import Match
 from starlette_csrf import CSRFMiddleware
 
 from .ai.assistant.router import router as assistant_router
@@ -50,10 +51,6 @@ from .progress.router import router as progress_router
 from .tagging.router import router as tagging_router
 from .user.router import router as user_router
 from .videos.router import router as videos_router
-
-
-if TYPE_CHECKING:
-    from starlette.requests import Request
 
 
 setup_logging()
@@ -92,13 +89,10 @@ async def _startup() -> None:
     await apply_migrations(engine)
     logger.info("Database migrations applied")
 
-    try:
-        from src.ai.memory import warm_memory_client
+    from src.ai.memory import warm_memory_client
 
-        await warm_memory_client()
-        logger.info("AsyncMemory client warmed")
-    except (RuntimeError, TimeoutError, TypeError, ValueError):
-        logger.warning("AsyncMemory client warm-up failed", exc_info=True)
+    await warm_memory_client()
+    logger.info("AsyncMemory client warmed")
 
 
 async def _shutdown() -> None:
@@ -198,6 +192,21 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
     app.add_exception_handler(ExternalServiceError, cast("Any", handle_external_service_errors))
 
+    def internal_error_handler(request: Request, exc: Exception) -> JSONResponse:
+        error_id = uuid.uuid4()
+        log_error_context(request, exc, error_id)
+        return format_error_response(
+            category=ErrorCategory.INTERNAL,
+            code=ErrorCode.INTERNAL,
+            detail="An unexpected error occurred",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            metadata={"error_id": str(error_id)},
+            suggestions=["Please try again later", "If the problem persists, contact support with the error ID"],
+        )
+
+    for exc_type in (RuntimeError, TypeError, ValueError):
+        app.add_exception_handler(exc_type, cast("Any", internal_error_handler))
+
 
 def _register_frontend_routes(app: FastAPI) -> None:
     """Serve built frontend files when a bundled web app is present."""
@@ -212,6 +221,35 @@ def _register_frontend_routes(app: FastAPI) -> None:
         app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="frontend-assets")
 
     logo_path = frontend_dist_dir / "logo.png"
+
+    @app.api_route(
+        "/api/v1/{api_path:path}",
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        include_in_schema=False,
+        response_model=None,
+    )
+    async def unknown_api_route(request: Request, api_path: str) -> JSONResponse:
+        del api_path
+        allowed_methods: set[str] = set()
+        for route in app.router.routes:
+            if getattr(route, "endpoint", None) is unknown_api_route:
+                continue
+
+            route_match, _ = route.matches(request.scope)
+            if route_match is Match.PARTIAL:
+                route_methods = getattr(route, "methods", None)
+                if route_methods:
+                    allowed_methods.update(route_methods)
+
+        if allowed_methods:
+            allow_header = ", ".join(sorted(method for method in allowed_methods if method != "HEAD"))
+            return JSONResponse(
+                {"detail": "Method Not Allowed"},
+                status_code=status.HTTP_405_METHOD_NOT_ALLOWED,
+                headers={"Allow": allow_header},
+            )
+
+        return JSONResponse({"detail": "Not Found"}, status_code=status.HTTP_404_NOT_FOUND)
 
     @app.get("/", include_in_schema=False, response_model=None)
     async def serve_frontend_index() -> FileResponse:
@@ -241,25 +279,6 @@ def create_app() -> FastAPI:
 
     # Exception handlers
     _register_exception_handlers(app)
-
-    @app.exception_handler(Exception)
-    async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-        """Global exception handler for unhandled errors."""
-        # Generate error ID for tracking
-        error_id = uuid.uuid4()
-
-        # Log comprehensive error context
-        log_error_context(request, exc, error_id)
-
-        # Return generic error response without exposing internal details
-        return format_error_response(
-            category=ErrorCategory.INTERNAL,
-            code=ErrorCode.INTERNAL,
-            detail="An unexpected error occurred",
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            metadata={"error_id": str(error_id)},
-            suggestions=["Please try again later", "If the problem persists, contact support with the error ID"],
-        )
 
     # Register health check endpoint
     @app.get("/health", response_model=None)
