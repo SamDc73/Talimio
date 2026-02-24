@@ -35,7 +35,7 @@ try:
     from mem0.configs.embeddings.base import BaseEmbedderConfig
     from mem0.embeddings.base import EmbeddingBase
     from mem0.utils.factory import EmbedderFactory
-except Exception:  # pragma: no cover - mem0 is an optional runtime dependency
+except ImportError:  # pragma: no cover - mem0 is an optional runtime dependency
     BaseEmbedderConfig = object  # type: ignore[assignment]
     EmbeddingBase = object  # type: ignore[assignment]
     EmbedderFactory = None  # type: ignore[assignment]
@@ -77,7 +77,7 @@ class Mem0LiteLLMEmbedding(EmbeddingBase):
 
         try:
             response = litellm.embedding(**kwargs)
-        except Exception as exc:
+        except litellm.exceptions.APIError as exc:
             # Fallback: if a provider rejects `dimensions`, retry without it once.
             if "dimensions" in kwargs:
                 logger.debug("LiteLLM embedding failed with dimensions, retrying without. err=%s", exc)

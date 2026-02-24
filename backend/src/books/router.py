@@ -64,7 +64,7 @@ async def _embed_book_background(book_id: uuid.UUID) -> None:
         try:
             await RAGService().process_book(session, book_id)
             await session.commit()
-        except Exception:
+        except (SQLAlchemyError, RuntimeError, ValueError):
             try:
                 await session.commit()
             except SQLAlchemyError:
@@ -125,7 +125,7 @@ async def _auto_tag_book_background(book_id: uuid.UUID, user_id: uuid.UUID) -> N
             )
             await session.commit()
             logger.info("Successfully tagged book %s with tags: %s", book_id, generated_tags)
-    except Exception:
+    except (SQLAlchemyError, RuntimeError, ValueError, OSError):
         logger.exception("Failed to tag book %s", book_id)
 
 
@@ -234,7 +234,7 @@ async def list_books(
         )
     except HTTPException:
         raise
-    except Exception as error:
+    except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
         logger.exception("Error listing books: %s", error)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
 
@@ -248,7 +248,7 @@ async def get_book(book_id: uuid.UUID, auth: CurrentAuth) -> BookWithProgress:
         return await facade.get_book(book_id, auth.user_id)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
-    except Exception as error:
+    except (SQLAlchemyError, RuntimeError, TypeError) as error:
         logger.exception("Error getting book %s: %s", book_id, error)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
 
@@ -358,7 +358,7 @@ async def create_book(
 
         if not result.get("success"):
             # Clean up uploaded file on failure
-            with suppress(Exception):
+            with suppress(OSError, RuntimeError, ValueError):
                 await storage.delete(storage_key)
             if result.get("error_code") == "duplicate_file":
                 raise HTTPException(
@@ -382,7 +382,7 @@ async def create_book(
 
     except HTTPException:
         raise
-    except Exception as error:
+    except (SQLAlchemyError, RuntimeError, ValueError, OSError, TypeError) as error:
         logger.exception("Error creating book: %s", error)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
 
@@ -406,7 +406,7 @@ async def update_book(book_id: uuid.UUID, book_data: BookUpdate, auth: CurrentAu
         return BookResponse.model_validate(book)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
-    except Exception as error:
+    except (SQLAlchemyError, RuntimeError, TypeError) as error:
         logger.exception("Error updating book %s: %s", book_id, error)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
 
@@ -440,7 +440,7 @@ async def update_book_progress(
         return BookResponseBuilder.build_progress_response(progress, book_id)
     except HTTPException:
         raise
-    except Exception as error:
+    except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
         logger.exception("Error updating book progress: %s", error)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
 
@@ -660,7 +660,7 @@ async def get_book_chapters(book_id: uuid.UUID, auth: CurrentAuth) -> list[BookT
         return [BookTocChapterResponse.model_validate(chapter) for chapter in raw_chapters]
     except HTTPException:
         raise
-    except Exception as error:
+    except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
         logger.exception("Error getting book chapters: %s", error)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
 
@@ -706,7 +706,7 @@ async def update_book_chapter_status(
         return BookTocChapterResponse.model_validate(fallback_payload)
     except HTTPException:
         raise
-    except Exception as error:
+    except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
         logger.exception("Error updating chapter status: %s", error)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
 

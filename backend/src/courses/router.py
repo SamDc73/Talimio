@@ -16,6 +16,7 @@ from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai.service import AIService, get_ai_service
 from src.auth import CurrentAuth
@@ -116,7 +117,7 @@ async def generate_self_assessment_questions(
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
-    except Exception as error:
+    except (RuntimeError, TypeError) as error:
         logger.exception(
             "SELF_ASSESSMENT_GENERATION_FAILED",
             extra={
@@ -317,7 +318,7 @@ async def generate_practice_drills(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
-    except Exception as error:
+    except (RuntimeError, TypeError) as error:
         logger.exception(
             "PRACTICE_DRILL_GENERATION_FAILED",
             extra={
@@ -461,7 +462,7 @@ async def submit_adaptive_reviews(
         try:
             progress_service = CourseProgressService(session)
             await progress_service.update_progress(course.id, auth.user_id, progress_payload)
-        except Exception:
+        except SQLAlchemyError:
             logger.exception(
                 "COURSE_PROGRESS_UPDATE_FAILED",
                 extra={
@@ -541,7 +542,7 @@ async def execute_code(
             result = await facade.get_course(request.course_id, auth.user_id)
             if result.get("success") and "course" in result:
                 course = result["course"]
-                setup_commands = course.setup_commands or []
+                setup_commands = course.get("setup_commands") or []
         except (RuntimeError, ValueError):
             logger.debug("Could not fetch course setup_commands for course_id=%s", request.course_id)
 
@@ -585,7 +586,7 @@ async def execute_code(
             exc_info=True,
         )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except Exception as exc:
+    except (RuntimeError, OSError, TimeoutError) as exc:
         logger.exception(
             "CODE_EXECUTION_UNEXPECTED",
             extra={
