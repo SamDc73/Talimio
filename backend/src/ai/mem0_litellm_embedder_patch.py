@@ -26,19 +26,15 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import litellm
+from mem0.embeddings.base import EmbeddingBase
+from mem0.utils.factory import EmbedderFactory
 
 
-try:
+if TYPE_CHECKING:
     from mem0.configs.embeddings.base import BaseEmbedderConfig
-    from mem0.embeddings.base import EmbeddingBase
-    from mem0.utils.factory import EmbedderFactory
-except ImportError:  # pragma: no cover - mem0 is an optional runtime dependency
-    BaseEmbedderConfig = object  # type: ignore[assignment]
-    EmbeddingBase = object  # type: ignore[assignment]
-    EmbedderFactory = None  # type: ignore[assignment]
 
 
 logger = logging.getLogger(__name__)
@@ -75,16 +71,7 @@ class Mem0LiteLLMEmbedding(EmbeddingBase):
             # Some providers support this (e.g., OpenAI). Others don't.
             kwargs["dimensions"] = int(self.config.embedding_dims)
 
-        try:
-            response = litellm.embedding(**kwargs)
-        except litellm.exceptions.APIError as exc:
-            # Fallback: if a provider rejects `dimensions`, retry without it once.
-            if "dimensions" in kwargs:
-                logger.debug("LiteLLM embedding failed with dimensions, retrying without. err=%s", exc)
-                kwargs.pop("dimensions", None)
-                response = litellm.embedding(**kwargs)
-            else:
-                raise
+        response = litellm.embedding(**kwargs)
 
         data = getattr(response, "data", None)
         if isinstance(data, Sequence) and data:
@@ -105,10 +92,6 @@ def apply_mem0_litellm_embedder_patch() -> None:
     global _PATCH_APPLIED  # noqa: PLW0603
 
     if _PATCH_APPLIED:
-        return
-
-    if EmbedderFactory is None:
-        logger.debug("mem0 not importable; skipping LiteLLM embedder patch")
         return
 
     # mem0's pydantic config currently rejects embedder.provider='litellm', so

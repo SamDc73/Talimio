@@ -338,12 +338,8 @@ class CodeExecutionService:
         return result
 
     async def _run_code(self, sbx: Any, source_code: str, language: str) -> Any:
-        """Run code in sandbox, handling different SDK versions."""
-        try:
-            return await sbx.run_code(code=source_code, language=language)
-        except TypeError:
-            # Fallback: some versions accept positional parameters
-            return await sbx.run_code(source_code, language=language)
+        """Run code in sandbox."""
+        return await sbx.run_code(code=source_code, language=language)
 
     async def _run_code_with_handling(self, sbx: Any, source_code: str, language: str) -> Any:
         try:
