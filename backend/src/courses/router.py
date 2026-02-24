@@ -358,7 +358,8 @@ async def execute_code(
                 "error_code": error.error_code,
             },
         )
-        detail = f"{error} (code: {error.error_code})"
+        error_detail = str(error).strip() or "Code execution failed"
+        detail = f"{error_detail} (code: {error.error_code})"
         raise HTTPException(status_code=error.status_code, detail=detail) from error
     except ValueError as exc:
         logger.warning(

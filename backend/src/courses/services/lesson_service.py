@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from fastapi import HTTPException, status
 from sqlalchemy import select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai import AGENT_ID_LESSON_WRITER
@@ -17,6 +18,30 @@ from src.courses.schemas import LessonDetailResponse
 
 
 logger = logging.getLogger(__name__)
+
+_LESSON_RAG_CONTEXT_FALLBACK_ERROR_TYPES = (
+    ImportError,
+    SQLAlchemyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    OSError,
+    ConnectionError,
+    TimeoutError,
+)
+_LESSON_OUTLINE_FALLBACK_ERROR_TYPES = (
+    SQLAlchemyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+_LESSON_GENERATION_HTTP_500_ERROR_TYPES = (
+    SQLAlchemyError,
+    OSError,
+    TypeError,
+    ConnectionError,
+    TimeoutError,
+)
 
 
 class LessonService:
@@ -121,7 +146,7 @@ class LessonService:
                 context_parts.append("")
 
             return "\n".join(context_parts).strip()
-        except Exception:
+        except _LESSON_RAG_CONTEXT_FALLBACK_ERROR_TYPES:
             logger.exception(
                 "Failed to get RAG context for course",
                 extra={"user_id": str(self.user_id), "course_id": str(course_id)},
@@ -163,7 +188,7 @@ class LessonService:
                 course_id=course.id,
                 lesson_id=lesson.id,
             )
-        except Exception:
+        except _LESSON_OUTLINE_FALLBACK_ERROR_TYPES:
             logger.exception(
                 "Failed to build course outline context",
                 extra={"user_id": str(self.user_id), "course_id": str(course.id), "lesson_id": str(lesson.id)},
@@ -326,7 +351,7 @@ class LessonService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Unable to generate lesson content. Please try again.",
             ) from exc
-        except Exception as exc:
+        except _LESSON_GENERATION_HTTP_500_ERROR_TYPES as exc:
             logger.exception(
                 "Unexpected error generating lesson content",
                 extra={"user_id": str(self.user_id), "lesson_id": str(lesson.id)},

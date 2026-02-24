@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai.models import AdaptiveCourseStructure
 from src.ai.rag.service import RAGService
@@ -422,13 +423,10 @@ class CourseContentService:
                 background_tasks=background_tasks,
             )
 
-        try:
-            if background_tasks is not None:
-                self._schedule_background_tagging(course.id, user_id)
-            else:
-                await self._auto_tag_course(session, course, user_id)
-        except (RuntimeError, TimeoutError, TypeError, ValueError) as exc:
-            logger.warning("Automatic tagging failed for course %s: %s", course.id, exc)
+        if background_tasks is not None:
+            self._schedule_background_tagging(course.id, user_id)
+        else:
+            await self._auto_tag_course(session, course, user_id)
 
     def _schedule_background_embeddings(
         self,
@@ -458,7 +456,7 @@ class CourseContentService:
         updated = await graph_service.backfill_embeddings_for_course(course_id)
         try:
             pairs = await graph_service.recompute_embedding_confusors_for_course(course_id)
-        except Exception as conf_exc:
+        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError) as conf_exc:
             logger.exception("Confusor recompute failed for course %s: %s", course_id, conf_exc)
             pairs = 0
         await session.flush()
@@ -480,7 +478,7 @@ class CourseContentService:
                     pairs,
                     course_id,
                 )
-        except Exception as exc:
+        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError) as exc:
             logger.exception("Background embedding task failed for course %s: %s", course_id, exc)
 
     def _schedule_background_tagging(
@@ -501,7 +499,7 @@ class CourseContentService:
                     return
                 await self._auto_tag_course(tagging_session, course, user_id)
                 await tagging_session.commit()
-        except Exception as exc:
+        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError) as exc:
             logger.exception("Background tagging task failed for course %s: %s", course_id, exc)
 
     async def update_course(
@@ -617,7 +615,7 @@ class CourseContentService:
 
             await session.flush()
             return tags
-        except Exception as exc:
+        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError) as exc:
             logger.exception("Auto-tagging error for course %s: %s", course_id_str, exc)
             return []
 
