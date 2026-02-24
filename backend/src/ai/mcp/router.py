@@ -27,7 +27,7 @@ def _coerce_url(raw: str) -> AnyHttpUrl:
 
 def _serialize_server(server: Any) -> MCPServerResponse:
     """Serialize a stored MCP server into the API response shape."""
-    url = str(_coerce_url(server.url))
+    url = _coerce_url(server.url)
     masked_headers = dict.fromkeys(server.static_headers or {}, "********")
     return MCPServerResponse(
         id=server.id,

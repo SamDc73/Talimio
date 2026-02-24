@@ -145,8 +145,9 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 							} else {
 								r = range ? range.getBoundingClientRect() : null
 							}
-						} catch {
+						} catch (error) {
 							logger.warn("Failed to compute EPUB selection client rect union; falling back to bounding rect", {
+								error,
 								cfiRange,
 							})
 							r = range ? range.getBoundingClientRect() : null
