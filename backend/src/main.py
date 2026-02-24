@@ -4,7 +4,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, status
@@ -16,7 +16,6 @@ from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError, IntegrityError, OperationalError, SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.requests import Request
 from starlette_csrf import CSRFMiddleware
 
 from .ai.assistant.router import router as assistant_router
@@ -53,6 +52,10 @@ from .user.router import router as user_router
 from .videos.router import router as videos_router
 
 
+if TYPE_CHECKING:
+    from starlette.requests import Request
+
+
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -80,22 +83,14 @@ def _register_routers(app: FastAPI) -> None:
 
 async def _startup() -> None:
     """Perform lightweight startup checks and initialization."""
-    try:
-        from src.ai.rag.config import RAGConfig
+    from src.ai.rag.config import RAGConfig
 
-        rag_config = RAGConfig()
-        if rag_config.embedding_model:
-            logger.info("RAG configuration loaded")
-    except Exception:
-        logger.exception("Failed to load RAG configuration")
-        raise
+    rag_config = RAGConfig()
+    if rag_config.embedding_model:
+        logger.info("RAG configuration loaded")
 
-    try:
-        await apply_migrations(engine)
-        logger.info("Database migrations applied")
-    except Exception:
-        logger.exception("Database migrations failed")
-        raise
+    await apply_migrations(engine)
+    logger.info("Database migrations applied")
 
     try:
         from src.ai.memory import warm_memory_client
@@ -231,11 +226,7 @@ def _register_frontend_routes(app: FastAPI) -> None:
 
 def create_app() -> FastAPI:
     """Create and configure FastAPI application."""
-    try:
-        settings = get_settings()
-    except Exception:
-        logger.exception("Failed to load settings")
-        raise
+    settings = get_settings()
 
     app = FastAPI(
         title="Learning Courses API",

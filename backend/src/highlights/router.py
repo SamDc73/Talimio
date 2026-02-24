@@ -6,6 +6,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import and_, select
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.auth import CurrentAuth
 
@@ -48,7 +49,7 @@ async def get_book_highlights(
             )
             for h in highlights
         ]
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.exception("Error fetching highlights for book %s: %s", book_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch highlights"
@@ -84,7 +85,7 @@ async def create_book_highlight(
             created_at=highlight.created_at,
             updated_at=highlight.updated_at,
         )
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.exception("Error creating highlight for book %s: %s", book_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create highlight"
@@ -117,7 +118,7 @@ async def delete_highlight(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.exception("Error deleting highlight %s: %s", highlight_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete highlight"
@@ -163,7 +164,7 @@ async def update_highlight(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.exception("Error updating highlight %s: %s", highlight_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update highlight"

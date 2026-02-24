@@ -6,6 +6,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
 
 # AI imports removed - using facades instead
 from src.auth import CurrentAuth
@@ -175,7 +176,7 @@ async def update_content_tags(
             success=True,
         )
 
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.exception("Error updating tags for %s %s: %s", content_type, content_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

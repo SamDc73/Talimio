@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import Depends
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.database.engine import engine
@@ -20,10 +21,11 @@ async def get_db_session() -> AsyncGenerator[AsyncSession]:
     async with async_session_maker() as session:
         try:
             yield session
-            await session.commit()
-        except Exception:
+        except SQLAlchemyError:
             await session.rollback()
             raise
+        else:
+            await session.commit()
 
 
 # Create a reusable dependency
