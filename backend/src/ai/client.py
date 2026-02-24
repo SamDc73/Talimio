@@ -6,11 +6,10 @@ from collections import Counter
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import litellm
 from pydantic import BaseModel, ValidationError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai import AGENT_ID_DEFAULT
 from src.ai.errors import (
@@ -55,6 +54,66 @@ T = TypeVar("T", bound=BaseModel)
 
 _MAX_AUTONOMY_ROUNDS = 6
 _MAX_SCHEMA_REPAIR_ATTEMPTS = 2
+
+_LITELLM_PROVIDER_ERROR_TYPES = (
+    litellm.APIError,
+    litellm.APIConnectionError,
+    litellm.AuthenticationError,
+    litellm.BadGatewayError,
+    litellm.BadRequestError,
+    litellm.BudgetExceededError,
+    litellm.ContentPolicyViolationError,
+    litellm.ContextWindowExceededError,
+    litellm.InternalServerError,
+    litellm.InvalidRequestError,
+    litellm.NotFoundError,
+    litellm.RouterRateLimitError,
+    litellm.ServiceUnavailableError,
+    litellm.UnprocessableEntityError,
+    litellm.UnsupportedParamsError,
+)
+
+_COMPLETION_RUNTIME_ERROR_TYPES = (
+    TimeoutError,
+    asyncio.TimeoutError,
+    ConnectionError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    ValidationError,
+    litellm.RateLimitError,
+    litellm.Timeout,
+    litellm.JSONSchemaValidationError,
+    litellm.APIResponseValidationError,
+    *_LITELLM_PROVIDER_ERROR_TYPES,
+)
+
+_GET_COMPLETION_ERROR_TYPES = (AIRuntimeError, *_COMPLETION_RUNTIME_ERROR_TYPES)
+_PARSE_COERCION_ERROR_TYPES = (TypeError, ValueError, ValidationError)
+_TOOL_ORCHESTRATION_ERROR_TYPES = (
+    AIRuntimeError,
+    TimeoutError,
+    asyncio.TimeoutError,
+    ConnectionError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+_GENERATION_WRAPPER_ERROR_TYPES = (
+    AIRuntimeError,
+    TimeoutError,
+    asyncio.TimeoutError,
+    ConnectionError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @dataclass(slots=True)
@@ -188,24 +247,7 @@ class LLMClient:
             ):
                 return AISchemaValidationError("Structured response failed schema validation")
 
-            provider_error_types = (
-                litellm.APIError,
-                litellm.APIConnectionError,
-                litellm.AuthenticationError,
-                litellm.BadGatewayError,
-                litellm.BadRequestError,
-                litellm.BudgetExceededError,
-                litellm.ContentPolicyViolationError,
-                litellm.ContextWindowExceededError,
-                litellm.InternalServerError,
-                litellm.InvalidRequestError,
-                litellm.NotFoundError,
-                litellm.RouterRateLimitError,
-                litellm.ServiceUnavailableError,
-                litellm.UnprocessableEntityError,
-                litellm.UnsupportedParamsError,
-            )
-            if isinstance(current, provider_error_types):
+            if isinstance(current, _LITELLM_PROVIDER_ERROR_TYPES):
                 return AIProviderError(default_message)
 
         return AIProviderError(default_message)
@@ -316,7 +358,7 @@ class LLMClient:
 
             return await asyncio.wait_for(litellm.acompletion(**kwargs), timeout=settings.ai_request_timeout)
 
-        except Exception as error:
+        except _COMPLETION_RUNTIME_ERROR_TYPES as error:
             mapped = self._map_runtime_error(error, default_message="Model completion failed")
             self._log_runtime_error(mapped, operation="Model completion")
             raise mapped from error
@@ -370,7 +412,7 @@ class LLMClient:
 
         except ValueError:
             raise
-        except Exception as error:
+        except _GET_COMPLETION_ERROR_TYPES as error:
             mapped = self._map_runtime_error(error, default_message="Completion failed")
             self._log_runtime_error(mapped, operation="Completion")
             raise mapped from error
@@ -439,7 +481,7 @@ class LLMClient:
             try:
                 parsed = self._coerce_response_model(response, request.response_model)
                 return parsed, conversation
-            except Exception as parse_error:
+            except _PARSE_COERCION_ERROR_TYPES as parse_error:
                 schema_attempts += 1
                 self._logger.warning(
                     "Structured response validation failed on attempt %s: %s",
@@ -889,7 +931,7 @@ class LLMClient:
                     for (_idx, tool_call, args_dict, target) in pending
                 ]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
-            except Exception as error:
+            except _TOOL_ORCHESTRATION_ERROR_TYPES as error:
                 msg = "Tool execution orchestration failed"
                 raise AIToolExecutionError(msg) from error
 
@@ -984,7 +1026,7 @@ class LLMClient:
             return result
         except ValueError:
             raise
-        except Exception as error:
+        except _GENERATION_WRAPPER_ERROR_TYPES as error:
             self._logger.exception("Error generating course structure")
             msg = "Failed to generate course outline"
             raise RuntimeError(msg) from error
@@ -1012,7 +1054,7 @@ class LLMClient:
             return result
         except ValueError:
             raise
-        except Exception as error:
+        except _GENERATION_WRAPPER_ERROR_TYPES as error:
             self._logger.exception("Error generating adaptive course structure")
             msg = "Failed to generate adaptive course structure"
             raise RuntimeError(msg) from error
@@ -1059,7 +1101,7 @@ class LLMClient:
 
             return result
 
-        except Exception as error:
+        except _GENERATION_WRAPPER_ERROR_TYPES as error:
             self._logger.exception("Error generating self-assessment questions")
             msg = "Failed to generate self-assessment questions"
             raise RuntimeError(msg) from error
@@ -1090,7 +1132,7 @@ class LLMClient:
 
             content = response_content if isinstance(response_content, str) else str(response_content or "")
             return LessonContent(body=content.strip())
-        except Exception as error:
+        except _GENERATION_WRAPPER_ERROR_TYPES as error:
             self._logger.exception("Error generating lesson content")
             msg = "Failed to generate lesson content"
             raise RuntimeError(msg) from error
@@ -1145,7 +1187,7 @@ class LLMClient:
 
             return plan
 
-        except Exception as exc:
+        except _GENERATION_WRAPPER_ERROR_TYPES as exc:
             self._logger.exception("Failed to generate execution plan")
             msg = "Execution planning failed"
             raise RuntimeError(msg) from exc

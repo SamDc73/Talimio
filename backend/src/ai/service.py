@@ -63,17 +63,11 @@ class AIService:
         user_id: uuid.UUID,
     ) -> SelfAssessmentQuiz:
         """Generate optional self-assessment questions for the given topic."""
-        try:
-            return await self._course_llm.generate_self_assessment_questions(
-                topic=topic,
-                level=level,
-                user_id=str(user_id),
-            )
-        except ValueError:
-            raise
-        except Exception:
-            logger.exception("Failed to generate self-assessment for topic '%s'", topic)
-            raise
+        return await self._course_llm.generate_self_assessment_questions(
+            topic=topic,
+            level=level,
+            user_id=str(user_id),
+        )
 
     # Code execution operations
     async def generate_execution_plan(

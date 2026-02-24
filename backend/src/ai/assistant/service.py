@@ -6,16 +6,17 @@ import logging
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import fitz  # PyMuPDF
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai import AGENT_ID_ASSISTANT
 from src.ai.client import LLMClient
+from src.ai.errors import AIRuntimeError
 from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT
 from src.books.models import Book
 from src.courses.services.course_query_service import CourseQueryService
@@ -35,6 +36,9 @@ ASSISTANT_VIDEO_CONTEXT_WINDOW_SECONDS = 120
 ASSISTANT_MAX_USER_MESSAGE_LENGTH = 8_000
 ASSISTANT_MAX_HISTORY_MESSAGES = 40
 ASSISTANT_REQUIRE_THREAD_ID = True
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class ContextData(BaseModel):
@@ -299,8 +303,16 @@ async def assistant_chat(
             }
         )
         yield _sse_event("[DONE]")
-    except Exception:
-        logger.exception("Chat failed for user %s", user_id)
+    except (AIRuntimeError, RuntimeError, TypeError, OSError, SQLAlchemyError, HTTPException) as error:
+        if isinstance(error, AIRuntimeError):
+            logger.warning(
+                "LLM runtime failure for user %s: %s (%s)",
+                user_id,
+                error,
+                error.category.value,
+            )
+        else:
+            logger.exception("Chat failed for user %s", user_id)
         if normalized_request and latest_user_message_id:
             incomplete_message = {
                 "id": str(uuid.uuid4()),
@@ -318,7 +330,7 @@ async def assistant_chat(
                     parent_id=latest_user_message_id,
                     run_config=request.run_config,
                 )
-            except Exception:
+            except (RuntimeError, TypeError, ValueError, OSError, SQLAlchemyError, HTTPException):
                 logger.exception(
                     "Failed to persist incomplete assistant message for thread %s",
                     normalized_request.thread_id,
@@ -497,7 +509,7 @@ async def _get_rag_context(request: NormalizedChatRequest, user_id: uuid.UUID, s
 
         return results
 
-    except Exception:
+    except (RuntimeError, TypeError, ValueError, OSError, SQLAlchemyError, HTTPException, ImportError):
         logger.exception("RAG search failed for %s_id: %s", request.context_type, request.context_id)
         return []
 
@@ -639,7 +651,7 @@ async def _course_context(
             return None
         logger.exception("Failed to load course context for course %s", resource_id)
         return None
-    except Exception:
+    except (RuntimeError, TypeError, ValueError, OSError, SQLAlchemyError):
         logger.exception("Failed to load course context for course %s", resource_id)
         return None
 
@@ -729,6 +741,6 @@ async def get_context(
     except (ValueError, AttributeError, KeyError):
         logger.exception("Context validation error")
         return None
-    except Exception:
+    except (RuntimeError, TypeError, OSError, SQLAlchemyError, HTTPException):
         logger.exception("Context retrieval failed: type=%s, resource=%s", context_type, resource_id)
         return None

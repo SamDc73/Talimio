@@ -11,11 +11,12 @@ from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
 
+import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from pydantic import ValidationError
 from sqlalchemy import Select, select
 
-from src.ai.mcp.client import get_mcp_client, probe_mcp_server
+from src.ai.mcp.client import MCPClientDependencyError, get_mcp_client, probe_mcp_server
 from src.ai.mcp.config import MCPAuthConfig, MCPConfig, MCPServerConfig
 from src.ai.mcp.schemas import AuthType, MCPServerCreateRequest
 from src.config.settings import get_settings
@@ -28,6 +29,14 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+_MCP_PROBE_ERROR_TYPES = (
+    MCPClientDependencyError,
+    TimeoutError,
+    httpx.HTTPError,
+    OSError,
+    ValueError,
+)
 
 
 def _token_cipher() -> Fernet:
@@ -158,7 +167,7 @@ async def create_user_mcp_server(
     try:
         server_info = await probe_mcp_server(str(payload.url), headers=probe_headers)
         base_name = _sanitize_name(server_info.name)
-    except Exception as exc:
+    except _MCP_PROBE_ERROR_TYPES as exc:
         logger.warning("Failed to probe MCP server at %s: %s", payload.url, exc)
         msg = f"Could not connect to MCP server: {exc}"
         raise ValueError(msg) from exc
