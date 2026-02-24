@@ -17,6 +17,7 @@ from src.videos.schemas import (
     VideoTranscriptResponse,
     VideoUpdate,
 )
+from src.videos.service import InvalidVideoChapterStatusError, VideoChapterNotFoundError, VideoNotFoundError
 
 
 logger = logging.getLogger(__name__)
@@ -153,9 +154,9 @@ async def update_video_chapter_status(
             chapter_status=status_data.status,
             user_id=auth.user_id,
         )
-    except ValueError as e:
-        if "Invalid status" in str(e):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except InvalidVideoChapterStatusError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except (VideoNotFoundError, VideoChapterNotFoundError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error updating chapter %s status for video %s: %s", chapter_id, video_id, e)
@@ -172,9 +173,9 @@ async def extract_video_chapters(
     try:
         chapters = await facade.extract_and_create_video_chapters(video_id=video_id, user_id=auth.user_id)
         return {"count": len(chapters), "chapters": chapters}
+    except VideoNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValueError as e:
-        if "not found" in str(e):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error extracting chapters for video %s: %s", video_id, e)

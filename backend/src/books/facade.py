@@ -147,7 +147,7 @@ class BooksFacade:
             if diag is not None:
                 constraint_name = getattr(diag, "constraint_name", None)
 
-            if constraint_name == "books_user_id_file_hash_key" or "books_user_id_file_hash_key" in str(e).lower():
+            if constraint_name == "books_user_id_file_hash_key":
                 logger.info(
                     "BOOK_UPLOAD_DUPLICATE_FILE",
                     extra={"user_id": str(user_id), "title": title},
