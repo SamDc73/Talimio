@@ -1064,10 +1064,17 @@ class CourseContentService:
         user_id: uuid.UUID,
     ) -> dict[str, Any]:
         """Generate course data from AI prompt."""
-        ai_result = await self.ai_service.generate_course_structure(
-            user_id=user_id,
-            user_prompt=user_prompt,
-        )
+        try:
+            ai_result = await self.ai_service.generate_course_structure(
+                user_id=user_id,
+                user_prompt=user_prompt,
+            )
+        except ValueError:
+            raise
+        except Exception as error:
+            logger.exception("Failed to generate course structure for prompt '%s'", prompt_text)
+            error_msg = "Failed to generate course outline"
+            raise RuntimeError(error_msg) from error
         if not ai_result:
             error_msg = "Invalid AI response format for course generation"
             raise TypeError(error_msg)
