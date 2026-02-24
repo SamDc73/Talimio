@@ -10,6 +10,7 @@ from pathlib import Path
 
 from fastapi import HTTPException, status
 from fastapi.concurrency import run_in_threadpool
+from pydantic import ValidationError
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,7 @@ from src.ai.rag.schemas import DocumentResponse, SearchResult
 from src.books.models import Book
 from src.courses.models import Course, CourseDocument
 from src.database.session import async_session_maker
+from src.storage.exceptions import StorageError
 from src.storage.factory import get_storage_provider
 from src.videos.models import Video
 
@@ -39,6 +41,18 @@ COURSE_DOCUMENT_STATUS_PROCESSING = "processing"
 COURSE_DOCUMENT_STATUS_EMBEDDED = "embedded"
 COURSE_DOCUMENT_STATUS_FAILED = "failed"
 COURSE_IMAGE_DOCUMENT_TYPE = "image"
+
+_RAG_RUNTIME_ERROR_TYPES = (
+    SQLAlchemyError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    TimeoutError,
+    asyncio.TimeoutError,
+    ConnectionError,
+    ImportError,
+)
 
 
 class RAGService:
@@ -160,7 +174,7 @@ class RAGService:
 
         except HTTPException:
             raise
-        except Exception as error:
+        except (SQLAlchemyError, OSError, ValidationError) as error:
             logger.exception("Failed to upload document")
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
 
@@ -247,7 +261,7 @@ class RAGService:
                     # Do not fail the request if cleanup fails
                     logger.debug("Post-process source cleanup failed for document %s", document_id)
 
-        except Exception:
+        except _RAG_RUNTIME_ERROR_TYPES:
             logger.exception("Failed to process document %s", document_id)
             await session.execute(
                 text("UPDATE course_documents SET status = :status WHERE id = :doc_id"),
@@ -262,7 +276,7 @@ class RAGService:
             try:
                 await self.process_document(session, document_id)
                 await session.commit()
-            except Exception:
+            except _RAG_RUNTIME_ERROR_TYPES:
                 try:
                     await session.commit()
                 except SQLAlchemyError:
@@ -368,7 +382,7 @@ class RAGService:
             # Book row was deleted between load and flush; treat as benign and exit quietly
             logger.info("Book %s was deleted during processing; aborting embedding", book_id)
             return
-        except Exception:
+        except (StorageError, *_RAG_RUNTIME_ERROR_TYPES):
             logger.exception("Failed to process book %s", book_id)
             # Best-effort mark failed
             try:
@@ -434,7 +448,7 @@ class RAGService:
 
             logger.info("Successfully processed video %s", video_id)
 
-        except Exception:
+        except _RAG_RUNTIME_ERROR_TYPES:
             logger.exception("Failed to process video %s", video_id)
             try:
                 video = await session.get(Video, video_id)
@@ -514,7 +528,7 @@ class RAGService:
 
             logger.info("Successfully stored %s chunks for document %s in pgvector", len(chunks), document_id)
 
-        except Exception:
+        except _RAG_RUNTIME_ERROR_TYPES:
             logger.exception("Failed to store document chunks")
             raise
 
@@ -547,7 +561,7 @@ class RAGService:
                 course_id=course_id,
             )
 
-        except Exception:
+        except _RAG_RUNTIME_ERROR_TYPES:
             logger.exception("Failed to search documents")
             return []
 
@@ -603,7 +617,7 @@ class RAGService:
             documents = await self._query_documents_for_course(session, course_id, skip=skip, limit=limit)
             total = await self._query_document_count_for_course(session, course_id)
             return documents, total
-        except Exception:
+        except (SQLAlchemyError, ValidationError):
             logger.exception("Failed to list documents for course %s", course_id)
             return [], 0
 
@@ -651,7 +665,9 @@ class RAGService:
             await session.flush()
             logger.info("Successfully deleted document %s", document_id)
 
-        except Exception:
+        except HTTPException:
+            raise
+        except (SQLAlchemyError, OSError):
             logger.exception("Failed to delete document %s", document_id)
             raise
 
@@ -677,7 +693,7 @@ class RAGService:
             return DocumentResponse.model_validate(row_map)
         except HTTPException:
             raise
-        except Exception as error:
+        except (SQLAlchemyError, ValidationError) as error:
             logger.exception("Error getting document %s", document_id)
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get document") from error
 
@@ -728,7 +744,7 @@ class RAGService:
 
             return rowcount
 
-        except Exception:
+        except SQLAlchemyError:
             logger.exception("Error deleting RAG chunks for document %s", document_id)
             # Don't raise - this is best-effort cleanup
             return 0
@@ -770,7 +786,7 @@ class RAGService:
 
             return rowcount
 
-        except Exception:
+        except SQLAlchemyError:
             logger.exception("Error deleting RAG chunks for course %s", course_id)
             # Don't raise - this is best-effort cleanup
             return 0
@@ -797,6 +813,6 @@ class RAGService:
             if t == CONTENT_TYPE_VIDEO:
                 return await RAGService.delete_chunks_by_doc_id(session, content_id, doc_type=CONTENT_TYPE_VIDEO)
             return 0
-        except Exception:
+        except SQLAlchemyError:
             logger.exception("RAG purge failed for %s %s", content_type, content_id)
             return 0

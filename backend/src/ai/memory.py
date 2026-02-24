@@ -147,11 +147,11 @@ async def get_memory_client() -> AsyncMemory:
             vector_store_config["connection_pool"] = pool
             _memory_client = AsyncMemory(config=MemoryConfig(**config))
             logger.info("AsyncMemory client initialized with checked psycopg connection pool")
-        except Exception:
+        except (RuntimeError, TypeError, ValueError, OSError, psycopg.Error) as error:
             if pool is not None:
-                with suppress(Exception):
+                with suppress(RuntimeError, OSError, psycopg.Error):
                     pool.close()
-            logger.exception("Failed to initialize AsyncMemory")
+            logger.exception("Failed to initialize AsyncMemory: %s", error)
             raise
 
     return _memory_client
@@ -181,8 +181,8 @@ async def _run_memory_operation[MemoryResultT](
                 continue
             logger.warning("Memory %s failed after retry: %s", operation, error)
             return fallback
-        except (RuntimeError, TypeError, ValueError) as error:
-            logger.warning("Memory %s failed: %s", operation, error)
+        except (RuntimeError, TypeError, ValueError, AttributeError) as error:
+            logger.warning("Memory %s failed with non-transient error: %s", operation, error, exc_info=True)
             return fallback
 
     return fallback
@@ -290,7 +290,20 @@ async def delete_memory(user_id: uuid.UUID, memory_id: str) -> bool:
         return False
 
     async def _execute(client: AsyncMemory) -> bool:
-        await client.delete(memory_id)
+        existing_memory = await client.get(memory_id)
+        if existing_memory is None:
+            logger.info("Memory %s not found for user %s", memory_id, user_id)
+            return False
+        try:
+            await client.delete(memory_id)
+        except AttributeError:
+            logger.warning(
+                "Memory provider failed to delete memory %s for user %s; treating as missing memory",
+                memory_id,
+                user_id,
+                exc_info=True,
+            )
+            return False
         logger.info("Deleted memory %s for user %s", memory_id, user_id)
         return True
 

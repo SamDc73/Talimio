@@ -9,7 +9,9 @@ import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from src.ai.mcp.client import get_mcp_client
+import httpx
+
+from src.ai.mcp.client import MCPClientDependencyError, MCPServerNotConfiguredError, get_mcp_client
 from src.ai.mcp.config import MCPConfig
 from src.ai.mcp.service import get_user_mcp_config, list_user_mcp_tools
 
@@ -19,6 +21,16 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+_MCP_TOOL_EXECUTION_ERROR_TYPES = (
+    MCPServerNotConfiguredError,
+    MCPClientDependencyError,
+    TimeoutError,
+    httpx.HTTPError,
+    OSError,
+    ValueError,
+    TypeError,
+)
 
 
 @dataclass(slots=True)
@@ -107,7 +119,7 @@ async def execute_user_tool_call(
             arguments=arguments,
             config=config,
         )
-    except Exception:
+    except _MCP_TOOL_EXECUTION_ERROR_TYPES:
         logger.warning(
             "MCP tool failed",
             extra={

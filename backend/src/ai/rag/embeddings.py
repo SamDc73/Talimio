@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import litellm
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai.rag.config import rag_config
 
@@ -23,6 +24,41 @@ from src.ai.rag.schemas import SearchResult
 
 
 logger = logging.getLogger(__name__)
+
+_LITELLM_PROVIDER_ERROR_TYPES = (
+    litellm.APIError,
+    litellm.APIConnectionError,
+    litellm.AuthenticationError,
+    litellm.BadGatewayError,
+    litellm.BadRequestError,
+    litellm.BudgetExceededError,
+    litellm.ContentPolicyViolationError,
+    litellm.ContextWindowExceededError,
+    litellm.InternalServerError,
+    litellm.InvalidRequestError,
+    litellm.NotFoundError,
+    litellm.RouterRateLimitError,
+    litellm.ServiceUnavailableError,
+    litellm.UnprocessableEntityError,
+    litellm.UnsupportedParamsError,
+)
+
+_EMBEDDING_RUNTIME_ERROR_TYPES = (
+    TimeoutError,
+    asyncio.TimeoutError,
+    ConnectionError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    litellm.Timeout,
+    *_LITELLM_PROVIDER_ERROR_TYPES,
+)
+
+_VECTOR_SEARCH_FALLBACK_ERROR_TYPES = (
+    SQLAlchemyError,
+    *_EMBEDDING_RUNTIME_ERROR_TYPES,
+)
 
 
 class VectorRAG:
@@ -151,7 +187,7 @@ class VectorRAG:
                 doc_type,
             )
 
-        except Exception:
+        except (SQLAlchemyError, *_EMBEDDING_RUNTIME_ERROR_TYPES):
             logger.exception("Failed to store chunks with embeddings for doc_id=%s", doc_id)
             raise
 
@@ -283,7 +319,7 @@ class VectorRAG:
             )
             return search_results
 
-        except Exception:
+        except _VECTOR_SEARCH_FALLBACK_ERROR_TYPES:
             logger.exception("Vector search failed for doc_type=%s doc_id=%s", doc_type, doc_id)
             return []
 
@@ -360,7 +396,7 @@ class VectorRAG:
                 embeddings = self._normalize_embedding_response(response)
                 logger.debug("Generated %s embeddings (attempt %s)", len(embeddings), attempt)
                 return embeddings
-            except Exception as exc:
+            except _EMBEDDING_RUNTIME_ERROR_TYPES as exc:
                 last_attempt = attempt == attempts
                 if last_attempt:
                     logger.exception("Failed to generate embeddings after %s attempts", attempts)
