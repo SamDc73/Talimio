@@ -13,10 +13,8 @@ from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.ai.rag.service import RAGService
 from src.auth import CurrentAuth
 from src.books.models import Book
-from src.database.session import async_session_maker
 from src.storage.factory import get_storage_provider
 
 # Import the facade
@@ -39,77 +37,6 @@ logger = logging.getLogger(__name__)
 _DETACHED_TASKS: set[asyncio.Task[Any]] = set()
 
 router = APIRouter(prefix="/api/v1/books", tags=["books"])
-
-
-async def _embed_book_background(book_id: uuid.UUID) -> None:
-    """Background task to embed a book."""
-    async with async_session_maker() as session:
-        try:
-            await RAGService().process_book(session, book_id)
-            await session.commit()
-        except (SQLAlchemyError, RuntimeError, ValueError):
-            try:
-                await session.commit()
-            except SQLAlchemyError:
-                logger.debug("Failed to commit failed RAG status for book %s", book_id, exc_info=True)
-            logger.exception("Failed to embed book %s", book_id)
-
-
-def _parse_json_tags(raw_tags: str | None) -> list[str]:
-    """Parse serialized tags JSON into a list."""
-    if not raw_tags:
-        return []
-    try:
-        parsed = json.loads(raw_tags)
-    except json.JSONDecodeError:
-        return []
-    if not isinstance(parsed, list):
-        return []
-    return [str(tag) for tag in parsed if isinstance(tag, str)]
-
-
-def _merge_tags(existing_tags: list[str], generated_tags: list[str]) -> list[str]:
-    """Merge existing and generated tags while keeping insertion order."""
-    return list(dict.fromkeys([*existing_tags, *generated_tags]))
-
-
-async def _auto_tag_book_background(book_id: uuid.UUID, user_id: uuid.UUID) -> None:
-    """Generate and persist book tags in a dedicated background session."""
-    try:
-        from src.tagging.processors.book_processor import process_book_for_tagging
-        from src.tagging.service import TaggingService, update_content_tags_json
-
-        async with async_session_maker() as session:
-            content_data = await process_book_for_tagging(book_id, user_id, session)
-            if not content_data:
-                logger.warning("Skipping tagging for missing book %s", book_id)
-                return
-
-            generated_tags = await TaggingService(session).tag_content(
-                content_id=book_id,
-                content_type="book",
-                user_id=user_id,
-                title=content_data.get("title", ""),
-                content_preview=content_data.get("content_preview", ""),
-            )
-
-            book = await session.get(Book, book_id)
-            if book is None:
-                logger.warning("Skipping tag JSON update for missing book %s", book_id)
-                return
-
-            merged_tags = _merge_tags(_parse_json_tags(book.tags), generated_tags)
-            await update_content_tags_json(
-                session=session,
-                content_id=book_id,
-                content_type="book",
-                tags=merged_tags,
-                user_id=user_id,
-            )
-            await session.commit()
-            logger.info("Successfully tagged book %s with tags: %s", book_id, generated_tags)
-    except (SQLAlchemyError, RuntimeError, ValueError, OSError):
-        logger.exception("Failed to tag book %s", book_id)
 
 
 def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
@@ -253,8 +180,8 @@ async def create_book(
             publisher=publisher,
             tags=tags_list,
             spawn_detached_task=_spawn_detached_task,
-            embed_book_background=_embed_book_background,
-            auto_tag_book_background=_auto_tag_book_background,
+            embed_book_background=facade.embed_book_background,
+            auto_tag_book_background=facade.auto_tag_book_background,
         )
 
         if not result.get("success"):
