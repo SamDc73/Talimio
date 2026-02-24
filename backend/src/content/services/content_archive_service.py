@@ -9,6 +9,7 @@ from sqlalchemy import text
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_transform_service import ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
+from src.exceptions import ResourceNotFoundError
 
 
 if TYPE_CHECKING:
@@ -69,9 +70,8 @@ class ContentArchiveService:
         logger.info("📊 Archive operation affected %s rows", affected_rows)
 
         if affected_rows == 0:
-            msg = f"Content {content_id} not found or access denied"
-            logger.warning("⚠️ %s", msg)
-            raise ValueError(msg)
+            logger.warning("⚠️ Content %s not found or access denied", content_id)
+            raise ResourceNotFoundError(content_type.value, str(content_id))
         logger.info("✅ Successfully archived %s", content_id)
 
     @staticmethod
@@ -118,9 +118,8 @@ class ContentArchiveService:
         logger.info("📊 Unarchive operation affected %s rows", affected_rows)
 
         if affected_rows == 0:
-            msg = f"Content {content_id} not found or access denied"
-            logger.warning("⚠️ %s", msg)
-            raise ValueError(msg)
+            logger.warning("⚠️ Content %s not found or access denied", content_id)
+            raise ResourceNotFoundError(content_type.value, str(content_id))
         logger.info("✅ Successfully unarchived %s", content_id)
 
     @staticmethod

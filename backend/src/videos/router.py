@@ -81,7 +81,7 @@ async def get_video(
     """Get a specific video by ID."""
     try:
         return await facade.get_video(video_id=video_id, user_id=auth.user_id)
-    except ValueError as e:
+    except VideoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error fetching video %s: %s", video_id, e)
@@ -98,7 +98,7 @@ async def update_video(
     """Update video metadata."""
     try:
         return await facade.update_video(video_id=video_id, update_data=update_data, user_id=auth.user_id)
-    except ValueError as e:
+    except VideoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error updating video %s: %s", video_id, e)
@@ -114,7 +114,7 @@ async def get_video_chapters(
     """Get all chapters for a video."""
     try:
         return await facade.get_video_chapters(video_id=video_id, user_id=auth.user_id)
-    except ValueError as e:
+    except VideoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error fetching chapters for video %s: %s", video_id, e)
@@ -131,7 +131,7 @@ async def get_video_chapter(
     """Get a specific chapter for a video."""
     try:
         return await facade.get_video_chapter(video_id=video_id, chapter_id=chapter_id, user_id=auth.user_id)
-    except ValueError as e:
+    except (VideoNotFoundError, VideoChapterNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error fetching chapter %s for video %s: %s", chapter_id, video_id, e)
@@ -154,7 +154,7 @@ async def update_video_chapter_status(
             chapter_status=status_data.status,
             user_id=auth.user_id,
         )
-    except (VideoNotFoundError, VideoChapterNotFoundError, ValueError) as e:
+    except (VideoNotFoundError, VideoChapterNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error updating chapter %s status for video %s: %s", chapter_id, video_id, e)
@@ -195,7 +195,7 @@ async def sync_video_chapter_progress(
             total_chapters=progress_data.total_chapters,
             user_id=auth.user_id,
         )
-    except ValueError as e:
+    except VideoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error syncing chapter progress for video %s: %s", video_id, e)
@@ -211,8 +211,10 @@ async def get_video_transcript(
     """Get transcript segments with timestamps for a video."""
     try:
         return await facade.get_video_transcript_segments(video_id=video_id, user_id=auth.user_id)
-    except ValueError as e:
+    except VideoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error fetching transcript for video %s: %s", video_id, e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
@@ -249,7 +251,7 @@ async def get_video_details(
             "progress": progress,
         }
 
-    except ValueError as e:
+    except VideoNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except (RuntimeError, SQLAlchemyError) as e:
         logger.exception("Error fetching video details for %s: %s", video_id, e)

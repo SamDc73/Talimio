@@ -26,6 +26,7 @@ from src.books.schemas import (
     BookWithProgress,
 )
 from src.database.session import async_session_maker
+from src.exceptions import ResourceNotFoundError
 from src.storage.factory import get_storage_provider
 
 from .services.book_content_service import BookContentService
@@ -42,6 +43,7 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+BOOK_RESOURCE_TYPE = "book"
 BOOK_RAG_STATUS_PENDING: BookRagStatus = "pending"
 BOOK_RAG_STATUS_PROCESSING: BookRagStatus = "processing"
 BOOK_RAG_STATUS_COMPLETED: BookRagStatus = "completed"
@@ -93,7 +95,7 @@ class BooksFacade:
         """Get book with progress in IntegrityErrora dict structure (parity with other facades)."""
         try:
             book_with = await self.get_book(content_id, user_id)
-        except ValueError:
+        except ResourceNotFoundError:
             return {"error": "Book not found", "success": False}
 
         # Also retrieve unified progress to ensure core fields are present
@@ -121,8 +123,7 @@ class BooksFacade:
                     "BOOK_ACCESS_DENIED",
                     extra={"user_id": str(user_id), "book_id": str(book_id), "operation": "get_book"},
                 )
-                msg = "Book not found"
-                raise ValueError(msg)
+                raise ResourceNotFoundError(BOOK_RESOURCE_TYPE, str(book_id))
 
             # Recalculate progress using the unified service (ToC-aware)
             prog = await self._progress_service.get_progress(book_id, user_id)
@@ -130,7 +131,7 @@ class BooksFacade:
 
             return BookResponseBuilder.build_book_with_progress(book, progress)
 
-        except ValueError:
+        except ResourceNotFoundError:
             raise
         except (SQLAlchemyError, RuntimeError, TypeError) as e:
             logger.exception(
@@ -534,8 +535,7 @@ class BooksFacade:
         result = await self._session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
         book = result.scalar_one_or_none()
         if not book:
-            msg = "Book not found"
-            raise ValueError(msg)
+            raise ResourceNotFoundError(BOOK_RESOURCE_TYPE, str(book_id))
 
         chunk_count = None
         if book.rag_status in BOOK_RAG_CHUNK_COUNT_STATUSES:

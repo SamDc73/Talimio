@@ -61,9 +61,6 @@ async def upload_document(
         return result.model_dump(by_alias=True) if hasattr(result, "model_dump") else result
     except HTTPException:
         raise
-    except ValueError as error:
-        logger.exception("Validation error uploading document: %s", error)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     except RuntimeError as error:
         logger.exception("System error uploading document: %s", error)
         raise HTTPException(
@@ -95,9 +92,6 @@ async def list_documents(
 
     except HTTPException:
         raise
-    except ValueError as error:
-        logger.exception("Validation error listing documents for course %s: %s", course_id, error)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     except RuntimeError as error:
         logger.exception("System error listing documents for course %s: %s", course_id, error)
         raise HTTPException(
@@ -128,9 +122,6 @@ async def search_documents(
 
     except HTTPException:
         raise
-    except ValueError as error:
-        logger.exception("Validation error searching documents: %s", error)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     except RuntimeError as error:
         logger.exception("System error searching documents: %s", error)
         raise HTTPException(
@@ -157,9 +148,6 @@ async def delete_document(
 
     except HTTPException:
         raise
-    except ValueError as error:
-        logger.exception("Validation error deleting document: %s", error)
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     except RuntimeError as error:
         logger.exception("System error deleting document: %s", error)
         raise HTTPException(
@@ -180,9 +168,6 @@ async def get_document(
         return result.model_dump(by_alias=True) if hasattr(result, "model_dump") else result
     except HTTPException:
         raise
-    except ValueError as error:
-        logger.exception("Validation error getting document: %s", error)
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     except RuntimeError as error:
         logger.exception("System error getting document: %s", error)
         raise HTTPException(
