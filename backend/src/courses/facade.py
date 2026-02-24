@@ -150,7 +150,7 @@ class CoursesFacade:
             return {"course": course_response, "success": True}
 
         except Exception as e:
-            logger.exception(f"Error generating AI course {topic} for user {user_id}: {e}")
+            logger.exception("Error generating AI course %s for user %s: %s", topic, user_id, e)
             return {"error": f"Failed to generate course: {e!s}", "success": False}
 
     async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
@@ -174,7 +174,7 @@ class CoursesFacade:
             return {"progress": updated_progress, "success": True}
 
         except Exception as e:
-            logger.exception(f"Error updating progress for course {course_id}: {e}")
+            logger.exception("Error updating progress for course %s: %s", course_id, e)
             return {"error": f"Failed to update progress: {e!s}", "success": False}
 
     async def update_course(self, course_id: uuid.UUID, user_id: uuid.UUID, update_data: dict[str, Any]) -> dict[str, Any]:
@@ -253,14 +253,14 @@ class CoursesFacade:
                         progress = await self._progress_service.get_progress(cr.id, user_id)
                         cd["progress"] = progress
                     except (RuntimeError, ValueError) as e:
-                        logger.warning(f"Failed to get progress for course {cr.id}: {e}")
+                        logger.warning("Failed to get progress for course %s: %s", cr.id, e)
                         cd["progress"] = {"completion_percentage": 0, "completed_lessons": {}}
                 course_dicts.append(cd)
 
             return {"courses": course_dicts, "success": True}
 
         except Exception as e:
-            logger.exception(f"Error getting courses for user {user_id}: {e}")
+            logger.exception("Error getting courses for user %s: %s", user_id, e)
             return {"error": f"Failed to get courses: {e!s}", "success": False}
 
 
@@ -273,7 +273,7 @@ class CoursesFacade:
                 course_response = await query_service.get_course(course_id, user_id)
             except HTTPException as exc:
                 if exc.status_code == 404:
-                    logger.info(f"Course {course_id} not found for user {user_id}")
+                    logger.info("Course %s not found for user %s", course_id, user_id)
                     return {"error": f"Course {course_id} not found", "success": False}
                 raise
 

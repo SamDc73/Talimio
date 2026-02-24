@@ -42,7 +42,7 @@ class CourseProgressService(ProgressTracker):
             course = course_result.scalar_one_or_none()
 
             if not course:
-                logger.warning(f"Course {content_id} not found")
+                logger.warning("Course %s not found", content_id)
                 return {
                     "completion_percentage": 0,
                     "completed_lessons": {},
@@ -143,7 +143,7 @@ class CourseProgressService(ProgressTracker):
                         completed_list, total_lessons
                     )
                 except (TypeError, ValueError, ZeroDivisionError) as e:
-                    logger.warning(f"Failed to calculate course progress percentage: {e}")
+                    logger.warning("Failed to calculate course progress percentage: %s", e)
                     progress_percentage = 0
 
             return {
@@ -175,7 +175,7 @@ class CourseProgressService(ProgressTracker):
                 session, progress_service, user_id, content_id
             )
             if not course:
-                logger.error(f"Course {content_id} not found")
+                logger.error("Course %s not found", content_id)
                 return {"error": "Course not found"}
 
             # Prepare metadata with existing data
@@ -388,7 +388,7 @@ class CourseProgressService(ProgressTracker):
 
         completed_count = len(completed_lessons)
         percentage = (completed_count / total_lessons) * 100
-        logger.info(f"📚 Course progress: {completed_count}/{total_lessons} lessons = {percentage:.1f}%")
+        logger.info("📚 Course progress: %s/%s lessons = %.1f%%", completed_count, total_lessons, percentage)
         return min(round(percentage, 2), 100.0)
 
     def _update_learning_patterns(self, metadata: dict, _lesson_id: str, quiz_results: dict) -> None:

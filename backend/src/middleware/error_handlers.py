@@ -157,7 +157,10 @@ async def handle_validation_errors(request: Request, exc: Exception) -> JSONResp
 async def handle_database_errors(request: Request, exc: Exception) -> JSONResponse:
     """Handle database-related errors."""
     logger.exception(
-        f"Database error on {request.method} {request.url.path}: {exc}",
+        "Database error on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc,
         extra={"error_type": type(exc).__name__},
         exc_info=(type(exc), exc, exc.__traceback__),
     )
@@ -208,7 +211,7 @@ async def handle_database_errors(request: Request, exc: Exception) -> JSONRespon
 
 async def handle_external_service_errors(request: Request, exc: ExternalServiceError) -> JSONResponse:
     """Handle external service failures."""
-    logger.error(f"External service error on {request.method} {request.url.path}: {exc.detail}")
+    logger.error("External service error on %s %s: %s", request.method, request.url.path, exc.detail)
 
     return format_error_response(
         category=ErrorCategory.EXTERNAL_SERVICE,
