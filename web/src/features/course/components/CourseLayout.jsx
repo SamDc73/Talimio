@@ -86,17 +86,6 @@ export default function CourseLayout() {
 		return <FullPageLoader message="Loading your course..." />
 	}
 
-	if (!courseId) {
-		return (
-			<div className="flex h-screen items-center justify-center">
-				<div className="text-center">
-					<h2 className="mb-2 text-xl font-semibold">Course Not Found</h2>
-					<p className="mb-4 text-muted-foreground">No course ID provided.</p>
-				</div>
-			</div>
-		)
-	}
-
 	return (
 		<div className="flex min-h-screen flex-col bg-background">
 			<CourseHeader

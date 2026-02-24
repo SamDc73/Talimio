@@ -24,9 +24,10 @@ class LoggerService {
 	 */
 	setupErrorHandlers() {
 		// Handle Vite dynamic import failures
-		window.addEventListener("vite:preloadError", (_event) => {
-			// Optionally reload page for critical failures
-			// window.location.reload()
+		window.addEventListener("vite:preloadError", (event) => {
+			this.error("Vite preload error", event?.payload ?? event?.error ?? null, {
+				type: "vite:preloadError",
+			})
 		})
 
 		// Catch unhandled errors
@@ -49,53 +50,69 @@ class LoggerService {
 	 * Send data to endpoint or console
 	 */
 	async send(data) {
-		// In dev, use plain console logging
 		if (import.meta.env.DEV) {
-			const message = `[${String(data.type || "info").toUpperCase()}] ${data.event || data.message || ""}`
-			const payload = data.data || data
-			switch (data.type) {
-				case "error": {
-					// biome-ignore lint/suspicious/noConsole: Development logging
-					console.error(message, payload)
-					break
-				}
-				case "warn": {
-					// biome-ignore lint/suspicious/noConsole: Development logging
-					console.warn(message, payload)
-					break
-				}
-				case "info": {
-					// biome-ignore lint/suspicious/noConsole: Development logging
-					console.info(message, payload)
-					break
-				}
-				default: {
-					// biome-ignore lint/suspicious/noConsole: Development logging
-					console.log(message, payload)
-				}
-			}
+			this.logToConsole(data)
 			return
 		}
 
-		// In production, send to endpoint if configured
-		if (!this.endpoint) return
+		if (!this.endpoint) {
+			if (!this.hasReportedMissingEndpoint) {
+				// biome-ignore lint/suspicious/noConsole: Explicit production diagnostics when telemetry endpoint is missing
+				console.warn("[WARN] Telemetry endpoint is not configured. Falling back to console logging.")
+				this.hasReportedMissingEndpoint = true
+			}
+			this.logToConsole(data)
+			return
+		}
 
 		try {
+			const payload = {
+				...data,
+				timestamp: new Date().toISOString(),
+				url: window.location.href,
+				userAgent: navigator.userAgent,
+			}
 			// Fire and forget - don't await to avoid blocking
 			fetch(this.endpoint, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					...data,
-					timestamp: new Date().toISOString(),
-					url: window.location.href,
-					userAgent: navigator.userAgent,
-				}),
+				body: JSON.stringify(payload),
 				// Use keepalive for reliability
 				keepalive: true,
+			}).catch((error) => {
+				// biome-ignore lint/suspicious/noConsole: Explicit diagnostics for telemetry failures in production
+				console.error("[ERROR] Failed to send telemetry log", { error, payload })
 			})
-		} catch {
-			// Silent fail in production
+		} catch (error) {
+			// biome-ignore lint/suspicious/noConsole: Explicit diagnostics for telemetry setup failures in production
+			console.error("[ERROR] Failed to initialize telemetry log request", { error, data })
+			this.logToConsole(data)
+		}
+	}
+
+	logToConsole(data) {
+		const message = `[${String(data.type || "info").toUpperCase()}] ${data.event || data.message || ""}`
+		const payload = data.data || data
+		switch (data.type) {
+			case "error": {
+				// biome-ignore lint/suspicious/noConsole: Development/fallback logging
+				console.error(message, payload)
+				break
+			}
+			case "warn": {
+				// biome-ignore lint/suspicious/noConsole: Development/fallback logging
+				console.warn(message, payload)
+				break
+			}
+			case "info": {
+				// biome-ignore lint/suspicious/noConsole: Development/fallback logging
+				console.info(message, payload)
+				break
+			}
+			default: {
+				// biome-ignore lint/suspicious/noConsole: Development/fallback logging
+				console.log(message, payload)
+			}
 		}
 	}
 
@@ -163,6 +180,8 @@ class LoggerService {
 			throw error
 		}
 	}
+	endpoint = null
+	hasReportedMissingEndpoint = false
 }
 
 // Create singleton instance

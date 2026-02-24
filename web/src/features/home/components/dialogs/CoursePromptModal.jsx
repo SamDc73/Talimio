@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/D
 import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/Tooltip"
+import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
 import useAppStore, { selectSelfAssessmentEnabled, selectSetSelfAssessmentEnabled } from "@/stores/useAppStore"
 import SelfAssessmentDialog from "./SelfAssessmentDialog"
@@ -84,7 +85,13 @@ function normalizeAttachmentFile(file) {
 	try {
 		const lastModified = typeof file.lastModified === "number" ? file.lastModified : Date.now()
 		return new File([file], normalizedName, { type: file.type || undefined, lastModified })
-	} catch {
+	} catch (error) {
+		logger.warn("Failed to normalize attachment file metadata; using original file", {
+			error,
+			fileName,
+			normalizedName,
+			mimeType,
+		})
 		return file
 	}
 }

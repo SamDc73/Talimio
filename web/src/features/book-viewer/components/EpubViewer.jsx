@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ReactReader } from "react-reader"
 import { api as apiClient } from "@/lib/apiClient"
+import logger from "@/lib/logger"
 import { useBookActions, useBookReadingState, useBookZoomLevel } from "../hooks/use-book-state"
 
 function EpubViewer({ url, bookId, onProgressUpdate }) {
@@ -108,7 +109,12 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 						try {
 							rangeFromCfi = rendition?.getRange?.(cfiRange) || null
 							textFromCfi = rangeFromCfi?.toString?.() || null
-						} catch {}
+						} catch (error) {
+							logger.warn("Failed to derive EPUB selection range from CFI; falling back to DOM selection", {
+								error,
+								cfiRange,
+							})
+						}
 						const selectionText = sel?.toString?.().trim()
 						const text = (textFromCfi || selectionText || "").trim()
 						const range = rangeFromCfi || (sel?.rangeCount ? sel.getRangeAt(0) : null)
@@ -140,6 +146,9 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 								r = range ? range.getBoundingClientRect() : null
 							}
 						} catch {
+							logger.warn("Failed to compute EPUB selection client rect union; falling back to bounding rect", {
+								cfiRange,
+							})
 							r = range ? range.getBoundingClientRect() : null
 						}
 						const iframeEl = contents?.document?.defaultView?.frameElement || contents?.iframe
@@ -156,8 +165,8 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 						}
 
 						document.dispatchEvent(new CustomEvent("talimio-iframe-selection", { detail: { text, clientRect } }))
-					} catch {
-						// ignore
+					} catch (error) {
+						logger.warn("Failed to process EPUB selection event", { error, cfiRange })
 					}
 				}
 
@@ -225,8 +234,8 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 							height: r.height,
 						}
 						document.dispatchEvent(new CustomEvent("talimio-iframe-selection", { detail: { text, clientRect: rect } }))
-					} catch {
-						// ignore
+					} catch (error) {
+						logger.warn("Failed to bridge EPUB iframe selection event", { error })
 					}
 				}
 
@@ -237,8 +246,8 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 					idoc.removeEventListener("mouseup", handler)
 					idoc.removeEventListener("selectionchange", handler)
 				}
-			} catch {
-				// ignore cross-origin or timing issues
+			} catch (error) {
+				logger.warn("Failed to attach EPUB iframe selection listeners", { error })
 			}
 		}
 
@@ -269,8 +278,8 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 			attached.forEach((iframe) => {
 				try {
 					iframe.__askaiDetach?.()
-				} catch {
-					// ignore
+				} catch (error) {
+					logger.warn("Failed to detach EPUB iframe selection listeners", { error })
 				}
 			})
 			attached.clear()

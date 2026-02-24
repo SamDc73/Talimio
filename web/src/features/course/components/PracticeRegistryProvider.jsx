@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react"
 import { PracticeRegistryContext } from "@/features/course/hooks/use-practice-registry"
+import logger from "@/lib/logger"
 
 const normalizeHints = (hints) => {
 	if (!hints) {
@@ -20,7 +21,8 @@ const serializeValue = (value) => {
 	}
 	try {
 		return JSON.stringify(value)
-	} catch {
+	} catch (error) {
+		logger.warn("Failed to stringify practice registry value; coercing to string", { error, value })
 		return String(value)
 	}
 }
