@@ -145,7 +145,7 @@ class CoursesFacade:
             logger.exception("Error getting course %s for user %s", course_id, user_id)
             return {"error": "Failed to retrieve course", "success": False}
 
-        except Exception:
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
             logger.exception("Error getting course %s for user %s", course_id, user_id)
             return {"error": "Failed to retrieve course", "success": False}
 
@@ -175,7 +175,7 @@ class CoursesFacade:
 
             return {"course": course_response, "success": True}
 
-        except Exception:
+        except (HTTPException, SQLAlchemyError, RuntimeError, ValueError, TypeError):
             logger.exception("Error creating course for user %s", user_id)
             return {"error": "Failed to create course", "success": False}
 
@@ -211,7 +211,7 @@ class CoursesFacade:
 
             return {"course": course_response, "success": True}
 
-        except Exception as e:
+        except (HTTPException, SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
             logger.exception("Error generating AI course %s for user %s: %s", topic, user_id, e)
             return {"error": f"Failed to generate course: {e!s}", "success": False}
 
@@ -235,7 +235,7 @@ class CoursesFacade:
             updated_progress = await self._progress_service.update_progress(course_id, user_id, progress_data)
             return {"progress": updated_progress, "success": True}
 
-        except Exception as e:
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
             logger.exception("Error updating progress for course %s: %s", course_id, e)
             return {"error": f"Failed to update progress: {e!s}", "success": False}
 
@@ -250,7 +250,7 @@ class CoursesFacade:
 
             return {"course": course_response, "success": True}
 
-        except Exception:
+        except (HTTPException, SQLAlchemyError, RuntimeError, ValueError, TypeError):
             logger.exception("Error updating course %s", course_id)
             return {"error": "Failed to update course", "success": False}
 
@@ -271,7 +271,7 @@ class CoursesFacade:
                 user_id=user_id,
             )
             return {"courses": courses, "total": total, "success": True}
-        except Exception:
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
             logger.exception("Error listing courses for user %s", user_id)
             return {"error": "Failed to list courses", "success": False}
 
@@ -288,7 +288,7 @@ class CoursesFacade:
 
             return {"results": results, "success": True}
 
-        except Exception:
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
             logger.exception("Error searching courses for user %s", user_id)
             return {"error": "Search failed", "success": False}
 
@@ -320,7 +320,7 @@ class CoursesFacade:
 
             return {"courses": course_dicts, "success": True}
 
-        except Exception as e:
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
             logger.exception("Error getting courses for user %s: %s", user_id, e)
             return {"error": f"Failed to get courses: {e!s}", "success": False}
 
@@ -350,7 +350,7 @@ class CoursesFacade:
 
             return {"lessons": lessons_payload, "success": True}
 
-        except Exception:
+        except (HTTPException, SQLAlchemyError, RuntimeError, ValueError, TypeError):
             logger.exception("Error getting lessons for course %s", course_id)
             return {"error": "Failed to get lessons", "success": False}
 
