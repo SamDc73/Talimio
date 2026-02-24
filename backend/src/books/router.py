@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import uuid
 from collections.abc import AsyncGenerator, Coroutine
-from contextlib import suppress
 from typing import Annotated, Any
 
 import httpx
@@ -34,26 +32,11 @@ from .schemas import (
     BookUpdate,
     BookWithProgress,
 )
-from .services.book_metadata_service import BookMetadataService
 from .services.book_response_builder import BookResponseBuilder
 
 
 logger = logging.getLogger(__name__)
 _DETACHED_TASKS: set[asyncio.Task[Any]] = set()
-BOOK_RAG_STATUS_PENDING: BookRagStatus = "pending"
-BOOK_RAG_STATUS_PROCESSING: BookRagStatus = "processing"
-BOOK_RAG_STATUS_COMPLETED: BookRagStatus = "completed"
-BOOK_RAG_STATUS_FAILED: BookRagStatus = "failed"
-BOOK_RAG_CHUNK_COUNT_STATUSES: tuple[BookRagStatus, ...] = (
-    BOOK_RAG_STATUS_COMPLETED,
-    BOOK_RAG_STATUS_PROCESSING,
-)
-BOOK_RAG_STATUS_MESSAGES: dict[BookRagStatus, str] = {
-    BOOK_RAG_STATUS_PENDING: "Book is ready to read! AI chat will be available once processing completes.",
-    BOOK_RAG_STATUS_PROCESSING: "Book is being processed for AI chat. You can start reading now!",
-    BOOK_RAG_STATUS_COMPLETED: "Book is ready! AI chat is now available.",
-    BOOK_RAG_STATUS_FAILED: "Processing failed. AI chat is not available, but you can still read the book.",
-}
 
 router = APIRouter(prefix="/api/v1/books", tags=["books"])
 
@@ -136,13 +119,6 @@ def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
     task.add_done_callback(_DETACHED_TASKS.discard)
 
 
-async def _schedule_book_background_tasks(auth: CurrentAuth, book_id: uuid.UUID) -> None:
-    """Commit the created book row before running detached embed/tag tasks."""
-    await auth.session.commit()
-    _spawn_detached_task(_embed_book_background(book_id))
-    _spawn_detached_task(_auto_tag_book_background(book_id, auth.user_id))
-
-
 def _build_progress_dict(progress_data: BookProgressUpdate) -> dict:
     """Build progress dictionary from update request."""
     progress_dict = {}
@@ -193,44 +169,13 @@ async def list_books(
 ) -> BookListResponse:
     """List all books with pagination and optional filtering."""
     try:
-        # Initialize facade with user context
         facade = BooksFacade(auth.session)
-        result = await facade.get_user_books(auth.user_id, include_progress=True)
-
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result.get("error", "Failed to get books")
-            )
-
-        books = result.get("books", [])
-
-        # Apply search filter if provided
-        if search:
-            search_lower = search.lower()
-            books = [
-                book
-                for book in books
-                if search_lower in (book.title or "").lower()
-                or search_lower in (book.author or "").lower()
-                or search_lower in (book.description or "").lower()
-            ]
-
-        # Apply tag filter if provided
-        if tags:
-            books = [book for book in books if any(tag in (book.tags or []) for tag in tags)]
-
-        # Pagination
-        total = len(books)
-        start = (page - 1) * limit
-        end = start + limit
-        paginated_books = books[start:end]
-
-        # Convert to response format
-        return BookListResponse(
-            items=[BookResponse.model_validate(book) for book in paginated_books],
-            total=total,
+        return await facade.get_paginated_user_books(
+            user_id=auth.user_id,
             page=page,
-            pages=(total + limit - 1) // limit,
+            limit=limit,
+            search=search,
+            tags=tags,
         )
     except HTTPException:
         raise
@@ -292,74 +237,27 @@ async def create_book(
                 detail="Only PDF and EPUB files are supported",
             )
 
-        # Upload file to storage
-        storage = get_storage_provider()
         file_content = await file.read()
-
-        # Generate the storage key
-        storage_key = f"books/{auth.user_id!s}/{file.filename}"
-        logger.info("Uploading file to storage: %s", storage_key)
-
-        # Upload the file (returns None, we use the key as the path)
-        await storage.upload(file_content, storage_key)
-
-        # Extract metadata if needed
-        metadata_service = BookMetadataService()
-        metadata = metadata_service.extract_metadata(file_content, f".{file_extension}")
-        logger.info(
-            "Extracted metadata - title: %s, author: %s, pages: %s",
-            metadata.title,
-            metadata.author,
-            metadata.total_pages,
-        )
-
-        # Calculate file hash
-        file_hash = hashlib.sha256(file_content).hexdigest()
-
-        # Smart metadata priority: use extracted metadata when form data looks like filename hints
-        filename_without_ext = file.filename.rsplit(".", 1)[0] if file.filename else ""
-
-        # Use extracted title if it exists and form title looks like filename
-        final_title = title
-        if metadata.title and (not title or title == filename_without_ext):
-            final_title = metadata.title
-
-        # Use extracted author if it exists and no author provided or author is empty
-        final_author = author
-        if metadata.author and (not author or not author.strip()):
-            final_author = metadata.author
-
-        # Build book data combining form data with extracted metadata
-        book_metadata = {
-            "title": final_title,
-            "subtitle": subtitle or metadata.subtitle,
-            "author": final_author,
-            "description": description or metadata.description,
-            "isbn": isbn or metadata.isbn,
-            "language": language or metadata.language,
-            "publication_year": publication_year or metadata.publication_year,
-            "publisher": publisher or metadata.publisher,
-            "tags": tags_list,
-            "file_type": file_extension,
-            "file_size": len(file_content),
-            "total_pages": metadata.total_pages or 0,
-            "file_hash": file_hash,
-            "table_of_contents": json.dumps(metadata.table_of_contents) if metadata.table_of_contents else None,
-        }
-
-        # Upload book through facade
         facade = BooksFacade(auth.session)
-        result = await facade.upload_book(
+        result = await facade.create_book_from_upload(
             user_id=auth.user_id,
-            file_path=storage_key,
-            title=final_title,
-            metadata=book_metadata,
+            filename=file.filename,
+            file_content=file_content,
+            title=title,
+            author=author,
+            subtitle=subtitle,
+            description=description,
+            isbn=isbn,
+            language=language,
+            publication_year=publication_year,
+            publisher=publisher,
+            tags=tags_list,
+            spawn_detached_task=_spawn_detached_task,
+            embed_book_background=_embed_book_background,
+            auto_tag_book_background=_auto_tag_book_background,
         )
 
         if not result.get("success"):
-            # Clean up uploaded file on failure
-            with suppress(OSError, RuntimeError, ValueError):
-                await storage.delete(storage_key)
             if result.get("error_code") == "duplicate_file":
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
@@ -371,11 +269,6 @@ async def create_book(
             )
 
         book_response = result.get("book")
-        book_id = result.get("book_id")
-
-        if book_id:
-            await _schedule_book_background_tasks(auth, book_id)
-
         if not isinstance(book_response, BookResponse):
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to build book response")
         return book_response
@@ -674,36 +567,13 @@ async def update_book_chapter_status(
 ) -> BookTocChapterResponse:
     """Update the status of a book chapter."""
     try:
-        # Use mark_chapter_complete on the facade
-        completed = status_data.status == "completed"
         facade = BooksFacade(auth.session)
-        result = await facade.mark_chapter_complete(book_id, auth.user_id, chapter_id, completed)
-
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get("error", "Failed to update chapter status"),
-            )
-
-        chapters_result = await facade.get_book_chapters(book_id, auth.user_id)
-        if not chapters_result.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=chapters_result.get("error", "Failed to load updated chapter data"),
-            )
-
-        raw_chapters = chapters_result.get("chapters", [])
-        for raw_chapter in raw_chapters:
-            if str(raw_chapter.get("id", "")) == chapter_id:
-                return BookTocChapterResponse.model_validate(raw_chapter)
-
-        fallback_payload: dict[str, Any] = {
-            "id": chapter_id,
-            "title": "Chapter",
-            "completed": completed,
-            "children": [],
-        }
-        return BookTocChapterResponse.model_validate(fallback_payload)
+        return await facade.update_book_chapter_status(
+            book_id=book_id,
+            user_id=auth.user_id,
+            chapter_id=chapter_id,
+            status=status_data.status,
+        )
     except HTTPException:
         raise
     except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
@@ -725,34 +595,12 @@ class RAGStatusResponse(BaseModel):
 @router.get("/{book_id}/rag-status")
 async def get_book_rag_status(book_id: uuid.UUID, auth: CurrentAuth) -> RAGStatusResponse:
     """Get the RAG embedding status for a book."""
-    from src.books.models import Book
-
-    # Use auth context helper for ownership check
-    book = await auth.get_or_404(Book, book_id, "book")
-
-    # Get chunk count if available
-    chunk_count = None
-    if book.rag_status in BOOK_RAG_CHUNK_COUNT_STATUSES:
-        try:
-            from sqlalchemy import text
-
-            count_result = await auth.session.execute(
-                text("SELECT COUNT(*) FROM rag_document_chunks WHERE doc_id = :doc_id"), {"doc_id": str(book_id)}
-            )
-            chunk_count = count_result.scalar()
-        except SQLAlchemyError:
-            logger.debug("Could not count RAG chunks")
-
-    # Get error details if failed
-    error_details = None
-    if book.rag_status == BOOK_RAG_STATUS_FAILED and hasattr(book, "rag_error"):
-        error_details = getattr(book, "rag_error", None)
-
-    return RAGStatusResponse(
-        book_id=book_id,
-        rag_status=book.rag_status,
-        rag_processed_at=book.rag_processed_at.isoformat() if book.rag_processed_at else None,
-        message=BOOK_RAG_STATUS_MESSAGES.get(book.rag_status, "Unknown status"),
-        chunk_count=chunk_count,
-        error_details=error_details,
-    )
+    try:
+        facade = BooksFacade(auth.session)
+        payload = await facade.get_book_rag_status_payload(book_id=book_id, user_id=auth.user_id)
+        return RAGStatusResponse.model_validate(payload)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    except (SQLAlchemyError, RuntimeError, TypeError) as error:
+        logger.exception("Error getting RAG status for book %s: %s", book_id, error)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error

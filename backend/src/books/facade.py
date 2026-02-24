@@ -8,18 +8,30 @@ Session-bound: uses the injected AsyncSession for all operations.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import uuid
+from collections.abc import Callable, Coroutine
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from src.books.models import Book
-from src.books.schemas import BookResponse, BookWithProgress
+from src.books.schemas import (
+    BookLearningStatus,
+    BookListResponse,
+    BookRagStatus,
+    BookResponse,
+    BookTocChapterResponse,
+    BookWithProgress,
+)
+from src.storage.factory import get_storage_provider
 
 from .services.book_content_service import BookContentService
+from .services.book_metadata_service import BookMetadataService
 from .services.book_progress_service import BookProgressService
 from .services.book_response_builder import BookResponseBuilder
 
@@ -29,6 +41,20 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+BOOK_RAG_STATUS_PENDING: BookRagStatus = "pending"
+BOOK_RAG_STATUS_PROCESSING: BookRagStatus = "processing"
+BOOK_RAG_STATUS_COMPLETED: BookRagStatus = "completed"
+BOOK_RAG_STATUS_FAILED: BookRagStatus = "failed"
+BOOK_RAG_CHUNK_COUNT_STATUSES: tuple[BookRagStatus, ...] = (
+    BOOK_RAG_STATUS_COMPLETED,
+    BOOK_RAG_STATUS_PROCESSING,
+)
+BOOK_RAG_STATUS_MESSAGES: dict[BookRagStatus, str] = {
+    BOOK_RAG_STATUS_PENDING: "Book is ready to read! AI chat will be available once processing completes.",
+    BOOK_RAG_STATUS_PROCESSING: "Book is being processed for AI chat. You can start reading now!",
+    BOOK_RAG_STATUS_COMPLETED: "Book is ready! AI chat is now available.",
+    BOOK_RAG_STATUS_FAILED: "Processing failed. AI chat is not available, but you can still read the book.",
+}
 
 
 class BooksFacade:
@@ -93,6 +119,143 @@ class BooksFacade:
                 extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)},
             )
             raise
+
+    async def get_paginated_user_books(
+        self,
+        user_id: uuid.UUID,
+        page: int = 1,
+        limit: int = 20,
+        search: str | None = None,
+        tags: list[str] | None = None,
+    ) -> BookListResponse:
+        """List books for a user with filtering and pagination."""
+        result = await self.get_user_books(user_id, include_progress=True)
+        if not result.get("success"):
+            msg = str(result.get("error", "Failed to get books"))
+            raise RuntimeError(msg)
+
+        books = result.get("books", [])
+
+        if search:
+            search_lower = search.lower()
+            books = [
+                book
+                for book in books
+                if search_lower in (book.get("title") or "").lower()
+                or search_lower in (book.get("author") or "").lower()
+                or search_lower in (book.get("description") or "").lower()
+            ]
+
+        if tags:
+            books = [book for book in books if any(tag in (book.get("tags") or []) for tag in tags)]
+
+        total = len(books)
+        start = (page - 1) * limit
+        end = start + limit
+        paginated_books = books[start:end]
+
+        return BookListResponse(
+            items=[BookResponse.model_validate(book) for book in paginated_books],
+            total=total,
+            page=page,
+            pages=(total + limit - 1) // limit,
+        )
+
+    async def create_book_from_upload(
+        self,
+        user_id: uuid.UUID,
+        filename: str,
+        file_content: bytes,
+        title: str,
+        author: str | None = None,
+        subtitle: str | None = None,
+        description: str | None = None,
+        isbn: str | None = None,
+        language: str | None = None,
+        publication_year: int | None = None,
+        publisher: str | None = None,
+        tags: list[str] | None = None,
+        spawn_detached_task: Callable[[Coroutine[Any, Any, None]], None] | None = None,
+        embed_book_background: Callable[[uuid.UUID], Coroutine[Any, Any, None]] | None = None,
+        auto_tag_book_background: Callable[[uuid.UUID, uuid.UUID], Coroutine[Any, Any, None]] | None = None,
+    ) -> dict[str, Any]:
+        """Create a book from uploaded file bytes and metadata payload."""
+        file_extension = filename.lower().split(".")[-1]
+        storage_key = f"books/{user_id!s}/{filename}"
+
+        storage = get_storage_provider()
+        logger.info("Uploading file to storage: %s", storage_key)
+        await storage.upload(file_content, storage_key)
+
+        metadata_service = BookMetadataService()
+        metadata = metadata_service.extract_metadata(file_content, f".{file_extension}")
+        logger.info(
+            "Extracted metadata - title: %s, author: %s, pages: %s",
+            metadata.title,
+            metadata.author,
+            metadata.total_pages,
+        )
+
+        file_hash = hashlib.sha256(file_content).hexdigest()
+        filename_without_ext = filename.rsplit(".", 1)[0]
+
+        final_title = title
+        if metadata.title and (not title or title == filename_without_ext):
+            final_title = metadata.title
+
+        final_author = author
+        if metadata.author and (not author or not author.strip()):
+            final_author = metadata.author
+
+        book_metadata = {
+            "title": final_title,
+            "subtitle": subtitle or metadata.subtitle,
+            "author": final_author,
+            "description": description or metadata.description,
+            "isbn": isbn or metadata.isbn,
+            "language": language or metadata.language,
+            "publication_year": publication_year or metadata.publication_year,
+            "publisher": publisher or metadata.publisher,
+            "tags": tags or [],
+            "file_type": file_extension,
+            "file_size": len(file_content),
+            "total_pages": metadata.total_pages or 0,
+            "file_hash": file_hash,
+            "table_of_contents": json.dumps(metadata.table_of_contents) if metadata.table_of_contents else None,
+        }
+
+        result = await self.upload_book(
+            user_id=user_id,
+            file_path=storage_key,
+            title=final_title,
+            metadata=book_metadata,
+        )
+
+        if not result.get("success"):
+            with suppress(OSError, RuntimeError, ValueError):
+                await storage.delete(storage_key)
+            return {
+                "error": result.get("error", "Failed to create book"),
+                "error_code": result.get("error_code"),
+                "success": False,
+            }
+
+        book_id = result.get("book_id")
+        if (
+            book_id
+            and spawn_detached_task is not None
+            and embed_book_background is not None
+            and auto_tag_book_background is not None
+        ):
+            await self._session.commit()
+            spawn_detached_task(embed_book_background(book_id))
+            spawn_detached_task(auto_tag_book_background(book_id, user_id))
+
+        book_response = result.get("book")
+        if not isinstance(book_response, BookResponse):
+            return {"error": "Failed to build book response", "success": False}
+
+        return {"book": book_response, "success": True}
 
     async def upload_book(
         self,
@@ -260,6 +423,65 @@ class BooksFacade:
                 extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)},
             )
             return {"error": "Failed to get chapters", "success": False}
+
+    async def update_book_chapter_status(
+        self,
+        book_id: uuid.UUID,
+        user_id: uuid.UUID,
+        chapter_id: str,
+        status: BookLearningStatus,
+    ) -> BookTocChapterResponse:
+        """Update chapter status and return canonical chapter payload."""
+        completed = status == "completed"
+        result = await self.mark_chapter_complete(book_id, user_id, chapter_id, completed)
+        if not result.get("success"):
+            msg = str(result.get("error", "Failed to update chapter status"))
+            raise RuntimeError(msg)
+
+        chapters_result = await self.get_book_chapters(book_id, user_id)
+        if not chapters_result.get("success"):
+            msg = str(chapters_result.get("error", "Failed to load updated chapter data"))
+            raise RuntimeError(msg)
+
+        raw_chapters = chapters_result.get("chapters", [])
+        for raw_chapter in raw_chapters:
+            if str(raw_chapter.get("id", "")) == chapter_id:
+                return BookTocChapterResponse.model_validate(raw_chapter)
+
+        msg = f"Updated chapter {chapter_id} was not found in book {book_id}"
+        raise RuntimeError(msg)
+
+    async def get_book_rag_status_payload(self, book_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
+        """Get RAG status payload for a book owned by a user."""
+        result = await self._session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
+        book = result.scalar_one_or_none()
+        if not book:
+            msg = "Book not found"
+            raise ValueError(msg)
+
+        chunk_count = None
+        if book.rag_status in BOOK_RAG_CHUNK_COUNT_STATUSES:
+            try:
+                count_result = await self._session.execute(
+                    text("SELECT COUNT(*) FROM rag_document_chunks WHERE doc_id = :doc_id"),
+                    {"doc_id": str(book_id)},
+                )
+                chunk_count = count_result.scalar()
+            except SQLAlchemyError:
+                logger.debug("Could not count RAG chunks")
+
+        error_details = None
+        if book.rag_status == BOOK_RAG_STATUS_FAILED and hasattr(book, "rag_error"):
+            error_details = getattr(book, "rag_error", None)
+
+        return {
+            "book_id": book_id,
+            "rag_status": book.rag_status,
+            "rag_processed_at": book.rag_processed_at.isoformat() if book.rag_processed_at else None,
+            "message": BOOK_RAG_STATUS_MESSAGES.get(book.rag_status, "Unknown status"),
+            "chunk_count": chunk_count,
+            "error_details": error_details,
+        }
 
     async def mark_chapter_complete(
         self, book_id: uuid.UUID, user_id: uuid.UUID, chapter_id: str, completed: bool = True
