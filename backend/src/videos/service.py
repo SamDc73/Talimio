@@ -5,13 +5,12 @@ import re
 import uuid
 from collections.abc import Coroutine
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import aiohttp
 import yt_dlp
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
 from src.ai.rag.service import RAGService
@@ -33,6 +32,10 @@ from src.videos.services.video_progress_service import VideoProgressService
 
 
 logger = logging.getLogger(__name__)
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 CHAPTER_EXTRACTION_MAX_RETRIES = 3
 CHAPTER_EXTRACTION_RETRY_DELAY_SECONDS = 2
@@ -93,7 +96,7 @@ async def _embed_video_background(video_id: uuid.UUID) -> None:
         try:
             await RAGService().process_video(session, video_id)
             await session.commit()
-        except Exception:
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
             try:
                 await session.commit()
             except SQLAlchemyError:
@@ -155,7 +158,7 @@ async def _auto_tag_video_background(video_id: uuid.UUID, user_id: uuid.UUID) ->
             )
             await db.commit()
             logger.info("Successfully tagged video %s with tags: %s", video_id, tags)
-    except Exception:
+    except (SQLAlchemyError, RuntimeError, ValueError, TypeError, OSError):
         logger.exception("Failed to tag video %s", video_id)
 
 
@@ -257,7 +260,15 @@ async def _extract_chapters_background(video_id: uuid.UUID, user_id: uuid.UUID) 
             logger.exception("Failed to extract chapters for video %s on attempt %s: %s", video_id, attempt + 1, e)
             await _mark_video_status(video_id, VIDEO_PIPELINE_STATUS_FAILED, " after ValueError")
             return
-        except Exception as e:
+        except (
+            SQLAlchemyError,
+            RuntimeError,
+            TimeoutError,
+            ConnectionError,
+            OSError,
+            yt_dlp.utils.DownloadError,
+            yt_dlp.utils.ExtractorError,
+        ) as e:
             if attempt < max_retries - 1:
                 logger.warning(
                     "Chapter extraction failed for video %s on attempt %s, retrying in %ss: %s",
@@ -310,13 +321,23 @@ async def _process_transcript_to_jsonb(video_id: uuid.UUID) -> None:
                 logger.info("Stored %s transcript segments for video %s", len(segments), video_id)
                 await _embed_video_background(video.id)
 
-    except Exception as e:
     except StaleDataError:
         if await _video_exists(video_id):
             logger.exception("Failed to process transcript segments for video %s due to stale row state", video_id)
             return
         logger.info("Stopping transcript processing for deleted video %s", video_id)
-    except Exception as e:
+    except (
+        SQLAlchemyError,
+        RuntimeError,
+        TimeoutError,
+        ConnectionError,
+        OSError,
+        ValueError,
+        TypeError,
+        aiohttp.ClientError,
+        yt_dlp.utils.DownloadError,
+        yt_dlp.utils.ExtractorError,
+    ) as e:
         logger.exception("Failed to process transcript segments for video %s: %s", video_id, e)
 
 
@@ -574,7 +595,16 @@ class VideoService:
                 "tags": info.get("tags", []),
                 "published_at": published_at,
             }
-        except Exception as e:
+        except (
+            RuntimeError,
+            TimeoutError,
+            ConnectionError,
+            OSError,
+            ValueError,
+            TypeError,
+            yt_dlp.utils.DownloadError,
+            yt_dlp.utils.ExtractorError,
+        ) as e:
             logger.exception("Error fetching video info: %s", e)
             # Return minimal info instead of failing completely
             # Extract video ID from URL
@@ -782,7 +812,16 @@ class VideoService:
         # Extract chapters using yt-dlp
         try:
             chapters_info = await self._fetch_video_chapters(video.url)
-        except Exception as e:
+        except (
+            RuntimeError,
+            TimeoutError,
+            ConnectionError,
+            OSError,
+            ValueError,
+            TypeError,
+            yt_dlp.utils.DownloadError,
+            yt_dlp.utils.ExtractorError,
+        ) as e:
             logger.exception("Failed to extract chapters for video %s", video_id)
             msg = f"Failed to extract chapters: {e!s}"
             raise ValueError(msg) from e
@@ -914,7 +953,19 @@ class VideoService:
                 "total_segments": len(segments),
             }
             return VideoTranscriptResponse.model_validate(response_payload)
-        except Exception as e:
+        except (
+            SQLAlchemyError,
+            RuntimeError,
+            TimeoutError,
+            ConnectionError,
+            OSError,
+            ValueError,
+            TypeError,
+            KeyError,
+            aiohttp.ClientError,
+            yt_dlp.utils.DownloadError,
+            yt_dlp.utils.ExtractorError,
+        ) as e:
             logger.exception("Failed to get transcript segments for video %s", video_id)
             msg = f"Failed to get transcript segments: {e!s}"
             raise ValueError(msg) from e
@@ -964,7 +1015,17 @@ class VideoService:
                     content = await response.text()
                     return self._parse_srt_segments(content)
 
-        except Exception as e:
+        except (
+            RuntimeError,
+            TimeoutError,
+            ConnectionError,
+            OSError,
+            ValueError,
+            TypeError,
+            aiohttp.ClientError,
+            yt_dlp.utils.DownloadError,
+            yt_dlp.utils.ExtractorError,
+        ) as e:
             logger.exception("Failed to extract transcript segments for %s: %s", video_url, e)
             return []
 
@@ -1031,7 +1092,16 @@ class VideoService:
                 for chapter in chapters
             ]
 
-        except Exception as e:
+        except (
+            RuntimeError,
+            TimeoutError,
+            ConnectionError,
+            OSError,
+            ValueError,
+            TypeError,
+            yt_dlp.utils.DownloadError,
+            yt_dlp.utils.ExtractorError,
+        ) as e:
             logger.exception("Error fetching video chapters: %s", e)
             return []
 

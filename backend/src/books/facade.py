@@ -6,8 +6,6 @@ Coordinates internal book services and provides a stable API for other modules.
 Session-bound: uses the injected AsyncSession for all operations.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 import logging
@@ -33,7 +31,7 @@ from src.database.session import async_session_maker
 from src.storage.factory import get_storage_provider
 
 from .services.book_content_service import BookContentService
-from .services.book_metadata_service import BookMetadataService
+from .services.book_metadata_service import BookMetadata, BookMetadataExtractionError, BookMetadataService
 from .services.book_progress_service import BookProgressService
 from .services.book_response_builder import BookResponseBuilder
 
@@ -208,7 +206,15 @@ class BooksFacade:
         await storage.upload(file_content, storage_key)
 
         metadata_service = BookMetadataService()
-        metadata = metadata_service.extract_metadata(file_content, f".{file_extension}")
+        try:
+            metadata = metadata_service.extract_metadata(file_content, f".{file_extension}")
+        except BookMetadataExtractionError as error:
+            logger.warning(
+                "Metadata extraction failed for %s; continuing upload with fallback metadata: %s",
+                filename,
+                error,
+            )
+            metadata = BookMetadata(file_type=file_extension)
         logger.info(
             "Extracted metadata - title: %s, author: %s, pages: %s",
             metadata.title,

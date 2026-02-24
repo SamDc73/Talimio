@@ -3,13 +3,12 @@
 
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException, status
 from pydantic import ValidationError
 from sqlalchemy import and_, delete, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.highlights.interfaces import HighlightInterface
 from src.highlights.models import Highlight
@@ -19,6 +18,10 @@ from src.videos.models import Video
 
 
 logger = logging.getLogger(__name__)
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class VideoHighlightService(HighlightInterface):
@@ -69,7 +72,7 @@ class VideoHighlightService(HighlightInterface):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
             ) from e
-        except Exception as e:
+        except (AttributeError, RuntimeError, TypeError, ValueError) as e:
             logger.exception("Unexpected error creating video highlight: %s", e)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"
@@ -156,7 +159,7 @@ class VideoHighlightService(HighlightInterface):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
             ) from e
-        except Exception as e:
+        except (AttributeError, RuntimeError, TypeError, ValueError) as e:
             logger.exception("Unexpected error updating video highlight %s: %s", highlight_id, e)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"
@@ -181,7 +184,7 @@ class VideoHighlightService(HighlightInterface):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
             ) from e
-        except Exception as e:
+        except (AttributeError, RuntimeError, TypeError, ValueError) as e:
             logger.exception("Unexpected error deleting video highlight %s: %s", highlight_id, e)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"

@@ -1,16 +1,16 @@
-
 """Core tagging service for content classification."""
 
 import json
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai.client import LLMClient
+from src.ai.errors import AIRateLimitOrQuotaError, AIRuntimeError
 from src.ai.prompts import CONTENT_TAGGING_PROMPT
 from src.config.settings import get_settings
 
@@ -21,10 +21,8 @@ from .schemas import TagWithConfidence
 logger = logging.getLogger(__name__)
 
 
-def _is_rate_limit_or_quota_error(error: Exception) -> bool:
-    """Return True when the error indicates provider-side rate limiting/quota exhaustion."""
-    lowered = str(error).lower()
-    return "insufficient_quota" in lowered or "ratelimiterror" in lowered or "rate limit" in lowered
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class TaggedContent(BaseModel):
@@ -54,10 +52,11 @@ class TaggingService:
         settings = get_settings()
         model = settings.TAGGING_LLM_MODEL
         if not model:
-            try:
-                model = settings.primary_llm_model
+            primary_model = getattr(settings, "primary_llm_model", None)
+            if primary_model:
+                model = primary_model
                 logger.info("TAGGING_LLM_MODEL not set; falling back to PRIMARY_LLM_MODEL: %s", model)
-            except (AttributeError, RuntimeError, ValueError):
+            else:
                 logger.warning("No TAGGING_LLM_MODEL and PRIMARY_LLM_MODEL unavailable; skipping tag generation")
                 return []
 
@@ -75,11 +74,11 @@ class TaggingService:
                 model=model,
                 num_retries=0,
             )
-        except Exception as exc:
-            if _is_rate_limit_or_quota_error(exc):
-                logger.warning("Skipping auto-tag generation due to provider quota/rate limit: %s", exc)
-            else:
-                logger.exception("Error generating tags via LiteLLM: %s", exc)
+        except AIRateLimitOrQuotaError as error:
+            logger.warning("Skipping auto-tag generation due to provider quota/rate limit: %s", error)
+            return []
+        except (AIRuntimeError, RuntimeError, ValueError, TypeError) as error:
+            logger.exception("Error generating tags via LiteLLM: %s", error)
             return []
 
         if not isinstance(result, TaggedContent):
@@ -143,8 +142,8 @@ class TaggingService:
 
             return tag_names
 
-        except Exception as e:
-            logger.exception("Error tagging content %s: %s", content_id, e)
+        except (AIRuntimeError, SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
+            logger.exception("Error tagging content %s: %s", content_id, error)
             return []
 
     async def suggest_tags(

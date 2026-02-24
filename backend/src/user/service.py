@@ -3,12 +3,12 @@
 
 import logging
 import uuid
+from typing import TYPE_CHECKING
 
 from psycopg.errors import ForeignKeyViolation
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.memory import add_memory, delete_all_memories, delete_memory, get_memories
 from src.user.models import UserPreferences as UserPreferencesModel
@@ -22,6 +22,10 @@ from src.user.schemas import (
 
 
 logger = logging.getLogger(__name__)
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class UserServiceError(Exception):
@@ -176,7 +180,7 @@ async def update_custom_instructions(
 
     except UserServiceError:
         raise
-    except Exception as error:
+    except (SQLAlchemyError, ValidationError, TypeError, ValueError) as error:
         logger.exception("Error updating custom instructions for %s", user_id)
         raise UserPreferencesPersistenceError from error
 
@@ -208,7 +212,7 @@ async def get_user_memories(user_id: uuid.UUID, agent_id: str | None = None, *, 
 
         return formatted_memories
 
-    except Exception as error:
+    except (RuntimeError, TimeoutError, TypeError, ValueError) as error:
         logger.exception("Error getting memories for user %s", user_id)
         raise UserMemoryAccessError from error
 
@@ -227,7 +231,7 @@ async def delete_user_memory(user_id: uuid.UUID, memory_id: str) -> bool:
     """
     try:
         return await delete_memory(user_id, memory_id)
-    except Exception as error:
+    except (RuntimeError, TimeoutError, TypeError, ValueError) as error:
         logger.exception("Error deleting memory %s for user %s", memory_id, user_id)
         raise UserMemoryAccessError from error
 
@@ -236,7 +240,7 @@ async def clear_user_memories(user_id: uuid.UUID, agent_id: str | None = None) -
     """Clear all memories for a user, optionally scoped to a specific agent."""
     try:
         return await delete_all_memories(user_id, agent_id=agent_id)
-    except Exception as error:
+    except (RuntimeError, TimeoutError, TypeError, ValueError) as error:
         logger.exception("Error clearing memories for user %s", user_id)
         raise UserMemoryAccessError from error
 
@@ -282,6 +286,6 @@ async def update_user_preferences(
         return PreferencesUpdateResponse(preferences=merged_preferences, updated=success)
     except UserServiceError:
         raise
-    except Exception as error:
+    except (SQLAlchemyError, ValidationError, TypeError, ValueError) as error:
         logger.exception("Error updating preferences for user %s", user_id)
         raise UserPreferencesPersistenceError from error

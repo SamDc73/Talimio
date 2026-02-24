@@ -1,18 +1,20 @@
-
 """Main content service."""
 
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_transform_service import ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 # Progress calculation imports removed - progress now fetched separately
@@ -127,7 +129,7 @@ class ContentService:
 
                 storage = get_storage_provider()
                 await storage.delete(row.file_path)
-            except Exception:
+            except (OSError, RuntimeError, TypeError, ValueError):
                 logger.exception("Non-fatal: failed to delete stored file for book")
 
     async def _delete_course_document_files(self, session: AsyncSession, course_id: uuid.UUID) -> None:

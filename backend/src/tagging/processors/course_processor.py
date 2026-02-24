@@ -1,18 +1,21 @@
-
 """Course content processor for tag generation."""
 
 import json
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.courses.models import Course, Lesson
 
 
 logger = logging.getLogger(__name__)
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class CourseProcessor:
@@ -57,8 +60,8 @@ class CourseProcessor:
                 "content_preview": content_preview,
             }
 
-        except Exception as e:
-            logger.exception("Error extracting course content for tagging: %s", e)
+        except SQLAlchemyError as error:
+            logger.exception("Error extracting course content for tagging: %s", error)
             return {
                 "title": course.title,
                 "content_preview": course.description or "",

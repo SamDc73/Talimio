@@ -1,8 +1,6 @@
 
 """Book progress service for tracking reading progress."""
 
-from __future__ import annotations
-
 import json
 import logging
 import uuid
@@ -23,11 +21,47 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
+class BookProgressRecomputeError(RuntimeError):
+    """Raised when ToC-based completion percentage recomputation fails."""
+
+
 class BookProgressService(ProgressTracker):
     """Progress service for books implementing ProgressTracker."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def _recompute_completion_percentage(
+        self,
+        *,
+        content_id: uuid.UUID,
+        user_id: uuid.UUID,
+        book: Book,
+        toc_progress: dict[str, Any],
+        operation: str,
+    ) -> float:
+        """Recompute completion percentage and raise a typed error on invalid ToC progress data."""
+        try:
+            recomputed_percentage = await self.get_book_toc_progress_percentage(
+                content_id,
+                user_id,
+                book,
+                toc_progress,
+            )
+        except (TypeError, ValueError, ZeroDivisionError) as error:
+            logger.warning(
+                "Failed to recompute book progress percentage",
+                extra={
+                    "user_id": str(user_id),
+                    "book_id": str(content_id),
+                    "operation": operation,
+                    "error": str(error),
+                },
+            )
+            message = f"Failed to recompute book progress percentage during {operation}"
+            raise BookProgressRecomputeError(message) from error
+
+        return float(recomputed_percentage)
 
     async def initialize_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, total_pages: int = 0) -> None:
         """Initialize progress tracking for a new book."""
@@ -86,16 +120,13 @@ class BookProgressService(ProgressTracker):
         progress_percentage = progress_data.progress_percentage or 0
 
         if book and book.table_of_contents and toc_progress and progress_percentage == 0:
-            try:
-                progress_percentage = await self.get_book_toc_progress_percentage(
-                    content_id, user_id, book, toc_progress
-                )
-            except (TypeError, ValueError, ZeroDivisionError) as e:
-                logger.warning(
-                    "Failed to calculate book progress percentage",
-                    extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(e)},
-                )
-                progress_percentage = 0
+            progress_percentage = await self._recompute_completion_percentage(
+                content_id=content_id,
+                user_id=user_id,
+                book=book,
+                toc_progress=toc_progress,
+                operation="get_progress",
+            )
 
         return {
             "page": metadata.get("current_page", 0),
@@ -153,15 +184,13 @@ class BookProgressService(ProgressTracker):
             book = book_result.scalar_one_or_none()
 
             if book and book.table_of_contents and metadata["toc_progress"]:
-                try:
-                    completion_percentage = await self.get_book_toc_progress_percentage(
-                        content_id, user_id, book, metadata["toc_progress"]
-                    )
-                except (TypeError, ValueError, ZeroDivisionError) as e:
-                    logger.warning(
-                        "Failed to recalculate book progress percentage",
-                        extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(e)},
-                    )
+                completion_percentage = await self._recompute_completion_percentage(
+                    content_id=content_id,
+                    user_id=user_id,
+                    book=book,
+                    toc_progress=metadata["toc_progress"],
+                    operation="update_progress",
+                )
 
         # Update zoom level if provided
         if "zoom_level" in progress_data:
@@ -230,16 +259,13 @@ class BookProgressService(ProgressTracker):
         # Recalculate completion percentage
         completion_percentage = 0
         if book and book.table_of_contents:
-            try:
-                completion_percentage = await self.get_book_toc_progress_percentage(
-                    content_id, user_id, book, toc_progress
-                )
-            except (TypeError, ValueError, ZeroDivisionError) as e:
-                logger.warning(
-                    "Failed to recalculate book progress percentage",
-                    extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(e)},
-                )
-                completion_percentage = current_progress.progress_percentage if current_progress else 0
+            completion_percentage = await self._recompute_completion_percentage(
+                content_id=content_id,
+                user_id=user_id,
+                book=book,
+                toc_progress=toc_progress,
+                operation="mark_chapter_complete",
+            )
 
         # Update progress
         progress_update = ProgressUpdate(progress_percentage=completion_percentage, metadata=metadata)

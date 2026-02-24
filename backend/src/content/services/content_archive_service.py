@@ -1,16 +1,19 @@
-
 """Content archive service."""
 
 import logging
 import uuid
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_transform_service import ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)
@@ -141,7 +144,11 @@ class ContentArchiveService:
         # Construct the combined query with archived filter
         if content_type:
             if content_type == ContentType.VIDEO:
-                combined_query = QueryBuilderService.get_video_query(search, archived_only=True)
+                combined_query = QueryBuilderService.get_video_query(
+                    search,
+                    archived_only=True,
+                    user_id=current_user_id,
+                )
             elif content_type == ContentType.BOOK:
                 combined_query = QueryBuilderService.get_books_query(
                     search, archived_only=True, user_id=current_user_id
@@ -156,7 +163,7 @@ class ContentArchiveService:
         else:
             # Union all content types with archived filter
             combined_query = f"""
-                {QueryBuilderService.get_video_query(search, archived_only=True)}
+                {QueryBuilderService.get_video_query(search, archived_only=True, user_id=current_user_id)}
                 UNION ALL
                 {QueryBuilderService.get_books_query(search, archived_only=True, user_id=current_user_id)}
                 UNION ALL

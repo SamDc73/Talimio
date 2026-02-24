@@ -6,15 +6,20 @@ import os
 import uuid
 from contextlib import redirect_stderr
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import fitz  # PyMuPDF
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book
+from src.storage.exceptions import StorageError
 from src.storage.factory import get_storage_provider
 
 
 logger = logging.getLogger(__name__)
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class BookProcessor:
@@ -67,7 +72,7 @@ class BookProcessor:
                 "content_preview": combined_preview,
             }
 
-        except Exception as e:
+        except (OSError, RuntimeError, TypeError, ValueError) as e:
             logger.exception("Error extracting book content for tagging: %s", e)
             return {
                 "title": book.title,
@@ -284,8 +289,8 @@ async def process_book_for_tagging(
         processor = BookProcessor(session)
         return await processor.extract_content_for_tagging(book, file_content, file_extension)
 
-    except Exception as e:
-        logger.exception("Error downloading or processing book file: %s", e)
+    except StorageError as error:
+        logger.exception("Error downloading or processing book file: %s", error)
         # Return basic info from database as fallback
         return {
             "title": book.title,
