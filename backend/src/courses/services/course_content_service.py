@@ -1037,9 +1037,6 @@ class CourseContentService:
             if lesson_slug is None and isinstance(lesson, dict):
                 lesson_slug = lesson.get("slug")
             lessons_list = cast("list[dict[str, Any]]", module_entry.setdefault("lessons", []))
-            if not isinstance(lessons_list, list):
-                lessons_list = []
-                module_entry["lessons"] = lessons_list
             lessons_list.append(
                 {
                     "title": title,
