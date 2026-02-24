@@ -66,11 +66,21 @@ class ContentService:
         # Log archive status of returned items
         archived_count = sum(1 for item in items if hasattr(item, "archived") and item.archived)
         active_count = len(items) - archived_count
-        logger.info(f"📊 Returning {len(items)} items: {archived_count} archived, {active_count} active")
+        logger.info(
+            "📊 Returning %s items: %s archived, %s active",
+            len(items),
+            archived_count,
+            active_count,
+        )
 
         for item in items:
             if hasattr(item, "archived"):
-                logger.info(f"🔍 Item '{item.title}': archived={item.archived}, type={item.__class__.__name__}")
+                logger.info(
+                    "🔍 Item '%s': archived=%s, type=%s",
+                    item.title,
+                    item.archived,
+                    item.__class__.__name__,
+                )
 
         return ContentListResponse(
             items=items,
@@ -102,7 +112,7 @@ class ContentService:
         # Only include user_id if it's not None (since we build different queries based on user_id)
         if user_id is not None:
             params["user_id"] = user_id
-            logger.info(f"Executing query with user_id: {user_id}")
+            logger.info("Executing query with user_id: %s", user_id)
         else:
             logger.info("Executing query without user_id")
 

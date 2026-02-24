@@ -131,7 +131,12 @@ async def update_progress(
     # Update progress
     result = await service.update_progress(auth.user_id, content_id, content_type, progress)
 
-    logger.info(f"Updated progress for user {auth.user_id}, content {content_id}: {progress.progress_percentage}%")
+    logger.info(
+        "Updated progress for user %s, content %s: %s%%",
+        auth.user_id,
+        content_id,
+        progress.progress_percentage,
+    )
 
     return result
 
@@ -151,4 +156,4 @@ async def delete_progress(
             detail=f"Progress for content {content_id} not found",
         )
 
-    logger.info(f"Deleted progress for user {auth.user_id}, content {content_id}")
+    logger.info("Deleted progress for user %s, content %s", auth.user_id, content_id)

@@ -45,7 +45,7 @@ class ProgressService:
                 try:
                     metadata = json.loads(metadata)
                 except json.JSONDecodeError:
-                    logger.warning(f"Failed to parse metadata for content {row.content_id}: {metadata}")
+                    logger.warning("Failed to parse metadata for content %s: %s", row.content_id, metadata)
                     metadata = {}
             elif metadata is None:
                 metadata = {}
@@ -78,7 +78,10 @@ class ProgressService:
         metadata_json = json.dumps(progress.metadata) if progress.metadata else json.dumps({})
 
         logger.info(
-            f"Updating progress for content {content_id}: {progress.progress_percentage}% with metadata: {progress.metadata}"
+            "Updating progress for content %s: %s%% with metadata: %s",
+            content_id,
+            progress.progress_percentage,
+            progress.metadata,
         )
 
         result = await self.session.execute(

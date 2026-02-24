@@ -52,7 +52,7 @@ class BookProcessor:
             elif file_extension == ".epub":
                 content_preview = self._extract_epub_content(file_content)
             else:
-                logger.warning(f"Unsupported file type for content extraction: {file_extension}")
+                logger.warning("Unsupported file type for content extraction: %s", file_extension)
                 content_preview = ""
 
             # Combine metadata for better tagging
@@ -68,7 +68,7 @@ class BookProcessor:
             }
 
         except Exception as e:
-            logger.exception(f"Error extracting book content for tagging: {e}")
+            logger.exception("Error extracting book content for tagging: %s", e)
             return {
                 "title": book.title,
                 "author": book.author,
@@ -123,7 +123,7 @@ class BookProcessor:
             pdf_document.close()
 
         except (RuntimeError, TypeError, ValueError) as e:
-            logger.warning(f"Failed to extract PDF content: {e}")
+            logger.warning("Failed to extract PDF content: %s", e)
 
         return "\n\n".join(content_parts)
 
@@ -170,7 +170,7 @@ class BookProcessor:
             epub_document.close()
 
         except (OSError, RuntimeError, TypeError, ValueError) as e:
-            logger.warning(f"Failed to extract EPUB content: {e}")
+            logger.warning("Failed to extract EPUB content: %s", e)
 
         return "\n\n".join(content_parts)
 
@@ -228,7 +228,7 @@ class BookProcessor:
                 if existing_tags:
                     parts.append(f"Existing tags: {', '.join(existing_tags)}")
             except (TypeError, ValueError) as e:
-                logger.debug(f"Failed to parse existing tags: {e}")
+                logger.debug("Failed to parse existing tags: %s", e)
 
         # Add extracted content
         if extracted_content:
@@ -269,7 +269,7 @@ async def process_book_for_tagging(
     book = result.scalar_one_or_none()
 
     if not book:
-        logger.error(f"Book not found: {book_id}")
+        logger.error("Book not found: %s", book_id)
         return None
 
     try:
@@ -285,7 +285,7 @@ async def process_book_for_tagging(
         return await processor.extract_content_for_tagging(book, file_content, file_extension)
 
     except Exception as e:
-        logger.exception(f"Error downloading or processing book file: {e}")
+        logger.exception("Error downloading or processing book file: %s", e)
         # Return basic info from database as fallback
         return {
             "title": book.title,

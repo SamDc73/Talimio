@@ -58,7 +58,7 @@ class CourseProcessor:
             }
 
         except Exception as e:
-            logger.exception(f"Error extracting course content for tagging: {e}")
+            logger.exception("Error extracting course content for tagging: %s", e)
             return {
                 "title": course.title,
                 "content_preview": course.description or "",
@@ -139,7 +139,7 @@ class CourseProcessor:
                 if existing_tags:
                     parts.append(f"Existing tags: {', '.join(existing_tags)}")
             except (TypeError, ValueError) as e:
-                logger.debug(f"Failed to parse existing tags: {e}")
+                logger.debug("Failed to parse existing tags: %s", e)
 
     def _add_module_outline(self, modules: list[dict[str, Any]], parts: list[str]) -> None:
         """Add module outline to preview parts."""
@@ -213,7 +213,7 @@ async def process_course_for_tagging(
     course = result.scalar_one_or_none()
 
     if not course:
-        logger.error(f"Course not found: {course_id}")
+        logger.error("Course not found: %s", course_id)
         return None
 
     processor = CourseProcessor(session)

@@ -22,7 +22,7 @@ class ContentArchiveService:
     @staticmethod
     async def archive_content(db: AsyncSession, content_type: ContentType, content_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Archive content by type and ID with user validation."""
-        logger.info(f"🗃️ Archiving {content_type} {content_id}")
+        logger.info("🗃️ Archiving %s %s", content_type, content_id)
 
         statement = None
         params: dict[str, uuid.UUID | datetime] = {"content_id": content_id, "user_id": user_id}
@@ -57,23 +57,23 @@ class ContentArchiveService:
             logger.error(msg)
             raise ValueError(msg)
 
-        logger.info(f"🔍 With params: content_id={content_id}, user_id={user_id}")
+        logger.info("🔍 With params: content_id=%s, user_id=%s", content_id, user_id)
         result = await db.execute(statement, params)
         affected_rows = int(getattr(result, "rowcount", 0) or 0)
         await db.flush()
 
-        logger.info(f"📊 Archive operation affected {affected_rows} rows")
+        logger.info("📊 Archive operation affected %s rows", affected_rows)
 
         if affected_rows == 0:
             msg = f"Content {content_id} not found or access denied"
-            logger.warning(f"⚠️ {msg}")
+            logger.warning("⚠️ %s", msg)
             raise ValueError(msg)
-        logger.info(f"✅ Successfully archived {content_id}")
+        logger.info("✅ Successfully archived %s", content_id)
 
     @staticmethod
     async def unarchive_content(db: AsyncSession, content_type: ContentType, content_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Unarchive content by type and ID with user validation."""
-        logger.info(f"📤 Unarchiving {content_type} {content_id}")
+        logger.info("📤 Unarchiving %s %s", content_type, content_id)
 
         statement = None
         params: dict[str, uuid.UUID] = {"content_id": content_id, "user_id": user_id}
@@ -106,18 +106,18 @@ class ContentArchiveService:
             logger.error(msg)
             raise ValueError(msg)
 
-        logger.info(f"🔍 With params: content_id={content_id}, user_id={user_id}")
+        logger.info("🔍 With params: content_id=%s, user_id=%s", content_id, user_id)
         result = await db.execute(statement, params)
         affected_rows = int(getattr(result, "rowcount", 0) or 0)
         await db.flush()
 
-        logger.info(f"📊 Unarchive operation affected {affected_rows} rows")
+        logger.info("📊 Unarchive operation affected %s rows", affected_rows)
 
         if affected_rows == 0:
             msg = f"Content {content_id} not found or access denied"
-            logger.warning(f"⚠️ {msg}")
+            logger.warning("⚠️ %s", msg)
             raise ValueError(msg)
-        logger.info(f"✅ Successfully unarchived {content_id}")
+        logger.info("✅ Successfully unarchived %s", content_id)
 
     @staticmethod
     async def list_archived_content(
