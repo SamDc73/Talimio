@@ -48,15 +48,12 @@ class CourseQueryService:
 
     async def list_courses(
         self,
+        user_id: uuid.UUID,
         page: int = 1,
         per_page: int = 20,
         search: str | None = None,
-        user_id: uuid.UUID | None = None,
     ) -> tuple[list[CourseResponse], int]:
         """List courses with pagination and optional search."""
-        if not user_id:
-            return [], 0
-
         offset = (page - 1) * per_page
 
         base_query = select(Course).where(Course.user_id == user_id)
