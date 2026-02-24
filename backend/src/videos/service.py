@@ -12,6 +12,7 @@ import yt_dlp
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.exc import StaleDataError
 
 from src.ai.rag.service import RAGService
 from src.database.pagination import Paginator
@@ -49,6 +50,18 @@ VALID_VIDEO_CHAPTER_STATUSES: tuple[VideoLearningStatus, ...] = (
     VIDEO_CHAPTER_STATUS_COMPLETED,
 )
 _DETACHED_TASKS: set[asyncio.Task[Any]] = set()
+
+
+class VideoNotFoundError(ValueError):
+    """Raised when a video does not exist for the requested owner/context."""
+
+
+class VideoChapterNotFoundError(ValueError):
+    """Raised when a chapter does not exist for the requested video."""
+
+
+class InvalidVideoChapterStatusError(ValueError):
+    """Raised when a chapter status value is not valid for video learning progress."""
 
 
 def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
@@ -163,10 +176,21 @@ async def _mark_video_status(video_id: uuid.UUID, status: VideoPipelineStatus, e
         logger.warning("Failed to mark video %s as %s%s: %s", video_id, status, error_context, update_error)
 
 
+async def _video_exists(video_id: uuid.UUID) -> bool:
+    """Return whether a video row still exists."""
+    async with async_session_maker() as db:
+        result = await db.execute(select(Video.id).where(Video.id == video_id))
+        return result.scalar_one_or_none() is not None
+
+
 async def _handle_video_not_found_error(
-    video_id: uuid.UUID, attempt: int, max_retries: int, retry_delay: int, e: ValueError
+    video_id: uuid.UUID, attempt: int, max_retries: int, retry_delay: int, e: VideoNotFoundError
 ) -> bool:
     """Handle video not found error. Returns True if should retry, False if should stop."""
+    if not await _video_exists(video_id):
+        logger.info("Stopping chapter extraction for deleted video %s", video_id)
+        return False
+
     if attempt < max_retries - 1:
         logger.warning("Video %s not found on attempt %s, retrying in %ss...", video_id, attempt + 1, retry_delay)
         await asyncio.sleep(retry_delay)
@@ -203,12 +227,33 @@ async def _extract_chapters_background(video_id: uuid.UUID, user_id: uuid.UUID) 
         try:
             if await _try_extract_chapters(video_id, user_id):
                 return
-        except ValueError as e:
-            if "not found" in str(e).lower():
-                if await _handle_video_not_found_error(video_id, attempt, max_retries, retry_delay, e):
+        except VideoNotFoundError as e:
+            if await _handle_video_not_found_error(video_id, attempt, max_retries, retry_delay, e):
+                continue
+            return
+        except StaleDataError:
+            if await _video_exists(video_id):
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "Chapter extraction hit stale row state for video %s on attempt %s, retrying in %ss",
+                        video_id,
+                        attempt + 1,
+                        retry_delay,
+                    )
+                    await asyncio.sleep(retry_delay)
                     continue
+
+                logger.exception(
+                    "Chapter extraction failed with stale row state for existing video %s after %s attempts",
+                    video_id,
+                    max_retries,
+                )
+                await _mark_video_status(video_id, VIDEO_PIPELINE_STATUS_FAILED, " after stale row failures")
                 return
 
+            logger.info("Stopping chapter extraction for deleted video %s", video_id)
+            return
+        except ValueError as e:
             logger.exception("Failed to extract chapters for video %s on attempt %s: %s", video_id, attempt + 1, e)
             await _mark_video_status(video_id, VIDEO_PIPELINE_STATUS_FAILED, " after ValueError")
             return
@@ -256,10 +301,21 @@ async def _process_transcript_to_jsonb(video_id: uuid.UUID) -> None:
                     "total_segments": len(segments),
                     "processed_at": datetime.now(UTC).isoformat(),
                 }
-                await db.commit()
+                try:
+                    await db.commit()
+                except StaleDataError:
+                    await db.rollback()
+                    logger.info("Skipping transcript persist for deleted video %s", video_id)
+                    return
                 logger.info("Stored %s transcript segments for video %s", len(segments), video_id)
                 await _embed_video_background(video.id)
 
+    except Exception as e:
+    except StaleDataError:
+        if await _video_exists(video_id):
+            logger.exception("Failed to process transcript segments for video %s due to stale row state", video_id)
+            return
+        logger.info("Stopping transcript processing for deleted video %s", video_id)
     except Exception as e:
         logger.exception("Failed to process transcript segments for video %s: %s", video_id, e)
 
@@ -279,7 +335,7 @@ class VideoService:
         if not video:
             # Generic error message to avoid exposing ownership info
             msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
+            raise VideoNotFoundError(msg)
 
         return video
 
@@ -599,7 +655,7 @@ class VideoService:
 
         if not chapter:
             msg = f"Chapter {chapter_id} not found"
-            raise ValueError(msg)
+            raise VideoChapterNotFoundError(msg)
 
         return VideoChapterResponse.model_validate(chapter)
 
@@ -626,12 +682,12 @@ class VideoService:
 
         if not chapter:
             msg = f"Chapter {chapter_id} not found"
-            raise ValueError(msg)
+            raise VideoChapterNotFoundError(msg)
 
         # Validate status
         if status not in VALID_VIDEO_CHAPTER_STATUSES:
             msg = f"Invalid status '{status}'. Valid statuses are: {', '.join(VALID_VIDEO_CHAPTER_STATUSES)}"
-            raise ValueError(msg)
+            raise InvalidVideoChapterStatusError(msg)
 
         # Update status
         chapter.status = status
@@ -692,7 +748,7 @@ class VideoService:
             video = video_result.scalar_one_or_none()
             if not video:
                 msg = f"Video with ID {video_id} not found"
-                raise ValueError(msg)
+                raise VideoNotFoundError(msg)
 
         # Calculate completion percentage from chapter progress
         completed_count = len(completed_chapter_ids)
@@ -817,7 +873,7 @@ class VideoService:
 
         if not video_data:
             msg = f"Video with ID {video_id} not found"
-            raise ValueError(msg)
+            raise VideoNotFoundError(msg)
 
         try:
             # Use JSONB data if available (fast path)
