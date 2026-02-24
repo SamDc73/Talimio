@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book
+from src.exceptions import ResourceNotFoundError
 
 
 logger = logging.getLogger(__name__)
@@ -66,8 +67,8 @@ class BookContentService:
                 "BOOK_ACCESS_DENIED",
                 extra={"user_id": str(user_id), "book_id": str(book_id), "operation": "update"},
             )
-            msg = f"Book {book_id} not found"
-            raise ValueError(msg)
+            resource_type = "book"
+            raise ResourceNotFoundError(resource_type, str(book_id))
 
         # Update fields
         for field, value in data.items():

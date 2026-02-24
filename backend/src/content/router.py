@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from src.auth import CurrentAuth
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_service import ContentService
+from src.exceptions import ResourceNotFoundError
 
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ async def archive_content(
 
     try:
         await ContentArchiveService.archive_content(auth.session, content_type, content_id, auth.user_id)
-    except ValueError as e:
+    except ResourceNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
@@ -71,7 +72,7 @@ async def unarchive_content(
 
     try:
         await ContentArchiveService.unarchive_content(auth.session, content_type, content_id, auth.user_id)
-    except ValueError as e:
+    except ResourceNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
@@ -89,5 +90,5 @@ async def delete_content(
             content_id=content_id,
             user_id=auth.user_id,
         )
-    except ValueError as e:
+    except ResourceNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e

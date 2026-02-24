@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from src.content.schemas import ContentListResponse, ContentType
 from src.content.services.content_transform_service import ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
+from src.exceptions import ResourceNotFoundError
 
 
 if TYPE_CHECKING:
@@ -260,8 +261,7 @@ class ContentService:
         # Load row with ownership check
         row = await session.get(model, content_id)
         if row is None or getattr(row, "user_id", None) != user_id:
-            msg = f"{content_type.value.capitalize()} {content_id} not found"
-            raise ValueError(msg)
+            raise ResourceNotFoundError(content_type.value, str(content_id))
 
         # Remove any stored files that rely on row attributes before deleting the row.
         if content_type == ContentType.BOOK:
