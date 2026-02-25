@@ -14,6 +14,7 @@ import litellm
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from src.ai.litellm_config import configure_litellm
 from src.ai.rag.config import rag_config
 
 
@@ -24,6 +25,7 @@ from src.ai.rag.schemas import SearchResult
 
 
 logger = logging.getLogger(__name__)
+configure_litellm()
 
 _LITELLM_PROVIDER_ERROR_TYPES = (
     litellm.APIError,
@@ -355,8 +357,6 @@ class VectorRAG:
             self._effective_embedding_dim,
             self._db_embedding_dim,
         )
-
-
 
     async def _fetch_db_embedding_dimension(self, session: AsyncSession) -> int | None:
         """Read the embedding column dimension from pgvector metadata."""

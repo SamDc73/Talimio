@@ -143,7 +143,7 @@ def _store_local_claims_on_request(request: Request, claims: LocalTokenClaims) -
 # ---------------------------------------------------------------------------
 # User ID resolution
 # ---------------------------------------------------------------------------
-async def get_user_id(request: Request, token: str) -> uuid.UUID:
+def get_user_id(request: Request, token: str) -> uuid.UUID:
     """Resolve authenticated user ID.
 
     Single-user mode: always return DEFAULT_USER_ID.
@@ -177,7 +177,7 @@ def _get_local_user_id(request: Request, *, token: str, jwt_secret: str) -> uuid
 # ---------------------------------------------------------------------------
 # FastAPI dependency
 # ---------------------------------------------------------------------------
-async def _get_user_id_dependency(
+def _get_user_id_dependency(
     request: Request,
     auth_token: CookieToken,
 ) -> uuid.UUID:
@@ -189,6 +189,6 @@ async def _get_user_id_dependency(
     settings = get_settings()
     if settings.AUTH_PROVIDER == "local" and not auth_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    user_id = await get_user_id(request, token=auth_token or "")
+    user_id = get_user_id(request, token=auth_token or "")
     request.state.user_id = user_id
     return user_id

@@ -94,7 +94,7 @@ async def _startup() -> None:
 
     from src.ai.memory import warm_memory_client
 
-    await warm_memory_client()
+    warm_memory_client()
     logger.info("AsyncMemory client warmed")
 
 
@@ -103,7 +103,7 @@ async def _shutdown() -> None:
     try:
         from src.ai.memory import cleanup_memory_client
 
-        await cleanup_memory_client()
+        cleanup_memory_client()
         logger.info("Memory wrapper cleaned up")
     except (RuntimeError, TimeoutError, TypeError, ValueError):
         logger.warning("Error cleaning up memory wrapper", exc_info=True)
@@ -231,7 +231,7 @@ def _register_frontend_routes(app: FastAPI) -> None:
         include_in_schema=False,
         response_model=None,
     )
-    async def unknown_api_route(request: Request, api_path: str) -> JSONResponse:
+    def unknown_api_route(request: Request, api_path: str) -> JSONResponse:
         del api_path
         allowed_methods: set[str] = set()
         for route in app.router.routes:

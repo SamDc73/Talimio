@@ -344,7 +344,7 @@ def _get_media_type(file_type: str) -> str:
     return "application/octet-stream"
 
 
-async def _handle_local_file(url: str, book: Book) -> FileResponse:
+def _handle_local_file(url: str, book: Book) -> FileResponse:
     """Handle serving local files."""
     media_type = _get_media_type(book.file_type)
 
@@ -416,7 +416,7 @@ async def stream_book_content(book_id: uuid.UUID, request: Request, auth: Curren
 
     # If it's a local file, serve it directly
     if not url.startswith("http"):
-        return await _handle_local_file(url, book)
+        return _handle_local_file(url, book)
 
     # For remote storage, properly stream with range support
     media_type = _get_media_type(book.file_type)

@@ -117,7 +117,7 @@ def format_error_response(
     return JSONResponse(status_code=status_code, content=content)
 
 
-async def handle_validation_errors(request: Request, exc: Exception) -> JSONResponse:
+def handle_validation_errors(request: Request, exc: Exception) -> JSONResponse:
     """Handle validation errors from Pydantic and custom validators."""
     if isinstance(exc, PydanticValidationError):
         # Extract field errors from Pydantic
@@ -155,9 +155,9 @@ async def handle_validation_errors(request: Request, exc: Exception) -> JSONResp
     )
 
 
-async def handle_database_errors(request: Request, exc: Exception) -> JSONResponse:
+def handle_database_errors(request: Request, exc: Exception) -> JSONResponse:
     """Handle database-related errors."""
-    logger.exception(
+    logger.error(
         "Database error on %s %s: %s",
         request.method,
         request.url.path,
@@ -233,7 +233,7 @@ def _is_unique_violation_error(exc: Exception) -> bool:
     return False
 
 
-async def handle_external_service_errors(request: Request, exc: ExternalServiceError) -> JSONResponse:
+def handle_external_service_errors(request: Request, exc: ExternalServiceError) -> JSONResponse:
     """Handle external service failures."""
     logger.error("External service error on %s %s: %s", request.method, request.url.path, exc.detail)
 
