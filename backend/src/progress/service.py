@@ -5,10 +5,9 @@
 import json
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import ContentType, ProgressResponse, ProgressUpdate
 from .queries import (
@@ -17,6 +16,10 @@ from .queries import (
     GET_SINGLE_PROGRESS_QUERY,
     UPSERT_PROGRESS_QUERY,
 )
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)

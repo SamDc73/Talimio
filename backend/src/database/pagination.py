@@ -1,8 +1,11 @@
 
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from sqlalchemy import Select, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 T = TypeVar("T")

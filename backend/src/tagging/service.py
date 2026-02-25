@@ -154,7 +154,6 @@ class TaggingService:
         tags_with_confidence = await self._generate_tags_llm(title, content_preview)
         return [item["tag"] for item in tags_with_confidence]
 
-
     async def get_content_tags(
         self,
         content_id: uuid.UUID,
@@ -228,7 +227,6 @@ class TaggingService:
             "failed": failed,
             "results": results,
         }
-
 
     async def update_manual_tags(
         self,
@@ -384,7 +382,6 @@ class TaggingService:
 
         self.session.add(association)
         return association
-
 
 
 async def update_content_tags_json(

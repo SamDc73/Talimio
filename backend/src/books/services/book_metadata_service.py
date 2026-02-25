@@ -120,7 +120,7 @@ class BookMetadataService:
             import os
             from contextlib import redirect_stderr
 
-            with redirect_stderr(open(os.devnull, "w")), fitz.open(stream=file_content, filetype="epub") as epub_document:  # noqa: PTH123
+            with redirect_stderr(open(os.devnull, "w", encoding="utf-8")), fitz.open(stream=file_content, filetype="epub") as epub_document:  # noqa: PTH123
                 # Get page count (EPUBs in PyMuPDF are treated as pages)
                 metadata.total_pages = epub_document.page_count
 

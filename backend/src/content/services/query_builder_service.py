@@ -4,12 +4,16 @@
 
 import logging
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import column, func, select, text
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql.selectable import Subquery
 
 from src.content.schemas import ContentType
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.sql.selectable import Subquery
 
 
 logger = logging.getLogger(__name__)
@@ -51,7 +55,6 @@ class QueryBuilderService:
 
         if not content_type or content_type == ContentType.VIDEO:
             queries.append(QueryBuilderService._get_video_query(search, include_archived, user_id))
-
 
         if not content_type or content_type == ContentType.BOOK:
             queries.append(QueryBuilderService._get_book_query(search, include_archived, user_id))
@@ -120,7 +123,6 @@ class QueryBuilderService:
 
         return query
 
-
     @staticmethod
     def _get_book_query(search: str | None, include_archived: bool = False, user_id: uuid.UUID | None = None) -> str:
         """Get SQL query for books."""
@@ -173,7 +175,6 @@ class QueryBuilderService:
             query += " WHERE " + " AND ".join(where_conditions)
 
         return query
-
 
     @staticmethod
     def get_courses_query(

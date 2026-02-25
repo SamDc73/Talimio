@@ -80,7 +80,6 @@ class ContentTransformService:
             metadata=metadata,
         )
 
-
     @staticmethod
     def _create_book_content(row: Any) -> BookContent:
         """Create BookContent from row data."""
@@ -115,7 +114,6 @@ class ContentTransformService:
             toc_progress=toc_progress,
             metadata=metadata,
         )
-
 
     @staticmethod
     def _create_course_content(row: Any) -> CourseContent:

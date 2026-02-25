@@ -54,9 +54,6 @@ class VideoUpdate(BaseModel):
     tags: list[str] | None = None
 
 
-
-
-
 class VideoInDB(VideoBase):
     """Schema for video stored in database."""
 

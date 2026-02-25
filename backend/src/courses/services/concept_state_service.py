@@ -107,4 +107,3 @@ class ConceptStateService:
         self._session.add(event)
         await self._session.flush()
         return event
-

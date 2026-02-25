@@ -4,14 +4,17 @@
 
 import logging
 import uuid
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book
 from src.books.schemas import BookLearningStatus, BookListResponse, BookResponse
 from src.books.services.book_response_builder import BookResponseBuilder
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)

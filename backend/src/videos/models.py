@@ -77,7 +77,6 @@ class Video(Base):
     )
 
 
-
 class VideoChapter(Base):
     """Model for video chapters."""
 

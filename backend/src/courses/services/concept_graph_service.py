@@ -6,15 +6,18 @@ import logging
 import re
 import uuid
 from collections.abc import Sequence
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from sqlalchemy import and_, bindparam, select, text, update
 from sqlalchemy.dialects.postgresql import ARRAY, UUID as PG_UUID
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.rag.embeddings import VectorRAG
 from src.config.settings import get_settings
 from src.courses.models import Concept, ConceptPrerequisite, CourseConcept, UserConceptState
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)
