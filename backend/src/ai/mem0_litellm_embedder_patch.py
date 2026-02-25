@@ -32,12 +32,15 @@ import litellm
 from mem0.embeddings.base import EmbeddingBase
 from mem0.utils.factory import EmbedderFactory
 
+from src.ai.litellm_config import configure_litellm
+
 
 if TYPE_CHECKING:
     from mem0.configs.embeddings.base import BaseEmbedderConfig
 
 
 logger = logging.getLogger(__name__)
+configure_litellm()
 
 _PATCH_APPLIED = False
 

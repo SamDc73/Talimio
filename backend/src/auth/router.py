@@ -83,7 +83,7 @@ _GENERIC_RESEND_VERIFICATION_MESSAGE = "If the account exists, a verification em
 _AUTH_SESSION_SENTINEL_EXPIRES_AT = datetime(9999, 12, 31, tzinfo=UTC)
 
 
-async def _require_local_provider() -> None:
+def _require_local_provider() -> None:
     """Block endpoints that are only valid in local-auth mode."""
     if get_settings().AUTH_PROVIDER != "local":
         raise HTTPException(

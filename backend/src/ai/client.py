@@ -19,6 +19,7 @@ from src.ai.errors import (
     AITimeoutError,
     AIToolExecutionError,
 )
+from src.ai.litellm_config import configure_litellm
 from src.ai.mcp.service import get_user_mcp_config
 from src.ai.mcp.tooling import (
     MCPToolBinding,
@@ -47,6 +48,9 @@ from src.ai.prompts import (
 )
 from src.config.settings import get_settings
 from src.database.session import async_session_maker
+
+
+configure_litellm()
 
 
 T = TypeVar("T", bound=BaseModel)
@@ -257,7 +261,7 @@ class LLMClient:
         if isinstance(error, (AIRateLimitOrQuotaError, AITimeoutError)):
             self._logger.warning("%s failed: %s (%s)", operation, error, error.category.value)
             return
-        self._logger.exception("%s failed: %s (%s)", operation, error, error.category.value)
+        self._logger.error("%s failed: %s (%s)", operation, error, error.category.value)
 
     async def _assemble_request_context(self, request: _LLMRequest) -> None:
         """Ordered context assembly: normalize -> memory -> tools."""

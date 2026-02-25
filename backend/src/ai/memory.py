@@ -118,7 +118,7 @@ def _build_checked_connection_pool(connection_string: str) -> ConnectionPool:
     )
 
 
-async def get_memory_client() -> AsyncMemory:
+def get_memory_client() -> AsyncMemory:
     """Get or create the singleton AsyncMemory client."""
     global _memory_client  # noqa: PLW0603
 
@@ -166,7 +166,7 @@ async def _run_memory_operation[MemoryResultT](
     """Execute a mem0 operation and retry once after transient DB failures."""
     for attempt in range(1, _MEMORY_DB_MAX_ATTEMPTS + 1):
         try:
-            client = await get_memory_client()
+            client = get_memory_client()
             return await execute(client)
         except (TimeoutError, ConnectionError, OSError, psycopg.Error) as error:
             if attempt < _MEMORY_DB_MAX_ATTEMPTS:
@@ -177,7 +177,7 @@ async def _run_memory_operation[MemoryResultT](
                     _MEMORY_DB_MAX_ATTEMPTS,
                     error,
                 )
-                await cleanup_memory_client()
+                cleanup_memory_client()
                 continue
             logger.warning("Memory %s failed after retry: %s", operation, error)
             return fallback
@@ -340,7 +340,7 @@ async def delete_all_memories(
     )
 
 
-async def cleanup_memory_client() -> None:
+def cleanup_memory_client() -> None:
     """Cleanup the memory client on shutdown."""
     global _memory_client  # noqa: PLW0603
 
@@ -375,9 +375,9 @@ async def cleanup_memory_client() -> None:
     logger.info("Memory client cleaned up")
 
 
-async def warm_memory_client() -> None:
+def warm_memory_client() -> None:
     """Initialize the AsyncMemory client so the first request skips cold start."""
     if not _memory_is_configured():
         logger.info("Memory disabled; skipping warm-up")
         return
-    await get_memory_client()
+    get_memory_client()
