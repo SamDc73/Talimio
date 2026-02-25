@@ -508,17 +508,7 @@ class CoursesFacade:
             detail = "Adaptive scheduling is not enabled for this course"
             raise CoursesFacadeBadRequestError(detail)
 
-        concept_ids = {review.concept_id for review in payload.reviews}
-        existing = await self._session.execute(
-            select(CourseConcept.concept_id).where(
-                CourseConcept.course_id == course.id,
-                CourseConcept.concept_id.in_(concept_ids),
-            )
-        )
-        found_ids = set(existing.scalars().all())
-        if concept_ids - found_ids:
-            detail = "One or more concepts are not assigned to this course"
-            raise CoursesFacadeNotFoundError(detail)
+        await self._assert_course_contains_review_concepts(course_id=course.id, reviews=payload.reviews)
 
         state_service = ConceptStateService(self._session)
         scheduler_service = LectorSchedulerService(self._session)
@@ -528,99 +518,32 @@ class CoursesFacade:
         last_review_snapshot: dict[str, Any] | None = None
 
         for review in payload.reviews:
-            correct = review.rating >= 3
-            updated_state = await state_service.update_mastery(
-                user_id=user_id,
-                concept_id=review.concept_id,
-                correct=correct,
-                latency_ms=review.latency_ms,
-            )
-            review_extra: dict[str, Any] = {"rating": review.rating}
-            if review.question:
-                review_extra["question"] = review.question
-            if review.structure_signature:
-                review_extra["structure_signature"] = review.structure_signature
-            if review.predicted_p_correct is not None:
-                review_extra["predicted_p_correct"] = float(review.predicted_p_correct)
-            if review.core_model:
-                review_extra["core_model"] = review.core_model
-            await state_service.log_probe_event(
-                user_id=user_id,
-                concept_id=review.concept_id,
-                rating=review.rating,
-                review_duration_ms=review.review_duration_ms,
-                correct=correct,
-                latency_ms=review.latency_ms,
-                context_tag=f"lesson:{lesson_id}",
-                extra=review_extra,
-            )
-            next_review = await scheduler_service.calculate_next_review(
-                user_id=user_id,
+            review_outcome, review_snapshot = await self._process_adaptive_review(
                 course_id=course.id,
-                concept_id=review.concept_id,
-                rating=review.rating,
-                duration_ms=review.review_duration_ms,
-            )
-            await scheduler_service.update_learner_profile(
+                lesson_id=lesson_id,
                 user_id=user_id,
-                concept_id=review.concept_id,
-                rating=review.rating,
-                duration_ms=review.review_duration_ms,
+                review=review,
+                state_service=state_service,
+                scheduler_service=scheduler_service,
             )
-
-            outcomes.append(
-                ReviewOutcome(
-                    concept_id=review.concept_id,
-                    next_review_at=next_review,
-                    mastery=updated_state.s_mastery,
-                    exposures=updated_state.exposures,
-                )
-            )
-
-            concept_key = str(review.concept_id)
-            stats = concept_stats.setdefault(
-                concept_key,
-                {
-                    "ratingCounts": {"1": 0, "2": 0, "3": 0, "4": 0},
-                    "totalDurationMs": 0,
-                },
-            )
-            rating_counts = cast("dict[str, int]", stats["ratingCounts"])
-            rating_key = str(review.rating)
-            rating_counts[rating_key] = rating_counts.get(rating_key, 0) + 1
-            stats["totalDurationMs"] = int(stats["totalDurationMs"]) + int(review.review_duration_ms)
-            stats.update(
-                {
-                    "lastRating": review.rating,
-                    "lastDurationMs": review.review_duration_ms,
-                    "lastReviewedAt": datetime.now(UTC).isoformat(),
-                    "lastNextReviewAt": next_review.isoformat() if next_review else None,
-                    "mastery": float(updated_state.s_mastery or 0.0),
-                    "exposures": int(updated_state.exposures),
-                }
-            )
-            last_review_snapshot = {
-                "concept_id": concept_key,
-                "rating": review.rating,
-                "duration_ms": review.review_duration_ms,
-                "next_review_at": next_review.isoformat() if next_review else None,
-            }
+            outcomes.append(review_outcome)
+            self._update_review_stats(concept_stats=concept_stats, review_snapshot=review_snapshot)
+            last_review_snapshot = review_snapshot
 
         await self._session.flush()
 
         if last_review_snapshot is not None:
-            progress_payload: dict[str, Any] = {
-                "current_lesson_id": str(lesson_id),
-                "last_reviewed_concept": last_review_snapshot["concept_id"],
-                "last_reviewed_rating": last_review_snapshot["rating"],
-                "last_review_duration_ms": last_review_snapshot["duration_ms"],
-                "last_reviewed_at": datetime.now(UTC).isoformat(),
-                "last_next_review_at": last_review_snapshot["next_review_at"],
-                "concept_review_stats": concept_stats,
-            }
             try:
                 progress_service = CourseProgressService(self._session)
-                await progress_service.update_progress(course.id, user_id, progress_payload)
+                await progress_service.update_progress(
+                    course.id,
+                    user_id,
+                    self._build_review_progress_payload(
+                        lesson_id=lesson_id,
+                        last_review_snapshot=last_review_snapshot,
+                        concept_stats=concept_stats,
+                    ),
+                )
             except SQLAlchemyError:
                 logger.exception(
                     "COURSE_PROGRESS_UPDATE_FAILED",
@@ -632,6 +555,132 @@ class CoursesFacade:
                 )
 
         return ReviewBatchResponse(outcomes=outcomes)
+
+    async def _assert_course_contains_review_concepts(self, *, course_id: uuid.UUID, reviews: list[Any]) -> None:
+        concept_ids = {review.concept_id for review in reviews}
+        existing = await self._session.execute(
+            select(CourseConcept.concept_id).where(
+                CourseConcept.course_id == course_id,
+                CourseConcept.concept_id.in_(concept_ids),
+            )
+        )
+        found_ids = set(existing.scalars().all())
+        if concept_ids - found_ids:
+            detail = "One or more concepts are not assigned to this course"
+            raise CoursesFacadeNotFoundError(detail)
+
+    def _build_review_extra(self, *, review: Any) -> dict[str, Any]:
+        review_extra: dict[str, Any] = {"rating": review.rating}
+        if review.question:
+            review_extra["question"] = review.question
+        if review.structure_signature:
+            review_extra["structure_signature"] = review.structure_signature
+        if review.predicted_p_correct is not None:
+            review_extra["predicted_p_correct"] = float(review.predicted_p_correct)
+        if review.core_model:
+            review_extra["core_model"] = review.core_model
+        return review_extra
+
+    async def _process_adaptive_review(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+        user_id: uuid.UUID,
+        review: Any,
+        state_service: ConceptStateService,
+        scheduler_service: LectorSchedulerService,
+    ) -> tuple[ReviewOutcome, dict[str, Any]]:
+        correct = review.rating >= 3
+        updated_state = await state_service.update_mastery(
+            user_id=user_id,
+            concept_id=review.concept_id,
+            correct=correct,
+            latency_ms=review.latency_ms,
+        )
+        await state_service.log_probe_event(
+            user_id=user_id,
+            concept_id=review.concept_id,
+            rating=review.rating,
+            review_duration_ms=review.review_duration_ms,
+            correct=correct,
+            latency_ms=review.latency_ms,
+            context_tag=f"lesson:{lesson_id}",
+            extra=self._build_review_extra(review=review),
+        )
+        next_review = await scheduler_service.calculate_next_review(
+            user_id=user_id,
+            course_id=course_id,
+            concept_id=review.concept_id,
+            rating=review.rating,
+            duration_ms=review.review_duration_ms,
+        )
+        await scheduler_service.update_learner_profile(
+            user_id=user_id,
+            concept_id=review.concept_id,
+            rating=review.rating,
+            duration_ms=review.review_duration_ms,
+        )
+        return ReviewOutcome(
+            concept_id=review.concept_id,
+            next_review_at=next_review,
+            mastery=updated_state.s_mastery,
+            exposures=updated_state.exposures,
+        ), {
+            "concept_id": str(review.concept_id),
+            "rating": review.rating,
+            "duration_ms": review.review_duration_ms,
+            "next_review_at": next_review.isoformat() if next_review else None,
+            "mastery": float(updated_state.s_mastery or 0.0),
+            "exposures": int(updated_state.exposures),
+            "reviewed_at": datetime.now(UTC).isoformat(),
+        }
+
+    def _update_review_stats(
+        self,
+        *,
+        concept_stats: dict[str, dict[str, Any]],
+        review_snapshot: dict[str, Any],
+    ) -> None:
+        concept_key = cast("str", review_snapshot["concept_id"])
+        stats = concept_stats.setdefault(
+            concept_key,
+            {
+                "ratingCounts": {"1": 0, "2": 0, "3": 0, "4": 0},
+                "totalDurationMs": 0,
+            },
+        )
+        rating_counts = cast("dict[str, int]", stats["ratingCounts"])
+        rating_key = str(review_snapshot["rating"])
+        rating_counts[rating_key] = rating_counts.get(rating_key, 0) + 1
+        stats["totalDurationMs"] = int(stats["totalDurationMs"]) + int(review_snapshot["duration_ms"])
+        stats.update(
+            {
+                "lastRating": review_snapshot["rating"],
+                "lastDurationMs": review_snapshot["duration_ms"],
+                "lastReviewedAt": review_snapshot["reviewed_at"],
+                "lastNextReviewAt": review_snapshot["next_review_at"],
+                "mastery": review_snapshot["mastery"],
+                "exposures": review_snapshot["exposures"],
+            }
+        )
+
+    def _build_review_progress_payload(
+        self,
+        *,
+        lesson_id: uuid.UUID,
+        last_review_snapshot: dict[str, Any],
+        concept_stats: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        return {
+            "current_lesson_id": str(lesson_id),
+            "last_reviewed_concept": last_review_snapshot["concept_id"],
+            "last_reviewed_rating": last_review_snapshot["rating"],
+            "last_review_duration_ms": last_review_snapshot["duration_ms"],
+            "last_reviewed_at": datetime.now(UTC).isoformat(),
+            "last_next_review_at": last_review_snapshot["next_review_at"],
+            "concept_review_stats": concept_stats,
+        }
 
     async def get_concept_next_review(
         self,

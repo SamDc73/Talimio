@@ -102,11 +102,9 @@ class PracticeDrillService:
         while len(drills) < count and rounds < _MAX_GENERATION_ROUNDS:
             rounds += 1
             remaining = count - len(drills)
-            enforce_signature_uniqueness = rounds <= _STRICT_SIGNATURE_ROUNDS
-            history_block = self._build_history_block(seen_signatures)
             question_batch = await self._generate_question_batch(
                 concept=concept,
-                history=history_block,
+                history=self._build_history_block(seen_signatures),
                 count=remaining,
                 user_id=user_id,
             )
@@ -128,7 +126,7 @@ class PracticeDrillService:
 
                 if question_key in seen_questions:
                     continue
-                if enforce_signature_uniqueness and signature in seen_signatures:
+                if rounds <= _STRICT_SIGNATURE_ROUNDS and signature in seen_signatures:
                     continue
 
                 seen_questions.add(question_key)

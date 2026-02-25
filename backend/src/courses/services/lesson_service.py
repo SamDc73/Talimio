@@ -5,17 +5,20 @@
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.client import LLMClient
 from src.courses.models import Course, Lesson
 from src.courses.schemas import LessonDetailResponse
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)
@@ -59,18 +62,17 @@ class LessonService:
         course_id: uuid.UUID,
         lesson_id: uuid.UUID,
     ) -> tuple[list[dict[str, Any]], int | None, int | None, str | None]:
-        outline_query = (
-            select(
-                Lesson.id,
-                Lesson.title,
-                Lesson.description,
+        rows = (
+            await self.session.execute(
+                select(
+                    Lesson.id,
+                    Lesson.title,
+                    Lesson.description,
+                )
+                .where(Lesson.course_id == course_id)
+                .order_by(*Lesson.course_order_by())
             )
-            .where(Lesson.course_id == course_id)
-            .order_by(*Lesson.course_order_by())
-        )
-
-        outline_result = await self.session.execute(outline_query)
-        rows = outline_result.all()
+        ).all()
 
         ordered_lessons: list[dict[str, Any]] = []
         for row in rows:
@@ -89,13 +91,7 @@ class LessonService:
             return [], None, lesson_total, None
 
         lesson_position = current_index + 1
-
-        next_lesson_title: str | None = None
-        next_item = ordered_lessons[current_index + 1] if current_index + 1 < lesson_total else None
-        if isinstance(next_item, dict):
-            next_title = next_item.get("title")
-            if isinstance(next_title, str) and next_title.strip():
-                next_lesson_title = next_title.strip()
+        next_lesson_title = self._resolve_next_lesson_title(ordered_lessons, current_index)
 
         window_start = max(0, current_index - 2)
         window_end = min(lesson_total, current_index + 5)
@@ -114,6 +110,15 @@ class LessonService:
             )
 
         return outline_window, lesson_position, lesson_total, next_lesson_title
+
+    def _resolve_next_lesson_title(self, ordered_lessons: list[dict[str, Any]], current_index: int) -> str | None:
+        next_index = current_index + 1
+        if next_index >= len(ordered_lessons):
+            return None
+        next_title = ordered_lessons[next_index].get("title")
+        if isinstance(next_title, str) and next_title.strip():
+            return next_title.strip()
+        return None
 
     async def _build_rag_context(
         self,
@@ -338,14 +343,14 @@ class LessonService:
         except ValueError as exc:
             logger.exception(
                 "Validation error generating lesson content: %s",
-                str(exc),
+                exc,
                 extra={"user_id": str(self.user_id), "lesson_id": str(lesson.id)},
             )
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid lesson content: {exc}") from exc
         except RuntimeError as exc:
             logger.exception(
                 "System error generating lesson content: %s",
-                str(exc),
+                exc,
                 extra={"user_id": str(self.user_id), "lesson_id": str(lesson.id)},
             )
             raise HTTPException(
