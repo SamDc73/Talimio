@@ -1,7 +1,5 @@
 """Vector-based RAG implementation using LiteLLM embeddings and pgvector."""
 
-from __future__ import annotations
-
 import asyncio
 import json
 import logging

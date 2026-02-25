@@ -1,8 +1,6 @@
 
 """Service layer for user-managed MCP servers."""
 
-from __future__ import annotations
-
 import base64
 import hashlib
 import logging

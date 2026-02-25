@@ -1,6 +1,5 @@
 """Google OAuth helpers for local auth."""
 
-from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass

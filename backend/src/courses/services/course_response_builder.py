@@ -1,8 +1,6 @@
 
 """Course response builder service for constructing course responses."""
 
-from __future__ import annotations
-
 import contextlib
 import json
 import uuid

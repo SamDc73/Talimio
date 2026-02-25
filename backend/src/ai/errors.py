@@ -1,6 +1,5 @@
 """Unified internal error taxonomy for LLM runtime failures."""
 
-from __future__ import annotations
 
 from enum import StrEnum
 

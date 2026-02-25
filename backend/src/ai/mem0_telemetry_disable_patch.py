@@ -19,8 +19,6 @@ This is intentionally small and idempotent, mirroring the pattern used for the
 LiteLLM embedder patch.
 """
 
-from __future__ import annotations
-
 import sys
 import types
 from contextlib import suppress

@@ -1,8 +1,6 @@
 
 """Adaptive practice drill generation service using batched direct LLM IRT."""
 
-from __future__ import annotations
-
 import re
 import uuid
 from dataclasses import dataclass

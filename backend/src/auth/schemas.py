@@ -1,7 +1,5 @@
 """Pydantic schemas for auth API requests and responses."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, EmailStr, Field, field_validator

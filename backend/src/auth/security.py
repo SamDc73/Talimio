@@ -1,6 +1,5 @@
 """Security primitives for local auth (password hashing + JWT)."""
 
-from __future__ import annotations
 
 import hashlib
 import hmac

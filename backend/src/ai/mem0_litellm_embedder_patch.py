@@ -22,8 +22,6 @@ mem0's config validation happy while allowing the model string itself to route
 via LiteLLM (e.g. ``ollama/...``, ``openai/...``, etc.).
 """
 
-from __future__ import annotations
-
 import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal

@@ -1,7 +1,5 @@
 """HTTP MCP client utilities."""
 
-from __future__ import annotations
-
 import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
