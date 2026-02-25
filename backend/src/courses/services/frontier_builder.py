@@ -37,9 +37,6 @@ class _FrontierSnapshot:
     due_ids: set[uuid.UUID]
 
 
-
-
-
 def _to_concept_summary(
     concept: Concept,
     state: UserConceptState | None,
@@ -67,9 +64,6 @@ def _to_concept_summary(
     )
 
 
-
-
-
 def _prepare_frontier_snapshot(
     frontier_entries: Sequence[FrontierEntry],
     due_entries: Sequence[DueConceptEntry],
@@ -85,7 +79,6 @@ def _prepare_frontier_snapshot(
     sum_mastery = 0.0
 
     course_concepts = [entry["concept"] for entry in entries]
-    total_count = len(course_concepts)
     state_by_id = {
         entry["state"].concept_id: entry["state"]
         for entry in entries
@@ -118,7 +111,7 @@ def _prepare_frontier_snapshot(
         )
         for item in due_list
     ]
-    avg_mastery = (sum_mastery / total_count) if total_count > 0 else 0.0
+    avg_mastery = (sum_mastery / len(course_concepts)) if course_concepts else 0.0
     due_ids = {item["concept"].id for item in due_list}
 
     return _FrontierSnapshot(
@@ -131,12 +124,6 @@ def _prepare_frontier_snapshot(
         state_by_id=state_by_id,
         due_ids=due_ids,
     )
-
-
-
-
-
-
 
 
 async def build_course_frontier(

@@ -63,44 +63,42 @@ class LatexExpressionVerifier:
                 tags.append("expected-parse-error")
             if answer_error or answer_expr is None:
                 tags.append("answer-parse-error")
-            diagnostics = LatexExpressionVerificationDiagnostics(
-                expected_parse_error=expected_error or ("Parser returned None" if expected_expr is None else None),
-                answer_parse_error=answer_error or ("Parser returned None" if answer_expr is None else None),
-                method_attempts=method_attempts,
-                numeric_samples=0,
-                likely_mistake="parse-error",
-            )
-            notes = "Failed to parse expected or answer expression." if expected_error or answer_error else "Parsed expression missing."
             return LatexExpressionVerificationResult(
                 is_correct=False,
                 status="parse_error",
                 method=None,
-                notes=notes,
-                diagnostics=diagnostics,
+                notes="Failed to parse expected or answer expression."
+                if expected_error or answer_error
+                else "Parsed expression missing.",
+                diagnostics=LatexExpressionVerificationDiagnostics(
+                    expected_parse_error=expected_error or ("Parser returned None" if expected_expr is None else None),
+                    answer_parse_error=answer_error or ("Parser returned None" if answer_expr is None else None),
+                    method_attempts=method_attempts,
+                    numeric_samples=0,
+                    likely_mistake="parse-error",
+                ),
                 tags=tags,
             )
 
         if self._is_unsupported_relation(expected_expr) or self._is_unsupported_relation(answer_expr):
-            diagnostics = LatexExpressionVerificationDiagnostics(
-                expected_parse_error=None,
-                answer_parse_error=None,
-                method_attempts=method_attempts,
-                numeric_samples=0,
-                likely_mistake="unsupported-relation",
-            )
-            notes = "Relational operators are not supported yet."
             return LatexExpressionVerificationResult(
                 is_correct=False,
                 status="unsupported",
                 method=None,
-                notes=notes,
-                diagnostics=diagnostics,
+                notes="Relational operators are not supported yet.",
+                diagnostics=LatexExpressionVerificationDiagnostics(
+                    expected_parse_error=None,
+                    answer_parse_error=None,
+                    method_attempts=method_attempts,
+                    numeric_samples=0,
+                    likely_mistake="unsupported-relation",
+                ),
                 tags=[*tags, "unsupported-relation"],
             )
 
-        normalized_expected, expected_equation = self._normalize_expression(expected_expr)
-        normalized_answer, answer_equation = self._normalize_expression(answer_expr)
-        allow_sign_flip = expected_equation and answer_equation
+        normalized_expected, _ = self._normalize_expression(expected_expr)
+        normalized_answer, _ = self._normalize_expression(answer_expr)
+        allow_sign_flip = isinstance(expected_expr, Equality) and isinstance(answer_expr, Equality)
 
         diff_expr = sympy.simplify(normalized_expected - normalized_answer)
         sum_expr = sympy.simplify(normalized_expected + normalized_answer) if allow_sign_flip else None
@@ -149,12 +147,11 @@ class LatexExpressionVerifier:
                 tags=tags,
             )
 
-        notes = "Numeric sampling did not establish equivalence." if numeric_samples > 0 else "No valid samples found."
         return LatexExpressionVerificationResult(
             is_correct=False,
             status="incorrect",
             method="numeric_sampling",
-            notes=notes,
+            notes="Numeric sampling did not establish equivalence." if numeric_samples > 0 else "No valid samples found.",
             diagnostics=diagnostics,
             tags=tags + self._build_mistake_tags(diagnostics.likely_mistake),
         )

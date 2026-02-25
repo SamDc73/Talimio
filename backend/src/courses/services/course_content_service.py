@@ -97,8 +97,7 @@ class CourseContentService:
         """Create a course using the provided session."""
         session_data = dict(data)
         is_adaptive = bool(session_data.get("adaptive_enabled"))
-        prompt = session_data.pop("prompt", None)
-        prompt_text = self._normalize_prompt_text(prompt)
+        prompt_text = self._normalize_prompt_text(session_data.pop("prompt", None))
         attachments = attachments or []
         normalized_modules: list[dict[str, Any]] = []
         inserted_lessons = 0
@@ -638,49 +637,16 @@ class CourseContentService:
             raw_lessons = module.get("lessons", [])
 
             for lesson_index, payload in enumerate(raw_lessons):
-                if not isinstance(payload, dict):
-                    continue
-
-                title = payload.get("title") or f"Lesson {lesson_index + 1}"
-                description = payload.get("description") or ""
-                content = ""
-                order_value = payload.get("order")
-                lesson_order = int(order_value) if isinstance(order_value, int) else lesson_index
-
-                lesson_id_value = payload.get("id")
-                lesson_uuid: uuid.UUID | None = None
-                if lesson_id_value is not None:
-                    try:
-                        lesson_uuid = (
-                            lesson_id_value if isinstance(lesson_id_value, uuid.UUID) else uuid.UUID(str(lesson_id_value))
-                        )
-                    except (TypeError, ValueError):
-                        logger.warning(
-                            "Ignoring invalid lesson id override %s for course %s",
-                            lesson_id_value,
-                            course_id,
-                        )
-
-                slug_value = payload.get("slug")
-                if lesson_uuid is None and isinstance(slug_value, str) and slug_value.strip():
-                    slug_text = slug_value.strip().lower()
-                    lesson_uuid = uuid.uuid5(uuid.NAMESPACE_URL, f"outline-lesson:{course_id}:{slug_text}")
-
-                lesson_kwargs: dict[str, Any] = {
-                    "course_id": course_id,
-                    "title": title,
-                    "description": description,
-                    "content": content,
-                    "order": lesson_order,
-                    "module_name": module_name,
-                    "module_order": module_order,
-                    "created_at": timestamp,
-                    "updated_at": timestamp,
-                }
-                if lesson_uuid is not None:
-                    lesson_kwargs["id"] = lesson_uuid
-
-                lesson_rows.append(lesson_kwargs)
+                lesson_row = self._build_lesson_row(
+                    course_id=course_id,
+                    module_name=module_name,
+                    module_order=module_order,
+                    lesson_index=lesson_index,
+                    payload=payload,
+                    timestamp=timestamp,
+                )
+                if lesson_row is not None:
+                    lesson_rows.append(lesson_row)
 
         if not lesson_rows:
             return 0
@@ -688,6 +654,57 @@ class CourseContentService:
         stmt = insert(Lesson).values(lesson_rows)
         await session.execute(stmt)
         return len(lesson_rows)
+
+    def _build_lesson_row(
+        self,
+        *,
+        course_id: uuid.UUID,
+        module_name: str | None,
+        module_order: int | None,
+        lesson_index: int,
+        payload: Any,
+        timestamp: datetime,
+    ) -> dict[str, Any] | None:
+        if not isinstance(payload, dict):
+            return None
+
+        lesson_id = self._resolve_lesson_id(payload=payload, course_id=course_id)
+        order_value = payload.get("order")
+
+        lesson_row: dict[str, Any] = {
+            "course_id": course_id,
+            "title": payload.get("title") or f"Lesson {lesson_index + 1}",
+            "description": payload.get("description") or "",
+            "content": "",
+            "order": int(order_value) if isinstance(order_value, int) else lesson_index,
+            "module_name": module_name,
+            "module_order": module_order,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        }
+        if lesson_id is not None:
+            lesson_row["id"] = lesson_id
+        return lesson_row
+
+    def _resolve_lesson_id(self, *, payload: dict[str, Any], course_id: uuid.UUID) -> uuid.UUID | None:
+        lesson_id_value = payload.get("id")
+        if lesson_id_value is not None:
+            try:
+                if isinstance(lesson_id_value, uuid.UUID):
+                    return lesson_id_value
+                return uuid.UUID(str(lesson_id_value))
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Ignoring invalid lesson id override %s for course %s",
+                    lesson_id_value,
+                    course_id,
+                )
+
+        slug_value = payload.get("slug")
+        if isinstance(slug_value, str) and slug_value.strip():
+            slug_text = slug_value.strip().lower()
+            return uuid.uuid5(uuid.NAMESPACE_URL, f"outline-lesson:{course_id}:{slug_text}")
+        return None
 
     def _normalize_modules_payload(
         self,
@@ -739,12 +756,11 @@ class CourseContentService:
         for index, node in enumerate(concept_graph.nodes):
             layer_index = layer_lookup.get(index)
             difficulty = min(5, layer_index + 1) if layer_index is not None else None
-            description = self._build_concept_description(node.title, plan.concept_tags_for_index(index))
 
             concept = await graph_service.create_concept(
                 domain=course.title,
                 name=node.title,
-                description=description,
+                description=self._build_concept_description(node.title, plan.concept_tags_for_index(index)),
                 slug=node.slug,
                 difficulty=difficulty,
                 generate_embedding=False,
@@ -786,10 +802,9 @@ class CourseContentService:
             confusor_pair_count,
         )
 
-        node_count = len(concepts_by_index)
         edge_pairs: list[tuple[uuid.UUID, uuid.UUID]] = []
         for edge in concept_graph.edges:
-            if edge.source_index >= node_count or edge.prereq_index >= node_count:
+            if edge.source_index >= len(concepts_by_index) or edge.prereq_index >= len(concepts_by_index):
                 logger.warning(
                     "Skipping edge due to out-of-range indices: %s depends on %s",
                     edge.source_index,

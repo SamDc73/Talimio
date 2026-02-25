@@ -10,15 +10,18 @@ learning preferences, and adaptive settings.
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.courses.models import Course, CourseConcept, Lesson, UserConceptState
 from src.progress.models import ProgressUpdate
 from src.progress.protocols import ProgressTracker
 from src.progress.service import ProgressService
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)
@@ -37,10 +40,8 @@ class CourseProgressService(ProgressTracker):
             progress_service = ProgressService(session)
             progress_data = await progress_service.get_single_progress(user_id, content_id)
 
-            # Get course for total lessons count
-            course_query = select(Course).where(Course.id == content_id)
-            course_result = await session.execute(course_query)
-            course = course_result.scalar_one_or_none()
+            # Get course for total lessons count.
+            course = (await session.execute(select(Course).where(Course.id == content_id))).scalar_one_or_none()
 
             if not course:
                 logger.warning("Course %s not found", content_id)
@@ -56,17 +57,19 @@ class CourseProgressService(ProgressTracker):
 
             # Determine total units for progress
             # Standard: number of lessons. Adaptive: number of concepts assigned to course.
-            lessons_query = select(Lesson).where(Lesson.course_id == content_id)
-            lessons_result = await session.execute(lessons_query)
-            lessons = lessons_result.scalars().all()
+            lessons = (await session.execute(select(Lesson).where(Lesson.course_id == content_id))).scalars().all()
             total_lessons = len(lessons)
 
             if course.adaptive_enabled:
                 # COUNT concepts for adaptive courses
-                concept_count = await session.scalar(
-                    select(func.count()).select_from(CourseConcept).where(CourseConcept.course_id == content_id)
+                total_concepts = int(
+                    (
+                        await session.scalar(
+                            select(func.count()).select_from(CourseConcept).where(CourseConcept.course_id == content_id)
+                        )
+                    )
+                    or 0
                 )
-                total_concepts = int(concept_count or 0)
                 if total_concepts > 0:
                     total_lessons = total_concepts
 

@@ -400,11 +400,8 @@ async def _build_messages(
                 context_parts.append(f"Related {request.context_type} content:\n{semantic_text}")
                 logger.debug("Added %d semantic search results", len(blocks))
 
-    # Use unified prompt that handles context intelligently
-    system_prompt = ASSISTANT_CHAT_SYSTEM_PROMPT
-
     # Build message list
-    messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+    messages: list[dict[str, Any]] = [{"role": "system", "content": ASSISTANT_CHAT_SYSTEM_PROMPT}]
 
     # Add conversation history
     messages.extend(request.conversation_history)

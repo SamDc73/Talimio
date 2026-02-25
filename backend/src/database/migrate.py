@@ -4,13 +4,17 @@
 import logging
 from collections.abc import Iterable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from src.config import env
 from src.config.settings import get_settings
 from src.database.engine import engine as default_engine
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 
 logger = logging.getLogger(__name__)
@@ -96,6 +100,51 @@ async def _release_lock(conn: AsyncConnection) -> None:
     )
 
 
+async def _execute_migration_sql(
+    *,
+    engine: AsyncEngine,
+    conn: AsyncConnection,
+    sql_content: str,
+    autocommit: bool,
+) -> None:
+    if autocommit:
+        async with engine.execution_options(isolation_level="AUTOCOMMIT").connect() as auto_conn:
+            await auto_conn.exec_driver_sql(sql_content)
+        return
+
+    async with conn.begin():
+        await conn.exec_driver_sql(sql_content)
+
+
+async def _record_applied_migration(conn: AsyncConnection, *, filename: str) -> None:
+    async with conn.begin():
+        await conn.execute(
+            text("INSERT INTO schema_migrations (filename) VALUES (:filename)"),
+            {"filename": filename},
+        )
+
+
+async def _apply_pending_migrations(
+    *,
+    engine: AsyncEngine,
+    conn: AsyncConnection,
+    migration_files: list[Path],
+    applied: set[str],
+    verbose: bool,
+) -> None:
+    for path in migration_files:
+        if path.name in applied:
+            continue
+
+        sql_content = _interpolate_env(_read_sql(path))
+        autocommit = _is_autocommit(sql_content)
+        await _execute_migration_sql(engine=engine, conn=conn, sql_content=sql_content, autocommit=autocommit)
+        await _record_applied_migration(conn, filename=path.name)
+
+        if verbose:
+            logger.info("Applied migration %s (autocommit=%s)", path.name, autocommit)
+
+
 async def apply_migrations(db_engine: AsyncEngine | None = None) -> None:
     """Apply pending SQL migrations in order.
 
@@ -138,29 +187,13 @@ async def apply_migrations(db_engine: AsyncEngine | None = None) -> None:
             async with engine.connect() as conn:
                 applied = set(await _get_applied(conn))
                 await conn.rollback()
-
-                for path in migration_files:
-                    if path.name in applied:
-                        continue
-
-                    sql_content = _interpolate_env(_read_sql(path))
-                    autocommit = _is_autocommit(sql_content)
-
-                    if autocommit:
-                        async with engine.execution_options(isolation_level="AUTOCOMMIT").connect() as auto_conn:
-                            await auto_conn.exec_driver_sql(sql_content)
-                    else:
-                        async with conn.begin():
-                            await conn.exec_driver_sql(sql_content)
-
-                    async with conn.begin():
-                        await conn.execute(
-                            text("INSERT INTO schema_migrations (filename) VALUES (:filename)"),
-                            {"filename": path.name},
-                        )
-
-                    if verbose:
-                        logger.info("Applied migration %s (autocommit=%s)", path.name, autocommit)
+                await _apply_pending_migrations(
+                    engine=engine,
+                    conn=conn,
+                    migration_files=migration_files,
+                    applied=applied,
+                    verbose=verbose,
+                )
         finally:
             await _release_lock(lock_conn)
 
