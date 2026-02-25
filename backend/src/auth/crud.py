@@ -1,8 +1,6 @@
 
 """Database-backed user CRUD for local auth."""
 
-from __future__ import annotations
-
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING

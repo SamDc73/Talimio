@@ -1,8 +1,6 @@
 
 """Utilities for assembling the course concept frontier response."""
 
-from __future__ import annotations
-
 import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

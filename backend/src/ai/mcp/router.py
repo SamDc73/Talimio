@@ -1,8 +1,6 @@
 
 """API routes for managing user MCP servers."""
 
-from __future__ import annotations
-
 import uuid
 from typing import Annotated, Any
 

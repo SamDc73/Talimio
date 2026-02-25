@@ -1,8 +1,6 @@
 
 """Pydantic schemas for the unified courses API."""
 
-from __future__ import annotations
-
 import uuid
 from datetime import datetime
 from typing import Any, Literal

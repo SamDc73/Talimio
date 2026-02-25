@@ -1,6 +1,5 @@
 """Email utilities for local auth (password reset + verification)."""
 
-from __future__ import annotations
 
 import hashlib
 import logging

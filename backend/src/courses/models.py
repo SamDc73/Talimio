@@ -1,6 +1,5 @@
 """SQLAlchemy models for courses, lessons, and adaptive concept scheduling."""
 
-from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime

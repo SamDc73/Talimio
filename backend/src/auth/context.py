@@ -6,8 +6,6 @@ with an AsyncSession and exposes small ownership helpers. Feature modules should
 prefer passing `CurrentAuth` instead of separate user_id/session pairs over time.
 """
 
-from __future__ import annotations
-
 import uuid
 from typing import TYPE_CHECKING, Annotated, Any, TypeVar
 

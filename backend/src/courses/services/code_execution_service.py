@@ -9,8 +9,6 @@ Fully autonomous execution with fast-path optimization:
 Sandboxes are reused per user+course with configurable TTL for compute efficiency.
 """
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
 import hashlib

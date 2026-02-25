@@ -1,6 +1,5 @@
 """Numeric sampling helpers for LaTeX expression verification."""
 
-from __future__ import annotations
 
 import math
 from itertools import islice, product

@@ -1,6 +1,5 @@
 """Database models for auth providers (OAuth accounts)."""
 
-from __future__ import annotations
 
 import uuid
 from datetime import datetime
