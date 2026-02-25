@@ -22,8 +22,10 @@ router = APIRouter(prefix="/api/v1/mcp", tags=["mcp"])
 
 _URL_ADAPTER = TypeAdapter(AnyHttpUrl)
 
+
 def _coerce_url(raw: str) -> AnyHttpUrl:
     return _URL_ADAPTER.validate_python(raw)
+
 
 def _serialize_server(server: Any) -> MCPServerResponse:
     """Serialize a stored MCP server into the API response shape."""
@@ -41,6 +43,7 @@ def _serialize_server(server: Any) -> MCPServerResponse:
         updated_at=server.updated_at,
     )
 
+
 @router.get("/servers", response_model=MCPServerListResponse)
 async def list_servers(
     auth: CurrentAuth,
@@ -56,6 +59,7 @@ async def list_servers(
         per_page=page_size,
     )
 
+
 @router.post("/servers", response_model=MCPServerResponse, status_code=status.HTTP_201_CREATED)
 async def create_server(
     payload: MCPServerCreateRequest,
@@ -67,6 +71,7 @@ async def create_server(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return _serialize_server(server)
+
 
 @router.delete("/servers/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_server(

@@ -33,4 +33,3 @@ def validate_password_policy(password: str) -> None:
         issue_list = "; ".join(issues)
         message = f"Password policy violation: {issue_list}."
         raise PasswordPolicyError(message)
-

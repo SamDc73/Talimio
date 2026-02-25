@@ -127,7 +127,6 @@ class CourseProcessor:
             ),
         )
 
-
     def _add_course_metadata(self, course: Course, parts: list[str]) -> None:
         """Add course metadata to preview parts."""
         if course.description:

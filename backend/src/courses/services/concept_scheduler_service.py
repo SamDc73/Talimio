@@ -11,10 +11,9 @@ import logging
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from sqlalchemy import and_, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.settings import get_settings
 from src.courses.models import (
@@ -27,6 +26,10 @@ from src.courses.models import (
 )
 
 from .concept_graph_service import FrontierEntry
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)

@@ -148,7 +148,7 @@ class BookProcessor:
 
         try:
             # Open EPUB directly from bytes with PyMuPDF (suppress MuPDF CSS warnings)
-            with redirect_stderr(Path(os.devnull).open("w")):
+            with redirect_stderr(Path(os.devnull).open("w", encoding="utf-8")):
                 epub_document = fitz.open(stream=file_content, filetype="epub")
 
             if epub_document is None:

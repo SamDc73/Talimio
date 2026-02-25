@@ -190,7 +190,7 @@ async def _handle_video_not_found_error(
         await asyncio.sleep(retry_delay)
         return True
 
-    logger.exception("Video %s not found after %s attempts: %s", video_id, max_retries, e)
+    logger.error("Video %s not found after %s attempts: %s", video_id, max_retries, e)
     await _mark_video_status(video_id, VIDEO_PIPELINE_STATUS_FAILED)
     return False
 

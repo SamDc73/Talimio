@@ -85,7 +85,6 @@ class VideoContent(ContentItemBase):
     model_config = build_camel_config()
 
 
-
 class BookContent(ContentItemBase):
     """Model for book content items."""
 
