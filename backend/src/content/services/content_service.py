@@ -1,26 +1,23 @@
 """Main content service."""
 
 import logging
-from typing import TYPE_CHECKING, Any
+
+# Progress calculation imports removed - progress now fetched separately
+# AuthContext removed - using uuid.UUID directly
+import uuid
+from typing import Any
 
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.content.schemas import ContentListResponse, ContentType
+from src.content.schemas import ContentListResponse, ContentType, normalize_content_type
 from src.content.services.content_transform_service import ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
 from src.exceptions import ResourceNotFoundError
 
 
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-
-# Progress calculation imports removed - progress now fetched separately
-# AuthContext removed - using uuid.UUID directly
 logger = logging.getLogger(__name__)
 
 
@@ -52,8 +49,10 @@ class ContentService:
         offset = (page - 1) * page_size
         search_term = f"%{search}%" if search else None
 
+        canonical_content_type = normalize_content_type(content_type) if content_type is not None else None
+
         session = self._session
-        queries = QueryBuilderService.build_content_queries(content_type, search, include_archived, user_id)
+        queries = QueryBuilderService.build_content_queries(canonical_content_type, search, include_archived, user_id)
 
         if not queries:
             return ContentListResponse(items=[], total=0, page=page, per_page=page_size)
@@ -255,8 +254,10 @@ class ContentService:
         user_id: uuid.UUID,
     ) -> None:
         """Delete a content item and all related references."""
+        canonical_content_type = normalize_content_type(content_type)
+
         session = self._session
-        model = self._get_model(content_type)
+        model = self._get_model(canonical_content_type)
 
         # Load row with ownership check
         row = await session.get(model, content_id)

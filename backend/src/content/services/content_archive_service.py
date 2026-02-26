@@ -1,21 +1,16 @@
 """Content archive service."""
 
 import logging
+import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.content.schemas import ContentListResponse, ContentType
+from src.content.schemas import ContentListResponse, ContentType, normalize_content_type
 from src.content.services.content_transform_service import ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
 from src.exceptions import ResourceNotFoundError
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)
@@ -29,9 +24,11 @@ class ContentArchiveService:
         """Archive content by type and ID with user validation."""
         logger.info("🗃️ Archiving %s %s", content_type, content_id)
 
+        canonical_content_type = normalize_content_type(content_type)
+
         statement = None
         params: dict[str, uuid.UUID | datetime] = {"content_id": content_id, "user_id": user_id}
-        if content_type == ContentType.BOOK:
+        if canonical_content_type == ContentType.BOOK:
             statement = text(
                 """
                 UPDATE books
@@ -40,7 +37,7 @@ class ContentArchiveService:
                 """
             )
             params["archived_at"] = datetime.now(UTC)
-        elif content_type == ContentType.VIDEO:
+        elif canonical_content_type == ContentType.VIDEO:
             statement = text(
                 """
                 UPDATE videos
@@ -49,7 +46,7 @@ class ContentArchiveService:
                 """
             )
             params["archived_at"] = datetime.now(UTC)
-        elif content_type == ContentType.COURSE:
+        elif canonical_content_type == ContentType.COURSE:
             statement = text(
                 """
                 UPDATE courses
@@ -79,9 +76,11 @@ class ContentArchiveService:
         """Unarchive content by type and ID with user validation."""
         logger.info("📤 Unarchiving %s %s", content_type, content_id)
 
+        canonical_content_type = normalize_content_type(content_type)
+
         statement = None
         params: dict[str, uuid.UUID] = {"content_id": content_id, "user_id": user_id}
-        if content_type == ContentType.BOOK:
+        if canonical_content_type == ContentType.BOOK:
             statement = text(
                 """
                 UPDATE books
@@ -89,7 +88,7 @@ class ContentArchiveService:
                 WHERE id = :content_id AND user_id = :user_id
                 """
             )
-        elif content_type == ContentType.VIDEO:
+        elif canonical_content_type == ContentType.VIDEO:
             statement = text(
                 """
                 UPDATE videos
@@ -97,7 +96,7 @@ class ContentArchiveService:
                 WHERE id = :content_id AND user_id = :user_id
                 """
             )
-        elif content_type == ContentType.COURSE:
+        elif canonical_content_type == ContentType.COURSE:
             statement = text(
                 """
                 UPDATE courses
@@ -143,17 +142,19 @@ class ContentArchiveService:
 
         # Construct the combined query with archived filter
         if content_type:
-            if content_type == ContentType.VIDEO:
+            canonical_content_type = normalize_content_type(content_type)
+
+            if canonical_content_type == ContentType.VIDEO:
                 combined_query = QueryBuilderService.get_video_query(
                     search,
                     archived_only=True,
                     user_id=current_user_id,
                 )
-            elif content_type == ContentType.BOOK:
+            elif canonical_content_type == ContentType.BOOK:
                 combined_query = QueryBuilderService.get_books_query(
                     search, archived_only=True, user_id=current_user_id
                 )
-            elif content_type == ContentType.COURSE:
+            elif canonical_content_type == ContentType.COURSE:
                 combined_query = QueryBuilderService.get_courses_query(
                     search, archived_only=True, include_archived=False, user_id=current_user_id
                 )

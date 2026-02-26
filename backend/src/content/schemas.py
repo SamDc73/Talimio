@@ -11,8 +11,16 @@ class ContentType(StrEnum):
     """Enumeration of content types available in the learning platform."""
 
     VIDEO = "video"
+    YOUTUBE = "youtube"
     BOOK = "book"
     COURSE = "course"
+
+
+def normalize_content_type(content_type: ContentType) -> ContentType:
+    """Normalize accepted aliases to canonical content types."""
+    if content_type == ContentType.YOUTUBE:
+        return ContentType.VIDEO
+    return content_type
 
 
 ContentItemStatus = Literal["active", "archived", "draft"]

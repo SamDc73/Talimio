@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 
 from src.auth import CurrentAuth
-from src.content.schemas import ContentListResponse, ContentType
+from src.content.schemas import ContentListResponse, ContentType, normalize_content_type
 from src.content.services.content_service import ContentService
 from src.exceptions import ResourceNotFoundError
 
@@ -55,8 +55,10 @@ async def archive_content(
     """Archive a content item by type and ID."""
     from src.content.services.content_archive_service import ContentArchiveService
 
+    normalized_content_type = normalize_content_type(content_type)
+
     try:
-        await ContentArchiveService.archive_content(auth.session, content_type, content_id, auth.user_id)
+        await ContentArchiveService.archive_content(auth.session, normalized_content_type, content_id, auth.user_id)
     except ResourceNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -70,8 +72,10 @@ async def unarchive_content(
     """Unarchive a content item by type and ID."""
     from src.content.services.content_archive_service import ContentArchiveService
 
+    normalized_content_type = normalize_content_type(content_type)
+
     try:
-        await ContentArchiveService.unarchive_content(auth.session, content_type, content_id, auth.user_id)
+        await ContentArchiveService.unarchive_content(auth.session, normalized_content_type, content_id, auth.user_id)
     except ResourceNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -84,9 +88,11 @@ async def delete_content(
 ) -> None:
     """Delete a content item by type and ID."""
     content_service = ContentService(session=auth.session)
+    normalized_content_type = normalize_content_type(content_type)
+
     try:
         await content_service.delete_content(
-            content_type=content_type,
+            content_type=normalized_content_type,
             content_id=content_id,
             user_id=auth.user_id,
         )
