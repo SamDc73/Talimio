@@ -1,7 +1,7 @@
 [project]
 name = "Talimio"
 version = "0.1.0"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     # Core
     "fastapi>=0.115.0",
@@ -67,7 +67,7 @@ dev = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py314"
 
 [tool.ruff.format]
 quote-style = "double"
