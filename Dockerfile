@@ -10,7 +10,7 @@ RUN pnpm install --frozen-lockfile
 COPY web/ ./
 RUN pnpm run build
 
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm AS backend-builder
+FROM ghcr.io/astral-sh/uv:python3.14-trixie AS backend-builder
 
 WORKDIR /app
 
@@ -19,7 +19,7 @@ RUN uv sync --frozen --no-dev
 
 COPY backend/src ./src
 
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm AS runtime
+FROM ghcr.io/astral-sh/uv:python3.14-trixie AS runtime
 
 WORKDIR /app
 
