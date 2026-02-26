@@ -7,7 +7,6 @@ depend on request-scoped auth context or router-layer dependencies.
 
 
 import logging
-import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -20,6 +19,8 @@ from src.videos.models import Video
 
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 

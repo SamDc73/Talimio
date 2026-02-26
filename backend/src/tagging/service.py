@@ -3,12 +3,11 @@
 import json
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.client import LLMClient
 from src.ai.errors import AIRateLimitOrQuotaError, AIRuntimeError
@@ -17,6 +16,10 @@ from src.config.settings import get_settings
 
 from .models import Tag, TagAssociation
 from .schemas import TagWithConfidence
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)
