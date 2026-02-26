@@ -12,10 +12,8 @@ Key design:
 """
 
 import logging
-import uuid
-from collections.abc import Awaitable, Callable
 from contextlib import suppress
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import psycopg
 from psycopg_pool import ConnectionPool
@@ -34,6 +32,11 @@ apply_mem0_telemetry_disable_patch()
 from src.ai.mem0_litellm_embedder_patch import apply_mem0_litellm_embedder_patch
 from src.config import env
 from src.config.settings import get_settings
+
+
+if TYPE_CHECKING:
+    import uuid
+    from collections.abc import Awaitable, Callable
 
 
 logger = logging.getLogger(__name__)

@@ -7,21 +7,23 @@ in the application, providing a clean interface that hides implementation detail
 
 
 import logging
-import uuid
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
 from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_COURSE_PLANNER
 from src.ai.client import LLMClient
-from src.ai.models import AdaptiveCourseStructure, CourseStructure, ExecutionPlan, SelfAssessmentQuiz
 from src.ai.rag.embeddings import VectorRAG
 from src.books.models import Book
 from src.videos.models import Video
 
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.ai.models import AdaptiveCourseStructure, CourseStructure, ExecutionPlan, SelfAssessmentQuiz
 
 
 logger = logging.getLogger(__name__)
