@@ -5,9 +5,8 @@
 import logging
 import re
 import secrets
-import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, cast
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -63,6 +62,10 @@ from src.config.settings import get_settings
 from src.database.session import DbSession
 from src.middleware.security import get_client_ip
 from src.user.models import User
+
+
+if TYPE_CHECKING:
+    import uuid
 
 
 router = APIRouter(
