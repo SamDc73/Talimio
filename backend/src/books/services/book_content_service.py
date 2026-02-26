@@ -4,7 +4,6 @@
 
 import json
 import logging
-import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +14,8 @@ from src.exceptions import ResourceNotFoundError
 
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 

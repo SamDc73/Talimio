@@ -9,8 +9,7 @@ This module provides:
 """
 
 import logging
-import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -25,6 +24,10 @@ from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
 )
+
+
+if TYPE_CHECKING:
+    import uuid
 
 
 logger = logging.getLogger(__name__)

@@ -3,7 +3,6 @@
 
 
 import logging
-import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
@@ -18,6 +17,8 @@ from src.courses.schemas import LessonDetailResponse
 
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 

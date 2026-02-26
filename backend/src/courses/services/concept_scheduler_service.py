@@ -9,7 +9,6 @@ and does not compute on-the-fly fallback from embeddings.
 
 import logging
 import uuid
-from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, TypedDict
 
@@ -25,11 +24,13 @@ from src.courses.models import (
     UserConceptState,
 )
 
-from .concept_graph_service import FrontierEntry
-
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from .concept_graph_service import FrontierEntry
 
 
 logger = logging.getLogger(__name__)

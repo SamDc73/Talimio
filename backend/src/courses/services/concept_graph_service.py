@@ -5,7 +5,6 @@
 import logging
 import re
 import uuid
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, TypedDict
 
 from sqlalchemy import and_, bindparam, select, text, update
@@ -17,6 +16,8 @@ from src.courses.models import Concept, ConceptPrerequisite, CourseConcept, User
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 

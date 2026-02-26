@@ -3,7 +3,6 @@
 
 
 import logging
-import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import column, func, select, text
@@ -12,6 +11,8 @@ from src.content.schemas import ContentType
 
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
     from sqlalchemy.sql.selectable import Subquery
 

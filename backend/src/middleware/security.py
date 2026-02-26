@@ -2,7 +2,6 @@
 
 
 import ipaddress
-from collections.abc import Callable
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
@@ -12,6 +11,8 @@ from src.config.settings import get_settings
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from fastapi import Request
     from fastapi.responses import Response
 

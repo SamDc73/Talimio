@@ -3,17 +3,21 @@
 
 import json
 import logging
-import uuid
-from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from src.books.models import Book
 from src.books.schemas import (
     BookProgressResponse,
     BookResponse,
     BookWithProgress,
     TableOfContentsItem,
 )
+
+
+if TYPE_CHECKING:
+    import uuid
+    from collections.abc import Mapping
+
+    from src.books.models import Book
 
 
 logger = logging.getLogger(__name__)
