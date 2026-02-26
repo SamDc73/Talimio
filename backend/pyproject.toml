@@ -49,13 +49,18 @@ dependencies = [
     "loguru>=0.7.3",
     # Code Execution
     "e2b-code-interpreter>=2.0.0",
+    "latex2sympy2-extended>=1.11.0",
+    "mcp>=1.26.0",
+    "starlette-csrf>=3.0.0",
+    "pwdlib[argon2]>=0.3.0",
+    "httpx-oauth>=0.16.1",
+    "deptry>=0.24.0",
 ]
 
 [dependency-groups]
 dev = [
     # Development tools
-    "uv>=0.4.0",
-    "ruff>=0.7.0",
+    "ruff>=0.15.2",
     "aiosqlite>=0.21.0",
     "pytest>=8.3.5",
     "pytest-asyncio>=0.26.0",
@@ -63,6 +68,7 @@ dev = [
     "httpx>=0.28.1",
     "respx>=0.22.0",
     "pytest-timeout>=2.4.0",
+    "ty>=0.0.18",
 ]
 
 [tool.ruff]
@@ -81,7 +87,6 @@ ignore = [
     "E501",    # line too long (handled by formatter)
     "D100",    # Missing docstring in public module
     "D104",    # Missing docstring in public package
-    "G004",     # logging-f-string
     "TRY300",   # try-else-block
     "TRY301",   # abstract-raise
     "TRY401",   # redundant-exception-object
@@ -94,10 +99,52 @@ ignore = [
     "FBT001",   # boolean-typed-positional-argument (often acceptable for internal APIs)
     "FBT002",   # boolean-default-positional-argument (often acceptable for internal APIs)
     "E402",     # module-import-not-at-top-of-file
+    "DOC201",   # docstring returns sections are guidance-only for this repo
+    "DOC402",   # docstring yields sections are guidance-only for this repo
+    "DOC501",   # raised-exception docstring tracking is too noisy/churn-heavy
+    "CPY001",   # copyright header policy is not enforced in this repo
+    "PLR6301",  # no-self-use conflicts with class-based service organization
+    "PLR0917",  # positional-argument threshold is guidance-only (not enforced)
+    "PLR6201",  # set-literal membership style is guidance-only
+    "PLC1901",  # empty-string comparison simplification is guidance-only
+    "FURB113",  # extend-vs-append micro-style is guidance-only
+    "B903",     # dataclass-or-namedtuple preference is not enforced
     "TC001",    # typing-only-first-party-import (we use from __future__ import annotations)
+    "TC002",    # typing-only-third-party-import (we use from __future__ import annotations)
     "TC003"     # typing-only-standard-library-import  (we use from __future__ import annotations)
 ]
 fixable = ["ALL"]
+preview = true
+future-annotations = false
+
+[tool.ruff.lint.flake8-type-checking]
+exempt-modules = ["typing", "typing_extensions"]
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "pydantic_settings.BaseSettings",
+    "sqlalchemy.orm.DeclarativeBase",
+    "src.database.base.Base",
+    "abc.ABC",
+    "typing.Protocol",
+]
+runtime-evaluated-decorators = [
+    "fastapi.APIRouter.api_route",
+    "fastapi.APIRouter.get",
+    "fastapi.APIRouter.post",
+    "fastapi.APIRouter.put",
+    "fastapi.APIRouter.patch",
+    "fastapi.APIRouter.delete",
+    "fastapi.APIRouter.websocket",
+    "fastapi.FastAPI.api_route",
+    "fastapi.FastAPI.get",
+    "fastapi.FastAPI.post",
+    "fastapi.FastAPI.put",
+    "fastapi.FastAPI.patch",
+    "fastapi.FastAPI.delete",
+    "pydantic.field_validator",
+    "pydantic.model_validator",
+    "pydantic.validate_call",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "D104"]
@@ -116,7 +163,7 @@ combine-as-imports = true
 lines-after-imports = 2
 
 [tool.ruff.lint.pep8-naming]
-classmethod-decorators = ["classmethod", "pydantic.validator", "pydantic.root_validator"]
+classmethod-decorators = ["classmethod"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -161,9 +208,12 @@ call-non-callable = "error"
 unresolved-reference = "error"
 conflicting-declarations = "error"
 duplicate-base = "error"
-deprecated = "warn"
 division-by-zero = "error"
 unresolved-import = "warn"
+invalid-type-checking-constant = "error"
+invalid-type-form = "error"
+deprecated = "warn"
+redundant-cast = "warn"
 
 [tool.ty.environment]
 root = [".", "src"]
