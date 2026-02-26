@@ -4,7 +4,6 @@
 
 import json
 import logging
-import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -13,6 +12,8 @@ from src.videos.models import Video
 
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 

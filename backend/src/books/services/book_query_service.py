@@ -3,7 +3,6 @@
 
 
 import logging
-import uuid
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import func, select, text
@@ -14,6 +13,8 @@ from src.books.services.book_response_builder import BookResponseBuilder
 
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
