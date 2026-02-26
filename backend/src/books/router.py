@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import uuid
-from collections.abc import AsyncGenerator, Coroutine
 from typing import TYPE_CHECKING, Annotated, Any
 
 import httpx
@@ -32,6 +31,8 @@ from .services.book_response_builder import BookResponseBuilder
 
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Coroutine
+
     from src.books.models import Book
 
 
