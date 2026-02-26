@@ -1,26 +1,14 @@
-
 """Utilities for assembling the course concept frontier response."""
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
-from src.courses.schemas import (
-    ConceptSummary,
-    FrontierResponse,
-)
+from src.courses.models import Concept, UserConceptState
+from src.courses.schemas import ConceptSummary, FrontierResponse
 
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    from src.courses.models import (
-        Concept,
-        UserConceptState,
-    )
-
-    from .concept_graph_service import ConceptGraphService, FrontierEntry
-    from .concept_scheduler_service import DueConceptEntry, LectorSchedulerService
+from .concept_graph_service import ConceptGraphService, FrontierEntry
+from .concept_scheduler_service import DueConceptEntry, LectorSchedulerService
 
 
 @dataclass(slots=True)

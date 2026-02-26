@@ -1,23 +1,22 @@
 
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.ai.mcp.config import MCPConfig
+
+
 """Helpers for exposing user MCP tools to the LLM client."""
 
 import json
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import httpx
 
 from src.ai.mcp.client import MCPClientDependencyError, MCPServerNotConfiguredError, get_mcp_client
 from src.ai.mcp.service import get_user_mcp_config, list_user_mcp_tools
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from src.ai.mcp.config import MCPConfig
 
 
 logger = logging.getLogger(__name__)

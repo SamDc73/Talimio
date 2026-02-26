@@ -1,10 +1,15 @@
 
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 """Lesson service with SQL-first queries and mandatory user isolation."""
 
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 from fastapi import HTTPException, status
 from sqlalchemy import select, update
@@ -14,12 +19,6 @@ from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.client import LLMClient
 from src.courses.models import Course, Lesson
 from src.courses.schemas import LessonDetailResponse
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)

@@ -1,8 +1,12 @@
 
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 """User service for handling user settings and memory management."""
 
 import logging
-from typing import TYPE_CHECKING
 
 from psycopg.errors import ForeignKeyViolation
 from pydantic import ValidationError
@@ -21,12 +25,6 @@ from src.user.schemas import (
 
 
 logger = logging.getLogger(__name__)
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class UserServiceError(Exception):

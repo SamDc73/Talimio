@@ -1,10 +1,15 @@
 
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 """Book progress service for tracking reading progress."""
 
 import json
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy import select
 
@@ -15,11 +20,6 @@ from src.progress.service import ProgressService
 
 
 logger = logging.getLogger(__name__)
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class BookProgressRecomputeError(RuntimeError):

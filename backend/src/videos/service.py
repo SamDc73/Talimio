@@ -2,13 +2,16 @@ import asyncio
 import json
 import logging
 import re
+import uuid
+from collections.abc import Coroutine
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import aiohttp
 import yt_dlp
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
 from src.ai.rag.service import RAGService
@@ -31,12 +34,6 @@ from src.videos.services.video_progress_service import VideoProgressService
 
 logger = logging.getLogger(__name__)
 
-
-if TYPE_CHECKING:
-    import uuid
-    from collections.abc import Coroutine
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 CHAPTER_EXTRACTION_MAX_RETRIES = 3
 CHAPTER_EXTRACTION_RETRY_DELAY_SECONDS = 2

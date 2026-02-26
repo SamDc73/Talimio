@@ -1,10 +1,18 @@
 
+import uuid
+from collections.abc import Iterable, Mapping
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.ai.mcp.schemas import AuthType, MCPServerCreateRequest
+
+
 """Service layer for user-managed MCP servers."""
 
 import base64
 import hashlib
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import httpx
@@ -17,15 +25,6 @@ from src.ai.mcp.config import MCPAuthConfig, MCPConfig, MCPServerConfig
 from src.config.settings import get_settings
 from src.database.pagination import Paginator
 from src.user.models import UserMCPServer
-
-
-if TYPE_CHECKING:
-    import uuid
-    from collections.abc import Iterable, Mapping
-
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from src.ai.mcp.schemas import AuthType, MCPServerCreateRequest
 
 
 logger = logging.getLogger(__name__)

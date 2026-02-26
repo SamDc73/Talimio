@@ -1,10 +1,15 @@
 
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 """Business logic for progress tracking."""
 
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy import text
 
@@ -15,12 +20,6 @@ from .queries import (
     GET_SINGLE_PROGRESS_QUERY,
     UPSERT_PROGRESS_QUERY,
 )
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)

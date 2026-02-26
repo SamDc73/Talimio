@@ -1,9 +1,10 @@
 import logging
 import re
 import uuid
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request, status
@@ -50,10 +51,6 @@ from .progress.router import router as progress_router
 from .tagging.router import router as tagging_router
 from .user.router import router as user_router
 from .videos.router import router as videos_router
-
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
 
 
 setup_logging()

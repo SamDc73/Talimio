@@ -1,11 +1,15 @@
 
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 """Book content processor for tag generation."""
 
 import logging
 import os
 from contextlib import redirect_stderr
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import fitz  # PyMuPDF
 
@@ -15,12 +19,6 @@ from src.storage.factory import get_storage_provider
 
 
 logger = logging.getLogger(__name__)
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class BookProcessor:

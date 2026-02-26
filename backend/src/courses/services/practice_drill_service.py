@@ -1,10 +1,12 @@
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 """Adaptive practice drill generation service using batched direct LLM IRT."""
 
 import re
 import uuid
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, select
@@ -14,9 +16,6 @@ from src.config.settings import get_settings
 from src.courses.models import Concept, CourseConcept, ProbeEvent, UserConceptState
 from src.courses.schemas import PracticeDrillItem
 
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 _MAX_GENERATION_ROUNDS = 5
 _STRICT_SIGNATURE_ROUNDS = 2

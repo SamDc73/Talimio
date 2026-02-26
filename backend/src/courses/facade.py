@@ -1,4 +1,9 @@
 
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 """
 Courses Module Facade.
 
@@ -8,7 +13,7 @@ Coordinates internal course services and provides stable API for other modules.
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import select
@@ -39,12 +44,6 @@ from .services.practice_drill_service import PracticeDrillService
 
 
 logger = logging.getLogger(__name__)
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class CoursesFacadeError(Exception):

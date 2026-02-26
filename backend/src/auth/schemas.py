@@ -1,15 +1,11 @@
 """Pydantic schemas for auth API requests and responses."""
 
-from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from src.config.schema_casing import build_camel_config
 from src.config.settings import get_settings
-
-
-if TYPE_CHECKING:
-    from src.user.models import User
+from src.user.models import User
 
 
 _MIN_PASSWORD_LENGTH = get_settings().AUTH_PASSWORD_MIN_LENGTH

@@ -2,7 +2,8 @@ import asyncio
 import json
 import logging
 import uuid
-from typing import TYPE_CHECKING, Annotated, Any
+from collections.abc import AsyncGenerator, Coroutine
+from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
@@ -11,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.auth import CurrentAuth
+from src.books.models import Book
 from src.exceptions import ResourceNotFoundError
 from src.storage.factory import get_storage_provider
 
@@ -28,12 +30,6 @@ from .schemas import (
     BookWithProgress,
 )
 from .services.book_response_builder import BookResponseBuilder
-
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Coroutine
-
-    from src.books.models import Book
 
 
 logger = logging.getLogger(__name__)

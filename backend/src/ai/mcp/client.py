@@ -1,18 +1,15 @@
 """HTTP MCP client utilities."""
 
 import asyncio
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import Any, Protocol
 
 import httpx
 
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable
-
-    from src.ai.mcp.config import MCPConfig, MCPServerConfig
+from src.ai.mcp.config import MCPConfig, MCPServerConfig
 
 
 class MCPClientDependencyError(RuntimeError):

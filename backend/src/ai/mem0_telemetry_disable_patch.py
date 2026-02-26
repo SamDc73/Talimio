@@ -21,12 +21,9 @@ LiteLLM embedder patch.
 
 import sys
 import types
+from collections.abc import Callable
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, cast
-
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
+from typing import Any, cast
 
 
 _POSTHOG_PATCHED = False

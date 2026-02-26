@@ -1,4 +1,10 @@
 
+import uuid
+from collections.abc import Callable, Coroutine
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 """Books Module Facade.
 
 Single entry point for all book-related operations.
@@ -10,7 +16,7 @@ import hashlib
 import json
 import logging
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -33,13 +39,6 @@ from .services.book_content_service import BookContentService
 from .services.book_metadata_service import BookMetadata, BookMetadataExtractionError, BookMetadataService
 from .services.book_progress_service import BookProgressService
 from .services.book_response_builder import BookResponseBuilder
-
-
-if TYPE_CHECKING:
-    import uuid
-    from collections.abc import Callable, Coroutine
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)

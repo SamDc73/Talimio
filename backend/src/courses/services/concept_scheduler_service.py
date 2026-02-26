@@ -1,4 +1,11 @@
 
+from collections.abc import Sequence
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .concept_graph_service import FrontierEntry
+
+
 """LECTOR scheduling service implementing semantic-aware spaced repetition.
 
 Embedding-based confusors are computed and persisted at course creation (or
@@ -10,7 +17,7 @@ and does not compute on-the-fly fallback from embeddings.
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, TypedDict
+from typing import TypedDict
 
 from sqlalchemy import and_, or_, select
 
@@ -23,14 +30,6 @@ from src.courses.models import (
     ProbeEvent,
     UserConceptState,
 )
-
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from .concept_graph_service import FrontierEntry
 
 
 logger = logging.getLogger(__name__)

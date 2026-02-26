@@ -1,4 +1,11 @@
 
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.ai.models import AdaptiveCourseStructure, CourseStructure, ExecutionPlan, SelfAssessmentQuiz
+
+
 """Centralized AI Service for all AI operations.
 
 This service acts as the single entry point for all AI-related functionality
@@ -7,7 +14,7 @@ in the application, providing a clean interface that hides implementation detail
 
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy import select
 
@@ -16,14 +23,6 @@ from src.ai.client import LLMClient
 from src.ai.rag.embeddings import VectorRAG
 from src.books.models import Book
 from src.videos.models import Video
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from src.ai.models import AdaptiveCourseStructure, CourseStructure, ExecutionPlan, SelfAssessmentQuiz
 
 
 logger = logging.getLogger(__name__)

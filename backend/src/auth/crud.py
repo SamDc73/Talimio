@@ -1,21 +1,19 @@
 
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 """Database-backed user CRUD for local auth."""
 
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, func, select
 
 from src.auth.models import AuthSession, PasswordResetTokenUse
 from src.auth.security import get_password_hash, verify_password
 from src.user.models import User
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 DUMMY_HASH = get_password_hash(secrets.token_urlsafe(32))

@@ -1,4 +1,9 @@
 
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 """Course progress service implementing the ProgressTracker protocol.
 
 Provides lesson-based progress tracking for courses with completion percentage calculations.
@@ -9,7 +14,7 @@ learning preferences, and adaptive settings.
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy import and_, func, select
 
@@ -17,12 +22,6 @@ from src.courses.models import Course, CourseConcept, Lesson, UserConceptState
 from src.progress.models import ProgressUpdate
 from src.progress.protocols import ProgressTracker
 from src.progress.service import ProgressService
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)

@@ -1,4 +1,11 @@
 
+from collections.abc import Sequence
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.ai.models import PlanAction
+
+
 """AI-powered code execution service using E2B Code Interpreter sandboxes.
 
 Fully autonomous execution with fast-path optimization:
@@ -18,7 +25,7 @@ import shlex
 import time
 import uuid
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any, ClassVar
 
 from fastapi import status
 from sqlalchemy.exc import SQLAlchemyError
@@ -36,13 +43,6 @@ with contextlib.suppress(Exception):  # e2b-code-interpreter >= 2.x
     _AsyncSandbox = _ImportedAsyncSandbox
 
 AsyncSandbox: Any | None = _AsyncSandbox
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from src.ai.models import PlanAction
 
 _AuthenticationException: type[Exception] = Exception
 _InvalidArgumentException: type[Exception] = Exception
