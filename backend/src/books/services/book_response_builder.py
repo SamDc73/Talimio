@@ -1,9 +1,15 @@
 
+import uuid
+from collections.abc import Mapping
+
+from src.books.models import Book
+
+
 """Book response builder service for consistent response formatting."""
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from src.books.schemas import (
     BookProgressResponse,
@@ -11,13 +17,6 @@ from src.books.schemas import (
     BookWithProgress,
     TableOfContentsItem,
 )
-
-
-if TYPE_CHECKING:
-    import uuid
-    from collections.abc import Mapping
-
-    from src.books.models import Book
 
 
 logger = logging.getLogger(__name__)

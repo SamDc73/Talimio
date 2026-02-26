@@ -1,14 +1,11 @@
-from typing import TYPE_CHECKING, Annotated
+from collections.abc import AsyncGenerator
+from typing import Annotated
 
 from fastapi import Depends
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.database.engine import engine
-
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
 
 
 async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

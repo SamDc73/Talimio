@@ -2,20 +2,15 @@
 
 
 import logging
+from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from src.config import env
 from src.config.settings import get_settings
 from src.database.engine import engine as default_engine
-
-
-if TYPE_CHECKING:
-    from collections.abc import Iterable
-
-    from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 
 logger = logging.getLogger(__name__)

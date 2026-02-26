@@ -1,10 +1,12 @@
 """Grading service backed by deterministic verifiers (SymPy for LaTeX expressions) and optional LLM coaching."""
 
 import logging
+import uuid
 from dataclasses import asdict
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.client import LLMClient
 from src.ai.errors import AIRuntimeError
@@ -41,11 +43,6 @@ ALLOWED_GRADING_TAGS = {
     "simplification",
     "unsupported-relation",
 }
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class GradingService:

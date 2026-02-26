@@ -2,11 +2,9 @@
 
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-
-if TYPE_CHECKING:
-    from src.courses.schemas import GradeStatus, JXGBoardState
+from src.courses.schemas import GradeStatus, JXGBoardState
 
 
 _DEFAULT_TOLERANCE = 0.05

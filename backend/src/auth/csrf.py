@@ -3,17 +3,13 @@
 
 import ipaddress
 import secrets
-from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
+from fastapi import Response
 from itsdangerous import URLSafeSerializer
 
 from src.auth.security import get_csrf_signing_key
 from src.config.settings import get_settings
-
-
-if TYPE_CHECKING:
-    from fastapi import Response
 
 
 CSRF_COOKIE_NAME = "csrftoken"

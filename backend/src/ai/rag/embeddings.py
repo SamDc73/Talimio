@@ -6,19 +6,15 @@ import logging
 import math
 import uuid
 from collections.abc import Iterator, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import litellm
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.litellm_config import configure_litellm
 from src.ai.rag.config import rag_config
-
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.ai.rag.schemas import SearchResult
 
 

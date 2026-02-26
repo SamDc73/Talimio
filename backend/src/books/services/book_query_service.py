@@ -1,21 +1,20 @@
 
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 """Book query service for complex database operations."""
 
 
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 from sqlalchemy import func, select, text
 
 from src.books.models import Book
 from src.books.schemas import BookLearningStatus, BookListResponse, BookResponse
 from src.books.services.book_response_builder import BookResponseBuilder
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)

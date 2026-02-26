@@ -1,4 +1,7 @@
 
+import uuid
+
+
 """Centralized error handling system with proper categorization.
 
 This module provides:
@@ -9,7 +12,7 @@ This module provides:
 """
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -24,10 +27,6 @@ from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
 )
-
-
-if TYPE_CHECKING:
-    import uuid
 
 
 logger = logging.getLogger(__name__)

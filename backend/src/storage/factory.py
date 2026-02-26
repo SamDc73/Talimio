@@ -1,16 +1,12 @@
 """Storage provider factory for creating the appropriate storage instance."""
 
 from functools import lru_cache
-from typing import TYPE_CHECKING
 
 from src.config import get_settings
 
+from .base import AbstractStorage
 from .local import LocalStorage
 from .r2 import R2Storage
-
-
-if TYPE_CHECKING:
-    from .base import AbstractStorage
 
 
 @lru_cache

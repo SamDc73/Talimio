@@ -2,21 +2,17 @@
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+import uuid
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.courses.models import Course, Lesson
 
 
 logger = logging.getLogger(__name__)
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class CourseProcessor:

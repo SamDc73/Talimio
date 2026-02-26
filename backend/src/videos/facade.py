@@ -5,10 +5,21 @@ Coordinates internal video services and provides stable API for other modules.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any
+import uuid
+from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from .schemas import (
+    VideoChapterResponse,
+    VideoCreate,
+    VideoLearningStatus,
+    VideoListResponse,
+    VideoResponse,
+    VideoTranscriptResponse,
+    VideoUpdate,
+)
 from .service import VideoNotFoundError, VideoService
 from .services.video_progress_service import VideoProgressService
 
@@ -17,21 +28,6 @@ logger = logging.getLogger(__name__)
 VIDEO_FACADE_ERROR_CODE_NOT_FOUND = "video_not_found"
 VIDEO_FACADE_ERROR_CODE_GET_PROGRESS_FAILED = "video_get_progress_failed"
 VIDEO_FACADE_ERROR_CODE_UPDATE_PROGRESS_FAILED = "video_update_progress_failed"
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from .schemas import (
-        VideoChapterResponse,
-        VideoCreate,
-        VideoLearningStatus,
-        VideoListResponse,
-        VideoResponse,
-        VideoTranscriptResponse,
-        VideoUpdate,
-    )
 
 
 class VideosFacade:

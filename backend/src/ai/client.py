@@ -3,12 +3,14 @@ import json
 import logging
 import uuid
 from collections import Counter
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import Any, TypeVar, cast
 
 import litellm
 from pydantic import BaseModel, ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai import AGENT_ID_DEFAULT
 from src.ai.errors import (
@@ -114,11 +116,6 @@ _GENERATION_WRAPPER_ERROR_TYPES = (
     TypeError,
     ValueError,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @dataclass(slots=True)

@@ -1,11 +1,17 @@
 
+from collections.abc import Iterable
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.courses.models import Course, Lesson
+
+
 """Course response builder service for constructing course responses."""
 
 import contextlib
 import json
 import uuid
 from collections import defaultdict
-from typing import TYPE_CHECKING
 
 from src.courses.schemas import CourseResponse, LessonSummary, ModuleResponse
 
@@ -29,14 +35,6 @@ def compute_module_id(course_id: uuid.UUID, module_name: str | None) -> uuid.UUI
     """
     module_key = module_name or "default"
     return uuid.uuid5(uuid.NAMESPACE_URL, f"course-module:{course_id}:{module_key}")
-
-
-if TYPE_CHECKING:
-    from collections.abc import Iterable
-
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from src.courses.models import Course, Lesson
 
 
 class CourseResponseBuilder:

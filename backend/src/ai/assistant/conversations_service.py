@@ -1,16 +1,12 @@
+import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import AssistantConversation, AssistantConversationHistoryItem
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 DEFAULT_CONVERSATIONS_PAGE_SIZE = 20

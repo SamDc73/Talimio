@@ -4,14 +4,16 @@ import asyncio
 import json
 import logging
 import uuid
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import fitz  # PyMuPDF
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai import AGENT_ID_ASSISTANT
 from src.ai.client import LLMClient
@@ -23,6 +25,7 @@ from src.storage.factory import get_storage_provider
 from src.videos.models import Video
 
 from . import conversations_service
+from .schemas import ChatRequest
 
 
 logger = logging.getLogger(__name__)
@@ -34,13 +37,6 @@ ASSISTANT_VIDEO_CONTEXT_WINDOW_SECONDS = 120
 ASSISTANT_MAX_USER_MESSAGE_LENGTH = 8_000
 ASSISTANT_MAX_HISTORY_MESSAGES = 40
 ASSISTANT_REQUIRE_THREAD_ID = True
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
-
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from .schemas import ChatRequest
 
 
 class ContextData(BaseModel):

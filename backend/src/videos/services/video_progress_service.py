@@ -1,4 +1,9 @@
 
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 """Video progress service implementing the ProgressTracker protocol.
 
 This provides a simplified interface for progress tracking that doesn't
@@ -8,7 +13,7 @@ depend on request-scoped auth context or router-layer dependencies.
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy import select
 
@@ -16,12 +21,6 @@ from src.progress.models import ProgressUpdate
 from src.progress.protocols import ProgressTracker
 from src.progress.service import ProgressService
 from src.videos.models import Video
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)

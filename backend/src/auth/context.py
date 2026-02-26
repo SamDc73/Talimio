@@ -1,4 +1,10 @@
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.auth.models import AuthSession
+from src.user.models import User
+
+
 """AuthContext and FastAPI dependencies for centralized auth/ownership.
 
 This introduces a thin AuthContext layer that pairs the authenticated user_id
@@ -7,7 +13,7 @@ prefer passing `CurrentAuth` instead of separate user_id/session pairs over time
 """
 
 import uuid
-from typing import TYPE_CHECKING, Annotated, Any, TypeVar
+from typing import Annotated, Any, TypeVar
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -21,13 +27,6 @@ from src.auth.dependencies import (
 from src.auth.exceptions import InvalidTokenError
 from src.config.settings import get_settings
 from src.database.session import DbSession
-
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from src.auth.models import AuthSession
-    from src.user.models import User
 
 
 T = TypeVar("T")

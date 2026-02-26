@@ -2,19 +2,14 @@
 
 
 import ipaddress
+from collections.abc import Callable
 from functools import lru_cache
-from typing import TYPE_CHECKING
 
+from fastapi import Request
+from fastapi.responses import Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.config.settings import get_settings
-
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from fastapi import Request
-    from fastapi.responses import Response
 
 
 @lru_cache(maxsize=32)

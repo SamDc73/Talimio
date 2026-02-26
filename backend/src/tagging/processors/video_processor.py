@@ -1,20 +1,18 @@
 
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 """Video content processor for tag generation."""
 
 
 import json
 import logging
-from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
 from src.videos.models import Video
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)

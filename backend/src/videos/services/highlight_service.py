@@ -1,8 +1,13 @@
 
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 """Video highlight service implementing the HighlightInterface contract."""
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import HTTPException, status
 from pydantic import ValidationError
@@ -17,12 +22,6 @@ from src.videos.models import Video
 
 
 logger = logging.getLogger(__name__)
-
-
-if TYPE_CHECKING:
-    import uuid
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class VideoHighlightService(HighlightInterface):

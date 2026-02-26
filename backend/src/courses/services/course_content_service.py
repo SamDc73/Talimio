@@ -1,4 +1,12 @@
 
+from collections.abc import Coroutine
+
+from fastapi import BackgroundTasks, UploadFile
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.ai.models import AdaptiveCourseStructure
+
+
 """Course content service for course-specific operations."""
 
 import asyncio
@@ -9,7 +17,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
@@ -28,15 +36,6 @@ from src.courses.models import (
 from src.database.session import async_session_maker
 
 from .concept_graph_service import ConceptGraphService
-
-
-if TYPE_CHECKING:
-    from collections.abc import Coroutine
-
-    from fastapi import BackgroundTasks, UploadFile
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from src.ai.models import AdaptiveCourseStructure
 
 
 logger = logging.getLogger(__name__)

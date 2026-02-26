@@ -8,13 +8,13 @@ import tempfile
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
 from src.ai.rag.chunker import chunk_text_async
@@ -27,10 +27,6 @@ from src.database.session import async_session_maker
 from src.storage.exceptions import StorageError
 from src.storage.factory import get_storage_provider
 from src.videos.models import Video
-
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)
