@@ -10,9 +10,8 @@ is delegated to CoursesFacade; this module keeps HTTP-layer handling only.
 
 import logging
 import uuid
-from collections.abc import Awaitable
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 
@@ -38,6 +37,10 @@ from src.courses.schemas import (
     SelfAssessmentResponse,
 )
 from src.courses.services.code_execution_service import CodeExecutionError, CodeExecutionService, WorkspaceFile
+
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable
 
 
 router = APIRouter(
