@@ -14,6 +14,7 @@ import jwt
 from fastapi import HTTPException, Request, Security, status
 from fastapi.security import APIKeyCookie
 
+from src.auth.config import DEFAULT_USER_ID
 from src.auth.exceptions import (
     InvalidTokenError,
 )
@@ -22,9 +23,6 @@ from src.config.settings import get_settings
 
 
 logger = logging.getLogger(__name__)
-
-# THE ONLY USER ID CONSTANT IN THE ENTIRE CODEBASE
-DEFAULT_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 # ---------------------------------------------------------------------------
 # Cookie scheme
@@ -174,6 +172,23 @@ def _get_local_user_id(request: Request, *, token: str, jwt_secret: str) -> uuid
     return claims.user_id
 
 
+def _get_local_auth_token(request: Request, cookie_token: str | None) -> str | None:
+    """Resolve local auth token from cookie first, then bearer auth header."""
+    if cookie_token:
+        return cookie_token
+
+    authorization = request.headers.get("authorization", "")
+    scheme, _, credentials = authorization.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+
+    token = credentials.strip()
+    if not token:
+        return None
+
+    return token
+
+
 # ---------------------------------------------------------------------------
 # FastAPI dependency
 # ---------------------------------------------------------------------------
@@ -187,8 +202,12 @@ def _get_user_id_dependency(
     Token extraction is handled exclusively by FastAPI DI via CookieToken.
     """
     settings = get_settings()
-    if settings.AUTH_PROVIDER == "local" and not auth_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    user_id = get_user_id(request, token=auth_token or "")
+    resolved_token = auth_token
+    if settings.AUTH_PROVIDER == "local":
+        resolved_token = _get_local_auth_token(request, auth_token)
+        if not resolved_token:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+    user_id = get_user_id(request, token=resolved_token or "")
     request.state.user_id = user_id
     return user_id
