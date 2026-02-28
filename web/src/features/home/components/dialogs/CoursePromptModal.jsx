@@ -4,10 +4,10 @@
 
 import { AnimatePresence, motion } from "framer-motion"
 import { FileText, HelpCircle, Image, Loader2, Paperclip, Sparkles, X } from "lucide-react"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useCourseService } from "@/api/courseApi"
 import { Button } from "@/components/Button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/Dialog"
 import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/Tooltip"
@@ -31,6 +31,7 @@ const examplePrompts = [
 const tooltipCopy = "Answer a few quick questions to tailor your course. Optional."
 
 const ACCEPTED_ATTACHMENT_EXTENSIONS = [".pdf", ".epub", ".png", ".jpg", ".jpeg"]
+const IMAGE_ATTACHMENT_EXTENSIONS = [".png", ".jpg", ".jpeg"]
 const ACCEPTED_ATTACHMENT_ACCEPT_ATTR = ACCEPTED_ATTACHMENT_EXTENSIONS.join(",")
 const ACCEPTED_ATTACHMENT_MIME_TYPES = {
 	"application/pdf": ".pdf",
@@ -106,6 +107,31 @@ function isAllowedAttachment(file) {
 	return Boolean(ACCEPTED_ATTACHMENT_MIME_TYPES[mimeType])
 }
 
+function isImageAttachmentFile(file) {
+	const fileName = file?.name?.toLowerCase?.() ?? ""
+	const isImageByExtension = IMAGE_ATTACHMENT_EXTENSIONS.some((ext) => fileName.endsWith(ext))
+	if (isImageByExtension) {
+		return true
+	}
+
+	const mimeType = (file?.type || "").toLowerCase()
+	return mimeType.startsWith("image/")
+}
+
+function createAttachmentPreviewUrl(file) {
+	if (!isImageAttachmentFile(file) || typeof globalThis.URL?.createObjectURL !== "function") {
+		return null
+	}
+	return globalThis.URL.createObjectURL(file)
+}
+
+function revokeAttachmentPreviewUrl(previewUrl) {
+	if (!previewUrl || typeof globalThis.URL?.revokeObjectURL !== "function") {
+		return
+	}
+	globalThis.URL.revokeObjectURL(previewUrl)
+}
+
 function formatSelfAssessmentSummary(responses) {
 	if (!responses?.length) {
 		return ""
@@ -148,18 +174,36 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	const [isAddingAttachments, setIsAddingAttachments] = useState(false)
 	const fileInputRef = useRef(null)
 	const attachmentSequenceRef = useRef(0)
+	const attachmentsRef = useRef([])
 
 	const courseService = useCourseService()
 
 	const selfAssessmentEnabled = useAppStore(selectSelfAssessmentEnabled) ?? false
 	const setSelfAssessmentEnabled = useAppStore(selectSetSelfAssessmentEnabled)
 
+	useEffect(() => {
+		attachmentsRef.current = attachments
+	}, [attachments])
+
+	useEffect(() => {
+		return () => {
+			for (const attachment of attachmentsRef.current) {
+				revokeAttachmentPreviewUrl(attachment.previewUrl)
+			}
+		}
+	}, [])
+
 	const resetForm = () => {
 		setPrompt("")
 		setError("")
 		setAdaptiveEnabled(Boolean(defaultAdaptiveEnabled))
 		setActiveStep(MODAL_STEPS.PROMPT)
-		setAttachments([])
+		setAttachments((previousAttachments) => {
+			for (const attachment of previousAttachments) {
+				revokeAttachmentPreviewUrl(attachment.previewUrl)
+			}
+			return []
+		})
 		setDragActive(false)
 		if (fileInputRef.current) {
 			fileInputRef.current.value = ""
@@ -225,6 +269,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 				return {
 					id: buildAttachmentId(file, attachmentSequenceRef.current),
 					file,
+					previewUrl: createAttachmentPreviewUrl(file),
 				}
 			}),
 		])
@@ -264,7 +309,17 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 		if (isGenerating) {
 			return
 		}
-		setAttachments((prev) => prev.filter((item) => item.id !== attachmentId))
+		setAttachments((previousAttachments) => {
+			const nextAttachments = []
+			for (const attachment of previousAttachments) {
+				if (attachment.id === attachmentId) {
+					revokeAttachmentPreviewUrl(attachment.previewUrl)
+					continue
+				}
+				nextAttachments.push(attachment)
+			}
+			return nextAttachments
+		})
 	}
 
 	const handlePaste = (event) => {
@@ -462,9 +517,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 										>
 											{attachments.map((attachment) => {
 												const fileName = attachment.file?.name ?? "Untitled"
-												const lowerName = fileName.toLowerCase()
-												const isImage =
-													lowerName.endsWith(".png") || lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")
+												const isImage = isImageAttachmentFile(attachment.file)
 
 												return (
 													<motion.div
@@ -475,14 +528,53 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 														exit={{ scale: 0.8, opacity: 0 }}
 														className="group flex items-center gap-2 rounded-md bg-secondary/50 px-2.5 py-1.5 text-xs font-medium text-secondary-foreground ring-1 ring-inset ring-black/5"
 													>
-														{isImage ? (
-															<Image className="size-3.5 text-muted-foreground/70" />
+														{isImage && attachment.previewUrl ? (
+															<Dialog>
+																<DialogTrigger asChild>
+																	<button
+																		type="button"
+																		className="flex min-w-0 items-center gap-2 rounded-sm transition-opacity hover:opacity-75"
+																		aria-label={`Preview ${fileName}`}
+																	>
+																		<span className="size-5 overflow-hidden rounded-sm bg-muted">
+																			<img
+																				src={attachment.previewUrl}
+																				alt={fileName}
+																				className="size-full object-cover"
+																				loading="eager"
+																				decoding="async"
+																			/>
+																		</span>
+																		<span className="truncate max-w-[100px]" title={fileName}>
+																			{fileName}
+																		</span>
+																	</button>
+																</DialogTrigger>
+																<DialogContent className="p-2 sm:max-w-3xl [&_svg]:text-background [&>button]:rounded-full [&>button]:bg-foreground/60 [&>button]:p-1 [&>button]:opacity-100 [&>button]:ring-0! [&>button]:hover:[&_svg]:text-destructive">
+																	<DialogTitle className="sr-only">Image Attachment Preview</DialogTitle>
+																	<div className="relative mx-auto flex max-h-[80dvh] w-full items-center justify-center overflow-hidden bg-background">
+																		<img
+																			src={attachment.previewUrl}
+																			alt={fileName}
+																			className="block size-auto max-h-[80vh] max-w-full object-contain"
+																			loading="eager"
+																			decoding="async"
+																		/>
+																	</div>
+																</DialogContent>
+															</Dialog>
 														) : (
-															<FileText className="size-3.5 text-muted-foreground/70" />
+															<>
+																{isImage ? (
+																	<Image className="size-3.5 text-muted-foreground/70" />
+																) : (
+																	<FileText className="size-3.5 text-muted-foreground/70" />
+																)}
+																<span className="truncate max-w-[100px]" title={fileName}>
+																	{fileName}
+																</span>
+															</>
 														)}
-														<span className="truncate max-w-[100px]" title={fileName}>
-															{fileName}
-														</span>
 														<button
 															type="button"
 															onClick={() => removeAttachment(attachment.id)}
