@@ -103,11 +103,12 @@ class PlanAction(BaseModel):
 class Lesson(BaseModel):
     """Model for a lesson in the course structure."""
 
-    title: str = Field(description="Title of the lesson")
+    title: str = Field(description="Title of the lesson", max_length=255)
     description: str = Field(description="Brief description of what the lesson covers")
     module: str | None = Field(
         default=None,
         description="Optional module/section name for grouping",
+        max_length=255,
     )
     slug: str | None = Field(default=None, description="Optional lesson slug reference")
 
@@ -136,7 +137,7 @@ class CourseOutlineInfo(BaseModel):
     """Top-level metadata about a generated course."""
 
     slug: str | None = None
-    title: str
+    title: str = Field(max_length=200)
     description: str | None = None
     setup_commands: list[str] = Field(default_factory=list)
 
@@ -202,7 +203,7 @@ class AdaptiveCourseMeta(BaseModel):
     """Minimal course metadata emitted by adaptive course planning."""
 
     slug: str | None = None
-    title: str
+    title: str = Field(max_length=200)
     description: str | None = None
     setup_commands: list[str] = Field(default_factory=list)
 
@@ -225,9 +226,9 @@ class AdaptiveLessonPlan(BaseModel):
     """Lesson planning payload aligned with adaptive concept assignments."""
 
     index: int
-    title: str | None = None
+    title: str | None = Field(default=None, max_length=255)
     description: str | None = None
-    module: str | None = None
+    module: str | None = Field(default=None, max_length=255)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -248,9 +249,9 @@ class AdaptiveLessonPlan(BaseModel):
 class AdaptiveConceptNode(BaseModel):
     """Single concept node returned by adaptive course planning."""
 
-    title: str
+    title: str = Field(max_length=255)
     initial_mastery: float | None = Field(default=None, alias="initialMastery")
-    slug: str | None = None
+    slug: str | None = Field(default=None, max_length=200)
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 

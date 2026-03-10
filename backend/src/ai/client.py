@@ -59,7 +59,7 @@ configure_litellm()
 T = TypeVar("T", bound=BaseModel)
 
 _MAX_AUTONOMY_ROUNDS = 6
-_MAX_SCHEMA_REPAIR_ATTEMPTS = 2
+_MAX_STRUCTURED_GENERATION_ATTEMPTS = 2
 _OPENROUTER_DEFAULT_PROVIDER_OPTIONS = {
     "sort": "latency",
     "allow_fallbacks": True,
@@ -427,7 +427,10 @@ class LLMClient:
                     num_retries=request.num_retries,
                 )
 
-            result, conversation = await self._run_autonomy_loop(request)
+            if request.response_model is None:
+                result, conversation = await self._run_autonomy_loop(request)
+            else:
+                result, conversation = await self._run_structured_completion_with_retries(request)
             self._schedule_memory_save(request.user_id, conversation, result)
             return result
 
@@ -438,10 +441,33 @@ class LLMClient:
             self._log_runtime_error(mapped, operation="Completion")
             raise mapped from error
 
+    async def _run_structured_completion_with_retries(self, request: _LLMRequest) -> tuple[Any, list[dict[str, Any]]]:
+        """Retry full structured generation from the original request on contract/schema failure."""
+        last_error: AISchemaValidationError | None = None
+
+        for attempt in range(1, _MAX_STRUCTURED_GENERATION_ATTEMPTS + 1):
+            try:
+                return await self._run_autonomy_loop(request)
+            except AISchemaValidationError as error:
+                last_error = error
+                self._logger.warning(
+                    "Structured generation validation failed on attempt %s/%s: %s",
+                    attempt,
+                    _MAX_STRUCTURED_GENERATION_ATTEMPTS,
+                    error,
+                )
+                if attempt >= _MAX_STRUCTURED_GENERATION_ATTEMPTS:
+                    raise
+
+        if last_error is not None:
+            raise last_error
+
+        msg = "Structured response failed schema validation"
+        raise AISchemaValidationError(msg)
+
     async def _run_autonomy_loop(self, request: _LLMRequest) -> tuple[Any, list[dict[str, Any]]]:
         """Run the shared non-stream autonomy loop for structured and free-form calls."""
         conversation = list(request.messages)
-        schema_attempts = 0
         tool_round = 0
 
         while True:
@@ -451,8 +477,6 @@ class LLMClient:
                 raise AIToolExecutionError(msg)
 
             effective_tool_choice = request.tool_choice
-            if request.response_model is not None and schema_attempts > 0:
-                effective_tool_choice = "none"
 
             response_format: dict[str, Any] | None = None
             if request.response_model is not None:
@@ -503,25 +527,8 @@ class LLMClient:
                 parsed = self._coerce_response_model(response, request.response_model)
                 return parsed, conversation
             except _PARSE_COERCION_ERROR_TYPES as parse_error:
-                schema_attempts += 1
-                self._logger.warning(
-                    "Structured response validation failed on attempt %s: %s",
-                    schema_attempts,
-                    parse_error,
-                )
-                if schema_attempts >= _MAX_SCHEMA_REPAIR_ATTEMPTS:
-                    msg = "Structured response failed schema validation"
-                    raise AISchemaValidationError(msg) from parse_error
-                conversation.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "Your previous response did not match the required JSON schema. "
-                            "Reply again with ONLY valid JSON that matches the schema exactly "
-                            "(no markdown, no commentary, no extra keys, do not call tools)."
-                        ),
-                    }
-                )
+                msg = "Structured response failed schema validation"
+                raise AISchemaValidationError(msg) from parse_error
 
     async def _stream_unstructured_completion(
         self,
