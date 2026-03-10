@@ -60,6 +60,11 @@ T = TypeVar("T", bound=BaseModel)
 
 _MAX_AUTONOMY_ROUNDS = 6
 _MAX_SCHEMA_REPAIR_ATTEMPTS = 2
+_OPENROUTER_DEFAULT_PROVIDER_OPTIONS = {
+    "sort": "latency",
+    "allow_fallbacks": True,
+    "require_parameters": True,
+}
 
 _LITELLM_PROVIDER_ERROR_TYPES = (
     litellm.APIError,
@@ -325,6 +330,7 @@ class LLMClient:
         tool_choice: str | None = None,
         user_id: str | uuid.UUID | None = None,
         response_format: Any | None = None,
+        extra_body: dict[str, Any] | None = None,
         stream: bool = False,
         model: str | None = None,
         num_retries: int | None = None,
@@ -335,7 +341,7 @@ class LLMClient:
             settings = get_settings()
             request_model = model or settings.primary_llm_model
 
-            kwargs = {
+            kwargs: dict[str, Any] = {
                 "model": request_model,
                 "messages": messages,
                 "timeout": settings.ai_request_timeout,
@@ -349,6 +355,18 @@ class LLMClient:
                 kwargs["tool_choice"] = tool_choice
             if response_format is not None:
                 kwargs["response_format"] = response_format
+            if request_model.startswith("openrouter/"):
+                merged_extra_body: dict[str, Any] = dict(extra_body or {})
+                provider_settings = merged_extra_body.get("provider")
+                if provider_settings is None:
+                    merged_extra_body["provider"] = dict(_OPENROUTER_DEFAULT_PROVIDER_OPTIONS)
+                elif isinstance(provider_settings, dict):
+                    merged_provider = dict(_OPENROUTER_DEFAULT_PROVIDER_OPTIONS)
+                    merged_provider.update(provider_settings)
+                    merged_extra_body["provider"] = merged_provider
+                kwargs["extra_body"] = merged_extra_body
+            elif extra_body is not None:
+                kwargs["extra_body"] = extra_body
             if user_id:
                 # Pass user identifier for provider-side tracking / rate limits when supported
                 # Safe with litellm.drop_params=True across providers
