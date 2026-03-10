@@ -1,8 +1,16 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+_SETTINGS_ENV_FILES = (
+    _BACKEND_ROOT / ".env",
+    _BACKEND_ROOT / ".env.local",
+)
 
 
 class Settings(BaseSettings):
@@ -185,12 +193,19 @@ class Settings(BaseSettings):
 
     @property
     def primary_llm_model(self) -> str:
-        """Get primary LLM model from environment - required configuration."""
-        model = self.PRIMARY_LLM_MODEL
-        if not model:
-            msg = "PRIMARY_LLM_MODEL environment variable is required"
-            raise ValueError(msg)
-        return model
+        """Get primary LLM model from environment with available-model fallback."""
+        explicit_model = (self.PRIMARY_LLM_MODEL or "").strip()
+        if explicit_model:
+            return explicit_model
+
+        available_raw = self.AVAILABLE_MODELS
+        if available_raw:
+            available_models = [candidate.strip() for candidate in available_raw.split(",") if candidate.strip()]
+            if available_models:
+                return available_models[0]
+
+        msg = "PRIMARY_LLM_MODEL environment variable is required (or set AVAILABLE_MODELS with at least one model)"
+        raise ValueError(msg)
 
     @property
     def ai_request_timeout(self) -> int:
@@ -204,7 +219,7 @@ class Settings(BaseSettings):
         return configured or self.FRONTEND_URL
 
     model_config = SettingsConfigDict(
-        env_file=(".env", ".env.local"),
+        env_file=_SETTINGS_ENV_FILES,
         env_file_encoding="utf-8",
         extra="allow",
         case_sensitive=False,

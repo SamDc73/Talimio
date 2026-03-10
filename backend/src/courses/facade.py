@@ -498,10 +498,6 @@ class CoursesFacade:
         user_id: uuid.UUID,
     ) -> ReviewBatchResponse:
         """Submit concept reviews for LECTOR scheduling."""
-        if not payload.reviews:
-            detail = "At least one review is required"
-            raise CoursesFacadeValidationError(detail)
-
         course = await self._require_owned_course(course_id=course_id, user_id=user_id)
         if not course.adaptive_enabled:
             detail = "Adaptive scheduling is not enabled for this course"
@@ -576,6 +572,12 @@ class CoursesFacade:
             review_extra["structure_signature"] = review.structure_signature
         if review.predicted_p_correct is not None:
             review_extra["predicted_p_correct"] = float(review.predicted_p_correct)
+        if review.target_probability is not None:
+            review_extra["target_probability"] = float(review.target_probability)
+        if review.target_low is not None:
+            review_extra["target_low"] = float(review.target_low)
+        if review.target_high is not None:
+            review_extra["target_high"] = float(review.target_high)
         if review.core_model:
             review_extra["core_model"] = review.core_model
         return review_extra

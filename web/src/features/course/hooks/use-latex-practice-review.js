@@ -10,24 +10,24 @@ const MEDIUM_FRICTION_MAX_ATTEMPTS = 2
 const MEDIUM_FRICTION_MAX_MS = 90_000
 
 const normalizeAttempts = (attempts) => {
-	if (typeof attempts !== "number" || Number.isNaN(attempts) || attempts <= 0) {
-		return 1
+	if (!Number.isInteger(attempts) || attempts <= 0) {
+		throw new Error("attempts must be a positive integer")
 	}
-	return Math.round(attempts)
+	return attempts
 }
 
 const normalizeDuration = (durationMs) => {
-	if (typeof durationMs !== "number" || Number.isNaN(durationMs) || durationMs <= 0) {
-		return 0
+	if (typeof durationMs !== "number" || !Number.isFinite(durationMs) || durationMs < 0) {
+		throw new Error("durationMs must be a non-negative number")
 	}
 	return Math.round(durationMs)
 }
 
 const normalizeHintsUsed = (hintsUsed) => {
-	if (typeof hintsUsed !== "number" || Number.isNaN(hintsUsed) || hintsUsed < 0) {
-		return 0
+	if (!Number.isInteger(hintsUsed) || hintsUsed < 0) {
+		throw new Error("hintsUsed must be a non-negative integer")
 	}
-	return Math.round(hintsUsed)
+	return hintsUsed
 }
 
 const deriveRating = ({ isCorrect, attempts, durationMs, skipped, hintsUsed }) => {
@@ -70,7 +70,7 @@ export function useLatexPracticeReview({
 		(targetConceptId) => {
 			const concept = targetConceptId ?? initialConceptId
 			if (!concept) {
-				throw new Error("Concept ID required for LaTeX practice review submission")
+				throw new Error("Concept ID required for practice review submission")
 			}
 			return concept
 		},
@@ -96,7 +96,7 @@ export function useLatexPracticeReview({
 					},
 				})
 			} catch (metadataError) {
-				logger.error("Failed to persist LaTeX practice metadata", metadataError, {
+				logger.error("Failed to persist practice metadata", metadataError, {
 					courseId,
 					lessonId,
 					conceptId,
@@ -109,9 +109,10 @@ export function useLatexPracticeReview({
 	const submitAnswer = useCallback(
 		async ({
 			question,
-			expectedLatex,
+			expectedAnswer,
+			answerKind = "math_latex",
 			criteria,
-			answerLatex,
+			answerText,
 			conceptId,
 			attempts,
 			durationMs,
@@ -120,7 +121,7 @@ export function useLatexPracticeReview({
 			reviewMetadata,
 		} = {}) => {
 			if (!courseId || !lessonId) {
-				throw new Error("Course ID and Lesson ID required for LaTeX practice grading")
+				throw new Error("Course ID and Lesson ID required for practice grading")
 			}
 
 			const resolvedConceptId = resolveConceptId(conceptId)
@@ -129,23 +130,46 @@ export function useLatexPracticeReview({
 			const normalizedHints = normalizeHintsUsed(hintsUsed)
 			const contextValue = contextOverride || practiceContext
 
-			const payload = {
-				kind: "latex_expression",
-				question,
-				expected: {
-					expectedLatex,
-					criteria,
-				},
-				answer: {
-					answerLatex,
-				},
-				context: {
-					courseId,
-					lessonId,
-					conceptId: resolvedConceptId,
-					practiceContext: contextValue,
-					hintsUsed: normalizedHints,
-				},
+			let payload = null
+			if (contextValue === "drill") {
+				payload = {
+					kind: "practice_answer",
+					question,
+					expected: {
+						expectedAnswer,
+						answerKind,
+						criteria,
+					},
+					answer: {
+						answerText,
+					},
+					context: {
+						courseId,
+						lessonId,
+						conceptId: resolvedConceptId,
+						practiceContext: contextValue,
+						hintsUsed: normalizedHints,
+					},
+				}
+			} else {
+				payload = {
+					kind: "latex_expression",
+					question,
+					expected: {
+						expectedLatex: expectedAnswer,
+						criteria,
+					},
+					answer: {
+						answerLatex: answerText,
+					},
+					context: {
+						courseId,
+						lessonId,
+						conceptId: resolvedConceptId,
+						practiceContext: contextValue,
+						hintsUsed: normalizedHints,
+					},
+				}
 			}
 
 			setIsSubmitting(true)
@@ -184,7 +208,7 @@ export function useLatexPracticeReview({
 				return { grade, review, rating }
 			} catch (submissionError) {
 				setError(submissionError)
-				logger.error("Failed to grade LaTeX practice answer", submissionError, {
+				logger.error("Failed to grade practice answer", submissionError, {
 					courseId,
 					lessonId,
 					conceptId: conceptId ?? initialConceptId,
@@ -313,7 +337,7 @@ export function useLatexPracticeReview({
 	const submitSkip = useCallback(
 		async ({ conceptId, attempts, durationMs, hintsUsed, practiceContext: contextOverride, reviewMetadata } = {}) => {
 			if (!courseId || !lessonId) {
-				throw new Error("Course ID and Lesson ID required for LaTeX practice review")
+				throw new Error("Course ID and Lesson ID required for practice review")
 			}
 
 			const resolvedConceptId = resolveConceptId(conceptId)
@@ -352,7 +376,7 @@ export function useLatexPracticeReview({
 				return { review, rating }
 			} catch (submissionError) {
 				setError(submissionError)
-				logger.error("Failed to submit skipped LaTeX practice review", submissionError, {
+				logger.error("Failed to submit skipped practice review", submissionError, {
 					courseId,
 					lessonId,
 					conceptId: conceptId ?? initialConceptId,

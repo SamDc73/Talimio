@@ -2,11 +2,18 @@ import { useCallback, useMemo, useState } from "react"
 import { useCourseService } from "@/api/courseApi"
 import logger from "@/lib/logger"
 
-function clampRating(value) {
-	if (typeof value !== "number" || Number.isNaN(value)) {
-		return null
+function normalizeRating(value) {
+	if (!Number.isInteger(value) || value < 1 || value > 4) {
+		throw new Error("Rating must be an integer between 1 and 4")
 	}
-	return Math.min(Math.max(Math.round(value), 1), 4)
+	return value
+}
+
+function normalizeReviewDurationMs(value) {
+	if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+		throw new Error("reviewDurationMs must be a non-negative number")
+	}
+	return Math.round(value)
 }
 
 function normalizeReviewMetadata(reviewMetadata) {
@@ -24,8 +31,20 @@ function normalizeReviewMetadata(reviewMetadata) {
 		normalized.structureSignature = reviewMetadata.structureSignature.trim()
 	}
 
-	if (typeof reviewMetadata.predictedPCorrect === "number" && !Number.isNaN(reviewMetadata.predictedPCorrect)) {
-		normalized.predictedPCorrect = Math.max(0, Math.min(1, reviewMetadata.predictedPCorrect))
+	if (typeof reviewMetadata.predictedPCorrect === "number" && Number.isFinite(reviewMetadata.predictedPCorrect)) {
+		normalized.predictedPCorrect = reviewMetadata.predictedPCorrect
+	}
+
+	if (typeof reviewMetadata.targetProbability === "number" && Number.isFinite(reviewMetadata.targetProbability)) {
+		normalized.targetProbability = reviewMetadata.targetProbability
+	}
+
+	if (typeof reviewMetadata.targetLow === "number" && Number.isFinite(reviewMetadata.targetLow)) {
+		normalized.targetLow = reviewMetadata.targetLow
+	}
+
+	if (typeof reviewMetadata.targetHigh === "number" && Number.isFinite(reviewMetadata.targetHigh)) {
+		normalized.targetHigh = reviewMetadata.targetHigh
 	}
 
 	if (typeof reviewMetadata.coreModel === "string" && reviewMetadata.coreModel.trim().length > 0) {
@@ -61,14 +80,8 @@ export function useLectorReview({ courseId, lessonId, conceptId: initialConceptI
 			}
 
 			const concept = ensureConceptId(targetConceptId)
-			const normalizedRating = clampRating(rating)
-			if (!normalizedRating) {
-				throw new Error("Rating must be a number between 1 and 4")
-			}
-
-			// Backend requires reviewDurationMs (>0); fall back to 1000ms if missing
-			const duration =
-				typeof reviewDurationMs === "number" && reviewDurationMs > 0 ? Math.round(reviewDurationMs) : 1000
+			const normalizedRating = normalizeRating(rating)
+			const duration = normalizeReviewDurationMs(reviewDurationMs)
 
 			const normalizedMetadata = normalizeReviewMetadata(reviewMetadata)
 			const payload = [
@@ -96,6 +109,9 @@ export function useLectorReview({ courseId, lessonId, conceptId: initialConceptI
 					question: normalizedMetadata.question ?? null,
 					structureSignature: normalizedMetadata.structureSignature ?? null,
 					predictedPCorrect: normalizedMetadata.predictedPCorrect ?? null,
+					targetProbability: normalizedMetadata.targetProbability ?? null,
+					targetLow: normalizedMetadata.targetLow ?? null,
+					targetHigh: normalizedMetadata.targetHigh ?? null,
 					coreModel: normalizedMetadata.coreModel ?? null,
 					nextReviewAt: primaryOutcome?.nextReviewAt ?? primaryOutcome?.next_review_at ?? null,
 					mastery: primaryOutcome?.mastery ?? null,

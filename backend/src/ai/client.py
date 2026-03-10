@@ -39,6 +39,7 @@ from src.ai.models import (
 )
 from src.ai.prompts import (
     ADAPTIVE_COURSE_GENERATION_PROMPT,
+    ADAPTIVE_PRACTICE_GRADING_PROMPT,
     COURSE_GENERATION_PROMPT,
     E2B_EXECUTION_SYSTEM_PROMPT,
     GRADING_COACH_PROMPT,
@@ -1211,7 +1212,6 @@ class LLMClient:
         result = await self.get_completion(
             messages,
             response_model=response_model,
-            temperature=0,
             user_id=user_id,
             model=model,
         )
@@ -1226,6 +1226,8 @@ class LLMClient:
         concept: str,
         concept_description: str | None,
         history: str,
+        learner_context: str,
+        difficulty_guidance: str,
         count: int,
         response_model: type[T],
         user_id: str | uuid.UUID | None = None,
@@ -1236,6 +1238,8 @@ class LLMClient:
             count=count,
             concept=concept,
             concept_description=concept_description or "",
+            learner_context=learner_context,
+            difficulty_guidance=difficulty_guidance,
             history=history,
         )
         messages = [
@@ -1246,12 +1250,36 @@ class LLMClient:
         result = await self.get_completion(
             messages,
             response_model=response_model,
-            temperature=0,
             user_id=user_id,
             model=model,
         )
         if not isinstance(result, response_model):
             msg = f"Expected {response_model.__name__} from practice generation structured output"
+            raise TypeError(msg)
+        return result
+
+    async def grade_adaptive_practice_answer(
+        self,
+        *,
+        payload: dict[str, Any],
+        response_model: type[T],
+        user_id: str | uuid.UUID | None = None,
+        model: str | None = None,
+    ) -> T:
+        """Grade an adaptive practice answer via the shared structured completion path."""
+        messages = [
+            {"role": "system", "content": ADAPTIVE_PRACTICE_GRADING_PROMPT},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=True)},
+        ]
+
+        result = await self.get_completion(
+            messages,
+            response_model=response_model,
+            user_id=user_id,
+            model=model,
+        )
+        if not isinstance(result, response_model):
+            msg = f"Expected {response_model.__name__} from adaptive practice grading structured output"
             raise TypeError(msg)
         return result
 
@@ -1263,8 +1291,10 @@ class LLMClient:
         recent_correct: int,
         recent_total: int,
         learning_speed: float,
-        strengths: list[str],
-        weaknesses: list[str],
+        retention_rate: float,
+        success_rate: float,
+        struggling_concepts: list[str],
+        review_status: str,
         questions: list[str],
         predictions_example: str,
         response_model: type[T],
@@ -1273,14 +1303,17 @@ class LLMClient:
     ) -> T:
         """Predict p(correct) values for a batch of candidate practice questions."""
         questions_block = "\n".join(f"{index + 1}. {question}" for index, question in enumerate(questions))
+        struggling_concepts_block = ", ".join(struggling_concepts) if struggling_concepts else "none"
         prompt = PRACTICE_PREDICTION_PROMPT.format(
             concept=concept,
             mastery=mastery,
             recent_correct=recent_correct,
             recent_total=recent_total,
             learning_speed=learning_speed,
-            strengths=strengths,
-            weaknesses=weaknesses,
+            retention_rate=retention_rate,
+            success_rate=success_rate,
+            struggling_concepts=struggling_concepts_block,
+            review_status=review_status,
             questions=questions_block,
             predictions_example=predictions_example,
         )
@@ -1292,7 +1325,6 @@ class LLMClient:
         result = await self.get_completion(
             messages,
             response_model=response_model,
-            temperature=0,
             user_id=user_id,
             model=model,
         )

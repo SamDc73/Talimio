@@ -46,10 +46,37 @@ Rules:
 - If hintsUsed is greater than 0, acknowledge the hint usage and avoid "perfect" language.
 - Wrap math tokens in $...$ for readability (for example: "$x^2$").
 - Never provide the full solution or step-by-step derivations.
-- Tags should be 0-3 short, lowercase, hyphenated strings from this list only:
-  ["sign-error", "notation-error", "calculation-error", "distribution", "simplification", "missing-term",
-   "parse-error", "expected-parse-error", "answer-parse-error", "constant-offset", "unsupported-relation"]
+- Tags should be 0-3 short, lowercase, hyphenated strings.
 - Only include errorHighlight when you can point to a specific LaTeX fragment to check; otherwise omit it.
+"""
+
+ADAPTIVE_PRACTICE_GRADING_PROMPT = """You are the official Adaptive Practice grader.
+
+You will receive one JSON payload with:
+- question
+- answerKind ("math_latex" or "text")
+- expectedAnswer
+- learnerAnswer
+- optional criteria and hintsUsed
+
+Return ONLY a JSON object with this exact shape (no markdown fences, no extra keys):
+{
+  "isCorrect": true,
+  "status": "correct",
+  "feedbackMarkdown": "string",
+  "tags": ["lowercase-hyphen-tag"],
+  "errorHighlight": {"latex": "string"}
+}
+
+Rules:
+- Decide correctness yourself from expectedAnswer vs learnerAnswer.
+- Use "parse_error" only when the learner answer cannot be interpreted.
+- For answerKind="math_latex", judge mathematical equivalence over formatting.
+- For answerKind="text", accept concise synonyms/paraphrases with same meaning.
+- Keep feedback to 1-3 sentences and never reveal full worked solutions.
+- Wrap math fragments in $...$.
+- tags should be 0-3 lowercase-hyphen strings.
+- Only include errorHighlight for answerKind="math_latex" when a specific fragment can be pointed out.
 """
 
 PRACTICE_GENERATION_PROMPT = """
@@ -57,13 +84,19 @@ Generate {count} practice questions for: {concept}.
 
 Concept description: {concept_description}
 
+## Learner Context
+{learner_context}
+
+## Difficulty Guidance
+{difficulty_guidance}
+
 Avoid questions similar to these:
 {history}
 
 Return JSON:
 {{
   "questions": [
-    {{"question": "...", "expected_answer": "..."}}
+    {{"question": "...", "expectedAnswer": "...", "answerKind": "math_latex"}}
   ]
 }}
 """
@@ -75,8 +108,10 @@ LEARNER PROFILE:
 - Current mastery of "{concept}": {mastery:.2f}
 - Recent performance: {recent_correct}/{recent_total}
 - Learning speed: {learning_speed}
-- Strengths: {strengths}
-- Weaknesses: {weaknesses}
+- Retention rate: {retention_rate}
+- Success rate: {success_rate}
+- Course-wide struggling concepts: {struggling_concepts}
+- Review status: {review_status}
 
 QUESTIONS (return probabilities in this exact order):
 {questions}

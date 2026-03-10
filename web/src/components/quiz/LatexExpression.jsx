@@ -59,7 +59,9 @@ function ReadOnlyLatexField({ latex, className }) {
 
 export function LatexExpression({
 	question,
+	expectedAnswer,
 	expectedLatex,
+	answerKind = "math_latex",
 	criteria,
 	hints,
 	solutionLatex,
@@ -69,7 +71,7 @@ export function LatexExpression({
 	onSkip,
 	onComplete,
 }) {
-	const [answerLatex, setAnswerLatex] = useState("")
+	const [answerText, setAnswerText] = useState("")
 	const [feedback, setFeedback] = useState(null)
 	const [skipFeedback, setSkipFeedback] = useState(null)
 	const [attemptCount, setAttemptCount] = useState(0)
@@ -80,6 +82,16 @@ export function LatexExpression({
 	const [submissionError, setSubmissionError] = useState(null)
 	const fieldRef = useRef(null)
 	const startedAtRef = useRef(null)
+	const resolvedExpectedAnswer = useMemo(() => {
+		if (typeof expectedAnswer === "string" && expectedAnswer.trim()) {
+			return expectedAnswer
+		}
+		if (typeof expectedLatex === "string" && expectedLatex.trim()) {
+			return expectedLatex
+		}
+		return ""
+	}, [expectedAnswer, expectedLatex])
+	const isMathLatex = answerKind === "math_latex"
 
 	const normalizedHints = useMemo(() => normalizeHints(hints), [hints])
 	const hasHints = normalizedHints.length > 0
@@ -98,7 +110,7 @@ export function LatexExpression({
 	}, [])
 
 	const resetState = useCallback(() => {
-		setAnswerLatex("")
+		setAnswerText("")
 		setFeedback(null)
 		setSkipFeedback(null)
 		setAttemptCount(0)
@@ -108,10 +120,15 @@ export function LatexExpression({
 		setSubmissionError(null)
 		setIsSubmitting(false)
 		startedAtRef.current = null
-		setLatexFieldValue(fieldRef.current, "")
-	}, [])
+		if (isMathLatex) {
+			setLatexFieldValue(fieldRef.current, "")
+		}
+	}, [isMathLatex])
 
 	useEffect(() => {
+		if (!isMathLatex) {
+			return
+		}
 		const field = fieldRef.current
 		if (!field) {
 			return
@@ -119,38 +136,43 @@ export function LatexExpression({
 
 		const handleInput = () => {
 			startTimer()
-			setAnswerLatex(readLatexFieldValue(field))
+			setAnswerText(readLatexFieldValue(field))
 		}
 
 		field.addEventListener("input", handleInput)
 		return () => {
 			field.removeEventListener("input", handleInput)
 		}
-	}, [startTimer])
+	}, [isMathLatex, startTimer])
 
 	useEffect(() => {
+		if (!isMathLatex) {
+			return
+		}
 		const field = fieldRef.current
 		if (!field) {
 			return
 		}
 		field.readOnly = isSubmitting || isComplete
-	}, [isComplete, isSubmitting])
+	}, [isComplete, isMathLatex, isSubmitting])
 
 	const handleSubmit = useCallback(async () => {
 		if (isSubmitting || isComplete) {
 			return
 		}
 
-		const trimmedAnswer = answerLatex.trim()
+		const trimmedAnswer = answerText.trim()
 		if (!trimmedAnswer) {
 			return
 		}
 
 		setSubmissionError(null)
-		const syntaxErrors = getLatexFieldErrors(fieldRef.current)
-		if (syntaxErrors.length > 0) {
-			setSubmissionError("Fix the LaTeX syntax before submitting.")
-			return
+		if (isMathLatex) {
+			const syntaxErrors = getLatexFieldErrors(fieldRef.current)
+			if (syntaxErrors.length > 0) {
+				setSubmissionError("Fix the LaTeX syntax before submitting.")
+				return
+			}
 		}
 
 		if (typeof onGrade !== "function") {
@@ -168,9 +190,10 @@ export function LatexExpression({
 		try {
 			const result = await onGrade({
 				question,
-				expectedLatex,
+				expectedAnswer: resolvedExpectedAnswer,
+				answerKind,
 				criteria,
-				answerLatex: trimmedAnswer,
+				answerText: trimmedAnswer,
 				practiceContext,
 				attempts: nextAttempt,
 				hintsUsed: revealedHints,
@@ -191,10 +214,12 @@ export function LatexExpression({
 			setIsSubmitting(false)
 		}
 	}, [
-		answerLatex,
+		answerKind,
+		answerText,
 		attemptCount,
 		criteria,
-		expectedLatex,
+		isMathLatex,
+		resolvedExpectedAnswer,
 		getDurationMs,
 		isComplete,
 		isSubmitting,
@@ -223,7 +248,8 @@ export function LatexExpression({
 		try {
 			const result = await onSkip({
 				question,
-				expectedLatex,
+				expectedAnswer: resolvedExpectedAnswer,
+				answerKind,
 				criteria,
 				practiceContext,
 				attempts: attemptCount || 1,
@@ -241,9 +267,10 @@ export function LatexExpression({
 			setIsSubmitting(false)
 		}
 	}, [
+		answerKind,
 		attemptCount,
 		criteria,
-		expectedLatex,
+		resolvedExpectedAnswer,
 		getDurationMs,
 		isComplete,
 		isSubmitting,
@@ -263,7 +290,7 @@ export function LatexExpression({
 		setIsSolutionOpen(event.currentTarget.open)
 	}, [])
 
-	const canSubmit = answerLatex.trim().length > 0 && !isSubmitting && !isComplete
+	const canSubmit = answerText.trim().length > 0 && !isSubmitting && !isComplete
 
 	let feedbackTitle = null
 	let feedbackTone = "text-muted-foreground"
@@ -301,13 +328,27 @@ export function LatexExpression({
 
 			<div className="mb-4">
 				<div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Your answer</div>
-				<div className="rounded-lg border border-input bg-background px-3 py-2 focus-within:ring-2 focus-within:ring-ring">
-					<math-field
-						ref={fieldRef}
-						className="w-full min-h-11 text-base text-foreground"
-						aria-label="Expression answer input"
+				{isMathLatex ? (
+					<div className="rounded-lg border border-input bg-background px-3 py-2 focus-within:ring-2 focus-within:ring-ring">
+						<math-field
+							ref={fieldRef}
+							className="w-full min-h-11 text-base text-foreground"
+							aria-label="Expression answer input"
+						/>
+					</div>
+				) : (
+					<textarea
+						value={answerText}
+						onChange={(event) => {
+							startTimer()
+							setAnswerText(event.target.value)
+						}}
+						disabled={isSubmitting || isComplete}
+						rows={3}
+						className="w-full rounded-lg border border-input bg-background px-3 py-2 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+						aria-label="Text answer input"
 					/>
-				</div>
+				)}
 			</div>
 
 			{submissionError ? (

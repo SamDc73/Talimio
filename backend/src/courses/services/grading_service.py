@@ -3,7 +3,7 @@
 import logging
 import uuid
 from dataclasses import asdict
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,19 +30,16 @@ class GradingCoachFeedback(BaseModel):
     model_config = build_camel_config(extra="forbid")
 
 
-ALLOWED_GRADING_TAGS = {
-    "answer-parse-error",
-    "calculation-error",
-    "constant-offset",
-    "distribution",
-    "expected-parse-error",
-    "missing-term",
-    "notation-error",
-    "parse-error",
-    "sign-error",
-    "simplification",
-    "unsupported-relation",
-}
+class AdaptivePracticeGradeFeedback(BaseModel):
+    """Structured output from the Adaptive Practice grading LLM."""
+
+    is_correct: bool = Field(...)
+    status: Literal["correct", "incorrect", "parse_error"] = Field(...)
+    feedback_markdown: str = Field(..., min_length=1)
+    tags: list[str] = Field(default_factory=list)
+    error_highlight: GradeErrorHighlight | None = None
+
+    model_config = build_camel_config(extra="forbid")
 
 
 class GradingService:
@@ -62,6 +59,9 @@ class GradingService:
 
         if request.kind == "jxg_state":
             return self._grade_jxg_state(request)
+
+        if request.kind == "practice_answer":
+            return await self._grade_practice_answer(request, user_id)
 
         fallback = self._fallback_feedback("unsupported", request.expected.criteria)
         verifier = VerifierInfo(name="sympy", method=None, notes="Unsupported grading kind.")
@@ -147,6 +147,38 @@ class GradingService:
             feedback_metadata=verification.feedback_metadata,
         )
 
+    async def _grade_practice_answer(self, request: GradeRequest, user_id: uuid.UUID) -> GradeResponse:
+        expected_answer = cast("str", request.expected.expected_answer)
+        answer_kind = cast("Literal['math_latex', 'text']", request.expected.answer_kind)
+        learner_answer = cast("str", request.answer.answer_text)
+
+        payload = {
+            "question": request.question,
+            "answerKind": answer_kind,
+            "expectedAnswer": expected_answer,
+            "learnerAnswer": learner_answer,
+            "criteria": request.expected.criteria,
+            "hintsUsed": request.context.hints_used,
+        }
+
+        result = await self._llm_client.grade_adaptive_practice_answer(
+            payload=payload,
+            response_model=AdaptivePracticeGradeFeedback,
+            user_id=user_id,
+        )
+
+        tags = self._merge_tags(result.tags)
+        error_highlight = result.error_highlight if answer_kind == "math_latex" else None
+        verifier = VerifierInfo(name="llm", method=None, notes="Adaptive Practice LLM grader.")
+        return GradeResponse(
+            is_correct=result.is_correct,
+            status=result.status,
+            feedback_markdown=result.feedback_markdown,
+            verifier=verifier,
+            tags=tags,
+            error_highlight=error_highlight,
+        )
+
     async def _generate_feedback(
         self,
         request: GradeRequest,
@@ -209,8 +241,6 @@ class GradingService:
             for tag in tag_list:
                 normalized = tag.strip().lower()
                 if not normalized or normalized in seen:
-                    continue
-                if normalized not in ALLOWED_GRADING_TAGS:
                     continue
                 seen.add(normalized)
                 merged.append(normalized)
