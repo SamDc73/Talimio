@@ -14,6 +14,7 @@ from typing import TypedDict
 
 from sqlalchemy import and_, bindparam, select, text, update
 from sqlalchemy.dialects.postgresql import ARRAY, UUID as PG_UUID
+from sqlalchemy.exc import IntegrityError
 
 from src.ai.rag.embeddings import VectorRAG
 from src.config.settings import get_settings
@@ -24,11 +25,27 @@ logger = logging.getLogger(__name__)
 
 
 _SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
+_MAX_CONCEPT_SLUG_LENGTH = 200
+_CONCEPT_SLUG_CONSTRAINT_NAMES = {"concepts_slug_key", "idx_concepts_slug"}
 
 
 def _slugify(value: str) -> str:
     normalized = _SLUG_PATTERN.sub("-", value.lower()).strip("-")
     return normalized or "concept"
+
+
+def build_slug_candidate(base_slug: str, suffix: int | None = None) -> str:
+    """Build a slug candidate that fits the database length limit."""
+    suffix_text = f"-{suffix}" if suffix is not None else ""
+    max_base_length = _MAX_CONCEPT_SLUG_LENGTH - len(suffix_text)
+    trimmed_base = base_slug[:max_base_length].rstrip("-") or "concept"
+    candidate = f"{trimmed_base}{suffix_text}"
+    return candidate[:_MAX_CONCEPT_SLUG_LENGTH]
+
+
+def _is_slug_integrity_error(error: IntegrityError) -> bool:
+    constraint_name = getattr(getattr(getattr(error, "orig", None), "diag", None), "constraint_name", None)
+    return constraint_name in _CONCEPT_SLUG_CONSTRAINT_NAMES
 
 
 def _compose_embedding_text(name: str, description: str) -> str:
@@ -71,7 +88,6 @@ class ConceptGraphService:
     ) -> Concept:
         """Create a concept node with optional embedding generation."""
         slug_base = _slugify(slug or name)
-        unique_slug = await self._ensure_unique_slug(slug_base)
 
         embedding: list[float] | None = None
         if generate_embedding:
@@ -83,19 +99,28 @@ class ConceptGraphService:
         else:
             logger.debug("Deferring embedding generation for concept '%s'", name)
 
-        concept = Concept(
-            domain=domain,
-            slug=unique_slug,
-            name=name,
-            description=description,
-            difficulty=difficulty,
-            embedding=embedding,
-        )
-        self._session.add(concept)
-        await self._session.flush()
-
-        logger.info("Created concept %s (%s)", concept.id, concept.slug)
-        return concept
+        candidate_slug = await self._ensure_unique_slug(slug_base)
+        suffix = 1
+        while True:
+            try:
+                async with self._session.begin_nested():
+                    concept = Concept(
+                        domain=domain,
+                        slug=candidate_slug,
+                        name=name,
+                        description=description,
+                        difficulty=difficulty,
+                        embedding=embedding,
+                    )
+                    self._session.add(concept)
+                    await self._session.flush()
+                logger.info("Created concept %s (%s)", concept.id, concept.slug)
+                return concept
+            except IntegrityError as error:
+                if not _is_slug_integrity_error(error):
+                    raise
+                suffix += 1
+                candidate_slug = build_slug_candidate(slug_base, suffix)
 
     async def add_prerequisite(self, *, concept_id: uuid.UUID, prereq_id: uuid.UUID) -> None:
         """Add prerequisite relation while preventing cycles."""
@@ -279,14 +304,14 @@ class ConceptGraphService:
         return [uuid.UUID(row[0]) for row in result]
 
     async def _ensure_unique_slug(self, base_slug: str) -> str:
-        candidate = base_slug
+        candidate = build_slug_candidate(base_slug)
         suffix = 1
         while True:
             exists = await self._session.scalar(select(Concept.id).where(Concept.slug == candidate))
             if not exists:
                 return candidate
             suffix += 1
-            candidate = f"{base_slug}-{suffix}"
+            candidate = build_slug_candidate(base_slug, suffix)
 
     async def _assert_no_cycle(self, *, concept_id: uuid.UUID, prereq_id: uuid.UUID) -> None:
         """Ensure adding the edge does not introduce a cycle."""

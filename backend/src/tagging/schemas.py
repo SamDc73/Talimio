@@ -35,7 +35,7 @@ class TagWithConfidence(BaseModel):
 
     model_config = build_camel_config(extra="forbid")
 
-    tag: str
+    tag: str = Field(..., min_length=1, max_length=100)
     confidence: float = Field(..., ge=0.0, le=1.0)
 
 

@@ -31,8 +31,8 @@ def get_rag_service() -> RAGService:
 @router.post("/courses/{course_id}/documents", response_model=DocumentResponse)
 async def upload_document(
     course_id: uuid.UUID,
-    document_type: Annotated[str, Form()],
-    title: Annotated[str, Form()],
+    document_type: Annotated[str, Form(max_length=50)],
+    title: Annotated[str, Form(max_length=255)],
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
     file: Annotated[UploadFile | None, File()] = None,

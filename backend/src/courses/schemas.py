@@ -43,7 +43,7 @@ class LessonDetailResponse(BaseModel):
 class CourseBase(BaseModel):
     """Base schema for courses."""
 
-    title: str = Field(..., description="Course title")
+    title: str = Field(..., description="Course title", max_length=200)
     description: str = Field("", description="Course description")
     tags: str = Field("[]", description="Course tags as JSON string")
     archived: bool = Field(default=False, description="Whether the course is archived")
@@ -94,7 +94,7 @@ class SelfAssessmentResponse(BaseModel):
 class CourseUpdate(BaseModel):
     """Schema for updating a course."""
 
-    title: str | None = Field(None, description="Course title")
+    title: str | None = Field(None, description="Course title", max_length=200)
     description: str | None = Field(None, description="Course description")
     tags: str | None = Field(None, description="Course tags as JSON string")
     archived: bool | None = Field(None, description="Whether the course is archived")

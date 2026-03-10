@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class LanguageModelMessage(BaseModel):
@@ -113,6 +113,15 @@ class ConversationHistoryItemRequest(BaseModel):
     message: dict[str, Any]
     parent_id: str | None = Field(default=None, alias="parentId")
     run_config: dict[str, Any] | None = Field(default=None, alias="runConfig")
+
+    @field_validator("message")
+    @classmethod
+    def _require_message_id(cls, value: dict[str, Any]) -> dict[str, Any]:
+        message_id = value.get("id")
+        if isinstance(message_id, str) and message_id.strip():
+            return value
+        msg = "message.id is required and must be a non-empty string"
+        raise ValueError(msg)
 
 
 class ConversationHistoryItemResponse(BaseModel):

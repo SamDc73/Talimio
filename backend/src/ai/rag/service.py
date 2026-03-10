@@ -87,6 +87,66 @@ class RAGService:
         if result.scalar_one_or_none() is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
+    def _validate_course_document_fields(self, *, document_type: str, title: str) -> tuple[str, str]:
+        document_type_text = document_type.strip() if isinstance(document_type, str) else ""
+        if not document_type_text:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Document type must not be empty",
+            )
+        if len(document_type_text) > 50:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Document type must be 50 characters or fewer",
+            )
+
+        title_text = title.strip() if isinstance(title, str) else ""
+        if not title_text:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Document title must not be empty",
+            )
+        if len(title_text) > 255:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Document title must be 255 characters or fewer",
+            )
+
+        return document_type_text, title_text
+
+    async def _store_course_document_file(
+        self,
+        *,
+        file_content: bytes,
+        filename: str,
+        course_id: uuid.UUID,
+        document_id: int,
+    ) -> str:
+        file_size_mb = len(file_content) / (1024 * 1024)
+        if file_size_mb > self.config.max_file_size_mb:
+            logger.warning(
+                "File %s too large: %.2fMB > %dMB limit", filename, file_size_mb, self.config.max_file_size_mb
+            )
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File too large: {file_size_mb:.1f}MB exceeds {self.config.max_file_size_mb}MB limit",
+            )
+
+        from src.config.settings import get_settings
+
+        rag_document_dir = Path(get_settings().LOCAL_STORAGE_PATH) / "rag_documents" / str(course_id)
+        await run_in_threadpool(rag_document_dir.mkdir, parents=True, exist_ok=True)
+
+        # Security fix: Use only UUID + validated extension, no user-provided filename in path
+        # This prevents path traversal attacks while preserving file type handling
+        ext = Path(filename).suffix.lower()
+        allowed_extensions = {".pdf", ".txt", ".md", ".epub", ".png", ".jpg", ".jpeg"}
+        safe_ext = ext if ext in allowed_extensions else ""
+
+        file_path = rag_document_dir / f"{document_id}{safe_ext}"
+        await run_in_threadpool(file_path.write_bytes, file_content)
+        return str(file_path)
+
     async def upload_document(
         self,
         session: AsyncSession,
@@ -101,15 +161,19 @@ class RAGService:
         """Upload a document to a course, ensuring user ownership."""
         # Validate user owns the course
         await self._ensure_course_owned(session, user_id, course_id)
+        document_type_text, title_text = self._validate_course_document_fields(
+            document_type=document_type,
+            title=title,
+        )
 
         try:
-            is_image = document_type == COURSE_IMAGE_DOCUMENT_TYPE
+            is_image = document_type_text == COURSE_IMAGE_DOCUMENT_TYPE
             now = datetime.now(UTC)
             # Create document record
             doc = CourseDocument(
                 course_id=course_id,
-                title=title,
-                document_type=document_type or "unknown",
+                title=title_text,
+                document_type=document_type_text,
                 status=COURSE_DOCUMENT_STATUS_EMBEDDED if is_image else COURSE_DOCUMENT_STATUS_PENDING,
                 processed_at=now if is_image else None,
                 embedded_at=now if is_image else None,
@@ -119,36 +183,12 @@ class RAGService:
 
             # Store file if provided
             if file_content and filename:
-                # Check file size limit
-                file_size_mb = len(file_content) / (1024 * 1024)
-                if file_size_mb > self.config.max_file_size_mb:
-                    logger.warning(
-                        "File %s too large: %.2fMB > %dMB limit", filename, file_size_mb, self.config.max_file_size_mb
-                    )
-                    raise HTTPException(
-                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                        detail=f"File too large: {file_size_mb:.1f}MB exceeds {self.config.max_file_size_mb}MB limit",
-                    )
-
-                from src.config.settings import get_settings
-
-                settings = get_settings()
-                # NOTE: RAG documents are stored separately from main user files (books)
-                # This is intentional - RAG documents are course-specific reference materials
-                # while books are user-owned files with different access patterns
-                rag_document_dir = Path(settings.LOCAL_STORAGE_PATH) / "rag_documents" / str(course_id)
-                await run_in_threadpool(rag_document_dir.mkdir, parents=True, exist_ok=True)
-
-                # Security fix: Use only UUID + validated extension, no user-provided filename in path
-                # This prevents path traversal attacks while preserving file type handling
-                ext = Path(filename).suffix.lower() if filename else ""
-                allowed_extensions = {".pdf", ".txt", ".md", ".epub", ".png", ".jpg", ".jpeg"}
-                safe_ext = ext if ext in allowed_extensions else ""
-
-                file_path = rag_document_dir / f"{doc.id}{safe_ext}"
-                await run_in_threadpool(file_path.write_bytes, file_content)
-
-                doc.file_path = str(file_path)
+                doc.file_path = await self._store_course_document_file(
+                    file_content=file_content,
+                    filename=filename,
+                    course_id=course_id,
+                    document_id=doc.id,
+                )
 
             await session.flush()
 
