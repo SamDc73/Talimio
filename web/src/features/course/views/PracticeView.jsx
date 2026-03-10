@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
-import { Loader2 } from "lucide-react"
+import { Loader2, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { useCourseService } from "@/api/courseApi"
 import { Button } from "@/components/Button"
 import { LatexExpression } from "@/components/quiz/LatexExpression"
@@ -11,6 +11,12 @@ import logger from "@/lib/logger"
 
 const MICRO_BATCH_SIZE = 4
 const PREFETCH_THRESHOLD = 2
+const SOFT_STOP_RECENT_WINDOW = 5
+const SOFT_STOP_MIN_ANSWERS = 10
+const SOFT_STOP_LOW_ACCURACY_THRESHOLD = 0.4
+const SOFT_STOP_CEILING_QUESTIONS = 30
+const SOFT_STOP_CEILING_MS = 30 * 60 * 1000
+const SOFT_STOP_MAX_EVENTS = 50
 
 function normalizeConcept(item) {
 	if (!item || typeof item !== "object") {
@@ -28,51 +34,64 @@ function normalizeConcept(item) {
 		return null
 	}
 
+	const masteryCandidate = item.mastery ?? item.confidence ?? item.strength ?? null
+	const masteryValue = typeof masteryCandidate === "string" ? Number(masteryCandidate) : masteryCandidate
+	const mastery = typeof masteryValue === "number" && Number.isFinite(masteryValue) ? masteryValue : null
+
 	return {
 		conceptId: String(conceptId),
 		lessonId: String(lessonId),
 		title: item.name || item.title || "Concept",
+		mastery,
 	}
 }
 
-function normalizeDrill(rawItem, fallbackConceptId, fallbackLessonId) {
+function normalizeDrill(rawItem) {
 	if (!rawItem || typeof rawItem !== "object") {
 		return null
 	}
 
 	const question = typeof rawItem.question === "string" ? rawItem.question.trim() : ""
-	const expectedLatex = typeof rawItem.expectedLatex === "string" ? rawItem.expectedLatex.trim() : ""
-	if (!question || !expectedLatex) {
+	const expectedAnswer = typeof rawItem.expectedAnswer === "string" ? rawItem.expectedAnswer.trim() : ""
+	let answerKind = ""
+	if (rawItem.answerKind === "text") {
+		answerKind = "text"
+	} else if (rawItem.answerKind === "math_latex") {
+		answerKind = "math_latex"
+	}
+	const conceptId = rawItem.conceptId ? String(rawItem.conceptId) : ""
+	const lessonId = rawItem.lessonId ? String(rawItem.lessonId) : ""
+	const structureSignature = typeof rawItem.structureSignature === "string" ? rawItem.structureSignature.trim() : ""
+	if (!question || !expectedAnswer || !answerKind || !conceptId || !lessonId || !structureSignature) {
 		return null
 	}
-
-	const conceptId = rawItem.conceptId ? String(rawItem.conceptId) : fallbackConceptId
-	const lessonId = rawItem.lessonId ? String(rawItem.lessonId) : fallbackLessonId
-	if (!conceptId || !lessonId) {
-		return null
-	}
-
-	const structureSignature =
-		typeof rawItem.structureSignature === "string" && rawItem.structureSignature.trim().length > 0
-			? rawItem.structureSignature.trim()
-			: "question.unknown"
 
 	const predictedPCorrect =
-		typeof rawItem.predictedPCorrect === "number" && !Number.isNaN(rawItem.predictedPCorrect)
-			? Math.max(0, Math.min(1, rawItem.predictedPCorrect))
-			: 0.5
-
-	const coreModel =
-		typeof rawItem.coreModel === "string" && rawItem.coreModel.trim().length > 0 ? rawItem.coreModel : "unknown-model"
+		typeof rawItem.predictedPCorrect === "number" && Number.isFinite(rawItem.predictedPCorrect)
+			? rawItem.predictedPCorrect
+			: null
+	const targetProbability =
+		typeof rawItem.targetProbability === "number" && Number.isFinite(rawItem.targetProbability)
+			? rawItem.targetProbability
+			: null
+	const targetLow =
+		typeof rawItem.targetLow === "number" && Number.isFinite(rawItem.targetLow) ? rawItem.targetLow : null
+	const targetHigh =
+		typeof rawItem.targetHigh === "number" && Number.isFinite(rawItem.targetHigh) ? rawItem.targetHigh : null
+	const coreModel = typeof rawItem.coreModel === "string" && rawItem.coreModel.trim() ? rawItem.coreModel.trim() : null
 
 	return {
 		conceptId,
 		lessonId,
 		question,
-		expectedLatex,
-		hints: Array.isArray(rawItem.hints) ? rawItem.hints.filter(Boolean).map(String) : [],
+		expectedAnswer,
+		answerKind,
+		hints: rawItem.hints,
 		structureSignature,
 		predictedPCorrect,
+		targetProbability,
+		targetLow,
+		targetHigh,
 		coreModel,
 	}
 }
@@ -81,7 +100,7 @@ function drillKey(item) {
 	if (!item) {
 		return ""
 	}
-	const normalizedQuestion = item.question.trim().toLowerCase().replace(/\s+/g, " ").replace(/\d+/g, "n")
+	const normalizedQuestion = item.question.trim().toLowerCase().replace(/\s+/g, " ")
 	return `${item.conceptId}:${item.structureSignature}:${normalizedQuestion}`
 }
 
@@ -89,18 +108,28 @@ export default function PracticeView() {
 	const { courseId, adaptiveEnabled } = useCourseContext()
 	const courseService = useCourseService(courseId)
 	const [searchParams] = useSearchParams()
+	const navigate = useNavigate()
 	const focusConceptIdParam = searchParams.get("focusConceptId")?.trim() || null
 
 	const [scheduledIndex, setScheduledIndex] = useState(0)
+	const fetchIndexRef = useRef(0)
 	const [queue, setQueue] = useState([])
 	const [isGenerating, setIsGenerating] = useState(false)
 	const [generationError, setGenerationError] = useState(null)
 	const [noMoreItems, setNoMoreItems] = useState(false)
 	const [completedCount, setCompletedCount] = useState(0)
+	const [softStopNudge, setSoftStopNudge] = useState(null)
+	const [incorrectStreak, setIncorrectStreak] = useState({ conceptId: null, count: 0 })
+	const [escapeHatchDismissedFor, setEscapeHatchDismissedFor] = useState(null)
 
+	const answerEventsRef = useRef([])
+	const sessionStartedAtRef = useRef(Date.now())
+	const sessionStartAccuracyRef = useRef(null)
+	const completedQuestionsRef = useRef(0)
+	const nudgeShownRef = useRef({ performance: false, ceiling: false })
 	const seenDrillKeysRef = useRef(new Set())
+
 	const generatingRef = useRef(false)
-	const noMoreItemsRef = useRef(false)
 
 	const { data: frontierData, isLoading: frontierLoading } = useQuery({
 		queryKey: ["course", courseId, "adaptive-concepts"],
@@ -117,6 +146,27 @@ export default function PracticeView() {
 		return frontierData.dueForReview.map((item) => normalizeConcept(item)).filter(Boolean)
 	}, [frontierData])
 
+	const mode = focusConceptIdParam ? "focused" : "scheduled"
+	const practiceSessionKey = `${mode}:${focusConceptIdParam ?? ""}`
+	const scheduledComplete = mode === "scheduled" && scheduledIndex >= dueConcepts.length
+	const bonusPracticeSuggestions = useMemo(() => {
+		const candidates = []
+		if (Array.isArray(frontierData?.frontier)) candidates.push(...frontierData.frontier)
+		if (Array.isArray(frontierData?.dueForReview)) candidates.push(...frontierData.dueForReview)
+		const normalized = candidates.map((item) => normalizeConcept(item)).filter(Boolean)
+		const unique = new Map()
+		for (const concept of normalized) {
+			if (!unique.has(concept.conceptId)) {
+				if (mode === "scheduled" && scheduledComplete && dueConcepts.some((d) => d.conceptId === concept.conceptId)) {
+					continue
+				}
+				unique.set(concept.conceptId, concept)
+			}
+		}
+		const sorted = [...unique.values()].toSorted((a, b) => (a.mastery ?? 1) - (b.mastery ?? 1))
+		return sorted.slice(0, 5)
+	}, [frontierData, mode, scheduledComplete, dueConcepts])
+
 	const allAdaptiveConcepts = useMemo(() => {
 		const buckets = []
 		if (Array.isArray(frontierData?.dueForReview)) buckets.push(...frontierData.dueForReview)
@@ -132,12 +182,20 @@ export default function PracticeView() {
 		return allAdaptiveConcepts.find((item) => item.conceptId === focusConceptIdParam) ?? null
 	}, [allAdaptiveConcepts, focusConceptIdParam])
 
-	const mode = focusConceptIdParam ? "focused" : "scheduled"
-	const sessionScopeKey = mode === "focused" ? focusConceptIdParam : "scheduled"
-	const scheduledComplete = mode === "scheduled" && scheduledIndex >= dueConcepts.length
 	const activeConcept = mode === "focused" ? focusConcept : (dueConcepts[scheduledIndex] ?? null)
-	const activeConceptKey = activeConcept ? `${activeConcept.conceptId}:${activeConcept.lessonId}` : ""
 	const currentQuestion = queue[0] ?? null
+
+	const showLessonEscapeHatch =
+		Boolean(courseId && activeConcept?.lessonId && activeConcept?.conceptId) &&
+		incorrectStreak.conceptId === activeConcept.conceptId &&
+		incorrectStreak.count >= 3 &&
+		escapeHatchDismissedFor !== activeConcept.conceptId
+
+	const handleDismissLessonEscapeHatch = useCallback(() => {
+		if (activeConcept?.conceptId) {
+			setEscapeHatchDismissedFor(activeConcept.conceptId)
+		}
+	}, [activeConcept?.conceptId])
 
 	const {
 		submitAnswer,
@@ -152,94 +210,272 @@ export default function PracticeView() {
 	})
 
 	const requestMore = useCallback(
-		async (requestedCount = MICRO_BATCH_SIZE) => {
-			if (!courseId || !activeConcept?.conceptId || !activeConcept?.lessonId) {
+		async (conceptToFetch, requestedCount = MICRO_BATCH_SIZE) => {
+			if (!courseId || !conceptToFetch?.conceptId || !conceptToFetch?.lessonId) {
 				return
 			}
-			if (generatingRef.current || noMoreItemsRef.current) {
+			if (generatingRef.current) {
 				return
 			}
 
 			generatingRef.current = true
 			setIsGenerating(true)
 			setGenerationError(null)
+			setNoMoreItems(false)
 
 			try {
 				const response = await courseService.fetchPracticeDrills({
-					conceptId: activeConcept.conceptId,
+					conceptId: conceptToFetch.conceptId,
 					count: requestedCount,
 				})
-				const drills = Array.isArray(response?.drills) ? response.drills : []
+				if (!response || !Array.isArray(response.drills)) {
+					setNoMoreItems(true)
+					setGenerationError("Invalid practice drill response payload.")
+					logger.error("Invalid practice drill response payload", {
+						courseId,
+						conceptId: conceptToFetch.conceptId,
+						response,
+					})
+					return
+				}
+
+				const drills = response.drills
 				if (drills.length === 0) {
-					noMoreItemsRef.current = true
 					setNoMoreItems(true)
 					return
 				}
 
-				setQueue((previousQueue) => {
-					const nextQueue = [...previousQueue]
-					for (const rawItem of drills) {
-						const normalized = normalizeDrill(rawItem, activeConcept.conceptId, activeConcept.lessonId)
-						if (!normalized) {
-							continue
-						}
-						const key = drillKey(normalized)
-						if (!key || seenDrillKeysRef.current.has(key)) {
-							continue
-						}
-						seenDrillKeysRef.current.add(key)
-						nextQueue.push(normalized)
+				const acceptedDrills = []
+				const batchKeys = new Set()
+				let rejectedInvalidCount = 0
+				let rejectedDuplicateCount = 0
+				for (const rawItem of drills) {
+					const normalized = normalizeDrill(rawItem)
+					if (!normalized) {
+						rejectedInvalidCount += 1
+						continue
 					}
-					return nextQueue
-				})
+					const key = drillKey(normalized)
+					if (!key || batchKeys.has(key) || seenDrillKeysRef.current.has(key)) {
+						rejectedDuplicateCount += 1
+						continue
+					}
+					batchKeys.add(key)
+					seenDrillKeysRef.current.add(key)
+					acceptedDrills.push(normalized)
+				}
+
+				if (acceptedDrills.length === 0) {
+					setNoMoreItems(true)
+					setGenerationError("No usable questions were returned for this concept right now.")
+					logger.error("Practice drill batch returned no usable questions", {
+						courseId,
+						conceptId: conceptToFetch.conceptId,
+						receivedCount: drills.length,
+						rejectedInvalidCount,
+						rejectedDuplicateCount,
+					})
+					return
+				}
+
+				setQueue((previousQueue) => [...previousQueue, ...acceptedDrills])
 			} catch (error) {
 				const message = error?.message || "Failed to generate practice drills"
 				setGenerationError(message)
 				logger.error("Failed to fetch practice drills", error, {
 					courseId,
-					conceptId: activeConcept.conceptId,
+					conceptId: conceptToFetch.conceptId,
 				})
 			} finally {
 				generatingRef.current = false
 				setIsGenerating(false)
 			}
 		},
-		[activeConcept?.conceptId, activeConcept?.lessonId, courseId, courseService]
+		[courseId, courseService]
 	)
 
+	const maybeTriggerCeilingNudge = useCallback(
+		(nowMs) => {
+			if (!courseId || nudgeShownRef.current.ceiling) {
+				return
+			}
+
+			const elapsedMs = Math.max(0, nowMs - sessionStartedAtRef.current)
+			if (completedQuestionsRef.current < SOFT_STOP_CEILING_QUESTIONS && elapsedMs < SOFT_STOP_CEILING_MS) {
+				return
+			}
+
+			setSoftStopNudge((previous) => {
+				if (previous) {
+					return previous
+				}
+				nudgeShownRef.current.ceiling = true
+				return {
+					kind: "ceiling",
+					message: "Great session! Take a break or keep going?",
+					stopTo: `/course/${courseId}`,
+				}
+			})
+		},
+		[courseId]
+	)
+
+	const recordAnswerEvent = useCallback(
+		({ isCorrect, conceptId }) => {
+			if (typeof isCorrect !== "boolean") {
+				return
+			}
+
+			const normalizedConceptId = conceptId ? String(conceptId) : null
+			if (normalizedConceptId) {
+				setIncorrectStreak((previous) => {
+					if (isCorrect) {
+						return { conceptId: normalizedConceptId, count: 0 }
+					}
+					if (previous.conceptId === normalizedConceptId) {
+						return { conceptId: normalizedConceptId, count: previous.count + 1 }
+					}
+					return { conceptId: normalizedConceptId, count: 1 }
+				})
+
+				if (isCorrect) {
+					setEscapeHatchDismissedFor((previous) => (previous === normalizedConceptId ? null : previous))
+				}
+			}
+
+			const nowMs = Date.now()
+			const events = answerEventsRef.current
+			events.push(isCorrect)
+			if (events.length > SOFT_STOP_MAX_EVENTS) {
+				events.shift()
+			}
+
+			if (sessionStartAccuracyRef.current === null && events.length >= SOFT_STOP_RECENT_WINDOW) {
+				const startWindow = events.slice(0, SOFT_STOP_RECENT_WINDOW)
+				const startCorrect = startWindow.filter(Boolean).length
+				sessionStartAccuracyRef.current = startCorrect / SOFT_STOP_RECENT_WINDOW
+			}
+
+			const startAccuracy = sessionStartAccuracyRef.current
+			if (
+				!nudgeShownRef.current.performance &&
+				events.length >= SOFT_STOP_MIN_ANSWERS &&
+				events.length >= SOFT_STOP_RECENT_WINDOW * 2 &&
+				typeof startAccuracy === "number" &&
+				!Number.isNaN(startAccuracy)
+			) {
+				const recentWindow = events.slice(-SOFT_STOP_RECENT_WINDOW)
+				const recentCorrect = recentWindow.filter(Boolean).length
+				const recentAccuracy = recentCorrect / SOFT_STOP_RECENT_WINDOW
+
+				if (recentAccuracy < SOFT_STOP_LOW_ACCURACY_THRESHOLD && recentAccuracy < startAccuracy) {
+					const stopTo = activeConcept?.lessonId
+						? `/course/${courseId}/lesson/${activeConcept.lessonId}`
+						: `/course/${courseId}`
+					setSoftStopNudge((previous) => {
+						if (previous) {
+							return previous
+						}
+						nudgeShownRef.current.performance = true
+						return {
+							kind: "performance",
+							message: "You might benefit from reviewing the lesson. Keep practicing or open lesson?",
+							stopTo,
+						}
+					})
+				}
+			}
+
+			maybeTriggerCeilingNudge(nowMs)
+		},
+		[activeConcept?.lessonId, courseId, maybeTriggerCeilingNudge]
+	)
+
+	const handleSoftStop = useCallback(() => {
+		const destination = softStopNudge?.stopTo
+		setSoftStopNudge(null)
+		if (destination) {
+			navigate(destination)
+		}
+	}, [navigate, softStopNudge])
+
+	const handleKeepPracticing = useCallback(() => {
+		setSoftStopNudge(null)
+	}, [])
+
 	useEffect(() => {
-		if (!sessionScopeKey) {
+		if (!courseId) {
 			return
 		}
 		setCompletedCount(0)
+		completedQuestionsRef.current = 0
 		setScheduledIndex(0)
-	}, [sessionScopeKey])
+		fetchIndexRef.current = 0
+		answerEventsRef.current = []
+		sessionStartAccuracyRef.current = null
+		sessionStartedAtRef.current = Date.now()
+		nudgeShownRef.current = { performance: false, ceiling: false }
+		setSoftStopNudge(null)
+		setIncorrectStreak({ conceptId: null, count: 0 })
+		setEscapeHatchDismissedFor(null)
+		seenDrillKeysRef.current.clear()
+	}, [courseId])
 
 	useEffect(() => {
-		if (!activeConceptKey && mode !== "scheduled") {
+		if (!courseId || nudgeShownRef.current.ceiling) {
 			return
 		}
+
+		const timer = setInterval(() => {
+			maybeTriggerCeilingNudge(Date.now())
+		}, 15_000)
+
+		return () => {
+			clearInterval(timer)
+		}
+	}, [courseId, maybeTriggerCeilingNudge])
+
+	useEffect(() => {
 		setQueue([])
 		setGenerationError(null)
 		setNoMoreItems(false)
-		noMoreItemsRef.current = false
-		seenDrillKeysRef.current = new Set()
-	}, [activeConceptKey, mode])
+		setCompletedCount(0)
+		completedQuestionsRef.current = 0
+		answerEventsRef.current = []
+		sessionStartAccuracyRef.current = null
+		sessionStartedAtRef.current = Date.now()
+		nudgeShownRef.current = { performance: false, ceiling: false }
+		setSoftStopNudge(null)
+		setIncorrectStreak({ conceptId: null, count: 0 })
+		setEscapeHatchDismissedFor(null)
+		seenDrillKeysRef.current.clear()
+		if (practiceSessionKey.startsWith("scheduled:")) {
+			setScheduledIndex(0)
+			fetchIndexRef.current = 0
+		}
+	}, [practiceSessionKey])
 
 	useEffect(() => {
-		if (!activeConcept?.conceptId || !activeConcept?.lessonId) {
+		if (generatingRef.current || generationError || noMoreItems) {
 			return
 		}
-		const threshold = mode === "scheduled" ? 0 : PREFETCH_THRESHOLD
+		const threshold = PREFETCH_THRESHOLD
 		const batchSize = mode === "scheduled" ? 1 : MICRO_BATCH_SIZE
 		if (queue.length > threshold) {
 			return
 		}
-		if (noMoreItemsRef.current) {
-			return
+
+		if (mode === "focused") {
+			if (!focusConcept) return
+			void requestMore(focusConcept, batchSize)
+		} else if (mode === "scheduled") {
+			const conceptToFetch = dueConcepts[fetchIndexRef.current]
+			if (conceptToFetch) {
+				fetchIndexRef.current += 1
+				void requestMore(conceptToFetch, batchSize)
+			}
 		}
-		void requestMore(batchSize)
-	}, [activeConcept?.conceptId, activeConcept?.lessonId, mode, queue.length, requestMore])
+	}, [generationError, mode, noMoreItems, queue.length, requestMore, focusConcept, dueConcepts])
 
 	useEffect(() => {
 		if (mode !== "scheduled" || scheduledComplete) {
@@ -248,16 +484,19 @@ export default function PracticeView() {
 		if (!noMoreItems || isGenerating || queue.length > 0) {
 			return
 		}
+		setNoMoreItems(false)
 		setScheduledIndex((value) => value + 1)
 	}, [isGenerating, mode, noMoreItems, queue.length, scheduledComplete])
 
 	const handleItemComplete = useCallback(() => {
+		completedQuestionsRef.current += 1
 		setCompletedCount((value) => value + 1)
+		maybeTriggerCeilingNudge(Date.now())
 		setQueue((previousQueue) => previousQueue.slice(1))
 		if (mode === "scheduled") {
 			setScheduledIndex((value) => value + 1)
 		}
-	}, [mode])
+	}, [maybeTriggerCeilingNudge, mode])
 
 	const handleGrade = useCallback(
 		async (payload) => {
@@ -269,17 +508,22 @@ export default function PracticeView() {
 				question: currentQuestion.question,
 				structureSignature: currentQuestion.structureSignature,
 				predictedPCorrect: currentQuestion.predictedPCorrect,
+				targetProbability: currentQuestion.targetProbability,
+				targetLow: currentQuestion.targetLow,
+				targetHigh: currentQuestion.targetHigh,
 				coreModel: currentQuestion.coreModel,
 			}
 
-			return await submitAnswer({
+			const result = await submitAnswer({
 				...payload,
 				conceptId: currentQuestion.conceptId,
 				practiceContext: "drill",
 				reviewMetadata,
 			})
+			recordAnswerEvent({ isCorrect: Boolean(result?.grade?.isCorrect), conceptId: currentQuestion.conceptId })
+			return result
 		},
-		[currentQuestion, submitAnswer]
+		[currentQuestion, recordAnswerEvent, submitAnswer]
 	)
 
 	const handleSkip = useCallback(
@@ -292,17 +536,22 @@ export default function PracticeView() {
 				question: currentQuestion.question,
 				structureSignature: currentQuestion.structureSignature,
 				predictedPCorrect: currentQuestion.predictedPCorrect,
+				targetProbability: currentQuestion.targetProbability,
+				targetLow: currentQuestion.targetLow,
+				targetHigh: currentQuestion.targetHigh,
 				coreModel: currentQuestion.coreModel,
 			}
 
-			return await submitSkip({
+			const result = await submitSkip({
 				...payload,
 				conceptId: currentQuestion.conceptId,
 				practiceContext: "drill",
 				reviewMetadata,
 			})
+			recordAnswerEvent({ isCorrect: false, conceptId: currentQuestion.conceptId })
+			return result
 		},
-		[currentQuestion, submitSkip]
+		[currentQuestion, recordAnswerEvent, submitSkip]
 	)
 
 	if (!adaptiveEnabled) {
@@ -339,23 +588,53 @@ export default function PracticeView() {
 	}
 
 	if (mode === "scheduled" && dueConcepts.length === 0) {
+		const hasSuggestions = bonusPracticeSuggestions.length > 0
 		return (
 			<div className="w-full max-w-3xl mx-auto py-12 px-6">
 				<div className="rounded-xl border border-border bg-card p-6 space-y-3">
 					<h1 className="text-2xl font-semibold text-foreground">Practice</h1>
-					<p className="text-muted-foreground">All caught up. No concepts are due for review.</p>
+					<p className="text-muted-foreground">You&apos;re caught up.</p>
+					{hasSuggestions ? (
+						<div className="pt-2 space-y-3">
+							<div className="text-sm font-medium text-foreground">Bonus practice</div>
+							<div className="flex flex-wrap gap-2">
+								{bonusPracticeSuggestions.map((concept) => (
+									<Button key={concept.conceptId} asChild variant="outline" size="sm">
+										<Link to={`/course/${courseId}/practice?focusConceptId=${encodeURIComponent(concept.conceptId)}`}>
+											{concept.title}
+										</Link>
+									</Button>
+								))}
+							</div>
+						</div>
+					) : null}
 				</div>
 			</div>
 		)
 	}
 
 	if (scheduledComplete) {
+		const hasSuggestions = bonusPracticeSuggestions.length > 0
 		return (
 			<div className="w-full max-w-3xl mx-auto py-12 px-6">
 				<div className="rounded-xl border border-border bg-card p-6 space-y-3">
 					<h1 className="text-2xl font-semibold text-foreground">Practice</h1>
-					<p className="text-muted-foreground">All caught up. You completed today&apos;s due concepts.</p>
+					<p className="text-muted-foreground">You&apos;re caught up.</p>
 					<p className="text-sm text-muted-foreground">Questions answered this session: {completedCount}</p>
+					{hasSuggestions ? (
+						<div className="pt-2 space-y-3">
+							<div className="text-sm font-medium text-foreground">Bonus practice</div>
+							<div className="flex flex-wrap gap-2">
+								{bonusPracticeSuggestions.map((concept) => (
+									<Button key={concept.conceptId} asChild variant="outline" size="sm">
+										<Link to={`/course/${courseId}/practice?focusConceptId=${encodeURIComponent(concept.conceptId)}`}>
+											{concept.title}
+										</Link>
+									</Button>
+								))}
+							</div>
+						</div>
+					) : null}
 				</div>
 			</div>
 		)
@@ -370,9 +649,10 @@ export default function PracticeView() {
 	if (currentQuestion) {
 		questionPanel = (
 			<LatexExpression
-				key={`${currentQuestion.conceptId}-${currentQuestion.structureSignature}`}
+				key={drillKey(currentQuestion)}
 				question={currentQuestion.question}
-				expectedLatex={currentQuestion.expectedLatex}
+				expectedAnswer={currentQuestion.expectedAnswer}
+				answerKind={currentQuestion.answerKind}
 				hints={currentQuestion.hints}
 				practiceContext="drill"
 				onGrade={handleGrade}
@@ -399,7 +679,7 @@ export default function PracticeView() {
 		<div className="w-full max-w-4xl mx-auto py-8 px-4 md:px-6">
 			<div className="rounded-xl border border-border bg-card shadow-sm p-6 space-y-6">
 				<div className="space-y-2">
-					<p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Practice Bowl</p>
+					<p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Adaptive Practice</p>
 					<h1 className="text-2xl font-semibold text-foreground">{activeConcept?.title || "Practice"}</h1>
 					<p className="text-sm text-muted-foreground">
 						{mode === "focused"
@@ -417,6 +697,38 @@ export default function PracticeView() {
 				{submissionError ? (
 					<div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
 						{submissionError.message || "Failed to submit answer"}
+					</div>
+				) : null}
+
+				{showLessonEscapeHatch ? (
+					<div className="rounded-lg border border-border bg-muted/20 p-4 flex flex-wrap items-center justify-between gap-3">
+						<Button asChild size="sm" variant="outline">
+							<Link to={`/course/${courseId}/lesson/${encodeURIComponent(activeConcept.lessonId)}`}>
+								Open lesson for {activeConcept.title}
+							</Link>
+						</Button>
+						<Button
+							variant="ghost"
+							size="icon"
+							onClick={handleDismissLessonEscapeHatch}
+							aria-label="Dismiss lesson suggestion"
+						>
+							<X className="size-4" />
+						</Button>
+					</div>
+				) : null}
+
+				{softStopNudge ? (
+					<div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+						<p className="text-sm font-medium text-foreground">{softStopNudge.message}</p>
+						<div className="flex flex-col sm:flex-row gap-2">
+							<Button size="sm" onClick={handleSoftStop} className="sm:w-auto">
+								{softStopNudge.kind === "performance" ? "Open lesson" : "Stop"}
+							</Button>
+							<Button variant="outline" size="sm" onClick={handleKeepPracticing} className="sm:w-auto">
+								Keep practicing
+							</Button>
+						</div>
 					</div>
 				) : null}
 

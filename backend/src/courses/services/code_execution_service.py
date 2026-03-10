@@ -155,8 +155,8 @@ class CodeExecutionService:
     _sessions: ClassVar[dict[str, tuple[float, Any]]] = {}
     # In-memory plan cache: cache_key -> ExecutionPlan (simple dict, no Redis)
     _plan_cache: ClassVar[dict[str, Any]] = {}
-    # Course setup tracking: course_id -> bool
-    _course_setup_done: ClassVar[dict[str, bool]] = {}
+    # Course setup tracking: sandbox_key -> bool
+    _setup_done_by_key: ClassVar[dict[str, bool]] = {}
 
     def __init__(self, session: AsyncSession) -> None:
         ttl = get_settings().E2B_SANDBOX_TTL
@@ -181,6 +181,7 @@ class CodeExecutionService:
         for k in stale:
             try:
                 _created, sbx = self._sessions.pop(k)
+                self._setup_done_by_key.pop(k, None)
                 # Best effort async close
                 closer = getattr(sbx, "close", None)
                 if callable(closer):
@@ -242,8 +243,8 @@ class CodeExecutionService:
         sbx = await self._get_sandbox(key)
 
         # Run course setup commands once per sandbox
-        if course_id and setup_commands and not self._course_setup_done.get(course_id):
-            await self._run_course_setup(sbx, course_id, setup_commands)
+        if course_id and setup_commands and not self._setup_done_by_key.get(key):
+            await self._run_course_setup(sbx, setup_key=key, course_id=course_id, setup_commands=setup_commands)
 
         workspace_context: dict[str, Any] | None = None
         if files:
@@ -441,6 +442,7 @@ class CodeExecutionService:
 
     async def _reset_session(self, key: str) -> None:
         _created, sbx = self._sessions.pop(key, (None, None))
+        self._setup_done_by_key.pop(key, None)
         if sbx:
             try:
                 closer = getattr(sbx, "close", None)
@@ -460,9 +462,9 @@ class CodeExecutionService:
         code_hash = hashlib.sha256(code_prefix.encode()).hexdigest()[:16]
         return f"{course_id or '_'}:{language.lower()}:{code_hash}"
 
-    async def _run_course_setup(self, sbx: Any, course_id: str, setup_commands: list[str]) -> None:
+    async def _run_course_setup(self, sbx: Any, *, setup_key: str, course_id: str, setup_commands: list[str]) -> None:
         """Run course setup commands once per sandbox."""
-        logger.info("Running course setup course_id=%s commands=%d", course_id, len(setup_commands))
+        logger.info("Running course setup course_id=%s key=%s commands=%d", course_id, setup_key, len(setup_commands))
         for cmd in setup_commands:
             try:
                 result = await sbx.commands.run(cmd)
@@ -480,7 +482,7 @@ class CodeExecutionService:
                 CommandExitException,
             ):
                 logger.exception("Setup command exception: %s", cmd)
-        self._course_setup_done[course_id] = True
+        self._setup_done_by_key[setup_key] = True
 
     async def _ensure_runtime(self, sbx: Any, language: str) -> None:
         """Install language runtime for fast-path execution when missing."""

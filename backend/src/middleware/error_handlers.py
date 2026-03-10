@@ -102,7 +102,7 @@ def format_error_response(
     metadata: dict[str, Any] | None = None,
 ) -> JSONResponse:
     """Format a consistent error response."""
-    content = {
+    content: dict[str, Any] = {
         "error": {
             "category": category,
             "code": code,

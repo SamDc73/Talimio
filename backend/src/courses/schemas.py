@@ -195,6 +195,24 @@ class ReviewRequest(BaseModel):
         min_length=1,
         description="Optional provider/model id used to generate the practice question",
     )
+    target_probability: float | None = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Optional target probability used during drill selection",
+    )
+    target_low: float | None = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Optional lower bound for the drill target band",
+    )
+    target_high: float | None = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Optional upper bound for the drill target band",
+    )
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
@@ -237,9 +255,10 @@ class NextReviewResponse(BaseModel):
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
-GradeKind = Literal["latex_expression", "jxg_state"]
+GradeKind = Literal["latex_expression", "jxg_state", "practice_answer"]
 GradeStatus = Literal["correct", "incorrect", "parse_error", "unsupported"]
 PracticeContext = Literal["inline", "quick_check", "scheduled_review", "drill"]
+PracticeAnswerKind = Literal["math_latex", "text"]
 
 
 class JXGBoardState(BaseModel):
@@ -271,6 +290,8 @@ class GradeExpectedPayload(BaseModel):
     """Expected answer payload for grading."""
 
     expected_latex: str | None = Field(None, min_length=1, description="Expected answer in LaTeX")
+    expected_answer: str | None = Field(None, min_length=1, description="Expected answer for generalized practice grading")
+    answer_kind: PracticeAnswerKind | None = Field(None, description="Expected answer type for generalized practice grading")
     expected_state: JXGBoardState | None = Field(
         None,
         description=(
@@ -296,6 +317,7 @@ class GradeAnswerPayload(BaseModel):
     """Learner answer payload for grading."""
 
     answer_latex: str | None = Field(None, min_length=1, description="Learner answer in LaTeX")
+    answer_text: str | None = Field(None, min_length=1, description="Learner answer string for generalized practice grading")
     answer_state: JXGBoardState | None = Field(
         None,
         description=(
@@ -355,6 +377,18 @@ class GradeRequest(BaseModel):
                 raise ValueError(message)
             return self
 
+        if self.kind == "practice_answer":
+            if not self.expected.expected_answer:
+                message = "expected.expectedAnswer is required when kind=practice_answer"
+                raise ValueError(message)
+            if not self.expected.answer_kind:
+                message = "expected.answerKind is required when kind=practice_answer"
+                raise ValueError(message)
+            if not self.answer.answer_text:
+                message = "answer.answerText is required when kind=practice_answer"
+                raise ValueError(message)
+            return self
+
         return self
 
 
@@ -411,16 +445,15 @@ class PracticeDrillItem(BaseModel):
     concept_id: uuid.UUID = Field(..., description="Concept this drill belongs to")
     lesson_id: uuid.UUID = Field(..., description="Deterministic lesson id mapped from concept")
     question: str = Field(..., min_length=1, description="Learner-facing drill question")
-    expected_latex: str = Field(..., min_length=1, description="Expected answer in LaTeX-compatible text")
+    expected_answer: str = Field(..., min_length=1, description="Expected answer string")
+    answer_kind: PracticeAnswerKind = Field(..., description="Expected answer input mode")
     hints: list[str] = Field(default_factory=list, description="Optional hints for this drill")
     structure_signature: str = Field(..., min_length=1, description="Normalized structural signature for duplicate checks")
-    predicted_p_correct: float = Field(
-        ...,
-        ge=0.0,
-        le=1.0,
-        description="Model-estimated probability that the learner answers correctly",
-    )
-    core_model: str = Field(..., min_length=1, description="Provider/model id used for generation")
+    predicted_p_correct: float = Field(..., ge=0.0, le=1.0, description="Estimated correctness probability used for selection")
+    target_probability: float = Field(..., ge=0.0, le=1.0, description="Target probability used to rank candidate drills")
+    target_low: float = Field(..., ge=0.0, le=1.0, description="Lower bound of the target probability band")
+    target_high: float = Field(..., ge=0.0, le=1.0, description="Upper bound of the target probability band")
+    core_model: str = Field(..., min_length=1, description="Core model used to generate and rank the drill")
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 

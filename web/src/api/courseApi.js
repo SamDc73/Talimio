@@ -222,11 +222,6 @@ export function useCourseService(courseId = null) {
 		},
 
 		/**
-		 * Delete a lesson
-		 * @param {string} lessonId - Lesson ID
-		 */
-
-		/**
 		 * Submit adaptive lesson reviews
 		 */
 		async submitLessonReviews(lessonId, reviews) {
