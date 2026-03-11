@@ -1,5 +1,6 @@
 
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.client import LLMClient
-from src.courses.models import Course, Lesson
+from src.courses.models import Concept, Course, CourseConcept, Lesson, ProbeEvent, UserConceptState
 from src.courses.schemas import LessonDetailResponse
 
 
@@ -46,6 +47,7 @@ _LESSON_GENERATION_HTTP_500_ERROR_TYPES = (
     ConnectionError,
     TimeoutError,
 )
+_LESSON_LEARNER_STATE_FALLBACK_ERROR_TYPES = (SQLAlchemyError,)
 
 
 class LessonService:
@@ -119,6 +121,103 @@ class LessonService:
         if isinstance(next_title, str) and next_title.strip():
             return next_title.strip()
         return None
+
+    def _resolve_concept_id_for_lesson(
+        self,
+        *,
+        lesson_id: uuid.UUID,
+        course_id: uuid.UUID,
+        concept_ids: Sequence[uuid.UUID],
+    ) -> uuid.UUID | None:
+        for concept_id in concept_ids:
+            candidate = uuid.uuid5(uuid.NAMESPACE_URL, f"concept-lesson:{course_id}:{concept_id}")
+            if candidate == lesson_id:
+                return concept_id
+        return None
+
+    async def _build_adaptive_learner_state_context(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+    ) -> str | None:
+        concept_ids = (
+            (
+                await self.session.execute(
+                    select(CourseConcept.concept_id)
+                    .where(CourseConcept.course_id == course_id)
+                    .order_by(CourseConcept.order_hint.asc().nulls_last(), CourseConcept.concept_id.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not concept_ids:
+            return None
+
+        concept_id = self._resolve_concept_id_for_lesson(
+            lesson_id=lesson_id,
+            course_id=course_id,
+            concept_ids=concept_ids,
+        )
+        if concept_id is None:
+            return None
+
+        concept_name = await self.session.scalar(select(Concept.name).where(Concept.id == concept_id))
+        if not isinstance(concept_name, str) or not concept_name.strip():
+            return None
+
+        state = await self.session.scalar(
+            select(UserConceptState).where(
+                UserConceptState.user_id == self.user_id,
+                UserConceptState.concept_id == concept_id,
+            )
+        )
+        outcomes = (
+            (
+                await self.session.execute(
+                    select(ProbeEvent.correct)
+                    .where(
+                        ProbeEvent.user_id == self.user_id,
+                        ProbeEvent.concept_id == concept_id,
+                    )
+                    .order_by(ProbeEvent.ts.desc())
+                    .limit(5)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        lines = ["## Learner State", f"Concept: {concept_name.strip()}"]
+        if state is None and not outcomes:
+            lines.append("First encounter: no learner state yet")
+            return "\n".join(lines)
+
+        if state is not None:
+            mastery = float(state.s_mastery)
+            lines.append(f"Mastery: {mastery:.2f}")
+
+            if state.exposures > 0:
+                lines.append(f"Exposures: {state.exposures}")
+
+            if isinstance(state.learner_profile, dict):
+                retention_raw = state.learner_profile.get("retention_rate")
+                if isinstance(retention_raw, (int, float)):
+                    lines.append(f"Retention: {float(retention_raw):.2f}")
+
+            if state.next_review_at is not None:
+                next_review_at = state.next_review_at
+                if next_review_at.tzinfo is None:
+                    next_review_at = next_review_at.replace(tzinfo=UTC)
+                review_status = "overdue" if next_review_at < datetime.now(UTC) else "on schedule"
+                lines.append(f"Review due: {review_status}")
+
+        if outcomes:
+            recent_correct = sum(1 for outcome in outcomes if outcome)
+            lines.append(f"Recent probes: {recent_correct}/{len(outcomes)} correct")
+
+        return "\n".join(lines)
 
     async def _build_rag_context(
         self,
@@ -222,6 +321,20 @@ class LessonService:
         outline_text = self._build_outline_window_text(outline_window)
         if outline_text:
             context_sections.append("## Course Outline (Near Term)\n" + outline_text)
+
+        if course.adaptive_enabled:
+            try:
+                learner_state_context = await self._build_adaptive_learner_state_context(
+                    course_id=course.id,
+                    lesson_id=lesson.id,
+                )
+                if learner_state_context:
+                    context_sections.append(learner_state_context)
+            except _LESSON_LEARNER_STATE_FALLBACK_ERROR_TYPES:
+                logger.exception(
+                    "Failed to build adaptive learner state context",
+                    extra={"user_id": str(self.user_id), "course_id": str(course.id), "lesson_id": str(lesson.id)},
+                )
 
         rag_context = await self._build_rag_context(
             course_id=course.id,

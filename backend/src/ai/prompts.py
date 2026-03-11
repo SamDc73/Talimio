@@ -476,6 +476,15 @@ LESSON_CONTEXT:
 - Use clear, modern language. No emojis. No “chit-chat”.
 - Prefer short paragraphs and concrete examples over long narration.
 
+## Adapting to the learner
+Read the learner state holistically and teach accordingly:
+- Match your pace and depth to what the numbers suggest about prior knowledge.
+- A confident learner (high mastery, strong retention) needs less scaffolding.
+- A struggling learner (low mastery, weak retention) needs more examples and clearer steps.
+- A learner who has seen this before (many exposures) doesn't need basic definitions repeated.
+- A learner who is new needs foundational context before technique.
+- Without learner state, create a well-structured lesson for a curious beginner.
+
 ## Lesson structure (practice-forward, integrated)
 - Organize the lesson into clear sections using `##` and `###`.
 - Flow target:
