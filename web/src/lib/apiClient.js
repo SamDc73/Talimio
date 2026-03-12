@@ -101,7 +101,7 @@ const executeRequest = async (method, endpoint, data = null, options = {}) => {
 	const { headers: optionHeaders, responseType, absoluteUrl, ...restOptions } = options
 
 	const makeRequest = async ({ forceRefreshCsrf = false } = {}) => {
-		const url = absoluteUrl ? endpoint : joinApiUrl(API_BASE, endpoint)
+		const requestUrl = absoluteUrl ? endpoint : joinApiUrl(API_BASE, endpoint)
 		const headers = { ...optionHeaders }
 		const hasCsrfHeader = Object.keys(headers).some((key) => key.toLowerCase() === CSRF_HEADER_NAME)
 		if (!SAFE_METHODS.has(method) && !hasCsrfHeader) {
@@ -130,13 +130,14 @@ const executeRequest = async (method, endpoint, data = null, options = {}) => {
 			}
 		}
 
-		return fetch(url, requestOptions)
+		return fetch(requestUrl, requestOptions)
 	}
 
 	let response = await makeRequest()
 	if (!SAFE_METHODS.has(method) && (await isCsrfVerificationFailure(response))) {
 		response = await makeRequest({ forceRefreshCsrf: true })
 	}
+
 	return handleResponse(response, endpoint, responseType)
 }
 

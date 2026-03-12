@@ -127,6 +127,19 @@ class Settings(BaseSettings):
     E2B_SANDBOX_TTL: int = 600
     E2B_SDK_LOG_LEVEL: str = "WARNING"
 
+    # Release metadata
+    RELEASE_VERSION: str = ""
+    K_REVISION: str = ""
+
+    # Observability
+    OTEL_ENABLED: bool | None = None
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: str = ""
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: str = ""
+    OTEL_EXPORTER_OTLP_HEADERS: str = ""
+    OTEL_EXPORTER_OTLP_TIMEOUT_SECONDS: int = 10
+    OTEL_RESOURCE_ATTRIBUTES: str = ""
+
     # Migrations
     MIGRATIONS_AUTO_APPLY: bool = False
     MIGRATIONS_VERBOSE: bool = False
@@ -217,6 +230,14 @@ class Settings(BaseSettings):
         """Get the frontend app URL used for user-facing auth navigation."""
         configured = self.FRONTEND_APP_URL.strip()
         return configured or self.FRONTEND_URL
+
+    @property
+    def otel_enabled(self) -> bool:
+        """Return the effective OpenTelemetry enablement."""
+        configured = self.OTEL_ENABLED
+        if configured is not None:
+            return configured
+        return self.ENVIRONMENT == "production" or bool(self.K_REVISION.strip())
 
     model_config = SettingsConfigDict(
         env_file=_SETTINGS_ENV_FILES,
