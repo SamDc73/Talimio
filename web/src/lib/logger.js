@@ -1,92 +1,90 @@
-/**
- * Streamlined Logger Service for Vite 7
- * Leverages Vite's build-time optimization for zero runtime overhead in dev
- *
- * In development: Logs to console with nice formatting
- * In production: Sends to logging endpoint (when configured)
- */
+import { faro, frontendReleaseVersion } from "@/lib/faro"
 
 class LoggerService {
-	constructor() {
-		// Only initialize in production when endpoint is configured
-		if (import.meta.env.PROD && import.meta.env.VITE_TELEMETRY_ENDPOINT) {
-			this.endpoint = import.meta.env.VITE_TELEMETRY_ENDPOINT
+	errorHandlersInstalled = false
+
+	installGlobalErrorHandlers() {
+		if (this.errorHandlersInstalled || typeof window === "undefined") {
+			return
 		}
 
-		// Add Vite 7's preload error handler in production
-		if (import.meta.env.PROD) {
-			this.setupErrorHandlers()
-		}
-	}
-
-	/**
-	 * Setup global error handlers for production
-	 */
-	setupErrorHandlers() {
-		// Handle Vite dynamic import failures
 		window.addEventListener("vite:preloadError", (event) => {
 			this.error("Vite preload error", event?.payload ?? event?.error ?? null, {
 				type: "vite:preloadError",
 			})
 		})
 
-		// Catch unhandled errors
-		window.addEventListener("error", (event) => {
-			this.error("Unhandled error", event.error, {
-				message: event.message,
-				filename: event.filename,
-				lineno: event.lineno,
-				colno: event.colno,
-			})
-		})
-
-		// Catch unhandled promise rejections
-		window.addEventListener("unhandledrejection", (event) => {
-			this.error("Unhandled promise rejection", event.reason)
-		})
+		this.errorHandlersInstalled = true
 	}
 
-	/**
-	 * Send data to endpoint or console
-	 */
-	async send(data) {
-		if (import.meta.env.DEV) {
+	send(data) {
+		const sentToFaro = this.pushToFaro(data)
+		if (import.meta.env.DEV || !sentToFaro) {
 			this.logToConsole(data)
-			return
+		}
+	}
+
+	pushToFaro(data) {
+		if (!faro?.api) {
+			return false
 		}
 
-		if (!this.endpoint) {
-			if (!this.hasReportedMissingEndpoint) {
-				// biome-ignore lint/suspicious/noConsole: Explicit production diagnostics when telemetry endpoint is missing
-				console.warn("[WARN] Telemetry endpoint is not configured. Falling back to console logging.")
-				this.hasReportedMissingEndpoint = true
-			}
-			this.logToConsole(data)
-			return
+		const context = {
+			release: frontendReleaseVersion,
+			url: window.location.href,
+			...data.context,
+		}
+		if (data.data && typeof data.data === "object") {
+			context.data = data.data
+		}
+		if (data.tags && typeof data.tags === "object") {
+			context.tags = data.tags
 		}
 
 		try {
-			const payload = {
-				...data,
-				timestamp: new Date().toISOString(),
-				url: window.location.href,
-				userAgent: navigator.userAgent,
+			switch (data.type) {
+				case "error": {
+					const error =
+						data.error?.name || data.error?.message
+							? Object.assign(new Error(data.error?.message || data.message), {
+									name: data.error?.name || "Error",
+									stack: data.error?.stack,
+								})
+							: new Error(data.message)
+					faro.api.pushError(error, {
+						type: data.context?.type || "handled_error",
+						context,
+					})
+					break
+				}
+				case "track": {
+					faro.api.pushEvent(data.event, context)
+					break
+				}
+				case "timing": {
+					faro.api.pushMeasurement({
+						type: data.metric,
+						values: {
+							value: data.value,
+						},
+						context,
+					})
+					break
+				}
+				default: {
+					faro.api.pushLog([data.message || data.event || "frontend_log"], {
+						level: data.type || "info",
+						context,
+					})
+				}
 			}
-			// Fire and forget - don't await to avoid blocking
-			fetch(this.endpoint, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(payload),
-				// Use keepalive for reliability
-				keepalive: true,
-			}).catch((error) => {
-				// biome-ignore lint/suspicious/noConsole: Explicit diagnostics for telemetry failures in production
-				console.error("[ERROR] Failed to send telemetry log", { error, payload })
-			})
+			return true
 		} catch (error) {
-			// biome-ignore lint/suspicious/noConsole: Explicit diagnostics for telemetry setup failures in production
-			console.error("[ERROR] Failed to initialize telemetry log request", { error, data })
-			this.logToConsole(data)
+			if (import.meta.env.DEV) {
+				// biome-ignore lint/suspicious/noConsole: Explicit observability fallback in development
+				console.warn("Failed to push frontend log to Faro", error)
+			}
+			return false
 		}
 	}
 
@@ -116,16 +114,10 @@ class LoggerService {
 		}
 	}
 
-	/**
-	 * Track user events
-	 */
 	track(event, data = {}) {
 		this.send({ type: "track", event, data })
 	}
 
-	/**
-	 * Log errors with context
-	 */
 	error(message, error, context = {}) {
 		const errorData = {
 			type: "error",
@@ -143,54 +135,19 @@ class LoggerService {
 		this.send(errorData)
 	}
 
-	/**
-	 * Log informational messages
-	 */
 	info(message, data = {}) {
 		this.send({ type: "info", message, data })
 	}
 
-	/**
-	 * Log warnings
-	 */
 	warn(message, data = {}) {
 		this.send({ type: "warn", message, data })
 	}
 
-	/**
-	 * Performance timing
-	 */
 	timing(metric, value, tags = {}) {
 		this.send({ type: "timing", metric, value, tags })
 	}
-
-	/**
-	 * Measure async operation duration
-	 */
-	async measure(name, operation) {
-		const start = performance.now()
-		try {
-			const result = await operation()
-			const duration = Math.round(performance.now() - start)
-			this.timing(name, duration, { status: "success" })
-			return result
-		} catch (error) {
-			const duration = Math.round(performance.now() - start)
-			this.timing(name, duration, { status: "error" })
-			throw error
-		}
-	}
-	endpoint = null
-	hasReportedMissingEndpoint = false
 }
 
-// Create singleton instance
 const logger = new LoggerService()
 
-// Export for use in components
 export default logger
-
-// Also attach to window for global access (useful for error boundaries)
-if (typeof window !== "undefined") {
-	window.logger = logger
-}

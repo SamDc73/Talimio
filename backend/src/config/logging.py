@@ -1,8 +1,7 @@
 import logging.config
-from typing import Any
 
 
-def setup_logging() -> dict[str, Any]:
+def setup_logging() -> None:
     """Configure logging for the application."""
     config = {
         "version": 1,
@@ -19,9 +18,7 @@ def setup_logging() -> dict[str, Any]:
                 "level": "INFO",
             },
         },
-
         "root": {"level": "INFO", "handlers": ["console"]},
     }
 
     logging.config.dictConfig(config)
-    return config

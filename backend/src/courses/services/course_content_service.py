@@ -349,20 +349,29 @@ class CourseContentService:
         course_id: uuid.UUID,
         prompt_text: str,
     ) -> str:
-        """Append RAG context to the prompt if available."""
+        """Append RAG context to the prompt when available."""
         if not prompt_text:
             return ""
-        results = await rag_service.search_documents(session, user_id, course_id, query=prompt_text, top_k=5)
+
+        results = await rag_service.search_documents(
+            session=session,
+            user_id=user_id,
+            course_id=course_id,
+            query=prompt_text,
+            top_k=5,
+        )
         chunks = [result.content for result in results if result.content]
         if not chunks:
             return prompt_text
+
         context_block = "\n\nReference Context:\n" + "\n\n".join(chunks)
         return f"{prompt_text}{context_block}"
 
     def _build_prompt_payload(self, prompt_text: str, image_data_urls: list[str]) -> str | list[dict[str, Any]]:
-        """Return a multimodal prompt payload when images are present."""
+        """Return text-only or multimodal prompt payload for course generation."""
         if not image_data_urls:
             return prompt_text
+
         image_parts = [{"type": "image_url", "image_url": {"url": url}} for url in image_data_urls]
         return [{"type": "text", "text": prompt_text}, *image_parts]
 

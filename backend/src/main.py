@@ -47,6 +47,7 @@ from .middleware.error_handlers import (
     log_error_context,
 )
 from .middleware.security import SimpleSecurityMiddleware
+from .observability import configure_observability
 from .progress.router import router as progress_router
 from .tagging.router import router as tagging_router
 from .user.router import router as user_router
@@ -295,6 +296,8 @@ def create_app() -> FastAPI:
 
     # Register frontend routes if a bundled SPA is present.
     _register_frontend_routes(app)
+
+    configure_observability(app, settings=settings, engine=engine)
 
     # Startup tasks are now handled by the lifespan context manager
 

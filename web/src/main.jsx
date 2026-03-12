@@ -5,6 +5,7 @@ import { HashRouter } from "react-router-dom"
 import App from "@/App"
 import ErrorBoundary from "@/components/ErrorBoundary"
 import { TooltipProvider } from "@/components/Tooltip"
+import { initializeFrontendObservability } from "@/lib/faro"
 import logger from "@/lib/logger"
 
 import "@/app.css"
@@ -19,6 +20,9 @@ if (!rootElement) {
 	logger.error("Application bootstrap failed", initializationError)
 	throw initializationError
 }
+
+initializeFrontendObservability()
+logger.installGlobalErrorHandlers()
 
 createRoot(rootElement).render(
 	<StrictMode>
