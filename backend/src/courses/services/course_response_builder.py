@@ -8,7 +8,6 @@ from src.courses.models import Course, Lesson
 
 """Course response builder service for constructing course responses."""
 
-import contextlib
 import json
 import uuid
 from collections import defaultdict
@@ -49,8 +48,7 @@ class CourseResponseBuilder:
 
         setup_commands: list[str] = []
         if course.setup_commands:
-            with contextlib.suppress(Exception):
-                setup_commands = json.loads(course.setup_commands)
+            setup_commands = json.loads(course.setup_commands)
 
         return CourseResponse(
             id=course.id,
@@ -73,8 +71,7 @@ class CourseResponseBuilder:
         for course in courses:
             setup_commands: list[str] = []
             if course.setup_commands:
-                with contextlib.suppress(Exception):
-                    setup_commands = json.loads(course.setup_commands)
+                setup_commands = json.loads(course.setup_commands)
 
             responses.append(
                 CourseResponse(
