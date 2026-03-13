@@ -22,7 +22,6 @@ LiteLLM embedder patch.
 import sys
 import types
 from collections.abc import Callable
-from contextlib import suppress
 from typing import Any, cast
 
 
@@ -48,9 +47,8 @@ def _install_noop_posthog_module() -> None:
     """Ensure future `import posthog` resolves to a no-op implementation."""
     existing = sys.modules.get("posthog")
     if existing is not None:
-        with suppress(Exception):
-            existing_module = cast("Any", existing)
-            existing_module.Posthog = _NoOpPosthog
+        existing_module = cast("Any", existing)
+        existing_module.Posthog = _NoOpPosthog
         return
 
     module = types.ModuleType("posthog")
@@ -72,13 +70,15 @@ def apply_mem0_telemetry_disable_patch() -> None:
 
     # Patch mem0 hooks when mem0 is importable (call again after importing mem0).
     if not _MEM0_HOOKS_PATCHED:
-        with suppress(Exception):
+        try:
             import mem0.memory.main as mem0_main
 
             mem0_main_module = cast("Any", mem0_main)
             mem0_main_module.capture_event = _noop
+        except ImportError:
+            pass
 
-        with suppress(Exception):
+        try:
             import mem0.memory.telemetry as mem0_telemetry
 
             mem0_telemetry_module = cast("Any", mem0_telemetry)
@@ -89,6 +89,7 @@ def apply_mem0_telemetry_disable_patch() -> None:
             close_client: Callable[[], Any] | None = getattr(client, "close", None) if client is not None else None
             if callable(close_client):
                 close_client()
+        except ImportError:
+            pass
 
-        # If mem0 wasn't importable, the imports above no-op and we should try again later.
         _MEM0_HOOKS_PATCHED = "mem0.memory.main" in sys.modules or "mem0.memory.telemetry" in sys.modules
