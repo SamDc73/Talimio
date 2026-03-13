@@ -217,7 +217,7 @@ class GradingService:
                 model=model,
             )
         except (AIRuntimeError, TypeError, ValueError):
-            self._logger.exception("Grading coach LLM feedback failed.")
+            self._logger.exception("Grading coach LLM feedback failed")
             return None, [], None
 
         if not isinstance(result, GradingCoachFeedback):
