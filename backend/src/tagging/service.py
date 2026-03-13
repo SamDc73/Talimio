@@ -74,8 +74,8 @@ class TaggingService:
         except AIRateLimitOrQuotaError as error:
             logger.warning("Skipping auto-tag generation due to provider quota/rate limit: %s", error)
             return []
-        except (AIRuntimeError, RuntimeError, ValueError, TypeError) as error:
-            logger.exception("Error generating tags via LiteLLM: %s", error)
+        except (AIRuntimeError, RuntimeError, ValueError, TypeError):
+            logger.exception("tagging.generate.failed")
             return []
 
         if not isinstance(result, TaggedContent):
@@ -139,8 +139,8 @@ class TaggingService:
 
             return tag_names
 
-        except (AIRuntimeError, SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
-            logger.exception("Error tagging content %s: %s", content_id, error)
+        except (AIRuntimeError, SQLAlchemyError, RuntimeError, ValueError, TypeError):
+            logger.exception("tagging.content.failed", extra={"content_id": str(content_id)})
             return []
 
     async def suggest_tags(

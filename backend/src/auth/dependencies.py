@@ -20,6 +20,7 @@ from src.auth.exceptions import (
 )
 from src.auth.security import get_jwt_signing_key
 from src.config.settings import get_settings
+from src.observability.log_context import update_log_context
 
 
 logger = logging.getLogger(__name__)
@@ -210,4 +211,5 @@ def _get_user_id_dependency(
 
     user_id = get_user_id(request, token=resolved_token or "")
     request.state.user_id = user_id
+    update_log_context(user_id=str(user_id))
     return user_id

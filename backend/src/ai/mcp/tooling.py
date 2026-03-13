@@ -101,44 +101,14 @@ async def execute_user_tool_call(
     The config must be pre-loaded via get_user_mcp_config() before calling.
     This allows concurrent tool calls without database session conflicts.
     """
-    logger.info(
-        "Invoking MCP tool",
-        extra={
-            "mcp_server": server_name,
-            "mcp_tool": tool_name,
-            "encoded_tool": encoded_name,
-            "user_id": str(user_id),
-        },
-    )
+    del user_id, encoded_name
     client = get_mcp_client()
-    try:
-        result = await client.call_tool(
-            server_name,
-            tool_name=tool_name,
-            arguments=arguments,
-            config=config,
-        )
-    except _MCP_TOOL_EXECUTION_ERROR_TYPES:
-        logger.warning(
-            "MCP tool failed",
-            extra={
-                "mcp_server": server_name,
-                "mcp_tool": tool_name,
-                "encoded_tool": encoded_name,
-                "user_id": str(user_id),
-            },
-        )
-        raise
-    logger.info(
-        "MCP tool completed",
-        extra={
-            "mcp_server": server_name,
-            "mcp_tool": tool_name,
-            "encoded_tool": encoded_name,
-            "user_id": str(user_id),
-        },
+    return await client.call_tool(
+        server_name,
+        tool_name=tool_name,
+        arguments=arguments,
+        config=config,
     )
-    return result
 
 
 def parse_tool_arguments(payload: dict[str, Any] | str | bytes | None) -> dict[str, Any]:

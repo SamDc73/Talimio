@@ -1,23 +1,13 @@
 """RAG system API router with dependency injection."""
 
-import logging
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
-from src.ai.rag.schemas import (
-    DefaultResponse,
-    DocumentList,
-    DocumentResponse,
-    SearchRequest,
-    SearchResponse,
-)
+from src.ai.rag.schemas import DefaultResponse, DocumentList, DocumentResponse, SearchRequest, SearchResponse
 from src.ai.rag.service import RAGService
 from src.auth import CurrentAuth
-
-
-logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api/v1", tags=["rag"])
@@ -36,37 +26,21 @@ async def upload_document(
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
     file: Annotated[UploadFile | None, File()] = None,
-) -> dict:
+) -> DocumentResponse:
     """Upload a document to a course."""
-    # Only file uploads supported in MVP
     if not file:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File upload required")
 
-    file_content = None
-    filename = None
-    if file:
-        file_content = await file.read()
-        filename = file.filename
-
-    try:
-        result = await rag_service.upload_document(
-            session=auth.session,
-            user_id=auth.user_id,
-            course_id=course_id,
-            document_type=document_type,
-            title=title,
-            file_content=file_content,
-            filename=filename,
-        )
-        return result.model_dump(by_alias=True) if hasattr(result, "model_dump") else result
-    except HTTPException:
-        raise
-    except RuntimeError as error:
-        logger.exception("System error uploading document: %s", error)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Document upload temporarily unavailable",
-        ) from error
+    file_content = await file.read()
+    return await rag_service.upload_document(
+        session=auth.session,
+        user_id=auth.user_id,
+        course_id=course_id,
+        document_type=document_type,
+        title=title,
+        file_content=file_content,
+        filename=file.filename,
+    )
 
 
 @router.get("/courses/{course_id}/documents", response_model=DocumentList)
@@ -76,28 +50,16 @@ async def list_documents(
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
     skip: int = 0,
     limit: int = 20,
-) -> dict:
+) -> DocumentList:
     """List documents for a course."""
-    try:
-        documents, total = await rag_service.list_documents_with_count(
-            auth.session,
-            auth.user_id,
-            course_id,
-            skip=skip,
-            limit=limit,
-        )
-
-        result = DocumentList(documents=documents, total=total, page=skip // limit + 1, size=limit)
-        return result.model_dump(by_alias=True)
-
-    except HTTPException:
-        raise
-    except RuntimeError as error:
-        logger.exception("System error listing documents for course %s: %s", course_id, error)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Document listing temporarily unavailable",
-        ) from error
+    documents, total = await rag_service.list_documents_with_count(
+        auth.session,
+        auth.user_id,
+        course_id,
+        skip=skip,
+        limit=limit,
+    )
+    return DocumentList(documents=documents, total=total, page=skip // limit + 1, size=limit)
 
 
 @router.post("/courses/{course_id}/search", response_model=SearchResponse)
@@ -106,28 +68,16 @@ async def search_documents(
     search_request: SearchRequest,
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
-) -> dict:
+) -> SearchResponse:
     """Search documents within a course using RAG."""
-    try:
-        results = await rag_service.search_documents(
-            auth.session,
-            auth.user_id,
-            course_id,
-            search_request.query,
-            search_request.top_k,
-        )
-
-        result = SearchResponse(results=results, total=len(results))
-        return result.model_dump(by_alias=True)
-
-    except HTTPException:
-        raise
-    except RuntimeError as error:
-        logger.exception("System error searching documents: %s", error)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Document search temporarily unavailable",
-        ) from error
+    results = await rag_service.search_documents(
+        auth.session,
+        auth.user_id,
+        course_id,
+        search_request.query,
+        search_request.top_k,
+    )
+    return SearchResponse(results=results, total=len(results))
 
 
 @router.delete("/documents/{document_id}", response_model=DefaultResponse)
@@ -135,25 +85,10 @@ async def delete_document(
     document_id: int,
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
-) -> dict:
+) -> DefaultResponse:
     """Delete a document by id, enforcing ownership."""
-    try:
-        # Validate user owns the document and delete it
-        await rag_service.delete_document(auth.session, auth.user_id, document_id)
-        result = DefaultResponse(
-            status=True,
-            message="Document deleted successfully",
-        )
-        return result.model_dump(by_alias=True)
-
-    except HTTPException:
-        raise
-    except RuntimeError as error:
-        logger.exception("System error deleting document: %s", error)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Document deletion temporarily unavailable",
-        ) from error
+    await rag_service.delete_document(auth.session, auth.user_id, document_id)
+    return DefaultResponse(status=True, message="Document deleted successfully")
 
 
 @router.get("/documents/{document_id}", response_model=DocumentResponse)
@@ -161,19 +96,6 @@ async def get_document(
     document_id: int,
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
-) -> dict:
+) -> DocumentResponse:
     """Get document details by id, enforcing ownership."""
-    try:
-        result = await rag_service.get_document(auth.session, auth.user_id, document_id)
-        return result.model_dump(by_alias=True) if hasattr(result, "model_dump") else result
-    except HTTPException:
-        raise
-    except RuntimeError as error:
-        logger.exception("System error getting document: %s", error)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Document retrieval temporarily unavailable",
-        ) from error
-
-
-# URL extraction endpoint removed - MVP only supports file uploads
+    return await rag_service.get_document(auth.session, auth.user_id, document_id)

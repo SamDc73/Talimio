@@ -45,11 +45,21 @@ _DOC_EXTENSIONS = {".pdf", ".epub"}
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
 
+def _handle_detached_task_done(task: asyncio.Task[Any]) -> None:
+    _DETACHED_TASKS.discard(task)
+    if task.cancelled():
+        return
+    error = task.exception()
+    if error is None:
+        return
+    logger.error("courses.background_task.failed", exc_info=(type(error), error, error.__traceback__))
+
+
 def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
     """Run background work outside FastAPI response-bound BackgroundTasks."""
     task = asyncio.create_task(coro)
     _DETACHED_TASKS.add(task)
-    task.add_done_callback(_DETACHED_TASKS.discard)
+    task.add_done_callback(_handle_detached_task_done)
 
 
 @dataclass(slots=True)
@@ -463,8 +473,8 @@ class CourseContentService:
         updated = await graph_service.backfill_embeddings_for_course(course_id)
         try:
             pairs = await graph_service.recompute_embedding_confusors_for_course(course_id)
-        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError) as conf_exc:
-            logger.exception("Confusor recompute failed for course %s: %s", course_id, conf_exc)
+        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError):
+            logger.exception("courses.confusor_recompute.failed", extra={"course_id": str(course_id)})
             pairs = 0
         await session.flush()
         return updated, pairs
@@ -485,8 +495,8 @@ class CourseContentService:
                     pairs,
                     course_id,
                 )
-        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError) as exc:
-            logger.exception("Background embedding task failed for course %s: %s", course_id, exc)
+        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError):
+            logger.exception("courses.background_embedding.failed", extra={"course_id": str(course_id)})
 
     def _schedule_background_tagging(
         self,
@@ -506,8 +516,8 @@ class CourseContentService:
                     return
                 await self._auto_tag_course(tagging_session, course, user_id)
                 await tagging_session.commit()
-        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError) as exc:
-            logger.exception("Background tagging task failed for course %s: %s", course_id, exc)
+        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError):
+            logger.exception("courses.background_tagging.failed", extra={"course_id": str(course_id)})
 
     async def update_course(
         self,
@@ -622,8 +632,8 @@ class CourseContentService:
 
             await session.flush()
             return tags
-        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError) as exc:
-            logger.exception("Auto-tagging error for course %s: %s", course_id_str, exc)
+        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError):
+            logger.exception("courses.auto_tagging.failed", extra={"course_id": str(course_id_str)})
             return []
 
     async def _insert_lessons(

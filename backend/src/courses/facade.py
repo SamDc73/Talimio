@@ -15,12 +15,23 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from fastapi import BackgroundTasks, HTTPException, status
+from fastapi import BackgroundTasks, status
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
+from src.exceptions import (
+    BadRequestError,
+    DomainError,
+    ErrorCategory,
+    ErrorCode,
+    NotFoundError,
+    UpstreamUnavailableError,
+    ValidationError,
+)
+
 from .models import Course, CourseConcept, Lesson
 from .schemas import (
+    CourseResponse,
     FrontierResponse,
     GradeRequest,
     GradeResponse,
@@ -46,41 +57,46 @@ from .services.practice_drill_service import PracticeDrillService
 logger = logging.getLogger(__name__)
 
 
-class CoursesFacadeError(Exception):
-    """Domain exception raised by course facade operations."""
-
-    def __init__(self, detail: Any, status_code: int) -> None:
-        super().__init__(str(detail))
-        self.detail = detail
-        self.status_code = status_code
+FEATURE_AREA = "courses"
 
 
-class CoursesFacadeNotFoundError(CoursesFacadeError):
-    """Facade error for missing course resources."""
+class CoursesFacadeNotFoundError(NotFoundError):
+    """Raised when a requested course resource is not available to the caller."""
 
-    def __init__(self, detail: str = "Resource not found") -> None:
-        super().__init__(detail=detail, status_code=status.HTTP_404_NOT_FOUND)
-
-
-class CoursesFacadeBadRequestError(CoursesFacadeError):
-    """Facade error for invalid domain state transitions."""
-
-    def __init__(self, detail: str = "Invalid request") -> None:
-        super().__init__(detail=detail, status_code=status.HTTP_400_BAD_REQUEST)
+    def __init__(self, detail: str = "Course not found") -> None:
+        super().__init__(message=detail, feature_area=FEATURE_AREA)
 
 
-class CoursesFacadeValidationError(CoursesFacadeError):
-    """Facade error for payload validation mismatches."""
+class CoursesFacadeBadRequestError(BadRequestError):
+    """Raised when a course operation is invalid for the current domain state."""
 
-    def __init__(self, detail: str = "Validation failed") -> None:
-        super().__init__(detail=detail, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail, feature_area=FEATURE_AREA)
 
 
-class CoursesFacadeUpstreamError(CoursesFacadeError):
-    """Facade error for upstream provider failures."""
+class CoursesFacadeValidationError(ValidationError):
+    """Raised when course payloads fail domain validation."""
 
-    def __init__(self, detail: str = "Upstream request failed") -> None:
-        super().__init__(detail=detail, status_code=status.HTTP_502_BAD_GATEWAY)
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail, feature_area=FEATURE_AREA)
+
+
+class CoursesFacadeUpstreamError(UpstreamUnavailableError):
+    """Raised when course workflows fail on upstream or internal dependencies."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail, feature_area=FEATURE_AREA)
+
+
+class CoursesFacadeInternalError(DomainError):
+    """Raised when course workflows fail with internal processing errors."""
+
+    category = ErrorCategory.INTERNAL
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    default_error_code = ErrorCode.INTERNAL
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail, feature_area=FEATURE_AREA)
 
 
 class CoursesFacade:
@@ -97,57 +113,33 @@ class CoursesFacade:
         self._progress_service = CourseProgressService(session)
 
     async def get_content_with_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
-        """
-        Get course with progress information.
-
-        Implements ContentFacade interface for consistent cross-module API.
-        """
-        return await self.get_course(content_id, user_id)
+        """Get course content with progress for cross-module progress contracts."""
+        course_response = await self.get_course(content_id, user_id)
+        progress = await self._progress_service.get_progress(content_id, user_id)
+        return {
+            "course": course_response.model_dump(),
+            "progress": progress,
+            "completion_percentage": progress.get("completion_percentage", 0),
+            "current_lesson": progress.get("current_lesson", ""),
+            "total_lessons": progress.get("total_lessons", 0),
+            "completed_lessons": progress.get("completed_lessons", {}),
+        }
 
     async def get_course(
         self,
         course_id: uuid.UUID,
         user_id: uuid.UUID,
-    ) -> dict[str, Any]:
-        """
-        Get complete course information with progress.
-
-        Coordinates course service and progress service to provide comprehensive data.
-        """
+    ) -> CourseResponse:
+        """Get a course for the authenticated user."""
+        query_service = CourseQueryService(self._session)
         try:
-            query_service = CourseQueryService(self._session)
-            course_response = await query_service.get_course(course_id, user_id)
-
-            course = course_response.model_dump() if course_response else None
-            if not course:
-                return {"error": "Course not found", "success": False}
-
-            # Get progress data from progress service
-            progress = await self._progress_service.get_progress(course_id, user_id)
-            completion_percentage = progress.get("completion_percentage", 0)
-            completed_lessons = progress.get("completed_lessons", {})
-            current_lesson = progress.get("current_lesson", "")
-            total_lessons = progress.get("total_lessons", 0)
-
-            return {
-                "course": course,
-                "progress": progress,
-                "completion_percentage": completion_percentage,
-                "current_lesson": current_lesson,
-                "total_lessons": total_lessons,
-                "completed_lessons": completed_lessons,
-                "success": True,
-            }
-
-        except HTTPException as exc:
-            if exc.status_code == 404:
-                return {"error": "Course not found", "success": False}
+            return await query_service.get_course(course_id, user_id)
+        except NotFoundError:
+            raise
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
             logger.exception("Error getting course %s for user %s", course_id, user_id)
-            return {"error": "Failed to retrieve course", "success": False}
-
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
-            logger.exception("Error getting course %s for user %s", course_id, user_id)
-            return {"error": "Failed to retrieve course", "success": False}
+            message = "Failed to retrieve course"
+            raise CoursesFacadeUpstreamError(message) from error
 
     async def create_course(
         self,
@@ -155,29 +147,23 @@ class CoursesFacade:
         user_id: uuid.UUID,
         background_tasks: BackgroundTasks | None = None,
         attachments: list[Any] | None = None,
-    ) -> dict[str, Any]:
-        """
-        Create new course entry.
-
-        Handles course creation and coordinates all related operations.
-        """
+    ) -> CourseResponse:
+        """Create a new course entry and return its canonical response model."""
         try:
-            # Use the content service which handles tags, progress, and AI processing
             created_course = await self._content_service.create_course(
                 course_data,
                 user_id,
                 background_tasks=background_tasks,
                 attachments=attachments,
             )
-
             query_service = CourseQueryService(self._session)
-            course_response = await query_service.get_course(created_course.id, user_id)
-
-            return {"course": course_response, "success": True}
-
-        except (HTTPException, SQLAlchemyError, RuntimeError, ValueError, TypeError):
+            return await query_service.get_course(created_course.id, user_id)
+        except NotFoundError:
+            raise
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
             logger.exception("Error creating course for user %s", user_id)
-            return {"error": "Failed to create course", "success": False}
+            message = "Failed to create course"
+            raise CoursesFacadeUpstreamError(message) from error
 
     # NOTE: Auto-tagging removed - now handled by CourseContentService via BaseContentService pipeline
     # Tagging happens automatically during course creation/updates, no manual intervention needed
@@ -188,32 +174,24 @@ class CoursesFacade:
         preferences: dict[str, Any],
         user_id: uuid.UUID,
         background_tasks: BackgroundTasks | None = None,
-    ) -> dict[str, Any]:
-        """
-        Generate AI-powered course from topic.
-
-        Handles AI course generation and coordinates related operations.
-        """
+    ) -> CourseResponse:
+        """Generate an AI-powered course and return the created course response."""
+        data: dict[str, Any] = {**(preferences or {})}
+        data["prompt"] = topic
         try:
-            # Build course data combining provided preferences and required fields
-            data: dict[str, Any] = {**(preferences or {})}
-            data["prompt"] = topic  # Use prompt field for AI generation
-
-            # Use the content service which handles tags, progress, and AI processing automatically
             course = await self._content_service.create_course(
                 data,
                 user_id,
                 background_tasks=background_tasks,
             )
-
             query_service = CourseQueryService(self._session)
-            course_response = await query_service.get_course(course.id, user_id)
-
-            return {"course": course_response, "success": True}
-
-        except (HTTPException, SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
-            logger.exception("Error generating AI course %s for user %s: %s", topic, user_id, e)
-            return {"error": f"Failed to generate course: {e!s}", "success": False}
+            return await query_service.get_course(course.id, user_id)
+        except NotFoundError:
+            raise
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
+            logger.exception("courses.generate_ai.failed", extra={"topic": topic, "user_id": str(user_id)})
+            message = "Failed to generate course"
+            raise CoursesFacadeUpstreamError(message) from error
 
     async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """
@@ -226,33 +204,28 @@ class CoursesFacade:
     async def update_course_progress(
         self, course_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]
     ) -> dict[str, Any]:
-        """
-        Update course progress.
-
-        Handles progress updates, lesson tracking, and completion detection.
-        """
+        """Update course progress and return the updated progress payload."""
         try:
             updated_progress = await self._progress_service.update_progress(course_id, user_id, progress_data)
-            return {"progress": updated_progress, "success": True}
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
+            logger.exception("courses.progress.update_failed", extra={"course_id": str(course_id)})
+            message = "Failed to update course progress"
+            raise CoursesFacadeUpstreamError(message) from error
 
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
-            logger.exception("Error updating progress for course %s: %s", course_id, e)
-            return {"error": f"Failed to update progress: {e!s}", "success": False}
+        return {"progress": updated_progress}
 
-    async def update_course(self, course_id: uuid.UUID, user_id: uuid.UUID, update_data: dict[str, Any]) -> dict[str, Any]:
-        """Update course metadata."""
+    async def update_course(self, course_id: uuid.UUID, user_id: uuid.UUID, update_data: dict[str, Any]) -> CourseResponse:
+        """Update course metadata and return the updated course response."""
         try:
-            # Update through content service which handles tags and reprocessing
             updated_course = await self._content_service.update_course(course_id, update_data, user_id)
-
             query_service = CourseQueryService(self._session)
-            course_response = await query_service.get_course(updated_course.id, user_id)
-
-            return {"course": course_response, "success": True}
-
-        except (HTTPException, SQLAlchemyError, RuntimeError, ValueError, TypeError):
+            return await query_service.get_course(updated_course.id, user_id)
+        except NotFoundError:
+            raise
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
             logger.exception("Error updating course %s", course_id)
-            return {"error": "Failed to update course", "success": False}
+            message = "Failed to update course"
+            raise CoursesFacadeUpstreamError(message) from error
 
     async def list_courses(
         self,
@@ -260,99 +233,82 @@ class CoursesFacade:
         page: int = 1,
         per_page: int = 20,
         search: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> tuple[list[CourseResponse], int]:
         """List user courses with pagination and optional search."""
+        query_service = CourseQueryService(self._session)
         try:
-            query_service = CourseQueryService(self._session)
-            courses, total = await query_service.list_courses(
+            return await query_service.list_courses(
                 page=page,
                 per_page=per_page,
                 search=search,
                 user_id=user_id,
             )
-            return {"courses": courses, "total": total, "success": True}
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
             logger.exception("Error listing courses for user %s", user_id)
-            return {"error": "Failed to list courses", "success": False}
+            message = "Failed to list courses"
+            raise CoursesFacadeUpstreamError(message) from error
 
-    async def search_courses(self, query: str, user_id: uuid.UUID, filters: dict[str, Any] | None = None) -> dict[str, Any]:
-        """
-        Search user's courses.
-
-        Provides unified search across course content and metadata.
-        """
+    async def search_courses(self, query: str, user_id: uuid.UUID, filters: dict[str, Any] | None = None) -> list[CourseResponse]:
+        """Search user courses and return the matching course responses."""
+        query_service = CourseQueryService(self._session)
+        limit = (filters or {}).get("limit", 20)
         try:
-            query_service = CourseQueryService(self._session)
-            limit = (filters or {}).get("limit", 20)
             results, _total = await query_service.list_courses(per_page=limit, search=query, user_id=user_id)
-
-            return {"results": results, "success": True}
-
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
+            return results
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
             logger.exception("Error searching courses for user %s", user_id)
-            return {"error": "Search failed", "success": False}
+            message = "Search failed"
+            raise CoursesFacadeUpstreamError(message) from error
 
-    async def get_user_courses(self, user_id: uuid.UUID, include_progress: bool = True) -> dict[str, Any]:
-        """
-        Get all courses for user.
-
-        Optionally includes progress information.
-        """
+    async def get_user_courses(self, user_id: uuid.UUID, include_progress: bool = True) -> list[dict[str, Any]]:
+        """Get all courses for user, optionally including progress information."""
+        query_service = CourseQueryService(self._session)
+        per_page = 20
         try:
-            query_service = CourseQueryService(self._session)
-            # Keep pagination aligned with API defaults to avoid oversized payloads.
-            per_page = 20
-            course_responses, _total = await query_service.list_courses(
-                page=1, per_page=per_page, search=None, user_id=user_id
-            )
+            course_responses, _total = await query_service.list_courses(page=1, per_page=per_page, search=None, user_id=user_id)
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
+            logger.exception("courses.list_user.failed", extra={"user_id": str(user_id)})
+            message = "Failed to get courses"
+            raise CoursesFacadeUpstreamError(message) from error
 
-            course_dicts: list[dict[str, Any]] = []
-            for cr in course_responses:
-                cd = cr.model_dump()
-                if include_progress:
-                    try:
-                        progress = await self._progress_service.get_progress(cr.id, user_id)
-                        cd["progress"] = progress
-                    except (RuntimeError, ValueError) as e:
-                        logger.warning("Failed to get progress for course %s: %s", cr.id, e)
-                        cd["progress"] = {"completion_percentage": 0, "completed_lessons": {}}
-                course_dicts.append(cd)
+        course_dicts: list[dict[str, Any]] = []
+        for course_response in course_responses:
+            course_dict = course_response.model_dump()
+            if include_progress:
+                try:
+                    progress = await self._progress_service.get_progress(course_response.id, user_id)
+                    course_dict["progress"] = progress
+                except (RuntimeError, ValueError) as error:
+                    logger.warning("Failed to get progress for course %s: %s", course_response.id, error)
+                    course_dict["progress"] = {"completion_percentage": 0, "completed_lessons": {}}
+            course_dicts.append(course_dict)
 
-            return {"courses": course_dicts, "success": True}
+        return course_dicts
 
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
-            logger.exception("Error getting courses for user %s: %s", user_id, e)
-            return {"error": f"Failed to get courses: {e!s}", "success": False}
-
-    async def get_course_lessons(self, course_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
+    async def get_course_lessons(self, course_id: uuid.UUID, user_id: uuid.UUID) -> list[dict[str, Any]]:
         """Get course lessons grouped by modules."""
+        query_service = CourseQueryService(self._session)
         try:
-            try:
-                query_service = CourseQueryService(self._session)
-                course_response = await query_service.get_course(course_id, user_id)
-            except HTTPException as exc:
-                if exc.status_code == 404:
-                    logger.info("Course %s not found for user %s", course_id, user_id)
-                    return {"error": f"Course {course_id} not found", "success": False}
-                raise
-
+            course_response = await query_service.get_course(course_id, user_id)
             progress = await self._progress_service.get_progress(course_id, user_id)
-            completed_lessons = progress.get("completed_lessons", {}) if isinstance(progress, dict) else {}
-
-            lessons_payload: list[dict[str, Any]] = []
-            for module in course_response.modules:
-                for lesson in module.lessons:
-                    lesson_dict = lesson.model_dump()
-                    lesson_dict["moduleTitle"] = module.title
-                    lesson_dict["moduleId"] = str(module.id)
-                    lesson_dict["completed"] = completed_lessons.get(str(lesson.id), False)
-                    lessons_payload.append(lesson_dict)
-
-            return {"lessons": lessons_payload, "success": True}
-
-        except (HTTPException, SQLAlchemyError, RuntimeError, ValueError, TypeError):
+        except NotFoundError:
+            raise
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
             logger.exception("Error getting lessons for course %s", course_id)
-            return {"error": "Failed to get lessons", "success": False}
+            message = "Failed to get lessons"
+            raise CoursesFacadeUpstreamError(message) from error
+
+        completed_lessons = progress.get("completed_lessons", {}) if isinstance(progress, dict) else {}
+        lessons_payload: list[dict[str, Any]] = []
+        for module in course_response.modules:
+            for lesson in module.lessons:
+                lesson_dict = lesson.model_dump()
+                lesson_dict["moduleTitle"] = module.title
+                lesson_dict["moduleId"] = str(module.id)
+                lesson_dict["completed"] = completed_lessons.get(str(lesson.id), False)
+                lessons_payload.append(lesson_dict)
+
+        return lessons_payload
 
     async def _require_owned_course(self, *, course_id: uuid.UUID, user_id: uuid.UUID) -> Course:
         course = await self._session.scalar(
@@ -376,10 +332,7 @@ class CoursesFacade:
     ) -> LessonDetailResponse:
         """Get a lesson detail payload for an owned course."""
         lesson_service = LessonService(self._session, user_id)
-        try:
-            return await lesson_service.get_lesson(course_id, lesson_id, force_refresh=generate)
-        except HTTPException as exc:
-            raise CoursesFacadeError(detail=exc.detail, status_code=exc.status_code) from exc
+        return await lesson_service.get_lesson(course_id, lesson_id, force_refresh=generate)
 
     async def grade_lesson_response(
         self,
@@ -420,7 +373,15 @@ class CoursesFacade:
             raise CoursesFacadeNotFoundError(detail)
 
         grading_service = GradingService(self._session)
-        return await grading_service.grade(payload, user_id)
+        try:
+            return await grading_service.grade(payload, user_id)
+        except (RuntimeError, ValueError, TypeError) as error:
+            logger.exception(
+                "courses.grade.failed",
+                extra={"course_id": str(course_id), "lesson_id": str(lesson_id), "user_id": str(user_id)},
+            )
+            message = "Failed to grade response"
+            raise CoursesFacadeInternalError(message) from error
 
     async def get_course_concept_frontier(
         self,

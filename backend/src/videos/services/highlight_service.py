@@ -1,24 +1,19 @@
-
-import uuid
-
-from sqlalchemy.ext.asyncio import AsyncSession
-
-
-"""Video highlight service implementing the HighlightInterface contract."""
-
 import logging
+import uuid
 from typing import Any
 
-from fastapi import HTTPException, status
-from pydantic import ValidationError
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import and_, delete, select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.exceptions import ConflictError, NotFoundError, ValidationError
 from src.highlights.interfaces import HighlightInterface
 from src.highlights.models import Highlight
 from src.highlights.schemas import HighlightResponse
 from src.highlights.validation import validate_highlight_data
 from src.videos.models import Video
+from src.videos.service import VideoNotFoundError
 
 
 logger = logging.getLogger(__name__)
@@ -47,9 +42,10 @@ class VideoHighlightService(HighlightInterface):
                 content_id,
                 validated_data.get("_validation_type"),
             )
-        except ValidationError as e:
-            logger.warning("Invalid highlight data for video %s: %s", content_id, e)
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid highlight data: {e!s}") from e
+        except PydanticValidationError as error:
+            logger.warning("Invalid highlight data for video %s: %s", content_id, error)
+            message = f"Invalid highlight data: {error!s}"
+            raise ValidationError(message, feature_area="videos") from error
 
         highlight = Highlight(
             user_id=user_id,
@@ -62,23 +58,11 @@ class VideoHighlightService(HighlightInterface):
             self.session.add(highlight)
             await self.session.flush()
             await self.session.refresh(highlight)
-        except IntegrityError as e:
-            logger.exception("Integrity constraint violation creating video highlight: %s", e)
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid highlight data or duplicate entry"
-            ) from e
-        except SQLAlchemyError as e:
-            logger.exception("Database error creating video highlight: %s", e)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
-            ) from e
-        except (AttributeError, RuntimeError, TypeError, ValueError) as e:
-            logger.exception("Unexpected error creating video highlight: %s", e)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"
-            ) from e
+        except IntegrityError as error:
+            logger.warning("Conflict creating video highlight for video %s: %s", content_id, error)
+            message = "Invalid highlight data or duplicate entry"
+            raise ConflictError(message, feature_area="videos") from error
 
-        logger.info("Created video highlight %s for video %s by user %s", highlight.id, content_id, user_id)
         return HighlightResponse.model_validate(highlight)
 
     async def get_highlights(
@@ -104,8 +88,7 @@ class VideoHighlightService(HighlightInterface):
         result = await self.session.execute(query)
         highlights = result.scalars().all()
 
-        logger.info("Retrieved %s highlights for video %s", len(highlights), content_id)
-        return [HighlightResponse.model_validate(h) for h in highlights]
+        return [HighlightResponse.model_validate(highlight) for highlight in highlights]
 
     async def get_highlight(
         self,
@@ -119,7 +102,7 @@ class VideoHighlightService(HighlightInterface):
         highlight = result.scalar_one_or_none()
 
         if not highlight:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Highlight {highlight_id} not found")
+            raise NotFoundError(message=f"Highlight {highlight_id} not found", feature_area="videos")
 
         return HighlightResponse.model_validate(highlight)
 
@@ -136,7 +119,7 @@ class VideoHighlightService(HighlightInterface):
         highlight = result.scalar_one_or_none()
 
         if not highlight:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Highlight {highlight_id} not found")
+            raise NotFoundError(message=f"Highlight {highlight_id} not found", feature_area="videos")
 
         try:
             validated_data = validate_highlight_data(highlight_data, _content_type="video")
@@ -145,27 +128,15 @@ class VideoHighlightService(HighlightInterface):
                 highlight_id,
                 validated_data.get("_validation_type"),
             )
-        except ValidationError as e:
-            logger.warning("Invalid highlight data for update %s: %s", highlight_id, e)
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid highlight data: {e!s}") from e
+        except PydanticValidationError as error:
+            logger.warning("Invalid highlight data for update %s: %s", highlight_id, error)
+            message = f"Invalid highlight data: {error!s}"
+            raise ValidationError(message, feature_area="videos") from error
 
         highlight.highlight_data = validated_data
+        await self.session.flush()
+        await self.session.refresh(highlight)
 
-        try:
-            await self.session.flush()
-            await self.session.refresh(highlight)
-        except SQLAlchemyError as e:
-            logger.exception("Database error updating video highlight %s: %s", highlight_id, e)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
-            ) from e
-        except (AttributeError, RuntimeError, TypeError, ValueError) as e:
-            logger.exception("Unexpected error updating video highlight %s: %s", highlight_id, e)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"
-            ) from e
-
-        logger.info("Updated highlight %s", highlight_id)
         return HighlightResponse.model_validate(highlight)
 
     async def delete_highlight(
@@ -175,26 +146,13 @@ class VideoHighlightService(HighlightInterface):
     ) -> bool:
         """Delete a highlight with ownership validation."""
         stmt = delete(Highlight).where(and_(Highlight.id == highlight_id, Highlight.user_id == user_id))
-
-        try:
-            result = await self.session.execute(stmt)
-            await self.session.flush()
-        except SQLAlchemyError as e:
-            logger.exception("Database error deleting video highlight %s: %s", highlight_id, e)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database error occurred"
-            ) from e
-        except (AttributeError, RuntimeError, TypeError, ValueError) as e:
-            logger.exception("Unexpected error deleting video highlight %s: %s", highlight_id, e)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred"
-            ) from e
+        result = await self.session.execute(stmt)
+        await self.session.flush()
 
         affected = getattr(result, "rowcount", 0) or 0
         if affected == 0:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Highlight {highlight_id} not found")
+            raise NotFoundError(message=f"Highlight {highlight_id} not found", feature_area="videos")
 
-        logger.info("Deleted highlight %s", highlight_id)
         return True
 
     async def _verify_video_ownership(self, video_id: uuid.UUID, user_id: uuid.UUID) -> None:
@@ -205,6 +163,4 @@ class VideoHighlightService(HighlightInterface):
         video = result.scalar_one_or_none()
 
         if not video:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail=f"Video {video_id} not found or access denied"
-            )
+            raise VideoNotFoundError(message=f"Video {video_id} not found or access denied")

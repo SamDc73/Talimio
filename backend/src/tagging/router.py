@@ -1,12 +1,9 @@
-
 """API endpoints for tagging operations."""
 
-import logging
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.exc import SQLAlchemyError
 
 # AI imports removed - using facades instead
 from src.auth import CurrentAuth
@@ -21,8 +18,6 @@ from .schemas import (
 )
 from .service import TaggingService
 
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/tags", tags=["tags"])
 
@@ -149,36 +144,28 @@ async def update_content_tags(
 
     await validate_owned_content(auth, content_type, content_id)
 
-    try:
-        await service.update_manual_tags(
-            content_id=content_id,
-            content_type=content_type,
-            user_id=auth.user_id,
-            tag_names=request.tags,
-        )
+    await service.update_manual_tags(
+        content_id=content_id,
+        content_type=content_type,
+        user_id=auth.user_id,
+        tag_names=request.tags,
+    )
 
-        # Also update content's tags field
-        from .service import update_content_tags_json
+    # Also update content's tags field
+    from .service import update_content_tags_json
 
-        await update_content_tags_json(
-            service.session,
-            content_id,
-            content_type,
-            request.tags,
-            auth.user_id,
-        )
+    await update_content_tags_json(
+        service.session,
+        content_id,
+        content_type,
+        request.tags,
+        auth.user_id,
+    )
 
-        return TaggingResponse(
-            content_id=content_id,
-            content_type=content_type,
-            tags=request.tags,
-            auto_generated=False,
-            success=True,
-        )
-
-    except SQLAlchemyError as e:
-        logger.exception("Error updating tags for %s %s: %s", content_type, content_id, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update tags: {e!s}",
-        ) from e
+    return TaggingResponse(
+        content_id=content_id,
+        content_type=content_type,
+        tags=request.tags,
+        auto_generated=False,
+        success=True,
+    )

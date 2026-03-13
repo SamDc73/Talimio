@@ -1,20 +1,15 @@
-
 """API router for highlights functionality."""
 
-import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import and_, select
-from sqlalchemy.exc import SQLAlchemyError
 
 from src.auth import CurrentAuth
 
 from .models import Highlight
 from .schemas import HighlightCreate, HighlightResponse
 
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["highlights"])
 
@@ -25,35 +20,29 @@ async def get_book_highlights(
     auth: CurrentAuth,
 ) -> list[HighlightResponse]:
     """Get all highlights for a specific book."""
-    try:
-        result = await auth.session.execute(
-            select(Highlight).where(
-                and_(
-                    Highlight.user_id == auth.user_id,
-                    Highlight.content_type == "book",
-                    Highlight.content_id == book_id,
-                )
+    result = await auth.session.execute(
+        select(Highlight).where(
+            and_(
+                Highlight.user_id == auth.user_id,
+                Highlight.content_type == "book",
+                Highlight.content_id == book_id,
             )
         )
-        highlights = result.scalars().all()
+    )
+    highlights = result.scalars().all()
 
-        return [
-            HighlightResponse(
-                id=h.id,
-                user_id=h.user_id,
-                content_type=h.content_type,
-                content_id=h.content_id,
-                highlight_data=h.highlight_data,
-                created_at=h.created_at,
-                updated_at=h.updated_at,
-            )
-            for h in highlights
-        ]
-    except SQLAlchemyError as e:
-        logger.exception("Error fetching highlights for book %s: %s", book_id, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch highlights"
-        ) from e
+    return [
+        HighlightResponse(
+            id=h.id,
+            user_id=h.user_id,
+            content_type=h.content_type,
+            content_id=h.content_id,
+            highlight_data=h.highlight_data,
+            created_at=h.created_at,
+            updated_at=h.updated_at,
+        )
+        for h in highlights
+    ]
 
 
 @router.post("/books/{book_id}/highlights", status_code=status.HTTP_201_CREATED)
@@ -63,33 +52,26 @@ async def create_book_highlight(
     auth: CurrentAuth,
 ) -> HighlightResponse:
     """Create a new highlight for a book."""
-    try:
-        # Create the highlight
-        highlight = Highlight(
-            user_id=auth.user_id,
-            content_type="book",
-            content_id=book_id,
-            highlight_data=highlight_create.source_data,
-        )
+    highlight = Highlight(
+        user_id=auth.user_id,
+        content_type="book",
+        content_id=book_id,
+        highlight_data=highlight_create.source_data,
+    )
 
-        auth.session.add(highlight)
-        await auth.session.flush()
-        await auth.session.refresh(highlight)
+    auth.session.add(highlight)
+    await auth.session.flush()
+    await auth.session.refresh(highlight)
 
-        return HighlightResponse(
-            id=highlight.id,
-            user_id=highlight.user_id,
-            content_type=highlight.content_type,
-            content_id=highlight.content_id,
-            highlight_data=highlight.highlight_data,
-            created_at=highlight.created_at,
-            updated_at=highlight.updated_at,
-        )
-    except SQLAlchemyError as e:
-        logger.exception("Error creating highlight for book %s: %s", book_id, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create highlight"
-        ) from e
+    return HighlightResponse(
+        id=highlight.id,
+        user_id=highlight.user_id,
+        content_type=highlight.content_type,
+        content_id=highlight.content_id,
+        highlight_data=highlight.highlight_data,
+        created_at=highlight.created_at,
+        updated_at=highlight.updated_at,
+    )
 
 
 @router.delete("/highlights/{highlight_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -98,31 +80,21 @@ async def delete_highlight(
     auth: CurrentAuth,
 ) -> None:
     """Delete a highlight by ID."""
-    try:
-        # Find the highlight
-        result = await auth.session.execute(
-            select(Highlight).where(
-                and_(
-                    Highlight.id == highlight_id,
-                    Highlight.user_id == auth.user_id,
-                )
+    result = await auth.session.execute(
+        select(Highlight).where(
+            and_(
+                Highlight.id == highlight_id,
+                Highlight.user_id == auth.user_id,
             )
         )
-        highlight = result.scalar_one_or_none()
+    )
+    highlight = result.scalar_one_or_none()
 
-        if not highlight:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Highlight not found")
+    if not highlight:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Highlight not found")
 
-        await auth.session.delete(highlight)
-        await auth.session.flush()
-
-    except HTTPException:
-        raise
-    except SQLAlchemyError as e:
-        logger.exception("Error deleting highlight %s: %s", highlight_id, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete highlight"
-        ) from e
+    await auth.session.delete(highlight)
+    await auth.session.flush()
 
 
 @router.put("/highlights/{highlight_id}")
@@ -132,40 +104,30 @@ async def update_highlight(
     auth: CurrentAuth,
 ) -> HighlightResponse:
     """Update a highlight by ID."""
-    try:
-        # Find the highlight
-        result = await auth.session.execute(
-            select(Highlight).where(
-                and_(
-                    Highlight.id == highlight_id,
-                    Highlight.user_id == auth.user_id,
-                )
+    result = await auth.session.execute(
+        select(Highlight).where(
+            and_(
+                Highlight.id == highlight_id,
+                Highlight.user_id == auth.user_id,
             )
         )
-        highlight = result.scalar_one_or_none()
+    )
+    highlight = result.scalar_one_or_none()
 
-        if not highlight:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Highlight not found")
+    if not highlight:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Highlight not found")
 
-        # Update the highlight data
-        highlight.highlight_data = highlight_update.source_data
+    highlight.highlight_data = highlight_update.source_data
 
-        await auth.session.flush()
-        await auth.session.refresh(highlight)
+    await auth.session.flush()
+    await auth.session.refresh(highlight)
 
-        return HighlightResponse(
-            id=highlight.id,
-            user_id=highlight.user_id,
-            content_type=highlight.content_type,
-            content_id=highlight.content_id,
-            highlight_data=highlight.highlight_data,
-            created_at=highlight.created_at,
-            updated_at=highlight.updated_at,
-        )
-    except HTTPException:
-        raise
-    except SQLAlchemyError as e:
-        logger.exception("Error updating highlight %s: %s", highlight_id, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update highlight"
-        ) from e
+    return HighlightResponse(
+        id=highlight.id,
+        user_id=highlight.user_id,
+        content_type=highlight.content_type,
+        content_id=highlight.content_id,
+        highlight_data=highlight.highlight_data,
+        created_at=highlight.created_at,
+        updated_at=highlight.updated_at,
+    )

@@ -16,7 +16,6 @@ Key design:
 """
 
 import logging
-from contextlib import suppress
 from typing import Any
 
 import psycopg
@@ -148,12 +147,14 @@ def get_memory_client() -> AsyncMemory:
             pool = _build_checked_connection_pool(connection_string)
             vector_store_config["connection_pool"] = pool
             _memory_client = AsyncMemory(config=MemoryConfig(**config))
-            logger.info("AsyncMemory client initialized with checked psycopg connection pool")
-        except (RuntimeError, TypeError, ValueError, OSError, psycopg.Error) as error:
+            logger.debug("memory.client.initialized")
+        except (RuntimeError, TypeError, ValueError, OSError, psycopg.Error):
             if pool is not None:
-                with suppress(RuntimeError, OSError, psycopg.Error):
+                try:
                     pool.close()
-            logger.exception("Failed to initialize AsyncMemory: %s", error)
+                except (RuntimeError, OSError, psycopg.Error):
+                    logger.exception("memory.init.pool_close_failed")
+            logger.exception("memory.init.failed")
             raise
 
     return _memory_client
@@ -351,6 +352,7 @@ def cleanup_memory_client() -> None:
         return
 
     _memory_client = None
+    cleanup_errors: list[Exception] = []
 
     for store_attr in ("vector_store", "_telemetry_vector_store"):
         store = getattr(client, store_attr, None)
@@ -360,26 +362,39 @@ def cleanup_memory_client() -> None:
 
         close_pool = getattr(pool, "close", None)
         close_all = getattr(pool, "closeall", None)
-        with suppress(Exception):
+        try:
             if callable(close_pool):
                 close_pool()
             elif callable(close_all):
                 close_all()
+        except Exception as error:
+            logger.exception("memory.cleanup.pool_close_failed")
+            cleanup_errors.append(error)
 
-    with suppress(Exception):
+    try:
         from mem0.memory import telemetry as mem0_telemetry
 
         mem0_client = getattr(mem0_telemetry, "client_telemetry", None)
         close_client = getattr(mem0_client, "close", None) if mem0_client is not None else None
         if callable(close_client):
             close_client()
+    except ImportError:
+        logger.debug("memory.cleanup.telemetry_module_missing")
+    except Exception as error:
+        logger.exception("memory.cleanup.telemetry_close_failed")
+        cleanup_errors.append(error)
 
-    logger.info("Memory client cleaned up")
+    if cleanup_errors:
+        message = "Memory cleanup failed"
+        raise RuntimeError(message) from cleanup_errors[0]
+
+    logger.debug("memory.cleanup.completed")
 
 
-def warm_memory_client() -> None:
+def warm_memory_client() -> bool:
     """Initialize the AsyncMemory client so the first request skips cold start."""
     if not _memory_is_configured():
-        logger.info("Memory disabled; skipping warm-up")
-        return
+        logger.debug("memory.warmup.skipped")
+        return False
     get_memory_client()
+    return True

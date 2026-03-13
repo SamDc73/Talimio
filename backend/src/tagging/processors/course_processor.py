@@ -57,8 +57,8 @@ class CourseProcessor:
                 "content_preview": content_preview,
             }
 
-        except SQLAlchemyError as error:
-            logger.exception("Error extracting course content for tagging: %s", error)
+        except SQLAlchemyError:
+            logger.exception("tagging.course.extract_failed")
             return {
                 "title": course.title,
                 "content_preview": course.description or "",

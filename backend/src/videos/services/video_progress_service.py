@@ -17,6 +17,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from src.exceptions import NotFoundError
 from src.progress.models import ProgressUpdate
 from src.progress.protocols import ProgressTracker
 from src.progress.service import ProgressService
@@ -67,8 +68,9 @@ class VideoProgressService(ProgressTracker):
         video = video_result.scalar_one_or_none()
 
         if not video:
-            logger.error("Video %s not found", content_id)
-            return {"error": "Video not found"}
+            logger.warning("videos.progress.not_found", extra={"content_id": str(content_id)})
+            resource_type = "video"
+            raise NotFoundError(resource_type, str(content_id))
 
         # Get current progress to merge metadata
         progress_service = ProgressService(self._session)

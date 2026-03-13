@@ -96,4 +96,4 @@ def apply_mem0_litellm_embedder_patch() -> None:
     # we patch an allowed provider to keep things "just work" without vendoring mem0.
     EmbedderFactory.provider_to_class["openai"] = "src.ai.mem0_litellm_embedder_patch.Mem0LiteLLMEmbedding"
     _PATCH_APPLIED = True
-    logger.info("Applied mem0 LiteLLM embedder patch (embedder provider 'openai' routed via LiteLLM)")
+    logger.debug("memory.embedder.patch.applied")

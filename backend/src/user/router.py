@@ -4,7 +4,6 @@ This router handles endpoints that operate on the currently authenticated user,
 eliminating the need to pass user_id in the URL.
 """
 
-import logging
 from typing import Annotated, Any, NoReturn
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -31,8 +30,6 @@ from src.user.service import (
     update_user_preferences,
 )
 
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/user",
@@ -61,7 +58,6 @@ async def get_current_user_settings(
     try:
         return await get_user_settings(auth.user_id, auth.session)
     except UserServiceError as error:
-        logger.exception("Error in get_current_user_settings for user %s", auth.user_id)
         _raise_user_service_error(error, detail="Failed to get user settings")
 
 
@@ -83,7 +79,6 @@ async def update_current_user_instructions(
     try:
         return await update_custom_instructions(auth.user_id, request.instructions, auth.session)
     except UserServiceError as error:
-        logger.exception("Error in update_current_user_instructions for user %s", auth.user_id)
         _raise_user_service_error(error, detail="Failed to update instructions")
 
 
@@ -103,7 +98,6 @@ async def get_current_user_memories(
         memories = await get_user_memories(auth.user_id, limit=limit)
         return {"memories": memories, "total": len(memories)}
     except UserServiceError as error:
-        logger.exception("Error in get_current_user_memories for user %s", auth.user_id)
         _raise_user_service_error(error, detail="Failed to get memories")
 
 
@@ -118,7 +112,6 @@ async def clear_current_user_memories(auth: CurrentAuth) -> ClearMemoryResponse:
     except HTTPException:
         raise
     except UserServiceError as error:
-        logger.exception("Error in clear_current_user_memories for user %s", auth.user_id)
         _raise_user_service_error(error, detail="Failed to clear memories")
 
 
@@ -142,7 +135,6 @@ async def delete_current_user_memory(auth: CurrentAuth, memory_id: str) -> dict[
     except HTTPException:
         raise
     except UserServiceError as error:
-        logger.exception("Error in delete_current_user_memory for user %s, memory %s", auth.user_id, memory_id)
         _raise_user_service_error(error, detail="Failed to delete memory")
 
 
@@ -167,7 +159,6 @@ async def update_current_user_preferences(
     try:
         return await update_user_preferences(auth.user_id, preferences_request.preferences, auth.session)
     except UserServiceError as error:
-        logger.exception("Error in update_current_user_preferences for user %s", auth.user_id)
         _raise_user_service_error(error, detail="Failed to update preferences")
 
 
@@ -185,5 +176,4 @@ async def get_current_user_preferences(
     try:
         return await _load_user_preferences(auth.user_id, auth.session)
     except UserServiceError as error:
-        logger.exception("Error in get_current_user_preferences for user %s", auth.user_id)
         _raise_user_service_error(error, detail="Failed to get preferences")
