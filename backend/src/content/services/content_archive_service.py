@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.content.schemas import ContentListResponse, ContentType, normalize_content_type
 from src.content.services.content_transform_service import ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
-from src.exceptions import ResourceNotFoundError
+from src.exceptions import NotFoundError
 
 
 logger = logging.getLogger(__name__)
@@ -22,8 +22,6 @@ class ContentArchiveService:
     @staticmethod
     async def archive_content(db: AsyncSession, content_type: ContentType, content_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Archive content by type and ID with user validation."""
-        logger.info("🗃️ Archiving %s %s", content_type, content_id)
-
         canonical_content_type = normalize_content_type(content_type)
 
         statement = None
@@ -56,26 +54,21 @@ class ContentArchiveService:
             )
         else:
             msg = f"Unsupported content type: {content_type}"
-            logger.error(msg)
+            logger.error("content.archive.unsupported_type", extra={"content_type": str(content_type)})
             raise ValueError(msg)
 
-        logger.info("🔍 With params: content_id=%s, user_id=%s", content_id, user_id)
         result = await db.execute(statement, params)
         affected_rows = int(getattr(result, "rowcount", 0) or 0)
         await db.flush()
 
-        logger.info("📊 Archive operation affected %s rows", affected_rows)
-
         if affected_rows == 0:
-            logger.warning("⚠️ Content %s not found or access denied", content_id)
-            raise ResourceNotFoundError(content_type.value, str(content_id))
-        logger.info("✅ Successfully archived %s", content_id)
+            logger.warning("content.archive.not_found", extra={"content_type": content_type.value, "content_id": str(content_id), "user_id": str(user_id)})
+            raise NotFoundError(content_type.value, str(content_id))
+        logger.info("content.archive.succeeded", extra={"content_type": content_type.value, "content_id": str(content_id), "user_id": str(user_id)})
 
     @staticmethod
     async def unarchive_content(db: AsyncSession, content_type: ContentType, content_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Unarchive content by type and ID with user validation."""
-        logger.info("📤 Unarchiving %s %s", content_type, content_id)
-
         canonical_content_type = normalize_content_type(content_type)
 
         statement = None
@@ -106,20 +99,17 @@ class ContentArchiveService:
             )
         else:
             msg = f"Unsupported content type: {content_type}"
-            logger.error(msg)
+            logger.error("content.unarchive.unsupported_type", extra={"content_type": str(content_type)})
             raise ValueError(msg)
 
-        logger.info("🔍 With params: content_id=%s, user_id=%s", content_id, user_id)
         result = await db.execute(statement, params)
         affected_rows = int(getattr(result, "rowcount", 0) or 0)
         await db.flush()
 
-        logger.info("📊 Unarchive operation affected %s rows", affected_rows)
-
         if affected_rows == 0:
-            logger.warning("⚠️ Content %s not found or access denied", content_id)
-            raise ResourceNotFoundError(content_type.value, str(content_id))
-        logger.info("✅ Successfully unarchived %s", content_id)
+            logger.warning("content.archive.not_found", extra={"content_type": content_type.value, "content_id": str(content_id), "user_id": str(user_id)})
+            raise NotFoundError(content_type.value, str(content_id))
+        logger.info("content.unarchive.succeeded", extra={"content_type": content_type.value, "content_id": str(content_id), "user_id": str(user_id)})
 
     @staticmethod
     async def list_archived_content(

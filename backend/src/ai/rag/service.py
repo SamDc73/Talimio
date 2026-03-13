@@ -2,16 +2,13 @@
 
 
 import asyncio
-import contextlib
 import logging
 import tempfile
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import HTTPException, status
 from fastapi.concurrency import run_in_threadpool
-from pydantic import ValidationError
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +16,13 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from src.ai.rag.chunker import chunk_text_async
 from src.ai.rag.config import rag_config
+from src.ai.rag.exceptions import (
+    RagCourseNotFoundError,
+    RagDocumentNotFoundError,
+    RagUnavailableError,
+    RagUploadTooLargeError,
+    RagValidationError,
+)
 from src.ai.rag.parser import DocumentProcessor
 from src.ai.rag.schemas import DocumentResponse, SearchResult
 from src.books.models import Book
@@ -42,6 +46,7 @@ COURSE_DOCUMENT_STATUS_PROCESSING = "processing"
 COURSE_DOCUMENT_STATUS_EMBEDDED = "embedded"
 COURSE_DOCUMENT_STATUS_FAILED = "failed"
 COURSE_IMAGE_DOCUMENT_TYPE = "image"
+MISSING_FILE_PATH_ERROR_MESSAGE = "No file path to process"
 
 _RAG_RUNTIME_ERROR_TYPES = (
     SQLAlchemyError,
@@ -75,6 +80,15 @@ class RAGService:
             self._document_processor = DocumentProcessor()
         return self._document_processor
 
+    def _handle_background_task_done(self, task: asyncio.Task[None]) -> None:
+        self._background_tasks.discard(task)
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is None:
+            return
+        logger.error("rag.background_task.failed", exc_info=(type(error), error, error.__traceback__))
+
     async def _ensure_course_owned(
         self,
         session: AsyncSession,
@@ -85,32 +99,24 @@ class RAGService:
         stmt = select(Course.id).where(Course.id == course_id, Course.user_id == user_id)
         result = await session.execute(stmt)
         if result.scalar_one_or_none() is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+            raise RagCourseNotFoundError(course_id)
 
     def _validate_course_document_fields(self, *, document_type: str, title: str) -> tuple[str, str]:
         document_type_text = document_type.strip() if isinstance(document_type, str) else ""
         if not document_type_text:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Document type must not be empty",
-            )
+            message = "Document type must not be empty"
+            raise RagValidationError(message)
         if len(document_type_text) > 50:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Document type must be 50 characters or fewer",
-            )
+            message = "Document type must be 50 characters or fewer"
+            raise RagValidationError(message)
 
         title_text = title.strip() if isinstance(title, str) else ""
         if not title_text:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Document title must not be empty",
-            )
+            message = "Document title must not be empty"
+            raise RagValidationError(message)
         if len(title_text) > 255:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Document title must be 255 characters or fewer",
-            )
+            message = "Document title must be 255 characters or fewer"
+            raise RagValidationError(message)
 
         return document_type_text, title_text
 
@@ -125,12 +131,14 @@ class RAGService:
         file_size_mb = len(file_content) / (1024 * 1024)
         if file_size_mb > self.config.max_file_size_mb:
             logger.warning(
-                "File %s too large: %.2fMB > %dMB limit", filename, file_size_mb, self.config.max_file_size_mb
+                "rag.upload.file_too_large",
+                extra={
+                    "file_size_mb": round(file_size_mb, 2),
+                    "max_file_size_mb": self.config.max_file_size_mb,
+                },
             )
-            raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=f"File too large: {file_size_mb:.1f}MB exceeds {self.config.max_file_size_mb}MB limit",
-            )
+            message = f"File too large: {file_size_mb:.1f}MB exceeds {self.config.max_file_size_mb}MB limit"
+            raise RagUploadTooLargeError(message)
 
         from src.config.settings import get_settings
 
@@ -159,7 +167,6 @@ class RAGService:
         process_in_background: bool = True,
     ) -> DocumentResponse:
         """Upload a document to a course, ensuring user ownership."""
-        # Validate user owns the course
         await self._ensure_course_owned(session, user_id, course_id)
         document_type_text, title_text = self._validate_course_document_fields(
             document_type=document_type,
@@ -169,7 +176,6 @@ class RAGService:
         try:
             is_image = document_type_text == COURSE_IMAGE_DOCUMENT_TYPE
             now = datetime.now(UTC)
-            # Create document record
             doc = CourseDocument(
                 course_id=course_id,
                 title=title_text,
@@ -181,7 +187,6 @@ class RAGService:
             session.add(doc)
             await session.flush()
 
-            # Store file if provided
             if file_content and filename:
                 doc.file_path = await self._store_course_document_file(
                     file_content=file_content,
@@ -193,114 +198,97 @@ class RAGService:
             await session.flush()
 
             if process_in_background and not is_image:
-                # Persist only after file_path/status are finalized and right before scheduling.
                 await session.commit()
-                # Process the document in a background task to avoid blocking uploads.
-                doc_id = doc.id  # Capture ID before potential session issues
+                doc_id = doc.id
                 task = asyncio.create_task(self._process_document_background(doc_id))
                 self._background_tasks.add(task)
-                task.add_done_callback(self._background_tasks.discard)
+                task.add_done_callback(self._handle_background_task_done)
 
-            # Re-query to get a Row object that works with model_validate
-            # This matches the pattern used in get_document() and list_documents_with_count()
             result = await session.execute(
                 text("SELECT * FROM course_documents WHERE id = :doc_id"), {"doc_id": doc.id}
             )
             row_map = result.mappings().first()
             if row_map is None:
                 msg = f"Course document {doc.id} not found after creation"
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+                raise RuntimeError(msg)
 
             return DocumentResponse.model_validate(row_map)
 
-        except HTTPException:
-            raise
-        except (SQLAlchemyError, OSError, ValidationError) as error:
+        except (SQLAlchemyError, OSError, StorageError) as error:
             logger.exception("Failed to upload document")
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to upload document") from error
+            message = "Failed to upload document"
+            raise RagUnavailableError(message) from error
 
     async def process_document(self, session: AsyncSession, document_id: int) -> None:
         """Process a document (parse, chunk, embed, index)."""
         try:
-            # Update status to processing
             await session.execute(
                 text("UPDATE course_documents SET status = :status WHERE id = :doc_id"),
                 {"doc_id": document_id, "status": COURSE_DOCUMENT_STATUS_PROCESSING},
             )
             await session.flush()
 
-            # Get document
             result = await session.execute(
                 text("SELECT * FROM course_documents WHERE id = :doc_id"), {"doc_id": document_id}
             )
             row_map = result.mappings().first()
             if row_map is None:
-                msg = f"Document {document_id} not found"
-                raise ValueError(msg)
+                raise RagDocumentNotFoundError(document_id)
 
             doc_dict = dict(row_map)
 
-            # Extract text using Unstructured parser
             text_content = ""
             if doc_dict["file_path"]:
-                # Process file using temp copy for efficient memory usage
                 stored_file_path = Path(doc_dict["file_path"])
                 if not await run_in_threadpool(stored_file_path.exists):
-                    msg = f"Stored file not found: {stored_file_path}"
-                    raise ValueError(msg)
+                    raise FileNotFoundError(stored_file_path)
 
-                # Create temp file and copy content
                 with tempfile.NamedTemporaryFile(delete=False, suffix=stored_file_path.suffix) as temp_file:
                     temp_file.write(await run_in_threadpool(stored_file_path.read_bytes))
                     temp_file_path = temp_file.name
 
                 try:
-                    # Process the temp file
                     text_content = await self.document_processor.process_document(
                         temp_file_path, doc_dict["document_type"]
                     )
                 finally:
-                    # Always clean up temp file
-                    with contextlib.suppress(OSError):
-                        cleanup_path = Path(temp_file_path)
+                    cleanup_path = Path(temp_file_path)
+                    try:
                         await run_in_threadpool(cleanup_path.unlink)
+                    except OSError:
+                        logger.exception("rag.document.temp_cleanup_failed", extra={"document_id": document_id})
+                        raise
             else:
-                msg = "No file path to process"
-                raise ValueError(msg)
+                raise RagValidationError(MISSING_FILE_PATH_ERROR_MESSAGE)
 
-            # Chunk text using Chonkie
             chunks = await chunk_text_async(text_content)
             logger.info("Document %s chunked into %s pieces", document_id, len(chunks))
-
-            # Store chunks in pgvector via VectorRAG helper
             await self._store_document_chunks(session, document_id, chunks)
 
-            # Update status to embedded
             await session.execute(
-                text("""
+                text(
+                    """
                     UPDATE course_documents
                     SET status = :status,
                         processed_at = NOW(),
                         embedded_at = NOW()
                     WHERE id = :doc_id
-                """),
+                    """
+                ),
                 {"doc_id": document_id, "status": COURSE_DOCUMENT_STATUS_EMBEDDED},
             )
             await session.flush()
 
             logger.info("Successfully processed document %s", document_id)
 
-            # Clean up stored source file after successful processing
-            # Course documents are reference materials, not user-viewed content like books
             if doc_dict.get("file_path"):
-                try:
-                    file_path = Path(doc_dict["file_path"])
-                    if await run_in_threadpool(file_path.exists):
+                file_path = Path(doc_dict["file_path"])
+                if await run_in_threadpool(file_path.exists):
+                    try:
                         await run_in_threadpool(file_path.unlink)
-                        logger.debug("Cleaned up source file for document %s", document_id)
-                except OSError:
-                    # Do not fail the request if cleanup fails
-                    logger.debug("Post-process source cleanup failed for document %s", document_id)
+                    except OSError:
+                        logger.exception("rag.document.source_cleanup_failed", extra={"document_id": document_id})
+                        raise
 
         except _RAG_RUNTIME_ERROR_TYPES:
             logger.exception("Failed to process document %s", document_id)
@@ -334,8 +322,11 @@ class RAGService:
             return
         fp = Path(file_path_str)
         if await run_in_threadpool(fp.exists):
-            with contextlib.suppress(Exception):
+            try:
                 await run_in_threadpool(fp.unlink)
+            except OSError:
+                logger.exception("rag.document.source_cleanup_failed", extra={"document_id": document_id})
+                raise
         await session.execute(
             text("UPDATE course_documents SET file_path = NULL WHERE id = :doc_id"),
             {"doc_id": document_id},
@@ -344,14 +335,15 @@ class RAGService:
 
     async def _cleanup_book_source_file(self, session: AsyncSession, book_id: uuid.UUID) -> None:
         """Delete a stored book file via storage provider and clear file_path in DB."""
-        # Reload latest book row to ensure we have current file_path
         book = await session.get(Book, book_id)
         if not book or not getattr(book, "file_path", None):
             return
         storage = get_storage_provider()
-        with contextlib.suppress(Exception):
+        try:
             await storage.delete(book.file_path)
-        # Clear DB reference
+        except (StorageError, OSError, RuntimeError, ValueError, TypeError):
+            logger.exception("rag.book.source_cleanup_failed", extra={"book_id": str(book_id)})
+            raise
         book.file_path = ""
         await session.flush()
 
@@ -388,10 +380,12 @@ class RAGService:
                     temp_path, (book.file_type or "pdf").lower()
                 )
             finally:
-                # Always clean up temp file
-                with contextlib.suppress(OSError):
-                    temp_file_path = Path(temp_path)
+                temp_file_path = Path(temp_path)
+                try:
                     await run_in_threadpool(temp_file_path.unlink)
+                except OSError:
+                    logger.exception("rag.book.temp_cleanup_failed", extra={"book_id": str(book_id)})
+                    raise
 
             # Chunk
             chunks = await chunk_text_async(text_content)
@@ -458,6 +452,7 @@ class RAGService:
             chunks, per_chunk_meta = await self._collect_video_transcript_chunks(video)
 
             if not chunks:
+                logger.warning("rag.video.no_transcript_chunks", extra={"video_id": str(video_id)})
                 video.rag_status = RAG_STATUS_FAILED
                 await session.flush()
                 return
@@ -534,8 +529,7 @@ class RAGService:
             doc_info = result.fetchone()
 
             if not doc_info:
-                msg = f"Document {document_id} not found"
-                raise ValueError(msg)
+                raise RagDocumentNotFoundError(document_id)
 
             # Determine deterministic UUID for course document
             doc_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"document_{document_id}")
@@ -602,9 +596,10 @@ class RAGService:
                 course_id=course_id,
             )
 
-        except _RAG_RUNTIME_ERROR_TYPES:
+        except _RAG_RUNTIME_ERROR_TYPES as error:
             logger.exception("Failed to search documents")
-            return []
+            message = "Failed to search documents"
+            raise RagUnavailableError(message) from error
 
     async def _query_documents_for_course(
         self,
@@ -658,9 +653,10 @@ class RAGService:
             documents = await self._query_documents_for_course(session, course_id, skip=skip, limit=limit)
             total = await self._query_document_count_for_course(session, course_id)
             return documents, total
-        except (SQLAlchemyError, ValidationError):
+        except SQLAlchemyError as error:
             logger.exception("Failed to list documents for course %s", course_id)
-            return [], 0
+            message = "Failed to list documents"
+            raise RagUnavailableError(message) from error
 
     async def delete_document(self, session: AsyncSession, user_id: uuid.UUID, document_id: int) -> None:
         """Delete a document and its chunks, ensuring user ownership."""
@@ -677,7 +673,7 @@ class RAGService:
             doc = result.fetchone()
 
             if not doc:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+                raise RagDocumentNotFoundError(document_id)
 
             # Verify user owns the course that contains this document
             await self._ensure_course_owned(session, user_id, doc.course_id)
@@ -706,11 +702,10 @@ class RAGService:
             await session.flush()
             logger.info("Successfully deleted document %s", document_id)
 
-        except HTTPException:
-            raise
-        except (SQLAlchemyError, OSError):
+        except (SQLAlchemyError, OSError) as error:
             logger.exception("Failed to delete document %s", document_id)
-            raise
+            message = "Failed to delete document"
+            raise RagUnavailableError(message) from error
 
     async def get_document(self, session: AsyncSession, user_id: uuid.UUID, document_id: int) -> DocumentResponse:
         """Get a single document, ensuring user ownership."""
@@ -726,17 +721,16 @@ class RAGService:
             row_map = result.mappings().first()
 
             if row_map is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+                raise RagDocumentNotFoundError(document_id)
 
             # Verify user owns the course that contains this document
             await self._ensure_course_owned(session, user_id, row_map["course_id"])
 
             return DocumentResponse.model_validate(row_map)
-        except HTTPException:
-            raise
-        except (SQLAlchemyError, ValidationError) as error:
+        except SQLAlchemyError as error:
             logger.exception("Error getting document %s", document_id)
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get document") from error
+            message = "Failed to get document"
+            raise RagUnavailableError(message) from error
 
     @staticmethod
     async def delete_chunks_by_doc_id(

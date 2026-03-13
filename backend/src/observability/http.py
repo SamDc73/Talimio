@@ -3,10 +3,21 @@
 import time
 from typing import Any
 
+import structlog
 from fastapi import FastAPI, Request
 from opentelemetry import trace
 
 from src.config.settings import Settings
+from src.observability.event_fields import get_feature_area
+from src.observability.log_context import (
+    get_log_context,
+    reset_log_context,
+    set_log_context,
+    update_log_context,
+)
+
+
+logger = structlog.get_logger(__name__)
 
 
 def get_request_route(request: Request) -> str:
@@ -16,14 +27,6 @@ def get_request_route(request: Request) -> str:
     if isinstance(route_path, str) and route_path:
         return route_path
     return request.url.path
-
-
-def get_feature_area(route: str) -> str:
-    """Derive a coarse feature area from /api/v1/<feature>/... paths."""
-    parts = [part for part in route.split("/") if part]
-    if len(parts) >= 3 and parts[0] == "api" and parts[1] == "v1":
-        return parts[2]
-    return "app"
 
 
 def _set_request_span_attributes(attributes: dict[str, Any]) -> None:
@@ -41,6 +44,20 @@ def _set_request_span_attributes(attributes: dict[str, Any]) -> None:
         span.set_attribute(key, str(value))
 
 
+def _build_request_context(request: Request, route: str) -> dict[str, Any]:
+    """Build the request-scoped context used by logging processors."""
+    return {
+        "route": route,
+        "feature_area": get_feature_area(route),
+        "course_id": request.path_params.get("course_id") or request.path_params.get("courseId"),
+        "content_type": request.path_params.get("content_type") or request.path_params.get("contentType"),
+        "model_name": None,
+        "status_code": None,
+        "error_code": None,
+        "user_id": getattr(request.state, "user_id", None),
+    }
+
+
 def install_request_context_middleware(app: FastAPI, _settings: Settings) -> None:
     """Install middleware that enriches logs and spans with request context."""
     if getattr(app.state, "request_context_middleware_installed", False):
@@ -49,22 +66,51 @@ def install_request_context_middleware(app: FastAPI, _settings: Settings) -> Non
     @app.middleware("http")
     async def request_context_middleware(request: Request, call_next: Any) -> Any:
         started_at = time.perf_counter()
+        initial_route = get_request_route(request)
+        request_context = _build_request_context(request, initial_route)
+        token = set_log_context(**request_context)
 
         try:
-            return await call_next(request)
+            response = await call_next(request)
+            request_context["status_code"] = response.status_code
+            return response
         finally:
             resolved_route = get_request_route(request)
-            course_id = request.path_params.get("course_id") or request.path_params.get("courseId")
-            user_id = getattr(request.state, "user_id", None)
+            status_code = request_context.get("status_code")
+            request_context.update(_build_request_context(request, resolved_route))
+            request_context["status_code"] = status_code
+
+            latest_context = get_log_context()
+            for key, value in latest_context.items():
+                if value is None:
+                    continue
+                request_context[key] = value
+
             duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+
             _set_request_span_attributes(
                 {
-                    "app.route": resolved_route,
-                    "app.feature_area": get_feature_area(resolved_route),
+                    "app.route": request_context["route"],
+                    "app.feature_area": request_context["feature_area"],
                     "app.request_duration_ms": duration_ms,
-                    "enduser.id": user_id,
-                    "app.course_id": course_id,
+                    "enduser.id": request_context["user_id"],
+                    "app.course_id": request_context["course_id"],
+                    "app.content_type": request_context["content_type"],
                 }
             )
+
+            update_log_context(**request_context)
+            logger.info(
+                "http.request.completed",
+                event_name="http.request.completed",
+                route=request_context["route"],
+                feature_area=request_context["feature_area"],
+                status_code=request_context["status_code"],
+                user_id=request_context["user_id"],
+                course_id=request_context["course_id"],
+                content_type=request_context["content_type"],
+                duration_ms=duration_ms,
+            )
+            reset_log_context(token)
 
     app.state.request_context_middleware_installed = True

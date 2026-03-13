@@ -17,6 +17,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from src.ai.rag.service import RAGService
 from src.database.pagination import Paginator
 from src.database.session import async_session_maker
+from src.exceptions import NotFoundError
 from src.tagging.service import TaggingService
 from src.videos.models import Video, VideoChapter
 from src.videos.schemas import (
@@ -47,19 +48,52 @@ VIDEO_CHAPTER_STATUS_COMPLETED = "completed"
 _DETACHED_TASKS: set[asyncio.Task[Any]] = set()
 
 
-class VideoNotFoundError(ValueError):
+class VideoNotFoundError(NotFoundError):
     """Raised when a video does not exist for the requested owner/context."""
 
+    def __init__(self, message: str | None = None, *, video_id: uuid.UUID | None = None) -> None:
+        if message is not None:
+            super().__init__(message=message, feature_area="videos")
+            return
+        resource_id = str(video_id) if video_id is not None else None
+        super().__init__("video", resource_id, feature_area="videos")
 
-class VideoChapterNotFoundError(ValueError):
+
+class VideoChapterNotFoundError(NotFoundError):
     """Raised when a chapter does not exist for the requested video."""
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        chapter_id: uuid.UUID | None = None,
+        video_id: uuid.UUID | None = None,
+    ) -> None:
+        metadata = None
+        if video_id is not None:
+            metadata = {"video_id": str(video_id)}
+        if message is not None:
+            super().__init__(message=message, metadata=metadata, feature_area="videos")
+            return
+        resource_id = str(chapter_id) if chapter_id is not None else None
+        super().__init__("video_chapter", resource_id, metadata=metadata, feature_area="videos")
+
+
+def _handle_detached_task_done(task: asyncio.Task[Any]) -> None:
+    _DETACHED_TASKS.discard(task)
+    if task.cancelled():
+        return
+    error = task.exception()
+    if error is None:
+        return
+    logger.error("videos.background_task.failed", exc_info=(type(error), error, error.__traceback__))
 
 
 def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
     """Run background work outside FastAPI response-bound BackgroundTasks."""
     task = asyncio.create_task(coro)
     _DETACHED_TASKS.add(task)
-    task.add_done_callback(_DETACHED_TASKS.discard)
+    task.add_done_callback(_handle_detached_task_done)
 
 
 def _create_downloader(options: dict[str, Any]) -> yt_dlp.YoutubeDL:
@@ -244,8 +278,8 @@ async def _extract_chapters_background(video_id: uuid.UUID, user_id: uuid.UUID) 
 
             logger.info("Stopping chapter extraction for deleted video %s", video_id)
             return
-        except ValueError as e:
-            logger.exception("Failed to extract chapters for video %s on attempt %s: %s", video_id, attempt + 1, e)
+        except ValueError:
+            logger.exception("videos.chapters.extract_retry_failed", extra={"video_id": str(video_id), "attempt": attempt + 1})
             await _mark_video_status(video_id, VIDEO_PIPELINE_STATUS_FAILED, " after ValueError")
             return
         except (
@@ -268,7 +302,7 @@ async def _extract_chapters_background(video_id: uuid.UUID, user_id: uuid.UUID) 
                 await asyncio.sleep(retry_delay)
                 continue
 
-            logger.exception("Failed to extract chapters for video %s after %s attempts: %s", video_id, max_retries, e)
+            logger.exception("videos.chapters.extract_failed", extra={"video_id": str(video_id), "attempts": max_retries})
             await _mark_video_status(video_id, VIDEO_PIPELINE_STATUS_FAILED, " after final attempt")
             return
 
@@ -325,8 +359,8 @@ async def _process_transcript_to_jsonb(video_id: uuid.UUID) -> None:
         aiohttp.ClientError,
         yt_dlp.utils.DownloadError,
         yt_dlp.utils.ExtractorError,
-    ) as e:
-        logger.exception("Failed to process transcript segments for video %s: %s", video_id, e)
+    ):
+        logger.exception("videos.transcript.process_failed", extra={"video_id": str(video_id)})
 
 
 class VideoService:
@@ -593,7 +627,7 @@ class VideoService:
             yt_dlp.utils.DownloadError,
             yt_dlp.utils.ExtractorError,
         ) as e:
-            logger.exception("Error fetching video info: %s", e)
+            logger.exception("videos.info.fetch_failed")
             # Return minimal info instead of failing completely
             # Extract video ID from URL
             video_id = ""
@@ -724,19 +758,13 @@ class VideoService:
                 total = len(all_chapters)
                 completion_pct = (len(completed_chapter_ids) / total) * 100 if total > 0 else 0.0
 
-                progress_result = await VideoProgressService(db).update_progress(
+                await VideoProgressService(db).update_progress(
                     video.id,
                     user_id,
                     {"completion_percentage": completion_pct, "completed_chapters": completed_chapter_ids},
                 )
-                if "error" in progress_result:
-                    logger.warning(
-                        "Failed to update unified progress for video %s after chapter status change: %s",
-                        video_id,
-                        progress_result["error"],
-                    )
-        except (RuntimeError, TimeoutError, TypeError, ValueError) as e:
-            logger.warning("Failed to update unified progress for video %s after chapter status change: %s", video_id, e)
+        except (NotFoundError, RuntimeError, TimeoutError, TypeError, ValueError) as error:
+            logger.warning("Failed to update unified progress for video %s after chapter status change: %s", video_id, error)
 
         await db.flush()
         await db.refresh(chapter)
@@ -773,9 +801,10 @@ class VideoService:
                 "completion_percentage": completion_percentage,
                 "completed_chapters": [str(chapter_id) for chapter_id in completed_chapter_ids],
             }
-            progress_result = await VideoProgressService(db).update_progress(video.id, user_id, progress_data)
-            if "error" in progress_result:
-                logger.warning("Failed to sync chapter progress for video %s: %s", video_id, progress_result["error"])
+            try:
+                await VideoProgressService(db).update_progress(video.id, user_id, progress_data)
+            except (NotFoundError, RuntimeError, TypeError, ValueError) as error:
+                logger.warning("Failed to sync chapter progress for video %s: %s", video_id, error)
 
         # Update video timestamp
         video.updated_at = datetime.now(UTC)
@@ -1008,8 +1037,8 @@ class VideoService:
             aiohttp.ClientError,
             yt_dlp.utils.DownloadError,
             yt_dlp.utils.ExtractorError,
-        ) as e:
-            logger.exception("Failed to extract transcript segments for %s: %s", video_url, e)
+        ):
+            logger.exception("videos.transcript.extract_failed")
             return []
 
         return []
@@ -1084,8 +1113,8 @@ class VideoService:
             TypeError,
             yt_dlp.utils.DownloadError,
             yt_dlp.utils.ExtractorError,
-        ) as e:
-            logger.exception("Error fetching video chapters: %s", e)
+        ):
+            logger.exception("videos.chapters.fetch_failed")
             return []
 
 

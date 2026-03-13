@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -34,27 +35,28 @@ from .content.router import router as content_router
 from .courses.router import router as courses_router
 from .database.migrate import apply_migrations
 from .database.session import DbSession, engine
-from .exceptions import ResourceNotFoundError, ValidationError as CustomValidationError
+from .exceptions import DomainError, ErrorCategory, ErrorCode
 from .highlights.router import router as highlights_router
 from .middleware.error_handlers import (
-    ErrorCategory,
-    ErrorCode,
     ExternalServiceError,
     format_error_response,
     handle_database_errors,
+    handle_domain_errors,
     handle_external_service_errors,
+    handle_http_exception,
     handle_validation_errors,
     log_error_context,
 )
 from .middleware.security import SimpleSecurityMiddleware
 from .observability import configure_observability
+from .observability.log_context import update_log_context
 from .progress.router import router as progress_router
 from .tagging.router import router as tagging_router
 from .user.router import router as user_router
 from .videos.router import router as videos_router
 
 
-setup_logging()
+setup_logging(get_settings())
 logger = logging.getLogger(__name__)
 
 
@@ -85,15 +87,15 @@ async def _startup() -> None:
 
     rag_config = RAGConfig()
     if rag_config.embedding_model:
-        logger.info("RAG configuration loaded")
+        logger.debug("startup.rag.config_loaded")
 
-    await apply_migrations(engine)
-    logger.info("Database migrations applied")
+    applied_migrations = await apply_migrations(engine)
+    logger.info("startup.migrations.checked", extra={"applied_count": applied_migrations})
 
     from src.ai.memory import warm_memory_client
 
-    warm_memory_client()
-    logger.info("AsyncMemory client warmed")
+    memory_warmed = warm_memory_client()
+    logger.info("startup.memory.checked", extra={"warmed": memory_warmed})
 
 
 async def _shutdown() -> None:
@@ -102,15 +104,15 @@ async def _shutdown() -> None:
         from src.ai.memory import cleanup_memory_client
 
         cleanup_memory_client()
-        logger.info("Memory wrapper cleaned up")
+        logger.debug("shutdown.memory.cleaned")
     except (RuntimeError, TimeoutError, TypeError, ValueError):
-        logger.warning("Error cleaning up memory wrapper", exc_info=True)
+        logger.warning("shutdown.memory.cleanup_failed", exc_info=True)
 
     try:
         await engine.dispose()
-        logger.info("Database engine disposed")
+        logger.debug("shutdown.database_engine.disposed")
     except SQLAlchemyError:
-        logger.warning("Error disposing database engine", exc_info=True)
+        logger.warning("shutdown.database_engine.dispose_failed", exc_info=True)
 
 
 @asynccontextmanager
@@ -171,20 +173,10 @@ def _configure_middlewares(app: FastAPI, settings: Any) -> None:
 
 def _register_exception_handlers(app: FastAPI) -> None:
     """Attach all exception handlers to app."""
-
-    def resource_not_found_handler(_request: Request, exc: ResourceNotFoundError) -> JSONResponse:
-        return format_error_response(
-            category=ErrorCategory.RESOURCE_NOT_FOUND,
-            code=ErrorCode.NOT_FOUND,
-            detail=str(exc),
-            status_code=status.HTTP_404_NOT_FOUND,
-            suggestions=["The requested resource does not exist"],
-        )
-
-    app.add_exception_handler(ResourceNotFoundError, cast("Any", resource_not_found_handler))
-
+    app.add_exception_handler(DomainError, cast("Any", handle_domain_errors))
+    app.add_exception_handler(HTTPException, cast("Any", handle_http_exception))
     validation_handler = cast("Any", handle_validation_errors)
-    for exc_type in (ValidationError, CustomValidationError):
+    for exc_type in (RequestValidationError, ValidationError):
         app.add_exception_handler(exc_type, validation_handler)
 
     database_handler = cast("Any", handle_database_errors)
@@ -195,18 +187,21 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
     def internal_error_handler(request: Request, exc: Exception) -> JSONResponse:
         error_id = uuid.uuid4()
+        update_log_context(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            error_code=str(ErrorCode.INTERNAL),
+        )
         log_error_context(request, exc, error_id)
         return format_error_response(
-            category=ErrorCategory.INTERNAL,
-            code=ErrorCode.INTERNAL,
+            category=str(ErrorCategory.INTERNAL),
+            code=str(ErrorCode.INTERNAL),
             detail="An unexpected error occurred",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             metadata={"error_id": str(error_id)},
             suggestions=["Please try again later", "If the problem persists, contact support with the error ID"],
         )
 
-    for exc_type in (RuntimeError, TypeError, ValueError):
-        app.add_exception_handler(exc_type, cast("Any", internal_error_handler))
+    app.add_exception_handler(Exception, cast("Any", internal_error_handler))
 
 
 def _register_frontend_routes(app: FastAPI) -> None:
@@ -214,7 +209,7 @@ def _register_frontend_routes(app: FastAPI) -> None:
     frontend_dist_dir = Path(__file__).resolve().parent.parent / "frontend_dist"
     index_file_path = frontend_dist_dir / "index.html"
     if not index_file_path.exists():
-        logger.info("Frontend bundle not found at %s; skipping static frontend routes", frontend_dist_dir)
+        logger.debug("startup.frontend.bundle_missing", extra={"frontend_dist_dir": str(frontend_dist_dir)})
         return
 
     assets_dir = frontend_dist_dir / "assets"
@@ -244,13 +239,21 @@ def _register_frontend_routes(app: FastAPI) -> None:
 
         if allowed_methods:
             allow_header = ", ".join(sorted(method for method in allowed_methods if method != "HEAD"))
-            return JSONResponse(
-                {"detail": "Method Not Allowed"},
+            response = format_error_response(
+                category=str(ErrorCategory.BAD_REQUEST),
+                code=str(ErrorCode.METHOD_NOT_ALLOWED),
+                detail="Method Not Allowed",
                 status_code=status.HTTP_405_METHOD_NOT_ALLOWED,
-                headers={"Allow": allow_header},
             )
+            response.headers["Allow"] = allow_header
+            return response
 
-        return JSONResponse({"detail": "Not Found"}, status_code=status.HTTP_404_NOT_FOUND)
+        return format_error_response(
+            category=str(ErrorCategory.RESOURCE_NOT_FOUND),
+            code=str(ErrorCode.NOT_FOUND),
+            detail="Not Found",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
 
     @app.get("/", include_in_schema=False, response_model=None)
     async def serve_frontend_index() -> FileResponse:

@@ -12,7 +12,6 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from fastapi import HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -20,6 +19,7 @@ from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.client import LLMClient
 from src.courses.models import Concept, Course, CourseConcept, Lesson, ProbeEvent, UserConceptState
 from src.courses.schemas import LessonDetailResponse
+from src.exceptions import NotFoundError, UpstreamUnavailableError, ValidationError
 
 
 logger = logging.getLogger(__name__)
@@ -366,7 +366,7 @@ class LessonService:
 
         Raises
         ------
-            HTTPException: 404 if lesson not found or access denied
+            NotFoundError: If the lesson is missing or not owned by the current user
         """
         # Single query with USER ISOLATION - prevents data leakage
         query = (
@@ -387,7 +387,10 @@ class LessonService:
                 "LESSON_ACCESS_DENIED",
                 extra={"user_id": str(self.user_id), "lesson_id": str(lesson_id), "course_id": str(course_id)},
             )
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found or access denied")
+            raise NotFoundError(
+                message="Lesson not found or access denied",
+                feature_area="courses",
+            )
 
         lesson, course = row
 
@@ -453,30 +456,9 @@ class LessonService:
                 await self.session.refresh(lesson)
 
         except ValueError as exc:
-            logger.exception(
-                "Validation error generating lesson content: %s",
-                exc,
-                extra={"user_id": str(self.user_id), "lesson_id": str(lesson.id)},
-            )
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid lesson content: {exc}") from exc
+            detail = f"Invalid lesson content: {exc}"
+            raise ValidationError(detail, feature_area="courses") from exc
         except RuntimeError as exc:
-            logger.exception(
-                "System error generating lesson content: %s",
-                exc,
-                extra={"user_id": str(self.user_id), "lesson_id": str(lesson.id)},
-            )
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Unable to generate lesson content. Please try again.",
-            ) from exc
-        except _LESSON_GENERATION_HTTP_500_ERROR_TYPES as exc:
-            logger.exception(
-                "Unexpected error generating lesson content",
-                extra={"user_id": str(self.user_id), "lesson_id": str(lesson.id)},
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="An unexpected error occurred while generating lesson content",
-            ) from exc
-
+            message = "Unable to generate lesson content. Please try again."
+            raise UpstreamUnavailableError(message, feature_area="courses") from exc
         return lesson

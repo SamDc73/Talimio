@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.content.schemas import ContentListResponse, ContentType, normalize_content_type
 from src.content.services.content_transform_service import ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
-from src.exceptions import ResourceNotFoundError
+from src.exceptions import NotFoundError
 
 
 logger = logging.getLogger(__name__)
@@ -66,25 +66,6 @@ class ContentService:
         # Progress is now fetched separately via /api/v1/progress endpoints
         # This reduces content endpoint response time from 300ms+ to <100ms
 
-        # Log archive status of returned items
-        archived_count = sum(1 for item in items if hasattr(item, "archived") and item.archived)
-        active_count = len(items) - archived_count
-        logger.info(
-            "📊 Returning %s items: %s archived, %s active",
-            len(items),
-            archived_count,
-            active_count,
-        )
-
-        for item in items:
-            if hasattr(item, "archived"):
-                logger.info(
-                    "🔍 Item '%s': archived=%s, type=%s",
-                    item.title,
-                    item.archived,
-                    item.__class__.__name__,
-                )
-
         return ContentListResponse(
             items=items,
             total=total,
@@ -115,9 +96,6 @@ class ContentService:
         # Only include user_id if it's not None (since we build different queries based on user_id)
         if user_id is not None:
             params["user_id"] = user_id
-            logger.info("Executing query with user_id: %s", user_id)
-        else:
-            logger.info("Executing query without user_id")
 
         result = await session.execute(statement, params)
         return list(result.all())
@@ -262,7 +240,7 @@ class ContentService:
         # Load row with ownership check
         row = await session.get(model, content_id)
         if row is None or getattr(row, "user_id", None) != user_id:
-            raise ResourceNotFoundError(content_type.value, str(content_id))
+            raise NotFoundError(content_type.value, str(content_id))
 
         # Remove any stored files that rely on row attributes before deleting the row.
         if content_type == ContentType.BOOK:

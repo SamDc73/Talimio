@@ -1,25 +1,16 @@
-
-import uuid
-from collections.abc import Callable, Coroutine
-
-from sqlalchemy.ext.asyncio import AsyncSession
-
-
-"""Books Module Facade.
-
-Single entry point for all book-related operations.
-Coordinates internal book services and provides a stable API for other modules.
-Session-bound: uses the injected AsyncSession for all operations.
-"""
+"""Books module facade."""
 
 import hashlib
 import json
 import logging
-from contextlib import suppress
+import uuid
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from fastapi import status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.rag.service import RAGService
 from src.books.models import Book
@@ -32,7 +23,7 @@ from src.books.schemas import (
     BookWithProgress,
 )
 from src.database.session import async_session_maker
-from src.exceptions import ResourceNotFoundError
+from src.exceptions import ConflictError, DomainError, ErrorCategory, ErrorCode, NotFoundError, ValidationError
 from src.storage.factory import get_storage_provider
 
 from .services.book_content_service import BookContentService
@@ -47,7 +38,6 @@ BOOK_RAG_STATUS_PENDING: BookRagStatus = "pending"
 BOOK_RAG_STATUS_PROCESSING: BookRagStatus = "processing"
 BOOK_RAG_STATUS_COMPLETED: BookRagStatus = "completed"
 BOOK_RAG_STATUS_FAILED: BookRagStatus = "failed"
-BOOK_CHAPTERS_ERROR_CODE_NOT_FOUND = "book_not_found"
 BOOK_RAG_CHUNK_COUNT_STATUSES: tuple[BookRagStatus, ...] = (
     BOOK_RAG_STATUS_COMPLETED,
     BOOK_RAG_STATUS_PROCESSING,
@@ -58,6 +48,17 @@ BOOK_RAG_STATUS_MESSAGES: dict[BookRagStatus, str] = {
     BOOK_RAG_STATUS_COMPLETED: "Book is ready! AI chat is now available.",
     BOOK_RAG_STATUS_FAILED: "Processing failed. AI chat is not available, but you can still read the book.",
 }
+
+
+class BooksFacadeInternalError(DomainError):
+    """Raised when book workflows fail with internal processing errors."""
+
+    category = ErrorCategory.INTERNAL
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    default_error_code = ErrorCode.INTERNAL
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail, feature_area="books")
 
 
 def _parse_json_tags(raw_tags: str | None) -> list[str]:
@@ -78,27 +79,53 @@ def _merge_tags(existing_tags: list[str], generated_tags: list[str]) -> list[str
     return list(dict.fromkeys([*existing_tags, *generated_tags]))
 
 
-class BooksFacade:
-    """
-    Single entry point for all book operations.
+def _apply_completed_chapters(chapters: list[dict[str, Any]], completed_chapters: dict[str, bool]) -> None:
+    """Annotate nested table-of-contents items with completion state."""
+    for chapter in chapters:
+        chapter_id = chapter.get("id")
+        if chapter_id is not None:
+            chapter["completed"] = completed_chapters.get(str(chapter_id), False)
 
-    Coordinates internal book services, publishes events, and provides
-    a stable API while sharing the request-scoped session.
-    """
+        children = chapter.get("children")
+        if isinstance(children, list):
+            child_items = [child for child in children if isinstance(child, dict)]
+            _apply_completed_chapters(child_items, completed_chapters)
+
+
+def _find_chapter(chapters: list[BookTocChapterResponse], chapter_id: str) -> BookTocChapterResponse | None:
+    """Return the nested chapter that matches the given id."""
+    for chapter in chapters:
+        if chapter.id == chapter_id:
+            return chapter
+        nested_match = _find_chapter(chapter.children, chapter_id)
+        if nested_match is not None:
+            return nested_match
+    return None
+
+
+class BooksFacade:
+    """Single entry point for all book operations."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._content_service = BookContentService(session)
         self._progress_service = BookProgressService(session)
 
-    async def get_content_with_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
-        """Get book with progress in IntegrityErrora dict structure (parity with other facades)."""
-        try:
-            book_with = await self.get_book(content_id, user_id)
-        except ResourceNotFoundError:
-            return {"error": "Book not found", "success": False}
+    async def _require_owned_book(self, *, book_id: uuid.UUID, user_id: uuid.UUID, operation: str) -> Book:
+        result = await self._session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
+        book = result.scalar_one_or_none()
+        if book is None:
+            logger.warning(
+                "BOOK_ACCESS_DENIED",
+                extra={"user_id": str(user_id), "book_id": str(book_id), "operation": operation},
+            )
+            raise NotFoundError(BOOK_RESOURCE_TYPE, str(book_id))
+        return book
 
-        # Also retrieve unified progress to ensure core fields are present
+    async def get_content_with_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
+        """Get book content with progress for cross-module progress contracts."""
+        book_with = await self.get_book(content_id, user_id)
+
         try:
             progress = await self._progress_service.get_progress(content_id, user_id)
         except (RuntimeError, ValueError):
@@ -106,39 +133,26 @@ class BooksFacade:
 
         return {
             "book": book_with.model_dump(),
-            "progress": (progress or {}),
+            "progress": progress or {},
             "completion_percentage": (progress or {}).get("completion_percentage", 0),
-            "success": True,
         }
 
     async def get_book(self, book_id: uuid.UUID, user_id: uuid.UUID) -> BookWithProgress:
         """Get a single book with progress as a typed response."""
         try:
-            # Ownership-checked book
-            result = await self._session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
-            book = result.scalar_one_or_none()
-
-            if not book:
-                logger.warning(
-                    "BOOK_ACCESS_DENIED",
-                    extra={"user_id": str(user_id), "book_id": str(book_id), "operation": "get_book"},
-                )
-                raise ResourceNotFoundError(BOOK_RESOURCE_TYPE, str(book_id))
-
-            # Recalculate progress using the unified service (ToC-aware)
-            prog = await self._progress_service.get_progress(book_id, user_id)
-            progress = BookResponseBuilder.build_progress_response(prog, book_id) if prog else None
-
+            book = await self._require_owned_book(book_id=book_id, user_id=user_id, operation="get_book")
+            progress_payload = await self._progress_service.get_progress(book_id, user_id)
+            progress = BookResponseBuilder.build_progress_response(progress_payload, book_id) if progress_payload else None
             return BookResponseBuilder.build_book_with_progress(book, progress)
-
-        except ResourceNotFoundError:
+        except NotFoundError:
             raise
-        except (SQLAlchemyError, RuntimeError, TypeError) as e:
+        except (SQLAlchemyError, RuntimeError, TypeError) as error:
             logger.exception(
-                "Error getting book",
-                extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)},
+                "books.get.failed",
+                extra={"user_id": str(user_id), "book_id": str(book_id), "error_type": type(error).__name__},
             )
-            raise
+            message = "Failed to retrieve book"
+            raise BooksFacadeInternalError(message) from error
 
     async def get_paginated_user_books(
         self,
@@ -149,12 +163,7 @@ class BooksFacade:
         tags: list[str] | None = None,
     ) -> BookListResponse:
         """List books for a user with filtering and pagination."""
-        result = await self.get_user_books(user_id, include_progress=True)
-        if not result.get("success"):
-            msg = str(result.get("error", "Failed to get books"))
-            raise RuntimeError(msg)
-
-        books = result.get("books", [])
+        books = await self.get_user_books(user_id, include_progress=True)
 
         if search:
             search_lower = search.lower()
@@ -198,13 +207,16 @@ class BooksFacade:
         spawn_detached_task: Callable[[Coroutine[Any, Any, None]], None] | None = None,
         embed_book_background: Callable[[uuid.UUID], Coroutine[Any, Any, None]] | None = None,
         auto_tag_book_background: Callable[[uuid.UUID, uuid.UUID], Coroutine[Any, Any, None]] | None = None,
-    ) -> dict[str, Any]:
+    ) -> BookResponse:
         """Create a book from uploaded file bytes and metadata payload."""
         file_extension = filename.lower().split(".")[-1]
         storage_key = f"books/{user_id!s}/{filename}"
 
         storage = get_storage_provider()
-        logger.info("Uploading file to storage: %s", storage_key)
+        logger.info(
+            "books.upload.storage.started",
+            extra={"user_id": str(user_id), "file_size_bytes": len(file_content)},
+        )
         await storage.upload(file_content, storage_key)
 
         metadata_service = BookMetadataService()
@@ -212,9 +224,8 @@ class BooksFacade:
             metadata = metadata_service.extract_metadata(file_content, f".{file_extension}")
         except BookMetadataExtractionError as error:
             logger.warning(
-                "Metadata extraction failed for %s; continuing upload with fallback metadata: %s",
-                filename,
-                error,
+                "books.upload.metadata_extraction.failed",
+                extra={"user_id": str(user_id), "error_type": type(error).__name__},
             )
             metadata = BookMetadata(file_type=file_extension)
         logger.info(
@@ -252,26 +263,31 @@ class BooksFacade:
             "table_of_contents": json.dumps(metadata.table_of_contents) if metadata.table_of_contents else None,
         }
 
-        result = await self.upload_book(
-            user_id=user_id,
-            file_path=storage_key,
-            title=final_title,
-            metadata=book_metadata,
-        )
-
-        if not result.get("success"):
-            with suppress(OSError, RuntimeError, ValueError):
+        try:
+            book_response, book_id = await self.upload_book(
+                user_id=user_id,
+                file_path=storage_key,
+                title=final_title,
+                metadata=book_metadata,
+            )
+        except (ConflictError, NotFoundError, ValidationError):
+            try:
                 await storage.delete(storage_key)
-            return {
-                "error": result.get("error", "Failed to create book"),
-                "error_code": result.get("error_code"),
-                "success": False,
-            }
+            except (OSError, RuntimeError, ValueError):
+                logger.exception("books.upload.rollback_file_delete_failed", extra={"user_id": str(user_id), "storage_key": storage_key})
+                raise
+            raise
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
+            try:
+                await storage.delete(storage_key)
+            except (OSError, RuntimeError, ValueError):
+                logger.exception("books.upload.rollback_file_delete_failed", extra={"user_id": str(user_id), "storage_key": storage_key})
+                raise
+            logger.exception("books.upload.failed", extra={"user_id": str(user_id), "title": final_title})
+            raise
 
-        book_id = result.get("book_id")
         if (
-            book_id
-            and spawn_detached_task is not None
+            spawn_detached_task is not None
             and embed_book_background is not None
             and auto_tag_book_background is not None
         ):
@@ -279,11 +295,7 @@ class BooksFacade:
             spawn_detached_task(embed_book_background(book_id))
             spawn_detached_task(auto_tag_book_background(book_id, user_id))
 
-        book_response = result.get("book")
-        if not isinstance(book_response, BookResponse):
-            return {"error": "Failed to build book response", "success": False}
-
-        return {"book": book_response, "success": True}
+        return book_response
 
     async def embed_book_background(self, book_id: uuid.UUID) -> None:
         """Process embeddings for a book in a dedicated background session."""
@@ -342,170 +354,135 @@ class BooksFacade:
         file_path: str,
         title: str,
         metadata: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Upload book file to user's library."""
+    ) -> tuple[BookResponse, uuid.UUID]:
+        """Upload a book file to the user's library and return the created response."""
         try:
-            # Build book data combining provided metadata and required fields
             data: dict[str, Any] = {**(metadata or {})}
             data["title"] = title or data.get("title")
             data["file_path"] = file_path
-            # Ensure RAG status set to pending for processing pipeline
             data.setdefault("rag_status", "pending")
 
-            # Create the book record via content service (prefer request session when provided)
             book = await self._content_service.create_book(data, user_id)
-
             book_id = getattr(book, "id", None)
-            total_pages = getattr(book, "total_pages", 0)
+            if not isinstance(book_id, uuid.UUID):
+                message = "Uploaded book did not receive an ID"
+                raise TypeError(message)
 
-            # Initialize progress tracking (non-fatal on failure)
+            total_pages = getattr(book, "total_pages", 0)
             try:
-                if book_id:
-                    await self._progress_service.initialize_progress(book_id, user_id, total_pages=total_pages)
-            except (RuntimeError, TypeError, ValueError) as e:
+                await self._progress_service.initialize_progress(book_id, user_id, total_pages=total_pages)
+            except (RuntimeError, TypeError, ValueError) as error:
                 logger.warning(
                     "Failed to initialize progress tracking",
-                    extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)},
+                    extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(error)},
                 )
 
-            # Reload from DB so we return a stable snapshot even if other operations used rollbacks/commits.
-            if book_id:
-                refreshed_book = await self._session.get(Book, book_id, populate_existing=True)
-                if refreshed_book:
-                    book = refreshed_book
+            refreshed_book = await self._session.get(Book, book_id, populate_existing=True)
+            if refreshed_book is not None:
+                book = refreshed_book
 
-            return {
-                "book": BookResponseBuilder.build_book_response(book),
-                "book_id": book_id,
-                "success": True,
-            }
-
-        except IntegrityError as e:
-            # Most common conflict is a duplicate file in the same user's library.
-            # Keep this sanitized so we don't leak SQL internals to clients.
+            return BookResponseBuilder.build_book_response(book), book_id
+        except ConflictError:
+            raise
+        except IntegrityError as error:
             constraint_name: str | None = None
-            orig = getattr(e, "orig", None)
-            diag = getattr(orig, "diag", None) if orig is not None else None
+            original_error = getattr(error, "orig", None)
+            diag = getattr(original_error, "diag", None) if original_error is not None else None
             if diag is not None:
                 constraint_name = getattr(diag, "constraint_name", None)
 
             if constraint_name == "books_user_id_file_hash_key":
-                logger.info(
-                    "BOOK_UPLOAD_DUPLICATE_FILE",
-                    extra={"user_id": str(user_id), "title": title},
-                )
-                return {
-                    "error": "Duplicate file upload",
-                    "error_code": "duplicate_file",
-                    "success": False,
-                }
+                logger.info("BOOK_UPLOAD_DUPLICATE_FILE", extra={"user_id": str(user_id), "title": title})
+                message = "This file already exists in your library"
+                raise ConflictError(message) from error
 
-            logger.exception("Book upload failed due to integrity error", extra={"user_id": str(user_id)})
-            return {"error": "Failed to upload book", "success": False}
-
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
-            logger.exception("Error uploading book", extra={"user_id": str(user_id), "title": title, "error": str(e)})
-            return {"error": f"Failed to upload book: {e!s}", "success": False}
+            logger.exception("books.upload.integrity_error", extra={"user_id": str(user_id)})
+            raise
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
+            logger.exception("books.upload.failed", extra={"user_id": str(user_id), "title": title})
+            raise
 
     async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update book reading progress."""
+        await self._require_owned_book(book_id=content_id, user_id=user_id, operation="update_progress")
         try:
-            # Update progress using the progress tracker
             updated_progress = await self._progress_service.update_progress(content_id, user_id, progress_data)
-
-            if "error" in updated_progress:
-                return {"error": updated_progress["error"], "success": False}
-
-            return {"progress": updated_progress, "success": True}
-
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
+        except NotFoundError:
+            raise
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
             logger.exception(
                 "Error updating progress",
-                extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(e)},
+                extra={"user_id": str(user_id), "book_id": str(content_id), "error": str(error)},
             )
-            return {"error": f"Failed to update progress: {e!s}", "success": False}
+            raise
 
-    async def update_book(self, book_id: uuid.UUID, user_id: uuid.UUID, update_data: dict[str, Any]) -> dict[str, Any]:
+        return {"progress": updated_progress}
+
+    async def update_book(self, book_id: uuid.UUID, user_id: uuid.UUID, update_data: dict[str, Any]) -> BookResponse:
         """Update book metadata."""
         try:
-            # Update through content service which handles tags and reprocessing
             book = await self._content_service.update_book(book_id, update_data, user_id)
-
-            return {"book": book, "success": True}
-
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
+            return BookResponse.model_validate(book)
+        except NotFoundError:
+            raise
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
             logger.exception(
-                "Error updating book", extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)}
+                "Error updating book",
+                extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(error)},
             )
-            return {"error": "Failed to update book", "success": False}
+            raise
 
-    async def get_user_books(self, user_id: uuid.UUID, include_progress: bool = True) -> dict[str, Any]:
-        """Get all books for user. Optionally includes progress information."""
+    async def get_user_books(self, user_id: uuid.UUID, include_progress: bool = True) -> list[dict[str, Any]]:
+        """Get all books for a user."""
         try:
-            # Fetch books for this user
             result = await self._session.execute(
                 select(Book).where(Book.user_id == user_id).order_by(Book.created_at.desc())
             )
             books = list(result.scalars().all())
 
-            # Convert to dict format and optionally add progress
             book_dicts: list[dict[str, Any]] = []
             for book in books:
                 book_response = BookResponse.model_validate(book)
-                bd = book_response.model_dump()
+                book_payload = book_response.model_dump()
                 if include_progress:
-                    progress = await self._progress_service.get_progress(bd["id"], user_id)
-                    bd["progress"] = progress
-                book_dicts.append(bd)
+                    progress = await self._progress_service.get_progress(book_payload["id"], user_id)
+                    book_payload["progress"] = progress
+                book_dicts.append(book_payload)
 
-            return {"books": book_dicts, "success": True}
+            return book_dicts
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
+            logger.exception("books.list.failed", extra={"user_id": str(user_id)})
+            raise
 
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
-            logger.exception("Error getting books", extra={"user_id": str(user_id), "error": str(e)})
-            return {"error": f"Failed to get books: {e!s}", "success": False}
-
-    async def get_book_chapters(self, book_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
-        """Get book chapters/table of contents if available."""
+    async def get_book_chapters(self, book_id: uuid.UUID, user_id: uuid.UUID) -> list[BookTocChapterResponse]:
+        """Get book chapters or table-of-contents items for a book."""
         try:
-            # Fetch book to read table_of_contents JSON
-            result = await self._session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
-            book = result.scalar_one_or_none()
-            if not book:
-                logger.warning(
-                    "BOOK_ACCESS_DENIED",
-                    extra={"user_id": str(user_id), "book_id": str(book_id), "operation": "get_chapters"},
-                )
-                return {
-                    "error": f"Book {book_id} not found",
-                    "error_code": BOOK_CHAPTERS_ERROR_CODE_NOT_FOUND,
-                    "success": False,
-                }
+            book = await self._require_owned_book(book_id=book_id, user_id=user_id, operation="get_chapters")
 
-            chapters: list[dict] = []
-            table_of_contents = book.table_of_contents
-            if isinstance(table_of_contents, str) and table_of_contents:
+            chapters: list[dict[str, Any]] = []
+            if isinstance(book.table_of_contents, str) and book.table_of_contents:
                 try:
-                    toc = json.loads(table_of_contents)
-                    if isinstance(toc, list):
-                        chapters = toc
+                    parsed_toc = json.loads(book.table_of_contents)
+                    if isinstance(parsed_toc, list):
+                        chapters = [chapter for chapter in parsed_toc if isinstance(chapter, dict)]
                 except (json.JSONDecodeError, TypeError):
                     chapters = []
 
-            # Add progress information for each chapter
             if chapters:
                 progress = await self._progress_service.get_progress(book_id, user_id)
-                completed_chapters = progress.get("completed_chapters", {})
-                for chapter in chapters:
-                    chapter["completed"] = completed_chapters.get(chapter.get("id"), False)
+                completed_chapters = progress.get("toc_progress", {})
+                if isinstance(completed_chapters, dict):
+                    _apply_completed_chapters(chapters, completed_chapters)
 
-            return {"chapters": chapters or [], "success": True}
-
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
+            return [BookTocChapterResponse.model_validate(chapter) for chapter in chapters]
+        except NotFoundError:
+            raise
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
             logger.exception(
                 "Error getting chapters",
-                extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(e)},
+                extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(error)},
             )
-            return {"error": "Failed to get chapters", "success": False}
+            raise
 
     async def update_book_chapter_status(
         self,
@@ -516,33 +493,19 @@ class BooksFacade:
     ) -> BookTocChapterResponse:
         """Update chapter status and return canonical chapter payload."""
         completed = status == "completed"
-        result = await self.mark_chapter_complete(book_id, user_id, chapter_id, completed)
-        if not result.get("success"):
-            msg = str(result.get("error", "Failed to update chapter status"))
-            raise RuntimeError(msg)
+        await self.mark_chapter_complete(book_id, user_id, chapter_id, completed)
 
-        chapters_result = await self.get_book_chapters(book_id, user_id)
-        if not chapters_result.get("success"):
-            error_code = chapters_result.get("error_code")
-            if error_code == BOOK_CHAPTERS_ERROR_CODE_NOT_FOUND:
-                raise ResourceNotFoundError(BOOK_RESOURCE_TYPE, str(book_id))
-            msg = str(chapters_result.get("error", "Failed to load updated chapter data"))
-            raise RuntimeError(msg)
+        chapters = await self.get_book_chapters(book_id, user_id)
+        chapter = _find_chapter(chapters, chapter_id)
+        if chapter is not None:
+            return chapter
 
-        raw_chapters = chapters_result.get("chapters", [])
-        for raw_chapter in raw_chapters:
-            if str(raw_chapter.get("id", "")) == chapter_id:
-                return BookTocChapterResponse.model_validate(raw_chapter)
-
-        msg = f"Updated chapter {chapter_id} was not found in book {book_id}"
-        raise RuntimeError(msg)
+        message = f"Updated chapter {chapter_id} was not found in book {book_id}"
+        raise NotFoundError(message=message)
 
     async def get_book_rag_status_payload(self, book_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
         """Get RAG status payload for a book owned by a user."""
-        result = await self._session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
-        book = result.scalar_one_or_none()
-        if not book:
-            raise ResourceNotFoundError(BOOK_RESOURCE_TYPE, str(book_id))
+        book = await self._require_owned_book(book_id=book_id, user_id=user_id, operation="get_rag_status")
 
         chunk_count = None
         if book.rag_status in BOOK_RAG_CHUNK_COUNT_STATUSES:
@@ -569,20 +532,26 @@ class BooksFacade:
         }
 
     async def mark_chapter_complete(
-        self, book_id: uuid.UUID, user_id: uuid.UUID, chapter_id: str, completed: bool = True
-    ) -> dict[str, Any]:
+        self,
+        book_id: uuid.UUID,
+        user_id: uuid.UUID,
+        chapter_id: str,
+        completed: bool = True,
+    ) -> None:
         """Mark a book chapter as completed."""
+        await self._require_owned_book(book_id=book_id, user_id=user_id, operation="mark_chapter_complete")
         try:
             await self._progress_service.mark_chapter_complete(book_id, user_id, chapter_id, completed)
-            return {"result": True, "success": True}
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as e:
+        except NotFoundError:
+            raise
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
             logger.exception(
                 "Error marking chapter complete",
                 extra={
                     "user_id": str(user_id),
                     "book_id": str(book_id),
                     "chapter_id": chapter_id,
-                    "error": str(e),
+                    "error": str(error),
                 },
             )
-            return {"error": "Failed to mark chapter complete", "success": False}
+            raise

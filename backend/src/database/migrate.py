@@ -1,6 +1,5 @@
 """Lightweight SQL migration runner for PostgreSQL session poolers."""
 
-
 import logging
 from collections.abc import Iterable
 from pathlib import Path
@@ -33,14 +32,8 @@ def _read_sql(path: Path) -> str:
 
 
 def _interpolate_env(sql: str) -> str:
-    """Replace known ${VAR} placeholders in SQL with env values.
+    """Replace known ${VAR} placeholders in SQL with env values."""
 
-    Currently supports:
-    - ${RAG_EMBEDDING_OUTPUT_DIM}
-    - ${MEMORY_EMBEDDING_OUTPUT_DIM}
-
-    Falls back to safe defaults if the values are missing or invalid.
-    """
     def _resolve_int(name: str, default: int) -> int:
         raw_value = env(name)
         if raw_value in (None, ""):
@@ -48,19 +41,27 @@ def _interpolate_env(sql: str) -> str:
         try:
             return int(raw_value)
         except (TypeError, ValueError):
-            logger.warning("Invalid %s=%s; using default %s", name, raw_value, default)
+            logger.warning("migration.placeholder.invalid", extra={"placeholder_name": name, "raw_value": raw_value, "default": default})
             return default
 
     rag_dim = _resolve_int("RAG_EMBEDDING_OUTPUT_DIM", _DEFAULT_RAG_EMBEDDING_OUTPUT_DIM)
     mem_dim = _resolve_int("MEMORY_EMBEDDING_OUTPUT_DIM", _DEFAULT_MEMORY_EMBEDDING_OUTPUT_DIM)
 
     return sql.replace("${RAG_EMBEDDING_OUTPUT_DIM}", str(rag_dim)).replace(
-        "${MEMORY_EMBEDDING_OUTPUT_DIM}", str(mem_dim)
+        "${MEMORY_EMBEDDING_OUTPUT_DIM}",
+        str(mem_dim),
     )
 
 
 def _sorted_sql_files(directory: Path) -> list[Path]:
     return sorted(file for file in directory.iterdir() if file.suffix == ".sql")
+
+
+def _log_migration_check_skipped(*, reason: str, migrations_dir: Path | None = None) -> None:
+    extra: dict[str, str] = {"reason": reason}
+    if migrations_dir is not None:
+        extra["migrations_dir"] = str(migrations_dir)
+    logger.debug("migration.check.skipped", extra=extra)
 
 
 async def _ensure_schema_table(conn: AsyncConnection) -> None:
@@ -127,7 +128,8 @@ async def _apply_pending_migrations(
     migration_files: list[Path],
     applied: set[str],
     verbose: bool,
-) -> None:
+) -> int:
+    applied_count = 0
     for path in migration_files:
         if path.name in applied:
             continue
@@ -136,54 +138,50 @@ async def _apply_pending_migrations(
         autocommit = _is_autocommit(sql_content)
         await _execute_migration_sql(engine=engine, conn=conn, sql_content=sql_content, autocommit=autocommit)
         await _record_applied_migration(conn, filename=path.name)
+        applied_count += 1
 
         if verbose:
-            logger.info("Applied migration %s (autocommit=%s)", path.name, autocommit)
+            logger.info("migration.applied", extra={"migration_filename": path.name, "autocommit": autocommit})
+
+    return applied_count
 
 
-async def apply_migrations(db_engine: AsyncEngine | None = None) -> None:
-    """Apply pending SQL migrations in order.
-
-    Respects MIGRATIONS_AUTO_APPLY (default true), MIGRATIONS_DIR, and MIGRATIONS_VERBOSE.
-    Files starting with "-- autocommit" run in AUTOCOMMIT mode (needed for CONCURRENTLY indexes).
-    """
+async def apply_migrations(db_engine: AsyncEngine | None = None) -> int:
+    """Apply pending SQL migrations in order and return the number applied."""
     engine = db_engine or default_engine
 
     settings = get_settings()
     if not settings.MIGRATIONS_AUTO_APPLY:
-        logger.info("Migrations auto-apply disabled; skipping")
-        return
+        _log_migration_check_skipped(reason="auto_apply_disabled")
+        return 0
 
     migrations_dir = Path(settings.MIGRATIONS_DIR) if settings.MIGRATIONS_DIR else _migrations_dir()
     verbose = settings.MIGRATIONS_VERBOSE
 
     if not migrations_dir.exists():
-        logger.warning("Migrations directory %s does not exist; skipping", migrations_dir)
-        return
+        _log_migration_check_skipped(reason="directory_missing", migrations_dir=migrations_dir)
+        return 0
 
     migration_files = _sorted_sql_files(migrations_dir)
     if not migration_files:
-        logger.info("No migration files found in %s", migrations_dir)
-        return
+        _log_migration_check_skipped(reason="no_files", migrations_dir=migrations_dir)
+        return 0
 
-    # 1) Ensure schema_migrations exists in a dedicated transaction
     async with engine.connect() as conn:
         await _ensure_schema_table(conn)
         await conn.commit()
 
-    # 2) Acquire advisory lock using an autocommit connection
     async with engine.execution_options(isolation_level="AUTOCOMMIT").connect() as lock_conn:
         locked = await _acquire_lock(lock_conn)
         if not locked:
-            logger.info("Another migration process is running; skipping")
-            return
+            _log_migration_check_skipped(reason="lock_unavailable")
+            return 0
 
         try:
-            # 3) Use a fresh connection for applying migrations
             async with engine.connect() as conn:
                 applied = set(await _get_applied(conn))
                 await conn.rollback()
-                await _apply_pending_migrations(
+                return await _apply_pending_migrations(
                     engine=engine,
                     conn=conn,
                     migration_files=migration_files,
@@ -196,7 +194,7 @@ async def apply_migrations(db_engine: AsyncEngine | None = None) -> None:
 
 async def main() -> None:
     """Run migrations when executed as a script."""
-    await apply_migrations()
+    _ = await apply_migrations()
 
 
 if __name__ == "__main__":

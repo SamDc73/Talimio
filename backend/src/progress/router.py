@@ -1,7 +1,6 @@
 
 """Progress tracking API endpoints."""
 
-import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException, Response, status
@@ -18,8 +17,6 @@ from .models import (
 )
 from .service import ProgressService
 
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/progress", tags=["progress"])
 
@@ -129,16 +126,7 @@ async def update_progress(
         )
 
     # Update progress
-    result = await service.update_progress(auth.user_id, content_id, content_type, progress)
-
-    logger.info(
-        "Updated progress for user %s, content %s: %s%%",
-        auth.user_id,
-        content_id,
-        progress.progress_percentage,
-    )
-
-    return result
+    return await service.update_progress(auth.user_id, content_id, content_type, progress)
 
 
 @router.delete("/{content_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -155,5 +143,3 @@ async def delete_progress(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Progress for content {content_id} not found",
         )
-
-    logger.info("Deleted progress for user %s, content %s", auth.user_id, content_id)

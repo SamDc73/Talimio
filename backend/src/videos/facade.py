@@ -25,9 +25,6 @@ from .services.video_progress_service import VideoProgressService
 
 
 logger = logging.getLogger(__name__)
-VIDEO_FACADE_ERROR_CODE_NOT_FOUND = "video_not_found"
-VIDEO_FACADE_ERROR_CODE_GET_PROGRESS_FAILED = "video_get_progress_failed"
-VIDEO_FACADE_ERROR_CODE_UPDATE_PROGRESS_FAILED = "video_update_progress_failed"
 
 
 class VideosFacade:
@@ -40,9 +37,8 @@ class VideosFacade:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
-        # Internal services - not exposed to outside modules
         self._video_service = VideoService()
-        self._progress_service = VideoProgressService(session)  # Implements ProgressTracker protocol
+        self._progress_service = VideoProgressService(session)
 
     async def get_content_with_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
         """
@@ -147,45 +143,23 @@ class VideosFacade:
         Coordinates video service and progress service to provide comprehensive data.
         """
         try:
-            # Get video information - need to pass user_id as well
             video_response = await self._video_service.get_video(self._session, video_id, user_id)
-            # Convert response to dict
-            video = video_response.model_dump() if video_response else None
-
-            if not video:
-                return {
-                    "error": "Video not found",
-                    "error_code": VIDEO_FACADE_ERROR_CODE_NOT_FOUND,
-                    "success": False,
-                }
-
-            # Get progress information
+            video = video_response.model_dump()
             progress = await self._progress_service.get_progress(video_id, user_id)
-
-            # Build response
-            return {
-                "video": video,
-                "progress": progress,
-                "completion_percentage": progress.get("completion_percentage", 0),
-                "last_position": progress.get("last_position", 0),
-                "total_duration": video.get("duration", 0),
-                "playback_speed": progress.get("playback_speed", 1.0),
-                "success": True,
-            }
-
         except VideoNotFoundError:
-            return {
-                "error": "Video not found",
-                "error_code": VIDEO_FACADE_ERROR_CODE_NOT_FOUND,
-                "success": False,
-            }
-        except (ValueError, RuntimeError, SQLAlchemyError, TypeError) as error:
-            logger.exception("Error getting video %s for user %s: %s", video_id, user_id, error)
-            return {
-                "error": "Failed to get video with progress",
-                "error_code": VIDEO_FACADE_ERROR_CODE_GET_PROGRESS_FAILED,
-                "success": False,
-            }
+            raise
+        except (ValueError, RuntimeError, SQLAlchemyError, TypeError):
+            logger.exception("videos.get.failed", extra={"video_id": str(video_id), "user_id": str(user_id)})
+            raise
+
+        return {
+            "video": video,
+            "progress": progress,
+            "completion_percentage": progress.get("completion_percentage", 0),
+            "last_position": progress.get("last_position", 0),
+            "total_duration": video.get("duration", 0),
+            "playback_speed": progress.get("playback_speed", 1.0),
+        }
 
     async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
         """Update video watching progress via ContentFacade contract."""
@@ -200,28 +174,9 @@ class VideosFacade:
         Handles progress updates, position tracking, and completion detection.
         """
         try:
-            # Update progress using the progress tracker
             updated_progress = await self._progress_service.update_progress(video_id, user_id, progress_data)
+        except (ValueError, RuntimeError, SQLAlchemyError, TypeError):
+            logger.exception("videos.progress.update_failed", extra={"video_id": str(video_id)})
+            raise
 
-            if "error" in updated_progress:
-                if updated_progress["error"] == "Video not found":
-                    return {
-                        "error": "Video not found",
-                        "error_code": VIDEO_FACADE_ERROR_CODE_NOT_FOUND,
-                        "success": False,
-                    }
-                return {
-                    "error": "Failed to update video progress",
-                    "error_code": VIDEO_FACADE_ERROR_CODE_UPDATE_PROGRESS_FAILED,
-                    "success": False,
-                }
-
-            return {"progress": updated_progress, "success": True}
-
-        except (ValueError, RuntimeError, SQLAlchemyError, TypeError) as error:
-            logger.exception("Error updating progress for video %s: %s", video_id, error)
-            return {
-                "error": "Failed to update video progress",
-                "error_code": VIDEO_FACADE_ERROR_CODE_UPDATE_PROGRESS_FAILED,
-                "success": False,
-            }
+        return {"progress": updated_progress}

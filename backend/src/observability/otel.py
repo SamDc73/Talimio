@@ -1,7 +1,6 @@
 """Runtime setup for OpenTelemetry tracing and metrics."""
 
-import logging
-
+import structlog
 from fastapi import FastAPI
 from opentelemetry import metrics, trace
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
@@ -21,7 +20,7 @@ from .http import install_request_context_middleware
 from .resources import build_resource, parse_otlp_headers, resolve_signal_endpoint
 
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def configure_observability(app: FastAPI, *, settings: Settings, engine: AsyncEngine) -> None:
@@ -29,7 +28,7 @@ def configure_observability(app: FastAPI, *, settings: Settings, engine: AsyncEn
     install_request_context_middleware(app, settings)
 
     if not settings.otel_enabled:
-        logger.info("OpenTelemetry is disabled")
+        logger.debug("observability.otel.disabled")
         return
 
     headers = parse_otlp_headers(settings.OTEL_EXPORTER_OTLP_HEADERS)
@@ -45,7 +44,7 @@ def configure_observability(app: FastAPI, *, settings: Settings, engine: AsyncEn
     )
 
     if not traces_endpoint:
-        logger.warning("OpenTelemetry tracing is enabled but no traces endpoint is configured")
+        logger.warning("observability.otel.tracing_endpoint_missing")
         return
 
     resource = build_resource(settings)
@@ -93,7 +92,11 @@ def _configure_traces(
     )
     trace.set_tracer_provider(tracer_provider)
     app.state.otel_traces_configured = True
-    logger.info("OpenTelemetry tracing initialized", extra={"otlp_traces_endpoint": endpoint})
+    logger.info(
+        "observability.otel.tracing.initialized",
+        event_name="observability.otel.tracing.initialized",
+        otlp_traces_endpoint=endpoint,
+    )
 
 
 def _configure_metrics(
@@ -115,4 +118,8 @@ def _configure_metrics(
     meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
     metrics.set_meter_provider(meter_provider)
     app.state.otel_metrics_configured = True
-    logger.info("OpenTelemetry metrics initialized", extra={"otlp_metrics_endpoint": endpoint})
+    logger.info(
+        "observability.otel.metrics.initialized",
+        event_name="observability.otel.metrics.initialized",
+        otlp_metrics_endpoint=endpoint,
+    )

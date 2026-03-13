@@ -100,7 +100,6 @@ _COMPLETION_RUNTIME_ERROR_TYPES = (
     *_LITELLM_PROVIDER_ERROR_TYPES,
 )
 
-_GET_COMPLETION_ERROR_TYPES = (AIRuntimeError, *_COMPLETION_RUNTIME_ERROR_TYPES)
 _PARSE_COERCION_ERROR_TYPES = (TypeError, ValueError, ValidationError)
 _TOOL_ORCHESTRATION_ERROR_TYPES = (
     AIRuntimeError,
@@ -315,12 +314,21 @@ class LLMClient:
             return [messages[0], tool_message, *messages[1:]]
         return [tool_message, *messages]
 
+    def _handle_background_task_done(self, task: asyncio.Task[Any]) -> None:
+        self._background_tasks.discard(task)
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is None:
+            return
+        self._logger.error("ai.background_task.failed", exc_info=(type(error), error, error.__traceback__))
+
     def _schedule_memory_save(self, user_id: uuid.UUID | None, messages: list[dict[str, Any]], response: Any) -> None:
         if user_id is None:
             return
         task = asyncio.create_task(self._save_conversation_to_memory(user_id, messages, response))
         self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
+        task.add_done_callback(self._handle_background_task_done)
 
     async def complete(
         self,
@@ -436,7 +444,9 @@ class LLMClient:
 
         except ValueError:
             raise
-        except _GET_COMPLETION_ERROR_TYPES as error:
+        except AIRuntimeError:
+            raise
+        except _COMPLETION_RUNTIME_ERROR_TYPES as error:
             mapped = self._map_runtime_error(error, default_message="Completion failed")
             self._log_runtime_error(mapped, operation="Completion")
             raise mapped from error
@@ -480,10 +490,7 @@ class LLMClient:
 
             response_format: dict[str, Any] | None = None
             if request.response_model is not None:
-                should_enforce_provider_schema = (
-                    effective_tool_choice in (None, "none")
-                    or not request.tool_schemas
-                )
+                should_enforce_provider_schema = effective_tool_choice in (None, "none") or not request.tool_schemas
                 if should_enforce_provider_schema:
                     response_format = self._build_response_format(request.response_model)
 
@@ -607,7 +614,7 @@ class LLMClient:
         try:
             built = litellm.stream_chunk_builder(chunks, messages=conversation)
         except litellm.APIError:
-            self._logger.debug("stream_chunk_builder failed; continuing without rebuilt message", exc_info=True)
+            self._logger.debug("ai.stream.chunk_builder.failed", exc_info=True)
             return None
         return self._extract_first_choice_message(built)
 
@@ -931,16 +938,6 @@ class LLMClient:
                 continue
             formatted.append(None)
             pending.append((idx, tool_call, args_dict, target))
-            self._logger.info(
-                "Queued MCP tool call",
-                extra={
-                    "mcp_server": target[0],
-                    "mcp_tool": target[1],
-                    "encoded_tool": tool_call.function.name,
-                    "user_id": str(user_id),
-                    "tool_call_id": getattr(tool_call, "id", None),
-                },
-            )
         if pending:
             try:
                 # Load config once, then run all tool calls concurrently without DB sessions
@@ -967,30 +964,18 @@ class LLMClient:
                 if isinstance(result, Exception):
                     content = f"Error: {result!s}"
                     self._logger.error(
-                        "MCP tool %s failed: %s",
-                        tool_call.function.name,
-                        result,
+                        "ai.mcp_tool.failed",
                         extra={
                             "mcp_server": target[0],
                             "mcp_tool": target[1],
                             "encoded_tool": tool_call.function.name,
                             "user_id": str(user_id),
                             "tool_call_id": getattr(tool_call, "id", None),
+                            "error": str(result),
                         },
                     )
                 else:
                     content = self._format_tool_result(result)
-                    self._logger.info(
-                        "MCP tool %s succeeded",
-                        tool_call.function.name,
-                        extra={
-                            "mcp_server": target[0],
-                            "mcp_tool": target[1],
-                            "encoded_tool": tool_call.function.name,
-                            "user_id": str(user_id),
-                            "tool_call_id": getattr(tool_call, "id", None),
-                        },
-                    )
                 formatted[idx] = (tool_call, content)
         return [entry for entry in formatted if entry is not None]
 

@@ -10,11 +10,11 @@ from src.courses.schemas import CourseResponse
 
 import logging
 
-from fastapi import HTTPException, status
 from sqlalchemy import func, select
 
 from src.courses.models import Course, Lesson
 from src.courses.services.course_response_builder import CourseResponseBuilder
+from src.exceptions import NotFoundError
 
 
 class CourseQueryService:
@@ -32,7 +32,8 @@ class CourseQueryService:
         course = course_result.scalar_one_or_none()
 
         if not course:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+            resource_type = "course"
+            raise NotFoundError(resource_type, str(course_id), feature_area="courses")
 
         lessons_query = (
             select(Lesson)

@@ -71,8 +71,8 @@ class BookProcessor:
                 "content_preview": combined_preview,
             }
 
-        except (OSError, RuntimeError, TypeError, ValueError) as e:
-            logger.exception("Error extracting book content for tagging: %s", e)
+        except (OSError, RuntimeError, TypeError, ValueError):
+            logger.exception("tagging.book.extract_failed")
             return {
                 "title": book.title,
                 "author": book.author,
@@ -122,7 +122,7 @@ class BookProcessor:
                             content_parts.insert(0, f"Table of Contents:\n{toc_text}\n")
             except (AttributeError, TypeError):
                 # get_toc() method might not be available in some versions
-                logger.debug("get_toc() method not available for this PDF")
+                logger.debug("tagging.book.pdf.get_toc.unavailable")
 
             pdf_document.close()
 
@@ -288,8 +288,8 @@ async def process_book_for_tagging(
         processor = BookProcessor(session)
         return await processor.extract_content_for_tagging(book, file_content, file_extension)
 
-    except StorageError as error:
-        logger.exception("Error downloading or processing book file: %s", error)
+    except StorageError:
+        logger.exception("tagging.book.file_process_failed")
         # Return basic info from database as fallback
         return {
             "title": book.title,

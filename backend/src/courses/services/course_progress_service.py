@@ -19,6 +19,7 @@ from typing import Any
 from sqlalchemy import and_, func, select
 
 from src.courses.models import Course, CourseConcept, Lesson, UserConceptState
+from src.exceptions import NotFoundError
 from src.progress.models import ProgressUpdate
 from src.progress.protocols import ProgressTracker
 from src.progress.service import ProgressService
@@ -180,7 +181,8 @@ class CourseProgressService(ProgressTracker):
             )
             if not course:
                 logger.error("Course %s not found", content_id)
-                return {"error": "Course not found"}
+                resource_type = "course"
+                raise NotFoundError(resource_type, str(content_id))
 
             # Prepare metadata with existing data
             metadata = current_progress.metadata if current_progress else {}
@@ -392,7 +394,6 @@ class CourseProgressService(ProgressTracker):
 
         completed_count = len(completed_lessons)
         percentage = (completed_count / total_lessons) * 100
-        logger.info("📚 Course progress: %s/%s lessons = %.1f%%", completed_count, total_lessons, percentage)
         return min(round(percentage, 2), 100.0)
 
     def _update_learning_patterns(self, metadata: dict, _lesson_id: str, quiz_results: dict) -> None:

@@ -9,15 +9,13 @@ import httpx
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.exc import SQLAlchemyError
 
 from src.auth import CurrentAuth
 from src.books.models import Book
-from src.exceptions import ResourceNotFoundError
+from src.exceptions import ValidationError
 from src.storage.factory import get_storage_provider
 
-# Import the facade
-from .facade import BOOK_CHAPTERS_ERROR_CODE_NOT_FOUND, BooksFacade
+from .facade import BooksFacade
 from .schemas import (
     BookChapterStatusUpdate,
     BookListResponse,
@@ -38,26 +36,35 @@ _DETACHED_TASKS: set[asyncio.Task[Any]] = set()
 router = APIRouter(prefix="/api/v1/books", tags=["books"])
 
 
+def _handle_detached_task_done(task: asyncio.Task[Any]) -> None:
+    _DETACHED_TASKS.discard(task)
+    if task.cancelled():
+        return
+    error = task.exception()
+    if error is None:
+        return
+    logger.error("books.background_task.failed", exc_info=(type(error), error, error.__traceback__))
+
+
 def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
     """Run background work outside FastAPI response-bound BackgroundTasks."""
     task = asyncio.create_task(coro)
     _DETACHED_TASKS.add(task)
-    task.add_done_callback(_DETACHED_TASKS.discard)
+    task.add_done_callback(_handle_detached_task_done)
 
 
-def _build_progress_dict(progress_data: BookProgressUpdate) -> dict:
+def _build_progress_dict(progress_data: BookProgressUpdate) -> dict[str, Any]:
     """Build progress dictionary from update request."""
-    progress_dict = {}
+    progress_dict: dict[str, Any] = {}
 
     if (
         progress_data.total_pages is not None
         and progress_data.current_page is not None
         and progress_data.current_page > progress_data.total_pages
     ):
-        msg = "current_page cannot exceed total_pages"
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=msg)
+        message = "current_page cannot exceed total_pages"
+        raise ValidationError(message)
 
-    # Map current_page to page for internal use
     if progress_data.current_page is not None:
         progress_dict["page"] = progress_data.current_page
 
@@ -94,34 +101,31 @@ async def list_books(
     tags: Annotated[list[str] | None, Query(description="Filter by tags")] = None,
 ) -> BookListResponse:
     """List all books with pagination and optional filtering."""
-    try:
-        facade = BooksFacade(auth.session)
-        return await facade.get_paginated_user_books(
-            user_id=auth.user_id,
-            page=page,
-            limit=limit,
-            search=search,
-            tags=tags,
-        )
-    except HTTPException:
-        raise
-    except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
-        logger.exception("Error listing books: %s", error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list books") from error
+    facade = BooksFacade(auth.session)
+    return await facade.get_paginated_user_books(
+        user_id=auth.user_id,
+        page=page,
+        limit=limit,
+        search=search,
+        tags=tags,
+    )
 
 
 @router.get("/{book_id}")
 async def get_book(book_id: uuid.UUID, auth: CurrentAuth) -> BookWithProgress:
     """Get book details with progress information."""
+    facade = BooksFacade(auth.session)
     try:
-        facade = BooksFacade(auth.session)
-        # Facade returns a fully built BookWithProgress
         return await facade.get_book(book_id, auth.user_id)
-    except ResourceNotFoundError as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
-    except (SQLAlchemyError, RuntimeError, TypeError) as error:
-        logger.exception("Error getting book %s: %s", book_id, error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve book") from error
+    except (RuntimeError, TypeError, ValueError) as error:
+        logger.exception(
+            "books.get.runtime_error",
+            extra={"book_id": str(book_id), "error_type": type(error).__name__},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve book",
+        ) from error
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -140,94 +144,53 @@ async def create_book(
 ) -> BookResponse:
     """Add a new book (PDF, EPUB)."""
     try:
-        # Parse tags from JSON string
-        try:
-            tags_list = json.loads(tags) if tags else []
-        except json.JSONDecodeError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid tags format. Expected JSON array.",
-            ) from None
+        tags_list = json.loads(tags) if tags else []
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid tags format. Expected JSON array.",
+        ) from None
 
-        # Determine file type from filename
-        if not file.filename:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No filename provided",
-            )
-
-        file_extension = (file.filename or "").lower().split(".")[-1]
-        if file_extension not in {"pdf", "epub"}:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only PDF and EPUB files are supported",
-            )
-
-        file_content = await file.read()
-        facade = BooksFacade(auth.session)
-        result = await facade.create_book_from_upload(
-            user_id=auth.user_id,
-            filename=file.filename,
-            file_content=file_content,
-            title=title,
-            author=author,
-            subtitle=subtitle,
-            description=description,
-            isbn=isbn,
-            language=language,
-            publication_year=publication_year,
-            publisher=publisher,
-            tags=tags_list,
-            spawn_detached_task=_spawn_detached_task,
-            embed_book_background=facade.embed_book_background,
-            auto_tag_book_background=facade.auto_tag_book_background,
+    if not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No filename provided",
         )
 
-        if not result.get("success"):
-            if result.get("error_code") == "duplicate_file":
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="This file already exists in your library",
-                )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get("error", "Failed to create book"),
-            )
+    file_extension = file.filename.lower().split(".")[-1]
+    if file_extension not in {"pdf", "epub"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only PDF and EPUB files are supported",
+        )
 
-        book_response = result.get("book")
-        if not isinstance(book_response, BookResponse):
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to build book response")
-        return book_response
-
-    except HTTPException:
-        raise
-    except (SQLAlchemyError, RuntimeError, ValueError, OSError, TypeError) as error:
-        logger.exception("Error creating book: %s", error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create book") from error
+    file_content = await file.read()
+    facade = BooksFacade(auth.session)
+    return await facade.create_book_from_upload(
+        user_id=auth.user_id,
+        filename=file.filename,
+        file_content=file_content,
+        title=title,
+        author=author,
+        subtitle=subtitle,
+        description=description,
+        isbn=isbn,
+        language=language,
+        publication_year=publication_year,
+        publisher=publisher,
+        tags=tags_list,
+        spawn_detached_task=_spawn_detached_task,
+        embed_book_background=facade.embed_book_background,
+        auto_tag_book_background=facade.auto_tag_book_background,
+    )
 
 
 @router.patch("/{book_id}")
 async def update_book(book_id: uuid.UUID, book_data: BookUpdate, auth: CurrentAuth) -> BookResponse:
     """Update book details."""
-    try:
-        # Convert Pydantic model to dict
-        update_dict = book_data.model_dump(exclude_unset=True)
-
-        facade = BooksFacade(auth.session)
-        result = await facade.update_book(book_id, auth.user_id, update_dict)
-
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result.get("error", "Failed to update book")
-            )
-
-        book = result.get("book", {})
-        return BookResponse.model_validate(book)
-    except ResourceNotFoundError as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
-    except (SQLAlchemyError, RuntimeError, TypeError) as error:
-        logger.exception("Error updating book %s: %s", book_id, error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update book") from error
+    update_dict = book_data.model_dump(exclude_unset=True)
+    facade = BooksFacade(auth.session)
+    return await facade.update_book(book_id, auth.user_id, update_dict)
 
 
 @router.put("/{book_id}/progress")
@@ -236,32 +199,12 @@ async def update_book_progress(
     progress_data: BookProgressUpdate,
     auth: CurrentAuth,
 ) -> BookProgressResponse:
-    """Update reading progress for a book.
-
-    Note: Progress percentage is now calculated on-demand from ToC progress
-    in the content endpoint, similar to how course progress works.
-    This ensures homepage always shows accurate progress.
-    """
-    try:
-        # Convert progress data to dict for facade
-        progress_dict = _build_progress_dict(progress_data)
-
-        facade = BooksFacade(auth.session)
-        result = await facade.update_progress(book_id, auth.user_id, progress_dict)
-
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get("error", "Failed to update progress"),
-            )
-
-        progress = result.get("progress", {})
-        return BookResponseBuilder.build_progress_response(progress, book_id)
-    except HTTPException:
-        raise
-    except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
-        logger.exception("Error updating book progress: %s", error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update book progress") from error
+    """Update reading progress for a book."""
+    progress_dict = _build_progress_dict(progress_data)
+    facade = BooksFacade(auth.session)
+    result = await facade.update_progress(book_id, auth.user_id, progress_dict)
+    progress = result.get("progress", {})
+    return BookResponseBuilder.build_progress_response(progress, book_id)
 
 
 @router.post("/{book_id}/progress")
@@ -271,30 +214,23 @@ async def save_book_progress(
     auth: CurrentAuth,
 ) -> BookProgressResponse:
     """Update reading progress for a book (POST version for sendBeacon compatibility)."""
-    # Delegate to the PUT endpoint handler
     return await update_book_progress(book_id, progress_data, auth)
 
 
 @router.get("/{book_id}/file", response_model=None)
 async def serve_book_file(book_id: uuid.UUID, auth: CurrentAuth) -> FileResponse | RedirectResponse:
     """Serve the actual book file for viewing."""
-    from src.books.models import Book
-
-    # Use auth context helper for ownership check
     book = await auth.get_or_404(Book, book_id, "book")
 
     if not book.file_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book file not found")
 
-    # Get storage provider and download URL
     storage = get_storage_provider()
     url = await storage.get_download_url(book.file_path)
 
     if url.startswith("http"):
-        # For R2 storage, redirect to the presigned URL
         return RedirectResponse(url)
 
-    # For local storage, url is an absolute path
     media_type = "application/pdf" if book.file_type == "pdf" else "application/epub+zip"
 
     return FileResponse(
@@ -305,21 +241,13 @@ async def serve_book_file(book_id: uuid.UUID, auth: CurrentAuth) -> FileResponse
 
 
 @router.get("/{book_id}/presigned-url")
-async def get_book_presigned_url(book_id: uuid.UUID, auth: CurrentAuth) -> dict:
-    """Get a presigned URL for direct book download from R2/storage.
-
-    This is useful when you want the browser to directly download from R2
-    without proxying through the backend.
-    """
-    from src.books.models import Book
-
-    # Use auth context helper for ownership check
+async def get_book_presigned_url(book_id: uuid.UUID, auth: CurrentAuth) -> dict[str, Any]:
+    """Get a presigned URL for direct book download from storage."""
     book = await auth.get_or_404(Book, book_id, "book")
 
     if not book.file_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book file not found")
 
-    # Get storage provider and presigned URL
     storage = get_storage_provider()
     url = await storage.get_download_url(book.file_path)
 
@@ -356,7 +284,10 @@ def _handle_local_file(url: str, book: Book) -> FileResponse:
 
 
 async def _handle_range_request(
-    url: str, range_header: str, media_type: str, stream_func: Any
+    url: str,
+    range_header: str,
+    media_type: str,
+    stream_func: Any,
 ) -> StreamingResponse | None:
     """Handle range requests for partial content."""
     async with httpx.AsyncClient(timeout=10.0) as client:
@@ -384,45 +315,31 @@ async def _handle_range_request(
                     media_type=media_type,
                     headers=headers,
                 )
-        except (httpx.HTTPError, ValueError) as error:
-            logger.warning("Range request failed: %s", error)
+        except (httpx.HTTPError, ValueError):
+            logger.warning("books.range_request.failed")
     return None
 
 
 @router.get("/{book_id}/content", response_model=None)
 async def stream_book_content(book_id: uuid.UUID, request: Request, auth: CurrentAuth) -> StreamingResponse | FileResponse:
-    """Stream book PDF content through backend to avoid CORS issues.
-
-    This endpoint acts as a proxy, fetching the book from storage and
-    streaming it back to the client. This completely bypasses CORS issues
-    with signed URLs. Supports range requests for efficient PDF loading.
-    """
-    from src.books.models import Book
-
-    # Use auth context helper for ownership check
+    """Stream book content through backend to avoid CORS issues."""
     book = await auth.get_or_404(Book, book_id, "book")
 
     if not book.file_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book file not found")
 
-    # Get storage provider and download URL
     storage = get_storage_provider()
     url = await storage.get_download_url(book.file_path)
 
-    # If it's a local file, serve it directly
     if not url.startswith("http"):
         return _handle_local_file(url, book)
 
-    # For remote storage, properly stream with range support
     media_type = _get_media_type(book.file_type)
-
-    # Check if this is a range request
     range_header = request.headers.get("range")
 
     async def stream_content() -> AsyncGenerator[bytes]:
         """Stream content in chunks to avoid loading entire file in memory."""
         async with httpx.AsyncClient(timeout=60.0) as client:
-            # Make request with range header if provided
             headers = {}
             if range_header:
                 headers["Range"] = range_header
@@ -430,23 +347,17 @@ async def stream_book_content(book_id: uuid.UUID, request: Request, auth: Curren
             try:
                 async with client.stream("GET", url, headers=headers, follow_redirects=True) as response:
                     response.raise_for_status()
-
-                    # Stream in chunks
                     async for chunk in response.aiter_bytes(chunk_size=8192):
                         yield chunk
+            except httpx.HTTPError:
+                logger.exception("books.stream.failed")
+                raise
 
-            except httpx.HTTPError as error:
-                logger.exception("Failed to stream book content: %s", error)
-                # Yield empty to avoid broken pipe
-                yield b""
-
-    # For range requests, we need to get content-length first
     if range_header:
         range_response = await _handle_range_request(url, range_header, media_type, stream_content)
         if range_response:
             return range_response
 
-    # Normal streaming response (no range)
     return StreamingResponse(
         stream_content(),
         media_type=media_type,
@@ -460,27 +371,9 @@ async def stream_book_content(book_id: uuid.UUID, request: Request, auth: Curren
 
 @router.get("/{book_id}/chapters")
 async def get_book_chapters(book_id: uuid.UUID, auth: CurrentAuth) -> list[BookTocChapterResponse]:
-    """Get all chapters/table of contents for a book.
-
-    Returns the table of contents structure, not database chapter records.
-    """
-    try:
-        facade = BooksFacade(auth.session)
-        result = await facade.get_book_chapters(book_id, auth.user_id)
-
-        if not result.get("success"):
-            error_code = result.get("error_code")
-            if error_code == BOOK_CHAPTERS_ERROR_CODE_NOT_FOUND:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Book {book_id} not found")
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get chapters")
-
-        raw_chapters = result.get("chapters", [])
-        return [BookTocChapterResponse.model_validate(chapter) for chapter in raw_chapters]
-    except HTTPException:
-        raise
-    except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
-        logger.exception("Error getting book chapters: %s", error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get book chapters") from error
+    """Get all chapters or table-of-contents entries for a book."""
+    facade = BooksFacade(auth.session)
+    return await facade.get_book_chapters(book_id, auth.user_id)
 
 
 @router.put("/{book_id}/chapters/{chapter_id}/status")
@@ -491,21 +384,13 @@ async def update_book_chapter_status(
     auth: CurrentAuth,
 ) -> BookTocChapterResponse:
     """Update the status of a book chapter."""
-    try:
-        facade = BooksFacade(auth.session)
-        return await facade.update_book_chapter_status(
-            book_id=book_id,
-            user_id=auth.user_id,
-            chapter_id=chapter_id,
-            status=status_data.status,
-        )
-    except ResourceNotFoundError as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
-    except HTTPException:
-        raise
-    except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
-        logger.exception("Error updating chapter status: %s", error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update chapter status") from error
+    facade = BooksFacade(auth.session)
+    return await facade.update_book_chapter_status(
+        book_id=book_id,
+        user_id=auth.user_id,
+        chapter_id=chapter_id,
+        status=status_data.status,
+    )
 
 
 class RAGStatusResponse(BaseModel):
@@ -515,19 +400,13 @@ class RAGStatusResponse(BaseModel):
     rag_status: BookRagStatus
     rag_processed_at: str | None = None
     message: str
-    chunk_count: int | None = None  # Number of chunks processed (if available)
-    error_details: str | None = None  # Error details if failed
+    chunk_count: int | None = None
+    error_details: str | None = None
 
 
 @router.get("/{book_id}/rag-status")
 async def get_book_rag_status(book_id: uuid.UUID, auth: CurrentAuth) -> RAGStatusResponse:
     """Get the RAG embedding status for a book."""
-    try:
-        facade = BooksFacade(auth.session)
-        payload = await facade.get_book_rag_status_payload(book_id=book_id, user_id=auth.user_id)
-        return RAGStatusResponse.model_validate(payload)
-    except ResourceNotFoundError as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
-    except (SQLAlchemyError, RuntimeError, TypeError) as error:
-        logger.exception("Error getting RAG status for book %s: %s", book_id, error)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get book RAG status") from error
+    facade = BooksFacade(auth.session)
+    payload = await facade.get_book_rag_status_payload(book_id=book_id, user_id=auth.user_id)
+    return RAGStatusResponse.model_validate(payload)

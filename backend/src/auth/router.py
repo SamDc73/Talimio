@@ -170,18 +170,10 @@ _AUTO_USERNAME_MAX_ATTEMPTS = 30
 _AUTO_USERNAME_BASE_MAX_LENGTH = _USERNAME_MAX_LENGTH - _AUTO_USERNAME_SUFFIX_DIGITS - 1
 
 
-def _validate_password_or_raise(password: str, *, context: str) -> None:
+def _validate_password_or_raise(password: str) -> None:
     try:
         validate_password_policy(password)
     except PasswordPolicyError as error:
-        logger.warning(
-            "Password requirements not met",
-            extra={
-                "context": context,
-                "password_length": len(password),
-                "policy_error": str(error),
-            },
-        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
 
@@ -323,7 +315,7 @@ async def signup(request: Request, response: Response, session: DbSession, data:
                 email_confirmation_required=True,
             )
 
-        _validate_password_or_raise(data.password, context="signup")
+        _validate_password_or_raise(data.password)
 
         username = await _resolve_signup_username(session, full_name=data.full_name, username=data.username)
         try:
@@ -343,7 +335,7 @@ async def signup(request: Request, response: Response, session: DbSession, data:
                     await session.rollback()
                     logger.warning(
                         "Signup verification email failed; user creation rolled back",
-                        extra={"email": normalized_email, "auth_provider": settings.AUTH_PROVIDER},
+                        extra={"auth_provider": settings.AUTH_PROVIDER},
                         exc_info=True,
                     )
                     raise HTTPException(
@@ -359,6 +351,8 @@ async def signup(request: Request, response: Response, session: DbSession, data:
                 email_confirmation_required=True,
             )
 
+        logger.info("auth.signup.succeeded", extra={"user_id": str(user.id), "email_confirmation_required": settings.AUTH_REQUIRE_EMAIL_VERIFICATION})
+
         if settings.AUTH_REQUIRE_EMAIL_VERIFICATION:
             return SignupResponse(
                 message="Please check your email to verify your account.",
@@ -366,6 +360,7 @@ async def signup(request: Request, response: Response, session: DbSession, data:
             )
 
         await _issue_local_auth_cookie(request, response, session, user)
+        logger.info("auth.session.issued", extra={"user_id": str(user.id), "operation": "signup"})
 
         return SignupResponse(user=UserResponse.from_model(user), email_confirmation_required=False)
 
@@ -422,7 +417,7 @@ async def resend_verification(session: DbSession, data: ResendVerificationReques
     except (httpx.HTTPError, ValueError):
         logger.warning(
             "Failed to resend verification email",
-            extra={"email": normalized_email, "auth_provider": settings.AUTH_PROVIDER},
+            extra={"auth_provider": settings.AUTH_PROVIDER},
             exc_info=True,
         )
 
@@ -459,6 +454,7 @@ async def login(
             )
 
         await _issue_local_auth_cookie(request, response, session, user)
+        logger.info("auth.session.issued", extra={"user_id": str(user.id), "operation": "login"})
         return LoginResponse(user=UserResponse.from_model(user))
 
     raise HTTPException(
@@ -492,10 +488,8 @@ async def logout(
 
             if auth_session is not None:
                 await local_crud.revoke_auth_session(session, auth_session)
-        clear_auth_cookie(response)
-        return LogoutResponse(message="Successfully logged out")
-
     clear_auth_cookie(response)
+    logger.info("auth.logout.succeeded", extra={"operation": "logout"})
     return LogoutResponse(message="Successfully logged out")
 
 
@@ -538,7 +532,7 @@ async def forgot_password(session: DbSession, data: PasswordResetRequest) -> Mes
         except (httpx.HTTPError, ValueError):
             logger.warning(
                 "Failed to send password reset email",
-                extra={"email": normalized_email, "auth_provider": get_settings().AUTH_PROVIDER},
+                extra={"auth_provider": get_settings().AUTH_PROVIDER},
                 exc_info=True,
             )
 
@@ -563,7 +557,7 @@ async def reset_password(session: DbSession, data: NewPasswordRequest) -> Messag
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
 
-    _validate_password_or_raise(data.new_password, context="reset_password")
+    _validate_password_or_raise(data.new_password)
     user.password_hash = get_password_hash(data.new_password)
     session.add(user)
     await local_crud.increment_auth_token_version(session, user)
@@ -582,6 +576,7 @@ async def reset_password(session: DbSession, data: NewPasswordRequest) -> Messag
         await session.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token") from error
 
+    logger.info("auth.password_reset.completed", extra={"user_id": str(user.id)})
     return MessageResponse(message="Password updated")
 
 
@@ -601,11 +596,13 @@ async def verify_email(session: DbSession, data: VerifyEmailRequest) -> MessageR
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
 
     if user.is_verified:
+        logger.info("auth.email_verification.skipped", extra={"user_id": str(user.id), "reason": "already_verified"})
         return MessageResponse(message="Email already verified")
 
     user.is_verified = True
     session.add(user)
     await session.commit()
+    logger.info("auth.email_verification.completed", extra={"user_id": str(user.id)})
     return MessageResponse(message="Email verified")
 
 
@@ -627,13 +624,14 @@ async def change_password(
     if not verified:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
 
-    _validate_password_or_raise(data.new_password, context="change_password")
+    _validate_password_or_raise(data.new_password)
     user.password_hash = get_password_hash(data.new_password)
     auth.session.add(user)
     await local_crud.increment_auth_token_version(auth.session, user)
     await local_crud.revoke_all_auth_sessions(auth.session, user_id=user.id)
     await auth.session.commit()
     clear_auth_cookie(response)
+    logger.info("auth.password_change.completed", extra={"user_id": str(user.id)})
     return MessageResponse(message="Password updated. Please sign in again.")
 
 
@@ -653,6 +651,7 @@ async def deactivate_account(response: Response, auth: CurrentAuth) -> MessageRe
     await local_crud.revoke_all_auth_sessions(auth.session, user_id=user.id)
     await auth.session.commit()
     clear_auth_cookie(response)
+    logger.info("auth.account_deactivation.completed", extra={"user_id": str(user.id)})
     return MessageResponse(message="Account deactivated")
 
 

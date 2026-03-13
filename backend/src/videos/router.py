@@ -1,12 +1,10 @@
-import logging
 import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.exc import SQLAlchemyError
 
 from src.auth import CurrentAuth
-from src.videos.facade import VIDEO_FACADE_ERROR_CODE_NOT_FOUND, VideosFacade
+from src.videos.facade import VideosFacade
 from src.videos.schemas import (
     VideoChapterProgressSync,
     VideoChapterResponse,
@@ -17,10 +15,6 @@ from src.videos.schemas import (
     VideoTranscriptResponse,
     VideoUpdate,
 )
-from src.videos.service import VideoChapterNotFoundError, VideoNotFoundError
-
-
-logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
@@ -40,11 +34,8 @@ async def create_video(
     """Add a YouTube video to the library."""
     try:
         return await facade.create_video(video_data=video_data, user_id=auth.user_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    except (RuntimeError, SQLAlchemyError) as e:
-        logger.exception("Error creating video: %s", e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create video") from e
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
 
 @router.get("")
@@ -58,18 +49,14 @@ async def list_videos(
     tags: Annotated[list[str] | None, Query(description="Filter by tags")] = None,
 ) -> VideoListResponse:
     """List all YouTube videos in library with optional filtering."""
-    try:
-        return await facade.get_videos(
-            user_id=auth.user_id,
-            page=page,
-            size=limit,
-            channel=channel,
-            search=search,
-            tags=tags,
-        )
-    except (RuntimeError, SQLAlchemyError) as e:
-        logger.exception("Error listing videos: %s", e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list videos") from e
+    return await facade.get_videos(
+        user_id=auth.user_id,
+        page=page,
+        size=limit,
+        channel=channel,
+        search=search,
+        tags=tags,
+    )
 
 
 @router.get("/{video_id}")
@@ -79,13 +66,7 @@ async def get_video(
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> VideoResponse:
     """Get a specific video by ID."""
-    try:
-        return await facade.get_video(video_id=video_id, user_id=auth.user_id)
-    except VideoNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except (RuntimeError, SQLAlchemyError) as e:
-        logger.exception("Error fetching video %s: %s", video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve video") from e
+    return await facade.get_video(video_id=video_id, user_id=auth.user_id)
 
 
 @router.patch("/{video_id}")
@@ -96,13 +77,7 @@ async def update_video(
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> VideoResponse:
     """Update video metadata."""
-    try:
-        return await facade.update_video(video_id=video_id, update_data=update_data, user_id=auth.user_id)
-    except VideoNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except (RuntimeError, SQLAlchemyError) as e:
-        logger.exception("Error updating video %s: %s", video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update video") from e
+    return await facade.update_video(video_id=video_id, update_data=update_data, user_id=auth.user_id)
 
 
 @router.get("/{video_id}/chapters")
@@ -112,13 +87,7 @@ async def get_video_chapters(
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> list[VideoChapterResponse]:
     """Get all chapters for a video."""
-    try:
-        return await facade.get_video_chapters(video_id=video_id, user_id=auth.user_id)
-    except VideoNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except (RuntimeError, SQLAlchemyError) as e:
-        logger.exception("Error fetching chapters for video %s: %s", video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve video chapters") from e
+    return await facade.get_video_chapters(video_id=video_id, user_id=auth.user_id)
 
 
 @router.get("/{video_id}/chapters/{chapter_id}")
@@ -129,13 +98,7 @@ async def get_video_chapter(
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> VideoChapterResponse:
     """Get a specific chapter for a video."""
-    try:
-        return await facade.get_video_chapter(video_id=video_id, chapter_id=chapter_id, user_id=auth.user_id)
-    except (VideoNotFoundError, VideoChapterNotFoundError) as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except (RuntimeError, SQLAlchemyError) as e:
-        logger.exception("Error fetching chapter %s for video %s: %s", chapter_id, video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve video chapter") from e
+    return await facade.get_video_chapter(video_id=video_id, chapter_id=chapter_id, user_id=auth.user_id)
 
 
 @router.put("/{video_id}/chapters/{chapter_id}/status")
@@ -147,21 +110,12 @@ async def update_video_chapter_status(
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> VideoChapterResponse:
     """Update the status of a video chapter."""
-    try:
-        return await facade.update_video_chapter_status(
-            video_id=video_id,
-            chapter_id=chapter_id,
-            chapter_status=status_data.status,
-            user_id=auth.user_id,
-        )
-    except (VideoNotFoundError, VideoChapterNotFoundError) as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except (RuntimeError, SQLAlchemyError) as e:
-        logger.exception("Error updating chapter %s status for video %s: %s", chapter_id, video_id, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update video chapter status",
-        ) from e
+    return await facade.update_video_chapter_status(
+        video_id=video_id,
+        chapter_id=chapter_id,
+        chapter_status=status_data.status,
+        user_id=auth.user_id,
+    )
 
 
 @router.post("/{video_id}/extract-chapters")
@@ -173,14 +127,9 @@ async def extract_video_chapters(
     """Extract chapters from YouTube video."""
     try:
         chapters = await facade.extract_and_create_video_chapters(video_id=video_id, user_id=auth.user_id)
-        return {"count": len(chapters), "chapters": chapters}
-    except VideoNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    except (RuntimeError, SQLAlchemyError) as e:
-        logger.exception("Error extracting chapters for video %s: %s", video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to extract video chapters") from e
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return {"count": len(chapters), "chapters": chapters}
 
 
 @router.post("/{video_id}/sync-chapter-progress")
@@ -191,18 +140,12 @@ async def sync_video_chapter_progress(
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> VideoResponse:
     """Sync chapter progress from web app to update video completion percentage."""
-    try:
-        return await facade.sync_chapter_progress(
-            video_id=video_id,
-            completed_chapter_ids=progress_data.completed_chapter_ids,
-            total_chapters=progress_data.total_chapters,
-            user_id=auth.user_id,
-        )
-    except VideoNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except (RuntimeError, SQLAlchemyError) as e:
-        logger.exception("Error syncing chapter progress for video %s: %s", video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to sync chapter progress") from e
+    return await facade.sync_chapter_progress(
+        video_id=video_id,
+        completed_chapter_ids=progress_data.completed_chapter_ids,
+        total_chapters=progress_data.total_chapters,
+        user_id=auth.user_id,
+    )
 
 
 @router.get("/{video_id}/transcript")
@@ -214,13 +157,8 @@ async def get_video_transcript(
     """Get transcript segments with timestamps for a video."""
     try:
         return await facade.get_video_transcript_segments(video_id=video_id, user_id=auth.user_id)
-    except VideoNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    except (RuntimeError, SQLAlchemyError) as e:
-        logger.exception("Error fetching transcript for video %s: %s", video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve video transcript") from e
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
 
 @router.get("/{video_id}/details")
@@ -234,29 +172,16 @@ async def get_video_details(
         video = await facade.get_video(video_id=video_id, user_id=auth.user_id)
         chapters = await facade.get_video_chapters(video_id=video_id, user_id=auth.user_id)
         transcript_info = await facade.get_transcript_info(video_id=video_id)
-        progress_result = await facade.get_video_with_progress(video_id, auth.user_id)
-        if progress_result.get("success") is not True:
-            progress_error_code = progress_result.get("error_code")
-            if progress_error_code == VIDEO_FACADE_ERROR_CODE_NOT_FOUND:
-                msg = f"Video with ID {video_id} not found"
-                raise VideoNotFoundError(msg)
-            msg = "Failed to retrieve video progress"
-            raise RuntimeError(msg)
+        progress_payload = await facade.get_video_with_progress(video_id, auth.user_id)
+    except (RuntimeError, TypeError, ValueError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred",
+        ) from error
 
-        if "progress" not in progress_result:
-            msg = "Video progress payload missing from successful response"
-            raise RuntimeError(msg)
-        progress = progress_result["progress"]
-
-        return {
-            **video.model_dump(),
-            "chapters": chapters,
-            "transcript_info": transcript_info,
-            "progress": progress,
-        }
-
-    except VideoNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except (RuntimeError, SQLAlchemyError) as e:
-        logger.exception("Error fetching video details for %s: %s", video_id, e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve video details") from e
+    return {
+        **video.model_dump(),
+        "chapters": chapters,
+        "transcript_info": transcript_info,
+        "progress": progress_payload["progress"],
+    }

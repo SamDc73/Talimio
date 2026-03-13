@@ -1,7 +1,4 @@
 
-from collections.abc import Awaitable
-
-
 """Unified courses API router.
 
 This router exposes the consolidated course API that replaces the legacy
@@ -20,7 +17,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 
 from src.ai.service import AIService, get_ai_service
 from src.auth import CurrentAuth
-from src.courses.facade import CoursesFacade, CoursesFacadeError
+from src.courses.facade import CoursesFacade
 from src.courses.schemas import (
     CodeExecuteRequest,
     CodeExecuteResponse,
@@ -68,14 +65,6 @@ def get_code_execution_service(auth: CurrentAuth) -> CodeExecutionService:
 def get_ai_service_dependency() -> AIService:
     """Provide AI service singleton for dependency injection."""
     return get_ai_service()
-
-
-async def _call_courses_facade[T](operation: Awaitable[T]) -> T:
-    """Execute a facade operation and map facade errors to HTTP responses."""
-    try:
-        return await operation
-    except CoursesFacadeError as error:
-        raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
 # Course operations
@@ -135,16 +124,12 @@ async def create_course(
         if ext not in _COURSE_ATTACHMENT_EXTENSIONS:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported attachment type")
 
-    result = await facade.create_course(
+    return await facade.create_course(
         {"prompt": prompt_text, "adaptive_enabled": adaptive_enabled},
         auth.user_id,
         background_tasks=background_tasks,
         attachments=attachments,
     )
-    if not result.get("success"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error", "Failed to create course"))
-
-    return result["course"]
 
 
 @router.get("/")
@@ -156,13 +141,7 @@ async def list_courses(
     search: Annotated[str | None, Query(description="Search query")] = None,
 ) -> CourseListResponse:
     """List courses with pagination and optional search (single source of truth)."""
-    result = await facade.list_courses(user_id=auth.user_id, page=page, per_page=per_page, search=search)
-    if not result.get("success"):
-        detail = result.get("error", "Failed to list courses")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=detail)
-
-    courses = result.get("courses", [])
-    total = result.get("total", 0)
+    courses, total = await facade.list_courses(user_id=auth.user_id, page=page, per_page=per_page, search=search)
     return CourseListResponse(courses=courses, total=total, page=page, per_page=per_page)
 
 
@@ -173,12 +152,7 @@ async def get_course(
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CourseResponse:
     """Get a specific course by ID."""
-    result = await facade.get_course(course_id, auth.user_id)
-
-    if not result.get("success"):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=result.get("error", "Course not found"))
-
-    return result["course"]
+    return await facade.get_course(course_id, auth.user_id)
 
 
 @router.patch("/{course_id}")
@@ -190,12 +164,7 @@ async def update_course(
 ) -> CourseResponse:
     """Update a course."""
     # Exclude None fields to avoid overwriting NOT NULL columns with NULL
-    result = await facade.update_course(course_id, auth.user_id, request.model_dump(exclude_none=True))
-
-    if not result.get("success"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error", "Failed to update course"))
-
-    return result["course"]
+    return await facade.update_course(course_id, auth.user_id, request.model_dump(exclude_none=True))
 
 
 @router.get("/{course_id}/lessons/{lesson_id}")
@@ -207,13 +176,11 @@ async def get_lesson(
     generate: Annotated[bool, Query(description="Auto-generate if lesson doesn't exist")] = False,
 ) -> LessonDetailResponse:
     """Get a specific lesson by course and lesson ID."""
-    return await _call_courses_facade(
-        facade.get_lesson(
-            course_id=course_id,
-            lesson_id=lesson_id,
-            user_id=auth.user_id,
-            generate=generate,
-        )
+    return await facade.get_lesson(
+        course_id=course_id,
+        lesson_id=lesson_id,
+        user_id=auth.user_id,
+        generate=generate,
     )
 
 
@@ -226,13 +193,11 @@ async def grade_lesson_response(
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> GradeResponse:
     """Grade a learner response for a lesson."""
-    return await _call_courses_facade(
-        facade.grade_lesson_response(
-            course_id=course_id,
-            lesson_id=lesson_id,
-            payload=payload,
-            user_id=auth.user_id,
-        )
+    return await facade.grade_lesson_response(
+        course_id=course_id,
+        lesson_id=lesson_id,
+        payload=payload,
+        user_id=auth.user_id,
     )
 
 
@@ -243,11 +208,9 @@ async def get_course_concept_frontier(
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> FrontierResponse:
     """Return adaptive frontier data for a course."""
-    return await _call_courses_facade(
-        facade.get_course_concept_frontier(
-            course_id=course_id,
-            user_id=auth.user_id,
-        )
+    return await facade.get_course_concept_frontier(
+        course_id=course_id,
+        user_id=auth.user_id,
     )
 
 
@@ -259,13 +222,11 @@ async def generate_practice_drills(
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> PracticeDrillResponse:
     """Generate adaptive drill items for one concept."""
-    return await _call_courses_facade(
-        facade.generate_practice_drills(
-            course_id=course_id,
-            concept_id=payload.concept_id,
-            count=payload.count,
-            user_id=auth.user_id,
-        )
+    return await facade.generate_practice_drills(
+        course_id=course_id,
+        concept_id=payload.concept_id,
+        count=payload.count,
+        user_id=auth.user_id,
     )
 
 
@@ -278,13 +239,11 @@ async def submit_adaptive_reviews(
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> ReviewBatchResponse:
     """Submit concept reviews for LECTOR scheduling."""
-    return await _call_courses_facade(
-        facade.submit_adaptive_reviews(
-            course_id=course_id,
-            lesson_id=lesson_id,
-            payload=payload,
-            user_id=auth.user_id,
-        )
+    return await facade.submit_adaptive_reviews(
+        course_id=course_id,
+        lesson_id=lesson_id,
+        payload=payload,
+        user_id=auth.user_id,
     )
 
 
@@ -296,12 +255,10 @@ async def get_concept_next_review(
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> NextReviewResponse:
     """Return the next scheduled review information for a concept."""
-    return await _call_courses_facade(
-        facade.get_concept_next_review(
-            course_id=course_id,
-            concept_id=concept_id,
-            user_id=auth.user_id,
-        )
+    return await facade.get_concept_next_review(
+        course_id=course_id,
+        concept_id=concept_id,
+        user_id=auth.user_id,
     )
 
 
@@ -326,10 +283,8 @@ async def execute_code(
     setup_commands: list[str] = []
     if request.course_id:
         try:
-            result = await facade.get_course(request.course_id, auth.user_id)
-            if result.get("success") and "course" in result:
-                course = result["course"]
-                setup_commands = course.get("setup_commands") or []
+            course = await facade.get_course(request.course_id, auth.user_id)
+            setup_commands = course.setup_commands or []
         except (RuntimeError, ValueError):
             logger.debug("Could not fetch course setup_commands for course_id=%s", request.course_id)
 

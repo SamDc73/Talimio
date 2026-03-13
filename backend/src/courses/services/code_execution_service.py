@@ -17,7 +17,6 @@ Sandboxes are reused per user+course with configurable TTL for compute efficienc
 """
 
 import asyncio
-import contextlib
 import hashlib
 import logging
 import posixpath
@@ -37,10 +36,12 @@ from src.courses.models import Lesson
 
 # Prefer AsyncSandbox; fall back if package layout differs
 _AsyncSandbox: Any | None = None
-with contextlib.suppress(Exception):  # e2b-code-interpreter >= 2.x
+try:  # e2b-code-interpreter >= 2.x
     from e2b_code_interpreter import AsyncSandbox as _ImportedAsyncSandbox
 
     _AsyncSandbox = _ImportedAsyncSandbox
+except ImportError:
+    pass
 
 AsyncSandbox: Any | None = _AsyncSandbox
 
@@ -52,7 +53,7 @@ _TimeoutException: type[Exception] = Exception
 _SandboxException: type[Exception] = Exception
 _CommandExitException: type[Exception] = Exception
 
-with contextlib.suppress(Exception):
+try:
     from e2b.exceptions import (
         AuthenticationException as _AuthenticationException,
         InvalidArgumentException as _InvalidArgumentException,
@@ -64,6 +65,8 @@ with contextlib.suppress(Exception):
     from e2b.sandbox.commands.command_handle import (
         CommandExitException as _CommandExitException,
     )
+except ImportError:
+    pass
 
 AuthenticationException = _AuthenticationException
 InvalidArgumentException = _InvalidArgumentException
@@ -469,7 +472,7 @@ class CodeExecutionService:
             try:
                 result = await sbx.commands.run(cmd)
                 if result.exit_code != 0:
-                    logger.warning("Setup command failed: %s (exit=%d)", cmd, result.exit_code)
+                    logger.warning("sandbox.setup_command.failed", extra={"command_sig": self._command_signature(cmd), "exit_code": result.exit_code})
             except (
                 OSError,
                 RuntimeError,
@@ -481,7 +484,7 @@ class CodeExecutionService:
                 SandboxException,
                 CommandExitException,
             ):
-                logger.exception("Setup command exception: %s", cmd)
+                logger.exception("sandbox.setup_command.error", extra={"command_sig": self._command_signature(cmd)})
         self._setup_done_by_key[setup_key] = True
 
     async def _ensure_runtime(self, sbx: Any, language: str) -> None:
@@ -797,6 +800,10 @@ class CodeExecutionService:
             return base_message
         return f"{base_message}. detail: {diagnostic}"
 
+    @staticmethod
+    def _command_signature(command: str) -> str:
+        return hashlib.sha256(command.encode("utf-8")).hexdigest()[:12]
+
     async def _run_command_list(
         self,
         sbx: Any,
@@ -816,7 +823,8 @@ class CodeExecutionService:
             if not normalized_command:
                 continue
             run_user = user or "user"
-            logger.info("Sandbox command user=%s cmd=%s", run_user, normalized_command)
+            command_sig = self._command_signature(normalized_command)
+            logger.debug("sandbox.command.started", extra={"user": run_user, "command_sig": command_sig})
             try:
                 try:
                     result = await sbx.commands.run(
@@ -856,7 +864,7 @@ class CodeExecutionService:
                 SandboxException,
                 TypeError,
             ) as exc:
-                logger.exception("Command execution failed: %s", command)
+                logger.exception("sandbox.command.error", extra={"command_sig": command_sig})
                 stderr_text = getattr(exc, "stderr", "")
                 if stderr_text:
                     stderr_chunks.append(stderr_text)

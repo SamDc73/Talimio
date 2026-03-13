@@ -78,12 +78,14 @@ class VectorRAG:
         self._effective_embedding_dim: int | None = self.configured_embedding_dim
         self._dimensions_validated = False
 
-        logger.info(
-            "VectorRAG initialized with model=%s configured_dim=%s batch_size=%s context_size=%s",
-            self.embedding_model,
-            self.configured_embedding_dim,
-            self.batch_size,
-            self.embedding_context_size,
+        logger.debug(
+            "rag.vector.initialized",
+            extra={
+                "model": self.embedding_model,
+                "configured_dim": self.configured_embedding_dim,
+                "batch_size": self.batch_size,
+                "context_size": self.embedding_context_size,
+            },
         )
 
     async def generate_embedding(self, text: str) -> list[float]:
@@ -339,7 +341,10 @@ class VectorRAG:
                 f"Embedding dimension mismatch detected: model={self.configured_embedding_dim} database={db_dim}. "
                 "Run scripts/verify_rag_schema.py or align RAG_EMBEDDING_OUTPUT_DIM."
             )
-            logger.error(error_msg)
+            logger.error(
+                "rag.embeddings.dimension_mismatch",
+                extra={"configured_dimension": self.configured_embedding_dim, "database_dimension": db_dim},
+            )
             raise ValueError(error_msg)
 
         if db_dim is not None:

@@ -1,16 +1,11 @@
-import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Query, Request, Response, status
 
 from src.auth import CurrentAuth
 from src.content.schemas import ContentListResponse, ContentType, normalize_content_type
 from src.content.services.content_service import ContentService
-from src.exceptions import ResourceNotFoundError
-
-
-logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api/v1/content", tags=["content"])
@@ -34,7 +29,6 @@ async def get_all_content(
     Uses ultra-optimized single query with database-level sorting and pagination.
     Requires authentication when local auth is configured.
     """
-    logger.info("Getting content for authenticated user %s", auth.user_id)
     content_service = ContentService(session=auth.session)
     return await content_service.list_content_fast(
         user_id=auth.user_id,
@@ -57,10 +51,7 @@ async def archive_content(
 
     normalized_content_type = normalize_content_type(content_type)
 
-    try:
-        await ContentArchiveService.archive_content(auth.session, normalized_content_type, content_id, auth.user_id)
-    except ResourceNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    await ContentArchiveService.archive_content(auth.session, normalized_content_type, content_id, auth.user_id)
 
 
 @router.patch("/{content_type}/{content_id}/unarchive", status_code=status.HTTP_204_NO_CONTENT)
@@ -74,10 +65,7 @@ async def unarchive_content(
 
     normalized_content_type = normalize_content_type(content_type)
 
-    try:
-        await ContentArchiveService.unarchive_content(auth.session, normalized_content_type, content_id, auth.user_id)
-    except ResourceNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    await ContentArchiveService.unarchive_content(auth.session, normalized_content_type, content_id, auth.user_id)
 
 
 @router.delete("/{content_type}/{content_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -90,11 +78,8 @@ async def delete_content(
     content_service = ContentService(session=auth.session)
     normalized_content_type = normalize_content_type(content_type)
 
-    try:
-        await content_service.delete_content(
-            content_type=normalized_content_type,
-            content_id=content_id,
-            user_id=auth.user_id,
-        )
-    except ResourceNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    await content_service.delete_content(
+        content_type=normalized_content_type,
+        content_id=content_id,
+        user_id=auth.user_id,
+    )

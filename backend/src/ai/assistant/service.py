@@ -456,10 +456,13 @@ async def _get_rag_context(request: NormalizedChatRequest, user_id: uuid.UUID, s
     try:
         if request.context_type == "course":
             from src.ai.rag.service import RAGService
-            logger.info(
-                "Searching for course documents with course_id: %s, query: %s...",
-                request.context_id,
-                (query_text[:50] + ("..." if len(query_text) > 50 else "")),
+            logger.debug(
+                "assistant.rag_search.started",
+                extra={
+                    "context_type": request.context_type,
+                    "context_id": str(request.context_id),
+                    "query_length": len(query_text),
+                },
             )
 
             rag_service = RAGService()
@@ -469,7 +472,7 @@ async def _get_rag_context(request: NormalizedChatRequest, user_id: uuid.UUID, s
                 query=query_text,
                 top_k=ASSISTANT_RAG_TOP_K,
             )
-            logger.info("Retrieved %d RAG results for course %s", len(results), request.context_id)
+            logger.debug("assistant.rag_search.completed", extra={"context_type": request.context_type, "context_id": str(request.context_id), "result_count": len(results)})
             if results:
                 logger.debug("First result preview: %s", results[0].content[:100])
         elif request.context_type in ("book", "video"):
@@ -505,7 +508,7 @@ async def _get_rag_context(request: NormalizedChatRequest, user_id: uuid.UUID, s
         return results
 
     except (RuntimeError, TypeError, ValueError, OSError, SQLAlchemyError, HTTPException, ImportError):
-        logger.exception("RAG search failed for %s_id: %s", request.context_type, request.context_id)
+        logger.exception("assistant.rag_search.failed", extra={"context_type": request.context_type, "context_id": str(request.context_id)})
         return []
 
 

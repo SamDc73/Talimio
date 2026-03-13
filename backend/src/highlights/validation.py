@@ -7,7 +7,7 @@ to ensure data integrity across different content types (PDF, video, EPUB).
 
 import json
 import logging
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
@@ -55,14 +55,16 @@ class PDFHighlightData(BaseModel):
                 msg = f"Rect {i} must be a dictionary"
                 raise TypeError(msg)
 
+            rect_dict = cast("dict[str, Any]", rect)
             rect_fields = {"x1", "y1", "x2", "y2", "width", "height"}
-            if not all(field in rect for field in rect_fields):
+            if not all(field in rect_dict for field in rect_fields):
                 msg = f"Rect {i} must contain fields: {rect_fields}"
                 raise ValueError(msg)
 
             # Validate numeric values
             for field in rect_fields:
-                if not isinstance(rect[field], (int, float)) or rect[field] < 0:
+                rect_value = rect_dict.get(field)
+                if not isinstance(rect_value, (int, float)) or rect_value < 0:
                     msg = f"Rect {i}.{field} must be a non-negative number"
                     raise ValueError(msg)
 
@@ -222,7 +224,7 @@ def validate_highlight_data(data: dict[str, Any], _content_type: str | None = No
         return result
 
     except ValidationError as validation_error:
-        logger.exception("Validation failed for %s highlight: %s", detected_type, validation_error)
+        logger.exception("highlights.validation.failed", extra={"detected_type": str(detected_type)})
 
         # If strict validation fails, try generic schema as fallback
         if detected_type != "generic":
@@ -233,7 +235,7 @@ def validate_highlight_data(data: dict[str, Any], _content_type: str | None = No
                 result["_validation_type"] = "generic"
                 return result
             except ValidationError as fallback_error:
-                logger.exception("Fallback generic validation failed: %s", fallback_error)
+                logger.exception("highlights.validation_fallback.failed")
                 raise fallback_error from validation_error
 
         # Re-raise the original validation error
