@@ -500,3 +500,67 @@ class CodeExecuteResponse(BaseModel):
     memory: float | None = None
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class RuntimeProcessStartRequest(BaseModel):
+    """Start a long-lived runtime process in a scoped sandbox session."""
+
+    command: str = Field(..., min_length=1)
+    course_id: uuid.UUID | None = None
+    workspace_id: str | None = None
+    cwd: str | None = None
+    env: dict[str, str] | None = None
+    user: str | None = Field(default="user")
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class RuntimeProcessReadRequest(BaseModel):
+    """Read process output for a scoped runtime process."""
+
+    process_id: int = Field(..., ge=1)
+    course_id: uuid.UUID | None = None
+    workspace_id: str | None = None
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class RuntimeProcessInputRequest(BaseModel):
+    """Send stdin data to a scoped runtime process."""
+
+    process_id: int = Field(..., ge=1)
+    input: str = Field(...)
+    course_id: uuid.UUID | None = None
+    workspace_id: str | None = None
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class RuntimeProcessStopRequest(BaseModel):
+    """Stop a scoped runtime process."""
+
+    process_id: int = Field(..., ge=1)
+    course_id: uuid.UUID | None = None
+    workspace_id: str | None = None
+    wait_timeout_seconds: float | None = Field(default=None, ge=0)
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class RuntimeListRequest(BaseModel):
+    """List runtime filesystem entries for a scoped sandbox session."""
+
+    path: str = Field(default=".")
+    depth: int = Field(default=2, ge=1, le=10)
+    course_id: uuid.UUID | None = None
+    workspace_id: str | None = None
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class RuntimeToolResponse(BaseModel):
+    """Generic runtime tool response payload."""
+
+    data: dict[str, Any]
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)

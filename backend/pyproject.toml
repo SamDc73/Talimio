@@ -17,7 +17,7 @@ dependencies = [
     "pyjwt>=2.8.0",
     "supabase>=2.0.0",
     # AI
-    "litellm>=1.75.7",
+    "litellm==1.81.11",
     "pgvector>=0.3.0",
     "instructor>=1.7.0",
     "mem0ai>=0.1.116",
