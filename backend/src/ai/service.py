@@ -4,6 +4,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.models import AdaptiveCourseStructure, CourseStructure, ExecutionPlan, SelfAssessmentQuiz
+from src.ai.tools.sandbox import SandboxToolContext
 
 
 """Centralized AI Service for all AI operations.
@@ -88,6 +89,7 @@ class AIService:
         workspace_root: str | None = None,
         workspace_files: list[str] | None = None,
         workspace_id: str | None = None,
+        sandbox_context: SandboxToolContext | None = None,
     ) -> ExecutionPlan:
         """Generate a sandbox execution plan for code execution."""
         return await self._assistant_llm.generate_execution_plan(
@@ -101,6 +103,7 @@ class AIService:
             workspace_root=workspace_root,
             workspace_files=workspace_files,
             workspace_id=workspace_id,
+            sandbox_context=sandbox_context,
         )
 
     # RAG helpers

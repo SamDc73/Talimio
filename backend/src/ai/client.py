@@ -2,11 +2,10 @@ import asyncio
 import json
 import logging
 import uuid
-from collections import Counter
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
-from typing import Any, TypeVar, cast
+from dataclasses import dataclass, field
+from typing import Any, TypeVar
 
 import litellm
 from pydantic import BaseModel, ValidationError
@@ -22,14 +21,9 @@ from src.ai.errors import (
     AIToolExecutionError,
 )
 from src.ai.litellm_config import configure_litellm
+from src.ai.mcp.config import MCPConfig
 from src.ai.mcp.service import get_user_mcp_config
-from src.ai.mcp.tooling import (
-    MCPToolBinding,
-    build_tool_instruction,
-    execute_user_tool_call,
-    load_user_tool_bindings,
-    parse_tool_arguments,
-)
+from src.ai.mcp.tooling import load_user_tool_bindings
 from src.ai.models import (
     AdaptiveCourseStructure,
     CourseStructure,
@@ -49,6 +43,16 @@ from src.ai.prompts import (
     PRACTICE_PREDICTION_PROMPT,
     SELF_ASSESSMENT_QUESTIONS_PROMPT,
 )
+from src.ai.tools.plan import (
+    FunctionToolDefinition,
+    MCPToolTarget,
+    RequestToolPlan,
+    ToolTarget,
+    build_request_tool_plan,
+)
+from src.ai.tools.runtime import PlannedToolCall, execute_planned_tool_calls
+from src.ai.tools.sandbox import SandboxToolContext, build_sandbox_function_tools
+from src.ai.tools.search import build_web_search_function_tool
 from src.config.settings import get_settings
 from src.database.session import async_session_maker
 
@@ -60,11 +64,6 @@ T = TypeVar("T", bound=BaseModel)
 
 _MAX_AUTONOMY_ROUNDS = 6
 _MAX_STRUCTURED_GENERATION_ATTEMPTS = 2
-_OPENROUTER_DEFAULT_PROVIDER_OPTIONS = {
-    "sort": "latency",
-    "allow_fallbacks": True,
-    "require_parameters": True,
-}
 
 _LITELLM_PROVIDER_ERROR_TYPES = (
     litellm.APIError,
@@ -101,16 +100,7 @@ _COMPLETION_RUNTIME_ERROR_TYPES = (
 )
 
 _PARSE_COERCION_ERROR_TYPES = (TypeError, ValueError, ValidationError)
-_TOOL_ORCHESTRATION_ERROR_TYPES = (
-    AIRuntimeError,
-    TimeoutError,
-    asyncio.TimeoutError,
-    ConnectionError,
-    OSError,
-    RuntimeError,
-    TypeError,
-    ValueError,
-)
+_MEMORY_OPERATION_ERROR_TYPES = (ImportError, *_COMPLETION_RUNTIME_ERROR_TYPES)
 _GENERATION_WRAPPER_ERROR_TYPES = (
     AIRuntimeError,
     TimeoutError,
@@ -130,13 +120,21 @@ class _LLMRequest:
     messages: list[dict[str, Any]]
     response_model: type[BaseModel] | None
     temperature: float | None
-    tools: list[dict[str, Any]] | list[MCPToolBinding] | None
+    tools: list[dict[str, Any]] | None
+    sandbox_context: SandboxToolContext | None
     tool_choice: str | None
     user_id: uuid.UUID | None
     model: str
     num_retries: int | None
+    max_completion_tokens: int | None
     stream: bool
     tool_schemas: list[dict[str, Any]] | None = None
+    responses_tools: list[dict[str, Any]] | None = None
+    tool_targets: dict[str, ToolTarget] = field(default_factory=dict)
+    mcp_config: MCPConfig | None = None
+    use_responses_transport: bool = False
+    has_hosted_tools: bool = False
+    tool_plan: RequestToolPlan | None = None
 
 
 def _iter_exception_chain(error: Exception, max_depth: int = 6) -> list[Exception]:
@@ -187,7 +185,6 @@ class LLMClient:
         """
         self._logger = logging.getLogger(__name__)
         self._agent_id = agent_id
-        self._tool_maps: dict[uuid.UUID, dict[str, tuple[str, str]]] = {}
         self._tool_filters = self._parse_tool_filters()
         self._background_tasks: set[asyncio.Task[Any]] = set()
 
@@ -216,11 +213,13 @@ class LLMClient:
         messages: list[dict[str, Any]],
         response_model: type[BaseModel] | None,
         temperature: float | None,
-        tools: list[dict[str, Any]] | list[MCPToolBinding] | None,
+        tools: list[dict[str, Any]] | None,
+        sandbox_context: SandboxToolContext | None,
         tool_choice: str | None,
         user_id: str | uuid.UUID | None,
         model: str | None,
         num_retries: int | None,
+        max_completion_tokens: int | None,
         stream: bool,
     ) -> _LLMRequest:
         settings = get_settings()
@@ -229,10 +228,12 @@ class LLMClient:
             response_model=response_model,
             temperature=temperature,
             tools=tools,
+            sandbox_context=sandbox_context,
             tool_choice=tool_choice,
             user_id=self._normalize_user_id(user_id),
             model=model or settings.primary_llm_model,
             num_retries=num_retries,
+            max_completion_tokens=max_completion_tokens,
             stream=stream,
         )
 
@@ -270,41 +271,100 @@ class LLMClient:
         if request.user_id is not None:
             request.messages = await self._inject_memory_into_messages(request.messages, request.user_id)
 
-        tool_sources: list[dict[str, Any]] | list[MCPToolBinding] | None = request.tools
-        if tool_sources is None and request.user_id is not None:
-            tool_sources = await self._load_user_tool_bindings(request.user_id)
+        request.tool_plan = await self._build_request_tool_plan(request)
+        request.tool_schemas = request.tool_plan.tool_schemas
+        request.responses_tools = request.tool_plan.responses_tools
+        request.tool_targets = request.tool_plan.tool_targets
+        request.use_responses_transport = request.tool_plan.use_responses_transport
+        request.has_hosted_tools = request.tool_plan.has_hosted_tools
+        request.tool_choice = request.tool_choice or request.tool_plan.default_tool_choice
 
-        tool_schemas, tool_instruction = self._prepare_tool_context(tool_sources, request.user_id)
-        request.tool_schemas = tool_schemas
-        request.tool_choice = request.tool_choice or ("auto" if tool_schemas else None)
+        if request.tool_plan.tool_instruction:
+            request.messages = self._inject_tool_instruction(request.messages, request.tool_plan.tool_instruction)
 
-        if tool_instruction:
-            request.messages = self._inject_tool_instruction(request.messages, tool_instruction)
+    async def _build_request_tool_plan(self, request: _LLMRequest) -> RequestToolPlan:
+        function_tools: list[FunctionToolDefinition] = []
+        if request.sandbox_context is not None:
+            function_tools.extend(build_sandbox_function_tools(request.sandbox_context))
 
-    def _prepare_tool_context(
-        self,
-        tools: list[dict[str, Any]] | list[MCPToolBinding] | None,
-        user_id: uuid.UUID | None,
-    ) -> tuple[list[dict[str, Any]] | None, str | None]:
-        if not tools:
-            if user_id is not None:
-                self._tool_maps.pop(user_id, None)
-            return None, None
+        settings = get_settings()
+        if request.response_model is None:
+            exa_api_key = settings.EXA_API_KEY.get_secret_value() if settings.EXA_API_KEY is not None else ""
+            web_search_tool = build_web_search_function_tool(
+                api_key=exa_api_key,
+                timeout_seconds=settings.EXA_SEARCH_TIMEOUT_SECONDS,
+                default_max_results=settings.EXA_SEARCH_MAX_RESULTS,
+            )
+            if web_search_tool is not None:
+                function_tools.append(web_search_tool)
 
-        first = tools[0]
-        if isinstance(first, MCPToolBinding):
-            if user_id is None:
-                self._logger.debug("MCP tools provided but user_id is missing; skipping tool wiring")
-                return None, None
-            bindings = cast("list[MCPToolBinding]", tools)
-            filtered_bindings = self._filter_tool_bindings(bindings)
-            if not filtered_bindings:
-                self._tool_maps.pop(user_id, None)
-                return None, None
-            return self._assign_tool_schemas(user_id, filtered_bindings), build_tool_instruction(filtered_bindings)
+            if settings.AI_ENABLE_EXPERIMENTAL_MCP_TOOLS and request.user_id is not None:
+                mcp_tools, mcp_config = await self._load_mcp_tool_definitions(request.user_id)
+                function_tools.extend(mcp_tools)
+                request.mcp_config = mcp_config
+            else:
+                request.mcp_config = None
+        else:
+            request.mcp_config = None
 
-        schema_list = cast("list[dict[str, Any]]", tools)
-        return self._filter_schema_list(schema_list), None
+        return build_request_tool_plan(
+            model=request.model,
+            explicit_tool_schemas=request.tools,
+            function_tools=function_tools,
+            allowed_tools=self._tool_filters[0],
+            blocked_tools=self._tool_filters[1],
+            include_hosted_web_search=self._should_include_hosted_web_search(request),
+        )
+
+    def _should_include_hosted_web_search(self, request: _LLMRequest) -> bool:
+        settings = get_settings()
+        if not settings.AI_ENABLE_HOSTED_WEB_SEARCH:
+            return False
+        if request.stream:
+            return False
+        return request.response_model is None
+
+    async def _load_mcp_tool_definitions(self, user_id: uuid.UUID) -> tuple[list[FunctionToolDefinition], MCPConfig]:
+        async with self._mcp_session() as session:
+            bindings = await load_user_tool_bindings(session, user_id)
+            config = await get_user_mcp_config(session, user_id)
+
+        definitions: list[FunctionToolDefinition] = []
+        counts: dict[str, int] = {}
+        for binding in bindings:
+            tool_key = binding.tool_name.lower()
+            if not self._is_tool_enabled(tool_key):
+                continue
+
+            base_name = self._slug_tool_key(binding.server_name, binding.tool_name)
+            count = counts.get(base_name, 0) + 1
+            counts[base_name] = count
+            encoded_name = base_name if count == 1 else f"{base_name}_{count}"
+
+            schema = {
+                "type": "function",
+                "function": {
+                    "name": encoded_name,
+                    "description": binding.description or f"{binding.tool_name} via {binding.server_name}",
+                    "parameters": binding.input_schema or {"type": "object", "properties": {}},
+                },
+            }
+            definitions.append(
+                FunctionToolDefinition(
+                    schema=schema,
+                    target=MCPToolTarget(server_name=binding.server_name, tool_name=binding.tool_name),
+                )
+            )
+        return definitions, config
+
+    def _is_tool_enabled(self, tool_name: str) -> bool:
+        normalized = tool_name.strip().lower()
+        if not normalized:
+            return False
+        allowed, blocked = self._tool_filters
+        if allowed is not None and normalized not in allowed:
+            return False
+        return normalized not in blocked
 
     def _inject_tool_instruction(self, messages: list[dict[str, Any]], instruction: str) -> list[dict[str, Any]]:
         if not instruction:
@@ -330,7 +390,7 @@ class LLMClient:
         self._background_tasks.add(task)
         task.add_done_callback(self._handle_background_task_done)
 
-    async def complete(
+    async def complete(  # noqa: PLR0912
         self,
         messages: list[dict[str, Any]],
         temperature: float | None = None,
@@ -342,50 +402,49 @@ class LLMClient:
         stream: bool = False,
         model: str | None = None,
         num_retries: int | None = None,
+        max_completion_tokens: int | None = None,
+        parallel_tool_calls: bool = False,
+        use_responses_transport: bool = False,
+        previous_response_id: str | None = None,
     ) -> Any:
         """Low-level completion method using LiteLLM directly."""
         try:
-            # Get model from settings
             settings = get_settings()
             request_model = model or settings.primary_llm_model
 
-            kwargs: dict[str, Any] = {
-                "model": request_model,
-                "messages": messages,
-                "timeout": settings.ai_request_timeout,
-            }
-
-            if temperature is not None:
-                kwargs["temperature"] = temperature
-            if tools:
-                kwargs["tools"] = tools
-            if tool_choice:
-                kwargs["tool_choice"] = tool_choice
-            if response_format is not None:
-                kwargs["response_format"] = response_format
-            if request_model.startswith("openrouter/"):
-                merged_extra_body: dict[str, Any] = dict(extra_body or {})
-                provider_settings = merged_extra_body.get("provider")
-                if provider_settings is None:
-                    merged_extra_body["provider"] = dict(_OPENROUTER_DEFAULT_PROVIDER_OPTIONS)
-                elif isinstance(provider_settings, dict):
-                    merged_provider = dict(_OPENROUTER_DEFAULT_PROVIDER_OPTIONS)
-                    merged_provider.update(provider_settings)
-                    merged_extra_body["provider"] = merged_provider
-                kwargs["extra_body"] = merged_extra_body
-            elif extra_body is not None:
-                kwargs["extra_body"] = extra_body
+            common_kwargs: dict[str, Any] = {"model": request_model, "timeout": settings.ai_request_timeout}
             if user_id:
-                # Pass user identifier for provider-side tracking / rate limits when supported
-                # Safe with litellm.drop_params=True across providers
-                # Convert uuid.UUID to string for JSON serialization
-                kwargs["user"] = str(user_id)
+                common_kwargs["user"] = str(user_id)
             if stream:
-                kwargs["stream"] = stream
+                common_kwargs["stream"] = stream
             if num_retries is not None:
-                kwargs["num_retries"] = num_retries
+                common_kwargs["num_retries"] = num_retries
+            if max_completion_tokens is not None:
+                common_kwargs["max_completion_tokens"] = max_completion_tokens
+                common_kwargs["max_tokens"] = max_completion_tokens
+            if tools and parallel_tool_calls:
+                common_kwargs["parallel_tool_calls"] = True
+            if temperature is not None:
+                common_kwargs["temperature"] = temperature
+            if tool_choice:
+                common_kwargs["tool_choice"] = tool_choice
+            if tools:
+                common_kwargs["tools"] = tools
+            if extra_body is not None:
+                common_kwargs["extra_body"] = extra_body
 
-            return await asyncio.wait_for(litellm.acompletion(**kwargs), timeout=settings.ai_request_timeout)
+            if use_responses_transport:
+                response_kwargs = dict(common_kwargs)
+                response_kwargs["input"] = messages
+                if previous_response_id is not None:
+                    response_kwargs["previous_response_id"] = previous_response_id
+                return await asyncio.wait_for(litellm.responses(**response_kwargs), timeout=settings.ai_request_timeout)
+
+            completion_kwargs = dict(common_kwargs)
+            completion_kwargs["messages"] = messages
+            if response_format is not None:
+                completion_kwargs["response_format"] = response_format
+            return await asyncio.wait_for(litellm.acompletion(**completion_kwargs), timeout=settings.ai_request_timeout)
 
         except _COMPLETION_RUNTIME_ERROR_TYPES as error:
             mapped = self._map_runtime_error(error, default_message="Model completion failed")
@@ -397,11 +456,13 @@ class LLMClient:
         messages: list[dict[str, Any]],
         response_model: type[BaseModel] | None = None,
         temperature: float | None = None,
-        tools: list[dict[str, Any]] | list[MCPToolBinding] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        sandbox_context: SandboxToolContext | None = None,
         tool_choice: str | None = None,
         user_id: str | uuid.UUID | None = None,
         model: str | None = None,
         num_retries: int | None = None,
+        max_completion_tokens: int | None = None,
         stream: bool = False,
     ) -> Any:
         """Shared execution engine for free-form and structured generation."""
@@ -410,10 +471,12 @@ class LLMClient:
             response_model=response_model,
             temperature=temperature,
             tools=tools,
+            sandbox_context=sandbox_context,
             tool_choice=tool_choice,
             user_id=user_id,
             model=model,
             num_retries=num_retries,
+            max_completion_tokens=max_completion_tokens,
             stream=stream,
         )
 
@@ -433,9 +496,13 @@ class LLMClient:
                     user_id=request.user_id,
                     model=request.model,
                     num_retries=request.num_retries,
+                    tool_targets=request.tool_targets,
+                    mcp_config=request.mcp_config,
                 )
 
-            if request.response_model is None:
+            if request.response_model is None and request.use_responses_transport:
+                result, conversation = await self._run_responses_autonomy_loop(request)
+            elif request.response_model is None:
                 result, conversation = await self._run_autonomy_loop(request)
             else:
                 result, conversation = await self._run_structured_completion_with_retries(request)
@@ -503,6 +570,8 @@ class LLMClient:
                 response_format=response_format,
                 model=request.model,
                 num_retries=request.num_retries,
+                max_completion_tokens=request.max_completion_tokens,
+                parallel_tool_calls=bool(request.tool_schemas),
             )
 
             assistant_message = response.choices[0].message
@@ -510,19 +579,13 @@ class LLMClient:
             tool_calls = getattr(assistant_message, "tool_calls", None)
 
             if tool_calls:
-                if request.user_id is None:
-                    self._logger.warning("Model attempted to call MCP tools without a user context")
-                    if request.response_model is not None:
-                        msg = "Structured completion attempted tool calls without user context"
-                        raise AIToolExecutionError(msg)
-                    conversation.append({"role": "assistant", "content": assistant_content})
-                    return assistant_content, conversation
-
                 await self._append_tool_calls(
                     conversation,
                     assistant_content=assistant_content,
                     tool_calls=tool_calls,
                     user_id=request.user_id,
+                    tool_targets=request.tool_targets,
+                    mcp_config=request.mcp_config,
                 )
                 continue
 
@@ -537,6 +600,135 @@ class LLMClient:
                 msg = "Structured response failed schema validation"
                 raise AISchemaValidationError(msg) from parse_error
 
+    async def _run_responses_autonomy_loop(self, request: _LLMRequest) -> tuple[str, list[dict[str, Any]]]:
+        """Run the non-stream autonomy loop using LiteLLM Responses transport."""
+        conversation = list(request.messages)
+        response_input = list(request.messages)
+        previous_response_id: str | None = None
+        tool_round = 0
+
+        while True:
+            tool_round += 1
+            if tool_round > _MAX_AUTONOMY_ROUNDS:
+                msg = f"Tool autonomy loop exceeded {_MAX_AUTONOMY_ROUNDS} rounds"
+                raise AIToolExecutionError(msg)
+
+            response = await self.complete(
+                messages=response_input,
+                temperature=request.temperature,
+                tools=request.responses_tools,
+                tool_choice=request.tool_choice,
+                user_id=request.user_id,
+                model=request.model,
+                num_retries=request.num_retries,
+                max_completion_tokens=request.max_completion_tokens,
+                parallel_tool_calls=bool(request.responses_tools),
+                use_responses_transport=True,
+                previous_response_id=previous_response_id,
+            )
+
+            assistant_content = self._extract_responses_text(response)
+            function_calls = self._extract_responses_function_calls(response)
+            if function_calls:
+                executed_calls = await execute_planned_tool_calls(
+                    calls=function_calls,
+                    tool_targets=request.tool_targets,
+                    user_id=request.user_id,
+                    mcp_config=request.mcp_config,
+                    logger=self._logger,
+                )
+                if assistant_content:
+                    conversation.append({"role": "assistant", "content": assistant_content})
+                response_input = [
+                    {
+                        "type": "function_call_output",
+                        "call_id": executed_call.call_id,
+                        "output": executed_call.content,
+                    }
+                    for executed_call in executed_calls
+                ]
+                conversation.extend(
+                    {
+                        "role": "tool",
+                        "tool_call_id": executed_call.call_id,
+                        "name": executed_call.name,
+                        "content": executed_call.content,
+                    }
+                    for executed_call in executed_calls
+                )
+                previous_response_id = self._extract_responses_response_id(response)
+                if previous_response_id is None:
+                    msg = "Responses transport returned tool calls without response id"
+                    raise AIToolExecutionError(msg)
+                continue
+
+            conversation.append({"role": "assistant", "content": assistant_content})
+            return assistant_content, conversation
+
+    def _extract_responses_response_id(self, response: Any) -> str | None:
+        response_id = self._read_attr_or_key(response, "id")
+        if isinstance(response_id, str) and response_id.strip():
+            return response_id
+        return None
+
+    def _extract_responses_function_calls(self, response: Any) -> list[PlannedToolCall]:
+        output_items = self._extract_responses_output_items(response)
+        calls: list[PlannedToolCall] = []
+        for item in output_items:
+            item_type = self._read_attr_or_key(item, "type")
+            if item_type != "function_call":
+                continue
+            call_id = self._read_attr_or_key(item, "call_id")
+            if not isinstance(call_id, str) or not call_id.strip():
+                fallback = self._read_attr_or_key(item, "id")
+                if isinstance(fallback, str) and fallback.strip():
+                    call_id = fallback
+            name = self._read_attr_or_key(item, "name")
+            arguments = self._read_attr_or_key(item, "arguments")
+            if not isinstance(call_id, str) or not call_id.strip():
+                continue
+            if not isinstance(name, str) or not name.strip():
+                continue
+            calls.append(PlannedToolCall(call_id=call_id, name=name.strip(), arguments=arguments))
+        return calls
+
+    def _extract_responses_text(self, response: Any) -> str:
+        output_text = self._read_attr_or_key(response, "output_text")
+        if isinstance(output_text, str):
+            return output_text
+
+        output_items = self._extract_responses_output_items(response)
+        collected: list[str] = []
+        for item in output_items:
+            item_type = self._read_attr_or_key(item, "type")
+            if item_type != "message":
+                continue
+            content_items = self._read_attr_or_key(item, "content")
+            if not isinstance(content_items, list):
+                continue
+            for content_item in content_items:
+                content_type = self._read_attr_or_key(content_item, "type")
+                if content_type != "output_text":
+                    continue
+                text_value = self._read_attr_or_key(content_item, "text")
+                if isinstance(text_value, str):
+                    collected.append(text_value)
+        return "".join(collected)
+
+    def _extract_responses_output_items(self, response: Any) -> list[Any]:
+        output = self._read_attr_or_key(response, "output")
+        if isinstance(output, list):
+            return output
+        return []
+
+    def _read_attr_or_key(self, payload: Any, name: str) -> Any:
+        value = getattr(payload, name, None)
+        if value is not None:
+            return value
+        if isinstance(payload, dict):
+            return payload.get(name)
+        return None
+
     async def _stream_unstructured_completion(
         self,
         *,
@@ -547,6 +739,8 @@ class LLMClient:
         user_id: uuid.UUID | None,
         model: str,
         num_retries: int | None,
+        tool_targets: dict[str, ToolTarget],
+        mcp_config: MCPConfig | None,
     ) -> AsyncGenerator[str]:
         """Stream an unstructured chat completion, optionally executing tool calls.
 
@@ -572,6 +766,8 @@ class LLMClient:
                 stream=True,
                 model=model,
                 num_retries=num_retries,
+                max_completion_tokens=None,
+                parallel_tool_calls=bool(tools),
             )
 
             chunks: list[Any] = []
@@ -593,15 +789,13 @@ class LLMClient:
                 assistant_content = "".join(round_text)
 
             if tool_calls:
-                if user_id is None:
-                    self._logger.warning("Model attempted to call MCP tools without a user context")
-                    break
-
                 await self._append_tool_calls(
                     conversation,
                     assistant_content=assistant_content,
                     tool_calls=tool_calls,
                     user_id=user_id,
+                    tool_targets=tool_targets,
+                    mcp_config=mcp_config,
                 )
                 continue
 
@@ -770,26 +964,70 @@ class LLMClient:
         assistant_content: str,
         tool_calls: list[Any],
         user_id: uuid.UUID | None,
+        tool_targets: dict[str, ToolTarget],
+        mcp_config: MCPConfig | None,
     ) -> None:
         conversation.append(
             {
                 "role": "assistant",
                 "content": assistant_content,
-                "tool_calls": [tc.model_dump() for tc in tool_calls],
+                "tool_calls": [self._serialize_tool_call_payload(tool_call) for tool_call in tool_calls],
             }
         )
 
-        if user_id is None:
+        normalized_calls = self._normalize_chat_tool_calls(tool_calls)
+        if not normalized_calls:
             return
-        executed = await self._execute_tool_calls(tool_calls, user_id)
-        for tool_call, result_content in executed:
-            conversation.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": result_content,
-                }
-            )
+        executed_calls = await execute_planned_tool_calls(
+            calls=normalized_calls,
+            tool_targets=tool_targets,
+            user_id=user_id,
+            mcp_config=mcp_config,
+            logger=self._logger,
+        )
+        conversation.extend(
+            {
+                "role": "tool",
+                "tool_call_id": executed_call.call_id,
+                "name": executed_call.name,
+                "content": executed_call.content,
+            }
+            for executed_call in executed_calls
+        )
+
+    def _serialize_tool_call_payload(self, tool_call: Any) -> dict[str, Any]:
+        if hasattr(tool_call, "model_dump"):
+            dumped = tool_call.model_dump()
+            if isinstance(dumped, dict):
+                return dumped
+        if isinstance(tool_call, dict):
+            return tool_call
+        tool_id = self._read_attr_or_key(tool_call, "id")
+        function_payload = self._read_attr_or_key(tool_call, "function")
+        function_name = self._read_attr_or_key(function_payload, "name")
+        function_arguments = self._read_attr_or_key(function_payload, "arguments")
+        return {
+            "id": tool_id,
+            "type": "function",
+            "function": {
+                "name": function_name,
+                "arguments": function_arguments,
+            },
+        }
+
+    def _normalize_chat_tool_calls(self, tool_calls: list[Any]) -> list[PlannedToolCall]:
+        normalized: list[PlannedToolCall] = []
+        for tool_call in tool_calls:
+            function_payload = self._read_attr_or_key(tool_call, "function")
+            name = self._read_attr_or_key(function_payload, "name")
+            arguments = self._read_attr_or_key(function_payload, "arguments")
+            call_id = self._read_attr_or_key(tool_call, "id")
+            if not isinstance(call_id, str) or not call_id.strip():
+                continue
+            if not isinstance(name, str) or not name.strip():
+                continue
+            normalized.append(PlannedToolCall(call_id=call_id, name=name.strip(), arguments=arguments))
+        return normalized
 
     async def _inject_memory_into_messages(self, messages: list[dict[str, Any]], user_id: uuid.UUID) -> list[dict[str, Any]]:
         """Inject user memory context into the conversation."""
@@ -806,7 +1044,7 @@ class LLMClient:
                 limit=6,
                 agent_id=self._agent_id,
             )
-        except (ImportError, RuntimeError, TimeoutError, TypeError, ValueError) as error:
+        except _MEMORY_OPERATION_ERROR_TYPES as error:
             self._logger.warning("Failed to inject memory for user %s: %s", user_id, error)
             return messages
 
@@ -863,135 +1101,9 @@ class LLMClient:
                     return normalized
         return None
 
-    def _filter_schema_list(self, schemas: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
-        allowed, blocked = self._tool_filters
-        filtered: list[dict[str, Any]] = []
-        for schema in schemas:
-            if not isinstance(schema, dict):
-                continue
-            function_block = schema.get("function") or {}
-            name = str(function_block.get("name", "")).strip()
-            if not name:
-                continue
-            key = name.lower()
-            if allowed is not None and key not in allowed:
-                continue
-            if key in blocked:
-                continue
-            filtered.append(schema)
-        return filtered or None
-
-    def _assign_tool_schemas(self, user_id: uuid.UUID, bindings: list[MCPToolBinding]) -> list[dict[str, Any]]:
-        schemas: list[dict[str, Any]] = []
-        mapping: dict[str, tuple[str, str]] = {}
-        counts: Counter[str] = Counter()
-        for binding in bindings:
-            base = self._slug_tool_key(binding.server_name, binding.tool_name)
-            counts[base] += 1
-            encoded = base if counts[base] == 1 else f"{base}_{counts[base]}"
-            binding.encoded_name = encoded
-            mapping[encoded] = (binding.server_name, binding.tool_name)
-            schemas.append(binding.to_tool_schema())
-        self._tool_maps[user_id] = mapping
-        return schemas
-
-    def _filter_tool_bindings(
-        self,
-        bindings: list[MCPToolBinding],
-    ) -> list[MCPToolBinding]:
-        allowed, blocked = self._tool_filters
-        filtered: list[MCPToolBinding] = []
-        for binding in bindings:
-            key = binding.tool_name.lower()
-            if allowed is not None and key not in allowed:
-                continue
-            if key in blocked:
-                continue
-            filtered.append(binding)
-        return filtered
-
     def _slug_tool_key(self, server_name: str, tool_name: str) -> str:
         base = f"{server_name}_{tool_name}".lower()
         return "".join(char if char.isalnum() or char == "_" else "_" for char in base)
-
-    async def _load_user_tool_bindings(self, user_id: uuid.UUID) -> list[MCPToolBinding]:
-        async with self._mcp_session() as session:
-            return await load_user_tool_bindings(session, user_id)
-
-    async def _execute_tool_calls(
-        self,
-        tool_calls: list[Any],
-        user_id: uuid.UUID,
-    ) -> list[tuple[Any, str]]:
-        formatted: list[tuple[Any, str] | None] = []
-        pending: list[tuple[int, Any, dict[str, Any], tuple[str, str]]] = []
-        for idx, tool_call in enumerate(tool_calls):
-            target = self._resolve_tool_target(user_id, tool_call.function.name)
-            if target is None:
-                warning = f"Error: Tool '{tool_call.function.name}' is not available"
-                formatted.append((tool_call, warning))
-                continue
-            try:
-                args_dict = parse_tool_arguments(tool_call.function.arguments)
-            except ValueError as exc:
-                formatted.append((tool_call, f"Error: {exc!s}"))
-                continue
-            formatted.append(None)
-            pending.append((idx, tool_call, args_dict, target))
-        if pending:
-            try:
-                # Load config once, then run all tool calls concurrently without DB sessions
-                async with self._mcp_session() as session:
-                    config = await get_user_mcp_config(session, user_id)
-
-                tasks = [
-                    execute_user_tool_call(
-                        user_id=user_id,
-                        server_name=target[0],
-                        tool_name=target[1],
-                        encoded_name=tool_call.function.name,
-                        arguments=args_dict,
-                        config=config,
-                    )
-                    for (_idx, tool_call, args_dict, target) in pending
-                ]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-            except _TOOL_ORCHESTRATION_ERROR_TYPES as error:
-                msg = "Tool execution orchestration failed"
-                raise AIToolExecutionError(msg) from error
-
-            for (idx, tool_call, _args_dict, target), result in zip(pending, results, strict=False):
-                if isinstance(result, Exception):
-                    content = f"Error: {result!s}"
-                    self._logger.error(
-                        "ai.mcp_tool.failed",
-                        extra={
-                            "mcp_server": target[0],
-                            "mcp_tool": target[1],
-                            "encoded_tool": tool_call.function.name,
-                            "user_id": str(user_id),
-                            "tool_call_id": getattr(tool_call, "id", None),
-                            "error": str(result),
-                        },
-                    )
-                else:
-                    content = self._format_tool_result(result)
-                formatted[idx] = (tool_call, content)
-        return [entry for entry in formatted if entry is not None]
-
-    def _resolve_tool_target(self, user_id: uuid.UUID, encoded_name: str) -> tuple[str, str] | None:
-        mapping = self._tool_maps.get(user_id)
-        if not mapping:
-            return None
-        return mapping.get(encoded_name)
-
-    def _format_tool_result(self, result: Any) -> str:
-        if isinstance(result, (dict, list)):
-            try:
-                return json.dumps(result, default=str)
-            except (OverflowError, TypeError, ValueError):
-                return str(result)
-        return str(result)
 
     def _normalize_user_prompt_content(self, user_prompt: str | list[dict[str, Any]]) -> str | list[dict[str, Any]]:
         if isinstance(user_prompt, str):
@@ -1163,6 +1275,7 @@ class LLMClient:
         workspace_root: str | None = None,
         workspace_files: list[str] | None = None,
         workspace_id: str | None = None,
+        sandbox_context: SandboxToolContext | None = None,
     ) -> ExecutionPlan:
         """Create a sandbox execution plan using Instructor-bound JSON output."""
         payload: dict[str, Any] = {
@@ -1188,10 +1301,13 @@ class LLMClient:
         ]
 
         try:
+            settings = get_settings()
             plan = await self.get_completion(
                 messages,
                 response_model=ExecutionPlan,
                 user_id=user_id,
+                sandbox_context=sandbox_context,
+                max_completion_tokens=settings.CODE_EXECUTION_MAX_COMPLETION_TOKENS,
             )
 
             if not isinstance(plan, ExecutionPlan):
@@ -1379,7 +1495,7 @@ class LLMClient:
                 messages=memory_messages,
                 agent_id=self._agent_id,
             )
-        except (RuntimeError, TimeoutError, TypeError, ValueError) as error:
+        except _MEMORY_OPERATION_ERROR_TYPES as error:
             # Never fail the main request due to memory issues
             self._logger.warning("Failed to save conversation to memory: %s", error)
 

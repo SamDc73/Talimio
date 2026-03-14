@@ -33,6 +33,12 @@ from src.courses.schemas import (
     PracticeDrillResponse,
     ReviewBatchRequest,
     ReviewBatchResponse,
+    RuntimeListRequest,
+    RuntimeProcessInputRequest,
+    RuntimeProcessReadRequest,
+    RuntimeProcessStartRequest,
+    RuntimeProcessStopRequest,
+    RuntimeToolResponse,
     SelfAssessmentRequest,
     SelfAssessmentResponse,
 )
@@ -329,7 +335,7 @@ async def execute_code(
             exc_info=True,
         )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except (RuntimeError, OSError, TimeoutError) as exc:
+    except (RuntimeError, OSError) as exc:
         logger.exception(
             "CODE_EXECUTION_UNEXPECTED",
             extra={
@@ -362,3 +368,104 @@ async def execute_code(
     )
 
     return response
+
+
+@router.post("/runtime/process/start")
+async def runtime_start_process(
+    request: RuntimeProcessStartRequest,
+    auth: CurrentAuth,
+    svc: Annotated[CodeExecutionService, Depends(get_code_execution_service)],
+) -> RuntimeToolResponse:
+    """Start a long-lived runtime process in the scoped sandbox."""
+    try:
+        data = await svc.start_process(
+            command=request.command,
+            user_id=str(auth.user_id),
+            course_id=str(request.course_id) if request.course_id else None,
+            workspace_id=request.workspace_id,
+            cwd=request.cwd,
+            env=request.env,
+            user=request.user,
+        )
+    except CodeExecutionError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    return RuntimeToolResponse(data=data)
+
+
+@router.post("/runtime/process/output")
+async def runtime_read_process_output(
+    request: RuntimeProcessReadRequest,
+    auth: CurrentAuth,
+    svc: Annotated[CodeExecutionService, Depends(get_code_execution_service)],
+) -> RuntimeToolResponse:
+    """Read incremental output for a long-lived runtime process."""
+    try:
+        data = await svc.read_process_output(
+            process_id=request.process_id,
+            user_id=str(auth.user_id),
+            course_id=str(request.course_id) if request.course_id else None,
+            workspace_id=request.workspace_id,
+        )
+    except CodeExecutionError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    return RuntimeToolResponse(data=data)
+
+
+@router.post("/runtime/process/input")
+async def runtime_send_process_input(
+    request: RuntimeProcessInputRequest,
+    auth: CurrentAuth,
+    svc: Annotated[CodeExecutionService, Depends(get_code_execution_service)],
+) -> RuntimeToolResponse:
+    """Send stdin input to a long-lived runtime process."""
+    try:
+        data = await svc.send_process_input(
+            process_id=request.process_id,
+            input_text=request.input,
+            user_id=str(auth.user_id),
+            course_id=str(request.course_id) if request.course_id else None,
+            workspace_id=request.workspace_id,
+        )
+    except CodeExecutionError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    return RuntimeToolResponse(data=data)
+
+
+@router.post("/runtime/process/stop")
+async def runtime_stop_process(
+    request: RuntimeProcessStopRequest,
+    auth: CurrentAuth,
+    svc: Annotated[CodeExecutionService, Depends(get_code_execution_service)],
+) -> RuntimeToolResponse:
+    """Stop a long-lived runtime process."""
+    try:
+        data = await svc.stop_process(
+            process_id=request.process_id,
+            user_id=str(auth.user_id),
+            course_id=str(request.course_id) if request.course_id else None,
+            workspace_id=request.workspace_id,
+            wait_timeout_seconds=request.wait_timeout_seconds,
+        )
+    except CodeExecutionError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    return RuntimeToolResponse(data=data)
+
+
+@router.post("/runtime/list")
+async def runtime_list_entries(
+    request: RuntimeListRequest,
+    auth: CurrentAuth,
+    svc: Annotated[CodeExecutionService, Depends(get_code_execution_service)],
+) -> RuntimeToolResponse:
+    """List runtime filesystem entries for scoped lab/course sessions."""
+    try:
+        data = await svc.list_runtime_entries(
+            path=request.path,
+            depth=request.depth,
+            user_id=str(auth.user_id),
+            course_id=str(request.course_id) if request.course_id else None,
+            workspace_id=request.workspace_id,
+        )
+    except CodeExecutionError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    return RuntimeToolResponse(data=data)

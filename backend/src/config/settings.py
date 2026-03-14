@@ -110,11 +110,17 @@ class Settings(BaseSettings):
 
     # AI Configuration
     PRIMARY_LLM_MODEL: str | None = None
+    CODE_EXECUTION_LLM_MODEL: str | None = None
     AI_REQUEST_TIMEOUT: int = 300
 
     # AI Tooling Configuration
     AI_ENABLED_TOOLS: str = ""  # Comma-separated allowlist; empty means allow all.
     AI_DISABLED_TOOLS: str = ""  # Comma-separated blocklist.
+    AI_ENABLE_EXPERIMENTAL_MCP_TOOLS: bool = False
+    AI_ENABLE_HOSTED_WEB_SEARCH: bool = True
+    EXA_API_KEY: SecretStr | None = None
+    EXA_SEARCH_TIMEOUT_SECONDS: float = 12.0
+    EXA_SEARCH_MAX_RESULTS: int = 5
 
     # Assistant UI Configuration
     AVAILABLE_MODELS: str = ""  # Comma-separated additional models for UI pickers.
@@ -125,7 +131,15 @@ class Settings(BaseSettings):
 
     # Code Execution (E2B)
     E2B_SANDBOX_TTL: int = 600
+    E2B_MAX_ACTIVE_SCOPES: int = 8
+    CODE_EXECUTION_MAX_COMPLETION_TOKENS: int = 4096
     E2B_SDK_LOG_LEVEL: str = "WARNING"
+    E2B_TEMPLATE_COURSE: str = ""
+    E2B_TEMPLATE_LAB: str = ""
+    E2B_TEMPLATE_ASSISTANT: str = ""
+    E2B_ALLOW_INTERNET_COURSE: bool = True
+    E2B_ALLOW_INTERNET_LAB: bool = True
+    E2B_ALLOW_INTERNET_ASSISTANT: bool = True
 
     # Release metadata
     RELEASE_VERSION: str = ""
@@ -163,6 +177,27 @@ class Settings(BaseSettings):
         """Ensure integer auth settings are positive."""
         if value <= 0:
             msg = "Auth settings integer values must be greater than zero"
+            raise ValueError(msg)
+        return value
+
+    @field_validator("EXA_SEARCH_TIMEOUT_SECONDS")
+    @classmethod
+    def validate_exa_timeout(cls, value: float) -> float:
+        """Ensure Exa search timeout is positive."""
+        if value <= 0:
+            msg = "EXA_SEARCH_TIMEOUT_SECONDS must be greater than zero"
+            raise ValueError(msg)
+        return value
+
+    @field_validator("EXA_SEARCH_MAX_RESULTS")
+    @classmethod
+    def validate_exa_max_results(cls, value: int) -> int:
+        """Ensure Exa max results stays in a practical range."""
+        if value < 1:
+            msg = "EXA_SEARCH_MAX_RESULTS must be >= 1"
+            raise ValueError(msg)
+        if value > 10:
+            msg = "EXA_SEARCH_MAX_RESULTS must be <= 10"
             raise ValueError(msg)
         return value
 

@@ -3823,7 +3823,7 @@ requires-dist = [
     { name = "instructor", specifier = ">=1.7.0" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
     { name = "latex2sympy2-extended", specifier = ">=1.11.0" },
-    { name = "litellm", specifier = ">=1.75.7" },
+    { name = "litellm", specifier = "==1.81.11" },
     { name = "markdownify", specifier = ">=0.11.0" },
     { name = "mcp", specifier = ">=1.26.0" },
     { name = "mdxjs-py", specifier = ">=0.1.0a2" },

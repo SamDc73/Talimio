@@ -20,6 +20,7 @@ import asyncio
 import hashlib
 import logging
 import posixpath
+import re
 import shlex
 import time
 import uuid
@@ -30,6 +31,7 @@ from fastapi import status
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai.service import get_ai_service
+from src.ai.tools.sandbox import SandboxToolContext
 from src.config.settings import get_settings
 from src.courses.models import Lesson
 
@@ -76,6 +78,10 @@ TimeoutException = _TimeoutException
 SandboxException = _SandboxException
 CommandExitException = _CommandExitException
 logger = logging.getLogger(__name__)
+
+APT_GET_UPDATE_COMMAND = "apt-get update"
+HOME_USER_DIR = "/home/user"
+WORKSPACES_DIR = f"{HOME_USER_DIR}/workspaces"
 
 # Trim noisy SDK logs by default; configurable via env
 E2B_SDK_LOG_LEVEL = get_settings().E2B_SDK_LOG_LEVEL.upper()
@@ -138,11 +144,11 @@ FAST_PATH_TEMPLATES = {
 # Fast-path installers provision missing runtimes before executing templates
 FAST_PATH_INSTALLERS = {
     "go": [
-        "apt-get update",
+        APT_GET_UPDATE_COMMAND,
         ("DEBIAN_FRONTEND=noninteractive DEBCONF_NOWARNINGS=yes apt-get install -y --no-install-recommends golang-go"),
     ],
     "rust": [
-        "apt-get update",
+        APT_GET_UPDATE_COMMAND,
         (
             "DEBIAN_FRONTEND=noninteractive DEBCONF_NOWARNINGS=yes "
             "apt-get install -y --no-install-recommends rustc cargo"
@@ -160,15 +166,21 @@ class CodeExecutionService:
     _plan_cache: ClassVar[dict[str, Any]] = {}
     # Course setup tracking: sandbox_key -> bool
     _setup_done_by_key: ClassVar[dict[str, bool]] = {}
+    # Runtime process handles keyed by sandbox scope then pid.
+    _runtime_handles: ClassVar[dict[str, dict[int, Any]]] = {}
+    # Incremental output offsets keyed by "<scope_key>:<pid>".
+    _runtime_output_offsets: ClassVar[dict[str, tuple[int, int]]] = {}
+    # Runtime install lock per sandbox to avoid apt/dpkg lock contention under concurrency.
+    _runtime_install_locks: ClassVar[dict[str, asyncio.Lock]] = {}
 
     def __init__(self, session: AsyncSession) -> None:
         ttl = get_settings().E2B_SANDBOX_TTL
         self.sandbox_ttl = max(60, ttl)
         self._ai_service = get_ai_service()
         self._session = session
-        self._apt_sentinel = "/home/user/.talimio_apt_updated"
-        self._language_sentinel_prefix = "/home/user/.talimio_lang_"
-        self._workspace_root = "/home/user/workspaces"
+        self._apt_sentinel = f"{HOME_USER_DIR}/.talimio_apt_updated"
+        self._language_sentinel_prefix = f"{HOME_USER_DIR}/.talimio_lang_"
+        self._workspace_root = WORKSPACES_DIR
 
     def _session_key(self, user_id: str | None, course_id: str | None) -> str:
         """Generate sandbox key per user+course (not per lesson)."""
@@ -185,6 +197,7 @@ class CodeExecutionService:
             try:
                 _created, sbx = self._sessions.pop(k)
                 self._setup_done_by_key.pop(k, None)
+                self._runtime_install_locks.pop(self._runtime_lock_key(sbx), None)
                 # Best effort async close
                 closer = getattr(sbx, "close", None)
                 if callable(closer):
@@ -199,8 +212,11 @@ class CodeExecutionService:
         # Reuse if present
         if key in self._sessions:
             sbx = self._sessions[key][1]
-            logger.debug("Reusing E2B sandbox for key=%s", key)
-            return sbx
+            if await self._refresh_sandbox_timeout(sbx):
+                logger.debug("Reusing E2B sandbox for key=%s", key)
+                return sbx
+            logger.warning("Discarding stale sandbox after timeout refresh failure key=%s", key)
+            await self._reset_session(key)
 
         if AsyncSandbox is None:
             msg = "e2b-code-interpreter AsyncSandbox not available"
@@ -218,6 +234,18 @@ class CodeExecutionService:
             sbx = await AsyncSandbox.create(timeout=self.sandbox_ttl)
         self._sessions[key] = (now, sbx)
         return sbx
+
+    async def _refresh_sandbox_timeout(self, sbx: Any) -> bool:
+        """Best-effort sandbox timeout refresh for reused sessions."""
+        refresher = getattr(sbx, "set_timeout", None)
+        if not callable(refresher):
+            return True
+        try:
+            await _maybe_await(refresher(self.sandbox_ttl))
+            return True
+        except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+            logger.debug("Failed to refresh sandbox timeout", exc_info=True)
+            return False
 
     async def execute(
         self,
@@ -268,6 +296,17 @@ class CodeExecutionService:
         norm_lang = language.lower().strip()
         if norm_lang in FAST_PATH_INSTALLERS:
             await self._ensure_runtime(sbx, norm_lang)
+
+        if is_workspace_mode:
+            workspace_result = await self._try_workspace_fast_path(
+                sbx=sbx,
+                language=norm_lang,
+                workspace_entry_file=workspace_context["entry_file"] if workspace_context else None,
+                workspace_root=workspace_context["workspace_dir"] if workspace_context else None,
+            )
+            if workspace_result is not None and workspace_result.status != "error":
+                logger.debug("Workspace fast-path success lang=%s", norm_lang)
+                return workspace_result
 
         # Try fast-path first (instant for common languages)
         if not is_workspace_mode and norm_lang in FAST_PATH_TEMPLATES:
@@ -321,6 +360,7 @@ class CodeExecutionService:
             user_id=user_id,
             lesson_id=lesson_id,
             cache_key=cache_key,
+            scope_key=key,
             workspace_entry_file=workspace_context["entry_file"] if workspace_context else None,
             workspace_root=workspace_context["workspace_dir"] if workspace_context else None,
             workspace_files=workspace_context["manifest"] if workspace_context else None,
@@ -341,6 +381,304 @@ class CodeExecutionService:
             result.status = result.status or "restarted"
 
         return result
+
+    async def start_process(
+        self,
+        *,
+        command: str,
+        user_id: str | None,
+        course_id: str | None,
+        workspace_id: str | None,
+        cwd: str | None,
+        env: dict[str, str] | None,
+        user: str | None,
+    ) -> dict[str, Any]:
+        """Start a long-lived command process in the scoped sandbox."""
+        key = self._session_key(user_id, course_id)
+        sbx = await self._get_sandbox(key)
+
+        normalized_command = command.strip()
+        if not normalized_command:
+            msg = "Runtime command must not be empty"
+            raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="invalid_command")
+
+        run_user = (user or "user").strip() or "user"
+        if run_user not in {"user", "root"}:
+            msg = "Runtime user must be either 'user' or 'root'"
+            raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="invalid_user")
+
+        normalized_env = self._normalize_runtime_env(env)
+        runtime_cwd = self._resolve_runtime_working_directory(
+            course_id=course_id,
+            workspace_id=workspace_id,
+            cwd=cwd,
+        )
+        if runtime_cwd:
+            await self._ensure_runtime_directory_exists(sbx, runtime_cwd)
+
+        try:
+            try:
+                handle = await sbx.commands.run(
+                    cmd=normalized_command,
+                    background=True,
+                    stdin=True,
+                    envs=normalized_env or None,
+                    user=run_user,
+                    cwd=runtime_cwd,
+                    timeout=0,
+                    request_timeout=30,
+                )
+            except TypeError:
+                handle = await sbx.commands.run(
+                    cmd=normalized_command,
+                    background=True,
+                    stdin=True,
+                    envs=normalized_env or None,
+                    user=run_user,
+                    timeout=0,
+                    request_timeout=30,
+                )
+        except CommandExitException as exc:
+            error_text = getattr(exc, "stderr", None) or str(exc)
+            msg = self._command_failure_message(normalized_command, error_text)
+            raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="command_failed") from exc
+        except TimeoutException as exc:
+            msg = "Starting runtime process timed out"
+            raise CodeExecutionError(msg, status_code=status.HTTP_504_GATEWAY_TIMEOUT, error_code="timeout") from exc
+        except (
+            OSError,
+            RuntimeError,
+            RateLimitException,
+            InvalidArgumentException,
+            NotEnoughSpaceException,
+            AuthenticationException,
+            SandboxException,
+        ) as exc:
+            msg = f"Failed to start runtime process: {exc}"
+            raise CodeExecutionError(msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="runtime_start_failed") from exc
+
+        process_id = getattr(handle, "pid", None)
+        if not isinstance(process_id, int) or process_id <= 0:
+            msg = "Sandbox returned an invalid process id"
+            raise CodeExecutionError(
+                msg,
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                error_code="invalid_process_id",
+            )
+
+        self._runtime_handles.setdefault(key, {})[process_id] = handle
+        self._runtime_output_offsets[self._runtime_output_key(key, process_id)] = (0, 0)
+
+        return {
+            "process_id": process_id,
+            "running": True,
+            "cwd": runtime_cwd,
+            "user": run_user,
+        }
+
+    async def read_process_output(
+        self,
+        *,
+        process_id: int,
+        user_id: str | None,
+        course_id: str | None,
+        workspace_id: str | None,
+    ) -> dict[str, Any]:
+        """Read incremental and full output buffers for a runtime process."""
+        key = self._session_key(user_id, course_id)
+        sbx = self._get_existing_sandbox_or_raise(key)
+        _ = workspace_id
+
+        handle = await self._get_or_connect_runtime_handle(sbx, key, process_id)
+        if handle is None:
+            msg = f"Runtime process {process_id} was not found"
+            raise CodeExecutionError(msg, status_code=status.HTTP_404_NOT_FOUND, error_code="process_not_found")
+
+        running = await self._is_process_running(sbx, process_id)
+        if not running and getattr(handle, "exit_code", None) is None:
+            try:
+                await asyncio.wait_for(handle.wait(), timeout=0.2)
+            except CommandExitException:
+                pass
+            except (OSError, RuntimeError, TimeoutException, SandboxException, TypeError, ValueError):
+                logger.debug("Runtime process wait check failed pid=%s", process_id, exc_info=True)
+
+        full_stdout = str(getattr(handle, "stdout", "") or "")
+        full_stderr = str(getattr(handle, "stderr", "") or "")
+        stdout_offset, stderr_offset = self._runtime_output_offsets.get(self._runtime_output_key(key, process_id), (0, 0))
+        safe_stdout_offset = max(0, min(stdout_offset, len(full_stdout)))
+        safe_stderr_offset = max(0, min(stderr_offset, len(full_stderr)))
+        stdout_delta = full_stdout[safe_stdout_offset:]
+        stderr_delta = full_stderr[safe_stderr_offset:]
+        self._runtime_output_offsets[self._runtime_output_key(key, process_id)] = (len(full_stdout), len(full_stderr))
+
+        exit_code = getattr(handle, "exit_code", None)
+        return {
+            "process_id": process_id,
+            "running": running,
+            "exit_code": exit_code,
+            "stdout": stdout_delta,
+            "stderr": stderr_delta,
+            "stdout_complete": full_stdout,
+            "stderr_complete": full_stderr,
+        }
+
+    async def send_process_input(
+        self,
+        *,
+        process_id: int,
+        input_text: str,
+        user_id: str | None,
+        course_id: str | None,
+        workspace_id: str | None,
+    ) -> dict[str, Any]:
+        """Send stdin text to a running runtime process."""
+        key = self._session_key(user_id, course_id)
+        sbx = self._get_existing_sandbox_or_raise(key)
+        _ = workspace_id
+
+        handle = await self._get_or_connect_runtime_handle(sbx, key, process_id)
+        if handle is None:
+            msg = f"Runtime process {process_id} was not found"
+            raise CodeExecutionError(msg, status_code=status.HTTP_404_NOT_FOUND, error_code="process_not_found")
+
+        try:
+            await sbx.commands.send_stdin(pid=process_id, data=input_text, request_timeout=20)
+        except TimeoutException as exc:
+            msg = "Sending runtime stdin timed out"
+            raise CodeExecutionError(msg, status_code=status.HTTP_504_GATEWAY_TIMEOUT, error_code="timeout") from exc
+        except (
+            OSError,
+            RuntimeError,
+            InvalidArgumentException,
+            AuthenticationException,
+            SandboxException,
+        ) as exc:
+            running = await self._is_process_running(sbx, process_id)
+            if not running:
+                msg = f"Runtime process {process_id} is no longer running"
+                raise CodeExecutionError(msg, status_code=status.HTTP_409_CONFLICT, error_code="process_not_running") from exc
+            msg = f"Failed to send runtime input: {exc}"
+            raise CodeExecutionError(msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="runtime_input_failed") from exc
+
+        return {
+            "process_id": process_id,
+            "accepted": True,
+            "bytes_sent": len(input_text.encode("utf-8")),
+        }
+
+    async def stop_process(
+        self,
+        *,
+        process_id: int,
+        user_id: str | None,
+        course_id: str | None,
+        workspace_id: str | None,
+        wait_timeout_seconds: float | None,
+    ) -> dict[str, Any]:
+        """Stop a runtime process and clean up local tracking state."""
+        key = self._session_key(user_id, course_id)
+        sbx = self._get_existing_sandbox_or_raise(key)
+        _ = workspace_id
+
+        handle = await self._get_or_connect_runtime_handle(sbx, key, process_id)
+        if handle is None:
+            msg = f"Runtime process {process_id} was not found"
+            raise CodeExecutionError(msg, status_code=status.HTTP_404_NOT_FOUND, error_code="process_not_found")
+
+        killed = False
+        try:
+            killed = await sbx.commands.kill(pid=process_id, request_timeout=20)
+        except TimeoutException as exc:
+            msg = "Stopping runtime process timed out"
+            raise CodeExecutionError(msg, status_code=status.HTTP_504_GATEWAY_TIMEOUT, error_code="timeout") from exc
+        except (
+            OSError,
+            RuntimeError,
+            InvalidArgumentException,
+            AuthenticationException,
+            SandboxException,
+        ) as exc:
+            msg = f"Failed to stop runtime process: {exc}"
+            raise CodeExecutionError(msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="runtime_stop_failed") from exc
+
+        if wait_timeout_seconds is not None and wait_timeout_seconds > 0:
+            try:
+                await asyncio.wait_for(handle.wait(), timeout=wait_timeout_seconds)
+            except CommandExitException:
+                pass
+            except (OSError, RuntimeError, TimeoutException, SandboxException, TypeError, ValueError):
+                logger.debug("Runtime process wait-on-stop failed pid=%s", process_id, exc_info=True)
+
+        running = await self._is_process_running(sbx, process_id)
+        self._cleanup_runtime_tracking(key, process_id)
+        return {
+            "process_id": process_id,
+            "stopped": not running,
+            "killed": bool(killed),
+        }
+
+    async def list_runtime_entries(
+        self,
+        *,
+        path: str,
+        depth: int,
+        user_id: str | None,
+        course_id: str | None,
+        workspace_id: str | None,
+    ) -> dict[str, Any]:
+        """List files and directories inside the runtime scope."""
+        key = self._session_key(user_id, course_id)
+        sbx = await self._get_sandbox(key)
+
+        target_path = self._resolve_runtime_list_path(
+            path=path,
+            course_id=course_id,
+            workspace_id=workspace_id,
+        )
+        quoted_path = shlex.quote(target_path)
+        list_command = f"find {quoted_path} -maxdepth {depth} -mindepth 1 -printf '%y\\t%s\\t%p\\n' | head -n 500"
+
+        try:
+            result = await sbx.commands.run(cmd=list_command, timeout=30, request_timeout=45, user="user")
+        except TypeError:
+            result = await sbx.commands.run(cmd=list_command, timeout=30, request_timeout=45)
+        except CommandExitException as exc:
+            error_text = getattr(exc, "stderr", None) or str(exc)
+            msg = self._command_failure_message(list_command, error_text)
+            raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="list_failed") from exc
+        except TimeoutException as exc:
+            msg = "Listing runtime entries timed out"
+            raise CodeExecutionError(msg, status_code=status.HTTP_504_GATEWAY_TIMEOUT, error_code="timeout") from exc
+        except (
+            OSError,
+            RuntimeError,
+            InvalidArgumentException,
+            AuthenticationException,
+            SandboxException,
+        ) as exc:
+            msg = f"Failed to list runtime entries: {exc}"
+            raise CodeExecutionError(msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="runtime_list_failed") from exc
+
+        entries: list[dict[str, Any]] = []
+        stdout = str(getattr(result, "stdout", "") or "")
+        for raw_line in stdout.splitlines():
+            if "\t" not in raw_line:
+                continue
+            kind, size, item_path = self._parse_runtime_list_line(raw_line)
+            entries.append(
+                {
+                    "type": "dir" if kind == "d" else "file",
+                    "size": size,
+                    "path": item_path,
+                }
+            )
+
+        return {
+            "path": target_path,
+            "depth": depth,
+            "entries": entries,
+        }
 
     async def _run_code(self, sbx: Any, source_code: str, language: str) -> Any:
         """Run code in sandbox."""
@@ -447,6 +785,7 @@ class CodeExecutionService:
         _created, sbx = self._sessions.pop(key, (None, None))
         self._setup_done_by_key.pop(key, None)
         if sbx:
+            self._runtime_install_locks.pop(self._runtime_lock_key(sbx), None)
             try:
                 closer = getattr(sbx, "close", None)
                 if callable(closer):
@@ -493,41 +832,43 @@ class CodeExecutionService:
         if not installers:
             return
 
-        sentinel_path = f"{self._language_sentinel_prefix}{language}"
-        try:
-            await sbx.files.read(sentinel_path)
-            return
-        except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
-            logger.debug("Runtime sentinel missing for %s, proceeding with provisioning", language, exc_info=True)
-
-        runtime_binary = "rustc" if language == "rust" else language
-        try:
-            result = await sbx.commands.run(f"command -v {shlex.quote(runtime_binary)}", timeout=60)
-            if getattr(result, "exit_code", None) == 0:
-                await sbx.files.write(sentinel_path, "present")
+        install_lock = self._runtime_install_locks.setdefault(self._runtime_lock_key(sbx), asyncio.Lock())
+        async with install_lock:
+            sentinel_path = f"{self._language_sentinel_prefix}{language}"
+            try:
+                await sbx.files.read(sentinel_path)
                 return
-        except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
-            logger.debug("Runtime presence check failed for %s", language, exc_info=True)
+            except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+                logger.debug("Runtime sentinel missing for %s, proceeding with provisioning", language, exc_info=True)
 
-        logger.info("Installing runtime lang=%s commands=%s", language, installers)
-        stdout_chunks: list[str] = []
-        stderr_chunks: list[str] = []
-        await self._run_command_list(
-            sbx,
-            installers,
-            {},
-            stdout_chunks,
-            stderr_chunks,
-            user="root",
-        )
-        await sbx.files.write(sentinel_path, "installed")
+            runtime_binary = "rustc" if language == "rust" else language
+            try:
+                result = await sbx.commands.run(f"command -v {shlex.quote(runtime_binary)}", timeout=60)
+                if getattr(result, "exit_code", None) == 0:
+                    await sbx.files.write(sentinel_path, "present")
+                    return
+            except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+                logger.debug("Runtime presence check failed for %s", language, exc_info=True)
+
+            logger.info("Installing runtime lang=%s commands=%s", language, installers)
+            stdout_chunks: list[str] = []
+            stderr_chunks: list[str] = []
+            await self._run_command_list(
+                sbx,
+                installers,
+                {},
+                stdout_chunks,
+                stderr_chunks,
+                user="root",
+            )
+            await sbx.files.write(sentinel_path, "installed")
 
     async def _fast_path_execute(
         self, sbx: Any, language: str, source_code: str, _stdin: str | None
     ) -> ExecutionResult:
         """Execute code using fast-path template (no AI)."""
         template = FAST_PATH_TEMPLATES[language]
-        filepath = f"/home/user/{template['file']}"
+        filepath = f"{HOME_USER_DIR}/{template['file']}"
 
         # Write code to file
         await sbx.files.write(path=filepath, data=source_code)
@@ -553,6 +894,7 @@ class CodeExecutionService:
         stdin: str | None,
         user_id: str | None,
         lesson_id: str | None,
+        scope_key: str,
         cache_key: str | None = None,
         workspace_entry_file: str | None = None,
         workspace_root: str | None = None,
@@ -561,6 +903,7 @@ class CodeExecutionService:
         is_workspace_mode: bool = False,
     ) -> ExecutionResult:
         sandbox_state = await self._gather_sandbox_state(sbx)
+        sandbox_context = self._build_sandbox_tool_context(sbx, scope_key)
         plan = await self._ai_service.generate_execution_plan(
             language=language,
             source_code=source_code,
@@ -572,6 +915,7 @@ class CodeExecutionService:
             workspace_root=workspace_root,
             workspace_files=list(workspace_files) if workspace_files else None,
             workspace_id=workspace_identifier,
+            sandbox_context=sandbox_context,
         )
 
         # Cache the plan for future use
@@ -598,6 +942,76 @@ class CodeExecutionService:
         except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
             state["apt_updated"] = False
         return state
+
+    def _build_sandbox_tool_context(self, sbx: Any, scope_key: str) -> SandboxToolContext:
+        async def run_command(
+            command: str,
+            cwd: str | None,
+            user: str | None,
+            timeout_seconds: int | None,
+        ) -> dict[str, Any]:
+            timeout = timeout_seconds or 120
+            request_timeout = max(timeout + 30, 60)
+            run_user = user or "user"
+            try:
+                result = await sbx.commands.run(
+                    cmd=command,
+                    timeout=timeout,
+                    request_timeout=request_timeout,
+                    user=run_user,
+                    cwd=cwd,
+                )
+            except TypeError:
+                result = await sbx.commands.run(
+                    cmd=command,
+                    timeout=timeout,
+                    request_timeout=request_timeout,
+                    user=run_user,
+                )
+            return {
+                "exit_code": getattr(result, "exit_code", None),
+                "stdout": getattr(result, "stdout", "") or "",
+                "stderr": getattr(result, "stderr", "") or "",
+            }
+
+        async def read_file(path: str) -> str:
+            content = await sbx.files.read(path)
+            return str(content)
+
+        async def write_file(path: str, content: str) -> dict[str, Any]:
+            await sbx.files.write(path=path, data=content)
+            return {"written": True}
+
+        async def list_dir(path: str, depth: int) -> list[dict[str, Any]]:
+            normalized_path = path.strip() or "."
+            quoted_path = shlex.quote(normalized_path)
+            command = (
+                f"find {quoted_path} -maxdepth {depth} -mindepth 1 -printf '%y\\t%p\\n' "
+                "| head -n 200"
+            )
+            run_result = await run_command(command, None, "user", 30)
+            stdout = str(run_result.get("stdout", ""))
+            entries: list[dict[str, Any]] = []
+            for raw_line in stdout.splitlines():
+                if "\t" not in raw_line:
+                    continue
+                raw_kind, raw_path = raw_line.split("\t", 1)
+                entry_type = "dir" if raw_kind == "d" else "file"
+                entries.append({"path": raw_path, "type": entry_type})
+            return entries
+
+        async def reset() -> dict[str, Any]:
+            await run_command(f"rm -rf {WORKSPACES_DIR}/*", None, "user", 30)
+            return {"status": "reset", "scope_key": scope_key}
+
+        return SandboxToolContext(
+            scope_key=scope_key,
+            run_command=run_command,
+            read_file=read_file,
+            write_file=write_file,
+            list_dir=list_dir,
+            reset=reset,
+        )
 
     async def _apply_execution_plan(
         self,
@@ -768,6 +1182,95 @@ class CodeExecutionService:
 
         return cwd, template.format(entry=entry_q)
 
+    async def _try_workspace_fast_path(  # noqa: PLR0911
+        self,
+        *,
+        sbx: Any,
+        language: str,
+        workspace_entry_file: str | None,
+        workspace_root: str | None,
+    ) -> ExecutionResult | None:
+        if workspace_entry_file is None:
+            return None
+
+        workspace_default = self._default_workspace_run(
+            language=language,
+            workspace_entry_file=workspace_entry_file,
+            workspace_root=workspace_root,
+        )
+        if workspace_default is None:
+            return None
+
+        cwd, command = workspace_default
+        stdout_chunks: list[str] = []
+        stderr_chunks: list[str] = []
+        try:
+            await self._ensure_runtime(sbx, language)
+            await self._run_command_list(sbx, [command], {}, stdout_chunks, stderr_chunks, cwd=cwd)
+            return self._finalize_command_run(stdout_chunks=stdout_chunks, stderr_chunks=stderr_chunks)
+        except CodeExecutionError:
+            stderr_text = "\n".join(chunk for chunk in stderr_chunks if chunk)
+            dependency_commands = self._infer_workspace_dependency_commands(language=language, stderr_text=stderr_text)
+            if not dependency_commands:
+                return None
+
+            try:
+                await self._run_command_list(sbx, dependency_commands, {}, stdout_chunks, stderr_chunks, cwd=cwd)
+                await self._run_command_list(sbx, [command], {}, stdout_chunks, stderr_chunks, cwd=cwd)
+                return self._finalize_command_run(stdout_chunks=stdout_chunks, stderr_chunks=stderr_chunks)
+            except CodeExecutionError:
+                return None
+        except (
+            OSError,
+            RuntimeError,
+            TimeoutException,
+            RateLimitException,
+            InvalidArgumentException,
+            NotEnoughSpaceException,
+            AuthenticationException,
+            SandboxException,
+            CommandExitException,
+        ):
+            return None
+
+    def _infer_workspace_dependency_commands(self, *, language: str, stderr_text: str) -> list[str]:
+        if not stderr_text:
+            return []
+
+        if language == "python":
+            module_name = self._extract_missing_python_module(stderr_text)
+            if module_name:
+                return [f"python3 -m pip install {shlex.quote(module_name)}"]
+
+        if language in {"javascript", "typescript"}:
+            package_name = self._extract_missing_node_module(stderr_text)
+            if package_name:
+                return [f"npm install {shlex.quote(package_name)}"]
+
+        return []
+
+    def _extract_missing_python_module(self, stderr_text: str) -> str | None:
+        match = re.search(r"No module named ['\"]([^'\"]+)['\"]", stderr_text)
+        if match is None:
+            return None
+        module_name = match.group(1).strip().split(".")[0]
+        if not module_name:
+            return None
+        if re.fullmatch(r"[A-Za-z0-9._-]+", module_name) is None:
+            return None
+        return module_name
+
+    def _extract_missing_node_module(self, stderr_text: str) -> str | None:
+        match = re.search(r"Cannot find module ['\"]([^'\"]+)['\"]", stderr_text)
+        if match is None:
+            return None
+        package_name = match.group(1).strip()
+        if not package_name or package_name.startswith("."):
+            return None
+        if re.fullmatch(r"[A-Za-z0-9@._/-]+", package_name) is None:
+            return None
+        return package_name
+
     def _summarize_stderr(self, stderr_text: str | None) -> str | None:
         if not stderr_text:
             return None
@@ -880,7 +1383,7 @@ class CodeExecutionService:
             if getattr(result, "stderr", None):
                 stderr_chunks.append(result.stderr)
 
-            if "apt-get update" in normalized_command:
+            if APT_GET_UPDATE_COMMAND in normalized_command:
                 try:
                     await sbx.files.write(self._apt_sentinel, "updated")
                 except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
@@ -1087,6 +1590,173 @@ class CodeExecutionService:
             msg = f"Invalid workspace file path: {raw_path}"
             raise ValueError(msg)
         return normalized
+
+    def _normalize_runtime_env(self, env: dict[str, str] | None) -> dict[str, str]:
+        if not env:
+            return {}
+        normalized: dict[str, str] = {}
+        for key, value in env.items():
+            name = str(key).strip()
+            if not name:
+                continue
+            normalized[name] = str(value)
+        return normalized
+
+    def _runtime_output_key(self, scope_key: str, process_id: int) -> str:
+        return f"{scope_key}:{process_id}"
+
+    def _runtime_lock_key(self, sbx: Any) -> str:
+        sandbox_id = getattr(sbx, "sandbox_id", None)
+        if isinstance(sandbox_id, str) and sandbox_id.strip():
+            return sandbox_id
+        return str(id(sbx))
+
+    def _cleanup_runtime_tracking(self, scope_key: str, process_id: int) -> None:
+        process_handles = self._runtime_handles.get(scope_key)
+        if process_handles is not None:
+            process_handles.pop(process_id, None)
+            if not process_handles:
+                self._runtime_handles.pop(scope_key, None)
+        self._runtime_output_offsets.pop(self._runtime_output_key(scope_key, process_id), None)
+
+    async def _get_or_connect_runtime_handle(self, sbx: Any, scope_key: str, process_id: int) -> Any | None:
+        known = self._runtime_handles.get(scope_key, {}).get(process_id)
+        if known is not None:
+            return known
+
+        try:
+            handle = await sbx.commands.connect(pid=process_id, timeout=5, request_timeout=15)
+        except (
+            OSError,
+            RuntimeError,
+            TimeoutException,
+            InvalidArgumentException,
+            AuthenticationException,
+            SandboxException,
+            TypeError,
+            ValueError,
+        ):
+            return None
+
+        self._runtime_handles.setdefault(scope_key, {})[process_id] = handle
+        self._runtime_output_offsets.setdefault(self._runtime_output_key(scope_key, process_id), (0, 0))
+        return handle
+
+    async def _is_process_running(self, sbx: Any, process_id: int) -> bool:
+        try:
+            processes = await sbx.commands.list(request_timeout=20)
+        except TypeError:
+            processes = await sbx.commands.list()
+        except (
+            OSError,
+            RuntimeError,
+            TimeoutException,
+            InvalidArgumentException,
+            AuthenticationException,
+            SandboxException,
+        ):
+            return False
+        return any(getattr(process, "pid", None) == process_id for process in processes)
+
+    def _get_existing_sandbox_or_raise(self, key: str) -> Any:
+        record = self._sessions.get(key)
+        if record is None:
+            msg = "Runtime sandbox session was not found"
+            raise CodeExecutionError(msg, status_code=status.HTTP_404_NOT_FOUND, error_code="runtime_session_not_found")
+        return record[1]
+
+    def _resolve_runtime_working_directory(self, *, course_id: str | None, workspace_id: str | None, cwd: str | None) -> str | None:
+        workspace_root = self._resolve_workspace_root(workspace_id, course_id, None) if workspace_id else None
+        normalized_cwd = (cwd or "").strip()
+        if not normalized_cwd:
+            return workspace_root
+
+        if workspace_root:
+            if normalized_cwd.startswith("/"):
+                resolved = posixpath.normpath(normalized_cwd)
+                if resolved == workspace_root or resolved.startswith(f"{workspace_root}/"):
+                    return resolved
+                msg = "Runtime cwd must stay inside the workspace root"
+                raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="invalid_cwd")
+
+            relative = self._normalize_workspace_relative_path(normalized_cwd)
+            return posixpath.join(workspace_root, relative)
+
+        if normalized_cwd.startswith("/"):
+            resolved = posixpath.normpath(normalized_cwd)
+        else:
+            resolved = posixpath.normpath(posixpath.join(HOME_USER_DIR, normalized_cwd))
+
+        if resolved == HOME_USER_DIR or resolved.startswith(f"{HOME_USER_DIR}/"):
+            return resolved
+        msg = f"Runtime cwd must stay inside {HOME_USER_DIR}"
+        raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="invalid_cwd")
+
+    def _resolve_runtime_list_path(self, *, path: str, course_id: str | None, workspace_id: str | None) -> str:
+        normalized_path = (path or ".").strip()
+        workspace_root = self._resolve_workspace_root(workspace_id, course_id, None) if workspace_id else None
+        if workspace_root:
+            if normalized_path in {"", "."}:
+                return workspace_root
+            if normalized_path.startswith("/"):
+                resolved = posixpath.normpath(normalized_path)
+                if resolved == workspace_root or resolved.startswith(f"{workspace_root}/"):
+                    return resolved
+                msg = "Runtime list path must stay inside the workspace root"
+                raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="invalid_path")
+            relative = self._normalize_workspace_relative_path(normalized_path)
+            return posixpath.join(workspace_root, relative)
+
+        if normalized_path.startswith("/"):
+            resolved = posixpath.normpath(normalized_path)
+        else:
+            resolved = posixpath.normpath(posixpath.join(HOME_USER_DIR, normalized_path))
+
+        if resolved == HOME_USER_DIR or resolved.startswith(f"{HOME_USER_DIR}/"):
+            return resolved
+        msg = f"Runtime list path must stay inside {HOME_USER_DIR}"
+        raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="invalid_path")
+
+    async def _ensure_runtime_directory_exists(self, sbx: Any, directory_path: str) -> None:
+        if not (directory_path == HOME_USER_DIR or directory_path.startswith(f"{HOME_USER_DIR}/")):
+            msg = f"Runtime cwd must stay inside {HOME_USER_DIR}"
+            raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="invalid_cwd")
+
+        quoted = shlex.quote(directory_path)
+        mkdir_command = f"mkdir -p {quoted}"
+        try:
+            try:
+                await sbx.commands.run(cmd=mkdir_command, timeout=30, request_timeout=45, user="user")
+            except TypeError:
+                await sbx.commands.run(cmd=mkdir_command, timeout=30, request_timeout=45)
+        except CommandExitException as exc:
+            error_text = getattr(exc, "stderr", None) or str(exc)
+            msg = self._command_failure_message(mkdir_command, error_text)
+            raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="mkdir_failed") from exc
+        except TimeoutException as exc:
+            msg = "Preparing runtime working directory timed out"
+            raise CodeExecutionError(msg, status_code=status.HTTP_504_GATEWAY_TIMEOUT, error_code="timeout") from exc
+        except (
+            OSError,
+            RuntimeError,
+            InvalidArgumentException,
+            AuthenticationException,
+            SandboxException,
+        ) as exc:
+            msg = f"Failed to prepare runtime working directory: {exc}"
+            raise CodeExecutionError(msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="mkdir_failed") from exc
+
+    def _parse_runtime_list_line(self, raw_line: str) -> tuple[str, int, str]:
+        parts = raw_line.split("\t", 2)
+        if len(parts) != 3:
+            return "f", 0, raw_line
+        raw_kind, raw_size, raw_path = parts
+        try:
+            size = int(raw_size)
+        except (TypeError, ValueError):
+            size = 0
+        kind = raw_kind if raw_kind in {"d", "f"} else "f"
+        return kind, size, raw_path
 
 
 async def _maybe_await(value: Any) -> Any:
