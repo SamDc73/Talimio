@@ -471,7 +471,6 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 								"min-h-[120px]"
 							)}
 							rows={4}
-							maxLength={500}
 						/>
 
 						<div className="flex items-end justify-between px-3 pb-3 pt-2 gap-2">
@@ -595,8 +594,6 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 									</span>
 								)}
 							</div>
-
-							<div className="text-xs text-muted-foreground/40 font-mono select-none">{prompt.length}/500</div>
 						</div>
 					</fieldset>
 				</div>
