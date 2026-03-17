@@ -21,6 +21,37 @@ const MODAL_STEPS = {
 	SELF_ASSESSMENT: "selfAssessment",
 }
 
+const EXISTENTIAL_MESSAGES = [
+	"Why does everything take so long?",
+	"Is this what waiting feels like?",
+	"Extracting thoughts from a black box...",
+	"WARN: User might actually learn something",
+	"Have you tried turning it off and on again?",
+	"Consulting the neural networks...",
+	"Loading: the musical",
+	"Plot twist: it was loading all along",
+	"Taking the scenic route through latent space...",
+	"Your tokens are in another castle...",
+	"This should work... (I've said that before, but this time I mean it)",
+	"Loading complete! (just kidding)",
+	"Seriously though, any second now...",
+	"Almost there... relatively speaking",
+	"Wait, did this actually work?",
+	"Running gradient descent on your patience...",
+	"We believe in you. Keep waiting.",
+	"Your patience is appreciated (weirdo)",
+]
+
+const EXISTENTIAL_ERRORS = [
+	"Well, that didn't work...",
+	"Error: User might need to try again",
+	"404: Success not found",
+	"Something went sideways...",
+	"The robots are confused",
+	"Plot twist: it failed",
+	"Well this is awkward...",
+]
+
 const examplePrompts = [
 	"Learn React and build modern web apps",
 	"Master Python for data science",
@@ -172,6 +203,9 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	const [attachments, setAttachments] = useState([])
 	const [dragActive, setDragActive] = useState(false)
 	const [isAddingAttachments, setIsAddingAttachments] = useState(false)
+	const [messageIndex, setMessageIndex] = useState(0)
+	const [showInitial, setShowInitial] = useState(true)
+	const [errorIndex, setErrorIndex] = useState(0)
 	const fileInputRef = useRef(null)
 	const attachmentSequenceRef = useRef(0)
 	const attachmentsRef = useRef([])
@@ -192,6 +226,20 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 			}
 		}
 	}, [])
+
+	useEffect(() => {
+		if (!isGenerating) {
+			setMessageIndex(0)
+			setShowInitial(true)
+			return
+		}
+		const interval = setInterval(() => {
+			setShowInitial(false)
+			// eslint-disable-next-line sonarjs/pseudo-random -- display humor, not security sensitive
+			setMessageIndex(Math.floor(Math.random() * EXISTENTIAL_MESSAGES.length))
+		}, 5000)
+		return () => clearInterval(interval)
+	}, [isGenerating])
 
 	const resetForm = () => {
 		setPrompt("")
@@ -413,8 +461,9 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 
 			throw new Error("Failed to create course - no response data")
 		} catch (creationError) {
-			const fallbackMessage = creationError?.message || "Failed to create course. Please try again."
-			setError(fallbackMessage)
+			// eslint-disable-next-line sonarjs/pseudo-random -- display humor, not security sensitive
+			setErrorIndex(Math.floor(Math.random() * EXISTENTIAL_ERRORS.length))
+			setError(creationError?.message || "Failed to create course. Please try again.")
 			setActiveStep(MODAL_STEPS.PROMPT)
 		} finally {
 			setIsGenerating(false)
@@ -694,12 +743,6 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 					</label>
 				</div>
 
-				{error ? (
-					<div className="p-2.5 bg-destructive/10 border border-destructive/20 rounded-lg">
-						<p className="text-sm text-destructive">{error}</p>
-					</div>
-				) : null}
-
 				<div className="flex justify-end gap-2.5 pt-2.5">
 					<Button type="button" variant="outline" onClick={closeModal} disabled={isGenerating}>
 						Cancel
@@ -751,16 +794,66 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
 			<DialogContent className="sm:max-w-[560px] gap-5">
 				<div className="relative">
-					{isGenerating ? (
-						<div className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm">
-							<div className="flex flex-col items-center gap-3 text-muted-foreground">
-								<Loader2 className="size-5  animate-spin" />
-								<span className="text-sm">
-									{attachments.length > 0 ? "Uploading attachments & generating course..." : "Generating course..."}
-								</span>
-							</div>
-						</div>
-					) : null}
+					<AnimatePresence>
+						{isGenerating && (
+							<motion.div
+								key="loading-overlay"
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								transition={{ duration: 0.3 }}
+								className="absolute inset-0 top-12 z-20 flex items-center justify-center rounded-lg bg-background shadow-sm border border-border/30"
+							>
+								<AnimatePresence mode="wait">
+									<motion.div
+										key={showInitial ? "initial" : messageIndex}
+										initial={{ opacity: 0 }}
+										animate={{ opacity: 1 }}
+										exit={{ opacity: 0 }}
+										transition={{ duration: 0.5, ease: "easeInOut" }}
+										className="text-base text-center px-8"
+									>
+										{showInitial ? "Loading..." : EXISTENTIAL_MESSAGES[messageIndex]}
+									</motion.div>
+								</AnimatePresence>
+							</motion.div>
+						)}
+					</AnimatePresence>
+					<AnimatePresence>
+						{error && (
+							<motion.div
+								key="error-overlay"
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								transition={{ duration: 0.3 }}
+								className="absolute inset-0 top-12 z-20 flex flex-col items-center justify-center rounded-lg bg-background shadow-sm border border-border/30"
+							>
+								<AnimatePresence mode="wait">
+									<motion.div
+										key={errorIndex}
+										initial={{ opacity: 0 }}
+										animate={{ opacity: 1 }}
+										exit={{ opacity: 0 }}
+										transition={{ duration: 0.5, ease: "easeInOut" }}
+										className="text-base text-center px-8 text-destructive"
+									>
+										{EXISTENTIAL_ERRORS[errorIndex]}
+									</motion.div>
+								</AnimatePresence>
+								<button
+									type="button"
+									onClick={() => {
+										setError("")
+										setActiveStep(MODAL_STEPS.PROMPT)
+									}}
+									className="mt-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
+								>
+									Try again
+								</button>
+							</motion.div>
+						)}
+					</AnimatePresence>
 					<AnimatePresence mode="wait">
 						{activeStep === MODAL_STEPS.PROMPT ? promptStepContent : selfAssessmentStep}
 					</AnimatePresence>
