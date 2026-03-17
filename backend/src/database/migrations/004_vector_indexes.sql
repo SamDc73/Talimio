@@ -38,15 +38,20 @@ END $$;
 -- Create HNSW indexes (idempotent); tolerate environments where columns can't be altered
 DO $$
 BEGIN
-  BEGIN
-    EXECUTE 'CREATE INDEX IF NOT EXISTS lm_vec_cos ON learning_memories USING hnsw (vector vector_cosine_ops)';
-  EXCEPTION WHEN others THEN
-    NULL;
-  END;
+  -- pgvector HNSW supports up to 2000 dimensions for vector columns.
+  IF ${MEMORY_EMBEDDING_OUTPUT_DIM} <= 2000 THEN
+    BEGIN
+      EXECUTE 'CREATE INDEX IF NOT EXISTS lm_vec_cos ON learning_memories USING hnsw (vector vector_cosine_ops)';
+    EXCEPTION WHEN others THEN
+      NULL;
+    END;
+  END IF;
 
-  BEGIN
-    EXECUTE 'CREATE INDEX IF NOT EXISTS rag_document_chunks_embedding_hnsw_idx ON rag_document_chunks USING hnsw (embedding vector_cosine_ops)';
-  EXCEPTION WHEN others THEN
-    NULL;
-  END;
+  IF ${RAG_EMBEDDING_OUTPUT_DIM} <= 2000 THEN
+    BEGIN
+      EXECUTE 'CREATE INDEX IF NOT EXISTS rag_document_chunks_embedding_hnsw_idx ON rag_document_chunks USING hnsw (embedding vector_cosine_ops)';
+    EXCEPTION WHEN others THEN
+      NULL;
+    END;
+  END IF;
 END $$;

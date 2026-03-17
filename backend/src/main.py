@@ -22,6 +22,7 @@ from starlette_csrf import CSRFMiddleware
 
 from .ai.assistant.router import router as assistant_router
 from .ai.mcp.router import router as mcp_router
+from .ai.rag.config import rag_config
 from .ai.rag.router import router as rag_router
 from .auth.csrf import get_csrf_cookie_domain
 from .auth.router import router as auth_router
@@ -33,7 +34,7 @@ from .config.logging import setup_logging
 from .config.settings import get_settings
 from .content.router import router as content_router
 from .courses.router import router as courses_router
-from .database.migrate import apply_migrations
+from .database.migrate import apply_migrations, validate_vector_schema_dimensions
 from .database.session import DbSession, engine
 from .exceptions import DomainError, ErrorCategory, ErrorCode
 from .highlights.router import router as highlights_router
@@ -83,14 +84,14 @@ def _register_routers(app: FastAPI) -> None:
 
 async def _startup() -> None:
     """Perform lightweight startup checks and initialization."""
-    from src.ai.rag.config import RAGConfig
-
-    rag_config = RAGConfig()
     if rag_config.embedding_model:
         logger.debug("startup.rag.config_loaded")
 
     applied_migrations = await apply_migrations(engine)
     logger.info("startup.migrations.checked", extra={"applied_count": applied_migrations})
+
+    await validate_vector_schema_dimensions(engine)
+    logger.info("startup.vector_schema.checked")
 
     from src.ai.memory import warm_memory_client
 

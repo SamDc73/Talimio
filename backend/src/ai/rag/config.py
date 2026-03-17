@@ -3,6 +3,8 @@
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from src.config.settings import get_settings
+
 
 class RAGConfig(BaseSettings):
     """RAG system configuration."""
@@ -11,10 +13,6 @@ class RAGConfig(BaseSettings):
     embedding_model: str = Field(
         default="",  # Optional - RAG might not be configured
         description="Model for generating embeddings via LiteLLM",
-    )
-    embedding_output_dim: int | None = Field(
-        default=None,  # Optional - only needed for models with variable dimensions
-        description="Embedding vector dimensions (only for models that support it like OpenAI text-embedding-3)",
     )
     embedding_context_size: int | None = Field(
         default=None,
@@ -82,6 +80,11 @@ class RAGConfig(BaseSettings):
         env_file=".env",
         extra="ignore",
     )
+
+    @property
+    def embedding_output_dim(self) -> int | None:
+        """Return the canonical RAG embedding dimension from application settings."""
+        return get_settings().RAG_EMBEDDING_OUTPUT_DIM
 
 
 # Global configuration instance

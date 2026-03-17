@@ -112,6 +112,8 @@ class Settings(BaseSettings):
     PRIMARY_LLM_MODEL: str | None = None
     CODE_EXECUTION_LLM_MODEL: str | None = None
     AI_REQUEST_TIMEOUT: int = 300
+    RAG_EMBEDDING_OUTPUT_DIM: int | None = None
+    MEMORY_EMBEDDING_OUTPUT_DIM: int | None = None
 
     # AI Tooling Configuration
     AI_ENABLED_TOOLS: str = ""  # Comma-separated allowlist; empty means allow all.
@@ -198,6 +200,17 @@ class Settings(BaseSettings):
             raise ValueError(msg)
         if value > 10:
             msg = "EXA_SEARCH_MAX_RESULTS must be <= 10"
+            raise ValueError(msg)
+        return value
+
+    @field_validator("RAG_EMBEDDING_OUTPUT_DIM", "MEMORY_EMBEDDING_OUTPUT_DIM")
+    @classmethod
+    def validate_embedding_output_dimensions(cls, value: int | None) -> int | None:
+        """Ensure configured embedding dimensions are positive when provided."""
+        if value is None:
+            return None
+        if value <= 0:
+            msg = "Embedding output dimensions must be greater than zero"
             raise ValueError(msg)
         return value
 

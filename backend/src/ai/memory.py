@@ -53,15 +53,8 @@ def _memory_is_configured() -> bool:
 
 
 def _resolve_embedding_dims() -> int | None:
-    """Return configured embedding dimension, if provided."""
-    raw_value = env("MEMORY_EMBEDDING_OUTPUT_DIM")
-    if raw_value in (None, ""):
-        return None
-    try:
-        return int(raw_value)
-    except (TypeError, ValueError) as exc:
-        msg = "MEMORY_EMBEDDING_OUTPUT_DIM must be an integer"
-        raise ValueError(msg) from exc
+    """Return the canonical memory embedding dimension, if configured."""
+    return get_settings().MEMORY_EMBEDDING_OUTPUT_DIM
 
 
 def _get_memory_config() -> dict[str, Any]:
