@@ -22,6 +22,7 @@ import {
 	RefreshCwIcon,
 	SquareIcon,
 } from "lucide-react"
+import { createContext, useContext } from "react"
 import { Button } from "@/components/Button"
 import {
 	ComposerAddAttachment,
@@ -34,36 +35,41 @@ import { ToolFallback } from "@/features/assistant/components/ToolFallback"
 import { TooltipIconButton } from "@/features/assistant/components/TooltipIconButton"
 import { cn } from "@/lib/utils"
 
-export function AssistantThread() {
+const DEFAULT_TOOL_RENDERERS = { Fallback: ToolFallback }
+const ToolRenderersContext = createContext(DEFAULT_TOOL_RENDERERS)
+
+export function AssistantThread({ toolRenderers = DEFAULT_TOOL_RENDERERS }) {
 	return (
-		<ThreadPrimitive.Root
-			className="aui-root aui-thread-root @container flex h-full min-h-0 flex-col bg-background"
-			style={{
-				"--thread-max-width": "44rem",
-			}}
-		>
-			<ThreadPrimitive.Viewport
-				autoScroll
-				className="aui-thread-viewport relative flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-auto px-4 pt-4"
+		<ToolRenderersContext.Provider value={toolRenderers}>
+			<ThreadPrimitive.Root
+				className="aui-root aui-thread-root @container flex h-full min-h-0 flex-col bg-background"
+				style={{
+					"--thread-max-width": "44rem",
+				}}
 			>
-				<AuiIf condition={(s) => s.thread.isEmpty}>
-					<ThreadWelcome />
-				</AuiIf>
+				<ThreadPrimitive.Viewport
+					autoScroll
+					className="aui-thread-viewport relative flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-auto px-4 pt-4"
+				>
+					<AuiIf condition={(s) => s.thread.isEmpty}>
+						<ThreadWelcome />
+					</AuiIf>
 
-				<ThreadPrimitive.Messages
-					components={{
-						UserMessage,
-						EditComposer,
-						AssistantMessage,
-					}}
-				/>
+					<ThreadPrimitive.Messages
+						components={{
+							UserMessage,
+							EditComposer,
+							AssistantMessage,
+						}}
+					/>
 
-				<ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer sticky bottom-0 mx-auto mt-auto flex w-full max-w-(--thread-max-width) flex-col gap-4 overflow-visible rounded-t-3xl bg-background pb-4 md:pb-6">
-					<ThreadScrollToBottom />
-					<Composer />
-				</ThreadPrimitive.ViewportFooter>
-			</ThreadPrimitive.Viewport>
-		</ThreadPrimitive.Root>
+					<ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer sticky bottom-0 mx-auto mt-auto flex w-full max-w-(--thread-max-width) flex-col gap-4 overflow-visible rounded-t-3xl bg-background pb-4 md:pb-6">
+						<ThreadScrollToBottom />
+						<Composer />
+					</ThreadPrimitive.ViewportFooter>
+				</ThreadPrimitive.Viewport>
+			</ThreadPrimitive.Root>
+		</ToolRenderersContext.Provider>
 	)
 }
 
@@ -140,7 +146,6 @@ function Composer() {
 					placeholder="Send a message..."
 					className="aui-composer-input mb-1 max-h-32 min-h-14 w-full resize-none bg-transparent px-4 pt-2 pb-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0"
 					rows={1}
-					autoFocus
 					aria-label="Message input"
 				/>
 				<ComposerAction />
@@ -199,6 +204,8 @@ function MessageError() {
 }
 
 function AssistantMessage() {
+	const toolRenderers = useContext(ToolRenderersContext)
+
 	return (
 		<MessagePrimitive.Root
 			className="aui-assistant-message-root fade-in slide-in-from-bottom-1 relative mx-auto w-full max-w-(--thread-max-width) animate-in py-3 duration-150"
@@ -208,7 +215,7 @@ function AssistantMessage() {
 				<MessagePrimitive.Parts
 					components={{
 						Text: MarkdownText,
-						tools: { Fallback: ToolFallback },
+						tools: toolRenderers,
 					}}
 				/>
 				<MessageError />
@@ -310,10 +317,7 @@ function EditComposer() {
 	return (
 		<MessagePrimitive.Root className="aui-edit-composer-wrapper mx-auto flex w-full max-w-(--thread-max-width) flex-col px-2 py-3">
 			<ComposerPrimitive.Root className="aui-edit-composer-root ml-auto flex w-full max-w-[85%] flex-col rounded-2xl bg-muted">
-				<ComposerPrimitive.Input
-					className="aui-edit-composer-input min-h-14 w-full resize-none bg-transparent p-4 text-foreground text-sm outline-none"
-					autoFocus
-				/>
+				<ComposerPrimitive.Input className="aui-edit-composer-input min-h-14 w-full resize-none bg-transparent p-4 text-foreground text-sm outline-none" />
 				<div className="aui-edit-composer-footer mx-3 mb-3 flex items-center gap-2 self-end">
 					<ComposerPrimitive.Cancel asChild>
 						<Button variant="ghost" size="sm">

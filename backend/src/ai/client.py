@@ -11,7 +11,7 @@ import litellm
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai import AGENT_ID_DEFAULT
+from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_DEFAULT
 from src.ai.errors import (
     AIProviderError,
     AIRateLimitOrQuotaError,
@@ -62,7 +62,7 @@ configure_litellm()
 
 T = TypeVar("T", bound=BaseModel)
 
-_MAX_AUTONOMY_ROUNDS = 6
+_MAX_AUTONOMY_ROUNDS = 8
 _MAX_STRUCTURED_GENERATION_ATTEMPTS = 2
 
 _LITELLM_PROVIDER_ERROR_TYPES = (
@@ -110,6 +110,33 @@ _GENERATION_WRAPPER_ERROR_TYPES = (
     RuntimeError,
     TypeError,
     ValueError,
+)
+_LEARNING_TOOL_NAMES = {
+    "search_lessons",
+    "list_relevant_courses",
+    "get_course_state",
+    "get_course_outline_state",
+    "get_lesson_state",
+    "get_course_frontier",
+    "create_course",
+    "append_course_lesson",
+    "extend_lesson_with_context",
+    "regenerate_lesson_with_context",
+}
+_LEARNING_INTENT_KEYWORDS = (
+    "create course",
+    "new course",
+    "append lesson",
+    "add lesson",
+    "extend lesson",
+    "regenerate lesson",
+    "course state",
+    "course outline",
+    "lesson state",
+    "course frontier",
+    "relevant course",
+    "search lesson",
+    "find lesson",
 )
 
 
@@ -266,6 +293,82 @@ class LLMClient:
             return
         self._logger.error("%s failed: %s (%s)", operation, error, error.category.value)
 
+    def _extract_latest_user_text(self, conversation: list[dict[str, Any]]) -> str:
+        for message in reversed(conversation):
+            if message.get("role") != "user":
+                continue
+
+            content = message.get("content")
+            if isinstance(content, str):
+                return content.strip()
+            if not isinstance(content, list):
+                return ""
+
+            text_parts: list[str] = []
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") != "text":
+                    continue
+                text = part.get("text")
+                if isinstance(text, str) and text.strip():
+                    text_parts.append(text.strip())
+            return " ".join(text_parts).strip()
+
+        return ""
+
+    def _looks_like_learning_intent(self, user_text: str) -> bool:
+        lowered = user_text.lower()
+        return any(keyword in lowered for keyword in _LEARNING_INTENT_KEYWORDS)
+
+    def _log_learning_capability_turn(
+        self,
+        *,
+        tool_targets: dict[str, ToolTarget],
+        used_tool_names: set[str],
+        conversation: list[dict[str, Any]],
+        user_id: uuid.UUID | None,
+        phase: str,
+    ) -> None:
+        available_learning_tools = sorted(name for name in tool_targets if name in _LEARNING_TOOL_NAMES)
+        if not available_learning_tools:
+            return
+
+        used_learning_tools = sorted(name for name in used_tool_names if name in _LEARNING_TOOL_NAMES)
+        user_text = self._extract_latest_user_text(conversation)
+        should_use = self._looks_like_learning_intent(user_text) if user_text else False
+
+        if used_learning_tools:
+            self._logger.info(
+                "learning_capability.turn.used",
+                extra={
+                    "phase": phase,
+                    "user_id": str(user_id) if user_id else None,
+                    "used_tools": used_learning_tools,
+                    "available_tools": available_learning_tools,
+                },
+            )
+            return
+
+        self._logger.info(
+            "learning_capability.turn.not_used",
+            extra={
+                "phase": phase,
+                "user_id": str(user_id) if user_id else None,
+                "available_tools": available_learning_tools,
+                "should_use": should_use,
+            },
+        )
+        if should_use:
+            self._logger.warning(
+                "learning_capability.turn.missed_opportunity",
+                extra={
+                    "phase": phase,
+                    "user_id": str(user_id) if user_id else None,
+                    "available_tools": available_learning_tools,
+                },
+            )
+
     async def _assemble_request_context(self, request: _LLMRequest) -> None:
         """Ordered context assembly: normalize -> memory -> tools."""
         if request.user_id is not None:
@@ -303,6 +406,12 @@ class LLMClient:
             request.mcp_config = mcp_config
         else:
             request.mcp_config = None
+
+        if request.user_id is not None and self._agent_id == AGENT_ID_ASSISTANT:
+            from src.ai.tools.learning import build_learning_action_tools, build_learning_query_tools
+
+            function_tools.extend(build_learning_query_tools(user_id=request.user_id))
+            function_tools.extend(build_learning_action_tools(user_id=request.user_id))
 
         return build_request_tool_plan(
             model=request.model,
@@ -543,6 +652,7 @@ class LLMClient:
         """Run the shared non-stream autonomy loop for structured and free-form calls."""
         conversation = list(request.messages)
         tool_round = 0
+        used_tool_names_in_turn: set[str] = set()
 
         while True:
             tool_round += 1
@@ -576,6 +686,8 @@ class LLMClient:
             tool_calls = getattr(assistant_message, "tool_calls", None)
 
             if tool_calls:
+                normalized_tool_calls = self._normalize_chat_tool_calls(tool_calls)
+                used_tool_names_in_turn.update(call.name for call in normalized_tool_calls)
                 await self._append_tool_calls(
                     conversation,
                     assistant_content=assistant_content,
@@ -586,6 +698,13 @@ class LLMClient:
                 )
                 continue
 
+            self._log_learning_capability_turn(
+                tool_targets=request.tool_targets,
+                used_tool_names=used_tool_names_in_turn,
+                conversation=conversation,
+                user_id=request.user_id,
+                phase="chat_completions",
+            )
             conversation.append({"role": "assistant", "content": assistant_content})
             if request.response_model is None:
                 return assistant_content, conversation
@@ -603,6 +722,7 @@ class LLMClient:
         response_input = list(request.messages)
         previous_response_id: str | None = None
         tool_round = 0
+        used_tool_names_in_turn: set[str] = set()
 
         while True:
             tool_round += 1
@@ -627,6 +747,7 @@ class LLMClient:
             assistant_content = self._extract_responses_text(response)
             function_calls = self._extract_responses_function_calls(response)
             if function_calls:
+                used_tool_names_in_turn.update(call.name for call in function_calls)
                 executed_calls = await execute_planned_tool_calls(
                     calls=function_calls,
                     tool_targets=request.tool_targets,
@@ -659,6 +780,13 @@ class LLMClient:
                     raise AIToolExecutionError(msg)
                 continue
 
+            self._log_learning_capability_turn(
+                tool_targets=request.tool_targets,
+                used_tool_names=used_tool_names_in_turn,
+                conversation=conversation,
+                user_id=request.user_id,
+                phase="responses",
+            )
             conversation.append({"role": "assistant", "content": assistant_content})
             return assistant_content, conversation
 
@@ -746,57 +874,72 @@ class LLMClient:
         conversation = list(messages)
         full_text: list[str] = []
         tool_round = 0
+        used_tool_names_in_turn: set[str] = set()
 
-        while True:
-            tool_round += 1
-            if tool_round > _MAX_AUTONOMY_ROUNDS:
-                self._logger.warning("Stopping tool loop after %s rounds for user %s", tool_round - 1, user_id)
-                break
+        try:
+            while True:
+                tool_round += 1
+                if tool_round > _MAX_AUTONOMY_ROUNDS:
+                    self._logger.warning("Stopping tool loop after %s rounds for user %s", tool_round - 1, user_id)
+                    break
 
-            # Stream from the model.
-            stream = await self.complete(
-                messages=conversation,
-                temperature=temperature,
-                tools=tools,
-                tool_choice=tool_choice,
-                user_id=user_id,
-                stream=True,
-                model=model,
-                num_retries=num_retries,
-                max_completion_tokens=None,
-                parallel_tool_calls=bool(tools),
-            )
-
-            chunks: list[Any] = []
-            round_text: list[str] = []
-            async for chunk in stream:
-                chunks.append(chunk)
-                delta = self._extract_stream_delta_content(chunk)
-                if delta:
-                    full_text.append(delta)
-                    round_text.append(delta)
-                    yield delta
-
-            built_message = self._rebuild_stream_message(chunks, conversation)
-            tool_calls = self._extract_message_tool_calls(built_message)
-            assistant_content = self._extract_message_content(built_message)
-
-            # If we didn't get rebuilt content, fall back to what we already streamed this round.
-            if not assistant_content:
-                assistant_content = "".join(round_text)
-
-            if tool_calls:
-                await self._append_tool_calls(
-                    conversation,
-                    assistant_content=assistant_content,
-                    tool_calls=tool_calls,
+                # Stream from the model.
+                stream = await self.complete(
+                    messages=conversation,
+                    temperature=temperature,
+                    tools=tools,
+                    tool_choice=tool_choice,
                     user_id=user_id,
-                    tool_targets=tool_targets,
-                    mcp_config=mcp_config,
+                    stream=True,
+                    model=model,
+                    num_retries=num_retries,
+                    max_completion_tokens=None,
+                    parallel_tool_calls=bool(tools),
                 )
-                continue
 
-            break
+                chunks: list[Any] = []
+                round_text: list[str] = []
+                async for chunk in stream:
+                    chunks.append(chunk)
+                    delta = self._extract_stream_delta_content(chunk)
+                    if delta:
+                        full_text.append(delta)
+                        round_text.append(delta)
+                        yield delta
+
+                built_message = self._rebuild_stream_message(chunks, conversation)
+                tool_calls = self._extract_message_tool_calls(built_message)
+                assistant_content = self._extract_message_content(built_message)
+
+                # If we didn't get rebuilt content, fall back to what we already streamed this round.
+                if not assistant_content:
+                    assistant_content = "".join(round_text)
+
+                if tool_calls:
+                    normalized_tool_calls = self._normalize_chat_tool_calls(tool_calls)
+                    used_tool_names_in_turn.update(call.name for call in normalized_tool_calls)
+                    await self._append_tool_calls(
+                        conversation,
+                        assistant_content=assistant_content,
+                        tool_calls=tool_calls,
+                        user_id=user_id,
+                        tool_targets=tool_targets,
+                        mcp_config=mcp_config,
+                    )
+                    continue
+
+                self._log_learning_capability_turn(
+                    tool_targets=tool_targets,
+                    used_tool_names=used_tool_names_in_turn,
+                    conversation=conversation,
+                    user_id=user_id,
+                    phase="streaming",
+                )
+                break
+        except _COMPLETION_RUNTIME_ERROR_TYPES as error:
+            mapped = self._map_runtime_error(error, default_message="Completion failed")
+            self._log_runtime_error(mapped, operation="Completion")
+            raise mapped from error
 
         # Save conversation to memory (non-blocking). Keep this best-effort.
         self._schedule_memory_save(user_id, conversation, "".join(full_text))

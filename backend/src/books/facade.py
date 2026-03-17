@@ -7,9 +7,9 @@ import uuid
 from collections.abc import Callable, Coroutine
 from typing import Any
 
+from fastapi import status
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.rag.service import RAGService

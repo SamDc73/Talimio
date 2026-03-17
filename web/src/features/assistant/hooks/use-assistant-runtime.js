@@ -10,6 +10,7 @@ import { useDataStreamRuntime } from "@assistant-ui/react-data-stream"
 import { createElement, useCallback, useEffect, useMemo, useRef } from "react"
 import { useChatSidebar } from "@/contexts/ChatSidebarContext"
 import { assistantApi } from "@/features/assistant/api/assistantApi"
+import { getAssistantToolRenderers } from "@/features/assistant/assistantToolRenderers"
 import { getApiUrl } from "@/lib/apiBase"
 import { getCsrfHeaders } from "@/lib/csrf"
 import logger from "@/lib/logger"
@@ -180,6 +181,7 @@ const createTitleStream = (title) => {
 }
 
 const useAssistantDataStreamRuntime = () => {
+	const aui = useAui()
 	const { claimPendingQuote, setInitialText } = useChatSidebar()
 
 	const toBlockquote = useCallback((rawText) => {
@@ -196,7 +198,10 @@ const useAssistantDataStreamRuntime = () => {
 	}, [])
 
 	const body = useCallback(async () => {
-		const payload = {}
+		const { remoteId } = await aui.threadListItem().initialize()
+		const payload = {
+			threadId: remoteId,
+		}
 
 		const rawQuote = claimPendingQuote() || ""
 		const pendingQuote = toBlockquote(rawQuote)
@@ -206,7 +211,7 @@ const useAssistantDataStreamRuntime = () => {
 		}
 
 		return payload
-	}, [claimPendingQuote, setInitialText, toBlockquote])
+	}, [aui, claimPendingQuote, setInitialText, toBlockquote])
 
 	return useDataStreamRuntime(
 		useMemo(
@@ -422,5 +427,6 @@ export const useAssistantRuntime = () => {
 		adapter: threadListAdapter,
 	})
 
-	return runtime
+	const toolRenderers = useMemo(() => getAssistantToolRenderers(), [])
+	return { runtime, toolRenderers }
 }

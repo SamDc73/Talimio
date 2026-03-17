@@ -10,7 +10,7 @@ from src.courses.schemas import CourseResponse
 
 import logging
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from src.courses.models import Course, Lesson
 from src.courses.services.course_response_builder import CourseResponseBuilder
@@ -51,12 +51,18 @@ class CourseQueryService:
         page: int = 1,
         per_page: int = 20,
         search: str | None = None,
+        include_archived: bool = True,
     ) -> tuple[list[CourseResponse], int]:
         """List courses with pagination and optional search."""
         offset = (page - 1) * per_page
 
         base_query = select(Course).where(Course.user_id == user_id)
         count_query = select(func.count(Course.id)).where(Course.user_id == user_id)
+
+        if not include_archived:
+            archive_filter = or_(Course.archived.is_(False), Course.archived.is_(None))
+            base_query = base_query.where(archive_filter)
+            count_query = count_query.where(archive_filter)
 
         if search:
             search_pattern = f"%{search}%"

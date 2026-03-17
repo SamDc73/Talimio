@@ -15,9 +15,9 @@
 		"preview": "vite preview"
 	},
 	"dependencies": {
-		"@assistant-ui/react": "^0.12.11",
-		"@assistant-ui/react-data-stream": "^0.12.4",
-		"@assistant-ui/react-markdown": "^0.12.4",
+		"@assistant-ui/react": "^0.12.17",
+		"@assistant-ui/react-data-stream": "^0.12.6",
+		"@assistant-ui/react-markdown": "^0.12.5",
 		"@codemirror/language": "^6.12.1",
 		"@codemirror/language-data": "^6.5.2",
 		"@codemirror/state": "^6.5.4",

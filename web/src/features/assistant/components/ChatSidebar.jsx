@@ -1,5 +1,5 @@
 import { AssistantRuntimeProvider, ThreadListPrimitive } from "@assistant-ui/react"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, domAnimation, LazyMotion, m } from "framer-motion"
 import { GripVertical, Pin, PlusIcon, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { Button } from "@/components/Button"
@@ -25,7 +25,7 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 	const toggleAssistantSidebarPin = useToggleAssistantPinned()
 	const setAssistantSidebarWidth = useSetAssistantSidebarWidth()
 
-	const runtime = useAssistantRuntime()
+	const { runtime, toolRenderers } = useAssistantRuntime()
 	const sidebarRef = useRef(null)
 	const [isPending, startTransition] = useTransition()
 	const [localWidth, setLocalWidth] = useState(assistantSidebarWidth || DEFAULT_WIDTH)
@@ -155,11 +155,11 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 	)
 
 	return (
-		<>
+		<LazyMotion features={domAnimation}>
 			{/* Backdrop overlay for unpinned mode */}
 			<AnimatePresence>
 				{isOpen && !assistantSidebarPinned && (
-					<motion.div
+					<m.div
 						initial="closed"
 						animate="open"
 						exit="closed"
@@ -172,7 +172,7 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 			</AnimatePresence>
 
 			{/* Sidebar */}
-			<motion.aside
+			<m.aside
 				ref={sidebarRef}
 				className={cn(
 					"fixed top-0 right-0 z-50 h-screen bg-background",
@@ -188,7 +188,7 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 			>
 				{/* Resize handle */}
 				{assistantSidebarPinned && !isMobile && (
-					<motion.div
+					<m.div
 						className={cn(
 							"absolute left-0 top-0 w-1.5 h-full cursor-col-resize",
 							"bg-transparent hover:bg-primary/20 active:bg-primary/30",
@@ -204,7 +204,7 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 						whileDrag={{ width: 12, backgroundColor: "rgb(var(--primary) / 0.3)" }}
 					>
 						<GripVertical className="h-8 w-3 opacity-0 hover:opacity-50" />
-					</motion.div>
+					</m.div>
 				)}
 
 				<ErrorBoundary>
@@ -219,7 +219,7 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 									<div className="flex items-center gap-1">
 										{/* New Chat Button */}
 										<ThreadListPrimitive.New asChild>
-											<motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+											<m.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
 												<Button
 													variant="ghost"
 													size="icon"
@@ -228,12 +228,12 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 												>
 													<PlusIcon className="size-4" />
 												</Button>
-											</motion.div>
+											</m.div>
 										</ThreadListPrimitive.New>
 
 										{/* Pin button */}
 										{!isMobile && (
-											<motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+											<m.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
 												<Button
 													variant="ghost"
 													size="icon"
@@ -254,11 +254,11 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 														)}
 													/>
 												</Button>
-											</motion.div>
+											</m.div>
 										)}
 
 										{/* Close button */}
-										<motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+										<m.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
 											<Button
 												variant="ghost"
 												size="icon"
@@ -268,24 +268,24 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 											>
 												<X className="size-4" />
 											</Button>
-										</motion.div>
+										</m.div>
 									</div>
 								</div>
 
 								{/* Assistant content */}
 								<div className="relative min-h-0 flex-1 overflow-hidden">
-									<AssistantThread />
+									<AssistantThread toolRenderers={toolRenderers} />
 								</div>
 							</ThreadListPrimitive.Root>
 						</div>
 					</AssistantRuntimeProvider>
 				</ErrorBoundary>
-			</motion.aside>
+			</m.aside>
 
 			{/* Edge hint when closed */}
 			<AnimatePresence>
 				{!isOpen && !assistantSidebarPinned && (
-					<motion.button
+					<m.button
 						initial={{ opacity: 0, x: 20 }}
 						animate={{ opacity: 1, x: 0 }}
 						exit={{ opacity: 0, x: 20 }}
@@ -301,6 +301,6 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 					/>
 				)}
 			</AnimatePresence>
-		</>
+		</LazyMotion>
 	)
 }
