@@ -7,7 +7,6 @@ import { createContext, memo, useContext, useEffect, useMemo } from "react"
 import { useAssistantModelsQuery } from "@/features/assistant/api/useAssistantModelsQuery"
 import { SelectContent, SelectRoot, SelectTrigger } from "@/features/assistant/components/Select"
 import { useAssistantModel, useSetAssistantModel } from "@/features/assistant/hooks/use-assistant-store"
-import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
 
 const ModelSelectorContext = createContext(null)
@@ -92,17 +91,11 @@ function ModelSelectorItem({ model, className, ...props }) {
 }
 
 function ModelSelectorImpl({ variant = "outline", size = "sm", contentClassName, className }) {
-	const { data, isLoading, isError, error } = useAssistantModelsQuery()
+	const { data, isLoading, isError } = useAssistantModelsQuery()
 	const models = useMemo(() => data?.models ?? [], [data?.models])
 	const assistantModel = useAssistantModel()
 	const setAssistantModel = useSetAssistantModel()
 	const api = useAssistantApi()
-
-	useEffect(() => {
-		if (isError) {
-			logger.error("Failed to fetch available models", error)
-		}
-	}, [isError, error])
 
 	useEffect(() => {
 		if (!assistantModel && models.length > 0) {
@@ -129,6 +122,7 @@ function ModelSelectorImpl({ variant = "outline", size = "sm", contentClassName,
 
 	const isSelectable = !isLoading && !isError && models.length > 0
 	const value = isSelectable ? assistantModel || models[0]?.id : modelOptions[0]?.id
+	const shouldHideSelector = !isLoading && !isError && models.length === 1
 
 	useEffect(() => {
 		if (!value) return
@@ -139,6 +133,10 @@ function ModelSelectorImpl({ variant = "outline", size = "sm", contentClassName,
 			getModelContext: () => config,
 		})
 	}, [api, value, modelOptions])
+
+	if (shouldHideSelector) {
+		return null
+	}
 
 	return (
 		<ModelSelectorRoot
