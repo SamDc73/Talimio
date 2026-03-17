@@ -69,6 +69,14 @@ class AdaptiveConceptBuildResult:
     concepts_by_index: list[Concept]
 
 
+@dataclass(slots=True)
+class CourseAttachmentIngestionResult:
+    """Container for uploaded course attachments and their searchability."""
+
+    image_data_urls: list[str]
+    has_searchable_documents: bool
+
+
 class CourseContentService:
     """Course service handling course-specific content operations."""
 
@@ -161,7 +169,7 @@ class CourseContentService:
             await session.flush()
 
             rag_service = RAGService()
-            image_data_urls = await self._ingest_course_attachments(
+            attachment_result = await self._ingest_course_attachments(
                 rag_service=rag_service,
                 session=session,
                 user_id=user_id,
@@ -174,8 +182,9 @@ class CourseContentService:
                 user_id=user_id,
                 course_id=course.id,
                 prompt_text=prompt_text,
+                has_searchable_documents=attachment_result.has_searchable_documents,
             )
-            prompt_payload = self._build_prompt_payload(augmented_prompt, image_data_urls)
+            prompt_payload = self._build_prompt_payload(augmented_prompt, attachment_result.image_data_urls)
 
             adaptive_structure = await self._build_adaptive_structure(
                 is_adaptive=is_adaptive,
@@ -313,15 +322,17 @@ class CourseContentService:
         user_id: uuid.UUID,
         course_id: uuid.UUID,
         attachments: list[UploadFile],
-    ) -> list[str]:
-        """Upload attachments and return image data URLs."""
+    ) -> CourseAttachmentIngestionResult:
+        """Upload attachments and describe what can be used for RAG search."""
         image_data_urls: list[str] = []
+        has_searchable_documents = False
         for attachment in attachments:
             raw_filename = attachment.filename or "attachment"
             filename = Path(raw_filename).name
             extension = Path(filename).suffix.lower()
             file_content = await attachment.read()
             if extension in _DOC_EXTENSIONS:
+                has_searchable_documents = True
                 document_type = extension.lstrip(".")
                 document = await rag_service.upload_document(
                     session=session,
@@ -348,7 +359,10 @@ class CourseContentService:
                     filename=filename,
                     process_in_background=False,
                 )
-        return image_data_urls
+        return CourseAttachmentIngestionResult(
+            image_data_urls=image_data_urls,
+            has_searchable_documents=has_searchable_documents,
+        )
 
     async def _build_augmented_prompt(
         self,
@@ -358,10 +372,13 @@ class CourseContentService:
         user_id: uuid.UUID,
         course_id: uuid.UUID,
         prompt_text: str,
+        has_searchable_documents: bool,
     ) -> str:
         """Append RAG context to the prompt when available."""
         if not prompt_text:
             return ""
+        if not has_searchable_documents:
+            return prompt_text
 
         results = await rag_service.search_documents(
             session=session,
