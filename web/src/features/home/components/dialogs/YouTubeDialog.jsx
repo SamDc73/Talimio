@@ -9,12 +9,54 @@ import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
 import logger from "@/lib/logger"
 
+const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/
+const YOUTUBE_HOSTS = new Set([
+	"youtube.com",
+	"www.youtube.com",
+	"m.youtube.com",
+	"music.youtube.com",
+	"youtube-nocookie.com",
+	"www.youtube-nocookie.com",
+])
+
+function extractYouTubeVideoId(rawUrl) {
+	let parsedUrl
+	try {
+		parsedUrl = new URL(rawUrl)
+	} catch {
+		return null
+	}
+
+	if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+		return null
+	}
+
+	const hostname = parsedUrl.hostname.toLowerCase()
+	const pathSegments = parsedUrl.pathname.split("/").filter(Boolean)
+	let candidateId = null
+
+	if (hostname === "youtu.be" || hostname === "www.youtu.be") {
+		candidateId = pathSegments[0] ?? null
+	} else if (YOUTUBE_HOSTS.has(hostname)) {
+		if (parsedUrl.pathname === "/watch") {
+			candidateId = parsedUrl.searchParams.get("v")
+		} else if (pathSegments.length >= 2 && ["embed", "v", "shorts", "live"].includes(pathSegments[0])) {
+			candidateId = pathSegments[1]
+		}
+	}
+
+	if (!candidateId || !YOUTUBE_VIDEO_ID_PATTERN.test(candidateId)) {
+		return null
+	}
+	return candidateId
+}
+
 export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 	const [youtubeUrl, setYoutubeUrl] = useState("")
 	const [isAddingVideo, setIsAddingVideo] = useState(false)
 
 	const trimmedUrl = youtubeUrl.trim()
-	const isValidUrl = Boolean(trimmedUrl) && (trimmedUrl.includes("youtube.com") || trimmedUrl.includes("youtu.be"))
+	const isValidUrl = Boolean(extractYouTubeVideoId(trimmedUrl))
 
 	const handleOpenChange = (nextOpen) => {
 		if (!nextOpen) handleClose()
@@ -31,7 +73,7 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 
 		setIsAddingVideo(true)
 		try {
-			const response = await createVideo(youtubeUrl)
+			const response = await createVideo(trimmedUrl)
 
 			// Reset and close
 			setYoutubeUrl("")

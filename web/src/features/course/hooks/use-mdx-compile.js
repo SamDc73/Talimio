@@ -83,6 +83,18 @@ function quoteCodeFenceMeta(meta) {
 }
 
 /**
+ * Remove HTML comments and orphan HTML comment delimiters.
+ * @param {string} text
+ * @returns {string}
+ */
+function stripHtmlComments(text) {
+	let sanitized = text.replace(/<!--[\s\S]*?-->/g, "")
+	sanitized = sanitized.replace(/<!--/g, "")
+	sanitized = sanitized.replace(/-->/g, "")
+	return sanitized
+}
+
+/**
  * Preprocess MDX content to fix common issues
  * @param {string} content - Raw MDX content
  * @returns {string} - Cleaned MDX content
@@ -92,9 +104,6 @@ function preprocessMDXContent(content) {
 
 	// Remove JSX comments {/* ... */}
 	processed = processed.replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-
-	// Remove HTML comments <!-- ... -->
-	processed = processed.replace(/<!--[\s\S]*?-->/g, "")
 
 	// Fix code fence meta: quote unquoted attributes (file=path → file="path")
 	// This must happen before we protect code blocks
@@ -115,6 +124,9 @@ function preprocessMDXContent(content) {
 		codeBlockIndex++
 		return placeholder
 	})
+
+	// Remove HTML comments outside fenced code and clean orphan delimiters.
+	processed = stripHtmlComments(processed)
 
 	// Fix problematic patterns outside of code blocks
 	// Remove double slashes that might cause issues (but preserve URLs)
