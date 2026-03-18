@@ -6,13 +6,15 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "vite build",
-		"cf:build": "pnpm --dir ../landing build && VITE_BASE_PATH=/app/ VITE_ROUTER_BASENAME=/app VITE_API_BASE=https://api.talimio.com/api/v1 pnpm run build && rm -rf ../dist && mkdir -p ../dist/app && cp -R ../landing/dist/. ../dist/ && cp -R dist/. ../dist/app/",
+		"cf:build": "pnpm --dir ../talimio-landing build && pnpm run build:prod && rm -rf ../dist && mkdir -p ../dist/app && cp -R ../talimio-landing/dist/. ../dist/ && cp -R dist/. ../dist/app/",
 		"cf:dev": "pnpm run cf:build && npx wrangler pages dev ../dist --local-protocol=https",
 		"lint": "biome check --write",
+		"knip": "knip",
 		"lint:knip": "pnpm run knip",
 		"lint:eslint": "eslint --fix",
 		"lint:all": "pnpm run lint src && pnpm run lint:eslint src",
-		"preview": "vite preview"
+		"preview": "vite preview",
+		"build:prod": "vite build --mode prod"
 	},
 	"dependencies": {
 		"@assistant-ui/react": "^0.12.17",
@@ -95,7 +97,7 @@
 		"@vitejs/plugin-react": "^5.1.4",
 		"autoprefixer": "^10.4.24",
 		"eslint": "^9.39.2",
-		"eslint-import-resolver-alias": "^1.1.2",
+		"eslint-import-resolver-typescript": "^4.4.4",
 		"eslint-plugin-better-tailwindcss": "3.7.2",
 		"eslint-plugin-boundaries": "^5.4.0",
 		"eslint-plugin-import": "^2.32.0",
@@ -108,7 +110,22 @@
 		"eslint-plugin-sonarjs": "^3.0.7",
 		"eslint-plugin-unicorn": "^62.0.0",
 		"knip": "^5.84.1",
+		"preact": "10.29.0",
+		"svelte": "5.54.0",
 		"tailwindcss": "^4.2.0",
+		"typescript": "^5.9.3",
 		"vite": "^7.3.1"
+	},
+	"pnpm": {
+		"overrides": {
+			"ajv@<7": "6.14.0",
+			"flatted": "3.4.2",
+			"minimatch@<4": "3.1.4",
+			"minimatch@>=9 <10": "9.0.7",
+			"minimatch@>=10 <11": "10.2.4",
+			"preact": "10.29.0",
+			"rollup": "4.59.0",
+			"svelte": "5.54.0"
+		}
 	}
 }
