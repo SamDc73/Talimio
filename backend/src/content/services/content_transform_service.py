@@ -2,7 +2,9 @@
 
 import json
 import logging
+import re
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from src.content.schemas import (
     BookContent,
@@ -14,6 +16,47 @@ from src.content.schemas import (
 
 
 logger = logging.getLogger(__name__)
+_YOUTUBE_VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def _is_valid_youtube_video_id(candidate: str) -> bool:
+    return bool(_YOUTUBE_VIDEO_ID_PATTERN.fullmatch(candidate))
+
+
+def _extract_youtube_video_id(raw_url: str | None) -> str | None:
+    """Extract a YouTube video ID from trusted YouTube/ytimg hosts only."""
+    if not raw_url:
+        return None
+
+    try:
+        parsed_url = urlparse(raw_url)
+    except ValueError:
+        return None
+
+    hostname = (parsed_url.hostname or "").lower()
+    if not hostname:
+        return None
+
+    path_segments = [segment for segment in parsed_url.path.split("/") if segment]
+    candidate: str | None = None
+
+    if hostname in {"youtu.be", "www.youtu.be"} and path_segments:
+        candidate = path_segments[0]
+    elif hostname == "youtube.com" or hostname.endswith(".youtube.com"):
+        if parsed_url.path == "/watch":
+            candidate = parse_qs(parsed_url.query).get("v", [""])[0]
+        elif len(path_segments) >= 2 and path_segments[0] in {"embed", "v", "shorts", "live"}:
+            candidate = path_segments[1]
+    elif (
+        (hostname == "ytimg.com" or hostname.endswith(".ytimg.com"))
+        and len(path_segments) >= 2
+        and path_segments[0] in {"vi", "vi_webp", "an_webp"}
+    ):
+        candidate = path_segments[1]
+
+    if candidate and _is_valid_youtube_video_id(candidate):
+        return candidate
+    return None
 
 
 def _safe_parse_tags(tags_json: str | None) -> list[str]:
@@ -50,15 +93,7 @@ class ContentTransformService:
     @staticmethod
     def _create_video_content(row: Any) -> VideoContent:
         """Create VideoContent from row data."""
-        # Extract video ID from extra2 if it's a YouTube URL/thumbnail
-        video_id = None
-        if row.extra2 and ("ytimg.com" in row.extra2 or "youtube.com" in row.extra2):
-            # YouTube thumbnail URLs contain the video ID
-            parts = row.extra2.split("/")
-            for part in parts:
-                if part and len(part) == 11:  # YouTube video IDs are 11 chars
-                    video_id = part
-                    break
+        video_id = _extract_youtube_video_id(row.extra2)
 
         metadata = ContentMetadata(platform="youtube", video_id=video_id)
 

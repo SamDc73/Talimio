@@ -1,6 +1,9 @@
 """Assistant API router - simple chat endpoint."""
 
+import json
+import logging
 import uuid
+from collections.abc import AsyncGenerator
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
@@ -25,6 +28,31 @@ from .schemas import (
 
 
 router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
+logger = logging.getLogger(__name__)
+
+
+def _sse_event(payload: dict[str, Any] | str) -> str:
+    encoded = payload if isinstance(payload, str) else json.dumps(payload)
+    return f"data: {encoded}\n\n"
+
+
+async def _safe_assistant_chat_stream(request: ChatRequest, auth: CurrentAuth) -> AsyncGenerator[str]:
+    try:
+        async for chunk in assistant_service.assistant_chat(request, user_id=auth.user_id, session=auth.session):
+            yield chunk
+    except Exception:
+        logger.exception("assistant.chat.stream_unhandled_error")
+        yield _sse_event(
+            {"type": "error", "errorText": "Sorry, I'm having trouble responding right now. Please try again."}
+        )
+        yield _sse_event(
+            {
+                "type": "finish",
+                "finishReason": "error",
+                "usage": {"promptTokens": 0, "completionTokens": 0},
+            }
+        )
+        yield _sse_event("[DONE]")
 
 
 @router.post("/chat")
@@ -34,7 +62,7 @@ async def assistant_chat(
 ) -> StreamingResponse:
     """Stream chat responses from the AI assistant."""
     return StreamingResponse(
-        assistant_service.assistant_chat(request, user_id=auth.user_id, session=auth.session),
+        _safe_assistant_chat_stream(request, auth),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

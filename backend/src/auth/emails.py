@@ -1,6 +1,7 @@
 """Email utilities for local auth (password reset + verification)."""
 
 
+import base64
 import hashlib
 import logging
 import uuid
@@ -18,6 +19,7 @@ _BRAND_NAME = "Talimio"
 _PRIMARY_COLOR = "#16a34a"  # Tailwind-ish green to match the app theme
 _EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS = 24
 _RESEND_SEND_EMAILS_URL = "https://api.resend.com/emails"
+_IDEMPOTENCY_PBKDF2_ITERATIONS = 120_000
 
 logger = logging.getLogger(__name__)
 
@@ -125,9 +127,17 @@ def _render_link_fallback(*, url: str) -> str:
 
 
 def _build_idempotency_key(*, purpose: str, email: str, token: str) -> str:
-    material = f"{purpose}:{email}:{token}"
-    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
-    return f"{purpose}/{digest}"
+    material = f"{purpose}:{email}:{token}".encode()
+    secret = get_jwt_signing_key().encode()
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        material,
+        secret,
+        _IDEMPOTENCY_PBKDF2_ITERATIONS,
+        dklen=18,
+    )
+    encoded_digest = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+    return f"{purpose}/{encoded_digest}"
 
 
 def _build_frontend_auth_link(*, path: str, token: str) -> str:
