@@ -1,11 +1,23 @@
 """Document parsing using Unstructured."""
 
 from fastapi.concurrency import run_in_threadpool
-
-from src.ai.rag.config import rag_config
+from pypdf import PdfReader
 
 
 _DEFAULT_LANGUAGES = ["eng"]
+
+
+def _extract_text_from_pdf(file_path: str) -> str:
+    """Extract plain text from a PDF using pypdf."""
+    reader = PdfReader(file_path, strict=False)
+    chunks: list[str] = []
+
+    for page in reader.pages:
+        page_text = page.extract_text() or ""
+        if page_text.strip():
+            chunks.append(page_text)
+
+    return "\n".join(chunks)
 
 
 class DocumentProcessor:
@@ -16,19 +28,7 @@ class DocumentProcessor:
         doc_type = (document_type or "").lower()
 
         if doc_type == "pdf":
-            from unstructured.partition.pdf import partition_pdf
-
-            strategy = "hi_res" if rag_config.enable_ocr else "fast"
-            elements = await run_in_threadpool(
-                partition_pdf,
-                filename=file_path,
-                strategy=strategy,
-                infer_table_structure=rag_config.extract_tables,
-                extract_images_in_pdf=rag_config.extract_images,
-                ocr_languages="eng" if rag_config.enable_ocr else None,
-                languages=_DEFAULT_LANGUAGES,
-            )
-            return "\n".join(str(el) for el in elements)
+            return await run_in_threadpool(_extract_text_from_pdf, file_path)
 
         from unstructured.partition.auto import partition
 

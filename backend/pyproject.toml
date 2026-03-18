@@ -14,20 +14,19 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "python-dotenv>=1.0.0",
     # Authentication
-    "pyjwt>=2.8.0",
+    "pyjwt>=2.12.1",
     "supabase>=2.0.0",
     # AI
     "litellm==1.81.11",
     "pgvector>=0.3.0",
-    "instructor>=1.7.0",
     "mem0ai>=0.1.116",
     "chonkie>=1.2.1",
-    "dspy>=3.0.3",
     # Video
-    "yt-dlp>=2024.0.0",
+    "yt-dlp>=2026.3.17",
     # Document Processing
     "pymupdf>=1.24.0",
     "pdfminer-six>=20250506",
+    "pypdf>=6.9.1",
     "python-docx>=1.0.0",
     "pillow-heif>=1.1.0",
     "python-multipart>=0.0.5",
@@ -36,7 +35,7 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "requests>=2.31.0",
     "goose3>=3.1.0",
-    "unstructured[epub,pdf]>=0.10.0",
+    "unstructured[epub]>=0.21.5",
     # Markdown/MDX & Conversion
     "mdxjs-py>=0.1.0a2",
     "pypandoc-binary>=1.15",
@@ -75,6 +74,7 @@ dev = [
     "respx>=0.22.0",
     "pytest-timeout>=2.4.0",
     "ty>=0.0.18",
+    "skylos>=4.0.0",
 ]
 
 [tool.ruff]
