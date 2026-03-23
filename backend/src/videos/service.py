@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Coroutine
 from datetime import UTC, datetime
 from typing import Any, Literal
+from urllib.parse import parse_qs, urlparse
 
 import aiohttp
 import yt_dlp
@@ -29,7 +30,6 @@ from src.videos.schemas import (
     VideoResponse,
     VideoTranscriptResponse,
     VideoUpdate,
-    extract_youtube_video_id,
 )
 from src.videos.services.video_progress_service import VideoProgressService
 
@@ -111,6 +111,26 @@ def _extract_info_sync(url: str, options: dict[str, Any]) -> Any:
 async def _extract_info_async(url: str, options: dict[str, Any]) -> Any:
     """Run yt-dlp extraction without blocking the asyncio event loop."""
     return await asyncio.to_thread(_extract_info_sync, url, options)
+
+
+def _extract_video_id_from_url(url: str) -> str:
+    """Best-effort video ID extraction for metadata-failure fallback."""
+    try:
+        parsed_url = urlparse(url)
+    except ValueError:
+        return ""
+
+    hostname = (parsed_url.hostname or "").lower()
+    path_segments = [segment for segment in parsed_url.path.split("/") if segment]
+
+    if hostname in {"youtu.be", "www.youtu.be"} and path_segments:
+        return path_segments[0]
+    if hostname == "youtube.com" or hostname.endswith(".youtube.com"):
+        if parsed_url.path == "/watch":
+            return parse_qs(parsed_url.query).get("v", [""])[0]
+        if len(path_segments) >= 2 and path_segments[0] in {"embed", "v", "shorts", "live"}:
+            return path_segments[1]
+    return ""
 
 
 async def _embed_video_background(video_id: uuid.UUID) -> None:
@@ -630,7 +650,7 @@ class VideoService:
         ) as e:
             logger.exception("videos.info.fetch_failed")
             # Return minimal info instead of failing completely
-            video_id = extract_youtube_video_id(url) or ""
+            video_id = _extract_video_id_from_url(url)
 
             # Return minimal required info
             return {

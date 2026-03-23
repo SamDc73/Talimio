@@ -1,5 +1,4 @@
 import json
-import re
 import uuid
 from datetime import datetime
 from typing import Any, Literal
@@ -12,34 +11,6 @@ from src.config.schema_casing import build_camel_config
 
 VideoRagStatus = Literal["pending", "processing", "completed", "failed"]
 VideoLearningStatus = Literal["not_started", "in_progress", "completed"]
-_YOUTUBE_VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{11}$")
-
-
-def extract_youtube_video_id(raw_url: str) -> str | None:
-    """Extract a YouTube video ID from canonical YouTube URL formats."""
-    try:
-        parsed_url = urlparse(raw_url)
-    except ValueError:
-        return None
-
-    hostname = (parsed_url.hostname or "").lower()
-    path_segments = [segment for segment in parsed_url.path.split("/") if segment]
-
-    if hostname in {"youtu.be", "www.youtu.be"} and path_segments:
-        candidate = path_segments[0]
-    elif hostname == "youtube.com" or hostname.endswith(".youtube.com"):
-        if parsed_url.path == "/watch":
-            candidate = parse_qs(parsed_url.query).get("v", [""])[0]
-        elif len(path_segments) >= 2 and path_segments[0] in {"embed", "v", "shorts", "live"}:
-            candidate = path_segments[1]
-        else:
-            return None
-    else:
-        return None
-
-    if not _YOUTUBE_VIDEO_ID_PATTERN.fullmatch(candidate):
-        return None
-    return candidate
 
 
 class VideoBase(BaseModel):
@@ -68,7 +39,22 @@ class VideoCreate(BaseModel):
     @classmethod
     def validate_youtube_url(cls, v: str) -> str:
         """Validate that the URL is a valid YouTube URL."""
-        if extract_youtube_video_id(v.strip()) is None:
+        try:
+            parsed_url = urlparse(v.strip())
+        except ValueError:
+            msg = "Invalid YouTube URL"
+            raise ValueError(msg) from None
+
+        hostname = (parsed_url.hostname or "").lower()
+        path_segments = [segment for segment in parsed_url.path.split("/") if segment]
+
+        is_short = hostname in {"youtu.be", "www.youtu.be"} and bool(path_segments)
+        is_watch = (hostname == "youtube.com" or hostname.endswith(".youtube.com")) and (
+            (parsed_url.path == "/watch" and bool(parse_qs(parsed_url.query).get("v", [""])[0]))
+            or (len(path_segments) >= 2 and path_segments[0] in {"embed", "v", "shorts", "live"})
+        )
+
+        if not is_short and not is_watch:
             msg = "Invalid YouTube URL"
             raise ValueError(msg)
         return v
