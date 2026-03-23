@@ -29,6 +29,7 @@ from src.videos.schemas import (
     VideoResponse,
     VideoTranscriptResponse,
     VideoUpdate,
+    extract_youtube_video_id,
 )
 from src.videos.services.video_progress_service import VideoProgressService
 
@@ -629,12 +630,7 @@ class VideoService:
         ) as e:
             logger.exception("videos.info.fetch_failed")
             # Return minimal info instead of failing completely
-            # Extract video ID from URL
-            video_id = ""
-            if "youtube.com/watch?v=" in url:
-                video_id = url.split("v=")[1].split("&", maxsplit=1)[0]
-            elif "youtu.be/" in url:
-                video_id = url.split("youtu.be/")[1].split("?", maxsplit=1)[0]
+            video_id = extract_youtube_video_id(url) or ""
 
             # Return minimal required info
             return {
