@@ -88,9 +88,46 @@ function quoteCodeFenceMeta(meta) {
  * @returns {string}
  */
 function stripHtmlComments(text) {
-	let sanitized = text.replace(/<!--[\s\S]*?-->/g, "")
-	sanitized = sanitized.replace(/<!--/g, "")
-	sanitized = sanitized.replace(/-->/g, "")
+	if (!text) {
+		return text
+	}
+
+	let sanitized = ""
+	let index = 0
+
+	while (index < text.length) {
+		if (text.startsWith("<!--", index)) {
+			index += 4
+
+			while (index < text.length && !text.startsWith("-->", index) && !text.startsWith("--!>", index)) {
+				index += 1
+			}
+
+			if (text.startsWith("--!>", index)) {
+				index += 4
+				continue
+			}
+
+			if (text.startsWith("-->", index)) {
+				index += 3
+			}
+			continue
+		}
+
+		if (text.startsWith("--!>", index)) {
+			index += 4
+			continue
+		}
+
+		if (text.startsWith("-->", index)) {
+			index += 3
+			continue
+		}
+
+		sanitized += text[index]
+		index += 1
+	}
+
 	return sanitized
 }
 

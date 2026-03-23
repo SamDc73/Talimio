@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 ASSISTANT_MAX_USER_MESSAGE_LENGTH = 8_000
 ASSISTANT_MAX_HISTORY_MESSAGES = 40
 ASSISTANT_REQUIRE_THREAD_ID = True
+ASSISTANT_PUBLIC_ERROR_TEXT = "Sorry, I'm having trouble responding right now. Please try again."
 
 
 class NormalizedChatRequest(BaseModel):
@@ -274,7 +275,7 @@ async def assistant_chat(
 
     except (ValueError, conversations_service.AssistantConversationValidationError) as error:
         logger.warning("Chat validation failed for user %s: %s", user_id, error)
-        yield _sse_event({"type": "error", "errorText": str(error)})
+        yield _sse_event({"type": "error", "errorText": ASSISTANT_PUBLIC_ERROR_TEXT})
         yield _sse_event(
             {
                 "type": "finish",
@@ -315,8 +316,7 @@ async def assistant_chat(
                     "Failed to persist incomplete assistant message for thread %s",
                     normalized_request.thread_id,
                 )
-        error_msg = "Sorry, I'm having trouble responding right now. Please try again."
-        yield _sse_event({"type": "error", "errorText": error_msg})
+        yield _sse_event({"type": "error", "errorText": ASSISTANT_PUBLIC_ERROR_TEXT})
         yield _sse_event(
             {
                 "type": "finish",
