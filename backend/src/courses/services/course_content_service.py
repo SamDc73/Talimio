@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from opentelemetry import trace
 from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
@@ -259,17 +260,24 @@ class CourseContentService:
         lessons_payload: list[Any],
     ) -> tuple[list[dict[str, Any]], int]:
         """Persist generated course fields, module structure, and lesson rows."""
-        self._serialize_payload_fields(session_data)
-        self._apply_course_updates(course, session_data)
-        normalized_modules = await self._prepare_course_modules(
-            session=session,
-            course=course,
-            adaptive_structure=adaptive_structure,
-            modules_payload=modules_payload,
-            lessons_payload=lessons_payload,
-        )
-        inserted_lessons = await self._insert_lessons(session, course.id, normalized_modules)
-        return normalized_modules, inserted_lessons
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span("llm.persistence.finalize_course") as span:
+            span.set_attribute("app.course_id", str(course.id))
+            span.set_attribute("app.adaptive_enabled", bool(course.adaptive_enabled))
+
+            self._serialize_payload_fields(session_data)
+            self._apply_course_updates(course, session_data)
+            normalized_modules = await self._prepare_course_modules(
+                session=session,
+                course=course,
+                adaptive_structure=adaptive_structure,
+                modules_payload=modules_payload,
+                lessons_payload=lessons_payload,
+            )
+            inserted_lessons = await self._insert_lessons(session, course.id, normalized_modules)
+            span.set_attribute("app.course_module_count", len(normalized_modules))
+            span.set_attribute("app.course_lesson_count", inserted_lessons)
+            return normalized_modules, inserted_lessons
 
     async def _build_adaptive_structure(
         self,
@@ -380,14 +388,23 @@ class CourseContentService:
         if not has_searchable_documents:
             return prompt_text
 
-        results = await rag_service.search_documents(
-            session=session,
-            user_id=user_id,
-            course_id=course_id,
-            query=prompt_text,
-            top_k=5,
-        )
-        chunks = [result.content for result in results if result.content]
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span("llm.retrieval.course_context") as span:
+            span.set_attribute("app.course_id", str(course_id))
+            span.set_attribute("enduser.id", str(user_id))
+            span.set_attribute("llm.retrieval.query_length", len(prompt_text))
+            span.set_attribute("llm.retrieval.top_k", 5)
+
+            results = await rag_service.search_documents(
+                session=session,
+                user_id=user_id,
+                course_id=course_id,
+                query=prompt_text,
+                top_k=5,
+            )
+            span.set_attribute("llm.retrieval.result_count", len(results))
+            chunks = [result.content for result in results if result.content]
+            span.set_attribute("llm.retrieval.chunk_count", len(chunks))
         if not chunks:
             return prompt_text
 

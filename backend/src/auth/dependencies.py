@@ -211,5 +211,9 @@ def _get_user_id_dependency(
 
     user_id = get_user_id(request, token=resolved_token or "")
     request.state.user_id = user_id
-    update_log_context(user_id=str(user_id))
+    session_id = getattr(request.state, "local_session_id", None)
+    update_log_context(
+        user_id=str(user_id),
+        session_id=str(session_id) if session_id is not None else None,
+    )
     return user_id

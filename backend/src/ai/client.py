@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
 import litellm
+from opentelemetry import trace
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,6 +56,7 @@ from src.ai.tools.sandbox import SandboxToolContext, build_sandbox_function_tool
 from src.ai.tools.search import build_web_search_function_tool
 from src.config.settings import get_settings
 from src.database.session import async_session_maker
+from src.observability.log_context import get_log_context
 
 
 configure_litellm()
@@ -155,6 +157,7 @@ class _LLMRequest:
     num_retries: int | None
     max_completion_tokens: int | None
     stream: bool
+    metadata: dict[str, Any] | None = None
     tool_schemas: list[dict[str, Any]] | None = None
     responses_tools: list[dict[str, Any]] | None = None
     tool_targets: dict[str, ToolTarget] = field(default_factory=dict)
@@ -248,6 +251,7 @@ class LLMClient:
         num_retries: int | None,
         max_completion_tokens: int | None,
         stream: bool,
+        metadata: dict[str, Any] | None,
     ) -> _LLMRequest:
         settings = get_settings()
         return _LLMRequest(
@@ -262,6 +266,7 @@ class LLMClient:
             num_retries=num_retries,
             max_completion_tokens=max_completion_tokens,
             stream=stream,
+            metadata=metadata,
         )
 
     def _map_runtime_error(self, error: Exception, *, default_message: str) -> AIRuntimeError:
@@ -496,7 +501,153 @@ class LLMClient:
         self._background_tasks.add(task)
         task.add_done_callback(self._handle_background_task_done)
 
-    async def complete(  # noqa: PLR0912
+    def _extract_provider_name(self, model: str) -> str:
+        normalized_model = model.strip()
+        if "/" not in normalized_model:
+            return "unknown"
+        provider = normalized_model.split("/", 1)[0].strip()
+        if not provider:
+            return "unknown"
+        return provider
+
+    def _collect_tool_names(self, tools: list[dict[str, Any]] | None) -> list[str]:
+        if not tools:
+            return []
+
+        names: list[str] = []
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            tool_type = tool.get("type")
+            if tool_type == "function":
+                function_payload = tool.get("function")
+                if isinstance(function_payload, dict):
+                    tool_name = function_payload.get("name")
+                    if isinstance(tool_name, str) and tool_name.strip():
+                        names.append(tool_name.strip())
+                        continue
+            if isinstance(tool_type, str) and tool_type.strip():
+                names.append(tool_type.strip())
+        return names
+
+    def _current_trace_id(self) -> str | None:
+        current_span = trace.get_current_span()
+        get_span_context = getattr(current_span, "get_span_context", None)
+        if not callable(get_span_context):
+            return None
+        span_context = get_span_context()
+        if not span_context.is_valid:
+            return None
+        return f"{span_context.trace_id:032x}"
+
+    def _build_completion_metadata(  # noqa: C901, PLR0912
+        self,
+        *,
+        metadata: dict[str, Any] | None,
+        model: str,
+        tools: list[dict[str, Any]] | None,
+        user_id: str | uuid.UUID | None,
+        settings: Any,
+    ) -> dict[str, Any]:
+        merged: dict[str, Any] = dict(metadata or {})
+        context = get_log_context()
+
+        generation_name = merged.get("generation_name")
+        if not isinstance(generation_name, str) or not generation_name.strip():
+            merged["generation_name"] = f"{self._agent_id}_generation"
+
+        trace_id = self._current_trace_id()
+        if trace_id and not merged.get("trace_id"):
+            merged["trace_id"] = trace_id
+
+        session_id = context.get("session_id")
+        if session_id and not merged.get("session_id"):
+            merged["session_id"] = str(session_id)
+
+        normalized_user_id: str | None = None
+        if user_id is not None:
+            normalized_user_id = str(user_id)
+        elif context.get("user_id"):
+            normalized_user_id = str(context["user_id"])
+        if normalized_user_id:
+            if not merged.get("trace_user_id"):
+                merged["trace_user_id"] = normalized_user_id
+            if not merged.get("user_id"):
+                merged["user_id"] = normalized_user_id
+
+        if context.get("course_id") and not merged.get("course_id"):
+            merged["course_id"] = str(context["course_id"])
+
+        feature_area = context.get("feature_area")
+        if feature_area and not merged.get("feature_area"):
+            merged["feature_area"] = str(feature_area)
+
+        if not merged.get("model_name"):
+            merged["model_name"] = model
+        if not merged.get("provider_name"):
+            merged["provider_name"] = self._extract_provider_name(model)
+
+        tool_names = self._collect_tool_names(tools)
+        if tool_names and not merged.get("tool_names"):
+            merged["tool_names"] = tool_names
+
+        existing_tags = merged.get("tags")
+        tags: list[str] = []
+        if isinstance(existing_tags, list):
+            tags = [str(tag) for tag in existing_tags if str(tag).strip()]
+        elif isinstance(existing_tags, str) and existing_tags.strip():
+            tags = [existing_tags.strip()]
+
+        default_tags = [f"platform_mode:{settings.PLATFORM_MODE}"]
+        if feature_area:
+            default_tags.append(f"feature_area:{feature_area}")
+        for tag in default_tags:
+            if tag not in tags:
+                tags.append(tag)
+        if tags:
+            merged["tags"] = tags
+
+        return merged
+
+    def _record_response_observability_fields(self, response: Any, *, tool_names: list[str]) -> None:
+        span = trace.get_current_span()
+        if not span.is_recording():
+            return
+
+        if tool_names:
+            span.set_attribute("llm.tool_names", json.dumps(tool_names))
+
+        usage = getattr(response, "usage", None)
+        if usage is None and isinstance(response, dict):
+            usage = response.get("usage")
+        prompt_tokens: Any = None
+        completion_tokens: Any = None
+        total_tokens: Any = None
+        if isinstance(usage, dict):
+            prompt_tokens = usage.get("prompt_tokens")
+            completion_tokens = usage.get("completion_tokens")
+            total_tokens = usage.get("total_tokens")
+        elif usage is not None:
+            prompt_tokens = getattr(usage, "prompt_tokens", None)
+            completion_tokens = getattr(usage, "completion_tokens", None)
+            total_tokens = getattr(usage, "total_tokens", None)
+
+        if isinstance(prompt_tokens, int):
+            span.set_attribute("llm.prompt_tokens", prompt_tokens)
+        if isinstance(completion_tokens, int):
+            span.set_attribute("llm.completion_tokens", completion_tokens)
+        if isinstance(total_tokens, int):
+            span.set_attribute("llm.total_tokens", total_tokens)
+
+        hidden_params = getattr(response, "_hidden_params", None)
+        if hidden_params is None and isinstance(response, dict):
+            hidden_params = response.get("_hidden_params")
+        if isinstance(hidden_params, dict):
+            response_cost = hidden_params.get("response_cost")
+            if isinstance(response_cost, (int, float)):
+                span.set_attribute("llm.cost_usd", float(response_cost))
+
+    async def complete(  # noqa: C901, PLR0912
         self,
         messages: list[dict[str, Any]],
         temperature: float | None = None,
@@ -505,6 +656,7 @@ class LLMClient:
         user_id: str | uuid.UUID | None = None,
         response_format: Any | None = None,
         extra_body: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
         stream: bool = False,
         model: str | None = None,
         num_retries: int | None = None,
@@ -517,6 +669,7 @@ class LLMClient:
         try:
             settings = get_settings()
             request_model = model or settings.primary_llm_model
+            tool_names = self._collect_tool_names(tools)
 
             common_kwargs: dict[str, Any] = {"model": request_model, "timeout": settings.ai_request_timeout}
             if user_id:
@@ -538,19 +691,34 @@ class LLMClient:
                 common_kwargs["tools"] = tools
             if extra_body is not None:
                 common_kwargs["extra_body"] = extra_body
+            completion_metadata = self._build_completion_metadata(
+                metadata=metadata,
+                model=request_model,
+                tools=tools,
+                user_id=user_id,
+                settings=settings,
+            )
+            if completion_metadata:
+                common_kwargs["metadata"] = completion_metadata
 
             if use_responses_transport:
                 response_kwargs = dict(common_kwargs)
                 response_kwargs["input"] = messages
                 if previous_response_id is not None:
                     response_kwargs["previous_response_id"] = previous_response_id
-                return await asyncio.wait_for(litellm.responses(**response_kwargs), timeout=settings.ai_request_timeout)
+                response = await asyncio.wait_for(litellm.responses(**response_kwargs), timeout=settings.ai_request_timeout)
+                if not stream:
+                    self._record_response_observability_fields(response, tool_names=tool_names)
+                return response
 
             completion_kwargs = dict(common_kwargs)
             completion_kwargs["messages"] = messages
             if response_format is not None:
                 completion_kwargs["response_format"] = response_format
-            return await asyncio.wait_for(litellm.acompletion(**completion_kwargs), timeout=settings.ai_request_timeout)
+            response = await asyncio.wait_for(litellm.acompletion(**completion_kwargs), timeout=settings.ai_request_timeout)
+            if not stream:
+                self._record_response_observability_fields(response, tool_names=tool_names)
+            return response
 
         except _COMPLETION_RUNTIME_ERROR_TYPES as error:
             mapped = self._map_runtime_error(error, default_message="Model completion failed")
@@ -570,6 +738,7 @@ class LLMClient:
         num_retries: int | None = None,
         max_completion_tokens: int | None = None,
         stream: bool = False,
+        metadata: dict[str, Any] | None = None,
     ) -> Any:
         """Shared execution engine for free-form and structured generation."""
         request = self._build_request(
@@ -584,6 +753,7 @@ class LLMClient:
             num_retries=num_retries,
             max_completion_tokens=max_completion_tokens,
             stream=stream,
+            metadata=metadata,
         )
 
         if request.response_model and request.stream:
@@ -604,6 +774,7 @@ class LLMClient:
                     num_retries=request.num_retries,
                     tool_targets=request.tool_targets,
                     mcp_config=request.mcp_config,
+                    metadata=request.metadata,
                 )
 
             if request.response_model is None and request.use_responses_transport:
@@ -674,6 +845,7 @@ class LLMClient:
                 tools=request.tool_schemas,
                 tool_choice=effective_tool_choice,
                 user_id=request.user_id,
+                metadata=request.metadata,
                 response_format=response_format,
                 model=request.model,
                 num_retries=request.num_retries,
@@ -736,6 +908,7 @@ class LLMClient:
                 tools=request.responses_tools,
                 tool_choice=request.tool_choice,
                 user_id=request.user_id,
+                metadata=request.metadata,
                 model=request.model,
                 num_retries=request.num_retries,
                 max_completion_tokens=request.max_completion_tokens,
@@ -866,6 +1039,7 @@ class LLMClient:
         num_retries: int | None,
         tool_targets: dict[str, ToolTarget],
         mcp_config: MCPConfig | None,
+        metadata: dict[str, Any] | None,
     ) -> AsyncGenerator[str]:
         """Stream an unstructured chat completion, optionally executing tool calls.
 
@@ -890,6 +1064,7 @@ class LLMClient:
                     tools=tools,
                     tool_choice=tool_choice,
                     user_id=user_id,
+                    metadata=metadata,
                     stream=True,
                     model=model,
                     num_retries=num_retries,
@@ -1274,17 +1449,28 @@ class LLMClient:
         user_id: str | uuid.UUID | None = None,
     ) -> CourseStructure:
         """Generate a structured learning course using LiteLLM structured output (Pydantic)."""
+        tracer = trace.get_tracer(__name__)
         try:
             normalized_content = self._normalize_user_prompt_content(user_prompt)
             messages = [
                 {"role": "system", "content": COURSE_GENERATION_PROMPT},
                 {"role": "user", "content": normalized_content},
             ]
-            result = await self.get_completion(
-                messages,
-                response_model=CourseStructure,
-                user_id=user_id,
-            )
+            with tracer.start_as_current_span("llm.generation.course") as span:
+                span.set_attribute("llm.generation.name", "course_generation")
+                span.set_attribute("llm.model.type", "structured")
+                if user_id is not None:
+                    span.set_attribute("enduser.id", str(user_id))
+
+                result = await self.get_completion(
+                    messages,
+                    response_model=CourseStructure,
+                    user_id=user_id,
+                    metadata={
+                        "generation_name": "course_generation",
+                        "tags": ["course", "generation"],
+                    },
+                )
             if not isinstance(result, CourseStructure):
                 msg = "Expected CourseStructure from structured output"
                 raise TypeError(msg)
@@ -1302,17 +1488,28 @@ class LLMClient:
         user_id: str | uuid.UUID | None = None,
     ) -> AdaptiveCourseStructure:
         """Generate the unified adaptive course payload used by ConceptFlow."""
+        tracer = trace.get_tracer(__name__)
         try:
             normalized_content = self._normalize_user_prompt_content(user_prompt)
             messages = [
                 {"role": "system", "content": ADAPTIVE_COURSE_GENERATION_PROMPT},
                 {"role": "user", "content": normalized_content},
             ]
-            result = await self.get_completion(
-                messages,
-                response_model=AdaptiveCourseStructure,
-                user_id=user_id,
-            )
+            with tracer.start_as_current_span("llm.generation.adaptive_course") as span:
+                span.set_attribute("llm.generation.name", "adaptive_course_generation")
+                span.set_attribute("llm.model.type", "structured")
+                if user_id is not None:
+                    span.set_attribute("enduser.id", str(user_id))
+
+                result = await self.get_completion(
+                    messages,
+                    response_model=AdaptiveCourseStructure,
+                    user_id=user_id,
+                    metadata={
+                        "generation_name": "adaptive_course_generation",
+                        "tags": ["course", "adaptive"],
+                    },
+                )
             if not isinstance(result, AdaptiveCourseStructure):
                 msg = "Expected AdaptiveCourseStructure from structured output"
                 raise TypeError(msg)
@@ -1332,6 +1529,7 @@ class LLMClient:
         user_id: str | uuid.UUID | None = None,
     ) -> SelfAssessmentQuiz:
         """Generate optional self-assessment questions for a course topic."""
+        tracer = trace.get_tracer(__name__)
         normalized_topic = topic.strip()
         if not normalized_topic:
             msg = "Topic must not be empty"
@@ -1354,11 +1552,24 @@ class LLMClient:
                 },
             ]
 
-            result = await self.get_completion(
-                messages,
-                response_model=SelfAssessmentQuiz,
-                user_id=user_id,
-            )
+            with tracer.start_as_current_span("llm.generation.self_assessment") as span:
+                span.set_attribute("llm.generation.name", "self_assessment_generation")
+                span.set_attribute("llm.topic", normalized_topic)
+                span.set_attribute("llm.level", level_text)
+                if user_id is not None:
+                    span.set_attribute("enduser.id", str(user_id))
+
+                result = await self.get_completion(
+                    messages,
+                    response_model=SelfAssessmentQuiz,
+                    user_id=user_id,
+                    metadata={
+                        "generation_name": "self_assessment_generation",
+                        "tags": ["self_assessment", "generation"],
+                        "topic": normalized_topic,
+                        "level": level_text,
+                    },
+                )
 
             if not isinstance(result, SelfAssessmentQuiz):
                 msg = "Expected SelfAssessmentQuiz from structured output"

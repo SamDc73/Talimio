@@ -7,6 +7,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from opentelemetry import trace
+
 from src.ai.mcp.config import MCPConfig
 from src.ai.mcp.tooling import execute_user_tool_call
 from src.ai.tools.plan import LocalToolTarget, MCPToolTarget, ToolTarget
@@ -134,25 +136,38 @@ async def _invoke_target(
     user_id: uuid.UUID | None,
     mcp_config: MCPConfig | None,
 ) -> Any:
-    if isinstance(target, LocalToolTarget):
-        return await target.execute(arguments)
+    tracer = trace.get_tracer(__name__)
+    with tracer.start_as_current_span("llm.tool.execution") as span:
+        span.set_attribute("llm.tool.name", call.name)
+        span.set_attribute("llm.tool.call_id", call.call_id)
+        if user_id is not None:
+            span.set_attribute("enduser.id", str(user_id))
 
-    if not isinstance(target, MCPToolTarget):
-        msg = f"Unknown tool target type for '{call.name}'"
-        raise TypeError(msg)
+        if isinstance(target, LocalToolTarget):
+            span.set_attribute("llm.tool.target_type", "local")
+            return await target.execute(arguments)
 
-    if user_id is None:
-        msg = f"MCP tool '{call.name}' requires a user context"
-        raise RuntimeError(msg)
-    if mcp_config is None:
-        msg = f"MCP tool '{call.name}' is unavailable because request MCP config is missing"
-        raise RuntimeError(msg)
+        if not isinstance(target, MCPToolTarget):
+            msg = f"Unknown tool target type for '{call.name}'"
+            raise TypeError(msg)
 
-    return await execute_user_tool_call(
-        user_id=user_id,
-        server_name=target.server_name,
-        tool_name=target.tool_name,
-        encoded_name=call.name,
-        arguments=arguments,
-        config=mcp_config,
-    )
+        span.set_attribute("llm.tool.target_type", "mcp")
+        span.set_attribute("llm.tool.server_name", target.server_name)
+        span.set_attribute("llm.tool.encoded_name", call.name)
+        span.set_attribute("llm.tool.target_name", target.tool_name)
+
+        if user_id is None:
+            msg = f"MCP tool '{call.name}' requires a user context"
+            raise RuntimeError(msg)
+        if mcp_config is None:
+            msg = f"MCP tool '{call.name}' is unavailable because request MCP config is missing"
+            raise RuntimeError(msg)
+
+        return await execute_user_tool_call(
+            user_id=user_id,
+            server_name=target.server_name,
+            tool_name=target.tool_name,
+            encoded_name=call.name,
+            arguments=arguments,
+            config=mcp_config,
+        )

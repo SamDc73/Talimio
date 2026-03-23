@@ -51,6 +51,7 @@ def _build_request_context(request: Request, route: str) -> dict[str, Any]:
         "feature_area": get_feature_area(route),
         "course_id": request.path_params.get("course_id") or request.path_params.get("courseId"),
         "content_type": request.path_params.get("content_type") or request.path_params.get("contentType"),
+        "session_id": getattr(request.state, "local_session_id", None),
         "model_name": None,
         "status_code": None,
         "error_code": None,
@@ -94,6 +95,7 @@ def install_request_context_middleware(app: FastAPI, _settings: Settings) -> Non
                     "app.feature_area": request_context["feature_area"],
                     "app.request_duration_ms": duration_ms,
                     "enduser.id": request_context["user_id"],
+                    "app.session_id": request_context["session_id"],
                     "app.course_id": request_context["course_id"],
                     "app.content_type": request_context["content_type"],
                 }
@@ -107,6 +109,7 @@ def install_request_context_middleware(app: FastAPI, _settings: Settings) -> Non
                 feature_area=request_context["feature_area"],
                 status_code=request_context["status_code"],
                 user_id=request_context["user_id"],
+                session_id=request_context["session_id"],
                 course_id=request_context["course_id"],
                 content_type=request_context["content_type"],
                 duration_ms=duration_ms,
