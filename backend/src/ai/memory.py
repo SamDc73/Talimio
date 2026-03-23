@@ -45,6 +45,7 @@ _memory_client: AsyncMemory | None = None
 _MEMORY_POOL_MIN_CONNECTIONS = 1
 _MEMORY_POOL_MAX_CONNECTIONS = 3
 _MEMORY_DB_MAX_ATTEMPTS = 2
+_MEMORY_HISTORY_DB_PATH = ":memory:"
 
 
 def _memory_is_configured() -> bool:
@@ -82,6 +83,9 @@ def _get_memory_config() -> dict[str, Any]:
         vector_store_config["embedding_model_dims"] = embedding_dims
 
     return {
+        # Talimio does not read mem0's mutation-history sidecar; keeping it in-memory
+        # avoids an extra file-backed SQLite dependency during the temporary mem0 phase.
+        "history_db_path": _MEMORY_HISTORY_DB_PATH,
         "vector_store": {
             "provider": "pgvector",
             "config": vector_store_config,
