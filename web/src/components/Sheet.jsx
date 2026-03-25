@@ -33,13 +33,52 @@ const sheetVariants = cva("fixed z-50 gap-4 bg-background p-6 shadow-lg", {
 	},
 })
 
-function SheetContent({ side = "right", className, children, ref, ...props }) {
+function SheetContent({
+	side = "right",
+	className,
+	children,
+	ref,
+	closeOnInteractOutside = false,
+	closeOnEscapeKeyDown = false,
+	onInteractOutside,
+	onPointerDownOutside,
+	onEscapeKeyDown,
+	...props
+}) {
+	const handleInteractOutside = (event) => {
+		onInteractOutside?.(event)
+		if (!closeOnInteractOutside && !event.defaultPrevented) {
+			event.preventDefault()
+		}
+	}
+
+	const handlePointerDownOutside = (event) => {
+		onPointerDownOutside?.(event)
+		if (!closeOnInteractOutside && !event.defaultPrevented) {
+			event.preventDefault()
+		}
+	}
+
+	const handleEscapeKeyDown = (event) => {
+		onEscapeKeyDown?.(event)
+		if (!closeOnEscapeKeyDown && !event.defaultPrevented) {
+			event.preventDefault()
+		}
+	}
+
 	return (
 		<SheetPortal>
 			<SheetOverlay />
-			<SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
+			<SheetPrimitive.Content
+				ref={ref}
+				className={cn(sheetVariants({ side }), className)}
+				onInteractOutside={handleInteractOutside}
+				onPointerDownOutside={handlePointerDownOutside}
+				onEscapeKeyDown={handleEscapeKeyDown}
+				{...props}
+			>
 				{children}
-				<SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-muted">
+				<SheetPrimitive.Close className="absolute right-4 top-4 cursor-pointer rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-muted">
 					<X className="size-4 " />
 					<span className="sr-only">Close</span>
 				</SheetPrimitive.Close>

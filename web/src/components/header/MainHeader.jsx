@@ -28,7 +28,7 @@ import {
 } from "@/components/DropdownMenu"
 import { Input } from "@/components/Input"
 import { PersonalizationDialog } from "@/components/PersonalizationDialog"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/Sheet"
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/Sheet"
 import { TooltipButton } from "@/components/TooltipButton"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useAuth } from "@/hooks/use-auth"
@@ -333,32 +333,40 @@ export function MainHeader({ transparent = false, className }) {
 									</div>
 
 									<nav className="flex flex-col space-y-4">
-										<Link
-											to="/courses"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
-										>
-											<BookOpen className="size-5  text-course" />
-											<span className="font-medium">Courses</span>
-										</Link>
-										<Link
-											to="/books"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
-										>
-											<FileText className="size-5  text-book" />
-											<span className="font-medium">Books</span>
-										</Link>
-										<Link
-											to="/videos"
-											className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
-										>
-											<Youtube className="size-5  text-video" />
-											<span className="font-medium">Videos</span>
-										</Link>
+										<SheetClose asChild>
+											<Link
+												to="/courses"
+												className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
+											>
+												<BookOpen className="size-5  text-course" />
+												<span className="font-medium">Courses</span>
+											</Link>
+										</SheetClose>
+										<SheetClose asChild>
+											<Link
+												to="/books"
+												className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
+											>
+												<FileText className="size-5  text-book" />
+												<span className="font-medium">Books</span>
+											</Link>
+										</SheetClose>
+										<SheetClose asChild>
+											<Link
+												to="/videos"
+												className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
+											>
+												<Youtube className="size-5  text-video" />
+												<span className="font-medium">Videos</span>
+											</Link>
+										</SheetClose>
 										<div className="px-4 py-3">
-											<Button onClick={toggleChat} className="w-full flex items-center justify-center gap-2">
-												<MessageSquare className="size-5 " />
-												<span>Open Chat Assistant</span>
-											</Button>
+											<SheetClose asChild>
+												<Button onClick={toggleChat} className="w-full flex items-center justify-center gap-2">
+													<MessageSquare className="size-5 " />
+													<span>Open Chat Assistant</span>
+												</Button>
+											</SheetClose>
 										</div>
 									</nav>
 									<div className="mt-auto pt-6 border-t">

@@ -1,6 +1,7 @@
-import { AlertTriangle, CheckCircle2, X } from "lucide-react"
+import { AlertTriangle, CheckCircle2 } from "lucide-react"
 import { useCallback, useState } from "react"
 import { Button } from "@/components/Button"
+import { Dialog, DialogContent, DialogTitle } from "@/components/Dialog"
 import { useDocumentsService } from "../api/documentsApi"
 import { DocumentStatusProgress } from "./DocumentStatusBadge"
 import DocumentUploader from "./DocumentUploader"
@@ -91,7 +92,11 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 		}
 	}
 
-	if (!isOpen) return null
+	const handleOpenChange = (nextOpen) => {
+		if (!nextOpen) {
+			handleClose()
+		}
+	}
 
 	const hasDocuments = documents.length > 0
 	const hasFailedDocuments = documents.some((doc) => doc.status === "failed")
@@ -100,18 +105,10 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 		documents.length > 0 && documents.every((doc) => doc.status === "embedded" || doc.status === "failed")
 
 	return (
-		<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-			<div className="bg-card rounded-lg max-w-3xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
-				<div className="flex items-center justify-between p-6 border-b border-border">
-					<h2 className="text-xl font-semibold text-foreground">Add Documents to Course</h2>
-					<button
-						type="button"
-						onClick={handleClose}
-						disabled={isUploading}
-						className="text-muted-foreground/70 hover:text-muted-foreground dark:hover:text-foreground transition-colors disabled:opacity-50"
-					>
-						<X className="size-6 " />
-					</button>
+		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
+			<DialogContent className="max-w-3xl gap-0 p-0 max-h-[90vh] overflow-y-auto">
+				<div className="flex items-center border-b border-border p-6 pr-14">
+					<DialogTitle className="text-xl font-semibold text-foreground">Add Documents to Course</DialogTitle>
 				</div>
 
 				<div className="p-6">
@@ -217,8 +214,8 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 						</Button>
 					)}
 				</div>
-			</div>
-		</div>
+			</DialogContent>
+		</Dialog>
 	)
 }
 
