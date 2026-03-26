@@ -619,18 +619,11 @@ const useAppStore = create(
 				// ========== PREFERENCES SLICE ==========
 				preferences: {
 					theme: "system",
-					language: "en",
-					autoPlayVideos: true,
-					defaultZoomLevel: 1,
 					selfAssessmentEnabled: false,
-					// User preferences
-					userPreferences: null,
-					// UI preferences
 					sidebarOpen: true,
-					// Assistant preferences
 					assistantSidebarPinned: false,
-					assistantModel: null, // Will be set from available models
-					assistantSidebarWidth: 400, // Default width in pixels
+					assistantModel: null,
+					assistantSidebarWidth: 400,
 				},
 
 				// Preferences actions
