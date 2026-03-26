@@ -285,12 +285,7 @@ async def get_models() -> dict[str, list[dict[str, Any]]]:
     # Ensure settings/env are loaded
     settings = get_settings()
 
-    primary = settings.primary_llm_model
-    available_raw = settings.AVAILABLE_MODELS
-    available = [m.strip() for m in available_raw.split(",") if m.strip()] if available_raw else []
-
-    # Build ordered unique list with primary first
-    ordered = [primary, *available]
+    ordered = settings.primary_llm_models
     seen: set[str] = set()
     models: list[dict[str, Any]] = []
 

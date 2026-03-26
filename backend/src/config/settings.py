@@ -109,8 +109,7 @@ class Settings(BaseSettings):
     DURATION_BASE_MS: int = 90000  # Base duration for adjustment calculations (90 seconds)
 
     # AI Configuration
-    PRIMARY_LLM_MODEL: str | None = None
-    CODE_EXECUTION_LLM_MODEL: str | None = None
+    PRIMARY_LLM_MODELS: str = ""
     AI_REQUEST_TIMEOUT: int = 300
     RAG_EMBEDDING_OUTPUT_DIM: int | None = None
     MEMORY_EMBEDDING_OUTPUT_DIM: int | None = None
@@ -123,9 +122,6 @@ class Settings(BaseSettings):
     EXA_API_KEY: SecretStr | None = None
     EXA_SEARCH_TIMEOUT_SECONDS: float = 12.0
     EXA_SEARCH_MAX_RESULTS: int = 5
-
-    # Assistant UI Configuration
-    AVAILABLE_MODELS: str = ""  # Comma-separated additional models for UI pickers.
 
     # Domain-specific model overrides
     TAGGING_LLM_MODEL: str | None = None
@@ -253,20 +249,19 @@ class Settings(BaseSettings):
         return self
 
     @property
-    def primary_llm_model(self) -> str:
-        """Get primary LLM model from environment with available-model fallback."""
-        explicit_model = (self.PRIMARY_LLM_MODEL or "").strip()
-        if explicit_model:
-            return explicit_model
+    def primary_llm_models(self) -> list[str]:
+        """Return the ordered primary LLM model list."""
+        models = [candidate.strip() for candidate in self.PRIMARY_LLM_MODELS.split(",") if candidate.strip()]
+        if models:
+            return models
 
-        available_raw = self.AVAILABLE_MODELS
-        if available_raw:
-            available_models = [candidate.strip() for candidate in available_raw.split(",") if candidate.strip()]
-            if available_models:
-                return available_models[0]
-
-        msg = "PRIMARY_LLM_MODEL environment variable is required (or set AVAILABLE_MODELS with at least one model)"
+        msg = "PRIMARY_LLM_MODELS environment variable is required with at least one model"
         raise ValueError(msg)
+
+    @property
+    def primary_llm_model(self) -> str:
+        """Return the default primary LLM model."""
+        return self.primary_llm_models[0]
 
     @property
     def ai_request_timeout(self) -> int:

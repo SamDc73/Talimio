@@ -52,9 +52,9 @@ class TaggingService:
             primary_model = getattr(settings, "primary_llm_model", None)
             if primary_model:
                 model = primary_model
-                logger.info("TAGGING_LLM_MODEL not set; falling back to PRIMARY_LLM_MODEL: %s", model)
+                logger.info("TAGGING_LLM_MODEL not set; falling back to default primary LLM model: %s", model)
             else:
-                logger.warning("No TAGGING_LLM_MODEL and PRIMARY_LLM_MODEL unavailable; skipping tag generation")
+                logger.warning("No TAGGING_LLM_MODEL and no primary LLM model configured; skipping tag generation")
                 return []
 
         messages = [
