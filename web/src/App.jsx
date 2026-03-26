@@ -16,6 +16,7 @@ import OutlineView from "@/features/course/views/OutlineView"
 import PracticeView from "@/features/course/views/PracticeView"
 import TrackView from "@/features/course/views/TrackView"
 import HomePage from "@/features/home"
+import { SettingsPage } from "@/features/settings/SettingsPage"
 import { VideoViewer } from "@/features/video-viewer/VideoViewer"
 
 function App() {
@@ -73,6 +74,15 @@ function App() {
 							element={
 								<ProtectedRoute>
 									<VideoViewer />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path="/settings"
+							element={
+								<ProtectedRoute>
+									<HomePage />
+									<SettingsPage />
 								</ProtectedRoute>
 							}
 						/>
