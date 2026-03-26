@@ -1126,24 +1126,16 @@ const useAppStore = create(
 		}
 	)
 )
-// Optimized selectors to prevent unnecessary re-renders
+// Sidebar selector
 export const selectSidebarOpen = (state) => state.preferences.sidebarOpen
 export const selectToggleSidebar = (state) => state.toggleSidebar
-export const selectTheme = (state) => state.preferences.theme
-// Progress selectors - standardized interface
-export const selectBookProgress = (bookId) => (state) => state.books.progress[bookId]
-export const selectVideoProgress = (videoId) => (state) => state.videos.progress[videoId]
-export const selectCourseProgress = (courseId) => (state) => state.courses.progress[courseId]
 
-// Reading state selectors
-export const selectBookReadingState = (bookId) => (state) => state.books.readingState[bookId]
-export const selectVideoPlaybackState = (videoId) => (state) => state.videos.playbackState[videoId]
+// Self-assessment selector
+export const selectSelfAssessmentEnabled = (state) => state.preferences.selfAssessmentEnabled
+export const selectSetSelfAssessmentEnabled = (state) => state.setSelfAssessmentEnabled
 
 // Assistant selectors
 export const selectAssistantSidebarPinned = (state) => state.preferences.assistantSidebarPinned
 export const selectAssistantModel = (state) => state.preferences.assistantModel
-export const selectAssistantPreferences = (state) => state.getAssistantPreferences()
-export const selectSelfAssessmentEnabled = (state) => state.preferences.selfAssessmentEnabled
-export const selectSetSelfAssessmentEnabled = (state) => state.setSelfAssessmentEnabled
 
 export default useAppStore
