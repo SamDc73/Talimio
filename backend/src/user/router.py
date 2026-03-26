@@ -13,21 +13,16 @@ from src.user.schemas import (
     ClearMemoryResponse,
     CustomInstructionsRequest,
     CustomInstructionsResponse,
-    PreferencesUpdateRequest,
-    PreferencesUpdateResponse,
-    UserPreferences,
     UserSettingsResponse,
 )
 from src.user.service import (
     UserNotFoundError,
     UserServiceError,
-    _load_user_preferences,
     clear_user_memories,
     delete_user_memory,
     get_user_memories,
     get_user_settings,
     update_custom_instructions,
-    update_user_preferences,
 )
 
 
@@ -136,44 +131,3 @@ async def delete_current_user_memory(auth: CurrentAuth, memory_id: str) -> dict[
         raise
     except UserServiceError as error:
         _raise_user_service_error(error, detail="Failed to delete memory")
-
-
-@router.put("/preferences")
-async def update_current_user_preferences(
-    auth: CurrentAuth,
-    preferences_request: PreferencesUpdateRequest,
-) -> PreferencesUpdateResponse:
-    """
-    Update preferences for the current user with partial updates.
-
-    Accepts partial preference updates - only specified fields will be changed.
-    Unspecified fields will retain their current values.
-
-    Args:
-        preferences_request: Partial preferences to update
-
-    Returns
-    -------
-        PreferencesUpdateResponse: Updated complete preferences and success status
-    """
-    try:
-        return await update_user_preferences(auth.user_id, preferences_request.preferences, auth.session)
-    except UserServiceError as error:
-        _raise_user_service_error(error, detail="Failed to update preferences")
-
-
-@router.get("/preferences")
-async def get_current_user_preferences(
-    auth: CurrentAuth,
-) -> UserPreferences:
-    """
-    Get current user preferences.
-
-    Returns
-    -------
-        UserPreferences: Current user preferences
-    """
-    try:
-        return await _load_user_preferences(auth.user_id, auth.session)
-    except UserServiceError as error:
-        _raise_user_service_error(error, detail="Failed to get preferences")

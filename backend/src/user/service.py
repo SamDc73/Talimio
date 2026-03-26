@@ -1,24 +1,19 @@
 
-import uuid
-
-from sqlalchemy.ext.asyncio import AsyncSession
-
-
 """User service for handling user settings and memory management."""
 
 import logging
+import uuid
 
 from psycopg.errors import ForeignKeyViolation
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.memory import add_memory, delete_all_memories, delete_memory, get_memories
 from src.user.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
     CustomInstructionsResponse,
-    PartialUserPreferences,
-    PreferencesUpdateResponse,
     UserPreferences,
     UserSettingsResponse,
 )
@@ -242,49 +237,3 @@ async def clear_user_memories(user_id: uuid.UUID, agent_id: str | None = None) -
     except (RuntimeError, TimeoutError, TypeError, ValueError) as error:
         logger.exception("Error clearing memories for user %s", user_id)
         raise UserMemoryAccessError from error
-
-
-async def update_user_preferences(
-    user_id: uuid.UUID, partial_preferences: PartialUserPreferences, db_session: AsyncSession
-) -> PreferencesUpdateResponse:
-    """
-    Update user preferences with partial updates.
-
-    Args:
-        user_id: Unique identifier for the user
-        partial_preferences: Partial preferences to update
-        db_session: Database session for saving preferences
-
-    Returns
-    -------
-        PreferencesUpdateResponse: Updated preferences and success status
-    """
-    try:
-        # Load current preferences
-        current_preferences = await _load_user_preferences(user_id, db_session)
-
-        # Merge partial updates into current preferences
-        updates = partial_preferences.model_dump(exclude_unset=True)
-        merged_dict = current_preferences.model_dump()
-
-        # Deep merge for nested user_preferences dict
-        if "user_preferences" in updates and updates["user_preferences"] is not None:
-            if merged_dict.get("user_preferences") is None:
-                merged_dict["user_preferences"] = {}
-            merged_dict["user_preferences"].update(updates["user_preferences"])
-            del updates["user_preferences"]
-
-        # Update other top-level fields
-        merged_dict.update(updates)
-
-        # Create new preferences object with merged data
-        merged_preferences = UserPreferences(**merged_dict)
-
-        # Save merged preferences - raises typed domain exceptions on failure.
-        success = await _save_user_preferences(user_id, merged_preferences, db_session)
-        return PreferencesUpdateResponse(preferences=merged_preferences, updated=success)
-    except UserServiceError:
-        raise
-    except (SQLAlchemyError, ValidationError, TypeError, ValueError) as error:
-        logger.exception("Error updating preferences for user %s", user_id)
-        raise UserPreferencesPersistenceError from error

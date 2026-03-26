@@ -11,27 +11,6 @@ class UserPreferences(BaseModel):
     """User preferences model."""
 
     theme: str = "system"
-    language: str = "en"
-    auto_play_videos: bool = True
-    default_zoom_level: float = 1.0
-    sidebar_open: bool = True
-    sidebar_collapsed: bool = False
-    notifications_enabled: bool = True
-    user_preferences: dict[str, Any] | None = None
-
-    model_config = build_camel_config()
-
-
-class PartialUserPreferences(BaseModel):
-    """Partial user preferences model for safe partial updates."""
-
-    theme: str | None = None
-    language: str | None = None
-    auto_play_videos: bool | None = None
-    default_zoom_level: float | None = None
-    sidebar_open: bool | None = None
-    sidebar_collapsed: bool | None = None
-    notifications_enabled: bool | None = None
     user_preferences: dict[str, Any] | None = None
 
     model_config = build_camel_config()
@@ -69,22 +48,5 @@ class ClearMemoryResponse(BaseModel):
 
     cleared: bool = True
     message: str = "All memories cleared successfully"
-
-    model_config = build_camel_config()
-
-
-class PreferencesUpdateRequest(BaseModel):
-    """Request schema for updating user preferences."""
-
-    preferences: PartialUserPreferences
-
-    model_config = build_camel_config()
-
-
-class PreferencesUpdateResponse(BaseModel):
-    """Response schema for preferences update."""
-
-    preferences: UserPreferences
-    updated: bool = True
 
     model_config = build_camel_config()
