@@ -1,7 +1,6 @@
 import { create } from "zustand"
 import { createJSONStorage, devtools, persist } from "zustand/middleware"
 import { immer } from "zustand/middleware/immer"
-import logger from "@/lib/logger"
 
 /* eslint-disable sonarjs/todo-tag */
 
@@ -633,19 +632,6 @@ const useAppStore = create(
 					})
 				},
 
-				toggleTheme: () => {
-					const current = get().preferences.theme
-					let next
-					if (current === "light") {
-						next = "dark"
-					} else if (current === "dark") {
-						next = "system"
-					} else {
-						next = "light"
-					}
-					get().updatePreference("theme", next)
-				},
-
 				setSelfAssessmentEnabled: (enabled) => {
 					set((state) => {
 						state.preferences.selfAssessmentEnabled = Boolean(enabled)
@@ -663,7 +649,6 @@ const useAppStore = create(
 				},
 
 				setAssistantSidebarWidth: (width) => {
-					// Ensure width is within reasonable bounds
 					const clampedWidth = Math.max(300, Math.min(800, width))
 					get().updatePreference("assistantSidebarWidth", clampedWidth)
 				},
@@ -677,66 +662,10 @@ const useAppStore = create(
 					}
 				},
 
-				// ========== UI SLICE ==========
-				ui: {
-					// Sidebar states
-					activeSidebarSection: null,
-
-					// Modal/dialog states
-					activeModal: null,
-					modalData: null,
-
-					// Loading states
-					loading: {},
-
-					// Error states
-					errors: [],
-				},
-
-				// UI actions
+				// Sidebar toggle
 				toggleSidebar: () => {
 					set((state) => {
 						state.preferences.sidebarOpen = !state.preferences.sidebarOpen
-					})
-				},
-
-				setActiveModal: (modalName, data = null) => {
-					set((state) => {
-						state.ui.activeModal = modalName
-						state.ui.modalData = data
-					})
-				},
-
-				closeModal: () => {
-					set((state) => {
-						state.ui.activeModal = null
-						state.ui.modalData = null
-					})
-				},
-
-				setLoading: (key, isLoading) => {
-					set((state) => {
-						if (isLoading) {
-							state.ui.loading[key] = true
-						} else {
-							delete state.ui.loading[key]
-						}
-					})
-				},
-
-				addError: (error) => {
-					set((state) => {
-						state.ui.errors.push({
-							id: Date.now(),
-							message: error.message || error,
-							timestamp: Date.now(),
-						})
-					})
-				},
-
-				removeError: (errorId) => {
-					set((state) => {
-						state.ui.errors = state.ui.errors.filter((e) => e.id !== errorId)
 					})
 				},
 
@@ -916,53 +845,6 @@ const useAppStore = create(
 						content_type: "course",
 						refresh: true,
 					})
-				},
-
-				// ========== GLOBAL ACTIONS ==========
-
-				// Clear all data (for logout/reset)
-				clearAllData: () => {
-					set((state) => {
-						state.books = {
-							progress: {},
-							loading: {},
-							error: {},
-							metadata: {},
-							readingState: {},
-						}
-						state.videos = {
-							progress: {},
-							loading: {},
-							error: {},
-							metadata: {},
-							playbackState: {},
-						}
-						state.courses = {
-							progress: {},
-							loading: {},
-							error: {},
-							activeCourseId: null,
-							lastViewedCourseId: null,
-						}
-						state.ui.errors = []
-						state.ui.loading = {}
-					})
-				},
-
-				// Hydrate from server data
-				hydrateFromServer: async () => {
-					try {
-						set((state) => {
-							state.ui.loading.hydration = true
-						})
-					} catch (error) {
-						logger.error("Failed to hydrate app store", error)
-						get().addError("Failed to sync with server")
-					} finally {
-						set((state) => {
-							state.ui.loading.hydration = undefined
-						})
-					}
 				},
 			})),
 			{
