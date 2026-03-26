@@ -10,7 +10,3 @@ export async function changePassword(currentPassword, newPassword) {
 export async function deleteAccount() {
 	return api.delete("/auth/account")
 }
-
-export async function getUserProfile() {
-	return api.get("/auth/me")
-}
