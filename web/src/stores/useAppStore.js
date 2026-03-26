@@ -8,19 +8,13 @@ import { immer } from "zustand/middleware/immer"
 const DEFAULT_BOOK_PROGRESS = {
 	currentPage: 1,
 	totalPages: 0,
-	zoomLevel: 100, // Changed from 1 to 100 to match percentage-based zoom
+	zoomLevel: 100,
 	scrollPosition: { x: 0, y: 0 },
 	epubState: {
 		location: null,
 		fontSize: 100,
 		lastUpdated: null,
 	},
-}
-const DEFAULT_VIDEO_PROGRESS = {
-	currentTime: 0,
-	duration: 0,
-	playbackRate: 1,
-	volume: 1,
 }
 
 const dispatchProgressUpdated = (contentId, progressValue, metadata = {}) => {
@@ -406,156 +400,11 @@ const useAppStore = create(
 
 				// ========== VIDEOS SLICE ==========
 				videos: {
-					// Video progress: videoId -> { percentage, totalItems, completedItems, items, lastUpdated }
 					progress: {},
-					// Loading states: videoId -> boolean
-					loading: {},
-					// Error states: videoId -> Error | null
-					error: {},
-					// Video metadata cache
-					metadata: {},
-					// Video playback state: videoId -> { currentTime, duration, playbackRate, volume }
 					playbackState: {},
 				},
 
 				// ========== VIDEO ACTIONS ==========
-				// Standardized actions matching course/book patterns
-
-				// Set video progress
-				setVideoProgress: (videoId, progress) => {
-					// Track this as a local update to prevent echo
-
-					const nextProgress = {
-						...progress,
-						lastUpdated: Date.now(),
-					}
-
-					set((state) => {
-						state.videos.progress[videoId] = nextProgress
-					})
-
-					const metadata = {
-						content_type: "video",
-						completed_chapters: nextProgress.items || {},
-						total_chapters: nextProgress.totalItems ?? Object.keys(nextProgress.items || {}).length,
-						completed_chapters_count: nextProgress.completedItems ?? 0,
-					}
-
-					if (nextProgress.lastPosition !== undefined) {
-						metadata.position = nextProgress.lastPosition
-					}
-					if (nextProgress.duration !== undefined) {
-						metadata.duration = nextProgress.duration
-					}
-
-					dispatchProgressUpdated(videoId, nextProgress.percentage ?? 0, metadata)
-				},
-
-				// Toggle video item completion (chapters)
-				toggleVideoItem: (videoId, chapterId) => {
-					const progress = get().videos.progress[videoId] || {
-						percentage: 0,
-						totalItems: 0,
-						completedItems: 0,
-						items: {},
-					}
-
-					const wasCompleted = progress.items[chapterId] || false
-					const isCompleted = !wasCompleted
-
-					// Calculate new progress
-					const completedItems = progress.completedItems + (isCompleted ? 1 : -1)
-					const percentage = progress.totalItems > 0 ? Math.round((completedItems / progress.totalItems) * 100) : 0
-
-					const newProgress = {
-						...progress,
-						items: {
-							...progress.items,
-							[chapterId]: isCompleted,
-						},
-						completedItems,
-						percentage,
-						lastUpdated: Date.now(),
-						// clientId: getClientId(), // Track which client made the change - TODO: implement getClientId
-					}
-
-					// Track this as a local update to prevent echo
-
-					// Update optimistically
-					set((state) => {
-						state.videos.progress[videoId] = newProgress
-					})
-
-					// Dispatch unified progress event for dashboard sync
-					const metadata = {
-						content_type: "video",
-						completed_chapters: newProgress.items || {},
-						total_chapters: newProgress.totalItems ?? Object.keys(newProgress.items || {}).length,
-						completed_chapters_count: newProgress.completedItems ?? 0,
-					}
-
-					dispatchProgressUpdated(videoId, newProgress.percentage ?? 0, metadata)
-				},
-
-				// Batch update video items
-				batchUpdateVideo: (videoId, updates) => {
-					const progress = get().videos.progress[videoId] || {
-						percentage: 0,
-						totalItems: 0,
-						completedItems: 0,
-						items: {},
-					}
-
-					// Apply all updates
-					const newItems = { ...progress.items }
-					for (const { itemId, completed } of updates) {
-						newItems[itemId] = completed
-					}
-
-					// Calculate new progress
-					const completedItems = Object.values(newItems).filter(Boolean).length
-					const percentage = progress.totalItems > 0 ? Math.round((completedItems / progress.totalItems) * 100) : 0
-
-					const newProgress = {
-						...progress,
-						items: newItems,
-						completedItems,
-						percentage,
-						lastUpdated: Date.now(),
-						// clientId: getClientId(), // Track which client made the change - TODO: implement getClientId
-					}
-
-					// Track this as a local update to prevent echo
-
-					// Update state
-					set((state) => {
-						state.videos.progress[videoId] = newProgress
-					})
-
-					// Dispatch unified progress event
-					const metadata = {
-						content_type: "video",
-						completed_chapters: newProgress.items || {},
-						total_chapters: newProgress.totalItems ?? Object.keys(newProgress.items || {}).length,
-						completed_chapters_count: newProgress.completedItems ?? 0,
-					}
-
-					dispatchProgressUpdated(videoId, newProgress.percentage ?? 0, metadata)
-				},
-
-				// Set video loading state
-				setVideoLoading: (videoId, isLoading) => {
-					set((state) => {
-						state.videos.loading[videoId] = isLoading
-					})
-				},
-
-				// Set video error state
-				setVideoError: (videoId, error) => {
-					set((state) => {
-						state.videos.error[videoId] = error
-					})
-				},
 
 				// Get video progress
 				getVideoProgress: (videoId) => {
@@ -570,27 +419,11 @@ const useAppStore = create(
 					)
 				},
 
-				// Playback state management (separate from progress)
-				updateVideoPlaybackState: (videoId, playbackState) => {
-					set((state) => {
-						state.videos.playbackState[videoId] = {
-							...state.videos.playbackState[videoId],
-							...playbackState,
-							lastUpdated: Date.now(),
-						}
-					})
-				},
-
-				getVideoPlaybackState: (videoId) => {
-					return get().videos.playbackState[videoId] || DEFAULT_VIDEO_PROGRESS
-				},
-
 				// Video progress update (used by VideoViewer)
 				updateVideoProgress: (videoId, progressData) => {
 					const position = progressData.position ?? progressData.lastPosition ?? 0
 					const percentage = progressData.percentage || 0
 
-					// Update playback state
 					set((state) => {
 						state.videos.playbackState[videoId] = {
 							...state.videos.playbackState[videoId],
@@ -599,7 +432,6 @@ const useAppStore = create(
 						}
 					})
 
-					// Also dispatch unified event for real-time updates
 					const storedVideoProgress = get().videos.progress[videoId] || {}
 					const duration = progressData.duration ?? storedVideoProgress.duration ?? 0
 
