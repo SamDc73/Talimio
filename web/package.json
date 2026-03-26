@@ -89,12 +89,12 @@
 	"devDependencies": {
 		"@chainlift/liftkit": "^0.2.0",
 		"@playwright/test": "^1.58.2",
-		"@tailwindcss/vite": "^4.2.0",
+		"@tailwindcss/vite": "^4.2.2",
 		"@tanstack/eslint-plugin-query": "^5.91.4",
 		"@types/node": "^25.3.0",
 		"@types/react": "^19.2.14",
 		"@types/react-dom": "^19.2.3",
-		"@vitejs/plugin-react": "^5.1.4",
+		"@vitejs/plugin-react": "^6.0.1",
 		"autoprefixer": "^10.4.24",
 		"eslint": "^9.39.2",
 		"eslint-import-resolver-typescript": "^4.4.4",
@@ -109,22 +109,27 @@
 		"eslint-plugin-react-refresh": "^0.4.26",
 		"eslint-plugin-sonarjs": "^3.0.7",
 		"eslint-plugin-unicorn": "^62.0.0",
-		"knip": "^5.84.1",
+		"knip": "^5.88.1",
 		"preact": "10.29.0",
 		"svelte": "5.54.0",
 		"tailwindcss": "^4.2.0",
 		"typescript": "^5.9.3",
-		"vite": "^7.3.1"
+		"vite": "^8.0.3"
 	},
 	"pnpm": {
 		"overrides": {
 			"ajv@<7": "6.14.0",
+			"brace-expansion@>=5 <6": "5.0.5",
 			"flatted": "3.4.2",
-			"minimatch@<4": "3.1.4",
+			"handlebars": "4.7.9",
+			"minimatch@<4": "10.2.4",
 			"minimatch@>=9 <10": "9.0.7",
 			"minimatch@>=10 <11": "10.2.4",
+			"picomatch@>=2 <3": "2.3.2",
+			"picomatch@>=4 <5": "4.0.4",
 			"preact": "10.29.0",
 			"rollup": "4.59.0",
+			"smol-toml": "1.6.1",
 			"svelte": "5.54.0"
 		}
 	}
