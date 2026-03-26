@@ -9,7 +9,7 @@ _DEFAULT_LANGUAGES = ["eng"]
 
 def _extract_text_from_pdf(file_path: str) -> str:
     """Extract plain text from a PDF using pypdf."""
-    reader = PdfReader(file_path, strict=False)
+    reader = PdfReader(file_path, strict=True)
     chunks: list[str] = []
 
     for page in reader.pages:
