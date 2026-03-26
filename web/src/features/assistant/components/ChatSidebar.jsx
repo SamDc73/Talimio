@@ -47,15 +47,6 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 		return () => window.removeEventListener("resize", checkMobile)
 	}, [])
 
-	// Listen for open assistant event
-	useEffect(() => {
-		const handleOpenAssistant = () => {
-			onToggle()
-		}
-		window.addEventListener("openAssistant", handleOpenAssistant)
-		return () => window.removeEventListener("openAssistant", handleOpenAssistant)
-	}, [onToggle])
-
 	// Handle resize
 	const handleResize = useCallback((_event, info) => {
 		const newWidth = window.innerWidth - info.point.x

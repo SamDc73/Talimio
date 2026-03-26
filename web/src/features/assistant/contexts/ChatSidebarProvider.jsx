@@ -1,26 +1,34 @@
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { ChatSidebarContext } from "@/contexts/ChatSidebarContext"
 import { ChatSidebar } from "@/features/assistant/components/ChatSidebar"
+import { useAssistantPinned } from "@/features/assistant/hooks/use-assistant-store"
 
 export function ChatSidebarProvider({ children }) {
 	const [isOpen, setIsOpen] = useState(false)
 	const [initialText, setInitialText] = useState("")
-	// Store a one-time quote to attach to the very next user message
 	const [pendingQuote, setPendingQuote] = useState("")
+	const assistantSidebarPinned = useAssistantPinned()
 
-	const openChat = (text = "") => {
+	const openChat = useCallback((text = "") => {
 		setInitialText(text)
 		setIsOpen(true)
-	}
-	const closeChat = () => setIsOpen(false)
-	const toggleChat = () => setIsOpen((v) => !v)
+	}, [])
+	const closeChat = useCallback(() => setIsOpen(false), [])
+	const toggleChat = useCallback(() => setIsOpen((v) => !v), [])
 
-	// Expose initialText to allow runtime/UI to read/clear selection context
-	const claimPendingQuote = () => {
+	const claimPendingQuote = useCallback(() => {
 		const q = pendingQuote || initialText || ""
 		if (pendingQuote) setPendingQuote("")
 		return q
-	}
+	}, [pendingQuote, initialText])
+
+	// Listen for open assistant events - needs to live here so it works
+	// even when the sidebar itself isn't mounted
+	useEffect(() => {
+		const handleOpenAssistant = () => toggleChat()
+		window.addEventListener("openAssistant", handleOpenAssistant)
+		return () => window.removeEventListener("openAssistant", handleOpenAssistant)
+	}, [toggleChat])
 
 	const value = {
 		isOpen,
@@ -29,7 +37,6 @@ export function ChatSidebarProvider({ children }) {
 		toggleChat,
 		initialText,
 		setInitialText,
-		// quote handoff for next sent message
 		setPendingQuote,
 		claimPendingQuote,
 	}
@@ -37,8 +44,7 @@ export function ChatSidebarProvider({ children }) {
 	return (
 		<ChatSidebarContext.Provider value={value}>
 			{children}
-			{/* Render the sidebar once at app-root level */}
-			<ChatSidebar isOpen={isOpen} onToggle={toggleChat} onClose={closeChat} />
+			{(isOpen || assistantSidebarPinned) && <ChatSidebar isOpen={isOpen} onToggle={toggleChat} onClose={closeChat} />}
 		</ChatSidebarContext.Provider>
 	)
 }
