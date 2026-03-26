@@ -185,14 +185,7 @@ class GradingService:
         verification: LatexExpressionVerificationResult,
         user_id: uuid.UUID,
     ) -> tuple[str | None, list[str], GradeErrorHighlight | None]:
-        settings = get_settings()
-        model = settings.GRADING_COACH_LLM_MODEL
-        if not model:
-            try:
-                model = settings.primary_llm_model
-                self._logger.info("GRADING_COACH_LLM_MODEL not set; falling back to PRIMARY_LLM_MODEL: %s", model)
-            except (AttributeError, RuntimeError, ValueError):
-                return None, [], None
+        model = get_settings().FAST_LLM_MODEL.strip() or None
 
         payload = {
             "question": request.question,

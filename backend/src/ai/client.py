@@ -1538,6 +1538,7 @@ class LLMClient:
         level_text = level.strip() if level else "unspecified"
 
         try:
+            settings = get_settings()
             messages = [
                 {
                     "role": "system",
@@ -1563,6 +1564,7 @@ class LLMClient:
                     messages,
                     response_model=SelfAssessmentQuiz,
                     user_id=user_id,
+                    model=settings.FAST_LLM_MODEL.strip() or None,
                     metadata={
                         "generation_name": "self_assessment_generation",
                         "tags": ["self_assessment", "generation"],
@@ -1657,6 +1659,7 @@ class LLMClient:
                 messages,
                 response_model=ExecutionPlan,
                 user_id=user_id,
+                model=settings.FAST_LLM_MODEL.strip() or None,
                 sandbox_context=sandbox_context,
                 max_completion_tokens=settings.CODE_EXECUTION_MAX_COMPLETION_TOKENS,
             )

@@ -110,6 +110,7 @@ class Settings(BaseSettings):
 
     # AI Configuration
     PRIMARY_LLM_MODELS: str = ""
+    FAST_LLM_MODEL: str = ""
     AI_REQUEST_TIMEOUT: int = 300
     RAG_EMBEDDING_OUTPUT_DIM: int | None = None
     MEMORY_EMBEDDING_OUTPUT_DIM: int | None = None
@@ -125,7 +126,6 @@ class Settings(BaseSettings):
 
     # Domain-specific model overrides
     TAGGING_LLM_MODEL: str | None = None
-    GRADING_COACH_LLM_MODEL: str | None = None
 
     # Code Execution (E2B)
     E2B_SANDBOX_TTL: int = 600
