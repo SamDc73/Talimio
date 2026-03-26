@@ -46,15 +46,9 @@ const useAppStore = create(
 				// Authentication actions
 				// ========== BOOKS SLICE ==========
 				books: {
-					// Book progress: bookId -> { percentage, totalItems, completedItems, items, lastUpdated }
 					progress: {},
-					// Loading states: bookId -> boolean
 					loading: {},
-					// Error states: bookId -> Error | null
 					error: {},
-					// Book metadata cache
-					metadata: {},
-					// Book reading state: bookId -> { currentPage, totalPages, zoomLevel, scrollPosition, epubState }
 					readingState: {},
 				},
 
@@ -325,77 +319,6 @@ const useAppStore = create(
 							lastUpdated: null,
 						}
 					)
-				},
-
-				// Initialize book progress from book data
-				initializeBookProgress: (bookId, book) => {
-					if (!book?.tableOfContents) {
-						return
-					}
-
-					// Store book metadata for progress calculations
-					set((state) => {
-						state.books.metadata[bookId] = {
-							...book,
-							tableOfContents: book.tableOfContents,
-						}
-					})
-
-					// Count only leaf chapters (not parent chapters)
-					const getAllLeafChapters = (chapters, seenIds = new Set()) => {
-						const leafChapters = []
-						for (const chapter of chapters) {
-							if (!seenIds.has(chapter.id)) {
-								seenIds.add(chapter.id)
-								if (chapter.children && chapter.children.length > 0) {
-									// Parent chapter - recurse into children
-									const childChapters = getAllLeafChapters(chapter.children, seenIds)
-									leafChapters.push(...childChapters)
-								} else {
-									// Leaf chapter - add to list
-									leafChapters.push(chapter)
-								}
-							}
-						}
-						return leafChapters
-					}
-
-					const leafChapters = getAllLeafChapters(
-						Array.isArray(book.tableOfContents) ? book.tableOfContents : [book.tableOfContents]
-					)
-
-					// Initialize standardized progress from server data if available
-					const items = {}
-					if (book.progress?.tocProgress) {
-						for (const [chapterId, completed] of Object.entries(book.progress.tocProgress)) {
-							items[chapterId] = completed
-						}
-					}
-
-					// Count only completed leaf chapters
-					const completedLeafIds = new Set()
-					for (const leafChapter of leafChapters) {
-						if (items[leafChapter.id]) {
-							completedLeafIds.add(leafChapter.id)
-						}
-					}
-
-					const completedItems = completedLeafIds.size
-					const totalItems = leafChapters.length
-					const percentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0
-
-					const progress = {
-						percentage,
-						totalItems,
-						completedItems,
-						items,
-						lastUpdated: Date.now(),
-					}
-
-					// Set standardized progress
-					set((state) => {
-						state.books.progress[bookId] = progress
-					})
 				},
 
 				// ========== VIDEOS SLICE ==========
