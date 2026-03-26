@@ -500,212 +500,28 @@ const useAppStore = create(
 						state.preferences.sidebarOpen = !state.preferences.sidebarOpen
 					})
 				},
-
-				// ========== COURSES SLICE ==========
-				courses: {
-					progress: {},
-					loading: {},
-					error: {},
-					// Currently active course ID
-					activeCourseId: null,
-					// Last viewed course for restoration
-					lastViewedCourseId: null,
-				},
-
-				// ========== COURSE ACTIONS ==========
-
-				setCourseProgress: (courseId, progress) => {
-					const nextProgress = {
-						...progress,
-						lastUpdated: Date.now(),
-					}
-
-					set((state) => {
-						state.courses.progress[courseId] = nextProgress
-					})
-
-					const completedFromArray = Array.isArray(nextProgress.completedLessons)
-						? nextProgress.completedLessons.map(String)
-						: []
-					const completedFromItems = Object.entries(nextProgress.items || {})
-						.filter(([, value]) => Boolean(value))
-						.map(([lessonId]) => String(lessonId))
-					const completedLessons = completedFromArray.length > 0 ? completedFromArray : completedFromItems
-
-					const metadata = {
-						content_type: "course",
-						completed_lessons: [...new Set(completedLessons)],
-						total_lessons: nextProgress.totalItems ?? completedLessons.length ?? 0,
-					}
-
-					if (nextProgress.currentLessonId !== undefined && nextProgress.currentLessonId !== null) {
-						metadata.current_lesson_id = String(nextProgress.currentLessonId)
-					}
-
-					dispatchProgressUpdated(courseId, nextProgress.percentage ?? 0, metadata)
-				},
-
-				toggleCourseItem: (courseId, lessonId) => {
-					const progress = get().courses.progress[courseId] || {
-						percentage: 0,
-						totalItems: 0,
-						completedItems: 0,
-						items: {},
-					}
-
-					const wasCompleted = progress.items[lessonId] || false
-					const isCompleted = !wasCompleted
-
-					const completedItems = progress.completedItems + (isCompleted ? 1 : -1)
-					const percentage = progress.totalItems > 0 ? Math.round((completedItems / progress.totalItems) * 100) : 0
-
-					const newProgress = {
-						...progress,
-						items: {
-							...progress.items,
-							[lessonId]: isCompleted,
-						},
-						completedItems,
-						percentage,
-						lastUpdated: Date.now(),
-						// clientId: getClientId(), // Track which client made the change - TODO: implement getClientId
-					}
-
-					set((state) => {
-						state.courses.progress[courseId] = newProgress
-					})
-
-					const completedLessons = Object.entries(newProgress.items || {})
-						.filter(([, value]) => Boolean(value))
-						.map(([id]) => String(id))
-
-					const metadata = {
-						content_type: "course",
-						completed_lessons: completedLessons,
-						total_lessons: newProgress.totalItems ?? completedLessons.length ?? 0,
-						current_lesson_id: String(lessonId),
-					}
-
-					dispatchProgressUpdated(courseId, newProgress.percentage ?? 0, metadata)
-				},
-
-				// Batch update course items
-				batchUpdateCourse: (courseId, updates) => {
-					const progress = get().courses.progress[courseId] || {
-						percentage: 0,
-						totalItems: 0,
-						completedItems: 0,
-						items: {},
-					}
-
-					const newItems = { ...progress.items }
-					for (const { itemId, completed } of updates) {
-						newItems[itemId] = completed
-					}
-
-					const completedItems = Object.values(newItems).filter(Boolean).length
-					const percentage = progress.totalItems > 0 ? Math.round((completedItems / progress.totalItems) * 100) : 0
-
-					const newProgress = {
-						...progress,
-						items: newItems,
-						completedItems,
-						percentage,
-						lastUpdated: Date.now(),
-						// clientId: getClientId(), // Track which client made the change - TODO: implement getClientId
-					}
-
-					set((state) => {
-						state.courses.progress[courseId] = newProgress
-					})
-
-					const completedLessons = Object.entries(newProgress.items || {})
-						.filter(([, value]) => Boolean(value))
-						.map(([id]) => String(id))
-
-					const metadata = {
-						content_type: "course",
-						completed_lessons: completedLessons,
-						total_lessons: newProgress.totalItems ?? completedLessons.length ?? 0,
-					}
-
-					dispatchProgressUpdated(courseId, newProgress.percentage ?? 0, metadata)
-				},
-
-				// Set course loading state
-				setCourseLoading: (courseId, isLoading) => {
-					set((state) => {
-						state.courses.loading[courseId] = isLoading
-					})
-				},
-
-				// Set course error state
-				setCourseError: (courseId, error) => {
-					set((state) => {
-						state.courses.error[courseId] = error
-					})
-				},
-
-				// Get course progress
-				getCourseProgress: (courseId) => {
-					return get().courses.progress[courseId] || null
-				},
-
-				// Set active course
-				setActiveCourse: (courseId) => {
-					set((state) => {
-						state.courses.activeCourseId = courseId
-						if (courseId) {
-							state.courses.lastViewedCourseId = courseId
-						}
-					})
-				},
-
-				getActiveCourse: () => {
-					return get().courses.activeCourseId
-				},
-
-				// Force refresh course progress (clear cache and emit event)
-				refreshCourseProgress: (courseId) => {
-					set((state) => {
-						// Clear cached progress stats to force fresh fetch
-						delete state.courses.progress[courseId]
-					})
-
-					// Emit unified event to notify components to refetch
-					dispatchProgressUpdated(courseId, undefined, {
-						content_type: "course",
-						refresh: true,
-					})
-				},
 			})),
 			{
 				name: "talimio-storage",
 				storage: createJSONStorage(() => localStorage),
 				partialize: (state) => ({
-					// Only persist what's needed across sessions
-					// Don't persist loading/error (ephemeral)
 					books: {
 						progress: state.books.progress,
 						readingState: state.books.readingState,
-						// Don't persist: loading, error (ephemeral - reset on page load)
 					},
 					videos: {
 						progress: state.videos.progress,
 						playbackState: state.videos.playbackState,
-						// Don't persist: loading, error (ephemeral)
-					},
-					courses: {
-						progress: state.courses.progress,
-						activeCourseId: state.courses.activeCourseId,
-						lastViewedCourseId: state.courses.lastViewedCourseId,
-						// Don't persist: loading, error (ephemeral)
 					},
 					preferences: state.preferences,
-					// Don't persist tokens - using httpOnly cookies
 				}),
-				version: 4, // Increment version to trigger migration
+				version: 5,
 				migrate: (persistedState, version) => {
+					// Migration from version 4 to 5 - remove unused courses slice
+					if (version === 4) {
+						delete persistedState.courses
+					}
+
 					// Migration from version 3 to 4 - standardize progress structure
 					if (version === 3) {
 						// Migrate course data to new structure
@@ -754,11 +570,9 @@ const useAppStore = create(
 								for (const [bookId, tocItems] of Object.entries(oldBooks.tocProgress)) {
 									const items = tocItems || {}
 									const completedItems = Object.values(items).filter(Boolean).length
-									// We'll need to get totalItems from metadata
 									const book = oldBooks.metadata?.[bookId]
 									let totalItems = 0
 									if (book?.tableOfContents) {
-										// Count all chapters
 										const getAllChapters = (chapters, seenIds = new Set()) => {
 											const allChapters = []
 											for (const chapter of chapters) {
@@ -821,11 +635,13 @@ const useAppStore = create(
 								}
 							}
 						}
+
+						// Remove courses slice after migration from 3 to 4
+						delete persistedState.courses
 					}
 
 					// Previous migrations
 					if (version === 0 || version === 1) {
-						// Migration from version 0 or 1 to 2
 						// Ensure course.lessonCompletion exists
 						if (persistedState.course && !persistedState.course.lessonCompletion) {
 							persistedState.course.lessonCompletion = {}
