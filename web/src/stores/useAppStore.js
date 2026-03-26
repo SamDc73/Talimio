@@ -374,6 +374,8 @@ const useAppStore = create(
 				preferences: {
 					theme: "system",
 					selfAssessmentEnabled: false,
+					courseFocusMode: false,
+					courseTimeboxMinutes: 25,
 					sidebarOpen: true,
 					assistantSidebarPinned: false,
 					assistantModel: null,
