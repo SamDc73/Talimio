@@ -13,39 +13,9 @@ import { catppuccinLatteColors } from "./catppuccinTheme"
 
 const LATTE_BORDER_COLOR = catppuccinLatteColors.surface1.hex
 
-const CODEMIRROR_ALIASES = {
-	js: "javascript",
-	ts: "typescript",
-	py: "python",
-	"c++": "cpp",
-	"c#": "csharp",
-	cs: "csharp",
-	yml: "yaml",
-	md: "markdown",
-	mdx: "markdown",
-	rb: "ruby",
-	ps: "powershell",
-	ps1: "powershell",
-	sh: "shell",
-	bash: "shell",
-	zsh: "shell",
-	gql: "graphql",
-	docker: "dockerfile",
-	kt: "kotlin",
-	rs: "rust",
-	ini: "ini",
-}
-
-function resolveEditorLanguage(rawLanguage) {
-	if (!rawLanguage) return null
-	const lowered = String(rawLanguage).toLowerCase()
-	return CODEMIRROR_ALIASES[lowered] || lowered
-}
-
 export default function ExecutableCodeBlock({ children, className, lessonId, courseId, ...props }) {
 	const language = getLanguage(props, children)
 	const originalCode = flattenText(children)
-	const editorLanguage = resolveEditorLanguage(language)
 
 	// Determine if this code block can be executed
 	const canRun = Boolean(language)
@@ -60,7 +30,7 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 
 	const editorExtensions = useCodeMirrorLanguageExtensions({
 		kind: "label",
-		languageLabel: editorLanguage,
+		languageLabel: language,
 	})
 
 	const actionGroupClassName =

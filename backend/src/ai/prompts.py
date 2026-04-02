@@ -503,7 +503,8 @@ Read the learner state holistically and teach accordingly:
 
 ### Code blocks
 - Use fenced code blocks in this form: ````` ```language `````.
-- Any language label is allowed.
+- Use canonical language labels when possible (for example: sql, bash, rust, toml, markdown, python, javascript, typescript, dockerfile).
+- Use `text` for plain-text snippets that should not receive syntax highlighting.
 - For multi-file runnable examples, add metadata in the fence info string:
   - Example: ````` ```ts file=src/main.ts workspace=my-demo entry `````
   - Use `file=...` for each file and `workspace=...` to group them.
