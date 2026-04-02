@@ -1,53 +1,98 @@
+import { LanguageDescription } from "@codemirror/language"
 import { languages as CM_LANGS } from "@codemirror/language-data"
 import { EditorView } from "@codemirror/view"
-import { loadLanguage } from "@uiw/codemirror-extensions-langs"
 import { useEffect, useMemo, useState } from "react"
 import { catppuccinLatte } from "@/features/course/components/catppuccinTheme"
 
-const LANGUAGE_CACHE = new Map()
+const LANGUAGE_SUPPORT_CACHE = new Map()
+const LANGUAGE_PROMISE_CACHE = new Map()
 const BASE_EXTENSIONS = [EditorView.lineWrapping]
 const EDITOR_THEME = EditorView.theme({ ".cm-scroller": { overflowAnchor: "none" } })
+const PLAIN_TEXT_LABELS = new Set(["text", "plaintext"])
 
-async function loadLanguageExtension(lang) {
-	if (!lang) return null
-	if (LANGUAGE_CACHE.has(lang)) return LANGUAGE_CACHE.get(lang)
+function normalizeValue(value) {
+	if (typeof value !== "string") return null
+	const normalized = value.trim().toLowerCase()
+	return normalized || null
+}
 
-	// Try primary loader
-	const ext = await Promise.resolve(loadLanguage(lang))
-	if (ext) {
-		LANGUAGE_CACHE.set(lang, ext)
-		return ext
+function normalizeLanguageInput(input) {
+	const kind = input?.kind === "filename" || input?.kind === "both" ? input.kind : "label"
+	return {
+		kind,
+		label: normalizeValue(input?.languageLabel),
+		filename: normalizeValue(input?.filename),
 	}
+}
 
-	// Fallback to codemirror language-data
-	const match = CM_LANGS.find((e) => {
-		const name = e.name?.toLowerCase()
-		const aliases = e.alias?.map((a) => a?.toLowerCase()) || []
-		return name === lang || aliases.includes(lang)
-	})
-	if (match) {
-		const fallback = await Promise.resolve(match.load())
-		if (fallback) {
-			LANGUAGE_CACHE.set(lang, fallback)
-			return fallback
+function resolveLanguageDescription(input) {
+	const shouldMatchFilename = input.kind === "filename" || input.kind === "both"
+	const shouldMatchLabel = input.kind === "label" || input.kind === "both"
+
+	if (shouldMatchFilename && input.filename) {
+		const byFilename = LanguageDescription.matchFilename(CM_LANGS, input.filename)
+		if (byFilename) {
+			return byFilename
 		}
 	}
+
+	if (shouldMatchLabel && input.label && !PLAIN_TEXT_LABELS.has(input.label)) {
+		return LanguageDescription.matchLanguageName(CM_LANGS, input.label)
+	}
+
 	return null
 }
 
-export function useCodeMirrorLanguageExtensions(language) {
+async function loadLanguageExtension(input) {
+	const description = resolveLanguageDescription(input)
+	if (!description) {
+		return null
+	}
+
+	const cacheKey = description.name.toLowerCase()
+	if (LANGUAGE_SUPPORT_CACHE.has(cacheKey)) {
+		return LANGUAGE_SUPPORT_CACHE.get(cacheKey)
+	}
+	if (LANGUAGE_PROMISE_CACHE.has(cacheKey)) {
+		return LANGUAGE_PROMISE_CACHE.get(cacheKey)
+	}
+
+	const pending = description
+		.load()
+		.then((support) => {
+			LANGUAGE_SUPPORT_CACHE.set(cacheKey, support)
+			return support
+		})
+		.finally(() => {
+			LANGUAGE_PROMISE_CACHE.delete(cacheKey)
+		})
+
+	LANGUAGE_PROMISE_CACHE.set(cacheKey, pending)
+	return pending
+}
+
+export function useCodeMirrorLanguageExtensions(input) {
 	const [langExt, setLangExt] = useState(null)
-	const target = typeof language === "string" ? language.toLowerCase() : null
+	const inputKind = input?.kind
+	const inputLanguageLabel = input?.languageLabel
+	const inputFilename = input?.filename
+
+	const normalizedInput = useMemo(
+		() => normalizeLanguageInput({ kind: inputKind, languageLabel: inputLanguageLabel, filename: inputFilename }),
+		[inputFilename, inputKind, inputLanguageLabel]
+	)
 
 	useEffect(() => {
 		let cancelled = false
-		loadLanguageExtension(target).then((ext) => {
-			if (!cancelled) setLangExt(ext)
+		loadLanguageExtension(normalizedInput).then((ext) => {
+			if (!cancelled) {
+				setLangExt(ext)
+			}
 		})
 		return () => {
 			cancelled = true
 		}
-	}, [target])
+	}, [normalizedInput])
 
 	return useMemo(() => [EDITOR_THEME, catppuccinLatte, ...BASE_EXTENSIONS, ...(langExt ? [langExt] : [])], [langExt])
 }

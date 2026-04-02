@@ -27,7 +27,11 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 		canReset,
 	} = useWorkspaceExecutionState({ workspaceId, lessonId, courseId, files })
 
-	const editorExtensions = useCodeMirrorLanguageExtensions(activeFile?.language)
+	const editorExtensions = useCodeMirrorLanguageExtensions({
+		kind: "both",
+		languageLabel: activeFile?.language,
+		filename: activeFile?.filePath,
+	})
 	const workspaceLabel = workspace?.label || "Workspace"
 
 	if (!workspace || editableFiles.length === 0) {
@@ -107,7 +111,9 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 						<CodeMirror
 							value={activeFile?.code || ""}
 							onChange={(value) => activeFile?.filePath && onCodeChange(activeFile.filePath, value)}
-							basicSetup={{ lineNumbers: false, foldGutter: false }}
+							// UIW's bundled setup pulls in mixed CodeMirror runtimes in this repo.
+							basicSetup={false}
+							theme="none"
 							className="bg-transparent"
 							style={{ fontSize: "0.9rem", lineHeight: 1.6 }}
 							extensions={editorExtensions}

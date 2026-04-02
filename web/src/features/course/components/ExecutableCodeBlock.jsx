@@ -58,7 +58,10 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 		lessonId,
 	})
 
-	const editorExtensions = useCodeMirrorLanguageExtensions(editorLanguage)
+	const editorExtensions = useCodeMirrorLanguageExtensions({
+		kind: "label",
+		languageLabel: editorLanguage,
+	})
 
 	const actionGroupClassName =
 		"inline-flex items-center overflow-hidden rounded-full border border-border/60 bg-background/60 shadow-xs backdrop-blur-[1px]"
@@ -141,7 +144,9 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 					<CodeMirror
 						value={code}
 						onChange={handleCodeChange}
-						basicSetup={{ lineNumbers: false, foldGutter: false }}
+						// UIW's bundled setup pulls in mixed CodeMirror runtimes in this repo.
+						basicSetup={false}
+						theme="none"
 						className="bg-transparent"
 						style={{ fontSize: "0.9rem", lineHeight: 1.6 }}
 						extensions={editorExtensions}
