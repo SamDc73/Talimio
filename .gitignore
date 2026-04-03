@@ -84,3 +84,5 @@ tasks/
 dist
 public/pdf.worker.min.js
 .serena/cache/
+.env.production
+backend/.env.prod

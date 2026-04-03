@@ -1,0 +1,78 @@
+# Cloud Build pipeline for talimio-backend.
+#
+# Low-abstraction flow:
+# 1) Build image
+# 2) Push image
+# 3) Deploy + execute Cloud Run Neon rehearsal job
+# 4) Deploy + execute Cloud Run migrator job
+# 5) Deploy service with new image
+#
+# Assumption: runtime env/secrets are managed on Cloud Run resources.
+
+steps:
+  # 1. Build the backend image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'backend/Dockerfile'
+      - '-t'
+      - 'us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/talimio-backend:$COMMIT_SHA'
+      - 'backend'
+
+  # 2. Push the image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/talimio-backend:$COMMIT_SHA'
+
+  # 3. Deploy and run Cloud Run Neon rehearsal job
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'jobs'
+      - 'deploy'
+      - 'backend-neon-rehearsal'
+      - '--image=us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/talimio-backend:$COMMIT_SHA'
+      - '--command=uv'
+      - '--args=run,python,-m,src.database.migrate_rehearsal'
+      - '--execute-now'
+      - '--wait'
+      - '--region=us-west1'
+      - '--quiet'
+
+  # 4. Deploy and run Cloud Run migration job
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'jobs'
+      - 'deploy'
+      - 'backend-migrator'
+      - '--image=us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/talimio-backend:$COMMIT_SHA'
+      - '--command=uv'
+      - '--args=run,python,-m,src.database.migrate'
+      - '--execute-now'
+      - '--wait'
+      - '--region=us-west1'
+      - '--quiet'
+
+  # 5. Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'talimio-backend'
+      - '--image=us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/talimio-backend:$COMMIT_SHA'
+      - '--region=us-west1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--quiet'
+
+images:
+  - 'us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/talimio-backend:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
