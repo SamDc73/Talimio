@@ -201,7 +201,7 @@ Lesson titles SHOULD:
 - "setup_commands" MUST be [] by default, and list shell commands needed for the sandbox.
 - Only include commands if core lessons genuinely require software/tools.
 - Do not add packages speculatively.
-- The sandbox is a Linux Debian environment with Python 3.12 and JavaScript, install the rest using apt or pip.
+- The sandbox is a Linux Debian environment with Python and Node.js. Python/pip, Node.js/npm, and common C/C++/Java toolchains are available; install anything else with `apt-get` as needed. Do not use `curl`/`wget` script installers.
 
 ## Schema (MATCH EXACTLY; NO EXTRA KEYS)
 {
@@ -303,7 +303,7 @@ Lesson titles SHOULD:
 - "setup_commands" MUST be [] by default, and list shell commands needed for the sandbox.
 - Only include commands if core lessons genuinely require software/tools.
 - Do not add packages speculatively.
-- The sandbox is a Linux Debian environment with Python 3.12 and JavaScript, install the rest using apt or pip.
+- The sandbox is a Linux Debian environment with Python and Node.js. Python/pip, Node.js/npm, and common C/C++/Java toolchains are available; install anything else with `apt-get` as needed. Do not use `curl`/`wget` script installers.
 
 ## Schema (MATCH EXACTLY; NO EXTRA KEYS)
 {
@@ -633,6 +633,7 @@ Creative freedom: you may combine languages or tooling (e.g., install PHP via ap
 Guardrails:
 - **Commands must terminate**: Never run long-running processes like web servers (`uvicorn`, `flask run`, `npm start`, `rails server`), REPLs, or watchers. For web frameworks, verify syntax and imports only (e.g., `python -c "from app.main import app; print('OK')"`).
 - Never use `sudo`, `curl`, `wget`, or fetch remote scripts via pipes. Stick to package managers and official CLIs available through apt or language-specific installers.
+- Prefer `apt-get` package installs over custom bootstrap scripts whenever the needed package exists in Debian repos.
 - Keep command count reasonable (aim for <= 12 install/setup/run commands total).
 - Use `apt-get update` only once per sandbox (create `/tmp/.apt_updated` or similar sentinel if needed).
 - Ensure commands are idempotent—rerunning the plan should not fail.

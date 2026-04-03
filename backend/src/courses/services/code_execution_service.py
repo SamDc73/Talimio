@@ -35,6 +35,8 @@ from src.ai.tools.sandbox import SandboxToolContext
 from src.config.settings import get_settings
 from src.courses.models import Lesson
 
+from .setup_commands_normalizer import normalize_setup_commands
+
 
 # Prefer AsyncSandbox; fall back if package layout differs
 _AsyncSandbox: Any | None = None
@@ -273,9 +275,16 @@ class CodeExecutionService:
         key = self._session_key(user_id, course_id)
         sbx = await self._get_sandbox(key)
 
+        normalized_setup_commands = normalize_setup_commands(setup_commands or [])
+
         # Run course setup commands once per sandbox
-        if course_id and setup_commands and not self._setup_done_by_key.get(key):
-            await self._run_course_setup(sbx, setup_key=key, course_id=course_id, setup_commands=setup_commands)
+        if course_id and normalized_setup_commands and not self._setup_done_by_key.get(key):
+            await self._run_course_setup(
+                sbx,
+                setup_key=key,
+                course_id=course_id,
+                setup_commands=normalized_setup_commands,
+            )
 
         workspace_context: dict[str, Any] | None = None
         if files:
@@ -808,10 +817,14 @@ class CodeExecutionService:
         """Run course setup commands once per sandbox."""
         logger.info("Running course setup course_id=%s key=%s commands=%d", course_id, setup_key, len(setup_commands))
         for cmd in setup_commands:
+            run_user = self._setup_command_run_user(cmd)
             try:
-                result = await sbx.commands.run(cmd)
+                result = await sbx.commands.run(cmd, user=run_user)
                 if result.exit_code != 0:
-                    logger.warning("sandbox.setup_command.failed", extra={"command_sig": self._command_signature(cmd), "exit_code": result.exit_code})
+                    logger.warning(
+                        "sandbox.setup_command.failed",
+                        extra={"command_sig": self._command_signature(cmd), "exit_code": result.exit_code},
+                    )
             except (
                 OSError,
                 RuntimeError,
@@ -825,6 +838,25 @@ class CodeExecutionService:
             ):
                 logger.exception("sandbox.setup_command.error", extra={"command_sig": self._command_signature(cmd)})
         self._setup_done_by_key[setup_key] = True
+
+    def _setup_command_run_user(self, command: str) -> str | None:
+        """Select command user for setup steps that require elevated permissions."""
+        for segment in command.split("&&"):
+            tokens = self._safe_split_shell_command(segment)
+            if not tokens:
+                continue
+            if tokens[0] in {"apt", "apt-get"}:
+                return "root"
+            if len(tokens) >= 2 and tokens[0] == "sudo" and tokens[1] in {"apt", "apt-get"}:
+                return "root"
+        return None
+
+    @staticmethod
+    def _safe_split_shell_command(command: str) -> list[str]:
+        try:
+            return shlex.split(command)
+        except ValueError:
+            return []
 
     async def _ensure_runtime(self, sbx: Any, language: str) -> None:
         """Install language runtime for fast-path execution when missing."""

@@ -37,6 +37,7 @@ from src.courses.models import (
 from src.database.session import async_session_maker
 
 from .concept_graph_service import ConceptGraphService
+from .setup_commands_normalizer import normalize_setup_commands_payload
 
 
 logger = logging.getLogger(__name__)
@@ -313,8 +314,13 @@ class CourseContentService:
         """Ensure optional payload collections are stored as JSON strings."""
         for key in ("tags", "setup_commands"):
             value = session_data.get(key)
-            if value is not None:
-                session_data[key] = self._ensure_json_string(value)
+            if value is None:
+                continue
+            if key == "setup_commands":
+                normalized_setup_commands = normalize_setup_commands_payload(value)
+                session_data[key] = self._ensure_json_string(normalized_setup_commands)
+                continue
+            session_data[key] = self._ensure_json_string(value)
 
     def _normalize_prompt_text(self, prompt: Any) -> str:
         """Normalize prompt input into a trimmed string."""
@@ -584,7 +590,11 @@ class CourseContentService:
         for attr, value in data.items():
             if value is None:
                 continue
-            if attr in {"tags", "setup_commands"}:
+            if attr == "setup_commands":
+                normalized_setup_commands = normalize_setup_commands_payload(value)
+                setattr(course, attr, self._ensure_json_string(normalized_setup_commands))
+                continue
+            if attr == "tags":
                 setattr(course, attr, self._ensure_json_string(value))
                 continue
             setattr(course, attr, value)
