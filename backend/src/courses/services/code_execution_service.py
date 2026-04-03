@@ -18,6 +18,7 @@ Sandboxes are reused per user+course with configurable TTL for compute efficienc
 
 import asyncio
 import hashlib
+import json
 import logging
 import posixpath
 import re
@@ -25,15 +26,17 @@ import shlex
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 from fastapi import status
+from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai.service import get_ai_service
 from src.ai.tools.sandbox import SandboxToolContext
 from src.config.settings import get_settings
-from src.courses.models import Lesson
+from src.courses.models import Course, Lesson
 
 from .setup_commands_normalizer import normalize_setup_commands
 
@@ -275,7 +278,10 @@ class CodeExecutionService:
         key = self._session_key(user_id, course_id)
         sbx = await self._get_sandbox(key)
 
-        normalized_setup_commands = normalize_setup_commands(setup_commands or [])
+        raw_setup_commands = list(setup_commands or [])
+        normalized_setup_commands = normalize_setup_commands(raw_setup_commands)
+        if course_id and normalized_setup_commands != raw_setup_commands:
+            await self._persist_normalized_setup_commands(course_id, normalized_setup_commands)
 
         # Run course setup commands once per sandbox
         if course_id and normalized_setup_commands and not self._setup_done_by_key.get(key):
@@ -816,11 +822,13 @@ class CodeExecutionService:
     async def _run_course_setup(self, sbx: Any, *, setup_key: str, course_id: str, setup_commands: list[str]) -> None:
         """Run course setup commands once per sandbox."""
         logger.info("Running course setup course_id=%s key=%s commands=%d", course_id, setup_key, len(setup_commands))
+        had_setup_failures = False
         for cmd in setup_commands:
             run_user = self._setup_command_run_user(cmd)
             try:
                 result = await sbx.commands.run(cmd, user=run_user)
                 if result.exit_code != 0:
+                    had_setup_failures = True
                     logger.warning(
                         "sandbox.setup_command.failed",
                         extra={"command_sig": self._command_signature(cmd), "exit_code": result.exit_code},
@@ -836,8 +844,35 @@ class CodeExecutionService:
                 SandboxException,
                 CommandExitException,
             ):
+                had_setup_failures = True
                 logger.exception("sandbox.setup_command.error", extra={"command_sig": self._command_signature(cmd)})
+
+        if had_setup_failures:
+            logger.warning("sandbox.setup.incomplete", extra={"course_id": course_id, "key": setup_key})
+            return
+
         self._setup_done_by_key[setup_key] = True
+
+    async def _persist_normalized_setup_commands(self, course_id: str, setup_commands: list[str]) -> None:
+        """Persist normalized setup commands for the course to avoid repeated runtime rewrites."""
+        try:
+            course_uuid = uuid.UUID(course_id)
+        except ValueError:
+            logger.warning("Skipping setup command persistence for invalid course_id=%s", course_id)
+            return
+
+        payload = json.dumps(setup_commands)
+        try:
+            await self._session.execute(
+                update(Course)
+                .where(Course.id == course_uuid)
+                .values(setup_commands=payload, updated_at=datetime.now(UTC))
+            )
+            await self._session.commit()
+            logger.info("Persisted normalized setup commands for course_id=%s", course_id)
+        except SQLAlchemyError:
+            await self._session.rollback()
+            logger.exception("Failed to persist normalized setup commands for course_id=%s", course_id)
 
     def _setup_command_run_user(self, command: str) -> str | None:
         """Select command user for setup steps that require elevated permissions."""
