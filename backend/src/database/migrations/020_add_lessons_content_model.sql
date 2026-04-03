@@ -1,0 +1,2 @@
+ALTER TABLE lessons
+ADD COLUMN IF NOT EXISTS content_model VARCHAR(255);
