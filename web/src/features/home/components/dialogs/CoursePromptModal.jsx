@@ -60,6 +60,10 @@ const examplePrompts = [
 ]
 
 const tooltipCopy = "Answer a few quick questions to tailor your course. Optional."
+const adaptiveModeTooltipCopy = {
+	adaptive: "Recommended. Adjusts the course as you learn.",
+	standard: "Keeps the course fixed from start to finish.",
+}
 
 const ACCEPTED_ATTACHMENT_EXTENSIONS = [".pdf", ".epub", ".png", ".jpg", ".jpeg"]
 const IMAGE_ATTACHMENT_EXTENSIONS = [".png", ".jpg", ".jpeg"]
@@ -275,11 +279,6 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	const handleToggleSelfAssessment = (event) => {
 		const { checked } = event.target
 		setSelfAssessmentEnabled(checked)
-	}
-
-	const handleToggleAdaptive = (event) => {
-		const { checked } = event.target
-		setAdaptiveEnabled(checked)
 	}
 
 	const addAttachments = (files) => {
@@ -669,42 +668,71 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 					</div>
 				</div>
 
-				<div className="space-y-2 py-2.5">
-					<label
-						htmlFor="enable-adaptive-mode"
-						className={cn(
-							"flex items-center gap-2.5 px-1 py-1.5 -mx-1 rounded-md",
-							"transition-colors duration-150",
-							"cursor-pointer hover:bg-muted/40",
-							isGenerating && "opacity-50 cursor-not-allowed"
-						)}
-					>
-						<input
-							type="checkbox"
-							id="enable-adaptive-mode"
-							checked={adaptiveEnabled}
-							onChange={handleToggleAdaptive}
-							disabled={isGenerating}
-							className="size-4  rounded-sm border-border text-(--color-course) focus:ring-2 focus:ring-(--color-course)/20 focus:ring-offset-0 transition-all"
-						/>
-						<span className="text-sm text-foreground select-none">Adaptive mode</span>
+				<div className="space-y-2.5 py-2">
+					<div className="relative inline-flex items-center gap-2">
+						<div className={cn("relative inline-flex rounded-full p-0.5", "bg-(--color-course)/5")}>
+							<div
+								className={cn(
+									"absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-1/2 rounded-full",
+									"bg-(--color-course)/10 border border-(--color-course)/15",
+									"transition-transform duration-280 ease-[cubic-bezier(0.22,1,0.36,1)]",
+									!adaptiveEnabled && "translate-x-full"
+								)}
+							/>
+							<label
+								className={cn(
+									"relative z-10 px-4 py-2 text-sm rounded-full cursor-pointer",
+									"transition-colors duration-200 min-w-[90px] text-center select-none",
+									adaptiveEnabled ? "text-(--color-course-accent) font-medium" : "text-muted-foreground",
+									isGenerating && "opacity-50 cursor-not-allowed"
+								)}
+							>
+								<input
+									type="radio"
+									name="learning-mode"
+									checked={adaptiveEnabled}
+									onChange={() => !isGenerating && setAdaptiveEnabled(true)}
+									disabled={isGenerating}
+									className="sr-only"
+								/>
+								Adaptive
+							</label>
+							<label
+								className={cn(
+									"relative z-10 px-4 py-2 text-sm rounded-full cursor-pointer",
+									"transition-colors duration-200 min-w-[90px] text-center select-none",
+									!adaptiveEnabled ? "text-(--color-course-accent) font-medium" : "text-muted-foreground",
+									isGenerating && "opacity-50 cursor-not-allowed"
+								)}
+							>
+								<input
+									type="radio"
+									name="learning-mode"
+									checked={!adaptiveEnabled}
+									onChange={() => !isGenerating && setAdaptiveEnabled(false)}
+									disabled={isGenerating}
+									className="sr-only"
+								/>
+								Standard
+							</label>
+						</div>
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<button
 									type="button"
 									onClick={(e) => e.preventDefault()}
 									disabled={isGenerating}
-									className="ml-0.5 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-									aria-label="Adaptive mode information"
+									className="text-muted-foreground/50 hover:text-muted-foreground transition-colors duration-150"
+									aria-label="Learning mode information"
 								>
-									<HelpCircle className="size-3.5 " />
+									<HelpCircle className="size-3.5" />
 								</button>
 							</TooltipTrigger>
-							<TooltipContent side="top" className="text-xs">
-								Enable spaced reviews and concept graphs tailored to each learner.
+							<TooltipContent side="top" className="text-xs max-w-[200px]">
+								{adaptiveEnabled ? adaptiveModeTooltipCopy.adaptive : adaptiveModeTooltipCopy.standard}
 							</TooltipContent>
 						</Tooltip>
-					</label>
+					</div>
 
 					<label
 						htmlFor="enable-self-assessment"
