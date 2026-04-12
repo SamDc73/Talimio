@@ -1,7 +1,9 @@
-import { ArrowLeft, ArrowRight, CheckCircle, RotateCcw } from "lucide-react"
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle, Loader2, RotateCcw } from "lucide-react"
 import { useMemo, useRef } from "react"
 import { Link } from "react-router-dom"
+import { Badge } from "@/components/Badge"
 import { Button } from "@/components/Button"
+import { cn } from "@/lib/utils"
 import { AdaptiveReviewPanel } from "./AdaptiveReviewPanel"
 import { ContentRenderer } from "./ContentRenderer"
 import { LessonQuickCheckPanel } from "./LessonQuickCheckPanel"
@@ -20,12 +22,62 @@ export function LessonViewer({
 	onBack,
 	onMarkComplete,
 	onRegenerate,
+	isRegeneratingLesson = false,
+	regenerateStatus = null,
 	modules = [],
 	onLessonNavigate,
 	adaptiveEnabled = false,
 	courseId,
 }) {
 	const containerRef = useRef(null)
+	let regenerationBanner = null
+	let regenerationBannerContent = null
+
+	if (isRegeneratingLesson) {
+		regenerationBanner = {
+			icon: Loader2,
+			iconClassName: "animate-spin text-primary",
+			role: "status",
+			title: "Regenerating lesson",
+			message: "Refreshing this lesson with your notes. The updated version will appear automatically.",
+			className: "border-primary/15 bg-primary/5",
+		}
+	} else if (regenerateStatus?.type === "error") {
+		regenerationBanner = {
+			icon: AlertTriangle,
+			iconClassName: "text-destructive",
+			role: "alert",
+			title: "Regeneration failed",
+			message: regenerateStatus.message,
+			className: "border-destructive/30 bg-destructive/10",
+		}
+	}
+
+	if (regenerationBanner) {
+		const RegenerationIcon = regenerationBanner.icon
+
+		regenerationBannerContent = (
+			<div className="px-6 pt-5 md:px-8">
+				<div
+					role={regenerationBanner.role}
+					aria-live="polite"
+					className={cn(
+						"flex items-start gap-3 rounded-xl border px-4 py-3 text-sm backdrop-blur-sm",
+						regenerationBanner.className
+					)}
+				>
+					<RegenerationIcon
+						className={cn("mt-0.5 size-4 shrink-0", regenerationBanner.iconClassName)}
+						aria-hidden="true"
+					/>
+					<div className="space-y-1">
+						<p className="font-medium text-foreground">{regenerationBanner.title}</p>
+						<p className="text-muted-foreground">{regenerationBanner.message}</p>
+					</div>
+				</div>
+			</div>
+		)
+	}
 
 	// Calculate previous and next lessons from modules
 	const { previousLesson, nextLesson } = useMemo(() => {
@@ -106,45 +158,78 @@ export function LessonViewer({
 	return (
 		<div ref={containerRef} className="h-[calc(100vh-4rem)] overflow-y-auto w-full">
 			<div className="max-w-4xl w-full mx-auto px-4 flex justify-center">
-				<div className="w-full rounded-lg border border-border bg-card shadow-sm flex flex-col my-8">
+				<div className="my-8 flex w-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
 					{/* Header */}
-					<div className="border-b border-border bg-linear-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-6">
-						<div className="flex items-center justify-between mb-5">
-							<Button onClick={onBack} variant="secondary" size="sm">
-								<ArrowLeft className="size-4 " />
-								Back
-							</Button>
+					<div className="border-b border-border/60 bg-linear-to-br from-emerald-500/[0.08] via-background to-cyan-500/[0.04] p-6 md:p-8">
+						<div className="flex flex-col gap-5">
+							<div className="flex flex-wrap items-center justify-between gap-3">
+								<Button onClick={onBack} variant="secondary" size="sm">
+									<ArrowLeft className="size-4 " />
+									Back
+								</Button>
 
-							<div className="flex items-center gap-2">
-								{adaptiveEnabled && courseId && lesson?.concept_id && (
-									<Link
-										to={`/course/${courseId}/practice?focusConceptId=${encodeURIComponent(String(lesson.concept_id))}`}
-									>
-										<Button variant="outline" size="sm">
-											Practice Concept
+								<div className="flex flex-wrap items-center gap-2">
+									{adaptiveEnabled && courseId && lesson?.concept_id && (
+										<Link
+											to={`/course/${courseId}/practice?focusConceptId=${encodeURIComponent(String(lesson.concept_id))}`}
+										>
+											<Button variant="outline" size="sm">
+												Practice Concept
+											</Button>
+										</Link>
+									)}
+									{onRegenerate && (
+										<Button
+											onClick={() => onRegenerate(lesson.id)}
+											variant="outline"
+											size="sm"
+											disabled={isRegeneratingLesson}
+										>
+											{isRegeneratingLesson ? (
+												<Loader2 className="size-4 animate-spin" />
+											) : (
+												<RotateCcw className="size-4 " />
+											)}
+											{isRegeneratingLesson ? "Regenerating" : "Regenerate"}
 										</Button>
-									</Link>
-								)}
-								{onRegenerate && (
-									<Button onClick={() => onRegenerate(lesson.id)} variant="outline" size="sm">
-										<RotateCcw className="size-4 " />
-										Regenerate
-									</Button>
-								)}
+									)}
 
-								{onMarkComplete && (
-									<Button onClick={() => onMarkComplete(lesson.id)} size="sm">
-										<CheckCircle className="size-4 " />
-										Complete
-									</Button>
-								)}
+									{onMarkComplete && (
+										<Button onClick={() => onMarkComplete(lesson.id)} size="sm">
+											<CheckCircle className="size-4 " />
+											Complete
+										</Button>
+									)}
+								</div>
+							</div>
+
+							<div className="space-y-4">
+								<div className="flex flex-wrap items-center gap-2">
+									{lesson.module_name ? (
+										<Badge
+											variant="outline"
+											className="rounded-full border-border/60 bg-background/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+										>
+											{lesson.module_name}
+										</Badge>
+									) : null}
+								</div>
+
+								<div className="space-y-3">
+									<h1 className="max-w-3xl text-3xl/tight font-semibold tracking-tight text-foreground md:text-4xl/tight">
+										{lesson.title || lesson.slug || "Lesson"}
+									</h1>
+									{lesson.description ? (
+										<p className="max-w-2xl text-sm/relaxed text-muted-foreground md:text-base/relaxed">
+											{lesson.description}
+										</p>
+									) : null}
+								</div>
 							</div>
 						</div>
-
-						<h1 className="text-3xl/tight font-bold  text-foreground px-6">
-							{lesson.title || lesson.slug || "Lesson"}
-						</h1>
 					</div>
+
+					{regenerationBannerContent}
 
 					{/* Content */}
 					<div className="p-6 md:p-8" data-selection-zone="true">

@@ -335,6 +335,33 @@ class CoursesFacade:
         lesson_service = LessonService(self._session, user_id)
         return await lesson_service.get_lesson(course_id, lesson_id, force_refresh=generate)
 
+    async def regenerate_lesson(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+        critique_text: str,
+        user_id: uuid.UUID,
+    ) -> LessonDetailResponse:
+        """Regenerate a lesson body with explicit learner feedback."""
+        lesson_service = LessonService(self._session, user_id)
+
+        try:
+            return await lesson_service.regenerate_lesson(
+                course_id=course_id,
+                lesson_id=lesson_id,
+                critique_text=critique_text,
+            )
+        except (NotFoundError, UpstreamUnavailableError, ValidationError):
+            raise
+        except (SQLAlchemyError, RuntimeError, TypeError, ValueError) as error:
+            logger.exception(
+                "courses.lesson.regenerate.failed",
+                extra={"course_id": str(course_id), "lesson_id": str(lesson_id), "user_id": str(user_id)},
+            )
+            message = "Failed to regenerate lesson"
+            raise CoursesFacadeUpstreamError(message) from error
+
     async def grade_lesson_response(
         self,
         *,

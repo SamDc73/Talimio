@@ -28,6 +28,7 @@ from src.courses.schemas import (
     GradeRequest,
     GradeResponse,
     LessonDetailResponse,
+    LessonRegenerateRequest,
     NextReviewResponse,
     PracticeDrillRequest,
     PracticeDrillResponse,
@@ -187,6 +188,23 @@ async def get_lesson(
         lesson_id=lesson_id,
         user_id=auth.user_id,
         generate=generate,
+    )
+
+
+@router.post("/{course_id}/lessons/{lesson_id}/regenerate")
+async def regenerate_lesson(
+    course_id: uuid.UUID,
+    lesson_id: uuid.UUID,
+    payload: LessonRegenerateRequest,
+    auth: CurrentAuth,
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
+) -> LessonDetailResponse:
+    """Regenerate a lesson using learner critique while keeping the same route identity."""
+    return await facade.regenerate_lesson(
+        course_id=course_id,
+        lesson_id=lesson_id,
+        critique_text=payload.critique_text,
+        user_id=auth.user_id,
     )
 
 

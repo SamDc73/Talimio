@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
 import { useUpdateProgress } from "@/hooks/use-progress"
-import { fetchLesson } from "../api/lessonApi"
+import { fetchLesson, regenerateLesson } from "../api/lessonApi"
 
 const toSnakeCase = (key) => key.replace(/([A-Z])/g, "_$1").toLowerCase()
 
@@ -44,6 +44,35 @@ export function useLessonData(courseId, lessonId) {
 				return false
 			}
 			return failureCount < 3
+		},
+	})
+}
+
+export function useLessonRegenerateMutation(courseId) {
+	const queryClient = useQueryClient()
+
+	return useMutation({
+		mutationFn: async ({ lessonId, critiqueText }) => {
+			if (!courseId) {
+				throw new Error("Course ID is required to regenerate a lesson")
+			}
+
+			if (!lessonId) {
+				throw new Error("Lesson ID is required to regenerate a lesson")
+			}
+
+			return regenerateLesson(courseId, lessonId, critiqueText)
+		},
+		onSuccess: async (data, variables) => {
+			if (!courseId || !variables?.lessonId) {
+				return
+			}
+
+			queryClient.setQueryData(["lesson", courseId, variables.lessonId], data)
+			await queryClient.invalidateQueries({
+				queryKey: ["lesson", courseId, variables.lessonId],
+				exact: true,
+			})
 		},
 	})
 }

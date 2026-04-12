@@ -17,6 +17,17 @@ export async function fetchLesson(courseId, lessonId, { generate = false } = {})
 	return api.get(`/courses/${courseId}/lessons/${lessonId}${query}`)
 }
 
-export function regenerateLesson(courseId, lessonId) {
-	return fetchLesson(courseId, lessonId, { generate: true })
+export async function regenerateLesson(courseId, lessonId, critiqueText) {
+	if (!courseId || !lessonId) {
+		throw new Error("Course ID and Lesson ID are required")
+	}
+
+	const trimmedCritique = critiqueText?.trim()
+	if (!trimmedCritique) {
+		throw new Error("Regeneration request is required")
+	}
+
+	return api.post(`/courses/${courseId}/lessons/${lessonId}/regenerate`, {
+		critiqueText: trimmedCritique,
+	})
 }

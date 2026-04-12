@@ -58,6 +58,37 @@ class LessonService:
         self.session = session
         self.user_id = user_id
 
+    async def _load_owned_lesson_and_course(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+    ) -> tuple[Lesson, Course]:
+        query = (
+            select(Lesson, Course)
+            .join(Course, Lesson.course_id == Course.id)
+            .where(
+                Lesson.id == lesson_id,
+                Lesson.course_id == course_id,
+                Course.user_id == self.user_id,
+            )
+        )
+        result = await self.session.execute(query)
+        row = result.first()
+
+        if not row:
+            logger.warning(
+                "LESSON_ACCESS_DENIED",
+                extra={"user_id": str(self.user_id), "lesson_id": str(lesson_id), "course_id": str(course_id)},
+            )
+            raise NotFoundError(
+                message="Lesson not found or access denied",
+                feature_area="courses",
+            )
+
+        lesson, course = row
+        return lesson, course
+
     async def _build_course_outline_context(
         self,
         *,
@@ -342,6 +373,16 @@ class LessonService:
         )
         return "\n\n".join([*context_sections, rag_context]).strip()
 
+    async def _prepare_regeneration_context(
+        self,
+        *,
+        lesson: Lesson,
+        course: Course,
+        critique_text: str,
+    ) -> str:
+        lesson_context = await self._prepare_lesson_context(lesson=lesson, course=course)
+        return "\n\n".join([lesson_context, f"## Regeneration Request\n{critique_text}"]).strip()
+
     async def _generate_lesson_body(self, *, lesson_context: str) -> str:
         llm_client = LLMClient(agent_id=AGENT_ID_LESSON_WRITER)
         lesson_content = await llm_client.generate_lesson_content(lesson_context, user_id=self.user_id)
@@ -368,37 +409,58 @@ class LessonService:
         ------
             NotFoundError: If the lesson is missing or not owned by the current user
         """
-        # Single query with USER ISOLATION - prevents data leakage
-        query = (
-            select(Lesson, Course)
-            .join(Course, Lesson.course_id == Course.id)
-            .where(
-                Lesson.id == lesson_id,
-                Lesson.course_id == course_id,
-                Course.user_id == self.user_id,
-            )
-        )
-        result = await self.session.execute(query)
-        row = result.first()
-
-        if not row:
-            # Log security event with user context
-            logger.warning(
-                "LESSON_ACCESS_DENIED",
-                extra={"user_id": str(self.user_id), "lesson_id": str(lesson_id), "course_id": str(course_id)},
-            )
-            raise NotFoundError(
-                message="Lesson not found or access denied",
-                feature_area="courses",
-            )
-
-        lesson, course = row
+        lesson, course = await self._load_owned_lesson_and_course(course_id=course_id, lesson_id=lesson_id)
 
         if force_refresh or lesson.content == "":
             lesson = await self._ensure_lesson_content(lesson, course, force_refresh=force_refresh)
 
         concept_id_value = getattr(cast("Any", lesson), "concept_id", None)
 
+        return LessonDetailResponse(
+            id=lesson.id,
+            course_id=course.id,
+            title=lesson.title,
+            description=lesson.description,
+            content=lesson.content,
+            concept_id=concept_id_value,
+            adaptive_enabled=course.adaptive_enabled,
+            created_at=lesson.created_at,
+            updated_at=lesson.updated_at,
+        )
+
+    async def regenerate_lesson(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+        critique_text: str,
+    ) -> LessonDetailResponse:
+        """Regenerate an existing lesson body using the normal writer path plus learner critique."""
+        lesson, course = await self._load_owned_lesson_and_course(course_id=course_id, lesson_id=lesson_id)
+
+        trimmed_critique = critique_text.strip()
+        if not trimmed_critique:
+            detail = "Regeneration request must not be empty"
+            raise ValidationError(detail, feature_area="courses")
+
+        try:
+            lesson_context = await self._prepare_regeneration_context(
+                lesson=lesson,
+                course=course,
+                critique_text=trimmed_critique,
+            )
+            lesson.content = await self._generate_lesson_body(lesson_context=lesson_context)
+            lesson.updated_at = datetime.now(UTC)
+            await self.session.flush()
+            await self.session.refresh(lesson)
+        except ValueError as exc:
+            detail = f"Invalid lesson content: {exc}"
+            raise ValidationError(detail, feature_area="courses") from exc
+        except RuntimeError as exc:
+            message = "Unable to generate lesson content. Please try again."
+            raise UpstreamUnavailableError(message, feature_area="courses") from exc
+
+        concept_id_value = getattr(cast("Any", lesson), "concept_id", None)
         return LessonDetailResponse(
             id=lesson.id,
             course_id=course.id,

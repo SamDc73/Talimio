@@ -1,7 +1,7 @@
 import { useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { useCourseNavigation } from "@/utils/navigationUtils"
-import { useLessonCompleteMutation, useLessonProgressMutation } from "./use-lesson-data"
+import { useLessonCompleteMutation, useLessonProgressMutation, useLessonRegenerateMutation } from "./use-lesson-data"
 
 /**
  * Business logic actions for lessons
@@ -12,6 +12,7 @@ export function useLessonActions(courseId) {
 	const { goToLesson } = useCourseNavigation()
 	const progressMutation = useLessonProgressMutation(courseId)
 	const completeMutation = useLessonCompleteMutation(courseId)
+	const regenerateMutation = useLessonRegenerateMutation(courseId)
 
 	// Action: Navigate back from lesson
 	const handleBack = useCallback(() => {
@@ -80,21 +81,22 @@ export function useLessonActions(courseId) {
 
 	// Action: Regenerate lesson content
 	const handleRegenerate = useCallback(
-		(lessonId, targetCourseId) => {
-			const courseToUse = targetCourseId ?? courseId
-			if (!courseToUse || !lessonId) {
+		async (lessonId, critiqueText) => {
+			if (!courseId || !lessonId) {
 				return
 			}
 
-			// This could trigger a mutation to regenerate content
-			// For now, we'll emit an event
+			const regeneratedLesson = await regenerateMutation.mutateAsync({ lessonId, critiqueText })
+
 			window.dispatchEvent(
 				new CustomEvent("lessonRegenerate", {
-					detail: { courseId: courseToUse, lessonId },
+					detail: { courseId, lessonId, timestamp: new Date().toISOString() },
 				})
 			)
+
+			return regeneratedLesson
 		},
-		[courseId]
+		[courseId, regenerateMutation]
 	)
 
 	return {
@@ -111,10 +113,12 @@ export function useLessonActions(courseId) {
 
 		// Mutation states for UI feedback
 		isCompletingLesson: completeMutation.isPending,
+		isRegeneratingLesson: regenerateMutation.isPending,
 		isUpdatingProgress: progressMutation.isPending,
 
 		// Error states
 		completeError: completeMutation.error,
+		regenerateError: regenerateMutation.error,
 		progressError: progressMutation.error,
 	}
 }

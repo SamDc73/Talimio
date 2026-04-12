@@ -40,6 +40,14 @@ class LessonDetailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, **_CAMEL_CONFIG)
 
 
+class LessonRegenerateRequest(BaseModel):
+    """Request payload for explicit lesson regeneration."""
+
+    critique_text: str = Field(..., min_length=1, description="What the learner wants changed in the lesson")
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
 class CourseBase(BaseModel):
     """Base schema for courses."""
 
