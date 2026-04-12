@@ -50,7 +50,7 @@ Rules:
 - Only include errorHighlight when you can point to a specific LaTeX fragment to check; otherwise omit it.
 """
 
-GRADING_PROMPT = """You are the official Adaptive Practice grader.
+GRADING_PROMPT = """You are the official grader for learner free-form answers.
 
 You will receive one JSON payload with:
 - question
@@ -529,6 +529,7 @@ Guidelines:
 - String props may include Markdown + LaTeX.
 - Prefer `<LatexExpression>` when the answer can be checked as a single expression.
 - For `<FreeForm>`, always provide `expectedAnswer` for grading; keep `sampleAnswer` optional and use it only as an extra learner reference after submission.
+- Set `<FreeForm answerKind="math_latex" ... />` when the learner should enter LaTeX math instead of plain text.
 - To populate the lesson's Quick Check, set `practiceContext="quick_check"` on 1-3 `<LatexExpression>` items.
 - If the lesson needs graphs, geometry, or simulation-style visualization, prefer `<JXGBoard>` over static text descriptions.
 - For `<JXGBoard>` plots, pass real JS functions (e.g. `(x) => x * x - 3`) or point arrays, never parse math strings (for example `"x^2"`).

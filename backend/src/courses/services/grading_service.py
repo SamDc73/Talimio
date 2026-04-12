@@ -31,8 +31,8 @@ class GradingCoachFeedback(BaseModel):
     model_config = build_camel_config(extra="forbid")
 
 
-class AdaptivePracticeGradeFeedback(BaseModel):
-    """Structured output from the Adaptive Practice grading LLM."""
+class LLMGradeFeedback(BaseModel):
+    """Structured output from the canonical grading prompt."""
 
     is_correct: bool = Field(...)
     status: Literal["correct", "incorrect", "parse_error"] = Field(...)
@@ -165,13 +165,13 @@ class GradingService:
         result = await self._llm_client.complete_grading_prompt(
             prompt=GRADING_PROMPT,
             payload=payload,
-            response_model=AdaptivePracticeGradeFeedback,
+            response_model=LLMGradeFeedback,
             user_id=user_id,
         )
 
         tags = self._merge_tags(result.tags)
         error_highlight = result.error_highlight if answer_kind == "math_latex" else None
-        verifier = VerifierInfo(name="llm", method=None, notes="Adaptive Practice LLM grader.")
+        verifier = VerifierInfo(name="llm", method=None, notes="LLM grading prompt.")
         return GradeResponse(
             is_correct=result.is_correct,
             status=result.status,
