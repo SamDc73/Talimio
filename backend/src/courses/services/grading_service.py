@@ -152,6 +152,7 @@ class GradingService:
         expected_answer = cast("str", request.expected.expected_answer)
         answer_kind = cast("Literal['math_latex', 'text']", request.expected.answer_kind)
         learner_answer = cast("str", request.answer.answer_text)
+        model = get_settings().FAST_LLM_MODEL.strip() or None
 
         payload = {
             "question": request.question,
@@ -167,6 +168,7 @@ class GradingService:
             payload=payload,
             response_model=LLMGradeFeedback,
             user_id=user_id,
+            model=model,
         )
 
         tags = self._merge_tags(result.tags)

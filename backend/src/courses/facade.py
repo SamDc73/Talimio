@@ -19,6 +19,7 @@ from fastapi import BackgroundTasks, status
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
+from src.ai.errors import AIRuntimeError
 from src.exceptions import (
     BadRequestError,
     DomainError,
@@ -375,7 +376,14 @@ class CoursesFacade:
         grading_service = GradingService(self._session)
         try:
             return await grading_service.grade(payload, user_id)
-        except (RuntimeError, ValueError, TypeError) as error:
+        except (AIRuntimeError, TypeError, ValueError) as error:
+            logger.exception(
+                "courses.grade.upstream_failed",
+                extra={"course_id": str(course_id), "lesson_id": str(lesson_id), "user_id": str(user_id)},
+            )
+            message = "Grading service is temporarily unavailable"
+            raise CoursesFacadeUpstreamError(message) from error
+        except RuntimeError as error:
             logger.exception(
                 "courses.grade.failed",
                 extra={"course_id": str(course_id), "lesson_id": str(lesson_id), "user_id": str(user_id)},

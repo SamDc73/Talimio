@@ -163,6 +163,7 @@ class _LLMRequest:
     use_responses_transport: bool = False
     has_hosted_tools: bool = False
     tool_plan: RequestToolPlan | None = None
+    enable_memory: bool = True
 
 
 def _iter_exception_chain(error: Exception, max_depth: int = 6) -> list[Exception]:
@@ -250,6 +251,7 @@ class LLMClient:
         max_completion_tokens: int | None,
         stream: bool,
         metadata: dict[str, Any] | None,
+        enable_memory: bool,
     ) -> _LLMRequest:
         settings = get_settings()
         return _LLMRequest(
@@ -265,6 +267,7 @@ class LLMClient:
             max_completion_tokens=max_completion_tokens,
             stream=stream,
             metadata=metadata,
+            enable_memory=enable_memory,
         )
 
     def _map_runtime_error(self, error: Exception, *, default_message: str) -> AIRuntimeError:
@@ -374,7 +377,7 @@ class LLMClient:
 
     async def _assemble_request_context(self, request: _LLMRequest) -> None:
         """Ordered context assembly: normalize -> memory -> tools."""
-        if request.user_id is not None:
+        if request.enable_memory and request.user_id is not None:
             request.messages = await self._inject_memory_into_messages(request.messages, request.user_id)
 
         request.tool_plan = await self._build_request_tool_plan(request)
@@ -737,6 +740,7 @@ class LLMClient:
         max_completion_tokens: int | None = None,
         stream: bool = False,
         metadata: dict[str, Any] | None = None,
+        enable_memory: bool = True,
     ) -> Any:
         """Shared execution engine for free-form and structured generation."""
         request = self._build_request(
@@ -752,6 +756,7 @@ class LLMClient:
             max_completion_tokens=max_completion_tokens,
             stream=stream,
             metadata=metadata,
+            enable_memory=enable_memory,
         )
 
         if request.response_model and request.stream:
@@ -781,7 +786,8 @@ class LLMClient:
                 result, conversation = await self._run_autonomy_loop(request)
             else:
                 result, conversation = await self._run_structured_completion_with_retries(request)
-            self._schedule_memory_save(request.user_id, conversation, result)
+            if request.enable_memory:
+                self._schedule_memory_save(request.user_id, conversation, result)
             return result
 
         except ValueError:
@@ -1693,6 +1699,7 @@ class LLMClient:
             response_model=response_model,
             user_id=user_id,
             model=model,
+            enable_memory=False,
         )
         if not isinstance(result, response_model):
             msg = f"Expected {response_model.__name__} from grading structured output"
