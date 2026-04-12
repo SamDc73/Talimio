@@ -8,12 +8,20 @@ import { api } from "@/lib/apiClient"
 /**
  * Fetch a lesson using the canonical course endpoint.
  */
-export async function fetchLesson(courseId, lessonId, { generate = false } = {}) {
+export async function fetchLesson(courseId, lessonId, { generate = false, versionId = null } = {}) {
 	if (!courseId || !lessonId) {
 		throw new Error("Course ID and Lesson ID are required")
 	}
 
-	const query = generate ? "?generate=true" : ""
+	const queryParams = new URLSearchParams()
+	if (generate) {
+		queryParams.set("generate", "true")
+	}
+	if (versionId) {
+		queryParams.set("versionId", versionId)
+	}
+
+	const query = queryParams.size > 0 ? `?${queryParams.toString()}` : ""
 	return api.get(`/courses/${courseId}/lessons/${lessonId}${query}`)
 }
 

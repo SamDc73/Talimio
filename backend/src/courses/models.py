@@ -97,6 +97,11 @@ class Lesson(Base):
     order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     module_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     module_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    current_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("lesson_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -121,6 +126,57 @@ class Lesson(Base):
             cls.order,
             cls.title,
         )
+
+
+class LessonVersion(Base):
+    """Stable revision row for one lesson body."""
+
+    __tablename__ = "lesson_versions"
+    __table_args__ = (
+        UniqueConstraint("lesson_id", "major_version", "minor_version", name="uq_lesson_version_number"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    lesson_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("lessons.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    major_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    minor_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    version_kind: Mapped[str] = mapped_column(String(50), nullable=False, default="first_pass")
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    generation_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+
+class LessonVersionWindow(Base):
+    """Stored pacing window for one lesson version."""
+
+    __tablename__ = "lesson_version_windows"
+    __table_args__ = (
+        UniqueConstraint("lesson_version_id", "window_index", name="uq_lesson_version_window_index"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    lesson_version_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("lesson_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    window_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    estimated_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
 
 
 class CourseDocument(Base):
@@ -354,6 +410,8 @@ __all__ = [
     "CourseConcept",
     "CourseDocument",
     "Lesson",
+    "LessonVersion",
+    "LessonVersionWindow",
     "ProbeEvent",
     "UserConceptState",
 ]

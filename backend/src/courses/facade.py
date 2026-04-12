@@ -37,6 +37,7 @@ from .schemas import (
     GradeRequest,
     GradeResponse,
     LessonDetailResponse,
+    LessonVersionHistoryResponse,
     NextReviewResponse,
     PracticeDrillResponse,
     ReviewBatchRequest,
@@ -330,10 +331,27 @@ class CoursesFacade:
         lesson_id: uuid.UUID,
         user_id: uuid.UUID,
         generate: bool = False,
+        version_id: uuid.UUID | None = None,
     ) -> LessonDetailResponse:
         """Get a lesson detail payload for an owned course."""
         lesson_service = LessonService(self._session, user_id)
-        return await lesson_service.get_lesson(course_id, lesson_id, force_refresh=generate)
+        return await lesson_service.get_lesson(
+            course_id,
+            lesson_id,
+            force_refresh=generate,
+            version_id=version_id,
+        )
+
+    async def list_lesson_versions(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> LessonVersionHistoryResponse:
+        """Return version history for an owned lesson."""
+        lesson_service = LessonService(self._session, user_id)
+        return await lesson_service.list_lesson_versions(course_id=course_id, lesson_id=lesson_id)
 
     async def regenerate_lesson(
         self,

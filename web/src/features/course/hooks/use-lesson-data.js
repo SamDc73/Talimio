@@ -31,13 +31,14 @@ const normalizeMetadataFields = (metadata = {}) => {
  * @param {string} lessonId - The lesson ID to fetch
  * @returns {Object} - Object containing lesson data and loading state
  */
-export function useLessonData(courseId, lessonId) {
+export function useLessonData(courseId, lessonId, versionId = null) {
 	return useQuery({
-		queryKey: ["lesson", courseId, lessonId],
-		queryFn: () => fetchLesson(courseId, lessonId),
+		queryKey: ["lesson", courseId, lessonId, versionId],
+		queryFn: () => fetchLesson(courseId, lessonId, { versionId }),
 		enabled: Boolean(courseId && lessonId),
 		staleTime: 5 * 60 * 1000, // Cache for 5 minutes
 		refetchOnWindowFocus: false, // Avoid unnecessary refetch loops when window gains focus
+		placeholderData: (previousData) => previousData,
 		retry: (failureCount, error) => {
 			// Don't retry on 404s or auth errors
 			if (error?.status === 404 || error?.status === 401) {
@@ -68,10 +69,9 @@ export function useLessonRegenerateMutation(courseId) {
 				return
 			}
 
-			queryClient.setQueryData(["lesson", courseId, variables.lessonId], data)
+			queryClient.setQueryData(["lesson", courseId, variables.lessonId, null], data)
 			await queryClient.invalidateQueries({
 				queryKey: ["lesson", courseId, variables.lessonId],
-				exact: true,
 			})
 		},
 	})

@@ -176,6 +176,7 @@ export function useCourseService(courseId = null) {
 
 			const queryParams = {}
 			if (options.generate) queryParams.generate = true
+			if (options.versionId) queryParams.versionId = options.versionId
 
 			return await getLesson.execute(null, {
 				pathParams: { courseId, lessonId },
@@ -198,13 +199,24 @@ export function useCourseService(courseId = null) {
 		 * Regenerate an existing lesson
 		 * @param {string} lessonId - Lesson ID
 		 */
-		async regenerateLesson(lessonId) {
+		async regenerateLesson(lessonId, payload = {}) {
 			if (!courseId || !lessonId) {
 				throw new Error("Course ID and Lesson ID required")
 			}
-			return await regenerateLesson.execute(null, {
+
+			const critiqueText = payload?.critiqueText?.trim()
+			if (!critiqueText) {
+				throw new Error("critiqueText is required")
+			}
+
+			return await regenerateLesson.execute(
+				{
+					critiqueText,
+				},
+				{
 				pathParams: { courseId, lessonId },
-			})
+				}
+			)
 		},
 
 		/**

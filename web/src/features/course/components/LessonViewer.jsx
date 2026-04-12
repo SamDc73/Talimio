@@ -1,8 +1,9 @@
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle, Loader2, RotateCcw } from "lucide-react"
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle, History, Loader2, RotateCcw } from "lucide-react"
 import { useMemo, useRef } from "react"
 import { Link } from "react-router-dom"
 import { Badge } from "@/components/Badge"
 import { Button } from "@/components/Button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/DropdownMenu"
 import { cn } from "@/lib/utils"
 import { AdaptiveReviewPanel } from "./AdaptiveReviewPanel"
 import { ContentRenderer } from "./ContentRenderer"
@@ -26,10 +27,23 @@ export function LessonViewer({
 	regenerateStatus = null,
 	modules = [],
 	onLessonNavigate,
+	onVersionSelect,
+	activeWindowIndex = 0,
+	onWindowChange,
 	adaptiveEnabled = false,
 	courseId,
 }) {
 	const containerRef = useRef(null)
+	const availableVersions = Array.isArray(lesson?.availableVersions) ? lesson.availableVersions : []
+	const lessonWindows = Array.isArray(lesson?.windows) ? lesson.windows : []
+	const hasMultipleWindows = lessonWindows.length > 1
+	const selectedWindow = lessonWindows[activeWindowIndex] ?? lessonWindows[0] ?? null
+	const currentVersionLabel =
+		typeof lesson?.majorVersion === "number" && typeof lesson?.minorVersion === "number"
+			? `${lesson.majorVersion}.${lesson.minorVersion}`
+			: null
+	const isViewingHistoricalVersion =
+		lesson?.versionId && lesson?.currentVersionId && String(lesson.versionId) !== String(lesson.currentVersionId)
 	let regenerationBanner = null
 	let regenerationBannerContent = null
 
@@ -78,6 +92,15 @@ export function LessonViewer({
 			</div>
 		)
 	}
+
+	const formatVersionKindLabel = (version) => {
+		if (version?.versionKind === "first_pass") {
+			return version?.minorVersion > 0 ? "Regeneration" : "First pass"
+		}
+		return version?.versionKind || "Version"
+	}
+
+	const windowTitle = selectedWindow?.title || (hasMultipleWindows ? `Window ${activeWindowIndex + 1}` : null)
 
 	// Calculate previous and next lessons from modules
 	const { previousLesson, nextLesson } = useMemo(() => {
@@ -178,12 +201,45 @@ export function LessonViewer({
 											</Button>
 										</Link>
 									)}
+									{availableVersions.length > 1 && onVersionSelect ? (
+										<DropdownMenu>
+											<DropdownMenuTrigger asChild>
+												<Button variant="ghost" size="sm" className="text-muted-foreground">
+													<History className="size-4" />
+													<span>History</span>
+													{currentVersionLabel ? <span className="font-mono text-xs">v{currentVersionLabel}</span> : null}
+												</Button>
+											</DropdownMenuTrigger>
+											<DropdownMenuContent align="end" className="w-56">
+												{availableVersions.map((version) => (
+													<DropdownMenuItem
+														key={version.id}
+														onClick={() => onVersionSelect(version.id)}
+														className="flex items-center justify-between gap-3"
+													>
+														<div className="min-w-0">
+															<p className="font-medium text-foreground">v{version.versionLabel}</p>
+															<p className="text-xs text-muted-foreground">{formatVersionKindLabel(version)}</p>
+														</div>
+														{version.isCurrent ? (
+															<Badge variant="outline" className="px-2 py-0.5 text-[10px] uppercase tracking-[0.14em]">
+																Current
+															</Badge>
+														) : null}
+													</DropdownMenuItem>
+												))}
+											</DropdownMenuContent>
+										</DropdownMenu>
+									) : null}
 									{onRegenerate && (
 										<Button
 											onClick={() => onRegenerate(lesson.id)}
 											variant="outline"
 											size="sm"
-											disabled={isRegeneratingLesson}
+											disabled={isRegeneratingLesson || isViewingHistoricalVersion}
+											title={
+												isViewingHistoricalVersion ? "Switch back to the current version to regenerate." : undefined
+											}
 										>
 											{isRegeneratingLesson ? (
 												<Loader2 className="size-4 animate-spin" />
@@ -226,20 +282,61 @@ export function LessonViewer({
 									) : null}
 								</div>
 							</div>
+					</div>
+				</div>
+
+				{regenerationBannerContent}
+
+				{hasMultipleWindows ? (
+					<div className="border-b border-border/50 bg-background/80 px-6 py-4 md:px-8">
+						<div className="flex flex-wrap items-center justify-between gap-3">
+							<div className="flex flex-wrap items-center gap-2">
+								{lessonWindows.map((window) => {
+									const isActive = window.windowIndex === activeWindowIndex
+									return (
+										<button
+											key={window.id}
+											type="button"
+											onClick={() => onWindowChange?.(window.windowIndex)}
+											className={cn(
+												"rounded-full border px-3 py-1.5 text-sm transition-colors",
+												isActive
+													? "border-(--color-course) bg-(--color-course)/10 text-(--color-course)"
+													: "border-border bg-background text-muted-foreground hover:bg-muted"
+											)}
+										>
+											<span className="font-medium">{window.windowIndex + 1}</span>
+											{window.title ? <span className="ml-2 hidden sm:inline">{window.title}</span> : null}
+										</button>
+									)
+								})}
+							</div>
+							{selectedWindow?.estimatedMinutes ? (
+								<span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+									{selectedWindow.estimatedMinutes} min
+								</span>
+							) : null}
 						</div>
 					</div>
+				) : null}
 
-					{regenerationBannerContent}
-
-					{/* Content */}
-					<div className="p-6 md:p-8" data-selection-zone="true">
-						<PracticeRegistryProvider>
-							<ContentRenderer
-								content={lesson.content || lesson.md_source}
-								lessonId={lesson.id}
-								courseId={courseId ?? lesson.course_id}
-								lessonConceptId={lesson.concept_id}
-							/>
+				{/* Content */}
+				<div className="p-6 md:p-8" data-selection-zone="true">
+					<PracticeRegistryProvider>
+						{hasMultipleWindows && windowTitle ? (
+							<div className="mb-6 space-y-1">
+								<p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+									Window {activeWindowIndex + 1} of {lessonWindows.length}
+								</p>
+								<h2 className="text-xl font-semibold text-foreground">{windowTitle}</h2>
+							</div>
+						) : null}
+						<ContentRenderer
+							content={selectedWindow?.content || lesson.content || lesson.md_source}
+							lessonId={lesson.id}
+							courseId={courseId ?? lesson.course_id}
+							lessonConceptId={lesson.concept_id}
+						/>
 							<LessonQuickCheckPanel
 								courseId={courseId ?? lesson.course_id}
 								lessonId={lesson.id}
@@ -248,7 +345,37 @@ export function LessonViewer({
 						</PracticeRegistryProvider>
 					</div>
 
-					{/* Adaptive Review Panel - blends seamlessly into lesson flow */}
+				{hasMultipleWindows ? (
+					<div className="px-6 pb-2 md:px-8">
+						<div className="flex items-center justify-between gap-4 border-t border-border/40 pt-4">
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								onClick={() => onWindowChange?.(activeWindowIndex - 1)}
+								disabled={activeWindowIndex === 0}
+							>
+								<ArrowLeft className="size-4 " />
+								Back
+							</Button>
+							<span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+								Window {activeWindowIndex + 1} of {lessonWindows.length}
+							</span>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								onClick={() => onWindowChange?.(activeWindowIndex + 1)}
+								disabled={activeWindowIndex >= lessonWindows.length - 1}
+							>
+								Next
+								<ArrowRight className="size-4 " />
+							</Button>
+						</div>
+					</div>
+				) : null}
+
+				{/* Adaptive Review Panel - blends seamlessly into lesson flow */}
 					{adaptiveEnabled && courseId && lesson?.id && (
 						<div className="px-6 md:px-8 pt-4">
 							<AdaptiveReviewPanel

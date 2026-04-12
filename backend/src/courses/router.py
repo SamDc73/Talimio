@@ -29,6 +29,7 @@ from src.courses.schemas import (
     GradeResponse,
     LessonDetailResponse,
     LessonRegenerateRequest,
+    LessonVersionHistoryResponse,
     NextReviewResponse,
     PracticeDrillRequest,
     PracticeDrillResponse,
@@ -181,6 +182,10 @@ async def get_lesson(
     auth: CurrentAuth,
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
     generate: Annotated[bool, Query(description="Auto-generate if lesson doesn't exist")] = False,
+    version_id: Annotated[
+        uuid.UUID | None,
+        Query(alias="versionId", description="Optional lesson version to read"),
+    ] = None,
 ) -> LessonDetailResponse:
     """Get a specific lesson by course and lesson ID."""
     return await facade.get_lesson(
@@ -188,6 +193,22 @@ async def get_lesson(
         lesson_id=lesson_id,
         user_id=auth.user_id,
         generate=generate,
+        version_id=version_id,
+    )
+
+
+@router.get("/{course_id}/lessons/{lesson_id}/versions")
+async def list_lesson_versions(
+    course_id: uuid.UUID,
+    lesson_id: uuid.UUID,
+    auth: CurrentAuth,
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
+) -> LessonVersionHistoryResponse:
+    """Return available version history for a lesson."""
+    return await facade.list_lesson_versions(
+        course_id=course_id,
+        lesson_id=lesson_id,
+        user_id=auth.user_id,
     )
 
 

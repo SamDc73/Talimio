@@ -10,15 +10,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import logging
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.client import LLMClient
-from src.courses.models import Concept, Course, CourseConcept, Lesson, ProbeEvent, UserConceptState
-from src.courses.schemas import LessonDetailResponse
+from src.courses.models import Concept, Course, CourseConcept, Lesson, LessonVersion, ProbeEvent, UserConceptState
+from src.courses.schemas import (
+    LessonDetailResponse,
+    LessonVersionHistoryResponse,
+    LessonVersionSummary,
+    LessonWindowResponse,
+)
+from src.courses.services.lesson_version_service import LessonVersionService
+from src.courses.services.lesson_window_service import LessonWindowService
 from src.exceptions import NotFoundError, UpstreamUnavailableError, ValidationError
 
 
@@ -166,13 +173,8 @@ class LessonService:
                 return concept_id
         return None
 
-    async def _build_adaptive_learner_state_context(
-        self,
-        *,
-        course_id: uuid.UUID,
-        lesson_id: uuid.UUID,
-    ) -> str | None:
-        concept_ids = (
+    async def _get_course_concept_ids(self, *, course_id: uuid.UUID) -> list[uuid.UUID]:
+        return (
             (
                 await self.session.execute(
                     select(CourseConcept.concept_id)
@@ -183,14 +185,24 @@ class LessonService:
             .scalars()
             .all()
         )
+
+    async def _get_lesson_concept_id(self, *, course_id: uuid.UUID, lesson_id: uuid.UUID) -> uuid.UUID | None:
+        concept_ids = await self._get_course_concept_ids(course_id=course_id)
         if not concept_ids:
             return None
-
-        concept_id = self._resolve_concept_id_for_lesson(
+        return self._resolve_concept_id_for_lesson(
             lesson_id=lesson_id,
             course_id=course_id,
             concept_ids=concept_ids,
         )
+
+    async def _build_adaptive_learner_state_context(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+    ) -> str | None:
+        concept_id = await self._get_lesson_concept_id(course_id=course_id, lesson_id=lesson_id)
         if concept_id is None:
             return None
 
@@ -344,6 +356,7 @@ class LessonService:
             lesson_lines.append("Description:")
             lesson_lines.append(lesson.description)
         context_sections.append("## Lesson Focus\n" + "\n".join(lesson_lines))
+        context_sections.append(LessonWindowService(self.session).build_generation_context(course=course))
 
         if next_lesson_title:
             context_sections.append("## Next Lesson\n" + f"Next: {next_lesson_title}")
@@ -388,11 +401,72 @@ class LessonService:
         lesson_content = await llm_client.generate_lesson_content(lesson_context, user_id=self.user_id)
         return lesson_content.body
 
+    def _build_version_summaries(
+        self,
+        *,
+        lesson: Lesson,
+        versions: Sequence[LessonVersion],
+    ) -> list[LessonVersionSummary]:
+        return [
+            LessonVersionSummary(
+                id=version.id,
+                major_version=version.major_version,
+                minor_version=version.minor_version,
+                version_kind=version.version_kind,
+                version_label=f"{version.major_version}.{version.minor_version}",
+                is_current=version.id == lesson.current_version_id,
+                created_at=version.created_at,
+            )
+            for version in versions
+        ]
+
+    def _build_window_payload(self, windows: Sequence[Any]) -> list[LessonWindowResponse]:
+        return [
+            LessonWindowResponse(
+                id=window.id,
+                window_index=window.window_index,
+                title=window.title,
+                content=window.content,
+                estimated_minutes=window.estimated_minutes,
+            )
+            for window in windows
+        ]
+
+    async def _build_lesson_detail_response(
+        self,
+        *,
+        lesson: Lesson,
+        course: Course,
+        selected_version: LessonVersion,
+        available_versions: Sequence[LessonVersion],
+        windows: Sequence[Any],
+    ) -> LessonDetailResponse:
+        concept_id_value = await self._get_lesson_concept_id(course_id=course.id, lesson_id=lesson.id)
+        return LessonDetailResponse(
+            id=lesson.id,
+            course_id=course.id,
+            title=lesson.title,
+            description=lesson.description,
+            content=selected_version.content,
+            concept_id=concept_id_value,
+            version_id=selected_version.id,
+            current_version_id=lesson.current_version_id,
+            major_version=selected_version.major_version,
+            minor_version=selected_version.minor_version,
+            version_kind=selected_version.version_kind,
+            available_versions=self._build_version_summaries(lesson=lesson, versions=available_versions),
+            windows=self._build_window_payload(windows),
+            adaptive_enabled=course.adaptive_enabled,
+            created_at=lesson.created_at,
+            updated_at=lesson.updated_at,
+        )
+
     async def get_lesson(
         self,
         course_id: uuid.UUID,
         lesson_id: uuid.UUID,
         force_refresh: bool = False,
+        version_id: uuid.UUID | None = None,
     ) -> LessonDetailResponse:
         """Get lesson with single query including user isolation.
 
@@ -400,6 +474,7 @@ class LessonService:
             course_id: Course uuid.UUID
             lesson_id: Lesson uuid.UUID
             force_refresh: Whether to regenerate content even if it already exists
+            version_id: Optional version row to read through the same lesson route
 
         Returns
         -------
@@ -414,19 +489,38 @@ class LessonService:
         if force_refresh or lesson.content == "":
             lesson = await self._ensure_lesson_content(lesson, course, force_refresh=force_refresh)
 
-        concept_id_value = getattr(cast("Any", lesson), "concept_id", None)
+        lesson_version_service = LessonVersionService(self.session)
+        lesson_window_service = LessonWindowService(self.session)
+        current_version = await lesson_version_service.sync_current_version_from_lesson(lesson=lesson)
+        selected_version = current_version
+        if version_id is not None and version_id != current_version.id:
+            selected_version = await lesson_version_service.get_version(lesson=lesson, version_id=version_id)
+        available_versions = await lesson_version_service.list_versions(lesson=lesson)
+        selected_windows = await lesson_window_service.get_or_build_windows(lesson_version=selected_version)
 
-        return LessonDetailResponse(
-            id=lesson.id,
-            course_id=course.id,
-            title=lesson.title,
-            description=lesson.description,
-            content=lesson.content,
-            concept_id=concept_id_value,
-            adaptive_enabled=course.adaptive_enabled,
-            created_at=lesson.created_at,
-            updated_at=lesson.updated_at,
+        return await self._build_lesson_detail_response(
+            lesson=lesson,
+            course=course,
+            selected_version=selected_version,
+            available_versions=available_versions,
+            windows=selected_windows,
         )
+
+    async def list_lesson_versions(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+    ) -> LessonVersionHistoryResponse:
+        """Return stable version history for one lesson."""
+        lesson, course = await self._load_owned_lesson_and_course(course_id=course_id, lesson_id=lesson_id)
+        if lesson.content == "":
+            lesson = await self._ensure_lesson_content(lesson, course)
+
+        lesson_version_service = LessonVersionService(self.session)
+        await lesson_version_service.sync_current_version_from_lesson(lesson=lesson)
+        versions = await lesson_version_service.list_versions(lesson=lesson)
+        return LessonVersionHistoryResponse(versions=self._build_version_summaries(lesson=lesson, versions=versions))
 
     async def regenerate_lesson(
         self,
@@ -444,14 +538,20 @@ class LessonService:
             raise ValidationError(detail, feature_area="courses")
 
         try:
+            lesson_version_service = LessonVersionService(self.session)
+            lesson_window_service = LessonWindowService(self.session)
             lesson_context = await self._prepare_regeneration_context(
                 lesson=lesson,
                 course=course,
                 critique_text=trimmed_critique,
             )
-            lesson.content = await self._generate_lesson_body(lesson_context=lesson_context)
-            lesson.updated_at = datetime.now(UTC)
-            await self.session.flush()
+            generated_content = await self._generate_lesson_body(lesson_context=lesson_context)
+            selected_version = await lesson_version_service.create_regenerated_version(
+                lesson=lesson,
+                content=generated_content,
+                critique_text=trimmed_critique,
+            )
+            selected_windows = await lesson_window_service.rebuild_windows(lesson_version=selected_version)
             await self.session.refresh(lesson)
         except ValueError as exc:
             detail = f"Invalid lesson content: {exc}"
@@ -460,17 +560,13 @@ class LessonService:
             message = "Unable to generate lesson content. Please try again."
             raise UpstreamUnavailableError(message, feature_area="courses") from exc
 
-        concept_id_value = getattr(cast("Any", lesson), "concept_id", None)
-        return LessonDetailResponse(
-            id=lesson.id,
-            course_id=course.id,
-            title=lesson.title,
-            description=lesson.description,
-            content=lesson.content,
-            concept_id=concept_id_value,
-            adaptive_enabled=course.adaptive_enabled,
-            created_at=lesson.created_at,
-            updated_at=lesson.updated_at,
+        available_versions = await lesson_version_service.list_versions(lesson=lesson)
+        return await self._build_lesson_detail_response(
+            lesson=lesson,
+            course=course,
+            selected_version=selected_version,
+            available_versions=available_versions,
+            windows=selected_windows,
         )
 
     async def _ensure_lesson_content(self, lesson: Lesson, course: Course, force_refresh: bool = False) -> Lesson:

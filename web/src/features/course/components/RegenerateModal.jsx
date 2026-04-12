@@ -29,8 +29,7 @@ export function RegenerateModal({ open, onOpenChange, onRegenerate, isRegenerati
 		(e) => {
 			e?.preventDefault()
 			if (!canSubmit) return
-			const trimmed = critique.trim()
-			void onRegenerate(trimmed)
+			void onRegenerate(critique.trim())
 		},
 		[canSubmit, critique, onRegenerate]
 	)
@@ -57,6 +56,9 @@ export function RegenerateModal({ open, onOpenChange, onRegenerate, isRegenerati
 							</div>
 							<DialogTitle className="text-2xl">Regenerate lesson</DialogTitle>
 						</div>
+						<p className="text-sm text-muted-foreground">
+							Say what felt off and what you want changed. Keep it specific so the next version is actually different.
+						</p>
 					</DialogHeader>
 
 					<div className="space-y-3">

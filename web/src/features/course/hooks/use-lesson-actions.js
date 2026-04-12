@@ -86,7 +86,10 @@ export function useLessonActions(courseId) {
 				return
 			}
 
-			const regeneratedLesson = await regenerateMutation.mutateAsync({ lessonId, critiqueText })
+			const regeneratedLesson = await regenerateMutation.mutateAsync({
+				lessonId,
+				critiqueText,
+			})
 
 			window.dispatchEvent(
 				new CustomEvent("lessonRegenerate", {

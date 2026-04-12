@@ -24,6 +24,32 @@ class LessonSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True, **_CAMEL_CONFIG)
 
 
+class LessonVersionSummary(BaseModel):
+    """Compact version metadata for lesson history UI."""
+
+    id: uuid.UUID = Field(..., description="Lesson version ID")
+    major_version: int = Field(..., description="Major version number")
+    minor_version: int = Field(..., description="Minor version number")
+    version_kind: str = Field(..., description="Version kind label")
+    version_label: str = Field(..., description="Display label such as 1.0")
+    is_current: bool = Field(..., description="Whether this is the current active version")
+    created_at: datetime = Field(..., description="Version creation timestamp")
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class LessonWindowResponse(BaseModel):
+    """Window payload for segmented lesson delivery."""
+
+    id: uuid.UUID = Field(..., description="Lesson window ID")
+    window_index: int = Field(..., description="Zero-based window index")
+    title: str | None = Field(None, description="Optional window title")
+    content: str = Field(..., description="Window content")
+    estimated_minutes: int = Field(..., description="Estimated reading time in minutes")
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
 class LessonDetailResponse(BaseModel):
     """Schema for detailed lesson responses (content endpoint)."""
 
@@ -33,11 +59,29 @@ class LessonDetailResponse(BaseModel):
     description: str | None = Field(None, description="Lesson description")
     content: str | None = Field(None, description="Lesson content (MDX format)")
     concept_id: uuid.UUID | None = Field(None, description="Mapped concept ID for adaptive lessons")
+    version_id: uuid.UUID | None = Field(None, description="Selected lesson version ID")
+    current_version_id: uuid.UUID | None = Field(None, description="Current active lesson version ID")
+    major_version: int | None = Field(None, description="Selected lesson major version")
+    minor_version: int | None = Field(None, description="Selected lesson minor version")
+    version_kind: str | None = Field(None, description="Selected lesson version kind")
+    available_versions: list[LessonVersionSummary] = Field(
+        default_factory=list,
+        description="Available version history for this lesson",
+    )
+    windows: list[LessonWindowResponse] = Field(default_factory=list, description="Windowed lesson delivery payload")
     adaptive_enabled: bool | None = Field(None, description="Whether the parent course is adaptive")
     created_at: datetime = Field(..., description="Lesson creation timestamp")
     updated_at: datetime = Field(..., description="Lesson last update timestamp")
 
     model_config = ConfigDict(from_attributes=True, **_CAMEL_CONFIG)
+
+
+class LessonVersionHistoryResponse(BaseModel):
+    """Response payload for lesson version history."""
+
+    versions: list[LessonVersionSummary] = Field(default_factory=list, description="Available lesson versions")
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
 class LessonRegenerateRequest(BaseModel):
