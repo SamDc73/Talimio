@@ -45,7 +45,8 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 		if (!lessonId) {
 			return
 		}
-		goToLesson(courseId, lessonId)
+		const useAdaptiveFlow = availableSet?.has(String(lessonId)) === true
+		goToLesson(courseId, lessonId, useAdaptiveFlow ? { adaptiveFlow: true } : null)
 	}
 
 	// Create refs for path, wrappers, circles and lesson wrappers

@@ -331,6 +331,7 @@ class CoursesFacade:
         lesson_id: uuid.UUID,
         user_id: uuid.UUID,
         generate: bool = False,
+        adaptive_flow: bool = False,
         version_id: uuid.UUID | None = None,
     ) -> LessonDetailResponse:
         """Get a lesson detail payload for an owned course."""
@@ -339,6 +340,7 @@ class CoursesFacade:
             course_id,
             lesson_id,
             force_refresh=generate,
+            adaptive_flow=adaptive_flow,
             version_id=version_id,
         )
 
@@ -359,6 +361,7 @@ class CoursesFacade:
         course_id: uuid.UUID,
         lesson_id: uuid.UUID,
         critique_text: str,
+        apply_across_course: bool,
         user_id: uuid.UUID,
     ) -> LessonDetailResponse:
         """Regenerate a lesson body with explicit learner feedback."""
@@ -369,6 +372,7 @@ class CoursesFacade:
                 course_id=course_id,
                 lesson_id=lesson_id,
                 critique_text=critique_text,
+                apply_across_course=apply_across_course,
             )
         except (NotFoundError, UpstreamUnavailableError, ValidationError):
             raise

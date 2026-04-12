@@ -370,7 +370,7 @@ export default function PracticeView() {
 
 				if (recentAccuracy < SOFT_STOP_LOW_ACCURACY_THRESHOLD && recentAccuracy < startAccuracy) {
 					const stopTo = activeConcept?.lessonId
-						? `/course/${courseId}/lesson/${activeConcept.lessonId}`
+						? `/course/${courseId}/lesson/${activeConcept.lessonId}?adaptiveFlow=true`
 						: `/course/${courseId}`
 					setSoftStopNudge((previous) => {
 						if (previous) {
@@ -703,7 +703,7 @@ export default function PracticeView() {
 				{showLessonEscapeHatch ? (
 					<div className="rounded-lg border border-border bg-muted/20 p-4 flex flex-wrap items-center justify-between gap-3">
 						<Button asChild size="sm" variant="outline">
-							<Link to={`/course/${courseId}/lesson/${encodeURIComponent(activeConcept.lessonId)}`}>
+							<Link to={`/course/${courseId}/lesson/${encodeURIComponent(activeConcept.lessonId)}?adaptiveFlow=true`}>
 								Open lesson for {activeConcept.title}
 							</Link>
 						</Button>

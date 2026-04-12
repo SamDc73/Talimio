@@ -177,6 +177,7 @@ export function useCourseService(courseId = null) {
 			const queryParams = {}
 			if (options.generate) queryParams.generate = true
 			if (options.versionId) queryParams.versionId = options.versionId
+			if (options.adaptiveFlow) queryParams.adaptiveFlow = true
 
 			return await getLesson.execute(null, {
 				pathParams: { courseId, lessonId },
@@ -212,9 +213,10 @@ export function useCourseService(courseId = null) {
 			return await regenerateLesson.execute(
 				{
 					critiqueText,
+					applyAcrossCourse: Boolean(payload?.applyAcrossCourse),
 				},
 				{
-				pathParams: { courseId, lessonId },
+					pathParams: { courseId, lessonId },
 				}
 			)
 		},

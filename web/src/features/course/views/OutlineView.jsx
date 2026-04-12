@@ -138,8 +138,8 @@ function OutlineView() {
 
 	const handleStartNext = useCallback(() => {
 		if (!nextLesson) return
-		goToLesson(courseId, nextLesson.id)
-	}, [courseId, goToLesson, nextLesson])
+		goToLesson(courseId, nextLesson.id, adaptiveEnabled ? { adaptiveFlow: true } : null)
+	}, [adaptiveEnabled, courseId, goToLesson, nextLesson])
 
 	const dueList = useMemo(
 		() => (adaptiveEnabled && Array.isArray(frontierData?.dueForReview) ? frontierData.dueForReview : []),
@@ -409,7 +409,7 @@ function OutlineView() {
 													<MasteryCircle value={mastery} className="shrink-0 text-emerald-600" />
 													<button
 														type="button"
-														onClick={() => lessonId && goToLesson(courseId, lessonId)}
+														onClick={() => lessonId && goToLesson(courseId, lessonId, { adaptiveFlow: true })}
 														className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
 													>
 														<span className="truncate text-sm font-medium text-foreground">{label}</span>

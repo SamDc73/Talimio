@@ -122,13 +122,18 @@ async def build_course_frontier(
     """Assemble the full frontier payload for a course."""
     frontier_entries = await graph_service.get_frontier(user_id=user_id, course_id=course_id)
     due_entries = await scheduler_service.get_due_concepts(user_id=user_id, course_id=course_id)
+    ranked_due_entries = await scheduler_service.rank_due_entries(
+        user_id=user_id,
+        course_id=course_id,
+        entries=due_entries,
+    )
     ranked_frontier = await scheduler_service.rank_frontier_entries(
         user_id=user_id,
         entries=frontier_entries,
-        due_entries=due_entries,
+        due_entries=ranked_due_entries,
     )
 
-    snapshot = _prepare_frontier_snapshot(ranked_frontier, due_entries, course_id=course_id)
+    snapshot = _prepare_frontier_snapshot(ranked_frontier, ranked_due_entries, course_id=course_id)
 
     return FrontierResponse(
         frontier=snapshot.frontier,

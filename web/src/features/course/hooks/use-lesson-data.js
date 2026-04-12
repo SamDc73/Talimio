@@ -31,10 +31,13 @@ const normalizeMetadataFields = (metadata = {}) => {
  * @param {string} lessonId - The lesson ID to fetch
  * @returns {Object} - Object containing lesson data and loading state
  */
-export function useLessonData(courseId, lessonId, versionId = null) {
+export function useLessonData(courseId, lessonId, options = {}) {
+	const versionId = options?.versionId ?? null
+	const adaptiveFlow = options?.adaptiveFlow === true
+
 	return useQuery({
-		queryKey: ["lesson", courseId, lessonId, versionId],
-		queryFn: () => fetchLesson(courseId, lessonId, { versionId }),
+		queryKey: ["lesson", courseId, lessonId, versionId, adaptiveFlow],
+		queryFn: () => fetchLesson(courseId, lessonId, { versionId, adaptiveFlow }),
 		enabled: Boolean(courseId && lessonId),
 		staleTime: 5 * 60 * 1000, // Cache for 5 minutes
 		refetchOnWindowFocus: false, // Avoid unnecessary refetch loops when window gains focus
@@ -53,7 +56,7 @@ export function useLessonRegenerateMutation(courseId) {
 	const queryClient = useQueryClient()
 
 	return useMutation({
-		mutationFn: async ({ lessonId, critiqueText }) => {
+		mutationFn: async ({ lessonId, critiqueText, applyAcrossCourse = false }) => {
 			if (!courseId) {
 				throw new Error("Course ID is required to regenerate a lesson")
 			}
@@ -62,14 +65,15 @@ export function useLessonRegenerateMutation(courseId) {
 				throw new Error("Lesson ID is required to regenerate a lesson")
 			}
 
-			return regenerateLesson(courseId, lessonId, critiqueText)
+			return regenerateLesson(courseId, lessonId, { critiqueText, applyAcrossCourse })
 		},
 		onSuccess: async (data, variables) => {
 			if (!courseId || !variables?.lessonId) {
 				return
 			}
 
-			queryClient.setQueryData(["lesson", courseId, variables.lessonId, null], data)
+			queryClient.setQueryData(["lesson", courseId, variables.lessonId, null, false], data)
+			queryClient.setQueryData(["lesson", courseId, variables.lessonId, null, true], data)
 			await queryClient.invalidateQueries({
 				queryKey: ["lesson", courseId, variables.lessonId],
 			})
@@ -150,24 +154,26 @@ export function useLessonProgressMutation(courseId) {
 				return {}
 			}
 
-			await queryClient.cancelQueries(["lesson", courseId, lessonId])
-			const previous = queryClient.getQueryData(["lesson", courseId, lessonId])
+			await queryClient.cancelQueries({ queryKey: ["lesson", courseId, lessonId] })
+			const previousEntries = queryClient.getQueriesData({ queryKey: ["lesson", courseId, lessonId] })
 
-			queryClient.setQueryData(["lesson", courseId, lessonId], (old) => ({
+			queryClient.setQueriesData({ queryKey: ["lesson", courseId, lessonId] }, (old) => ({
 				...old,
 				progress,
 			}))
 
-			return { previous, lessonId }
+			return { previousEntries, lessonId }
 		},
 
 		// Rollback on error
 		onError: (_err, _variables, context) => {
-			if (!courseId || !context?.previous || !context.lessonId) {
+			if (!courseId || !Array.isArray(context?.previousEntries) || !context.lessonId) {
 				return
 			}
 
-			queryClient.setQueryData(["lesson", courseId, context.lessonId], context.previous)
+			for (const [queryKey, previousValue] of context.previousEntries) {
+				queryClient.setQueryData(queryKey, previousValue)
+			}
 		},
 
 		// Refetch after success
@@ -176,7 +182,7 @@ export function useLessonProgressMutation(courseId) {
 				return
 			}
 
-			queryClient.invalidateQueries(["lesson", courseId, variables.lessonId])
+			queryClient.invalidateQueries({ queryKey: ["lesson", courseId, variables.lessonId] })
 		},
 	})
 }
@@ -208,15 +214,15 @@ export function useLessonCompleteMutation(courseId) {
 			const lessonId = variables.lessonId
 
 			// Update lesson cache to mark as complete
-			queryClient.setQueryData(["lesson", courseId, lessonId], (old) => ({
+			queryClient.setQueriesData({ queryKey: ["lesson", courseId, lessonId] }, (old) => ({
 				...old,
 				completed: true,
 				completedAt: new Date().toISOString(),
 			}))
 
 			// Invalidate related queries
-			queryClient.invalidateQueries(["lesson", courseId, lessonId])
-			queryClient.invalidateQueries(["courses"]) // Invalidate course progress
+			queryClient.invalidateQueries({ queryKey: ["lesson", courseId, lessonId] })
+			queryClient.invalidateQueries({ queryKey: ["courses"] }) // Invalidate course progress
 		},
 	})
 }

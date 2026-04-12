@@ -64,7 +64,7 @@ class LessonWindowService:
             .all()
         )
         if existing_windows:
-            return existing_windows
+            return list(existing_windows)
 
         parsed_windows = self.parse_windows(lesson_version.content)
         created_windows = [

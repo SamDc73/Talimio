@@ -569,6 +569,7 @@ Guidelines:
 - Lesson stays tightly scoped; checkpoints test what you just taught.
 """
 
+
 # Assistant Chat Prompts
 ASSISTANT_CHAT_SYSTEM_PROMPT = """You are Talimio's AI learning assistant.
 

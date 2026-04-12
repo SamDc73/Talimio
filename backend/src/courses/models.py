@@ -13,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     PrimaryKeyConstraint,
@@ -20,6 +21,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -83,6 +85,20 @@ class Lesson(Base):
     """Persisted lessons tied to a course."""
 
     __tablename__ = "lessons"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["course_id", "concept_id"],
+            ["course_concepts.course_id", "course_concepts.concept_id"],
+            name="lessons_course_id_concept_id_fkey",
+        ),
+        Index(
+            "lessons_course_id_concept_id_key",
+            "course_id",
+            "concept_id",
+            unique=True,
+            postgresql_where=text("concept_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     course_id: Mapped[uuid.UUID] = mapped_column(
@@ -91,6 +107,7 @@ class Lesson(Base):
         nullable=False,
         index=True,
     )
+    concept_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -172,6 +189,38 @@ class LessonVersionWindow(Base):
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     estimated_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+
+class LessonFeedbackEvent(Base):
+    """Raw regeneration feedback linked to a lesson and optional course-scoped reuse."""
+
+    __tablename__ = "lesson_feedback_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    lesson_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("lessons.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    lesson_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("lesson_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    critique_text: Mapped[str] = mapped_column(Text, nullable=False)
+    apply_across_course: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -410,6 +459,7 @@ __all__ = [
     "CourseConcept",
     "CourseDocument",
     "Lesson",
+    "LessonFeedbackEvent",
     "LessonVersion",
     "LessonVersionWindow",
     "ProbeEvent",

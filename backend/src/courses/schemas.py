@@ -32,6 +32,9 @@ class LessonVersionSummary(BaseModel):
     minor_version: int = Field(..., description="Minor version number")
     version_kind: str = Field(..., description="Version kind label")
     version_label: str = Field(..., description="Display label such as 1.0")
+    pass_label: str | None = Field(None, description="Lightweight pass label such as Pass 2")
+    history_label: str | None = Field(None, description="Short history label such as Regenerated")
+    source_reason: str | None = Field(None, description="Why this version exists")
     is_current: bool = Field(..., description="Whether this is the current active version")
     created_at: datetime = Field(..., description="Version creation timestamp")
 
@@ -64,6 +67,9 @@ class LessonDetailResponse(BaseModel):
     major_version: int | None = Field(None, description="Selected lesson major version")
     minor_version: int | None = Field(None, description="Selected lesson minor version")
     version_kind: str | None = Field(None, description="Selected lesson version kind")
+    version_label: str | None = Field(None, description="Selected lesson version label")
+    pass_label: str | None = Field(None, description="Selected lesson pass label")
+    source_reason: str | None = Field(None, description="Why the selected version exists")
     available_versions: list[LessonVersionSummary] = Field(
         default_factory=list,
         description="Available version history for this lesson",
@@ -88,6 +94,10 @@ class LessonRegenerateRequest(BaseModel):
     """Request payload for explicit lesson regeneration."""
 
     critique_text: str = Field(..., min_length=1, description="What the learner wants changed in the lesson")
+    apply_across_course: bool = Field(
+        default=False,
+        description="Whether this critique should influence future lessons",
+    )
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 

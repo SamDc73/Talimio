@@ -94,10 +94,24 @@ export function LessonViewer({
 	}
 
 	const formatVersionKindLabel = (version) => {
-		if (version?.versionKind === "first_pass") {
-			return version?.minorVersion > 0 ? "Regeneration" : "First pass"
+		return version?.historyLabel || version?.passLabel || version?.versionKind || "Version"
+	}
+
+	const formatVersionTimestamp = (timestamp) => {
+		if (!timestamp) {
+			return null
 		}
-		return version?.versionKind || "Version"
+
+		const parsed = new Date(timestamp)
+		if (Number.isNaN(parsed.getTime())) {
+			return null
+		}
+
+		return new Intl.DateTimeFormat(undefined, {
+			month: "short",
+			day: "numeric",
+			year: parsed.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+		}).format(parsed)
 	}
 
 	const windowTitle = selectedWindow?.title || (hasMultipleWindows ? `Window ${activeWindowIndex + 1}` : null)
@@ -207,19 +221,33 @@ export function LessonViewer({
 												<Button variant="ghost" size="sm" className="text-muted-foreground">
 													<History className="size-4" />
 													<span>History</span>
-													{currentVersionLabel ? <span className="font-mono text-xs">v{currentVersionLabel}</span> : null}
+													{currentVersionLabel ? (
+														<span className="font-mono text-xs">v{currentVersionLabel}</span>
+													) : null}
 												</Button>
 											</DropdownMenuTrigger>
-											<DropdownMenuContent align="end" className="w-56">
+											<DropdownMenuContent align="end" className="w-72">
 												{availableVersions.map((version) => (
 													<DropdownMenuItem
 														key={version.id}
 														onClick={() => onVersionSelect(version.id)}
-														className="flex items-center justify-between gap-3"
+														className="flex items-start justify-between gap-3"
 													>
 														<div className="min-w-0">
-															<p className="font-medium text-foreground">v{version.versionLabel}</p>
-															<p className="text-xs text-muted-foreground">{formatVersionKindLabel(version)}</p>
+															<p className="font-medium text-foreground">
+																{version.passLabel || "Version"}{" "}
+																<span className="font-mono text-xs">v{version.versionLabel}</span>
+															</p>
+															<p className="text-xs text-muted-foreground">
+																{[formatVersionKindLabel(version), formatVersionTimestamp(version.createdAt)]
+																	.filter(Boolean)
+																	.join(" · ")}
+															</p>
+															{version.sourceReason ? (
+																<p className="line-clamp-2 text-xs/relaxed text-muted-foreground/80">
+																	{version.sourceReason}
+																</p>
+															) : null}
 														</div>
 														{version.isCurrent ? (
 															<Badge variant="outline" className="px-2 py-0.5 text-[10px] uppercase tracking-[0.14em]">
@@ -269,6 +297,22 @@ export function LessonViewer({
 											{lesson.module_name}
 										</Badge>
 									) : null}
+									{lesson.passLabel ? (
+										<Badge
+											variant="outline"
+											className="rounded-full border-border/60 bg-background/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+										>
+											{lesson.passLabel}
+										</Badge>
+									) : null}
+									{lesson.versionLabel && lesson.versionLabel !== lesson.passLabel ? (
+										<Badge
+											variant="outline"
+											className="rounded-full border-border/60 bg-background/80 px-3 py-1 font-mono text-[11px] text-muted-foreground"
+										>
+											v{lesson.versionLabel}
+										</Badge>
+									) : null}
 								</div>
 
 								<div className="space-y-3">
@@ -282,61 +326,61 @@ export function LessonViewer({
 									) : null}
 								</div>
 							</div>
-					</div>
-				</div>
-
-				{regenerationBannerContent}
-
-				{hasMultipleWindows ? (
-					<div className="border-b border-border/50 bg-background/80 px-6 py-4 md:px-8">
-						<div className="flex flex-wrap items-center justify-between gap-3">
-							<div className="flex flex-wrap items-center gap-2">
-								{lessonWindows.map((window) => {
-									const isActive = window.windowIndex === activeWindowIndex
-									return (
-										<button
-											key={window.id}
-											type="button"
-											onClick={() => onWindowChange?.(window.windowIndex)}
-											className={cn(
-												"rounded-full border px-3 py-1.5 text-sm transition-colors",
-												isActive
-													? "border-(--color-course) bg-(--color-course)/10 text-(--color-course)"
-													: "border-border bg-background text-muted-foreground hover:bg-muted"
-											)}
-										>
-											<span className="font-medium">{window.windowIndex + 1}</span>
-											{window.title ? <span className="ml-2 hidden sm:inline">{window.title}</span> : null}
-										</button>
-									)
-								})}
-							</div>
-							{selectedWindow?.estimatedMinutes ? (
-								<span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-									{selectedWindow.estimatedMinutes} min
-								</span>
-							) : null}
 						</div>
 					</div>
-				) : null}
 
-				{/* Content */}
-				<div className="p-6 md:p-8" data-selection-zone="true">
-					<PracticeRegistryProvider>
-						{hasMultipleWindows && windowTitle ? (
-							<div className="mb-6 space-y-1">
-								<p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-									Window {activeWindowIndex + 1} of {lessonWindows.length}
-								</p>
-								<h2 className="text-xl font-semibold text-foreground">{windowTitle}</h2>
+					{regenerationBannerContent}
+
+					{hasMultipleWindows ? (
+						<div className="border-b border-border/50 bg-background/80 px-6 py-4 md:px-8">
+							<div className="flex flex-wrap items-center justify-between gap-3">
+								<div className="flex flex-wrap items-center gap-2">
+									{lessonWindows.map((window) => {
+										const isActive = window.windowIndex === activeWindowIndex
+										return (
+											<button
+												key={window.id}
+												type="button"
+												onClick={() => onWindowChange?.(window.windowIndex)}
+												className={cn(
+													"rounded-full border px-3 py-1.5 text-sm transition-colors",
+													isActive
+														? "border-(--color-course) bg-(--color-course)/10 text-(--color-course)"
+														: "border-border bg-background text-muted-foreground hover:bg-muted"
+												)}
+											>
+												<span className="font-medium">{window.windowIndex + 1}</span>
+												{window.title ? <span className="ml-2 hidden sm:inline">{window.title}</span> : null}
+											</button>
+										)
+									})}
+								</div>
+								{selectedWindow?.estimatedMinutes ? (
+									<span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+										{selectedWindow.estimatedMinutes} min
+									</span>
+								) : null}
 							</div>
-						) : null}
-						<ContentRenderer
-							content={selectedWindow?.content || lesson.content || lesson.md_source}
-							lessonId={lesson.id}
-							courseId={courseId ?? lesson.course_id}
-							lessonConceptId={lesson.concept_id}
-						/>
+						</div>
+					) : null}
+
+					{/* Content */}
+					<div className="p-6 md:p-8" data-selection-zone="true">
+						<PracticeRegistryProvider>
+							{hasMultipleWindows && windowTitle ? (
+								<div className="mb-6 space-y-1">
+									<p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+										Window {activeWindowIndex + 1} of {lessonWindows.length}
+									</p>
+									<h2 className="text-xl font-semibold text-foreground">{windowTitle}</h2>
+								</div>
+							) : null}
+							<ContentRenderer
+								content={selectedWindow?.content || lesson.content || lesson.md_source}
+								lessonId={lesson.id}
+								courseId={courseId ?? lesson.course_id}
+								lessonConceptId={lesson.concept_id}
+							/>
 							<LessonQuickCheckPanel
 								courseId={courseId ?? lesson.course_id}
 								lessonId={lesson.id}
@@ -345,37 +389,37 @@ export function LessonViewer({
 						</PracticeRegistryProvider>
 					</div>
 
-				{hasMultipleWindows ? (
-					<div className="px-6 pb-2 md:px-8">
-						<div className="flex items-center justify-between gap-4 border-t border-border/40 pt-4">
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								onClick={() => onWindowChange?.(activeWindowIndex - 1)}
-								disabled={activeWindowIndex === 0}
-							>
-								<ArrowLeft className="size-4 " />
-								Back
-							</Button>
-							<span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-								Window {activeWindowIndex + 1} of {lessonWindows.length}
-							</span>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								onClick={() => onWindowChange?.(activeWindowIndex + 1)}
-								disabled={activeWindowIndex >= lessonWindows.length - 1}
-							>
-								Next
-								<ArrowRight className="size-4 " />
-							</Button>
+					{hasMultipleWindows ? (
+						<div className="px-6 pb-2 md:px-8">
+							<div className="flex items-center justify-between gap-4 border-t border-border/40 pt-4">
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									onClick={() => onWindowChange?.(activeWindowIndex - 1)}
+									disabled={activeWindowIndex === 0}
+								>
+									<ArrowLeft className="size-4 " />
+									Back
+								</Button>
+								<span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+									Window {activeWindowIndex + 1} of {lessonWindows.length}
+								</span>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									onClick={() => onWindowChange?.(activeWindowIndex + 1)}
+									disabled={activeWindowIndex >= lessonWindows.length - 1}
+								>
+									Next
+									<ArrowRight className="size-4 " />
+								</Button>
+							</div>
 						</div>
-					</div>
-				) : null}
+					) : null}
 
-				{/* Adaptive Review Panel - blends seamlessly into lesson flow */}
+					{/* Adaptive Review Panel - blends seamlessly into lesson flow */}
 					{adaptiveEnabled && courseId && lesson?.id && (
 						<div className="px-6 md:px-8 pt-4">
 							<AdaptiveReviewPanel

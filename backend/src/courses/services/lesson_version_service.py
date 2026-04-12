@@ -24,6 +24,10 @@ class LessonVersionService:
                 )
             )
             if current_version is not None:
+                if lesson.content != current_version.content:
+                    lesson.content = current_version.content
+                    lesson.updated_at = datetime.now(UTC)
+                    await self.session.flush()
                 return current_version
 
         latest_version = await self.session.scalar(
@@ -39,6 +43,7 @@ class LessonVersionService:
                 minor_version=0,
                 version_kind="first_pass",
                 content=lesson.content,
+                generation_metadata={},
             )
             self.session.add(latest_version)
             await self.session.flush()
@@ -50,12 +55,8 @@ class LessonVersionService:
         return latest_version
 
     async def sync_current_version_from_lesson(self, *, lesson: Lesson) -> LessonVersion:
-        """Keep the current version row aligned with the compatibility content field."""
-        current_version = await self.ensure_current_version(lesson=lesson)
-        if current_version.content != lesson.content:
-            current_version.content = lesson.content
-            await self.session.flush()
-        return current_version
+        """Keep the lesson content field as a compatibility mirror of the version row."""
+        return await self.ensure_current_version(lesson=lesson)
 
     async def get_version(self, *, lesson: Lesson, version_id: uuid.UUID | None) -> LessonVersion:
         """Return the requested version or the current one when no version is specified."""
@@ -76,7 +77,7 @@ class LessonVersionService:
     async def list_versions(self, *, lesson: Lesson) -> list[LessonVersion]:
         """Return all versions for one lesson from newest to oldest."""
         await self.ensure_current_version(lesson=lesson)
-        return (
+        versions = (
             (
                 await self.session.execute(
                     select(LessonVersion)
@@ -91,6 +92,42 @@ class LessonVersionService:
             .scalars()
             .all()
         )
+        return list(versions)
+
+    async def create_initial_version(self, *, lesson: Lesson, content: str) -> LessonVersion:
+        """Create the first canonical version for a lesson whose content is being generated."""
+        current_version = await self.session.scalar(
+            select(LessonVersion)
+            .where(LessonVersion.lesson_id == lesson.id)
+            .order_by(LessonVersion.major_version.desc(), LessonVersion.minor_version.desc(), LessonVersion.created_at.desc())
+            .limit(1)
+        )
+        if current_version is not None:
+            lesson.current_version_id = current_version.id
+            lesson.content = current_version.content
+            lesson.updated_at = datetime.now(UTC)
+            await self.session.flush()
+            return current_version
+
+        new_version = LessonVersion(
+            lesson_id=lesson.id,
+            major_version=1,
+            minor_version=0,
+            version_kind="first_pass",
+            content=content,
+            generation_metadata={
+                "source": "initial_generation",
+                "source_reason": "First pass for this concept.",
+            },
+        )
+        self.session.add(new_version)
+        await self.session.flush()
+
+        lesson.current_version_id = new_version.id
+        lesson.content = content
+        lesson.updated_at = datetime.now(UTC)
+        await self.session.flush()
+        return new_version
 
     async def create_regenerated_version(
         self,
@@ -105,9 +142,46 @@ class LessonVersionService:
             lesson_id=lesson.id,
             major_version=current_version.major_version,
             minor_version=current_version.minor_version + 1,
-            version_kind=current_version.version_kind,
+            version_kind="regeneration",
             content=content,
-            generation_metadata={"source": "regenerate", "critique_text": critique_text},
+            generation_metadata={
+                "source": "regenerate",
+                "critique_text": critique_text,
+                "source_version_id": str(current_version.id),
+                "source_reason": critique_text[:160],
+            },
+        )
+        self.session.add(new_version)
+        await self.session.flush()
+
+        lesson.current_version_id = new_version.id
+        lesson.content = content
+        lesson.updated_at = datetime.now(UTC)
+        await self.session.flush()
+        return new_version
+
+    async def create_adaptive_pass_version(
+        self,
+        *,
+        lesson: Lesson,
+        content: str,
+        source_version: LessonVersion,
+        source_reason: str,
+    ) -> LessonVersion:
+        """Create the next major lesson pass for an adaptive revisit."""
+        latest_version = await self.ensure_current_version(lesson=lesson)
+        next_major = max(latest_version.major_version, source_version.major_version) + 1
+        new_version = LessonVersion(
+            lesson_id=lesson.id,
+            major_version=next_major,
+            minor_version=0,
+            version_kind="revisit_pass",
+            content=content,
+            generation_metadata={
+                "source": "adaptive_revisit",
+                "source_version_id": str(source_version.id),
+                "source_reason": source_reason,
+            },
         )
         self.session.add(new_version)
         await self.session.flush()

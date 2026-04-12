@@ -280,7 +280,11 @@ class LearningCapabilityActionService:
             raise LearningCapabilitiesValidationError(detail)
 
         lesson_service = LessonService(self._session, user_id)
-        base_context = await lesson_service._prepare_lesson_context(lesson=lesson, course=course)  # noqa: SLF001
+        base_context = await lesson_service._prepare_lesson_context(  # noqa: SLF001
+            lesson=lesson,
+            course=course,
+            generation_mode="learning_capability_mutation",
+        )
         mode_instruction = (
             "Extend the current lesson with new material that continues the existing flow."
             if mode == "append"

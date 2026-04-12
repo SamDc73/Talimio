@@ -1,5 +1,7 @@
 
 from collections.abc import Sequence
+from dataclasses import dataclass
+from operator import itemgetter
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,14 +19,15 @@ and does not compute on-the-fly fallback from embeddings.
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import TypedDict
+from typing import Literal, TypedDict
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from src.config.settings import get_settings
 from src.courses.models import (
     _DEFAULT_LEARNER_PROFILE,
     Concept,
+    ConceptPrerequisite,
     ConceptSimilarity,
     CourseConcept,
     ProbeEvent,
@@ -51,6 +54,15 @@ class DueConceptEntry(TypedDict):
 
     concept: Concept
     state: UserConceptState
+
+
+@dataclass(slots=True)
+class AdaptivePassRecommendation:
+    """High-level decision for how an adaptive lesson should behave on revisit."""
+
+    action: Literal["review_now", "deepen_with_next_major_pass", "defer_for_now"]
+    recommended_major_version: int
+    reason: str
 
 
 class LectorSchedulerService:
@@ -301,6 +313,226 @@ class LectorSchedulerService:
                 )
             )
         return due_entries
+
+    async def rank_due_entries(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        entries: Sequence[DueConceptEntry],
+    ) -> list[DueConceptEntry]:
+        """Return due concepts in a stable learner-priority order."""
+        entry_list = list(entries)
+        if len(entry_list) <= 1:
+            return entry_list
+
+        recent_ids = await self._recent_concept_ids(user_id)
+        due_ids = {item["concept"].id for item in entry_list}
+        sigma_map = await self._sigma_for_concepts(due_ids, set(recent_ids) | due_ids)
+
+        ranked_entries: list[tuple[tuple[float, float, str], DueConceptEntry]] = []
+        for entry in entry_list:
+            state = entry["state"]
+            next_review_at = state.next_review_at or datetime.now(UTC)
+            if next_review_at.tzinfo is None:
+                next_review_at = next_review_at.replace(tzinfo=UTC)
+
+            hours_overdue = max(0.0, (datetime.now(UTC) - next_review_at).total_seconds() / 3600)
+            mastery = self._mastery_value(state)
+            sigma_value = sigma_map.get(entry["concept"].id, 0.0)
+            downstream_pressure = await self._downstream_pressure(
+                user_id=user_id,
+                course_id=course_id,
+                concept_id=entry["concept"].id,
+            )
+            identifier = (entry["concept"].name or "").strip().lower() or (entry["concept"].slug or "").strip().lower()
+            key = (
+                -(hours_overdue + downstream_pressure + ((1.0 - mastery) * 2.0) - (sigma_value * 0.2)),
+                next_review_at.timestamp(),
+                identifier,
+            )
+            ranked_entries.append((key, entry))
+
+        ranked_entries.sort(key=itemgetter(0))
+        return [entry for _, entry in ranked_entries]
+
+    async def recommend_adaptive_pass(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        concept_id: uuid.UUID,
+        current_major_version: int,
+    ) -> AdaptivePassRecommendation:
+        """Decide whether a revisit should stay review-only or deepen into a new pass."""
+        state = await self._session.scalar(
+            select(UserConceptState).where(
+                and_(
+                    UserConceptState.user_id == user_id,
+                    UserConceptState.concept_id == concept_id,
+                )
+            )
+        )
+        if state is None:
+            return AdaptivePassRecommendation(
+                action="review_now",
+                recommended_major_version=max(current_major_version, 1),
+                reason="No learner history exists for this concept yet.",
+            )
+
+        mastery = self._mastery_value(state)
+        exposures = max(state.exposures, 0)
+        recent_accuracy = await self._recent_accuracy(user_id=user_id, concept_id=concept_id)
+        downstream_pressure = await self._downstream_pressure(
+            user_id=user_id,
+            course_id=course_id,
+            concept_id=concept_id,
+        )
+        downstream_miss_count = await self._downstream_recent_miss_count(user_id=user_id, course_id=course_id, concept_id=concept_id)
+        competing_due_count = len((await self._due_concept_ids(user_id=user_id, course_id=course_id)) - {concept_id})
+        semantic_confusion = await self._current_confusion_pressure(user_id=user_id, course_id=course_id, concept_id=concept_id)
+
+        now = datetime.now(UTC)
+        review_is_due = False
+        if state.next_review_at is not None:
+            next_review_at = state.next_review_at
+            if next_review_at.tzinfo is None:
+                next_review_at = next_review_at.replace(tzinfo=UTC)
+            review_is_due = next_review_at <= now
+
+        should_deepen = (
+            review_is_due
+            and exposures >= max(current_major_version, 1)
+            and mastery >= 0.76
+            and (recent_accuracy is None or recent_accuracy >= 0.6)
+            and (downstream_pressure > 0.0 or downstream_miss_count > 0 or semantic_confusion >= 0.45 or mastery >= 0.9)
+            and competing_due_count <= 1
+        )
+        if should_deepen:
+            return AdaptivePassRecommendation(
+                action="deepen_with_next_major_pass",
+                recommended_major_version=current_major_version + 1,
+                reason="The learner is retaining this concept well enough for a broader revisit that still reviews the core idea.",
+            )
+
+        if not review_is_due and mastery >= 0.9 and competing_due_count > 0 and downstream_pressure <= 0.01:
+            return AdaptivePassRecommendation(
+                action="defer_for_now",
+                recommended_major_version=current_major_version,
+                reason="Other concepts need attention sooner than this already-strong concept.",
+            )
+
+        return AdaptivePassRecommendation(
+            action="review_now",
+            recommended_major_version=current_major_version,
+            reason="The learner still benefits more from review than from a new major pass right now.",
+        )
+
+    async def _recent_accuracy(self, *, user_id: uuid.UUID, concept_id: uuid.UUID) -> float | None:
+        outcomes = (
+            (
+                await self._session.execute(
+                    select(ProbeEvent.correct)
+                    .where(
+                        ProbeEvent.user_id == user_id,
+                        ProbeEvent.concept_id == concept_id,
+                    )
+                    .order_by(ProbeEvent.ts.desc())
+                    .limit(5)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not outcomes:
+            return None
+        return sum(1 for outcome in outcomes if outcome) / len(outcomes)
+
+    async def _downstream_pressure(self, *, user_id: uuid.UUID, course_id: uuid.UUID, concept_id: uuid.UUID) -> float:
+        rows = (
+            await self._session.execute(
+                select(UserConceptState.s_mastery)
+                .select_from(ConceptPrerequisite)
+                .join(
+                    CourseConcept,
+                    and_(
+                        CourseConcept.concept_id == ConceptPrerequisite.concept_id,
+                        CourseConcept.course_id == course_id,
+                    ),
+                )
+                .outerjoin(
+                    UserConceptState,
+                    and_(
+                        UserConceptState.concept_id == ConceptPrerequisite.concept_id,
+                        UserConceptState.user_id == user_id,
+                    ),
+                )
+                .where(ConceptPrerequisite.prereq_id == concept_id)
+            )
+        ).scalars().all()
+        if not rows:
+            return 0.0
+
+        pressure = 0.0
+        for mastery in rows:
+            mastery_value = float(mastery) if mastery is not None else 0.0
+            if mastery_value < self._unlock_threshold:
+                pressure += 1.0 - mastery_value
+        return round(pressure, 3)
+
+    async def _downstream_recent_miss_count(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        concept_id: uuid.UUID,
+    ) -> int:
+        downstream_ids = (
+            (
+                await self._session.execute(
+                    select(ConceptPrerequisite.concept_id)
+                    .join(
+                        CourseConcept,
+                        and_(
+                            CourseConcept.concept_id == ConceptPrerequisite.concept_id,
+                            CourseConcept.course_id == course_id,
+                        ),
+                    )
+                    .where(ConceptPrerequisite.prereq_id == concept_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not downstream_ids:
+            return 0
+
+        recent_misses = await self._session.scalar(
+            select(func.count())
+            .select_from(ProbeEvent)
+            .where(
+                ProbeEvent.user_id == user_id,
+                ProbeEvent.concept_id.in_(downstream_ids),
+                ProbeEvent.correct.is_(False),
+            )
+        )
+        return int(recent_misses or 0)
+
+    async def _current_confusion_pressure(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        concept_id: uuid.UUID,
+    ) -> float:
+        context_ids = (await self._due_concept_ids(user_id=user_id, course_id=course_id)) - {concept_id}
+        if not context_ids:
+            recent_ids = await self._recent_concept_ids(user_id)
+            context_ids = set(recent_ids) - {concept_id}
+        if not context_ids:
+            return 0.0
+        sigma_map = await self._sigma_for_concepts({concept_id}, context_ids)
+        return float(sigma_map.get(concept_id, 0.0))
 
     async def update_learner_profile(
         self,

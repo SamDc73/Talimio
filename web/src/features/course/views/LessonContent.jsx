@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useParams, useSearchParams } from "react-router-dom"
 import { useCourseContext } from "@/features/course/CourseContext"
 import { LessonViewer } from "@/features/course/components/LessonViewer"
-import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
 import { RegenerateModal } from "@/features/course/components/RegenerateModal"
+import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
 import { useLessonActions } from "@/features/course/hooks/use-lesson-actions"
 import { useLessonData } from "@/features/course/hooks/use-lesson-data"
 
@@ -16,8 +16,16 @@ export default function LessonContent() {
 	const [regenerateStatus, setRegenerateStatus] = useState(null)
 	const [currentWindowIndex, setCurrentWindowIndex] = useState(0)
 	const selectedVersionId = searchParams.get("versionId")?.trim() || null
+	const adaptiveFlow = searchParams.get("adaptiveFlow") === "true"
 
-	const { data: lesson, isLoading, error } = useLessonData(courseId, lessonId, selectedVersionId)
+	const {
+		data: lesson,
+		isLoading,
+		error,
+	} = useLessonData(courseId, lessonId, {
+		versionId: selectedVersionId,
+		adaptiveFlow,
+	})
 	const { progress, rawMetadata, updateProgressAsync } = useCourseProgress(courseId)
 
 	const { handleBack, handleLessonNavigation, handleMarkComplete, handleRegenerate, isRegeneratingLesson } =
@@ -56,13 +64,13 @@ export default function LessonContent() {
 	}, [])
 
 	const handleRegenerateSubmit = useCallback(
-		async (critiqueText) => {
+		async ({ critiqueText, applyAcrossCourse }) => {
 			if (!pendingRegenerateLessonId) {
 				return
 			}
 
 			try {
-				await handleRegenerate(pendingRegenerateLessonId, critiqueText)
+				await handleRegenerate(pendingRegenerateLessonId, critiqueText, applyAcrossCourse)
 				setIsRegenerateOpen(false)
 				setPendingRegenerateLessonId(null)
 				setRegenerateStatus(null)
