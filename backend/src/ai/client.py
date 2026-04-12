@@ -36,8 +36,6 @@ from src.ai.prompts import (
     ADAPTIVE_COURSE_GENERATION_PROMPT,
     COURSE_GENERATION_PROMPT,
     E2B_EXECUTION_SYSTEM_PROMPT,
-    GRADING_COACH_PROMPT,
-    GRADING_PROMPT,
     LESSON_GENERATION_PROMPT,
     MEMORY_CONTEXT_SYSTEM_PROMPT,
     PRACTICE_GENERATION_PROMPT,
@@ -1675,17 +1673,18 @@ class LLMClient:
             msg = "Execution planning failed"
             raise RuntimeError(msg) from exc
 
-    async def generate_grading_coach_feedback(
+    async def complete_grading_prompt(
         self,
         *,
+        prompt: str,
         payload: dict[str, Any],
         response_model: type[T],
         user_id: str | uuid.UUID | None = None,
         model: str | None = None,
     ) -> T:
-        """Generate grading coach feedback with a strict structured contract."""
+        """Run a grading prompt through the shared structured completion path."""
         messages = [
-            {"role": "system", "content": GRADING_COACH_PROMPT},
+            {"role": "system", "content": prompt},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=True)},
         ]
 
@@ -1696,7 +1695,7 @@ class LLMClient:
             model=model,
         )
         if not isinstance(result, response_model):
-            msg = f"Expected {response_model.__name__} from grading coach structured output"
+            msg = f"Expected {response_model.__name__} from grading structured output"
             raise TypeError(msg)
         return result
 
@@ -1735,31 +1734,6 @@ class LLMClient:
         )
         if not isinstance(result, response_model):
             msg = f"Expected {response_model.__name__} from practice generation structured output"
-            raise TypeError(msg)
-        return result
-
-    async def grade_adaptive_practice_answer(
-        self,
-        *,
-        payload: dict[str, Any],
-        response_model: type[T],
-        user_id: str | uuid.UUID | None = None,
-        model: str | None = None,
-    ) -> T:
-        """Grade an adaptive practice answer via the shared structured completion path."""
-        messages = [
-            {"role": "system", "content": GRADING_PROMPT},
-            {"role": "user", "content": json.dumps(payload, ensure_ascii=True)},
-        ]
-
-        result = await self.get_completion(
-            messages,
-            response_model=response_model,
-            user_id=user_id,
-            model=model,
-        )
-        if not isinstance(result, response_model):
-            msg = f"Expected {response_model.__name__} from adaptive practice grading structured output"
             raise TypeError(msg)
         return result
 

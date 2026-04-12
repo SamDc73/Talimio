@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.client import LLMClient
 from src.ai.errors import AIRuntimeError
+from src.ai.prompts import GRADING_COACH_PROMPT, GRADING_PROMPT
 from src.config.schema_casing import build_camel_config
 from src.config.settings import get_settings
 from src.courses.schemas import GradeErrorHighlight, GradeRequest, GradeResponse, VerifierInfo
@@ -161,7 +162,8 @@ class GradingService:
             "hintsUsed": request.context.hints_used,
         }
 
-        result = await self._llm_client.grade_adaptive_practice_answer(
+        result = await self._llm_client.complete_grading_prompt(
+            prompt=GRADING_PROMPT,
             payload=payload,
             response_model=AdaptivePracticeGradeFeedback,
             user_id=user_id,
@@ -203,7 +205,8 @@ class GradingService:
         }
 
         try:
-            result = await self._llm_client.generate_grading_coach_feedback(
+            result = await self._llm_client.complete_grading_prompt(
+                prompt=GRADING_COACH_PROMPT,
                 payload=payload,
                 response_model=GradingCoachFeedback,
                 user_id=user_id,
