@@ -549,6 +549,8 @@ Guidelines:
 - Add a small interactive demo only when it genuinely improves understanding.
 - Define it as `export function DemoName() { ... }` and then render `<DemoName />`.
 - Use hooks via `React.*` (for example: `React.useState(...)`).
+- For compact explanatory visuals, you may use a small responsive side-by-side text/visual layout (prefer text left, visual right), for example: `<div className="my-6 grid gap-6 grid-cols-1 md:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">...</div>`.
+- Do not use side-by-side custom layout for quizzes/checkpoints, wide charts, large tables, or code blocks.
 - Never include third-party imports inside MDX output.
 - Canonical `<JXGBoard>` patterns include: function plots, auto-play timeline animation via `startAnimation`, non-math visual simulations (physics/CS), and multi-board state coordination with `React.useState`.
 - Graded `<JXGBoard>` pattern:
