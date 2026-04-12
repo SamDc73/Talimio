@@ -34,10 +34,10 @@ from src.ai.models import (
 )
 from src.ai.prompts import (
     ADAPTIVE_COURSE_GENERATION_PROMPT,
-    ADAPTIVE_PRACTICE_GRADING_PROMPT,
     COURSE_GENERATION_PROMPT,
     E2B_EXECUTION_SYSTEM_PROMPT,
     GRADING_COACH_PROMPT,
+    GRADING_PROMPT,
     LESSON_GENERATION_PROMPT,
     MEMORY_CONTEXT_SYSTEM_PROMPT,
     PRACTICE_GENERATION_PROMPT,
@@ -1748,7 +1748,7 @@ class LLMClient:
     ) -> T:
         """Grade an adaptive practice answer via the shared structured completion path."""
         messages = [
-            {"role": "system", "content": ADAPTIVE_PRACTICE_GRADING_PROMPT},
+            {"role": "system", "content": GRADING_PROMPT},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=True)},
         ]
 

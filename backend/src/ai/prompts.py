@@ -50,7 +50,7 @@ Rules:
 - Only include errorHighlight when you can point to a specific LaTeX fragment to check; otherwise omit it.
 """
 
-ADAPTIVE_PRACTICE_GRADING_PROMPT = """You are the official Adaptive Practice grader.
+GRADING_PROMPT = """You are the official Adaptive Practice grader.
 
 You will receive one JSON payload with:
 - question
