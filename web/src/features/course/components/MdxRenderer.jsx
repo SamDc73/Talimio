@@ -116,7 +116,9 @@ const MDX_COMPONENTS = {
 		return <input {...props} />
 	},
 }
-export function MdxRenderer({ content, lessonId, courseId, lessonConceptId }) {
+const EMPTY_MDX_COMPONENTS = {}
+
+export function MdxRenderer({ content, lessonId, courseId, lessonConceptId, components = EMPTY_MDX_COMPONENTS }) {
 	const { Component, error, isLoading } = useMdxCompile(content, { lessonId, courseId })
 
 	// Render states
@@ -163,6 +165,9 @@ export function MdxRenderer({ content, lessonId, courseId, lessonConceptId }) {
 				{(() => {
 					const componentsWithLesson = {
 						...MDX_COMPONENTS,
+						FreeForm: (props) => (
+							<FreeForm {...props} courseId={courseId} lessonId={lessonId} lessonConceptId={lessonConceptId} />
+						),
 						JXGBoard: (props) => (
 							<JXGBoardPractice {...props} courseId={courseId} lessonId={lessonId} lessonConceptId={lessonConceptId} />
 						),
@@ -175,6 +180,7 @@ export function MdxRenderer({ content, lessonId, courseId, lessonConceptId }) {
 							/>
 						),
 						pre: (props) => <WorkspaceAwareCodeBlock {...props} lessonId={lessonId} courseId={courseId} />,
+						...components,
 					}
 					return (
 						<MDXProvider components={componentsWithLesson}>

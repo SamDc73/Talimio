@@ -518,7 +518,7 @@ Use these inline (NOT inside code fences) as you teach:
 - Fill in the blank:
   `<FillInTheBlank question="..." answer="..." explanation="..." />`
 - Free-form writing:
-  `<FreeForm question="..." sampleAnswer="..." minLength={80} />`
+  `<FreeForm question="..." expectedAnswer="..." sampleAnswer="..." minLength={80} />`
 - LaTeX expression practice (graded/tracked):
   `<LatexExpression question="..." expectedLatex="..." criteria={{...}} hints={["..."]} solutionLatex="..." solutionMdx="..." />`
 - JSXGraph interactive board (visual + exploratory):
@@ -528,6 +528,7 @@ Guidelines:
 - Use 2-6 checkpoints total, placed right after the idea they verify.
 - String props may include Markdown + LaTeX.
 - Prefer `<LatexExpression>` when the answer can be checked as a single expression.
+- For `<FreeForm>`, always provide `expectedAnswer` for grading; keep `sampleAnswer` optional and use it only as an extra learner reference after submission.
 - To populate the lesson's Quick Check, set `practiceContext="quick_check"` on 1-3 `<LatexExpression>` items.
 - If the lesson needs graphs, geometry, or simulation-style visualization, prefer `<JXGBoard>` over static text descriptions.
 - For `<JXGBoard>` plots, pass real JS functions (e.g. `(x) => x * x - 3`) or point arrays, never parse math strings (for example `"x^2"`).
