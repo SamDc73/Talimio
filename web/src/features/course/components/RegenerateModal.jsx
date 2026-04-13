@@ -4,6 +4,13 @@ import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
 
 const MIN_CRITIQUE_LENGTH = 10
+const REGENERATE_ICON_SHELL_CLASS_NAME =
+	"rounded-lg bg-(--color-course)/10 p-2.5 ring-1 ring-inset ring-(--color-course)/15"
+const REGENERATE_FIELDSET_CLASS_NAME =
+	"relative flex flex-col rounded-xl border border-border bg-background shadow-sm transition-all duration-200 hover:border-muted-foreground/30 focus-within:border-(--color-course) focus-within:ring-4 focus-within:ring-(--color-course)/10"
+const REGENERATE_CHECKBOX_CLASS_NAME =
+	"mt-0.5 size-4 rounded-sm border-border text-(--color-course) focus:ring-2 focus:ring-(--color-course)/20 focus:ring-offset-0"
+const REGENERATE_PRIMARY_ACTION_CLASS_NAME = "min-w-[140px] bg-(--color-course) text-white hover:bg-(--color-course)/90"
 
 export function RegenerateModal({ open, onOpenChange, onRegenerate, isRegenerating = false }) {
 	const [critique, setCritique] = useState("")
@@ -53,8 +60,8 @@ export function RegenerateModal({ open, onOpenChange, onRegenerate, isRegenerati
 				<form onSubmit={handleSubmit} className="space-y-5">
 					<DialogHeader className="space-y-2">
 						<div className="flex items-center gap-3">
-							<div className="rounded-lg bg-linear-to-br from-(--color-course)/90 to-(--color-course) p-2.5">
-								<RotateCcw className="size-5 text-white" />
+							<div className={REGENERATE_ICON_SHELL_CLASS_NAME}>
+								<RotateCcw className="size-5 text-(--color-course)" />
 							</div>
 							<DialogTitle className="text-2xl">Regenerate lesson</DialogTitle>
 						</div>
@@ -64,7 +71,7 @@ export function RegenerateModal({ open, onOpenChange, onRegenerate, isRegenerati
 					</DialogHeader>
 
 					<div className="space-y-3">
-						<fieldset className="relative flex flex-col rounded-xl border border-border bg-background shadow-sm transition-all duration-200 hover:border-muted-foreground/30 focus-within:border-(--color-course) focus-within:ring-4 focus-within:ring-(--color-course)/10">
+						<fieldset className={REGENERATE_FIELDSET_CLASS_NAME}>
 							<textarea
 								id="lesson-regenerate-critique"
 								ref={textareaRef}
@@ -95,7 +102,7 @@ export function RegenerateModal({ open, onOpenChange, onRegenerate, isRegenerati
 								checked={applyAcrossCourse}
 								onChange={(e) => setApplyAcrossCourse(e.target.checked)}
 								disabled={isRegenerating}
-								className="mt-0.5 size-4 rounded-sm border-border text-(--color-course) focus:ring-2 focus:ring-(--color-course)/20 focus:ring-offset-0"
+								className={REGENERATE_CHECKBOX_CLASS_NAME}
 							/>
 							<span className="space-y-1">
 								<span className="block font-medium text-foreground">Apply this preference across this course</span>
@@ -110,11 +117,7 @@ export function RegenerateModal({ open, onOpenChange, onRegenerate, isRegenerati
 						<Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isRegenerating}>
 							Cancel
 						</Button>
-						<Button
-							type="submit"
-							disabled={!canSubmit}
-							className="min-w-[140px] bg-(--color-course) text-white hover:bg-(--color-course)/90"
-						>
+						<Button type="submit" disabled={!canSubmit} className={REGENERATE_PRIMARY_ACTION_CLASS_NAME}>
 							{isRegenerating ? (
 								<>
 									<Loader2 className="size-4 animate-spin" />

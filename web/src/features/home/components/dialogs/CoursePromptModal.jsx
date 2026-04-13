@@ -75,6 +75,23 @@ const ACCEPTED_ATTACHMENT_MIME_TYPES = {
 	"image/jpeg": ".jpg",
 }
 
+const COURSE_PROMPT_ICON_SHELL_CLASS_NAME =
+	"rounded-lg bg-(--color-course)/10 p-2.5 ring-1 ring-inset ring-(--color-course)/15"
+const COURSE_PROMPT_FIELDSET_CLASS_NAME =
+	"relative flex flex-col rounded-xl border border-border bg-background shadow-sm transition-all duration-200 hover:border-muted-foreground/30 focus-within:border-(--color-course) focus-within:ring-4 focus-within:ring-(--color-course)/10"
+const COURSE_ATTACHMENT_CHIP_CLASS_NAME =
+	"group flex items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1.5 text-xs font-medium text-foreground"
+const COURSE_MODE_TOGGLE_CLASS_NAME = "relative inline-flex rounded-full bg-(--color-course)/5 p-0.5"
+const COURSE_MODE_ACTIVE_PILL_CLASS_NAME =
+	"absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-1/2 rounded-full border border-(--color-course)/15 bg-(--color-course)/10 transition-transform duration-280 ease-[cubic-bezier(0.22,1,0.36,1)]"
+const COURSE_CHECKBOX_CLASS_NAME =
+	"size-4 rounded-sm border-border text-(--color-course) transition-all focus:ring-2 focus:ring-(--color-course)/20 focus:ring-offset-0"
+const COURSE_PRIMARY_ACTION_CLASS_NAME = "min-w-[140px] bg-(--color-course) text-white hover:bg-(--color-course)/90"
+const COURSE_LOADING_OVERLAY_CLASS_NAME =
+	"absolute inset-0 top-12 z-20 flex items-center justify-center rounded-lg border border-(--color-course)/10 bg-card/95 shadow-sm backdrop-blur-sm"
+const COURSE_ERROR_OVERLAY_CLASS_NAME =
+	"absolute inset-0 top-12 z-20 flex flex-col items-center justify-center rounded-lg border border-destructive/20 bg-card/95 shadow-sm backdrop-blur-sm"
+
 function buildPastedFileName(extension) {
 	const isoTimestamp = new Date().toISOString().replace(/[:.]/g, "-")
 	return `pasted-${isoTimestamp}${extension}`
@@ -481,8 +498,8 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 		>
 			<DialogHeader className="space-y-2">
 				<div className="flex items-center gap-3">
-					<div className="p-2.5 bg-linear-to-br from-(--color-course)/90 to-(--color-course) rounded-lg">
-						<Sparkles className="size-5  text-white" />
+					<div className={COURSE_PROMPT_ICON_SHELL_CLASS_NAME}>
+						<Sparkles className="size-5 text-(--color-course)" />
 					</div>
 					<DialogTitle className="text-2xl">Create Course</DialogTitle>
 				</div>
@@ -496,11 +513,8 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 					<fieldset
 						aria-label="Course prompt editor and file drop zone"
 						className={cn(
-							"relative flex flex-col rounded-xl border bg-background transition-all duration-200",
-							"focus-within:border-(--color-course) focus-within:ring-4 focus-within:ring-(--color-course)/10",
-							dragActive
-								? "border-(--color-course) bg-(--color-course)/5 ring-4 ring-(--color-course)/10"
-								: "border-border shadow-sm hover:border-muted-foreground/30"
+							COURSE_PROMPT_FIELDSET_CLASS_NAME,
+							dragActive ? "border-(--color-course) bg-(--color-course)/5 ring-4 ring-(--color-course)/10" : null
 						)}
 						onDragEnter={handleDrag}
 						onDragOver={handleDrag}
@@ -573,7 +587,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 														initial={{ scale: 0.8, opacity: 0 }}
 														animate={{ scale: 1, opacity: 1 }}
 														exit={{ scale: 0.8, opacity: 0 }}
-														className="group flex items-center gap-2 rounded-md bg-secondary/50 px-2.5 py-1.5 text-xs font-medium text-secondary-foreground ring-1 ring-inset ring-black/5"
+														className={COURSE_ATTACHMENT_CHIP_CLASS_NAME}
 													>
 														{isImage && attachment.previewUrl ? (
 															<Dialog>
@@ -670,20 +684,13 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 
 				<div className="space-y-2.5 py-2">
 					<div className="relative inline-flex items-center gap-2">
-						<div className={cn("relative inline-flex rounded-full p-0.5", "bg-(--color-course)/5")}>
-							<div
-								className={cn(
-									"absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-1/2 rounded-full",
-									"bg-(--color-course)/10 border border-(--color-course)/15",
-									"transition-transform duration-280 ease-[cubic-bezier(0.22,1,0.36,1)]",
-									!adaptiveEnabled && "translate-x-full"
-								)}
-							/>
+						<div className={COURSE_MODE_TOGGLE_CLASS_NAME}>
+							<div className={cn(COURSE_MODE_ACTIVE_PILL_CLASS_NAME, !adaptiveEnabled && "translate-x-full")} />
 							<label
 								className={cn(
 									"relative z-10 px-4 py-2 text-sm rounded-full cursor-pointer",
 									"transition-colors duration-200 min-w-[90px] text-center select-none",
-									adaptiveEnabled ? "text-(--color-course-accent) font-medium" : "text-muted-foreground",
+									adaptiveEnabled ? "font-medium text-(--color-course-accent)" : "text-muted-foreground",
 									isGenerating && "opacity-50 cursor-not-allowed"
 								)}
 							>
@@ -701,7 +708,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 								className={cn(
 									"relative z-10 px-4 py-2 text-sm rounded-full cursor-pointer",
 									"transition-colors duration-200 min-w-[90px] text-center select-none",
-									!adaptiveEnabled ? "text-(--color-course-accent) font-medium" : "text-muted-foreground",
+									!adaptiveEnabled ? "font-medium text-(--color-course-accent)" : "text-muted-foreground",
 									isGenerating && "opacity-50 cursor-not-allowed"
 								)}
 							>
@@ -749,7 +756,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 							checked={selfAssessmentEnabled}
 							onChange={handleToggleSelfAssessment}
 							disabled={isGenerating}
-							className="size-4  rounded-sm border-border text-(--color-course) focus:ring-2 focus:ring-(--color-course)/20 focus:ring-offset-0 transition-all"
+							className={COURSE_CHECKBOX_CLASS_NAME}
 						/>
 						<span className="text-sm text-foreground select-none">Self-assessment</span>
 						<Tooltip>
@@ -775,11 +782,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 					<Button type="button" variant="outline" onClick={closeModal} disabled={isGenerating}>
 						Cancel
 					</Button>
-					<Button
-						type="submit"
-						disabled={isGenerating || !prompt.trim()}
-						className="min-w-[140px] bg-(--color-course) hover:bg-(--color-course)/90 text-white"
-					>
+					<Button type="submit" disabled={isGenerating || !prompt.trim()} className={COURSE_PRIMARY_ACTION_CLASS_NAME}>
 						{isGenerating ? (
 							<div className="flex items-center gap-2">
 								<Loader2 className="size-4  animate-spin" />
@@ -830,7 +833,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 								animate={{ opacity: 1 }}
 								exit={{ opacity: 0 }}
 								transition={{ duration: 0.3 }}
-								className="absolute inset-0 top-12 z-20 flex items-center justify-center rounded-lg bg-background shadow-sm border border-border/30"
+								className={COURSE_LOADING_OVERLAY_CLASS_NAME}
 							>
 								<AnimatePresence mode="wait">
 									<motion.div
@@ -855,7 +858,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 								animate={{ opacity: 1 }}
 								exit={{ opacity: 0 }}
 								transition={{ duration: 0.3 }}
-								className="absolute inset-0 top-12 z-20 flex flex-col items-center justify-center rounded-lg bg-background shadow-sm border border-border/30"
+								className={COURSE_ERROR_OVERLAY_CLASS_NAME}
 							>
 								<AnimatePresence mode="wait">
 									<motion.div

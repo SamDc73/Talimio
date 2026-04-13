@@ -10,6 +10,30 @@ import { ContentRenderer } from "./ContentRenderer"
 import { LessonQuickCheckPanel } from "./LessonQuickCheckPanel"
 import { PracticeRegistryProvider } from "./PracticeRegistryProvider"
 
+const LESSON_REGENERATION_BANNER_STYLES = {
+	inProgress: {
+		icon: Loader2,
+		iconClassName: "animate-spin text-(--color-course)",
+		role: "status",
+		title: "Regenerating lesson",
+		message: "Refreshing this lesson with your notes. The updated version will appear automatically.",
+		className: "border-(--color-course)/15 bg-(--color-course)/5",
+	},
+	error: {
+		icon: AlertTriangle,
+		iconClassName: "text-destructive",
+		role: "alert",
+		title: "Regeneration failed",
+		className: "border-destructive/30 bg-destructive/10",
+	},
+}
+
+const LESSON_SHELL_HEADER_CLASS_NAME =
+	"border-b border-border/60 bg-linear-to-br from-(--color-course)/12 via-background to-(--color-course-accent)/10"
+const ACTIVE_WINDOW_BUTTON_CLASS_NAME = "border-(--color-course)/20 bg-(--color-course)/10 text-(--color-course)"
+const REGENERATE_ACTION_CLASS_NAME =
+	"border-(--color-course)/20 text-(--color-course) hover:bg-(--color-course)/10 hover:text-(--color-course)"
+
 /**
  * LessonViewer - Presents a lesson with MDX content and actions
  * - Uses design tokens (bg-card, border-border, text-foreground, etc.)
@@ -48,22 +72,11 @@ export function LessonViewer({
 	let regenerationBannerContent = null
 
 	if (isRegeneratingLesson) {
-		regenerationBanner = {
-			icon: Loader2,
-			iconClassName: "animate-spin text-primary",
-			role: "status",
-			title: "Regenerating lesson",
-			message: "Refreshing this lesson with your notes. The updated version will appear automatically.",
-			className: "border-primary/15 bg-primary/5",
-		}
+		regenerationBanner = LESSON_REGENERATION_BANNER_STYLES.inProgress
 	} else if (regenerateStatus?.type === "error") {
 		regenerationBanner = {
-			icon: AlertTriangle,
-			iconClassName: "text-destructive",
-			role: "alert",
-			title: "Regeneration failed",
+			...LESSON_REGENERATION_BANNER_STYLES.error,
 			message: regenerateStatus.message,
-			className: "border-destructive/30 bg-destructive/10",
 		}
 	}
 
@@ -161,7 +174,7 @@ export function LessonViewer({
 		return (
 			<div className="h-[calc(100vh-4rem)] overflow-y-auto w-full">
 				<div className="flex flex-col items-center justify-center min-h-full text-destructive">
-					<div className="max-w-3xl mx-auto p-6 bg-destructive/10 rounded-lg border border-destructive/30">
+					<div className="mx-auto max-w-3xl rounded-2xl border border-destructive/30 bg-destructive/10 p-6 shadow-sm">
 						<h2 className="text-xl font-semibold mb-4">Error loading lesson</h2>
 						<p className="mb-4">{error}</p>
 						<Button onClick={onBack} variant="outline" size="sm">
@@ -179,7 +192,7 @@ export function LessonViewer({
 		return (
 			<div className="h-[calc(100vh-4rem)] overflow-y-auto w-full">
 				<div className="flex flex-col items-center justify-center min-h-full text-muted-foreground">
-					<div className="max-w-3xl mx-auto p-6 bg-muted rounded-lg border border-border">
+					<div className="mx-auto max-w-3xl rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
 						<h2 className="text-xl font-semibold mb-4 text-foreground">No lesson available</h2>
 						<p className="mb-4">This lesson could not be loaded.</p>
 						<Button onClick={onBack} variant="outline" size="sm">
@@ -197,7 +210,7 @@ export function LessonViewer({
 			<div className="max-w-4xl w-full mx-auto px-4 flex justify-center">
 				<div className="my-8 flex w-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
 					{/* Header */}
-					<div className="border-b border-border/60 bg-linear-to-br from-emerald-500/[0.08] via-background to-cyan-500/[0.04] p-6 md:p-8">
+					<div className={cn(LESSON_SHELL_HEADER_CLASS_NAME, "p-6 md:p-8")}>
 						<div className="flex flex-col gap-5">
 							<div className="flex flex-wrap items-center justify-between gap-3">
 								<Button onClick={onBack} variant="secondary" size="sm">
@@ -264,6 +277,7 @@ export function LessonViewer({
 											onClick={() => onRegenerate(lesson.id)}
 											variant="outline"
 											size="sm"
+											className={REGENERATE_ACTION_CLASS_NAME}
 											disabled={isRegeneratingLesson || isViewingHistoricalVersion}
 											title={
 												isViewingHistoricalVersion ? "Switch back to the current version to regenerate." : undefined
@@ -345,7 +359,7 @@ export function LessonViewer({
 												className={cn(
 													"rounded-full border px-3 py-1.5 text-sm transition-colors",
 													isActive
-														? "border-(--color-course) bg-(--color-course)/10 text-(--color-course)"
+														? ACTIVE_WINDOW_BUTTON_CLASS_NAME
 														: "border-border bg-background text-muted-foreground hover:bg-muted"
 												)}
 											>
