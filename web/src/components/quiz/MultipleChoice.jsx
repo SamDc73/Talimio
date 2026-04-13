@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from "react"
 import { QuizMarkdown } from "@/components/quiz/QuizMarkdown"
+import {
+	QUIZ_ACTIVE_BUTTON_CLASS_NAME,
+	QUIZ_DISABLED_BUTTON_CLASS_NAME,
+	QUIZ_ERROR_PANEL_CLASS_NAME,
+	QUIZ_RESET_BUTTON_CLASS_NAME,
+	QUIZ_SUCCESS_PANEL_CLASS_NAME,
+	QUIZ_WIDGET_CLASS_NAME,
+} from "@/components/quiz/quizUiClassNames"
+import { cn } from "@/lib/utils"
 
 export function MultipleChoice({
 	question,
@@ -66,18 +75,14 @@ export function MultipleChoice({
 	const renderFeedbackSection = () => (
 		<div>
 			{explanation && (
-				<div className="p-4 mb-4 rounded-lg border border-border bg-muted/20">
+				<div className={cn(isCorrect ? QUIZ_SUCCESS_PANEL_CLASS_NAME : QUIZ_ERROR_PANEL_CLASS_NAME, "mb-4 p-4")}>
 					<div className={`text-sm font-medium mb-2 ${isCorrect ? "text-completed" : "text-destructive"}`}>
 						{isCorrect ? "✓ Correct" : "✗ Incorrect"}
 					</div>
 					<QuizMarkdown content={explanation} className="text-sm/relaxed  text-muted-foreground [&_p]:m-0" />
 				</div>
 			)}
-			<button
-				type="button"
-				onClick={handleReset}
-				className="px-4 py-2 bg-muted text-foreground hover:bg-muted/80 rounded-lg text-sm font-medium transition-colors"
-			>
+			<button type="button" onClick={handleReset} className={QUIZ_RESET_BUTTON_CLASS_NAME}>
 				Try Again
 			</button>
 		</div>
@@ -87,18 +92,14 @@ export function MultipleChoice({
 			type="button"
 			onClick={handleSubmit}
 			disabled={effectiveSelected === null}
-			className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-				effectiveSelected === null
-					? "bg-muted text-muted-foreground cursor-not-allowed"
-					: "bg-completed text-completed-text hover:bg-completed/90"
-			}`}
+			className={effectiveSelected === null ? QUIZ_DISABLED_BUTTON_CLASS_NAME : QUIZ_ACTIVE_BUTTON_CLASS_NAME}
 		>
 			{submitLabel}
 		</button>
 	)
 
 	return (
-		<div className="border-l-4 border-l-completed/20 pl-6 my-8 bg-background/30 rounded-r-lg" data-askai-exclude="true">
+		<div className={QUIZ_WIDGET_CLASS_NAME} data-askai-exclude="true">
 			<QuizMarkdown content={question} className="mb-6 text-lg font-medium text-foreground [&_p]:m-0" />
 
 			<div className="mb-6 space-y-2">
@@ -119,7 +120,7 @@ export function MultipleChoice({
 							optionClasses = "bg-muted/20 border-border text-muted-foreground"
 						}
 					} else if (isSelected) {
-						optionClasses = "bg-completed/10 border-completed/30 text-foreground"
+						optionClasses = "bg-due-today/10 border-due-today/30 text-foreground"
 					}
 
 					return (

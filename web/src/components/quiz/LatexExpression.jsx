@@ -2,6 +2,17 @@ import "mathlive"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { QuizMarkdown } from "@/components/quiz/QuizMarkdown"
+import {
+	QUIZ_ACTIVE_BUTTON_CLASS_NAME,
+	QUIZ_ATTENTION_PANEL_CLASS_NAME,
+	QUIZ_DISABLED_BUTTON_CLASS_NAME,
+	QUIZ_ERROR_PANEL_CLASS_NAME,
+	QUIZ_NEUTRAL_PANEL_CLASS_NAME,
+	QUIZ_RESET_BUTTON_CLASS_NAME,
+	QUIZ_SUCCESS_PANEL_CLASS_NAME,
+	QUIZ_WIDGET_CLASS_NAME,
+} from "@/components/quiz/quizUiClassNames"
+import { cn } from "@/lib/utils"
 
 const normalizeHints = (hints) => {
 	if (!hints) {
@@ -302,20 +313,20 @@ export function LatexExpression({
 		if (feedback.isCorrect) {
 			feedbackTitle = "✓ Correct"
 			feedbackTone = "text-completed"
-			feedbackContainer = "border-completed/30 bg-completed/10"
+			feedbackContainer = QUIZ_SUCCESS_PANEL_CLASS_NAME
 		} else if (feedback.status === "parse_error") {
 			feedbackTitle = "Check the LaTeX"
-			feedbackTone = "text-amber-600"
-			feedbackContainer = "border-amber-400/40 bg-amber-50/70"
+			feedbackTone = "text-due-today-text"
+			feedbackContainer = QUIZ_ATTENTION_PANEL_CLASS_NAME
 		} else {
 			feedbackTitle = "Not quite"
 			feedbackTone = "text-destructive"
-			feedbackContainer = "border-destructive/30 bg-destructive/10"
+			feedbackContainer = QUIZ_ERROR_PANEL_CLASS_NAME
 		}
 	} else if (skipFeedback) {
 		feedbackTitle = "Let’s walk through it"
-		feedbackTone = "text-amber-700"
-		feedbackContainer = "border-amber-400/40 bg-amber-50/70"
+		feedbackTone = "text-due-today-text"
+		feedbackContainer = QUIZ_ATTENTION_PANEL_CLASS_NAME
 		feedbackMessage = skipFeedback
 	}
 
@@ -323,7 +334,7 @@ export function LatexExpression({
 	const showSolution = Boolean(solutionLatex || solutionMdx)
 
 	return (
-		<div className="border-l-4 border-l-completed/20 pl-6 my-8 bg-background/30 rounded-r-lg" data-askai-exclude="true">
+		<div className={QUIZ_WIDGET_CLASS_NAME} data-askai-exclude="true">
 			<QuizMarkdown content={question} className="mb-4 text-lg font-medium text-foreground [&_p]:m-0" />
 
 			<div className="mb-4">
@@ -352,20 +363,22 @@ export function LatexExpression({
 			</div>
 
 			{submissionError ? (
-				<div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+				<div className={cn(QUIZ_ERROR_PANEL_CLASS_NAME, "mb-4 px-4 py-3 text-sm text-destructive")}>
 					{submissionError}
 				</div>
 			) : null}
 
 			{showFeedback ? (
-				<div className={`mb-4 rounded-lg border px-4 py-3 ${feedbackContainer}`}>
+				<div className={cn(feedbackContainer, "mb-4 px-4 py-3")}>
 					{feedbackTitle ? <div className={`text-sm font-medium mb-2 ${feedbackTone}`}>{feedbackTitle}</div> : null}
 					{feedbackMessage ? (
 						<QuizMarkdown content={feedbackMessage} className="text-sm/relaxed  text-muted-foreground [&_p]:m-0" />
 					) : null}
 					{feedback?.errorHighlight?.latex ? (
-						<div className="mt-3 rounded-md border border-amber-400/40 bg-amber-50/70 px-3 py-2">
-							<div className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-2">Check this part</div>
+						<div className={cn(QUIZ_ATTENTION_PANEL_CLASS_NAME, "mt-3 rounded-md px-3 py-2")}>
+							<div className="mb-2 text-due-today-text text-xs font-semibold uppercase tracking-wide">
+								Check this part
+							</div>
 							<ReadOnlyLatexField
 								latex={feedback.errorHighlight.latex}
 								className="w-full min-h-9 bg-background/80 rounded-md px-2 py-1"
@@ -377,11 +390,7 @@ export function LatexExpression({
 
 			<div className="flex flex-wrap items-center gap-2 mb-4">
 				{isComplete ? (
-					<button
-						type="button"
-						onClick={resetState}
-						className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-muted text-foreground hover:bg-muted/80"
-					>
+					<button type="button" onClick={resetState} className={QUIZ_RESET_BUTTON_CLASS_NAME}>
 						Try another
 					</button>
 				) : (
@@ -390,11 +399,7 @@ export function LatexExpression({
 							type="button"
 							onClick={handleSubmit}
 							disabled={!canSubmit}
-							className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-								canSubmit
-									? "bg-completed text-completed-text hover:bg-completed/90"
-									: "bg-muted text-muted-foreground cursor-not-allowed"
-							}`}
+							className={`${canSubmit ? QUIZ_ACTIVE_BUTTON_CLASS_NAME : QUIZ_DISABLED_BUTTON_CLASS_NAME}`}
 						>
 							Check Answer
 						</button>
@@ -402,11 +407,7 @@ export function LatexExpression({
 							type="button"
 							onClick={handleSkip}
 							disabled={isSubmitting}
-							className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-								isSubmitting
-									? "bg-muted text-muted-foreground cursor-not-allowed"
-									: "bg-muted text-foreground hover:bg-muted/80"
-							}`}
+							className={`${isSubmitting ? QUIZ_DISABLED_BUTTON_CLASS_NAME : QUIZ_RESET_BUTTON_CLASS_NAME}`}
 						>
 							I don&apos;t know
 						</button>
@@ -445,7 +446,7 @@ export function LatexExpression({
 			{showSolution ? (
 				<details className="group" open={isSolutionOpen} onToggle={handleSolutionToggle}>
 					<summary className="cursor-pointer text-sm font-medium text-foreground">View solution</summary>
-					<div className="mt-3 space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
+					<div className={cn(QUIZ_NEUTRAL_PANEL_CLASS_NAME, "mt-3 space-y-3 p-4")}>
 						{solutionLatex ? (
 							<ReadOnlyLatexField
 								latex={solutionLatex}
