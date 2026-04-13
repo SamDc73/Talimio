@@ -436,34 +436,6 @@ export function LessonViewer({
 											{lesson.module_name}
 										</Badge>
 									) : null}
-									{lesson.versionLabel ? (
-										<div className="flex items-center gap-1.5">
-											<Badge
-												variant="outline"
-												className="rounded-full border-border/60 bg-background/80 px-3 py-1 font-mono text-[11px] text-muted-foreground"
-											>
-												v{lesson.versionLabel}
-											</Badge>
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<button
-														type="button"
-														onClick={(event) => event.preventDefault()}
-														className="text-muted-foreground/60 transition-colors hover:text-muted-foreground"
-														aria-label="Version information"
-													>
-														<HelpCircle className="size-3.5" />
-													</button>
-												</TooltipTrigger>
-												<TooltipContent side="top" className="max-w-[220px] text-xs">
-													<p>
-														Minor versions refine the same lesson. Major jumps like v2.0 return to the topic with deeper
-														teaching.
-													</p>
-												</TooltipContent>
-											</Tooltip>
-										</div>
-									) : null}
 								</div>
 
 								<div className="space-y-3">
