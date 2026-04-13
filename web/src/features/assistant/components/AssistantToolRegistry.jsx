@@ -1,5 +1,23 @@
 import { CheckCircle2Icon, CircleAlertIcon, ExternalLinkIcon } from "lucide-react"
+import { Badge } from "@/components/Badge"
 import { Button } from "@/components/Button"
+
+const TOOL_STATUS_STYLES = {
+	complete: {
+		icon: CheckCircle2Icon,
+		iconClassName: "text-completed",
+	},
+	"requires-action": {
+		icon: CircleAlertIcon,
+		iconClassName: "text-due-today",
+	},
+	incomplete: {
+		icon: CircleAlertIcon,
+		iconClassName: "text-destructive",
+	},
+}
+
+const CONFIRMATION_BADGE_CLASS_NAME = "rounded-md border-due-today/30 bg-due-today/10 px-2 py-1 text-due-today-text"
 
 const normalizeUiItems = (result) => {
 	if (!result || typeof result !== "object") {
@@ -49,12 +67,9 @@ const renderToolUiItem = (item, uiItemKey) => {
 	}
 	if (item.type === "confirmation") {
 		return (
-			<span
-				key={uiItemKey(item)}
-				className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800 text-xs"
-			>
+			<Badge key={uiItemKey(item)} variant="outline" className={CONFIRMATION_BADGE_CLASS_NAME}>
 				{renderConfirmationText(item)}
-			</span>
+			</Badge>
 		)
 	}
 	return null
@@ -62,6 +77,7 @@ const renderToolUiItem = (item, uiItemKey) => {
 
 export function LearningCapabilityToolCard({ toolName, result, status }) {
 	const toolStatus = resolveStatus(status, result)
+	const { icon: StatusIcon, iconClassName } = TOOL_STATUS_STYLES[toolStatus]
 	const message = typeof result?.message === "string" ? result.message : ""
 	const uiItems = normalizeUiItems(result)
 	const uiItemKey = (item) => {
@@ -77,11 +93,7 @@ export function LearningCapabilityToolCard({ toolName, result, status }) {
 	return (
 		<div className="mb-3 flex w-full flex-col gap-2 rounded-lg border border-border/70 bg-card px-3 py-2">
 			<div className="flex items-center gap-2 text-sm">
-				{toolStatus === "incomplete" || toolStatus === "requires-action" ? (
-					<CircleAlertIcon className="size-4 text-destructive" />
-				) : (
-					<CheckCircle2Icon className="size-4 text-emerald-600" />
-				)}
+				<StatusIcon className={`size-4 ${iconClassName}`} />
 				<span className="font-medium text-foreground">{toolName}</span>
 			</div>
 			{message ? <p className="text-muted-foreground text-sm">{message}</p> : null}
