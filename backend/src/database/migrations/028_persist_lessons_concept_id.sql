@@ -17,14 +17,14 @@ BEGIN
         WHERE courses.adaptive_enabled IS TRUE
           AND uuid_generate_v5(
               uuid_ns_url(),
-              format('concept-lesson:%s:%s', lessons.course_id, course_concepts.concept_id)
+              format('concept-lesson:%%s:%%s', lessons.course_id, course_concepts.concept_id)
           ) = lessons.id
         GROUP BY lessons.id
         HAVING COUNT(*) > 1
     ) AS ambiguous_lessons;
 
     IF ambiguous_count > 0 THEN
-        RAISE EXCEPTION 'Adaptive lesson concept backfill found ambiguous matches for % lesson rows', ambiguous_count;
+        RAISE EXCEPTION 'Adaptive lesson concept backfill found ambiguous matches for %% lesson rows', ambiguous_count;
     END IF;
 
     UPDATE lessons
@@ -37,7 +37,7 @@ BEGIN
         WHERE courses.adaptive_enabled IS TRUE
           AND uuid_generate_v5(
               uuid_ns_url(),
-              format('concept-lesson:%s:%s', lessons.course_id, course_concepts.concept_id)
+              format('concept-lesson:%%s:%%s', lessons.course_id, course_concepts.concept_id)
           ) = lessons.id
     ) AS mapped
     WHERE lessons.id = mapped.lesson_id
@@ -50,7 +50,7 @@ BEGIN
       AND lessons.concept_id IS NULL;
 
     IF missing_count > 0 THEN
-        RAISE EXCEPTION 'Adaptive lesson concept backfill left % adaptive lessons without concept_id', missing_count;
+        RAISE EXCEPTION 'Adaptive lesson concept backfill left %% adaptive lessons without concept_id', missing_count;
     END IF;
 END $$;
 
