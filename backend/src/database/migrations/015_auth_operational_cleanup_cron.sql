@@ -48,7 +48,7 @@ BEGIN
     INTO existing_job_id;
 
     IF existing_job_id IS NOT NULL THEN
-        EXECUTE format('SELECT cron.unschedule(%s)', existing_job_id);
+        EXECUTE format('SELECT cron.unschedule(%%s)', existing_job_id);
     END IF;
 
     EXECUTE $sql$
