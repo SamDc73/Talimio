@@ -125,8 +125,8 @@ export default function LessonContent() {
 			setNextPassStatus({
 				type: "inProgress",
 				message: force
-					? `Starting ${lesson?.nextPass?.passLabel || "the next pass"} now.`
-					: `Opening ${lesson?.nextPass?.passLabel || "the recommended next pass"}.`,
+					? `Starting v${lesson?.nextPass?.majorVersion || "2"}.0 now.`
+					: `Opening v${lesson?.nextPass?.majorVersion || "2"}.0.`,
 			})
 
 			try {
@@ -137,7 +137,7 @@ export default function LessonContent() {
 			} catch (submissionError) {
 				setNextPassStatus({
 					type: "error",
-					message: submissionError?.message || "We couldn't start the next pass right now.",
+					message: submissionError?.message || "We couldn't start the deeper version right now.",
 				})
 				throw submissionError
 			}
@@ -263,10 +263,10 @@ export default function LessonContent() {
 			<ConfirmationDialog
 				open={isNextPassConfirmOpen}
 				onOpenChange={setIsNextPassConfirmOpen}
-				title={`${lesson?.nextPass?.passLabel || "The next pass"} is usually better later`}
+				title={`v${lesson?.nextPass?.majorVersion || "2"}.0 is usually better later`}
 				description="If you have an exam or want to double down on this topic right now, you can still start it early."
-				confirmText={`Start ${lesson?.nextPass?.passLabel || "next pass"} anyway`}
-				cancelText="Keep current pass"
+				confirmText={`Start v${lesson?.nextPass?.majorVersion || "2"}.0 anyway`}
+				cancelText="Stay on current version"
 				onConfirm={handleConfirmNextPass}
 				isDestructive={false}
 			/>

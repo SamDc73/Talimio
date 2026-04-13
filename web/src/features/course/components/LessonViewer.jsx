@@ -1,4 +1,13 @@
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle, History, Loader2, RotateCcw } from "lucide-react"
+import {
+	AlertTriangle,
+	ArrowLeft,
+	ArrowRight,
+	CheckCircle,
+	HelpCircle,
+	History,
+	Loader2,
+	RotateCcw,
+} from "lucide-react"
 import { useMemo, useRef } from "react"
 import { Link } from "react-router-dom"
 import { Badge } from "@/components/Badge"
@@ -10,6 +19,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/DropdownMenu"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/Tooltip"
 import { cn } from "@/lib/utils"
 import { AdaptiveReviewPanel } from "./AdaptiveReviewPanel"
 import { ContentRenderer } from "./ContentRenderer"
@@ -39,14 +49,14 @@ const LESSON_NEXT_PASS_BANNER_STYLES = {
 		icon: Loader2,
 		iconClassName: "animate-spin text-(--color-course)",
 		role: "status",
-		title: "Starting next pass",
+		title: "Going deeper",
 		className: "border-(--color-course)/15 bg-(--color-course)/5",
 	},
 	error: {
 		icon: AlertTriangle,
 		iconClassName: "text-destructive",
 		role: "alert",
-		title: "Couldn't start the next pass",
+		title: "Couldn't start the deeper version",
 		className: "border-destructive/30 bg-destructive/10",
 	},
 }
@@ -97,7 +107,7 @@ export function LessonViewer({
 			: null
 	const isViewingHistoricalVersion =
 		lesson?.versionId && lesson?.currentVersionId && String(lesson.versionId) !== String(lesson.currentVersionId)
-	const canShowPassMenu = Boolean((availableVersions.length > 1 || nextPass) && (onVersionSelect || onStartNextPass))
+	const canShowVersionMenu = Boolean((availableVersions.length > 1 || nextPass) && (onVersionSelect || onStartNextPass))
 	let regenerationBanner = null
 	let regenerationBannerContent = null
 	let nextPassBanner = null
@@ -141,7 +151,7 @@ export function LessonViewer({
 	if (isStartingNextPass) {
 		nextPassBanner = {
 			...LESSON_NEXT_PASS_BANNER_STYLES.inProgress,
-			message: nextPassStatus?.message || "Preparing the next pass for this concept.",
+			message: nextPassStatus?.message || "Preparing the deeper version for this concept.",
 		}
 	} else if (nextPassStatus?.type === "error") {
 		nextPassBanner = {
@@ -174,7 +184,16 @@ export function LessonViewer({
 	}
 
 	const formatVersionKindLabel = (version) => {
-		return version?.historyLabel || version?.passLabel || version?.versionKind || "Version"
+		switch (version?.versionKind) {
+			case "first_pass":
+				return "First version"
+			case "regeneration":
+				return "Updated"
+			case "revisit_pass":
+				return "Deeper version"
+			default:
+				return "Version"
+		}
 	}
 
 	const formatVersionTimestamp = (timestamp) => {
@@ -195,12 +214,14 @@ export function LessonViewer({
 	}
 
 	const windowTitle = selectedWindow?.title || (hasMultipleWindows ? `Window ${activeWindowIndex + 1}` : null)
+	const currentVersionDisplay = currentVersionLabel ? `v${currentVersionLabel}` : "Versions"
+	const nextVersionDisplay = nextPass ? `v${nextPass.majorVersion}.0` : null
 	let nextPassActionLabel = null
 	let nextPassHelperText = null
 	if (nextPass) {
-		nextPassActionLabel =
-			nextPass.status === "recommended_now" ? `Start ${nextPass.passLabel}` : `Start ${nextPass.passLabel} early`
-		nextPassHelperText = nextPass.status === "recommended_now" ? "Recommended now" : "Usually due later"
+		nextPassActionLabel = nextPass.status === "recommended_now" ? "Go deeper" : "Go deeper early"
+		nextPassHelperText =
+			nextPass.status === "recommended_now" ? `Creates ${nextVersionDisplay}` : `${nextVersionDisplay} · usually later`
 	}
 
 	// Calculate previous and next lessons from modules
@@ -302,18 +323,37 @@ export function LessonViewer({
 											</Button>
 										</Link>
 									)}
-									{canShowPassMenu ? (
+									{canShowVersionMenu ? (
 										<DropdownMenu>
 											<DropdownMenuTrigger asChild>
 												<Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
 													<History className="size-4" />
-													<span>{lesson.passLabel || "Passes"}</span>
-													{currentVersionLabel ? (
-														<span className="font-mono text-xs text-muted-foreground/80">v{currentVersionLabel}</span>
-													) : null}
+													<span className="font-mono text-xs">{currentVersionDisplay}</span>
 												</Button>
 											</DropdownMenuTrigger>
 											<DropdownMenuContent align="end" className="w-72">
+												<div className="flex items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground">
+													<span>Versions</span>
+													<Tooltip>
+														<TooltipTrigger asChild>
+															<button
+																type="button"
+																onClick={(event) => event.preventDefault()}
+																className="text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+																aria-label="Version information"
+															>
+																<HelpCircle className="size-3.5" />
+															</button>
+														</TooltipTrigger>
+														<TooltipContent side="left" className="max-w-[220px] text-xs">
+															<p>
+																Minor versions rewrite the same lesson. Major versions like v2.0 revisit the topic more
+																deeply.
+															</p>
+														</TooltipContent>
+													</Tooltip>
+												</div>
+												<DropdownMenuSeparator />
 												{availableVersions.map((version) => (
 													<DropdownMenuItem
 														key={version.id}
@@ -321,20 +361,12 @@ export function LessonViewer({
 														className="flex items-start justify-between gap-3"
 													>
 														<div className="min-w-0">
-															<p className="font-medium text-foreground">
-																{version.passLabel || "Version"}{" "}
-																<span className="font-mono text-xs">v{version.versionLabel}</span>
-															</p>
+															<p className="font-mono text-sm font-medium text-foreground">v{version.versionLabel}</p>
 															<p className="text-xs text-muted-foreground">
 																{[formatVersionKindLabel(version), formatVersionTimestamp(version.createdAt)]
 																	.filter(Boolean)
 																	.join(" · ")}
 															</p>
-															{version.sourceReason ? (
-																<p className="line-clamp-2 text-xs/relaxed text-muted-foreground/80">
-																	{version.sourceReason}
-																</p>
-															) : null}
 														</div>
 														{version.isCurrent ? (
 															<Badge variant="outline" className="px-2 py-0.5 text-[10px] uppercase tracking-[0.14em]">
@@ -355,7 +387,7 @@ export function LessonViewer({
 													>
 														<div className="min-w-0 space-y-1">
 															<p className="font-medium leading-none">
-																{isStartingNextPass ? "Starting next pass" : nextPassActionLabel}
+																{isStartingNextPass ? "Opening deeper version" : nextPassActionLabel}
 															</p>
 															<p className="text-xs text-muted-foreground">{nextPassHelperText}</p>
 															<p className="line-clamp-2 text-xs/relaxed text-muted-foreground/80">{nextPass.reason}</p>
@@ -404,21 +436,33 @@ export function LessonViewer({
 											{lesson.module_name}
 										</Badge>
 									) : null}
-									{lesson.passLabel ? (
-										<Badge
-											variant="outline"
-											className="rounded-full border-border/60 bg-background/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground"
-										>
-											{lesson.passLabel}
-										</Badge>
-									) : null}
-									{lesson.versionLabel && lesson.versionLabel !== lesson.passLabel ? (
-										<Badge
-											variant="outline"
-											className="rounded-full border-border/60 bg-background/80 px-3 py-1 font-mono text-[11px] text-muted-foreground"
-										>
-											v{lesson.versionLabel}
-										</Badge>
+									{lesson.versionLabel ? (
+										<div className="flex items-center gap-1.5">
+											<Badge
+												variant="outline"
+												className="rounded-full border-border/60 bg-background/80 px-3 py-1 font-mono text-[11px] text-muted-foreground"
+											>
+												v{lesson.versionLabel}
+											</Badge>
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<button
+														type="button"
+														onClick={(event) => event.preventDefault()}
+														className="text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+														aria-label="Version information"
+													>
+														<HelpCircle className="size-3.5" />
+													</button>
+												</TooltipTrigger>
+												<TooltipContent side="top" className="max-w-[220px] text-xs">
+													<p>
+														Minor versions refine the same lesson. Major jumps like v2.0 return to the topic with deeper
+														teaching.
+													</p>
+												</TooltipContent>
+											</Tooltip>
+										</div>
 									) : null}
 								</div>
 
