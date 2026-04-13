@@ -410,15 +410,6 @@ const useAppStore = create(
 					get().updatePreference("assistantSidebarWidth", clampedWidth)
 				},
 
-				getAssistantPreferences: () => {
-					const { assistantSidebarPinned, assistantModel, assistantSidebarWidth } = get().preferences
-					return {
-						sidebarPinned: assistantSidebarPinned,
-						model: assistantModel,
-						sidebarWidth: assistantSidebarWidth,
-					}
-				},
-
 				// Sidebar toggle
 				toggleSidebar: () => {
 					set((state) => {
@@ -441,41 +432,40 @@ const useAppStore = create(
 					preferences: state.preferences,
 				}),
 				version: 5,
+				// Persisted slices only store nested subsets, so merge them explicitly and
+				// keep runtime defaults like books.loading and new preference keys intact.
+				merge: (persistedState, currentState) => {
+					const persisted = persistedState || {}
+
+					return {
+						...currentState,
+						...persisted,
+						books: {
+							...currentState.books,
+							...persisted.books,
+							progress: persisted.books?.progress ?? currentState.books.progress,
+							readingState: persisted.books?.readingState ?? currentState.books.readingState,
+						},
+						videos: {
+							...currentState.videos,
+							...persisted.videos,
+							progress: persisted.videos?.progress ?? currentState.videos.progress,
+							playbackState: persisted.videos?.playbackState ?? currentState.videos.playbackState,
+						},
+						preferences: {
+							...currentState.preferences,
+							...persisted.preferences,
+						},
+					}
+				},
 				migrate: (persistedState, version) => {
-					// Migration from version 4 to 5 - remove unused courses slice
-					if (version === 4) {
+					if (version <= 4) {
 						delete persistedState.courses
 					}
 
-					// Migration from version 3 to 4 - standardize progress structure
-					if (version === 3) {
-						// Migrate course data to new structure
+					// Migration from legacy store shapes to the current persisted slices
+					if (version <= 3) {
 						if (persistedState.course) {
-							persistedState.courses = {
-								progress: persistedState.course.progressStats || {},
-								loading: {},
-								error: {},
-								activeCourseId: persistedState.course.activeCourseId || null,
-								lastViewedCourseId: persistedState.course.lastViewedCourseId || null,
-							}
-
-							// Convert old lesson completion to standardized progress
-							if (persistedState.course.lessonCompletion) {
-								for (const [courseId, lessons] of Object.entries(persistedState.course.lessonCompletion)) {
-									const items = lessons || {}
-									const completedItems = Object.values(items).filter(Boolean).length
-									const totalItems = Object.keys(items).length
-									const percentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0
-
-									persistedState.courses.progress[courseId] = {
-										percentage,
-										totalItems,
-										completedItems,
-										items,
-										lastUpdated: Date.now(),
-									}
-								}
-							}
 							delete persistedState.course
 						}
 
@@ -484,9 +474,6 @@ const useAppStore = create(
 							const oldBooks = persistedState.books
 							persistedState.books = {
 								progress: {},
-								loading: {},
-								error: {},
-								metadata: oldBooks.metadata || {},
 								readingState: oldBooks.progress || {},
 							}
 
@@ -536,9 +523,6 @@ const useAppStore = create(
 							const oldVideos = persistedState.videos
 							persistedState.videos = {
 								progress: {},
-								loading: {},
-								error: {},
-								metadata: oldVideos.metadata || {},
 								playbackState: oldVideos.progress || {},
 							}
 
@@ -559,17 +543,6 @@ const useAppStore = create(
 									}
 								}
 							}
-						}
-
-						// Remove courses slice after migration from 3 to 4
-						delete persistedState.courses
-					}
-
-					// Previous migrations
-					if (version === 0 || version === 1) {
-						// Ensure course.lessonCompletion exists
-						if (persistedState.course && !persistedState.course.lessonCompletion) {
-							persistedState.course.lessonCompletion = {}
 						}
 					}
 					return persistedState
