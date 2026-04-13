@@ -40,6 +40,7 @@ steps:
       - '--execute-now'
       - '--wait'
       - '--region=us-west1'
+      - '--set-env-vars=MIGRATIONS_AUTO_APPLY=true'
       - '--quiet'
 
   # 4. Deploy and run Cloud Run migration job
