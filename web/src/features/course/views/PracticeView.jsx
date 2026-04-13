@@ -8,6 +8,7 @@ import { LatexExpression } from "@/components/quiz/LatexExpression"
 import { useCourseContext } from "@/features/course/CourseContext"
 import { useLatexPracticeReview } from "@/features/course/hooks/use-latex-practice-review"
 import logger from "@/lib/logger"
+import { cn } from "@/lib/utils"
 
 const MICRO_BATCH_SIZE = 4
 const PREFETCH_THRESHOLD = 2
@@ -17,6 +18,8 @@ const SOFT_STOP_LOW_ACCURACY_THRESHOLD = 0.4
 const SOFT_STOP_CEILING_QUESTIONS = 30
 const SOFT_STOP_CEILING_MS = 30 * 60 * 1000
 const SOFT_STOP_MAX_EVENTS = 50
+const PRACTICE_ATTENTION_NOTICE_CLASS_NAME = "rounded-lg border border-due-today/30 bg-due-today/10 p-4"
+const PRACTICE_ATTENTION_DISMISS_CLASS_NAME = "text-due-today-text hover:bg-due-today/15 hover:text-due-today-text"
 
 function normalizeConcept(item) {
 	if (!item || typeof item !== "object") {
@@ -701,7 +704,9 @@ export default function PracticeView() {
 				) : null}
 
 				{showLessonEscapeHatch ? (
-					<div className="rounded-lg border border-border bg-muted/20 p-4 flex flex-wrap items-center justify-between gap-3">
+					<div
+						className={cn(PRACTICE_ATTENTION_NOTICE_CLASS_NAME, "flex flex-wrap items-center justify-between gap-3")}
+					>
 						<Button asChild size="sm" variant="outline">
 							<Link to={`/course/${courseId}/lesson/${encodeURIComponent(activeConcept.lessonId)}?adaptiveFlow=true`}>
 								Open lesson for {activeConcept.title}
@@ -711,6 +716,7 @@ export default function PracticeView() {
 							variant="ghost"
 							size="icon"
 							onClick={handleDismissLessonEscapeHatch}
+							className={PRACTICE_ATTENTION_DISMISS_CLASS_NAME}
 							aria-label="Dismiss lesson suggestion"
 						>
 							<X className="size-4" />
@@ -719,7 +725,7 @@ export default function PracticeView() {
 				) : null}
 
 				{softStopNudge ? (
-					<div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+					<div className={cn(PRACTICE_ATTENTION_NOTICE_CLASS_NAME, "space-y-3")}>
 						<p className="text-sm font-medium text-foreground">{softStopNudge.message}</p>
 						<div className="flex flex-col sm:flex-row gap-2">
 							<Button size="sm" onClick={handleSoftStop} className="sm:w-auto">

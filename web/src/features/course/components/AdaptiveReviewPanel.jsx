@@ -8,11 +8,25 @@ import { useAdaptiveSession } from "../hooks/use-adaptive-session"
 import { useLectorReview } from "../hooks/use-lector-review"
 
 const RATING_OPTIONS = [
-	{ value: 1, label: "Again", tone: "border-destructive/40 text-destructive" },
-	{ value: 2, label: "Hard", tone: "border-amber-400/60 text-amber-600" },
-	{ value: 3, label: "Good", tone: "border-emerald-400/50 text-emerald-600" },
-	{ value: 4, label: "Easy", tone: "border-emerald-300/60 text-emerald-700" },
+	{ value: 1, label: "Again", tone: "destructive" },
+	{ value: 2, label: "Hard", tone: "attention" },
+	{ value: 3, label: "Good", tone: "neutral" },
+	{ value: 4, label: "Easy", tone: "completed" },
 ]
+
+const RATING_TONE_CLASS_NAMES = {
+	destructive: "border-destructive/40 text-destructive",
+	attention: "border-due-today/40 text-due-today-text",
+	neutral: "border-border text-foreground",
+	completed: "border-completed/40 text-completed",
+}
+
+const RATING_SELECTED_CLASS_NAMES = {
+	destructive: "border-destructive/40 bg-destructive/10 text-destructive",
+	attention: "border-due-today/40 bg-due-today/10 text-due-today-text",
+	neutral: "border-border bg-muted/60 text-foreground",
+	completed: "border-completed/40 bg-completed/10 text-completed",
+}
 
 function formatIn(nextTs) {
 	if (!nextTs) return "soon"
@@ -147,9 +161,8 @@ export function AdaptiveReviewPanel({
 							variant="outline"
 							className={cn(
 								"h-10 rounded-full border bg-background/70 text-sm font-medium transition",
-								option.tone,
-								selectedRating === option.value &&
-									"bg-(--color-course)/10 border-(--color-course) text-(--color-course)",
+								RATING_TONE_CLASS_NAMES[option.tone],
+								selectedRating === option.value && RATING_SELECTED_CLASS_NAMES[option.tone],
 								(isSubmitting || hasSubmitted) && "opacity-60"
 							)}
 						>
@@ -166,7 +179,7 @@ export function AdaptiveReviewPanel({
 				) : null}
 
 				{hasSubmitted ? (
-					<div className="flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-700">
+					<div className="flex items-center gap-2 rounded-lg border border-completed/40 bg-completed/10 px-4 py-3 text-sm text-completed">
 						<Check className="size-4 " aria-hidden="true" />
 						<p>
 							Saved.

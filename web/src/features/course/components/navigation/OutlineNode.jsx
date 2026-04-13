@@ -2,6 +2,9 @@ import { CheckCircle, ChevronRight, Circle } from "lucide-react"
 import { useState } from "react"
 
 const cn = (...classes) => classes.filter(Boolean).join(" ")
+const COMPLETED_ROW_CLASS_NAME = "border-completed/30 bg-completed/10"
+const AVAILABLE_ROW_CLASS_NAME = "hover:border-border hover:bg-muted/40"
+const NEUTRAL_FOCUS_RING_CLASS_NAME = "focus-visible:ring-ring"
 
 /**
  * @param {Object} props
@@ -59,9 +62,9 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 	function LessonStatusIndicator({ isCompleted, indexStr: _indexStr }) {
 		// Show a proper empty circle when not completed to match the old outline's spirit
 		if (isCompleted) {
-			return <CheckCircle className="size-5  text-emerald-600 shrink-0" />
+			return <CheckCircle className="size-5 shrink-0 text-completed" />
 		}
-		return <Circle className="size-5  text-zinc-400 shrink-0" />
+		return <Circle className="size-5 shrink-0 text-muted-foreground" />
 	}
 
 	// Removed the separate action button; the whole row is clickable now with a subtle chevron indicator
@@ -69,7 +72,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 	function LessonContent({ lesson, isCompleted, currentLessonIndexStr, idx, onLessonClick }) {
 		const containerClasses = cn(
 			"group flex items-center gap-3 rounded-2xl border border-transparent px-4 py-3 md:px-5 md:py-3.5 transition-colors",
-			isCompleted ? "border-emerald-200 bg-emerald-50/80" : "hover:border-emerald-200 hover:bg-emerald-50/40"
+			isCompleted ? COMPLETED_ROW_CLASS_NAME : AVAILABLE_ROW_CLASS_NAME
 		)
 		const titleClasses = cn("truncate text-sm font-medium", isCompleted ? "text-muted-foreground" : "text-foreground")
 
@@ -78,7 +81,10 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 				<button
 					type="button"
 					onClick={() => toggleLessonCompletion?.(lesson.id)}
-					className="rounded-full border border-transparent p-0.5 transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
+					className={cn(
+						"rounded-full border border-transparent p-0.5 transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+						NEUTRAL_FOCUS_RING_CLASS_NAME
+					)}
 					aria-label={isCompleted ? "Mark as incomplete" : "Mark as complete"}
 				>
 					<LessonStatusIndicator isCompleted={isCompleted} indexStr={currentLessonIndexStr} />
@@ -86,7 +92,10 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 				<button
 					type="button"
 					onClick={() => onLessonClick?.(idx, lesson.id)}
-					className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
+					className={cn(
+						"flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+						NEUTRAL_FOCUS_RING_CLASS_NAME
+					)}
 				>
 					<span className={titleClasses}>{lesson.title}</span>
 					<ChevronRight className="size-4  text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100" />
@@ -100,7 +109,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 		const isCompleted = isItemCompleted(lesson)
 		const lessonKey = lesson.id ?? `${moduleId}-lesson-${depth}-${idx}`
 		const hasNestedLessons = lesson.lessons?.length > 0
-		const depthClass = depth > 0 ? "ml-5 mt-3 border-l border-emerald-100/60 pl-4 pt-3" : "mt-3"
+		const depthClass = depth > 0 ? "mt-3 ml-5 border-l border-border/70 pl-4 pt-3" : "mt-3"
 
 		return (
 			<div key={lessonKey} className={`space-y-2.5 ${depthClass}`}>
@@ -156,7 +165,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 					className={cn(
 						"flex size-8  shrink-0 items-center justify-center rounded-full border text-sm font-medium transition-all duration-300",
 						isModuleCompleted
-							? "border-emerald-300 bg-emerald-50 text-emerald-700"
+							? "border-completed/30 bg-completed/10 text-completed"
 							: "border-border/70 bg-muted/60 text-muted-foreground"
 					)}
 				>
@@ -167,7 +176,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 					{module.title}
 				</h2>
 				{isModuleCompleted && (
-					<span className="ml-auto rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+					<span className="ml-auto rounded-full border border-completed/30 bg-completed/10 px-2.5 py-0.5 text-xs font-semibold text-completed">
 						Completed
 					</span>
 				)}
@@ -179,7 +188,7 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 				</div>
 				<div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted/40 md:h-2">
 					<div
-						className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+						className="h-full rounded-full bg-completed transition-all duration-500"
 						style={{ width: `${progress}%` }}
 					/>
 				</div>

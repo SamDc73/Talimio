@@ -219,7 +219,7 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 								id="coursePath"
 								d={buildPath(modules.length)}
 								fill="none"
-								stroke="#10b981"
+								stroke="var(--color-border)"
 								strokeWidth="2"
 								strokeLinecap="round"
 							/>
@@ -235,82 +235,85 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 							initialPositioningDone && "opacity-100 transition-opacity duration-300"
 						)}
 					>
-						{modules.map((module, moduleIndex) => (
-							<div key={module.id} className="mb-16">
-								{/* Module node with title beside it */}
-								<div
-									className="relative flex justify-center mb-12"
-									style={{
-										marginLeft: "auto",
-										marginRight: "auto",
-										width: "fit-content",
-									}}
-								>
+						{modules.map((module, moduleIndex) => {
+							const sortedLessons = Array.isArray(module.lessons)
+								? module.lessons.toSorted((a, b) => a.order - b.order)
+								: []
+							const isModuleCompleted =
+								module.status === "completed" ||
+								(sortedLessons.length > 0 && sortedLessons.every((lesson) => isCompleted(lesson.id)))
+
+							return (
+								<div key={module.id} className="mb-16">
+									{/* Module node with title beside it */}
 									<div
-										ref={(el) => {
-											wrapperRefs.current[moduleIndex] = el
+										className="mb-12 relative flex justify-center"
+										style={{
+											marginLeft: "auto",
+											marginRight: "auto",
+											width: "fit-content",
 										}}
-										className={cn("flex items-center gap-6", moduleIndex % 2 === 0 ? "flex-row" : "flex-row-reverse")}
 									>
-										{/* Module circle */}
 										<div
 											ref={(el) => {
-												circleRefs.current[moduleIndex] = el
+												wrapperRefs.current[moduleIndex] = el
 											}}
-											className="relative shrink-0"
+											className={cn("flex items-center gap-6", moduleIndex % 2 === 0 ? "flex-row" : "flex-row-reverse")}
 										>
 											<div
-												className={`size-24  rounded-full bg-emerald-500 flex items-center justify-center shadow-lg ${
-													moduleIndex % 2 === 0 ? "rotate-[-5deg]" : "rotate-[5deg]"
-												}`}
+												ref={(el) => {
+													circleRefs.current[moduleIndex] = el
+												}}
+												className="relative shrink-0"
 											>
-												<div className="absolute inset-2 rounded-full bg-card flex items-center justify-center">
-													{module.status === "completed" ? (
-														<CheckCircle className="size-10  text-emerald-500" />
-													) : (
-														<div className="size-16  rounded-full flex items-center justify-center text-2xl font-bold text-emerald-600 bg-emerald-50">
-															{moduleIndex + 1}
-														</div>
-													)}
+												<div
+													className={`size-24 rounded-full flex items-center justify-center shadow-lg ${
+														isModuleCompleted ? "bg-completed" : "bg-muted"
+													} ${moduleIndex % 2 === 0 ? "rotate-[-5deg]" : "rotate-[5deg]"}`}
+												>
+													<div className="absolute inset-2 flex items-center justify-center rounded-full bg-card">
+														{isModuleCompleted ? (
+															<CheckCircle className="size-10 text-completed" />
+														) : (
+															<div className="flex size-16 items-center justify-center rounded-full bg-muted text-2xl font-bold text-muted-foreground">
+																{moduleIndex + 1}
+															</div>
+														)}
+													</div>
 												</div>
 											</div>
+
+											{((typeof module.title === "string" && module.title.trim()) ||
+												(typeof module.description === "string" && module.description.trim())) && (
+												<div
+													className={cn(
+														"relative max-w-[220px] min-w-[180px] pointer-events-none",
+														moduleIndex % 2 === 0 ? "text-left" : "text-right"
+													)}
+												>
+													{module.title ? (
+														<h3 className="text-xl/snug font-bold text-foreground">{module.title}</h3>
+													) : null}
+													{module.description ? (
+														<p className="mt-1 text-sm/tight text-muted-foreground">{module.description}</p>
+													) : null}
+												</div>
+											)}
 										</div>
-
-										{/* Module title (only when provided by backend) */}
-										{((typeof module.title === "string" && module.title.trim()) ||
-											(typeof module.description === "string" && module.description.trim())) && (
-											<div
-												className={cn(
-													"relative max-w-[220px] min-w-[180px] pointer-events-none",
-													moduleIndex % 2 === 0 ? "text-left" : "text-right"
-												)}
-											>
-												{module.title ? (
-													<h3 className="text-xl/snug font-bold text-slate-800 ">{module.title}</h3>
-												) : null}
-												{module.description ? (
-													<p className="text-slate-500 text-sm/tight mt-1 ">{module.description}</p>
-												) : null}
-											</div>
-										)}
 									</div>
-								</div>
 
-								{/* Lessons - always shown */}
-								{module.lessons && module.lessons.length > 0 && (
-									<div className="relative mx-auto max-w-md">
-										{/* Lessons container with alternating sides */}
-										<div className="relative">
-											{module.lessons
-												.toSorted((a, b) => a.order - b.order)
-												.map((lesson, lessonIndex) => {
+									{sortedLessons.length > 0 ? (
+										<div className="relative mx-auto max-w-md">
+											<div className="relative">
+												{sortedLessons.map((lesson, lessonIndex) => {
 													const completed = isCompleted(lesson.id)
 													const locked = availableSet ? !completed && !availableSet.has(String(lesson.id)) : false
-													let lessonCardStateClass = "border-slate-200 hover:shadow-md hover:border-emerald-300"
+													let lessonCardStateClass =
+														"border-border hover:border-border hover:bg-muted/30 hover:shadow-md"
 													if (completed) {
-														lessonCardStateClass = "border-emerald-300 bg-emerald-50/30"
+														lessonCardStateClass = "border-completed/30 bg-completed/10"
 													} else if (locked) {
-														lessonCardStateClass = "border-slate-200 opacity-60"
+														lessonCardStateClass = "border-paused/30 bg-muted/40 opacity-70"
 													}
 
 													return (
@@ -318,13 +321,12 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 															key={lesson.id}
 															className={cn("mb-4 flex", lessonIndex % 2 === 0 ? "justify-start" : "justify-end")}
 														>
-															{/* Connector line to center path */}
 															<div
 																className={cn(
-																	"absolute top-1/2 h-0.5 bg-emerald-200 z-0",
+																	"absolute top-1/2 z-0 h-0.5 bg-border",
 																	lessonIndex % 2 === 0
 																		? "left-1/2 right-[calc(100%-70px)]"
-																		: "right-1/2 left-[calc(100%-70px)]"
+																		: "left-[calc(100%-70px)] right-1/2"
 																)}
 																style={{ top: `${lessonIndex * 84 + 40}px` }}
 															/>
@@ -336,7 +338,7 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 																	lessonWrapRefs.current[moduleIndex][lessonIndex] = el
 																}}
 																className={cn(
-																	"relative bg-card border rounded-xl p-4 shadow-sm w-[calc(50%-20px)] z-10 text-left",
+																	"relative z-10 w-[calc(50%-20px)] rounded-xl border bg-card p-4 text-left shadow-sm",
 																	lessonCardStateClass
 																)}
 																onClick={() => {
@@ -346,11 +348,11 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 																aria-label={`Open lesson: ${lesson.title}`}
 																aria-disabled={locked}
 															>
-																<div className="flex items-center gap-3 mb-2">
+																<div className="mb-2 flex items-center gap-3">
 																	<div
 																		className={cn(
-																			"size-8 rounded-full flex items-center justify-center shrink-0",
-																			completed ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-600"
+																			"flex size-8 shrink-0 items-center justify-center rounded-full",
+																			completed ? "bg-completed/10 text-completed" : "bg-muted text-muted-foreground"
 																		)}
 																	>
 																		{completed ? (
@@ -359,24 +361,25 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 																			<span className="text-sm font-medium">{lessonIndex + 1}</span>
 																		)}
 																	</div>
-																	<h4 className="text-sm font-medium text-slate-800">{lesson.title}</h4>
+																	<h4 className="text-sm font-medium text-foreground">{lesson.title}</h4>
 																</div>
-																<p className="ml-11 text-xs text-slate-500">{lesson.description}</p>
+																<p className="ml-11 text-xs text-muted-foreground">{lesson.description}</p>
 
 																{locked ? (
-																	<span className="absolute right-2 top-2 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white/80 p-1">
-																		<Lock className="size-3.5 text-slate-500" />
+																	<span className="absolute right-2 top-2 inline-flex items-center justify-center rounded-md border border-paused/30 bg-muted/80 p-1">
+																		<Lock className="size-3.5 text-paused" />
 																	</span>
 																) : null}
 															</button>
 														</div>
 													)
 												})}
+											</div>
 										</div>
-									</div>
-								)}
-							</div>
-						))}
+									) : null}
+								</div>
+							)
+						})}
 					</div>
 				</div>
 			</div>

@@ -10,6 +10,13 @@ import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
 import logger from "@/lib/logger"
 import { useCourseNavigation } from "@/utils/navigationUtils"
 
+const COMPLETED_SUMMARY_CLASS_NAME =
+	"inline-flex items-center gap-2 rounded-full border border-completed/30 bg-completed/10 px-3 py-1 text-xs font-medium text-completed"
+const IN_PROGRESS_ROW_CLASS_NAME =
+	"group flex items-center gap-3 rounded-2xl border border-transparent px-4 py-3 transition-colors hover:border-border hover:bg-muted/40 md:px-5 md:py-3.5"
+const IN_PROGRESS_ACTION_CLASS_NAME =
+	"flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+
 function extractLessonId(item) {
 	if (!item || typeof item !== "object") return null
 	const candidate =
@@ -277,8 +284,8 @@ function OutlineView() {
 										</h2>
 									</div>
 									<div className="flex flex-col items-start gap-3 md:flex-row md:items-center md:gap-4">
-										<span className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground">
-											<CheckCircle2 className="size-3.5  text-emerald-500" />
+										<span className={COMPLETED_SUMMARY_CLASS_NAME}>
+											<CheckCircle2 className="size-3.5 text-completed" />
 											<span>
 												Completed {completedCount}/{totalLessons}
 											</span>
@@ -336,8 +343,8 @@ function OutlineView() {
 									</h2>
 								</div>
 								<div className="flex flex-col items-start gap-3 md:flex-row md:items-center md:gap-4">
-									<span className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground">
-										<CheckCircle2 className="size-3.5  text-emerald-500" />
+									<span className={COMPLETED_SUMMARY_CLASS_NAME}>
+										<CheckCircle2 className="size-3.5 text-completed" />
 										<span>
 											Completed {completedCount}/{totalLessons}
 										</span>
@@ -402,15 +409,12 @@ function OutlineView() {
 											const label = idToTitle.get(String(lessonId)) || item?.name || `Concept ${idx + 1}`
 											const mastery = item?.mastery ?? item?.confidence ?? item?.strength ?? 0
 											return (
-												<div
-													key={lessonId || idx}
-													className="group flex items-center gap-3 rounded-2xl border border-transparent px-4 py-3 md:px-5 md:py-3.5 transition-colors hover:border-emerald-200 hover:bg-emerald-50/40"
-												>
-													<MasteryCircle value={mastery} className="shrink-0 text-emerald-600" />
+												<div key={lessonId || idx} className={IN_PROGRESS_ROW_CLASS_NAME}>
+													<MasteryCircle value={mastery} className="shrink-0 text-muted-foreground" />
 													<button
 														type="button"
 														onClick={() => lessonId && goToLesson(courseId, lessonId, { adaptiveFlow: true })}
-														className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
+														className={IN_PROGRESS_ACTION_CLASS_NAME}
 													>
 														<span className="truncate text-sm font-medium text-foreground">{label}</span>
 														<ArrowRight className="size-4  text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100" />
