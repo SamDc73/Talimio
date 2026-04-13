@@ -9,13 +9,12 @@ const normalizeConcept = (concept) => {
 		return null
 	}
 
-	const conceptId = concept.id ?? concept.conceptId ?? concept.concept_id ?? null
+	const conceptId = concept.id ?? concept.conceptId ?? null
 	if (!conceptId) {
 		return null
 	}
 
-	const lessonId =
-		concept.lessonId ?? concept.lesson_id ?? concept.lessonIdRef ?? concept.lesson_id_ref ?? concept.lesson?.id ?? null
+	const lessonId = concept.lessonId ?? concept.lesson?.id ?? null
 
 	return {
 		conceptId: String(conceptId),
@@ -23,7 +22,7 @@ const normalizeConcept = (concept) => {
 		title: concept.name || concept.title || null,
 		description: concept.description || null,
 		mastery: typeof concept.mastery === "number" ? concept.mastery : null,
-		nextReviewAt: concept.nextReviewAt ?? concept.next_review_at ?? null,
+		nextReviewAt: concept.nextReviewAt ?? null,
 	}
 }
 

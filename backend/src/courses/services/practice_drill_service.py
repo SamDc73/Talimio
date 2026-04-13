@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.ai.client import LLMClient
 from src.config.schema_casing import build_camel_config
 from src.config.settings import get_settings
-from src.courses.models import Concept, CourseConcept, ProbeEvent, UserConceptState
+from src.courses.models import Concept, CourseConcept, Lesson, ProbeEvent, UserConceptState
 from src.courses.schemas import PracticeDrillItem
 
 
@@ -93,9 +93,30 @@ class PracticeDrillService:
         count: int,
     ) -> list[PracticeDrillItem]:
         """Generate adaptive drills for a course concept."""
-        concept = await self._resolve_course_concept(course_id=course_id, concept_id=concept_id)
-        if concept is None:
+        concept_lesson_row = await self._session.execute(
+            select(Concept, Lesson.id)
+            .join(CourseConcept, CourseConcept.concept_id == Concept.id)
+            .outerjoin(
+                Lesson,
+                and_(
+                    Lesson.course_id == CourseConcept.course_id,
+                    Lesson.concept_id == CourseConcept.concept_id,
+                ),
+            )
+            .where(
+                and_(
+                    CourseConcept.course_id == course_id,
+                    CourseConcept.concept_id == concept_id,
+                )
+            )
+        )
+        row = concept_lesson_row.first()
+        if row is None:
             message = "Concept is not assigned to this course"
+            raise LookupError(message)
+        concept, lesson_id = row
+        if lesson_id is None:
+            message = "Lesson is not assigned to this course concept"
             raise LookupError(message)
 
         learner = await self._load_learner_profile(user_id=user_id, course_id=course_id, concept_id=concept_id)
@@ -120,18 +141,6 @@ class PracticeDrillService:
             raise ValueError(message)
 
         return drills
-
-    async def _resolve_course_concept(self, *, course_id: uuid.UUID, concept_id: uuid.UUID) -> Concept | None:
-        return await self._session.scalar(
-            select(Concept)
-            .join(CourseConcept, CourseConcept.concept_id == Concept.id)
-            .where(
-                and_(
-                    CourseConcept.course_id == course_id,
-                    CourseConcept.concept_id == concept_id,
-                )
-            )
-        )
 
     def _build_generation_context(self, learner: _LearnerProfile) -> _GenerationContext:
         target_probability, target_low, target_high = self._build_target_band(

@@ -402,25 +402,33 @@ class CoursesFacade:
             detail = "Context lessonId does not match the request path"
             raise CoursesFacadeValidationError(detail)
 
-        lesson_exists = await self._session.scalar(
-            select(Lesson.id).where(
-                Lesson.id == lesson_id,
-                Lesson.course_id == course_id,
+        lesson_row = (
+            await self._session.execute(
+                select(Lesson.id, Lesson.concept_id).where(
+                    Lesson.id == lesson_id,
+                    Lesson.course_id == course_id,
+                )
             )
-        )
-        if lesson_exists is None:
+        ).first()
+        if lesson_row is None:
             detail = "Lesson not found"
             raise CoursesFacadeNotFoundError(detail)
 
-        concept_link = await self._session.scalar(
-            select(CourseConcept.concept_id).where(
-                CourseConcept.course_id == course_id,
-                CourseConcept.concept_id == payload.context.concept_id,
+        _lesson_row_id, lesson_concept_id = lesson_row
+        if lesson_concept_id is not None:
+            if lesson_concept_id != payload.context.concept_id:
+                detail = "Context conceptId does not match the request lesson"
+                raise CoursesFacadeValidationError(detail)
+        else:
+            concept_link = await self._session.scalar(
+                select(CourseConcept.concept_id).where(
+                    CourseConcept.course_id == course_id,
+                    CourseConcept.concept_id == payload.context.concept_id,
+                )
             )
-        )
-        if concept_link is None:
-            detail = "Concept is not assigned to this course"
-            raise CoursesFacadeNotFoundError(detail)
+            if concept_link is None:
+                detail = "Concept is not assigned to this course"
+                raise CoursesFacadeNotFoundError(detail)
 
         grading_service = GradingService(self._session)
         try:
@@ -460,6 +468,7 @@ class CoursesFacade:
         graph_service = ConceptGraphService(self._session)
         scheduler_service = LectorSchedulerService(self._session)
         return await build_course_frontier(
+            session=self._session,
             user_id=user_id,
             course_id=course_id,
             graph_service=graph_service,

@@ -113,7 +113,7 @@ export function useLectorReview({ courseId, lessonId, conceptId: initialConceptI
 					targetLow: normalizedMetadata.targetLow ?? null,
 					targetHigh: normalizedMetadata.targetHigh ?? null,
 					coreModel: normalizedMetadata.coreModel ?? null,
-					nextReviewAt: primaryOutcome?.nextReviewAt ?? primaryOutcome?.next_review_at ?? null,
+					nextReviewAt: primaryOutcome?.nextReviewAt ?? null,
 					mastery: primaryOutcome?.mastery ?? null,
 					exposures: primaryOutcome?.exposures ?? null,
 				})

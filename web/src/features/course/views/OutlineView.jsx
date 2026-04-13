@@ -21,8 +21,6 @@ function extractLessonId(item) {
 	if (!item || typeof item !== "object") return null
 	const candidate =
 		item.lessonId ??
-		item.lesson_id ??
-		item.lessonIdRef ??
 		item.lesson?.id ??
 		(item.id && (item.type === "lesson" || item.category === "lesson") ? item.id : undefined)
 
@@ -134,7 +132,7 @@ function OutlineView() {
 		if (adaptiveEnabled && frontierData) {
 			const candidate = frontierData?.dueForReview?.[0] || frontierData?.frontier?.[0]
 			if (candidate) {
-				const lessonId = candidate.lessonId ?? candidate.lesson_id ?? candidate.lessonIdRef
+				const lessonId = candidate.lessonId
 				const found = flatLessons.find((l) => String(l.id) === String(lessonId))
 				if (found) return found
 				if (lessonId) return { id: lessonId, title: candidate.name }
@@ -165,7 +163,7 @@ function OutlineView() {
 		const dueIds = new Set((dueList || []).map((it) => String(it?.id)))
 		const all = [...(dueList || []), ...(frontierList || [])]
 		const toTs = (it) => {
-			const raw = it?.nextReviewAt ?? it?.next_review_at
+			const raw = it?.nextReviewAt
 			if (!raw) return Number.POSITIVE_INFINITY
 			const t = Date.parse(raw)
 			return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY
@@ -218,10 +216,7 @@ function OutlineView() {
 
 		const metadataLessons = Array.isArray(metadata?.lessons) ? metadata.lessons : []
 		for (const lesson of metadataLessons) {
-			assign(
-				lesson?.id ?? lesson?.lessonId ?? lesson?.lesson_id ?? lesson?.lessonIdRef,
-				lesson?.title ?? lesson?.name ?? lesson?.label
-			)
+			assign(lesson?.id ?? lesson?.lessonId, lesson?.title ?? lesson?.name ?? lesson?.label)
 		}
 
 		for (const list of [dueList, frontierList, comingList]) {

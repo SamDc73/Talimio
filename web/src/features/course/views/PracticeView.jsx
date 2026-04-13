@@ -26,12 +26,12 @@ function normalizeConcept(item) {
 		return null
 	}
 
-	const conceptId = item.id ?? item.conceptId ?? item.concept_id ?? null
+	const conceptId = item.id ?? item.conceptId ?? null
 	if (!conceptId) {
 		return null
 	}
 
-	const lessonId = item.lessonId ?? item.lesson_id ?? item.lessonIdRef ?? item.lesson_id_ref ?? item.lesson?.id ?? null
+	const lessonId = item.lessonId ?? item.lesson?.id ?? null
 
 	if (!lessonId) {
 		return null

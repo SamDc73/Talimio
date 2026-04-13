@@ -209,8 +209,7 @@ class ConceptSummary(BaseModel):
     mastery: float | None = Field(None, description="Current mastery score in [0,1]")
     next_review_at: datetime | None = Field(None, description="Next scheduled review timestamp")
     exposures: int = Field(0, description="Total review exposures")
-    lesson_id: uuid.UUID | None = Field(None, description="Deterministic lesson ID mapped to this concept")
-    lesson_id_ref: uuid.UUID | None = Field(None, description="Alias for lesson ID reference")
+    lesson_id: uuid.UUID | None = Field(None, description="Lesson ID linked to this concept")
     prerequisites: list[uuid.UUID] = Field(default_factory=list, description="List of prerequisite concept IDs")
     order: int | None = Field(None, description="Ordering hint within course graph")
 
@@ -505,7 +504,7 @@ class PracticeDrillItem(BaseModel):
     """Single generated practice drill item."""
 
     concept_id: uuid.UUID = Field(..., description="Concept this drill belongs to")
-    lesson_id: uuid.UUID = Field(..., description="Deterministic lesson id mapped from concept")
+    lesson_id: uuid.UUID = Field(..., description="Lesson ID linked to this concept")
     question: str = Field(..., min_length=1, description="Learner-facing drill question")
     expected_answer: str = Field(..., min_length=1, description="Expected answer string")
     answer_kind: PracticeAnswerKind = Field(..., description="Expected answer input mode")

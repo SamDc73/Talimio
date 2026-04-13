@@ -742,6 +742,18 @@ class CourseContentService:
             "created_at": timestamp,
             "updated_at": timestamp,
         }
+        concept_id_value = payload.get("concept_id")
+        if concept_id_value is not None:
+            try:
+                lesson_row["concept_id"] = (
+                    concept_id_value if isinstance(concept_id_value, uuid.UUID) else uuid.UUID(str(concept_id_value))
+                )
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Ignoring invalid lesson concept id override %s for course %s",
+                    concept_id_value,
+                    course_id,
+                )
         if lesson_id is not None:
             lesson_row["id"] = lesson_id
         return lesson_row
@@ -1019,7 +1031,7 @@ class CourseContentService:
         plan: AdaptiveCourseStructure,
         concepts_by_index: list[Concept],
     ) -> list[dict[str, Any]]:
-        """Build deterministic lesson payloads for adaptive concepts."""
+        """Build lesson payloads for adaptive concepts with explicit concept linkage."""
         lessons: list[dict[str, Any]] = []
         assigned: set[int] = set()
         node_count = len(concepts_by_index)
@@ -1034,10 +1046,9 @@ class CourseContentService:
                 continue
 
             concept = concepts_by_index[node_index]
-            lesson_id = uuid.uuid5(uuid.NAMESPACE_URL, f"concept-lesson:{course.id}:{concept.id}")
             lessons.append(
                 {
-                    "id": lesson_id,
+                    "concept_id": concept.id,
                     "title": lesson_plan.title or concept.name,
                     "description": lesson_plan.description or concept.description,
                     "order": order,
@@ -1050,10 +1061,9 @@ class CourseContentService:
             if node_index in assigned:
                 continue
 
-            lesson_id = uuid.uuid5(uuid.NAMESPACE_URL, f"concept-lesson:{course.id}:{concept.id}")
             lessons.append(
                 {
-                    "id": lesson_id,
+                    "concept_id": concept.id,
                     "title": concept.name,
                     "description": concept.description,
                     "order": order_cursor,

@@ -21,7 +21,7 @@ export default function TrackView() {
 	// Compute the set of currently available lessons (due + frontier) for locking logic.
 	const availableLessonIds = useMemo(() => {
 		if (!adaptiveEnabled || !data) return
-		const toId = (c) => c?.lessonId ?? c?.lesson_id ?? c?.lessonIdRef ?? c?.lesson_id_ref ?? c?.lesson?.id ?? c?.id
+		const toId = (c) => c?.lessonId ?? c?.lesson?.id ?? null
 		const ids = new Set()
 		for (const c of data?.dueForReview || []) {
 			const id = toId(c)
@@ -37,8 +37,7 @@ export default function TrackView() {
 	const fallbackModules = useMemo(() => {
 		if (!adaptiveEnabled || !data) return []
 		const toLesson = (concept, order) => {
-			const lessonId =
-				concept?.lessonId ?? concept?.lesson_id ?? concept?.lessonIdRef ?? concept?.lesson_id_ref ?? concept?.lesson?.id
+			const lessonId = concept?.lessonId ?? concept?.lesson?.id
 			if (!lessonId) return null
 			return { id: lessonId, order, title: concept?.name || "Lesson", description: concept?.description || "" }
 		}

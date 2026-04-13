@@ -60,6 +60,8 @@ export function LessonViewer({
 	const containerRef = useRef(null)
 	const availableVersions = Array.isArray(lesson?.availableVersions) ? lesson.availableVersions : []
 	const lessonWindows = Array.isArray(lesson?.windows) ? lesson.windows : []
+	const lessonCourseId = courseId ?? lesson?.courseId ?? null
+	const lessonConceptId = lesson?.conceptId ?? null
 	const hasMultipleWindows = lessonWindows.length > 1
 	const selectedWindow = lessonWindows[activeWindowIndex] ?? lessonWindows[0] ?? null
 	const currentVersionLabel =
@@ -219,9 +221,9 @@ export function LessonViewer({
 								</Button>
 
 								<div className="flex flex-wrap items-center gap-2">
-									{adaptiveEnabled && courseId && lesson?.concept_id && (
+									{adaptiveEnabled && lessonCourseId && lessonConceptId && (
 										<Link
-											to={`/course/${courseId}/practice?focusConceptId=${encodeURIComponent(String(lesson.concept_id))}`}
+											to={`/course/${lessonCourseId}/practice?focusConceptId=${encodeURIComponent(String(lessonConceptId))}`}
 										>
 											<Button variant="outline" size="sm">
 												Practice Concept
@@ -392,14 +394,10 @@ export function LessonViewer({
 							<ContentRenderer
 								content={selectedWindow?.content || lesson.content || lesson.md_source}
 								lessonId={lesson.id}
-								courseId={courseId ?? lesson.course_id}
-								lessonConceptId={lesson.concept_id}
+								courseId={lessonCourseId}
+								lessonConceptId={lessonConceptId}
 							/>
-							<LessonQuickCheckPanel
-								courseId={courseId ?? lesson.course_id}
-								lessonId={lesson.id}
-								lessonConceptId={lesson.concept_id}
-							/>
+							<LessonQuickCheckPanel courseId={lessonCourseId} lessonId={lesson.id} lessonConceptId={lessonConceptId} />
 						</PracticeRegistryProvider>
 					</div>
 
@@ -434,12 +432,12 @@ export function LessonViewer({
 					) : null}
 
 					{/* Adaptive Review Panel - blends seamlessly into lesson flow */}
-					{adaptiveEnabled && courseId && lesson?.id && (
+					{adaptiveEnabled && lessonCourseId && lesson?.id && (
 						<div className="px-6 md:px-8 pt-4">
 							<AdaptiveReviewPanel
-								courseId={courseId}
+								courseId={lessonCourseId}
 								lessonId={lesson.id}
-								lessonConceptId={lesson.concept_id}
+								lessonConceptId={lessonConceptId}
 								adaptiveEnabled={adaptiveEnabled}
 							/>
 						</div>

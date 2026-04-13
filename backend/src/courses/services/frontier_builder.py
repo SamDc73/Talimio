@@ -4,7 +4,10 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from src.courses.models import Concept, UserConceptState
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.courses.models import Concept, Lesson, UserConceptState
 from src.courses.schemas import ConceptSummary, FrontierResponse
 
 from .concept_graph_service import ConceptGraphService, FrontierEntry
@@ -27,14 +30,13 @@ def _to_concept_summary(
     concept: Concept,
     state: UserConceptState | None,
     *,
-    course_id: uuid.UUID,
+    lesson_ids_by_concept: dict[uuid.UUID, uuid.UUID],
     prerequisites: list[uuid.UUID] | None = None,
 ) -> ConceptSummary:
     mastery = state.s_mastery if state is not None else None
     next_review = state.next_review_at if state is not None else None
     exposures = state.exposures if state is not None else 0
-    # Deterministic lesson id mapping for adaptive navigation (no DB writes here)
-    lesson_id = uuid.uuid5(uuid.NAMESPACE_URL, f"concept-lesson:{course_id}:{concept.id}")
+    lesson_id = lesson_ids_by_concept.get(concept.id)
     return ConceptSummary(
         id=concept.id,
         name=concept.name,
@@ -44,7 +46,6 @@ def _to_concept_summary(
         next_review_at=next_review,
         exposures=exposures,
         lesson_id=lesson_id,
-        lesson_id_ref=lesson_id,
         prerequisites=prerequisites or [],
         order=None,  # Not available in this context
     )
@@ -54,7 +55,7 @@ def _prepare_frontier_snapshot(
     frontier_entries: Sequence[FrontierEntry],
     due_entries: Sequence[DueConceptEntry],
     *,
-    course_id: uuid.UUID,
+    lesson_ids_by_concept: dict[uuid.UUID, uuid.UUID],
 ) -> _FrontierSnapshot:
     entries = list(frontier_entries)
     due_list = list(due_entries)
@@ -80,7 +81,7 @@ def _prepare_frontier_snapshot(
         summary = _to_concept_summary(
             concept,
             state,
-            course_id=course_id,
+            lesson_ids_by_concept=lesson_ids_by_concept,
             prerequisites=entry["prerequisites"],
         )
         if entry["unlocked"]:
@@ -92,7 +93,7 @@ def _prepare_frontier_snapshot(
         _to_concept_summary(
             item["concept"],
             item["state"],
-            course_id=course_id,
+            lesson_ids_by_concept=lesson_ids_by_concept,
             prerequisites=prereqs_by_id.get(item["concept"].id, []),
         )
         for item in due_list
@@ -114,12 +115,26 @@ def _prepare_frontier_snapshot(
 
 async def build_course_frontier(
     *,
+    session: AsyncSession,
     user_id: uuid.UUID,
     course_id: uuid.UUID,
     graph_service: ConceptGraphService,
     scheduler_service: LectorSchedulerService,
 ) -> FrontierResponse:
     """Assemble the full frontier payload for a course."""
+    lesson_rows = (
+        await session.execute(
+            select(Lesson.id, Lesson.concept_id).where(
+                Lesson.course_id == course_id,
+                Lesson.concept_id.is_not(None),
+            )
+        )
+    ).all()
+    lesson_ids_by_concept = {
+        concept_id: lesson_id
+        for lesson_id, concept_id in lesson_rows
+        if concept_id is not None
+    }
     frontier_entries = await graph_service.get_frontier(user_id=user_id, course_id=course_id)
     due_entries = await scheduler_service.get_due_concepts(user_id=user_id, course_id=course_id)
     ranked_due_entries = await scheduler_service.rank_due_entries(
@@ -133,7 +148,11 @@ async def build_course_frontier(
         due_entries=ranked_due_entries,
     )
 
-    snapshot = _prepare_frontier_snapshot(ranked_frontier, ranked_due_entries, course_id=course_id)
+    snapshot = _prepare_frontier_snapshot(
+        ranked_frontier,
+        ranked_due_entries,
+        lesson_ids_by_concept=lesson_ids_by_concept,
+    )
 
     return FrontierResponse(
         frontier=snapshot.frontier,
