@@ -17,7 +17,7 @@ dependencies = [
     "pyjwt>=2.12.1",
     "supabase>=2.0.0",
     # AI
-    "litellm[google]==1.81.11",
+    "litellm[google]>=1.83.4",
     "pgvector>=0.3.0",
     "mem0ai>=0.1.116",
     "chonkie>=1.2.1",
@@ -26,7 +26,7 @@ dependencies = [
     # Document Processing
     "pymupdf>=1.24.0",
     "pdfminer-six>=20250506",
-    "pypdf>=6.9.2",
+    "pypdf>=6.10.0",
     "python-docx>=1.0.0",
     "pillow-heif>=1.1.0",
     "python-multipart>=0.0.5",
@@ -53,13 +53,13 @@ dependencies = [
     "httpx-oauth>=0.16.1",
     "deptry>=0.24.0",
     # Logging & Observability
-    "opentelemetry-api==1.40.0",
-    "opentelemetry-sdk==1.40.0",
-    "opentelemetry-exporter-otlp-proto-http==1.40.0",
-    "opentelemetry-instrumentation-fastapi==0.61b0",
-    "opentelemetry-instrumentation-asgi==0.61b0",
-    "opentelemetry-instrumentation-sqlalchemy==0.61b0",
-    "structlog==25.5.0",
+    "opentelemetry-api>=1.41.0",
+    "opentelemetry-sdk>=1.41.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.41.0",
+    "opentelemetry-instrumentation-fastapi>=0.62b0",
+    "opentelemetry-instrumentation-asgi>=0.62b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.62b0",
+    "structlog>=25.5.0",
 ]
 
 [dependency-groups]
