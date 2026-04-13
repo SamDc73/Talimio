@@ -3,7 +3,13 @@ import { useMemo, useRef } from "react"
 import { Link } from "react-router-dom"
 import { Badge } from "@/components/Badge"
 import { Button } from "@/components/Button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/DropdownMenu"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/DropdownMenu"
 import { cn } from "@/lib/utils"
 import { AdaptiveReviewPanel } from "./AdaptiveReviewPanel"
 import { ContentRenderer } from "./ContentRenderer"
@@ -24,6 +30,23 @@ const LESSON_REGENERATION_BANNER_STYLES = {
 		iconClassName: "text-destructive",
 		role: "alert",
 		title: "Regeneration failed",
+		className: "border-destructive/30 bg-destructive/10",
+	},
+}
+
+const LESSON_NEXT_PASS_BANNER_STYLES = {
+	inProgress: {
+		icon: Loader2,
+		iconClassName: "animate-spin text-(--color-course)",
+		role: "status",
+		title: "Starting next pass",
+		className: "border-(--color-course)/15 bg-(--color-course)/5",
+	},
+	error: {
+		icon: AlertTriangle,
+		iconClassName: "text-destructive",
+		role: "alert",
+		title: "Couldn't start the next pass",
 		className: "border-destructive/30 bg-destructive/10",
 	},
 }
@@ -51,14 +74,18 @@ export function LessonViewer({
 	regenerateStatus = null,
 	modules = [],
 	onLessonNavigate,
+	onStartNextPass,
 	onVersionSelect,
 	activeWindowIndex = 0,
 	onWindowChange,
+	isStartingNextPass = false,
+	nextPassStatus = null,
 	adaptiveEnabled = false,
 	courseId,
 }) {
 	const containerRef = useRef(null)
 	const availableVersions = Array.isArray(lesson?.availableVersions) ? lesson.availableVersions : []
+	const nextPass = lesson?.nextPass ?? null
 	const lessonWindows = Array.isArray(lesson?.windows) ? lesson.windows : []
 	const lessonCourseId = courseId ?? lesson?.courseId ?? null
 	const lessonConceptId = lesson?.conceptId ?? null
@@ -70,8 +97,11 @@ export function LessonViewer({
 			: null
 	const isViewingHistoricalVersion =
 		lesson?.versionId && lesson?.currentVersionId && String(lesson.versionId) !== String(lesson.currentVersionId)
+	const canShowPassMenu = Boolean((availableVersions.length > 1 || nextPass) && (onVersionSelect || onStartNextPass))
 	let regenerationBanner = null
 	let regenerationBannerContent = null
+	let nextPassBanner = null
+	let nextPassBannerContent = null
 
 	if (isRegeneratingLesson) {
 		regenerationBanner = LESSON_REGENERATION_BANNER_STYLES.inProgress
@@ -108,6 +138,41 @@ export function LessonViewer({
 		)
 	}
 
+	if (isStartingNextPass) {
+		nextPassBanner = {
+			...LESSON_NEXT_PASS_BANNER_STYLES.inProgress,
+			message: nextPassStatus?.message || "Preparing the next pass for this concept.",
+		}
+	} else if (nextPassStatus?.type === "error") {
+		nextPassBanner = {
+			...LESSON_NEXT_PASS_BANNER_STYLES.error,
+			message: nextPassStatus.message,
+		}
+	}
+
+	if (nextPassBanner) {
+		const NextPassIcon = nextPassBanner.icon
+
+		nextPassBannerContent = (
+			<div className="px-6 pt-5 md:px-8">
+				<div
+					role={nextPassBanner.role}
+					aria-live="polite"
+					className={cn(
+						"flex items-start gap-3 rounded-xl border px-4 py-3 text-sm backdrop-blur-sm",
+						nextPassBanner.className
+					)}
+				>
+					<NextPassIcon className={cn("mt-0.5 size-4 shrink-0", nextPassBanner.iconClassName)} aria-hidden="true" />
+					<div className="space-y-1">
+						<p className="font-medium text-foreground">{nextPassBanner.title}</p>
+						<p className="text-muted-foreground">{nextPassBanner.message}</p>
+					</div>
+				</div>
+			</div>
+		)
+	}
+
 	const formatVersionKindLabel = (version) => {
 		return version?.historyLabel || version?.passLabel || version?.versionKind || "Version"
 	}
@@ -130,6 +195,13 @@ export function LessonViewer({
 	}
 
 	const windowTitle = selectedWindow?.title || (hasMultipleWindows ? `Window ${activeWindowIndex + 1}` : null)
+	let nextPassActionLabel = null
+	let nextPassHelperText = null
+	if (nextPass) {
+		nextPassActionLabel =
+			nextPass.status === "recommended_now" ? `Start ${nextPass.passLabel}` : `Start ${nextPass.passLabel} early`
+		nextPassHelperText = nextPass.status === "recommended_now" ? "Recommended now" : "Usually due later"
+	}
 
 	// Calculate previous and next lessons from modules
 	const { previousLesson, nextLesson } = useMemo(() => {
@@ -230,14 +302,14 @@ export function LessonViewer({
 											</Button>
 										</Link>
 									)}
-									{availableVersions.length > 1 && onVersionSelect ? (
+									{canShowPassMenu ? (
 										<DropdownMenu>
 											<DropdownMenuTrigger asChild>
-												<Button variant="ghost" size="sm" className="text-muted-foreground">
+												<Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
 													<History className="size-4" />
-													<span>History</span>
+													<span>{lesson.passLabel || "Passes"}</span>
 													{currentVersionLabel ? (
-														<span className="font-mono text-xs">v{currentVersionLabel}</span>
+														<span className="font-mono text-xs text-muted-foreground/80">v{currentVersionLabel}</span>
 													) : null}
 												</Button>
 											</DropdownMenuTrigger>
@@ -245,7 +317,7 @@ export function LessonViewer({
 												{availableVersions.map((version) => (
 													<DropdownMenuItem
 														key={version.id}
-														onClick={() => onVersionSelect(version.id)}
+														onClick={() => onVersionSelect?.(version.id)}
 														className="flex items-start justify-between gap-3"
 													>
 														<div className="min-w-0">
@@ -271,6 +343,25 @@ export function LessonViewer({
 														) : null}
 													</DropdownMenuItem>
 												))}
+												{nextPass ? <DropdownMenuSeparator /> : null}
+												{nextPass ? (
+													<DropdownMenuItem
+														onClick={() => onStartNextPass?.()}
+														disabled={isViewingHistoricalVersion || isStartingNextPass}
+														className={cn(
+															"flex items-start gap-3 rounded-md px-3 py-2.5",
+															nextPass.status === "available_early" ? "text-muted-foreground" : "text-foreground"
+														)}
+													>
+														<div className="min-w-0 space-y-1">
+															<p className="font-medium leading-none">
+																{isStartingNextPass ? "Starting next pass" : nextPassActionLabel}
+															</p>
+															<p className="text-xs text-muted-foreground">{nextPassHelperText}</p>
+															<p className="line-clamp-2 text-xs/relaxed text-muted-foreground/80">{nextPass.reason}</p>
+														</div>
+													</DropdownMenuItem>
+												) : null}
 											</DropdownMenuContent>
 										</DropdownMenu>
 									) : null}
@@ -346,6 +437,7 @@ export function LessonViewer({
 					</div>
 
 					{regenerationBannerContent}
+					{nextPassBannerContent}
 
 					{hasMultipleWindows ? (
 						<div className="border-b border-border/50 bg-background/80 px-6 py-4 md:px-8">

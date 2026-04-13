@@ -1,7 +1,12 @@
 import { useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { useCourseNavigation } from "@/utils/navigationUtils"
-import { useLessonCompleteMutation, useLessonProgressMutation, useLessonRegenerateMutation } from "./use-lesson-data"
+import {
+	useLessonCompleteMutation,
+	useLessonNextPassMutation,
+	useLessonProgressMutation,
+	useLessonRegenerateMutation,
+} from "./use-lesson-data"
 
 /**
  * Business logic actions for lessons
@@ -13,6 +18,7 @@ export function useLessonActions(courseId) {
 	const progressMutation = useLessonProgressMutation(courseId)
 	const completeMutation = useLessonCompleteMutation(courseId)
 	const regenerateMutation = useLessonRegenerateMutation(courseId)
+	const nextPassMutation = useLessonNextPassMutation(courseId)
 
 	// Action: Navigate back from lesson
 	const handleBack = useCallback(() => {
@@ -103,6 +109,28 @@ export function useLessonActions(courseId) {
 		[courseId, regenerateMutation]
 	)
 
+	const handleStartNextPass = useCallback(
+		async (lessonId, { force = false } = {}) => {
+			if (!courseId || !lessonId) {
+				return
+			}
+
+			const nextPassLesson = await nextPassMutation.mutateAsync({
+				lessonId,
+				force,
+			})
+
+			window.dispatchEvent(
+				new CustomEvent("lessonNextPass", {
+					detail: { courseId, lessonId, force, timestamp: new Date().toISOString() },
+				})
+			)
+
+			return nextPassLesson
+		},
+		[courseId, nextPassMutation]
+	)
+
 	return {
 		// Navigation actions
 		handleBack,
@@ -114,14 +142,17 @@ export function useLessonActions(courseId) {
 
 		// Content actions
 		handleRegenerate,
+		handleStartNextPass,
 
 		// Mutation states for UI feedback
 		isCompletingLesson: completeMutation.isPending,
+		isStartingNextPass: nextPassMutation.isPending,
 		isRegeneratingLesson: regenerateMutation.isPending,
 		isUpdatingProgress: progressMutation.isPending,
 
 		// Error states
 		completeError: completeMutation.error,
+		nextPassError: nextPassMutation.error,
 		regenerateError: regenerateMutation.error,
 		progressError: progressMutation.error,
 	}

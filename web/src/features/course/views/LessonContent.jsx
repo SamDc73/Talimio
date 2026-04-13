@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useSearchParams } from "react-router-dom"
+import { ConfirmationDialog } from "@/components/ConfirmationDialog"
 import { useCourseContext } from "@/features/course/CourseContext"
 import { LessonViewer } from "@/features/course/components/LessonViewer"
 import { RegenerateModal } from "@/features/course/components/RegenerateModal"
@@ -12,9 +13,12 @@ export default function LessonContent() {
 	const { courseId, modules, adaptiveEnabled } = useCourseContext()
 	const [searchParams, setSearchParams] = useSearchParams()
 	const [isRegenerateOpen, setIsRegenerateOpen] = useState(false)
+	const [isNextPassConfirmOpen, setIsNextPassConfirmOpen] = useState(false)
 	const [pendingRegenerateLessonId, setPendingRegenerateLessonId] = useState(null)
 	const [regenerateStatus, setRegenerateStatus] = useState(null)
+	const [nextPassStatus, setNextPassStatus] = useState(null)
 	const [currentWindowIndex, setCurrentWindowIndex] = useState(0)
+	const autoStartedNextPassRef = useRef(new Set())
 	const selectedVersionId = searchParams.get("versionId")?.trim() || null
 	const adaptiveFlow = searchParams.get("adaptiveFlow") === "true"
 
@@ -28,8 +32,15 @@ export default function LessonContent() {
 	})
 	const { progress, rawMetadata, updateProgressAsync } = useCourseProgress(courseId)
 
-	const { handleBack, handleLessonNavigation, handleMarkComplete, handleRegenerate, isRegeneratingLesson } =
-		useLessonActions(courseId)
+	const {
+		handleBack,
+		handleLessonNavigation,
+		handleMarkComplete,
+		handleRegenerate,
+		handleStartNextPass,
+		isRegeneratingLesson,
+		isStartingNextPass,
+	} = useLessonActions(courseId)
 
 	const errorMessage = error?.message || (typeof error === "string" ? error : null)
 	const lessonWindows = Array.isArray(lesson?.windows) ? lesson.windows : []
@@ -91,6 +102,67 @@ export default function LessonContent() {
 		}
 	}, [])
 
+	const clearLessonSelectionParams = useCallback(
+		({ clearAdaptiveFlow = false } = {}) => {
+			setSearchParams((currentParams) => {
+				const nextParams = new URLSearchParams(currentParams)
+				nextParams.delete("versionId")
+				if (clearAdaptiveFlow) {
+					nextParams.delete("adaptiveFlow")
+				}
+				return nextParams
+			})
+		},
+		[setSearchParams]
+	)
+
+	const startNextPass = useCallback(
+		async ({ force = false, clearAdaptiveFlow = false } = {}) => {
+			if (!lesson?.id) {
+				return null
+			}
+
+			setNextPassStatus({
+				type: "inProgress",
+				message: force
+					? `Starting ${lesson?.nextPass?.passLabel || "the next pass"} now.`
+					: `Opening ${lesson?.nextPass?.passLabel || "the recommended next pass"}.`,
+			})
+
+			try {
+				const nextPassLesson = await handleStartNextPass(lesson.id, { force })
+				clearLessonSelectionParams({ clearAdaptiveFlow })
+				setNextPassStatus(null)
+				return nextPassLesson
+			} catch (submissionError) {
+				setNextPassStatus({
+					type: "error",
+					message: submissionError?.message || "We couldn't start the next pass right now.",
+				})
+				throw submissionError
+			}
+		},
+		[clearLessonSelectionParams, handleStartNextPass, lesson]
+	)
+
+	const handleStartNextPassAction = useCallback(() => {
+		if (!lesson?.nextPass) {
+			return
+		}
+
+		setNextPassStatus(null)
+		if (lesson.nextPass.status === "available_early") {
+			setIsNextPassConfirmOpen(true)
+			return
+		}
+
+		void startNextPass({ force: false, clearAdaptiveFlow: adaptiveFlow })
+	}, [adaptiveFlow, lesson?.nextPass, startNextPass])
+
+	const handleConfirmNextPass = useCallback(() => {
+		void startNextPass({ force: true, clearAdaptiveFlow: adaptiveFlow })
+	}, [adaptiveFlow, startNextPass])
+
 	const handleVersionSelect = useCallback(
 		(versionId) => {
 			setSearchParams((currentParams) => {
@@ -105,6 +177,28 @@ export default function LessonContent() {
 		},
 		[lesson?.currentVersionId, setSearchParams]
 	)
+
+	useEffect(() => {
+		if (!adaptiveFlow || selectedVersionId || !lesson?.id || !lesson?.nextPass || isStartingNextPass) {
+			return
+		}
+
+		if (lesson.nextPass.status !== "recommended_now") {
+			return
+		}
+
+		if (!lesson.versionId || !lesson.currentVersionId || String(lesson.versionId) !== String(lesson.currentVersionId)) {
+			return
+		}
+
+		const autoStartKey = `${lesson.id}:${lesson.versionId}:${lesson.nextPass.majorVersion}`
+		if (autoStartedNextPassRef.current.has(autoStartKey)) {
+			return
+		}
+
+		autoStartedNextPassRef.current.add(autoStartKey)
+		void startNextPass({ force: false, clearAdaptiveFlow: true })
+	}, [adaptiveFlow, isStartingNextPass, lesson, selectedVersionId, startNextPass])
 
 	const persistWindowIndex = useCallback(
 		async (nextIndex) => {
@@ -157,11 +251,24 @@ export default function LessonContent() {
 				regenerateStatus={regenerateStatus}
 				modules={modules}
 				onLessonNavigate={(id) => handleLessonNavigation(id)}
+				onStartNextPass={handleStartNextPassAction}
 				adaptiveEnabled={adaptiveEnabled}
 				courseId={courseId}
 				onVersionSelect={handleVersionSelect}
 				activeWindowIndex={currentWindowIndex}
+				isStartingNextPass={isStartingNextPass}
+				nextPassStatus={nextPassStatus}
 				onWindowChange={handleWindowChange}
+			/>
+			<ConfirmationDialog
+				open={isNextPassConfirmOpen}
+				onOpenChange={setIsNextPassConfirmOpen}
+				title={`${lesson?.nextPass?.passLabel || "The next pass"} is usually better later`}
+				description="If you have an exam or want to double down on this topic right now, you can still start it early."
+				confirmText={`Start ${lesson?.nextPass?.passLabel || "next pass"} anyway`}
+				cancelText="Keep current pass"
+				onConfirm={handleConfirmNextPass}
+				isDestructive={false}
 			/>
 			<RegenerateModal
 				open={isRegenerateOpen}

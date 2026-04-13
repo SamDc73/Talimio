@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
 import { useUpdateProgress } from "@/hooks/use-progress"
-import { fetchLesson, regenerateLesson } from "../api/lessonApi"
+import { fetchLesson, regenerateLesson, startNextLessonPass } from "../api/lessonApi"
 
 const toSnakeCase = (key) => key.replace(/([A-Z])/g, "_$1").toLowerCase()
 
@@ -66,6 +66,35 @@ export function useLessonRegenerateMutation(courseId) {
 			}
 
 			return regenerateLesson(courseId, lessonId, { critiqueText, applyAcrossCourse })
+		},
+		onSuccess: async (data, variables) => {
+			if (!courseId || !variables?.lessonId) {
+				return
+			}
+
+			queryClient.setQueryData(["lesson", courseId, variables.lessonId, null, false], data)
+			queryClient.setQueryData(["lesson", courseId, variables.lessonId, null, true], data)
+			await queryClient.invalidateQueries({
+				queryKey: ["lesson", courseId, variables.lessonId],
+			})
+		},
+	})
+}
+
+export function useLessonNextPassMutation(courseId) {
+	const queryClient = useQueryClient()
+
+	return useMutation({
+		mutationFn: async ({ lessonId, force = false }) => {
+			if (!courseId) {
+				throw new Error("Course ID is required to start the next lesson pass")
+			}
+
+			if (!lessonId) {
+				throw new Error("Lesson ID is required to start the next lesson pass")
+			}
+
+			return startNextLessonPass(courseId, lessonId, { force })
 		},
 		onSuccess: async (data, variables) => {
 			if (!courseId || !variables?.lessonId) {

@@ -47,3 +47,13 @@ export async function regenerateLesson(courseId, lessonId, { critiqueText, apply
 		applyAcrossCourse,
 	})
 }
+
+export async function startNextLessonPass(courseId, lessonId, { force = false } = {}) {
+	if (!courseId || !lessonId) {
+		throw new Error("Course ID and Lesson ID are required")
+	}
+
+	return api.post(`/courses/${courseId}/lessons/${lessonId}/next-pass`, {
+		force,
+	})
+}
