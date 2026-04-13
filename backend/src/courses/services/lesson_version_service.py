@@ -14,6 +14,17 @@ class LessonVersionService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    async def select_current_version(self, *, lesson: Lesson, version: LessonVersion) -> LessonVersion:
+        """Promote one existing version as the current lesson revision."""
+        if version.lesson_id != lesson.id:
+            raise NotFoundError(message="Lesson version not found", feature_area="courses")
+
+        lesson.current_version_id = version.id
+        lesson.content = version.content
+        lesson.updated_at = datetime.now(UTC)
+        await self.session.flush()
+        return version
+
     async def ensure_current_version(self, *, lesson: Lesson) -> LessonVersion:
         """Return the current version, backfilling 1.0 when the lesson has only flat content."""
         if lesson.current_version_id is not None:
@@ -24,8 +35,16 @@ class LessonVersionService:
                 )
             )
             if current_version is not None:
-                if lesson.content != current_version.content:
-                    lesson.content = current_version.content
+                lesson_content = lesson.content or ""
+                version_content = current_version.content or ""
+
+                if not version_content and lesson_content:
+                    current_version.content = lesson_content
+                    await self.session.flush()
+                    version_content = lesson_content
+
+                if lesson.content != version_content:
+                    lesson.content = version_content
                     lesson.updated_at = datetime.now(UTC)
                     await self.session.flush()
                 return current_version
@@ -48,11 +67,12 @@ class LessonVersionService:
             self.session.add(latest_version)
             await self.session.flush()
 
-        lesson.current_version_id = latest_version.id
-        lesson.content = latest_version.content
-        lesson.updated_at = datetime.now(UTC)
-        await self.session.flush()
-        return latest_version
+        lesson_content = lesson.content or ""
+        if not (latest_version.content or "") and lesson_content:
+            latest_version.content = lesson_content
+            await self.session.flush()
+
+        return await self.select_current_version(lesson=lesson, version=latest_version)
 
     async def sync_current_version_from_lesson(self, *, lesson: Lesson) -> LessonVersion:
         """Keep the lesson content field as a compatibility mirror of the version row."""
@@ -103,11 +123,19 @@ class LessonVersionService:
             .limit(1)
         )
         if current_version is not None:
-            lesson.current_version_id = current_version.id
+            if not (current_version.content or "").strip():
+                current_version.content = content
+                current_version.generation_metadata = {
+                    **(current_version.generation_metadata or {}),
+                    "source": "initial_generation",
+                    "source_reason": "First pass for this concept.",
+                }
+                await self.session.flush()
+
             lesson.content = current_version.content
             lesson.updated_at = datetime.now(UTC)
             await self.session.flush()
-            return current_version
+            return await self.select_current_version(lesson=lesson, version=current_version)
 
         new_version = LessonVersion(
             lesson_id=lesson.id,
@@ -123,11 +151,7 @@ class LessonVersionService:
         self.session.add(new_version)
         await self.session.flush()
 
-        lesson.current_version_id = new_version.id
-        lesson.content = content
-        lesson.updated_at = datetime.now(UTC)
-        await self.session.flush()
-        return new_version
+        return await self.select_current_version(lesson=lesson, version=new_version)
 
     async def create_regenerated_version(
         self,
@@ -154,11 +178,7 @@ class LessonVersionService:
         self.session.add(new_version)
         await self.session.flush()
 
-        lesson.current_version_id = new_version.id
-        lesson.content = content
-        lesson.updated_at = datetime.now(UTC)
-        await self.session.flush()
-        return new_version
+        return await self.select_current_version(lesson=lesson, version=new_version)
 
     async def create_adaptive_pass_version(
         self,
@@ -186,8 +206,4 @@ class LessonVersionService:
         self.session.add(new_version)
         await self.session.flush()
 
-        lesson.current_version_id = new_version.id
-        lesson.content = content
-        lesson.updated_at = datetime.now(UTC)
-        await self.session.flush()
-        return new_version
+        return await self.select_current_version(lesson=lesson, version=new_version)

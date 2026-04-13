@@ -28,6 +28,7 @@ from src.courses.schemas import (
     GradeRequest,
     GradeResponse,
     LessonDetailResponse,
+    LessonNextPassRequest,
     LessonRegenerateRequest,
     LessonVersionHistoryResponse,
     NextReviewResponse,
@@ -231,6 +232,23 @@ async def regenerate_lesson(
         lesson_id=lesson_id,
         critique_text=payload.critique_text,
         apply_across_course=payload.apply_across_course,
+        user_id=auth.user_id,
+    )
+
+
+@router.post("/{course_id}/lessons/{lesson_id}/next-pass")
+async def start_next_lesson_pass(
+    course_id: uuid.UUID,
+    lesson_id: uuid.UUID,
+    payload: LessonNextPassRequest,
+    auth: CurrentAuth,
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
+) -> LessonDetailResponse:
+    """Create or select the next major lesson pass."""
+    return await facade.start_next_lesson_pass(
+        course_id=course_id,
+        lesson_id=lesson_id,
+        force=payload.force,
         user_id=auth.user_id,
     )
 

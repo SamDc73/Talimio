@@ -20,6 +20,7 @@ from src.ai.client import LLMClient
 from src.courses.models import Concept, Course, Lesson, LessonFeedbackEvent, LessonVersion, ProbeEvent, UserConceptState
 from src.courses.schemas import (
     LessonDetailResponse,
+    LessonNextPassResponse,
     LessonVersionHistoryResponse,
     LessonVersionSummary,
     LessonWindowResponse,
@@ -27,7 +28,7 @@ from src.courses.schemas import (
 from src.courses.services.concept_scheduler_service import AdaptivePassRecommendation, LectorSchedulerService
 from src.courses.services.lesson_version_service import LessonVersionService
 from src.courses.services.lesson_window_service import LessonWindowService
-from src.exceptions import NotFoundError, UpstreamUnavailableError, ValidationError
+from src.exceptions import ConflictError, NotFoundError, UpstreamUnavailableError, ValidationError
 
 
 logger = logging.getLogger(__name__)
@@ -360,7 +361,7 @@ class LessonService:
         ]
         return "\n".join(lines)
 
-    async def _build_generation_context_sections(  # noqa: PLR0912
+    async def _build_generation_context_sections(
         self,
         *,
         lesson: Lesson,
@@ -551,56 +552,56 @@ class LessonService:
             for window in windows
         ]
 
-    async def _maybe_create_adaptive_pass(
+    async def _recommend_next_pass(
         self,
         *,
         lesson: Lesson,
         course: Course,
         current_version: LessonVersion,
-        available_versions: Sequence[LessonVersion],
-        lesson_version_service: LessonVersionService,
-    ) -> LessonVersion:
-        if not course.adaptive_enabled:
-            return current_version
-
-        concept_id = lesson.concept_id
-        if concept_id is None:
-            return current_version
+    ) -> AdaptivePassRecommendation | None:
+        if not course.adaptive_enabled or lesson.concept_id is None:
+            return None
 
         scheduler_service = LectorSchedulerService(self.session)
-        recommendation = await scheduler_service.recommend_adaptive_pass(
+        return await scheduler_service.recommend_adaptive_pass(
             user_id=self.user_id,
             course_id=course.id,
-            concept_id=concept_id,
+            concept_id=lesson.concept_id,
             current_major_version=current_version.major_version,
         )
-        if recommendation.action != "deepen_with_next_major_pass":
-            return current_version
 
-        latest_major_version = max((version.major_version for version in available_versions), default=current_version.major_version)
-        if latest_major_version >= recommendation.recommended_major_version:
-            return current_version
+    async def _build_next_pass_response(
+        self,
+        *,
+        lesson: Lesson,
+        course: Course,
+        current_version: LessonVersion,
+        selected_version: LessonVersion,
+        available_versions: Sequence[LessonVersion],
+    ) -> LessonNextPassResponse | None:
+        if selected_version.id != current_version.id:
+            return None
 
-        try:
-            lesson_context = await self._prepare_adaptive_pass_context(
-                lesson=lesson,
-                course=course,
-                current_version=current_version,
-                recommendation=recommendation,
-            )
-            generated_content = await self._generate_lesson_body(lesson_context=lesson_context)
-            return await lesson_version_service.create_adaptive_pass_version(
-                lesson=lesson,
-                content=generated_content,
-                source_version=current_version,
-                source_reason=recommendation.reason,
-            )
-        except ValueError as exc:
-            detail = f"Invalid lesson content: {exc}"
-            raise ValidationError(detail, feature_area="courses") from exc
-        except RuntimeError as exc:
-            message = "Unable to generate lesson content. Please try again."
-            raise UpstreamUnavailableError(message, feature_area="courses") from exc
+        recommendation = await self._recommend_next_pass(
+            lesson=lesson,
+            course=course,
+            current_version=current_version,
+        )
+        if recommendation is None:
+            return None
+
+        next_major_version = current_version.major_version + 1
+        next_major_exists = any(version.major_version == next_major_version for version in available_versions)
+        if next_major_exists:
+            return None
+
+        status = "recommended_now" if recommendation.action == "deepen_with_next_major_pass" else "available_early"
+        return LessonNextPassResponse(
+            major_version=next_major_version,
+            pass_label=self._build_pass_label(major_version=next_major_version),
+            status=status,
+            reason=recommendation.reason,
+        )
 
     async def _build_lesson_detail_response(
         self,
@@ -609,6 +610,7 @@ class LessonService:
         course: Course,
         selected_version: LessonVersion,
         available_versions: Sequence[LessonVersion],
+        next_pass: LessonNextPassResponse | None,
         windows: Sequence[Any],
     ) -> LessonDetailResponse:
         return LessonDetailResponse(
@@ -627,6 +629,7 @@ class LessonService:
             pass_label=self._build_pass_label(major_version=selected_version.major_version),
             source_reason=self._build_source_reason(version=selected_version),
             available_versions=self._build_version_summaries(lesson=lesson, versions=available_versions),
+            next_pass=next_pass,
             windows=self._build_window_payload(windows),
             adaptive_enabled=course.adaptive_enabled,
             created_at=lesson.created_at,
@@ -659,6 +662,7 @@ class LessonService:
             NotFoundError: If the lesson is missing or not owned by the current user
         """
         lesson, course = await self._load_owned_lesson_and_course(course_id=course_id, lesson_id=lesson_id)
+        _ = adaptive_flow
 
         if lesson.content == "" or (force_refresh and lesson.current_version_id is None):
             lesson = await self._ensure_lesson_content(lesson, course, force_refresh=force_refresh)
@@ -666,23 +670,23 @@ class LessonService:
         lesson_version_service = LessonVersionService(self.session)
         lesson_window_service = LessonWindowService(self.session)
         current_version = await lesson_version_service.sync_current_version_from_lesson(lesson=lesson)
+        if not (current_version.content or "").strip():
+            lesson = await self._ensure_lesson_content(lesson, course, force_refresh=True)
+            current_version = await lesson_version_service.sync_current_version_from_lesson(lesson=lesson)
+
         selected_version = current_version
         available_versions = await lesson_version_service.list_versions(lesson=lesson)
 
-        if adaptive_flow and version_id is None:
-            selected_version = await self._maybe_create_adaptive_pass(
-                lesson=lesson,
-                course=course,
-                current_version=current_version,
-                available_versions=available_versions,
-                lesson_version_service=lesson_version_service,
-            )
-            if selected_version.id != current_version.id:
-                await self.session.refresh(lesson)
-                available_versions = await lesson_version_service.list_versions(lesson=lesson)
-
         if version_id is not None and version_id != current_version.id:
             selected_version = await lesson_version_service.get_version(lesson=lesson, version_id=version_id)
+
+        next_pass = await self._build_next_pass_response(
+            lesson=lesson,
+            course=course,
+            current_version=current_version,
+            selected_version=selected_version,
+            available_versions=available_versions,
+        )
         selected_windows = await lesson_window_service.get_or_build_windows(lesson_version=selected_version)
 
         return await self._build_lesson_detail_response(
@@ -690,6 +694,107 @@ class LessonService:
             course=course,
             selected_version=selected_version,
             available_versions=available_versions,
+            next_pass=next_pass,
+            windows=selected_windows,
+        )
+
+    async def start_next_pass(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+        force: bool,
+    ) -> LessonDetailResponse:
+        """Create or select the next major pass for one adaptive lesson."""
+        lesson, course = await self._load_owned_lesson_and_course(course_id=course_id, lesson_id=lesson_id)
+        if not course.adaptive_enabled or lesson.concept_id is None:
+            detail = "This lesson does not support adaptive passes."
+            raise ConflictError(detail, feature_area="courses")
+
+        if lesson.content == "":
+            lesson = await self._ensure_lesson_content(lesson, course, force_refresh=True)
+
+        lesson_version_service = LessonVersionService(self.session)
+        lesson_window_service = LessonWindowService(self.session)
+        current_version = await lesson_version_service.sync_current_version_from_lesson(lesson=lesson)
+        if not (current_version.content or "").strip():
+            lesson = await self._ensure_lesson_content(lesson, course, force_refresh=True)
+            current_version = await lesson_version_service.sync_current_version_from_lesson(lesson=lesson)
+
+        available_versions = await lesson_version_service.list_versions(lesson=lesson)
+        next_major_version = current_version.major_version + 1
+        existing_next_pass = next(
+            (version for version in available_versions if version.major_version == next_major_version),
+            None,
+        )
+
+        recommendation = await self._recommend_next_pass(
+            lesson=lesson,
+            course=course,
+            current_version=current_version,
+        )
+        if recommendation is None:
+            detail = "This lesson does not support adaptive passes."
+            raise ConflictError(detail, feature_area="courses")
+
+        if recommendation.action != "deepen_with_next_major_pass" and not force:
+            detail = "The next pass is usually recommended later for this lesson."
+            raise ConflictError(detail, feature_area="courses")
+
+        if existing_next_pass is not None:
+            selected_version = await lesson_version_service.select_current_version(
+                lesson=lesson,
+                version=existing_next_pass,
+            )
+            selected_windows = await lesson_window_service.get_or_build_windows(lesson_version=selected_version)
+        else:
+            generation_recommendation = recommendation
+            source_reason = recommendation.reason
+            if force and recommendation.action != "deepen_with_next_major_pass":
+                generation_recommendation = AdaptivePassRecommendation(
+                    action="deepen_with_next_major_pass",
+                    recommended_major_version=next_major_version,
+                    reason="The learner explicitly asked to start the next pass early.",
+                )
+                source_reason = generation_recommendation.reason
+
+            try:
+                lesson_context = await self._prepare_adaptive_pass_context(
+                    lesson=lesson,
+                    course=course,
+                    current_version=current_version,
+                    recommendation=generation_recommendation,
+                )
+                generated_content = await self._generate_lesson_body(lesson_context=lesson_context)
+                selected_version = await lesson_version_service.create_adaptive_pass_version(
+                    lesson=lesson,
+                    content=generated_content,
+                    source_version=current_version,
+                    source_reason=source_reason,
+                )
+                selected_windows = await lesson_window_service.rebuild_windows(lesson_version=selected_version)
+            except ValueError as exc:
+                detail = f"Invalid lesson content: {exc}"
+                raise ValidationError(detail, feature_area="courses") from exc
+            except RuntimeError as exc:
+                message = "Unable to generate lesson content. Please try again."
+                raise UpstreamUnavailableError(message, feature_area="courses") from exc
+
+        await self.session.refresh(lesson)
+        available_versions = await lesson_version_service.list_versions(lesson=lesson)
+        next_pass = await self._build_next_pass_response(
+            lesson=lesson,
+            course=course,
+            current_version=selected_version,
+            selected_version=selected_version,
+            available_versions=available_versions,
+        )
+        return await self._build_lesson_detail_response(
+            lesson=lesson,
+            course=course,
+            selected_version=selected_version,
+            available_versions=available_versions,
+            next_pass=next_pass,
             windows=selected_windows,
         )
 
@@ -766,6 +871,13 @@ class LessonService:
             course=course,
             selected_version=selected_version,
             available_versions=available_versions,
+            next_pass=await self._build_next_pass_response(
+                lesson=lesson,
+                course=course,
+                current_version=selected_version,
+                selected_version=selected_version,
+                available_versions=available_versions,
+            ),
             windows=selected_windows,
         )
 

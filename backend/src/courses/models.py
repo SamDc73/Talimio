@@ -90,6 +90,7 @@ class Lesson(Base):
             ["course_id", "concept_id"],
             ["course_concepts.course_id", "course_concepts.concept_id"],
             name="lessons_course_id_concept_id_fkey",
+            ondelete="CASCADE",
         ),
         Index(
             "lessons_course_id_concept_id_key",

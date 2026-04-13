@@ -384,6 +384,33 @@ class CoursesFacade:
             message = "Failed to regenerate lesson"
             raise CoursesFacadeUpstreamError(message) from error
 
+    async def start_next_lesson_pass(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+        force: bool,
+        user_id: uuid.UUID,
+    ) -> LessonDetailResponse:
+        """Create or select the next major pass for one adaptive lesson."""
+        lesson_service = LessonService(self._session, user_id)
+
+        try:
+            return await lesson_service.start_next_pass(
+                course_id=course_id,
+                lesson_id=lesson_id,
+                force=force,
+            )
+        except DomainError:
+            raise
+        except (SQLAlchemyError, RuntimeError, TypeError, ValueError) as error:
+            logger.exception(
+                "courses.lesson.next_pass.failed",
+                extra={"course_id": str(course_id), "lesson_id": str(lesson_id), "user_id": str(user_id)},
+            )
+            message = "Failed to start the next lesson pass"
+            raise CoursesFacadeUpstreamError(message) from error
+
     async def grade_lesson_response(
         self,
         *,

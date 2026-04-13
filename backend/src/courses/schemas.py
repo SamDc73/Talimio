@@ -53,6 +53,20 @@ class LessonWindowResponse(BaseModel):
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
+class LessonNextPassResponse(BaseModel):
+    """Lightweight metadata for the next major lesson pass."""
+
+    major_version: int = Field(..., description="Next major version number")
+    pass_label: str = Field(..., description="User-facing label such as Pass 2")
+    status: Literal["recommended_now", "available_early"] = Field(
+        ...,
+        description="Whether the next pass is recommended now or only available as an early override",
+    )
+    reason: str = Field(..., description="Short explanation for the next-pass recommendation state")
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
 class LessonDetailResponse(BaseModel):
     """Schema for detailed lesson responses (content endpoint)."""
 
@@ -73,6 +87,10 @@ class LessonDetailResponse(BaseModel):
     available_versions: list[LessonVersionSummary] = Field(
         default_factory=list,
         description="Available version history for this lesson",
+    )
+    next_pass: LessonNextPassResponse | None = Field(
+        None,
+        description="Lightweight next-major-pass metadata for the current active lesson view",
     )
     windows: list[LessonWindowResponse] = Field(default_factory=list, description="Windowed lesson delivery payload")
     adaptive_enabled: bool | None = Field(None, description="Whether the parent course is adaptive")
@@ -97,6 +115,17 @@ class LessonRegenerateRequest(BaseModel):
     apply_across_course: bool = Field(
         default=False,
         description="Whether this critique should influence future lessons",
+    )
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class LessonNextPassRequest(BaseModel):
+    """Request payload for starting the next major lesson pass."""
+
+    force: bool = Field(
+        default=False,
+        description="Whether to allow an early override even when the next pass is usually recommended later",
     )
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
