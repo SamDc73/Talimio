@@ -52,7 +52,7 @@ function SearchBar({
 						size="sm"
 						onClick={onGenerateCourse}
 						disabled={!searchQuery.trim() || isGenerating}
-					className="bg-course text-course-text hover:bg-course-accent"
+						className="bg-course text-course-text hover:bg-course-accent"
 					>
 						{isGenerating ? "Generating..." : "Generate"}
 					</Button>
@@ -76,7 +76,7 @@ function SearchBar({
 							}
 						}}
 						disabled={!searchQuery.trim()}
-					className="bg-video text-video-text hover:bg-video-accent"
+						className="bg-video text-video-text hover:bg-video-accent"
 					>
 						Add Video
 					</Button>
@@ -86,11 +86,7 @@ function SearchBar({
 
 		return (
 			<>
-				<Button
-					onClick={onGenerateCourse}
-					size="sm"
-					className="flex items-center gap-1 bg-linear-to-r from-primary to-course-accent text-primary-foreground hover:from-primary/95 hover:to-course-accent/90"
-				>
+				<Button onClick={onGenerateCourse} size="sm" className="gap-1 shadow-sm">
 					<Sparkles className="size-3.5 " />
 					Generate Course
 				</Button>
