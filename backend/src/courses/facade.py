@@ -331,7 +331,6 @@ class CoursesFacade:
         lesson_id: uuid.UUID,
         user_id: uuid.UUID,
         generate: bool = False,
-        adaptive_flow: bool = False,
         version_id: uuid.UUID | None = None,
     ) -> LessonDetailResponse:
         """Get a lesson detail payload for an owned course."""
@@ -340,7 +339,6 @@ class CoursesFacade:
             course_id,
             lesson_id,
             force_refresh=generate,
-            adaptive_flow=adaptive_flow,
             version_id=version_id,
         )
 

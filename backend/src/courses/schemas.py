@@ -239,6 +239,10 @@ class ConceptSummary(BaseModel):
     next_review_at: datetime | None = Field(None, description="Next scheduled review timestamp")
     exposures: int = Field(0, description="Total review exposures")
     lesson_id: uuid.UUID | None = Field(None, description="Lesson ID linked to this concept")
+    recommended_lesson_entry: Literal["open_current", "start_next_pass"] | None = Field(
+        None,
+        description="Backend-owned adaptive lesson entry recommendation for this concept",
+    )
     prerequisites: list[uuid.UUID] = Field(default_factory=list, description="List of prerequisite concept IDs")
     order: int | None = Field(None, description="Ordering hint within course graph")
 

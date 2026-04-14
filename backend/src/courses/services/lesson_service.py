@@ -641,7 +641,6 @@ class LessonService:
         course_id: uuid.UUID,
         lesson_id: uuid.UUID,
         force_refresh: bool = False,
-        adaptive_flow: bool = False,
         version_id: uuid.UUID | None = None,
     ) -> LessonDetailResponse:
         """Get lesson with single query including user isolation.
@@ -650,7 +649,6 @@ class LessonService:
             course_id: Course uuid.UUID
             lesson_id: Lesson uuid.UUID
             force_refresh: Whether to generate missing content immediately
-            adaptive_flow: Whether the learner arrived through adaptive recommendation flow
             version_id: Optional version row to read through the same lesson route
 
         Returns
@@ -662,7 +660,6 @@ class LessonService:
             NotFoundError: If the lesson is missing or not owned by the current user
         """
         lesson, course = await self._load_owned_lesson_and_course(course_id=course_id, lesson_id=lesson_id)
-        _ = adaptive_flow
 
         if lesson.content == "" or (force_refresh and lesson.current_version_id is None):
             lesson = await self._ensure_lesson_content(lesson, course, force_refresh=force_refresh)

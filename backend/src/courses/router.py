@@ -183,10 +183,6 @@ async def get_lesson(
     auth: CurrentAuth,
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
     generate: Annotated[bool, Query(description="Auto-generate if lesson doesn't exist")] = False,
-    adaptive_flow: Annotated[
-        bool,
-        Query(alias="adaptiveFlow", description="Whether the learner entered through the adaptive recommendation flow"),
-    ] = False,
     version_id: Annotated[
         uuid.UUID | None,
         Query(alias="versionId", description="Optional lesson version to read"),
@@ -198,7 +194,6 @@ async def get_lesson(
         lesson_id=lesson_id,
         user_id=auth.user_id,
         generate=generate,
-        adaptive_flow=adaptive_flow,
         version_id=version_id,
     )
 

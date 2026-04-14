@@ -3,15 +3,19 @@
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.courses.models import Concept, Lesson, UserConceptState
+from src.courses.models import Concept, Lesson, LessonVersion, UserConceptState
 from src.courses.schemas import ConceptSummary, FrontierResponse
 
 from .concept_graph_service import ConceptGraphService, FrontierEntry
 from .concept_scheduler_service import DueConceptEntry, LectorSchedulerService
+
+
+RecommendedLessonEntry = Literal["open_current", "start_next_pass"]
 
 
 @dataclass(slots=True)
@@ -31,6 +35,7 @@ def _to_concept_summary(
     state: UserConceptState | None,
     *,
     lesson_ids_by_concept: dict[uuid.UUID, uuid.UUID],
+    recommended_lesson_entries: dict[uuid.UUID, RecommendedLessonEntry] | None = None,
     prerequisites: list[uuid.UUID] | None = None,
 ) -> ConceptSummary:
     mastery = state.s_mastery if state is not None else None
@@ -46,6 +51,7 @@ def _to_concept_summary(
         next_review_at=next_review,
         exposures=exposures,
         lesson_id=lesson_id,
+        recommended_lesson_entry=(recommended_lesson_entries or {}).get(concept.id),
         prerequisites=prerequisites or [],
         order=None,  # Not available in this context
     )
@@ -56,6 +62,7 @@ def _prepare_frontier_snapshot(
     due_entries: Sequence[DueConceptEntry],
     *,
     lesson_ids_by_concept: dict[uuid.UUID, uuid.UUID],
+    recommended_lesson_entries: dict[uuid.UUID, RecommendedLessonEntry],
 ) -> _FrontierSnapshot:
     entries = list(frontier_entries)
     due_list = list(due_entries)
@@ -82,6 +89,7 @@ def _prepare_frontier_snapshot(
             concept,
             state,
             lesson_ids_by_concept=lesson_ids_by_concept,
+            recommended_lesson_entries=recommended_lesson_entries,
             prerequisites=entry["prerequisites"],
         )
         if entry["unlocked"]:
@@ -94,6 +102,7 @@ def _prepare_frontier_snapshot(
             item["concept"],
             item["state"],
             lesson_ids_by_concept=lesson_ids_by_concept,
+            recommended_lesson_entries=recommended_lesson_entries,
             prerequisites=prereqs_by_id.get(item["concept"].id, []),
         )
         for item in due_list
@@ -111,6 +120,66 @@ def _prepare_frontier_snapshot(
         state_by_id=state_by_id,
         due_ids=due_ids,
     )
+
+
+async def _build_recommended_lesson_entries(
+    *,
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    course_id: uuid.UUID,
+    scheduler_service: LectorSchedulerService,
+    frontier_entries: Sequence[FrontierEntry],
+    due_entries: Sequence[DueConceptEntry],
+) -> dict[uuid.UUID, RecommendedLessonEntry]:
+    candidate_concept_ids = {
+        entry["concept"].id
+        for entry in frontier_entries
+        if entry["unlocked"]
+    }
+    candidate_concept_ids.update(item["concept"].id for item in due_entries)
+    if not candidate_concept_ids:
+        return {}
+
+    lesson_rows = (
+        await session.execute(
+            select(
+                Lesson.id,
+                Lesson.concept_id,
+                Lesson.content,
+                Lesson.current_version_id,
+                LessonVersion.major_version,
+            )
+            .outerjoin(LessonVersion, LessonVersion.id == Lesson.current_version_id)
+            .where(
+                Lesson.course_id == course_id,
+                Lesson.concept_id.in_(candidate_concept_ids),
+            )
+        )
+    ).all()
+
+    recommendations: dict[uuid.UUID, RecommendedLessonEntry] = {}
+    for _, concept_id, lesson_content, current_version_id, current_major_version in lesson_rows:
+        if concept_id is None:
+            continue
+
+        has_current_pass = bool(current_version_id) or bool((lesson_content or "").strip())
+        if not has_current_pass:
+            recommendations[concept_id] = "open_current"
+            continue
+
+        recommendation = await scheduler_service.recommend_adaptive_pass(
+            user_id=user_id,
+            course_id=course_id,
+            concept_id=concept_id,
+            current_major_version=int(current_major_version or 1),
+        )
+        recommendations[concept_id] = (
+            "start_next_pass"
+            if recommendation.action == "deepen_with_next_major_pass"
+            else "open_current"
+        )
+
+    return recommendations
 
 
 async def build_course_frontier(
@@ -147,11 +216,20 @@ async def build_course_frontier(
         entries=frontier_entries,
         due_entries=ranked_due_entries,
     )
+    recommended_lesson_entries = await _build_recommended_lesson_entries(
+        session=session,
+        user_id=user_id,
+        course_id=course_id,
+        scheduler_service=scheduler_service,
+        frontier_entries=ranked_frontier,
+        due_entries=ranked_due_entries,
+    )
 
     snapshot = _prepare_frontier_snapshot(
         ranked_frontier,
         ranked_due_entries,
         lesson_ids_by_concept=lesson_ids_by_concept,
+        recommended_lesson_entries=recommended_lesson_entries,
     )
 
     return FrontierResponse(
