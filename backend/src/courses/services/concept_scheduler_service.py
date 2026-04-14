@@ -38,6 +38,10 @@ from src.courses.models import (
 logger = logging.getLogger(__name__)
 
 
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
 LEARNER_PROFILE_EMA = 0.1
 LEARNER_PROFILE_SPEED_MIN = 0.3
 LEARNER_PROFILE_SPEED_MAX = 2.0
@@ -207,7 +211,7 @@ class LectorSchedulerService:
         return sigma_map
 
     async def _due_concept_ids(self, *, user_id: uuid.UUID, course_id: uuid.UUID) -> set[uuid.UUID]:
-        now = datetime.now(UTC)
+        now = _utc_now()
         rows = await self._session.execute(
             select(CourseConcept.concept_id)
             .join(
@@ -249,7 +253,7 @@ class LectorSchedulerService:
             state = UserConceptState(user_id=user_id, concept_id=concept_id)
             self._session.add(state)
 
-        now = datetime.now(UTC)
+        now = _utc_now()
         exposures = max(state.exposures, 0)
         base_minutes = float(self._settings.REVIEW_INTERVALS_BY_RATING.get(rating, 1440))
         multiplier = 1.0 + (exposures * self._settings.EXPOSURE_MULTIPLIER)
@@ -283,7 +287,7 @@ class LectorSchedulerService:
 
     async def get_due_concepts(self, *, user_id: uuid.UUID, course_id: uuid.UUID) -> list[DueConceptEntry]:
         """Return concepts whose reviews are due."""
-        now = datetime.now(UTC)
+        now = _utc_now()
         rows = await self._session.execute(
             select(Concept, UserConceptState)
             .select_from(CourseConcept)
@@ -326,6 +330,7 @@ class LectorSchedulerService:
         if len(entry_list) <= 1:
             return entry_list
 
+        now = _utc_now()
         recent_ids = await self._recent_concept_ids(user_id)
         due_ids = {item["concept"].id for item in entry_list}
         sigma_map = await self._sigma_for_concepts(due_ids, set(recent_ids) | due_ids)
@@ -333,11 +338,11 @@ class LectorSchedulerService:
         ranked_entries: list[tuple[tuple[float, float, str], DueConceptEntry]] = []
         for entry in entry_list:
             state = entry["state"]
-            next_review_at = state.next_review_at or datetime.now(UTC)
+            next_review_at = state.next_review_at or now
             if next_review_at.tzinfo is None:
                 next_review_at = next_review_at.replace(tzinfo=UTC)
 
-            hours_overdue = max(0.0, (datetime.now(UTC) - next_review_at).total_seconds() / 3600)
+            hours_overdue = max(0.0, (now - next_review_at).total_seconds() / 3600)
             mastery = self._mastery_value(state)
             sigma_value = sigma_map.get(entry["concept"].id, 0.0)
             downstream_pressure = await self._downstream_pressure(
@@ -392,7 +397,7 @@ class LectorSchedulerService:
         competing_due_count = len((await self._due_concept_ids(user_id=user_id, course_id=course_id)) - {concept_id})
         semantic_confusion = await self._current_confusion_pressure(user_id=user_id, course_id=course_id, concept_id=concept_id)
 
-        now = datetime.now(UTC)
+        now = _utc_now()
         review_is_due = False
         if state.next_review_at is not None:
             next_review_at = state.next_review_at

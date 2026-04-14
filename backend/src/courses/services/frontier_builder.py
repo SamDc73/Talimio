@@ -148,6 +148,7 @@ async def _build_recommended_lesson_entries(
                 Lesson.content,
                 Lesson.current_version_id,
                 LessonVersion.major_version,
+                LessonVersion.content,
             )
             .outerjoin(LessonVersion, LessonVersion.id == Lesson.current_version_id)
             .where(
@@ -158,12 +159,12 @@ async def _build_recommended_lesson_entries(
     ).all()
 
     recommendations: dict[uuid.UUID, RecommendedLessonEntry] = {}
-    for _, concept_id, lesson_content, current_version_id, current_major_version in lesson_rows:
+    for _, concept_id, lesson_content, _current_version_id, current_major_version, current_version_content in lesson_rows:
         if concept_id is None:
             continue
 
-        has_current_pass = bool(current_version_id) or bool((lesson_content or "").strip())
-        if not has_current_pass:
+        current_pass_has_content = bool((current_version_content or lesson_content or "").strip())
+        if not current_pass_has_content:
             recommendations[concept_id] = "open_current"
             continue
 
