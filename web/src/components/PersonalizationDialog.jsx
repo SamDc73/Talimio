@@ -503,7 +503,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 								<div className="flex items-center gap-2">
 									<span className="text-sm font-medium text-foreground truncate">{server.name}</span>
 									{server.enabled && (
-										<span className="size-2  rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
+										<span className="size-2 rounded-full bg-completed shadow-sm shadow-completed/50" />
 									)}
 								</div>
 								<p className="text-xs text-muted-foreground truncate mt-0.5">{server.url}</p>

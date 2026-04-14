@@ -236,7 +236,7 @@ function LoginForm({
 
 						{(resendMessage || resendError) && (
 							<p
-								className={`text-[10px] tracking-wide ${resendError ? "text-destructive" : "text-emerald-500"} animate-in fade-in font-medium`}
+								className={`text-[10px] tracking-wide ${resendError ? "text-destructive" : "text-completed"} animate-in fade-in font-medium`}
 							>
 								{resendError || resendMessage}
 							</p>

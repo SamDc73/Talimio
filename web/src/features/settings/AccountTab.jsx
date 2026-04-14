@@ -103,7 +103,7 @@ export function AccountTab() {
 					</div>
 				)}
 				{success && (
-					<div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-sm text-emerald-600">
+					<div className="rounded-lg border border-completed/20 bg-completed/10 p-3 text-sm text-completed">
 						{success}
 					</div>
 				)}

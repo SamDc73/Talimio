@@ -171,7 +171,7 @@ function CourseSidebar({
 													className="inline-flex"
 													title="Confidence: predicted correctness now (based on recent answers and memory decay)"
 												>
-													<span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-100 px-1.5 text-[10px] font-semibold text-emerald-700">
+													<span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-course/10 px-1.5 text-[10px] font-semibold text-course">
 														Conf {Math.round(item.mastery * 100)}%
 													</span>
 												</div>

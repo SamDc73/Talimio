@@ -133,8 +133,8 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 						</div>
 					)}
 					{result?.stdout && (
-						<div className="rounded-md border p-3 bg-emerald-50 border-l-2 border-l-emerald-500">
-							<div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 mb-2">
+						<div className="rounded-md border border-completed/20 bg-muted/30 border-l-2 border-l-completed p-3">
+							<div className="mb-2 flex items-center gap-2 text-xs font-semibold text-completed">
 								<CheckCircle className="size-4 " />
 								Output
 							</div>

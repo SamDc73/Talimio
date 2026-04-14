@@ -6,9 +6,22 @@ export function CircularProgress({ value, size = 120, strokeWidth = 10, classNam
 	const viewBox = `-${size * 0.125} -${size * 0.125} ${size * 1.25} ${size * 1.25}`
 
 	const getProgressColor = () => {
-		if (percentage < 30) return { stroke: "stroke-green-500", glow: "rgba(34, 197, 94, 0.3)" }
-		if (percentage < 70) return { stroke: "stroke-teal-500", glow: "rgba(20, 184, 166, 0.3)" }
-		return { stroke: "stroke-blue-500", glow: "rgba(59, 130, 246, 0.3)" }
+		if (percentage < 30) {
+			return {
+				stroke: "var(--color-primary)",
+				glow: "color-mix(in srgb, var(--color-primary) 30%, transparent)",
+			}
+		}
+		if (percentage < 70) {
+			return {
+				stroke: "var(--color-course-accent)",
+				glow: "color-mix(in srgb, var(--color-course-accent) 30%, transparent)",
+			}
+		}
+		return {
+			stroke: "var(--color-upcoming)",
+			glow: "color-mix(in srgb, var(--color-upcoming) 30%, transparent)",
+		}
 	}
 
 	const colors = getProgressColor()
@@ -47,8 +60,8 @@ export function CircularProgress({ value, size = 120, strokeWidth = 10, classNam
 					strokeDashoffset={offset}
 					fill="transparent"
 					strokeDasharray={circumference}
-					className={colors.stroke}
 					style={{
+						stroke: colors.stroke,
 						transition: "stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.6s ease",
 					}}
 				/>
