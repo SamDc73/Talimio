@@ -131,7 +131,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 										<span className="text-sm font-medium text-foreground truncate">{doc.title}</span>
 									</div>
 									<DocumentStatusProgress status={doc.status} />
-									{doc.error && <p className="text-xs text-red-600 mt-1">{doc.error}</p>}
+									{doc.error && <p className="mt-1 text-xs text-destructive">{doc.error}</p>}
 								</div>
 							))}
 						</div>
@@ -151,16 +151,16 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 							)}
 
 							{uploadResults.errors.length > 0 && (
-								<div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-									<div className="flex items-center space-x-2 mb-2">
-										<AlertTriangle className="size-5  text-red-600" />
-										<p className="text-sm font-medium text-red-800 dark:text-red-300">
+								<div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 dark:bg-destructive/5">
+									<div className="mb-2 flex items-center space-x-2">
+										<AlertTriangle className="size-5 text-destructive" />
+										<p className="text-sm font-medium text-destructive">
 											{uploadResults.errors.length} document(s) failed to upload
 										</p>
 									</div>
 									<div className="space-y-1">
 										{uploadResults.errors.map((error, index) => (
-											<p key={`${error.document.title}-${index}`} className="text-xs text-red-700 dark:text-red-400">
+											<p key={`${error.document.title}-${index}`} className="text-xs text-destructive/90">
 												• {error.document.title}: {error.error}
 											</p>
 										))}
@@ -171,8 +171,8 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 					)}
 
 					{!isUploading && !uploadResults && (
-						<div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-							<p className="text-sm text-blue-700 dark:text-blue-300">
+						<div className="mb-6 rounded-lg border border-upcoming/20 bg-upcoming/10 p-4">
+							<p className="text-sm text-upcoming-text">
 								<strong>Document Integration:</strong> Uploaded documents will be processed and integrated into the
 								course's RAG system, making them searchable during lessons and assistant conversations.
 							</p>
@@ -190,7 +190,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 							type="button"
 							variant="outline"
 							onClick={handleRetryFailed}
-							className="text-orange-600 border-orange-600 hover:bg-orange-50"
+							className="border-due-today/40 text-due-today-text hover:bg-due-today/10"
 						>
 							Retry Failed
 						</Button>
@@ -205,7 +205,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 						>
 							{isUploading ? (
 								<div className="flex items-center space-x-2">
-									<div className="size-4  border-2 border-white border-t-transparent rounded-full animate-spin" />
+									<div className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
 									<span>Uploading...</span>
 								</div>
 							) : (

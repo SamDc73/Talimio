@@ -311,7 +311,7 @@ function BookSidebar({
 			<SidebarContainer>
 				<div className="px-4 pt-20 pb-4">
 					<div className="text-center text-muted-foreground text-sm mt-8">
-						<FileText className="size-12  mx-auto mb-4 text-zinc-300" />
+						<FileText className="mx-auto mb-4 size-12 text-muted-foreground/40" />
 						<p>No table of contents available</p>
 						{!IsLoadingChapters && (
 							<>

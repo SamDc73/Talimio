@@ -16,9 +16,15 @@
 
 	--color-popover: oklch(1 0 0);
 	--color-popover-foreground: oklch(0.17 0.05 249);
+	--color-overlay: oklch(0 0 0);
+	--color-code-surface: oklch(0.22 0.02 258);
+	--color-code-foreground: oklch(0.98 0.01 210);
 
 	--color-primary: oklch(0.61 0.12 159); /* guiding jade */
 	--color-primary-foreground: oklch(0.98 0.01 210);
+	--color-brand-start: oklch(0.68 0.21 359);
+	--color-brand-middle: oklch(0.79 0.16 58);
+	--color-brand-end: oklch(0.73 0.14 220);
 
 	--color-secondary: oklch(0.96 0.01 210);
 	--color-secondary-foreground: oklch(0.26 0.04 249);
@@ -45,15 +51,15 @@
 
 	/* Content Type Colors */
 	--color-course: oklch(0.61 0.12 159); /* guiding jade */
-	--color-course-text: oklch(0.61 0.12 159);
+	--color-course-text: oklch(0.98 0.01 210);
 	--color-course-accent: oklch(0.75 0.07 162);
 
 	--color-book: oklch(0.5449 0.2154 262.74); /* blue */
-	--color-book-text: oklch(0.5449 0.2154 262.74);
+	--color-book-text: oklch(0.98 0.01 210);
 	--color-book-accent: oklch(0.684 0.1538 264.01);
 
 	--color-video: oklch(0.6016 0.2214 292.23); /* violet */
-	--color-video-text: oklch(0.6016 0.2214 292.23);
+	--color-video-text: oklch(0.98 0.01 210);
 	--color-video-accent: oklch(0.7237 0.1518 296.22);
 
 	/* Status Colors */
@@ -207,15 +213,15 @@ html.dark {
 
 	/* Content Type Colors - Lighter versions for dark mode */
 	--color-course: oklch(0.74 0.09 159);
-	--color-course-text: oklch(0.74 0.09 159);
+	--color-course-text: oklch(0.17 0.05 249);
 	--color-course-accent: oklch(0.82 0.05 162);
 
 	--color-book: oklch(0.7835 0.1015 265);
-	--color-book-text: oklch(0.7835 0.1015 265);
+	--color-book-text: oklch(0.17 0.05 249);
 	--color-book-accent: oklch(0.8655 0.0611 265.54);
 
 	--color-video: oklch(0.8307 0.0909 298.16);
-	--color-video-text: oklch(0.8307 0.0909 298.16);
+	--color-video-text: oklch(0.17 0.05 249);
 	--color-video-accent: oklch(0.9031 0.051 299.08);
 
 	/* Status Colors - Dark mode versions */

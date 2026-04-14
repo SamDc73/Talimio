@@ -8,24 +8,24 @@ function ProgressCircle({ number, progress, variant = "default" }) {
 	const strokeColors = {
 		default: "var(--color-primary)",
 		course: "var(--color-course)",
-		book: "#2563eb", // blue-600
-		video: "#7c3aed", // violet-600
+		book: "var(--color-book)",
+		video: "var(--color-video)",
 	}
 
 	const strokeColor = strokeColors[variant] || strokeColors.default
 
 	if (progress <= 0) {
 		return (
-			<div className="size-8  rounded-full bg-zinc-100 flex items-center justify-center">
-				<span className="text-sm text-zinc-600">{number}</span>
+			<div className="flex size-8 items-center justify-center rounded-full bg-muted/60">
+				<span className="text-sm text-muted-foreground">{number}</span>
 			</div>
 		)
 	}
 
 	return (
 		<div className="relative flex items-center justify-center">
-			<div className="size-8  rounded-full bg-zinc-100 flex items-center justify-center">
-				<span className="text-sm text-zinc-600">{number}</span>
+			<div className="flex size-8 items-center justify-center rounded-full bg-muted/60">
+				<span className="text-sm text-muted-foreground">{number}</span>
 			</div>
 			<svg
 				className="absolute top-0 left-0 size-8  -rotate-90"
@@ -33,7 +33,7 @@ function ProgressCircle({ number, progress, variant = "default" }) {
 				aria-label={`Progress: ${Math.round(progress)}%`}
 			>
 				<title>Progress indicator</title>
-				<circle cx="16" cy="16" r="14" strokeWidth="2.5" fill="none" stroke="#f4f4f5" className="opacity-70" />
+				<circle cx="16" cy="16" r="14" strokeWidth="2.5" fill="none" stroke="var(--color-border)" className="opacity-70" />
 				<circle
 					cx="16"
 					cy="16"
@@ -44,9 +44,6 @@ function ProgressCircle({ number, progress, variant = "default" }) {
 					strokeLinecap="round"
 					strokeDasharray={`${(progress / 100) * 87.96} 87.96`}
 					className="transition-all duration-300"
-					style={{
-						filter: "drop-shadow(0 1px 1px rgb(0 0 0 / 0.05))",
-					}}
 				/>
 			</svg>
 		</div>

@@ -183,8 +183,8 @@ function ResetPasswordPage() {
 					<button
 						type="submit"
 						disabled={loading || !token}
-						className="w-full bg-linear-to-r from-primary to-primary/90 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-primary/30 hover:from-primary/90 hover:to-primary/80 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transform transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-					>
+					className="w-full rounded-xl bg-linear-to-r from-primary to-primary/90 px-4 py-3 font-semibold text-primary-foreground shadow-lg shadow-primary/30 transition-all duration-200 hover:scale-[1.02] hover:from-primary/90 hover:to-primary/80 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+				>
 						{loading ? (
 							<div className="flex items-center justify-center">
 								<Loader2 className="size-5 animate-spin mr-2" />

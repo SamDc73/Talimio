@@ -43,7 +43,7 @@ export function VideoContentTabs({ video, youtubePlayerRef, onSeek, isPlaying, o
 								"disabled:opacity-50 disabled:cursor-not-allowed",
 								activeTab === tab.id && [
 									"bg-video/10 text-video font-semibold",
-									"border-video/30 shadow-[0_1px_3px_rgba(139,92,246,0.1)]",
+									"border-video/30 shadow-sm",
 								]
 							)}
 							disabled={tab.badge === "Coming soon"}

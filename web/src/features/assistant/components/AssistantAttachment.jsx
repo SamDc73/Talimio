@@ -136,7 +136,7 @@ function AttachmentRemove() {
 		<AttachmentPrimitive.Remove asChild>
 			<TooltipIconButton
 				tooltip="Remove image"
-				className="aui-attachment-tile-remove absolute top-1.5 right-1.5 size-3.5 rounded-full bg-background text-muted-foreground opacity-100 shadow-sm hover:bg-background! [&_svg]:text-black hover:[&_svg]:text-destructive"
+				className="aui-attachment-tile-remove absolute top-1.5 right-1.5 size-3.5 rounded-full bg-background text-muted-foreground opacity-100 shadow-sm hover:bg-background! [&_svg]:text-foreground hover:[&_svg]:text-destructive"
 				side="top"
 			>
 				<XIcon className="aui-attachment-remove-icon size-3 dark:stroke-[2.5px]" />

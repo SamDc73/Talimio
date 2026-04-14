@@ -280,7 +280,7 @@ function DocumentUploader({
 										size="sm"
 										onClick={() => removeDocument(doc.id)}
 										disabled={disabled}
-										className="shrink-0 size-8  p-0 text-muted-foreground/70 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all duration-200"
+										className="shrink-0 size-8 p-0 text-muted-foreground/70 opacity-0 transition-all duration-200 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
 									>
 										<X className="size-4 " />
 									</Button>
@@ -289,9 +289,9 @@ function DocumentUploader({
 						</div>
 
 						{documents.length >= maxFiles && (
-							<div className="mt-3 p-2 bg-amber-100 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-sm text-xs text-amber-700 dark:text-amber-300">
-								Maximum documents reached ({maxFiles}). Remove some to add more.
-							</div>
+						<div className="mt-3 rounded-sm border border-due-today/20 bg-due-today/10 p-2 text-xs text-due-today-text">
+							Maximum documents reached ({maxFiles}). Remove some to add more.
+						</div>
 						)}
 					</div>
 				</Card>
@@ -378,7 +378,7 @@ function DocumentUploader({
 						>
 							{isExtractingTitle ? (
 								<>
-									<div className="size-4  border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+									<div className="mr-2 size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
 									Extracting Title...
 								</>
 							) : (

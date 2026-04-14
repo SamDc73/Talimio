@@ -159,7 +159,7 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage, p
 				suffix={displaySuffix}
 				data-testid="progress-percentage"
 			>
-				<span className="text-xs text-zinc-500">
+				<span className="text-xs text-muted-foreground">
 					{chapters.length > 0
 						? `${completedChapterCount} of ${chapters.length} chapters`
 						: `${formatTime(currentTime || 0)} / ${formatTime(video.duration || 0)}`}

@@ -101,7 +101,7 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 					<DialogHeader className="space-y-2">
 						<div className="flex items-center gap-3">
 							<div className="rounded-lg bg-linear-to-br from-video/90 to-video p-2.5">
-								<Youtube className="size-5  text-white" />
+								<Youtube className="size-5 text-video-text" />
 							</div>
 							<DialogTitle className="text-2xl">Add a YouTube Video</DialogTitle>
 						</div>
@@ -135,7 +135,7 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 							type="button"
 							onClick={handleYoutubeAdd}
 							disabled={!isValidUrl || isAddingVideo}
-							className="min-w-[140px] bg-video hover:bg-video-accent text-white"
+							className="min-w-[140px] bg-video text-video-text hover:bg-video-accent"
 						>
 							{isAddingVideo ? (
 								<div className="flex items-center gap-2">

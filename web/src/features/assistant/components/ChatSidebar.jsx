@@ -155,7 +155,7 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 						animate="open"
 						exit="closed"
 						variants={overlayVariants}
-						className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+						className="fixed inset-0 z-40 bg-overlay/20 backdrop-blur-sm"
 						onClick={onClose}
 						transition={{ duration: 0.2 }}
 					/>
@@ -192,7 +192,7 @@ export function ChatSidebar({ isOpen, onToggle, onClose }) {
 						onDrag={handleResize}
 						onDragEnd={handleResizeEnd}
 						whileHover={{ width: 12 }}
-						whileDrag={{ width: 12, backgroundColor: "rgb(var(--primary) / 0.3)" }}
+						whileDrag={{ width: 12, backgroundColor: "color-mix(in srgb, var(--color-primary) 30%, transparent)" }}
 					>
 						<GripVertical className="h-8 w-3 opacity-0 hover:opacity-50" />
 					</m.div>

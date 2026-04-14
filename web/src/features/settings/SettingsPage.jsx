@@ -15,7 +15,7 @@ export function SettingsPage() {
 	const navigate = useNavigate()
 
 	return (
-		<div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+		<div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/60 p-4">
 			<div className="w-full max-w-3xl bg-background rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
 				<header className="flex items-center gap-4 px-6 py-4 border-b border-border">
 					<button

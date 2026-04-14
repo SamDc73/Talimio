@@ -44,7 +44,7 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 			style={{ borderColor: LATTE_BORDER_COLOR }}
 		>
 			<div
-				className="flex flex-col gap-2 border-b bg-linear-to-r from-slate-100/60 via-muted/45 to-muted/25 px-4 py-3"
+				className="flex flex-col gap-2 border-b bg-linear-to-r from-background/80 via-muted/45 to-muted/25 px-4 py-3"
 				style={{ borderBottomColor: LATTE_BORDER_COLOR }}
 			>
 				<div className="flex flex-wrap items-center justify-between gap-3">
@@ -92,7 +92,7 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 									"w-full rounded-lg border px-3 py-2 text-left transition-all",
 									isActive
 										? "border-primary/60 bg-primary/10 text-foreground"
-										: "border-transparent bg-white/60 text-muted-foreground hover:border-border"
+										: "border-transparent bg-background/60 text-muted-foreground hover:border-border"
 								)}
 							>
 								<div className="flex items-center gap-2 text-sm font-medium">
@@ -142,12 +142,12 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 						</div>
 					)}
 					{result?.stderr && (
-						<div className="rounded-md border p-3 bg-amber-50 border-l-2 border-l-amber-500">
-							<div className="flex items-center gap-2 text-xs font-semibold text-amber-700 mb-2">
+						<div className="rounded-md border border-due-today/20 bg-muted/30 border-l-2 border-l-due-today p-3">
+							<div className="mb-2 flex items-center gap-2 text-xs font-semibold text-due-today-text">
 								<AlertTriangle className="size-4 " />
 								Warnings
 							</div>
-							<pre className="text-xs font-mono whitespace-pre-wrap text-amber-900">{result.stderr}</pre>
+							<pre className="text-xs font-mono whitespace-pre-wrap text-due-today-text">{result.stderr}</pre>
 						</div>
 					)}
 				</div>

@@ -54,10 +54,10 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 				<div className="flex items-center gap-2.5">
 					<Badge
 						variant="outline"
-						className="group/language relative flex items-center gap-1.5 rounded-full border border-primary/25 bg-linear-to-r from-primary/8 via-primary/5 to-primary/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/90 shadow-[0_6px_18px_-12px_RGBA(var(--primary-rgb),0.6)] backdrop-blur-[1px]"
+						className="group/language relative flex items-center gap-1.5 rounded-full border border-primary/25 bg-linear-to-r from-primary/8 via-primary/5 to-primary/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/90 shadow-xs backdrop-blur-[1px]"
 					>
 						<span
-							className="inline-flex size-1  rounded-full bg-primary shadow-[0_0_6px_RGBA(var(--primary-rgb),0.35)] transition-transform duration-200 group-hover/language:scale-110"
+							className="inline-flex size-1 rounded-full bg-primary transition-transform duration-200 group-hover/language:scale-110"
 							aria-hidden="true"
 						/>
 						<span className="opacity-90">
@@ -128,12 +128,12 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 				<div className="border-t border-border bg-muted/20 px-4 py-3 space-y-3">
 					<div className="space-y-3">
 						{error && (
-							<div className="rounded-md border p-3 bg-muted/30 border-l-2 border-l-red-500">
-								<div className="flex items-center gap-2 text-xs font-semibold text-red-600 mb-2">
+							<div className="rounded-md border border-destructive/20 bg-muted/30 border-l-2 border-l-destructive p-3">
+								<div className="mb-2 flex items-center gap-2 text-xs font-semibold text-destructive">
 									<AlertTriangle className="size-4 " aria-hidden="true" />
 									Error
 								</div>
-								<pre className="text-[12.5px] text-red-700 font-mono whitespace-pre-wrap leading-relaxed">
+								<pre className="font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap text-destructive/90">
 									{String(error)}
 								</pre>
 							</div>
@@ -150,12 +150,12 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 							</div>
 						)}
 						{result?.stderr && (
-							<div className="rounded-md border p-3 bg-muted/30 border-l-2 border-l-amber-500">
-								<div className="flex items-center gap-2 text-xs font-semibold text-amber-700 mb-2">
+							<div className="rounded-md border border-due-today/20 bg-muted/30 border-l-2 border-l-due-today p-3">
+								<div className="mb-2 flex items-center gap-2 text-xs font-semibold text-due-today-text">
 									<AlertTriangle className="size-3.5 " aria-hidden="true" />
 									Warnings
 								</div>
-								<pre className="max-h-56 overflow-auto text-[12.5px] text-amber-800 font-mono whitespace-pre-wrap leading-relaxed">
+								<pre className="max-h-56 overflow-auto font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap text-due-today-text">
 									{result.stderr}
 								</pre>
 							</div>

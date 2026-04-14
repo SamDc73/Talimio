@@ -77,9 +77,9 @@ export function UserAvatarMenu() {
 					>
 						<button type="button" className="flex items-center justify-center">
 							<div className="size-8  rounded-full bg-card flex items-center justify-center overflow-hidden border border-border shadow-sm">
-								<div className="text-transparent bg-clip-text bg-linear-to-r from-pink-500 via-orange-500 to-cyan-500 font-semibold text-sm">
-									{userInitials}
-								</div>
+							<div className="bg-linear-to-r from-brand-start via-brand-middle to-brand-end bg-clip-text text-sm font-semibold text-transparent">
+								{userInitials}
+							</div>
 							</div>
 						</button>
 					</TooltipButton>
@@ -202,9 +202,9 @@ export function Logo({ className, size = "md", href = "/" }) {
 					className={cn("object-contain", sizeClasses[size])}
 				/>
 			</div>
-			<span className={cn("font-bold tracking-tight text-foreground dark:text-white", textSize)}>
+			<span className={cn("font-bold tracking-tight text-foreground", textSize)}>
 				Tali
-				<span className="text-transparent bg-clip-text bg-linear-to-r from-pink-500 via-orange-500 to-cyan-500">
+				<span className="bg-linear-to-r from-brand-start via-brand-middle to-brand-end bg-clip-text text-transparent">
 					mio
 				</span>
 			</span>

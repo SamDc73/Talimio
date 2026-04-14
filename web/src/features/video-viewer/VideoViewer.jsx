@@ -214,7 +214,7 @@ function VideoViewerContent() {
 						<button
 							type="button"
 							onClick={() => navigate("/")}
-							className="mt-4 px-5 py-2.5 bg-video text-white rounded-lg text-sm font-medium transition-colors hover:bg-video-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+							className="mt-4 rounded-lg bg-video px-5 py-2.5 text-sm font-medium text-video-text transition-colors hover:bg-video-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
 						>
 							Back to Home
 						</button>
@@ -237,7 +237,7 @@ function VideoViewerContent() {
 			<main className={`flex-1 transition-all duration-300 ${isOpen ? "ml-80" : "ml-0"} pt-16`}>
 				<div className="flex-1 flex flex-col overflow-y-auto p-8 max-w-7xl mx-auto w-full scroll-smooth">
 					{/* Video Player Container */}
-					<div className="relative w-full pb-[56.25%] bg-black rounded-xl overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
+					<div className="relative w-full overflow-hidden rounded-xl bg-overlay pb-[56.25%] shadow-md dark:shadow-xl">
 						<YouTubePlayer
 							ref={youtubePlayerRef}
 							videoId={video.youtubeId}

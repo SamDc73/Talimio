@@ -303,8 +303,8 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 							<ArrowLeft className="size-5 " />
 						</button>
 					) : (
-						<div className="p-2.5 bg-linear-to-br from-primary/90 to-primary rounded-lg">
-							<IconComponent className="size-5  text-white" />
+						<div className="rounded-lg bg-linear-to-br from-primary/90 to-primary p-2.5">
+							<IconComponent className="size-5 text-primary-foreground" />
 						</div>
 					)}
 					<DialogTitle className="text-2xl">{h.title}</DialogTitle>

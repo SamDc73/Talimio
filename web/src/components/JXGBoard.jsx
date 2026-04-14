@@ -46,49 +46,57 @@ function readCssColor(cssVariable, fallback) {
 	return value || fallback
 }
 
+function getBoardPalette() {
+	return {
+		primary: readCssColor("--color-primary", "var(--color-primary)"),
+		foreground: readCssColor("--color-foreground", "var(--color-foreground)"),
+		border: readCssColor("--color-border", "var(--color-border)"),
+		muted: readCssColor("--color-muted-foreground", "var(--color-muted-foreground)"),
+		upcoming: readCssColor("--color-upcoming", "var(--color-upcoming)"),
+	}
+}
+
 function getThemeOptions(theme) {
+	const palette = getBoardPalette()
+
 	if (theme === "classic") {
 		return {
 			defaultAxes: {
-				x: { strokeColor: "#1f2937", highlightStrokeColor: "#1f2937" },
-				y: { strokeColor: "#1f2937", highlightStrokeColor: "#1f2937" },
+				x: { strokeColor: palette.foreground, highlightStrokeColor: palette.foreground },
+				y: { strokeColor: palette.foreground, highlightStrokeColor: palette.foreground },
 			},
-			grid: { strokeColor: "#d1d5db", strokeOpacity: 0.55, dash: 1 },
-			point: { fillColor: "#1f4ed8", strokeColor: "#1f4ed8", size: 3 },
-			line: { strokeColor: "#1f4ed8" },
-			curve: { strokeColor: "#1f4ed8" },
-			text: { strokeColor: "#111827" },
+			grid: { strokeColor: palette.border, strokeOpacity: 0.55, dash: 1 },
+			point: { fillColor: palette.upcoming, strokeColor: palette.upcoming, size: 3 },
+			line: { strokeColor: palette.upcoming },
+			curve: { strokeColor: palette.upcoming },
+			text: { strokeColor: palette.foreground },
 		}
 	}
 
 	if (theme === "minimal") {
 		return {
 			defaultAxes: {
-				x: { strokeColor: "#9ca3af", highlightStrokeColor: "#6b7280" },
-				y: { strokeColor: "#9ca3af", highlightStrokeColor: "#6b7280" },
+				x: { strokeColor: palette.muted, highlightStrokeColor: palette.foreground },
+				y: { strokeColor: palette.muted, highlightStrokeColor: palette.foreground },
 			},
-			grid: { strokeColor: "#e5e7eb", strokeOpacity: 0.4, dash: 1 },
-			point: { fillColor: "#4b5563", strokeColor: "#4b5563", size: 3 },
-			line: { strokeColor: "#4b5563" },
-			curve: { strokeColor: "#4b5563" },
-			text: { strokeColor: "#4b5563" },
+			grid: { strokeColor: palette.border, strokeOpacity: 0.4, dash: 1 },
+			point: { fillColor: palette.muted, strokeColor: palette.muted, size: 3 },
+			line: { strokeColor: palette.muted },
+			curve: { strokeColor: palette.muted },
+			text: { strokeColor: palette.muted },
 		}
 	}
 
-	const primaryColor = readCssColor("--color-primary", "#16a34a")
-	const borderColor = readCssColor("--color-border", "#d4d4d8")
-	const mutedColor = readCssColor("--color-muted-foreground", "#64748b")
-
 	return {
 		defaultAxes: {
-			x: { strokeColor: borderColor, highlightStrokeColor: primaryColor },
-			y: { strokeColor: borderColor, highlightStrokeColor: primaryColor },
+			x: { strokeColor: palette.border, highlightStrokeColor: palette.primary },
+			y: { strokeColor: palette.border, highlightStrokeColor: palette.primary },
 		},
-		grid: { strokeColor: borderColor, strokeOpacity: 0.45, dash: 1 },
-		point: { fillColor: primaryColor, strokeColor: primaryColor, size: 3 },
-		line: { strokeColor: primaryColor, highlightStrokeColor: primaryColor },
-		curve: { strokeColor: primaryColor, highlightStrokeColor: primaryColor },
-		text: { strokeColor: mutedColor },
+		grid: { strokeColor: palette.border, strokeOpacity: 0.45, dash: 1 },
+		point: { fillColor: palette.primary, strokeColor: palette.primary, size: 3 },
+		line: { strokeColor: palette.primary, highlightStrokeColor: palette.primary },
+		curve: { strokeColor: palette.primary, highlightStrokeColor: palette.primary },
+		text: { strokeColor: palette.muted },
 	}
 }
 
@@ -277,10 +285,10 @@ export function JXGBoard({
 		const exposedTheme = {
 			name: resolvedTheme,
 			colors: {
-				primary: themeOptions.point?.fillColor || "#16a34a",
-				text: themeOptions.text?.strokeColor || "#64748b",
-				grid: themeOptions.grid?.strokeColor || "#d4d4d8",
-				axis: themeOptions.defaultAxes?.x?.strokeColor || "#d4d4d8",
+				primary: themeOptions.point?.fillColor || "var(--color-primary)",
+				text: themeOptions.text?.strokeColor || "var(--color-muted-foreground)",
+				grid: themeOptions.grid?.strokeColor || "var(--color-border)",
+				axis: themeOptions.defaultAxes?.x?.strokeColor || "var(--color-border)",
 			},
 		}
 

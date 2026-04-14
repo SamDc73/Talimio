@@ -32,7 +32,7 @@ function CompletionCheckbox({
 		if (isCompleted) {
 			return <CheckCircle className={`size-5  ${completedColor}`} />
 		}
-		return <Circle className={`size-5  ${isLocked ? "text-zinc-200" : "text-zinc-300 hover:text-zinc-400"}`} />
+		return <Circle className={`size-5 ${isLocked ? "text-border" : "text-muted-foreground/35 hover:text-muted-foreground/70"}`} />
 	}
 
 	const handleClick = (e) => {
@@ -42,7 +42,7 @@ function CompletionCheckbox({
 		}
 	}
 
-	const baseClasses = "mt-0.5 transition-all duration-200 hover:scale-110 hover:bg-zinc-50 rounded-full p-1 -m-1"
+	const baseClasses = "-m-1 mt-0.5 rounded-full p-1 transition-all duration-200 hover:scale-110 hover:bg-muted/60"
 
 	if (asDiv) {
 		return (

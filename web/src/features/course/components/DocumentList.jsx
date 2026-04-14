@@ -115,7 +115,7 @@ function DocumentList({
 		if (doc.document_type === "url") {
 			return <Link2 className="size-5 text-primary" />
 		}
-		return <FileText className="size-5  text-blue-500" />
+		return <FileText className="size-5 text-primary" />
 	}
 
 	// Format file size
@@ -179,7 +179,7 @@ function DocumentList({
 		return (
 			<Card className={className}>
 				<div className="p-6 text-center">
-					<div className="animate-spin rounded-full size-8  border-b-2 border-blue-600 mx-auto mb-4" />
+					<div className="mx-auto mb-4 size-8 animate-spin rounded-full border-b-2 border-primary" />
 					<p className="text-muted-foreground">Loading documents...</p>
 				</div>
 			</Card>
@@ -355,14 +355,14 @@ function DocumentList({
 																Download
 															</DropdownMenuItem>
 														)}
-														{onRemoveDocument && (
-															<DropdownMenuItem
-																onClick={() => onRemoveDocument(doc)}
-																className="text-red-600 hover:text-red-800"
-															>
-																<Trash2 className="size-4  mr-2" />
-																Remove
-															</DropdownMenuItem>
+													{onRemoveDocument && (
+														<DropdownMenuItem
+															onClick={() => onRemoveDocument(doc)}
+															className="text-destructive hover:text-destructive/80"
+														>
+															<Trash2 className="size-4  mr-2" />
+															Remove
+														</DropdownMenuItem>
 														)}
 													</DropdownMenuContent>
 												</DropdownMenu>

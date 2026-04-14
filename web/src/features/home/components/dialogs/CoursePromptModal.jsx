@@ -86,7 +86,7 @@ const COURSE_MODE_ACTIVE_PILL_CLASS_NAME =
 	"absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-1/2 rounded-full border border-(--color-course)/15 bg-(--color-course)/10 transition-transform duration-280 ease-[cubic-bezier(0.22,1,0.36,1)]"
 const COURSE_CHECKBOX_CLASS_NAME =
 	"size-4 rounded-sm border-border text-(--color-course) transition-all focus:ring-2 focus:ring-(--color-course)/20 focus:ring-offset-0"
-const COURSE_PRIMARY_ACTION_CLASS_NAME = "min-w-[140px] bg-(--color-course) text-white hover:bg-(--color-course)/90"
+const COURSE_PRIMARY_ACTION_CLASS_NAME = "min-w-[140px] bg-(--color-course) text-(--color-course-text) hover:bg-(--color-course)/90"
 const COURSE_LOADING_OVERLAY_CLASS_NAME =
 	"absolute inset-0 top-12 z-20 flex items-center justify-center rounded-lg border border-(--color-course)/10 bg-card/95 shadow-sm backdrop-blur-sm"
 const COURSE_ERROR_OVERLAY_CLASS_NAME =

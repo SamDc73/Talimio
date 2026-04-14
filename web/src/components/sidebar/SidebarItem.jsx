@@ -31,7 +31,7 @@ function SidebarItem({
 
 	const activeColor = variantColors[variant] || variantColors.default
 	const isHighlighted = isCompleted || isActive
-	const titleClassName = isHighlighted ? `font-semibold ${activeColor}` : "text-zinc-800"
+	const titleClassName = isHighlighted ? `font-semibold ${activeColor}` : "text-foreground"
 
 	return (
 		<li className={`flex items-start gap-3 ${className}`}>

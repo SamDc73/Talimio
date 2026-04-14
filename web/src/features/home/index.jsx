@@ -119,7 +119,7 @@ export default function HomePage() {
 	// Show loading skeleton while content is loading
 	if (contentLoading) {
 		return (
-			<div className="min-h-screen bg-linear-to-b from-slate-50 to-slate-100">
+			<div className="min-h-screen bg-linear-to-b from-background to-muted/40">
 				<MainHeader transparent />
 				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-28">
 					<WelcomeHeader />
@@ -134,7 +134,7 @@ export default function HomePage() {
 	return (
 		<ErrorBoundary>
 			<ErrorBoundary>
-				<div className="min-h-screen bg-linear-to-b from-slate-50 to-slate-100">
+				<div className="min-h-screen bg-linear-to-b from-background to-muted/40">
 					<MainHeader transparent />
 					<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-28">
 						<WelcomeHeader />

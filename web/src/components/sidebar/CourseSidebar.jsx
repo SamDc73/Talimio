@@ -137,7 +137,7 @@ function CourseSidebar({
 										onClick={() => onPracticeClick?.(item.id)}
 										variant="course"
 										leftContent={
-											<span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-800">
+											<span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-due-today/15 px-1.5 text-[10px] font-semibold text-due-today-text">
 												DUE
 											</span>
 										}

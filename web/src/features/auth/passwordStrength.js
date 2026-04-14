@@ -6,7 +6,7 @@ export const PASSWORD_SCORE_LABELS = ["Very weak", "Weak", "Fair", "Good", "Stro
 export const PASSWORD_SCORE_STYLES = [
 	"bg-destructive/40",
 	"bg-destructive/55",
-	"bg-amber-500/60",
+	"bg-due-today/60",
 	"bg-primary/70",
 	"bg-primary",
 ]

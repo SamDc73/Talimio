@@ -12,7 +12,7 @@ const DialogPortal = DialogPrimitive.Portal
 const DialogClose = DialogPrimitive.Close
 
 function DialogOverlay({ className, ref, ...props }) {
-	return <DialogPrimitive.Overlay ref={ref} className={cn("fixed inset-0 z-50 bg-black/80", className)} {...props} />
+	return <DialogPrimitive.Overlay ref={ref} className={cn("fixed inset-0 z-50 bg-overlay/80", className)} {...props} />
 }
 
 function DialogContent({

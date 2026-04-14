@@ -134,8 +134,8 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 					>
 						<DialogHeader className="space-y-3">
 							<div className="flex items-center gap-3">
-								<div className="rounded-lg bg-linear-to-br from-book/90 to-book p-2.5">
-									<BookOpen className="size-5  text-white" />
+							<div className="rounded-lg bg-linear-to-br from-book/90 to-book p-2.5">
+								<BookOpen className="size-5 text-book-text" />
 								</div>
 								<DialogTitle className="text-2xl">Upload Book</DialogTitle>
 							</div>
@@ -219,7 +219,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 								type="button"
 								onClick={handleUpload}
 								disabled={!selectedFile || !bookTitle.trim() || isUploadingBook}
-								className="min-w-[140px] bg-book hover:bg-book-accent text-white"
+							className="min-w-[140px] bg-book text-book-text hover:bg-book-accent"
 							>
 								{isUploadingBook ? (
 									<div className="flex items-center gap-2">

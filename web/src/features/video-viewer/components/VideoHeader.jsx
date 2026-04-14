@@ -29,9 +29,9 @@ export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
 							<div className="flex items-center mt-1">
 								<div className="w-32 md:w-48 bg-muted rounded-full h-1.5 overflow-hidden">
 									<div
-										className="h-full bg-linear-to-r from-violet-500 to-violet-600 rounded-full transition-all duration-300"
-										style={{ width: `${progress.percentage}%` }}
-									/>
+									className="h-full rounded-full bg-linear-to-r from-video to-video-accent transition-all duration-300"
+									style={{ width: `${progress.percentage}%` }}
+								/>
 								</div>
 								<span className="ml-2 text-xs font-medium text-muted-foreground">
 									{formatProgressText(progress.percentage)}

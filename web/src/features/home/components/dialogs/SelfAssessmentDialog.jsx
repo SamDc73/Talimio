@@ -266,8 +266,8 @@ export default function SelfAssessmentDialog({ topic, level = null, onBack, onSk
 							type="button"
 							onClick={currentSelection === null ? handleSkip : goToNext}
 							disabled={isSubmitting}
-							className="min-w-[120px] bg-(--color-course) text-white hover:bg-(--color-course)/90"
-						>
+						className="min-w-[120px] bg-(--color-course) text-(--color-course-text) hover:bg-(--color-course)/90"
+					>
 							{currentSelection === null ? "Skip" : "Next"}
 						</Button>
 					</div>
