@@ -123,7 +123,6 @@ class PracticeDrillService:
         generation_context = self._build_generation_context(learner)
         seen_questions, seen_signatures = await self._load_recent_seen_keys(user_id=user_id, concept_id=concept_id)
 
-        lesson_id = uuid.uuid5(uuid.NAMESPACE_URL, f"concept-lesson:{course_id}:{concept_id}")
         drills = await self._generate_drills_once(
             concept=concept,
             concept_id=concept_id,
