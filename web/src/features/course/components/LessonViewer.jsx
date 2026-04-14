@@ -2,7 +2,7 @@ import {
 	AlertTriangle,
 	ArrowLeft,
 	ArrowRight,
-	CheckCircle,
+	CheckCircle2,
 	HelpCircle,
 	History,
 	Loader2,
@@ -62,10 +62,163 @@ const LESSON_NEXT_PASS_BANNER_STYLES = {
 }
 
 const LESSON_SHELL_HEADER_CLASS_NAME =
-	"border-b border-border/60 bg-linear-to-br from-(--color-course)/12 via-background to-(--color-course-accent)/10"
-const ACTIVE_WINDOW_BUTTON_CLASS_NAME = "border-(--color-course)/20 bg-(--color-course)/10 text-(--color-course)"
-const REGENERATE_ACTION_CLASS_NAME =
-	"border-(--color-course)/20 text-(--color-course) hover:bg-(--color-course)/10 hover:text-(--color-course)"
+	"border-b border-border/40 bg-linear-to-br from-(--color-course)/8 via-background to-(--color-course-accent)/5"
+
+const LESSON_FLOW_ACTION_BUTTON_CLASS_NAME =
+	"gap-1.5 bg-(--color-course) text-(--color-course-text) hover:bg-(--color-course)/90 shadow-xs"
+
+const FLOW_CARD_COMPLETED_ROW_CLASS_NAME =
+	"flex min-h-[3.294rem] w-full items-center justify-between gap-[0.786rem] rounded-[1.272rem] border border-border/20 bg-muted/20 px-[1.272rem] py-[0.618rem] text-left transition-all hover:bg-muted/40"
+
+const FLOW_CARD_HEADER_BUTTON_CLASS_NAME =
+	"flex min-h-[4.182rem] w-full items-center gap-[0.786rem] px-[1.272rem] py-[1.062rem] text-left"
+
+const FLOW_CARD_MARKER_SLOT_CLASS_NAME = "flex size-[2.058rem] shrink-0 items-center justify-center"
+
+const FLOW_CARD_MARKER_CLASS_NAME = `${FLOW_CARD_MARKER_SLOT_CLASS_NAME} rounded-full text-[0.786rem] leading-none font-semibold tracking-[-0.014em] tabular-nums transition-all`
+
+const FLOW_CARD_COMPLETED_ICON_CLASS_NAME = "size-[1.618rem] text-(--color-course)"
+
+const FLOW_CARD_TITLE_CLASS_NAME =
+	"min-w-0 flex-1 truncate text-[1.062rem] leading-[1.272rem] font-medium tracking-[-0.011em] transition-colors"
+
+const FLOW_CARD_CONTENT_CLASS_NAME =
+	"border-t border-border/20 px-[1.272rem] py-[1.272rem] md:px-[1.618rem] md:py-[1.618rem]"
+
+function truncatePreview(text, maxLength = 56) {
+	if (!text || text.length <= maxLength) {
+		return text
+	}
+
+	return `${text.slice(0, maxLength - 3).trimEnd()}...`
+}
+
+function cleanWindowPreviewLine(line) {
+	return line
+		.replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
+		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+		.replace(/^#{1,6}\s+/, "")
+		.replace(/^>\s?/, "")
+		.replace(/^[-*+]\s+/, "")
+		.replace(/^\d+\.\s+/, "")
+		.replace(/[*_`~]/g, "")
+		.replace(/\s+/g, " ")
+		.trim()
+}
+
+function getWindowMicroSummary(window) {
+	if (typeof window?.content === "string") {
+		const windowTitle = typeof window?.title === "string" ? window.title.trim().toLowerCase() : null
+
+		for (const line of window.content.split("\n")) {
+			const preview = cleanWindowPreviewLine(line)
+
+			if (!preview) {
+				continue
+			}
+
+			if (windowTitle && preview.toLowerCase() === windowTitle) {
+				continue
+			}
+
+			return truncatePreview(preview)
+		}
+	}
+
+	if (Number.isFinite(window?.estimatedMinutes) && window.estimatedMinutes > 0) {
+		return `${window.estimatedMinutes} min section`
+	}
+
+	return "Section finished"
+}
+
+function getWindowProgressDotClasses(isActive, isCompleted) {
+	if (isActive) {
+		return {
+			dotSizeClass: "size-[0.5rem]",
+			dotColorClass: "bg-(--color-course) shadow-sm",
+		}
+	}
+
+	if (isCompleted) {
+		return {
+			dotSizeClass: "size-[0.382rem]",
+			dotColorClass: "bg-(--color-course)/45",
+		}
+	}
+
+	return {
+		dotSizeClass: "size-[0.309rem]",
+		dotColorClass: "bg-muted-foreground/20",
+	}
+}
+
+function getWindowMarkerClass(isActive, isCompleted) {
+	if (isActive) {
+		return "bg-(--color-course) text-(--color-course-text)"
+	}
+
+	if (isCompleted) {
+		return "bg-(--color-course)/12 text-(--color-course)"
+	}
+
+	return "bg-muted text-muted-foreground/60"
+}
+
+function LessonFlowActionButton({ label, onClick, className }) {
+	return (
+		<Button type="button" size="sm" onClick={onClick} className={cn(LESSON_FLOW_ACTION_BUTTON_CLASS_NAME, className)}>
+			{label}
+			<ArrowRight className="size-4" />
+		</Button>
+	)
+}
+
+function LessonWindowProgressDots({ windows, activeWindowIndex, onWindowChange }) {
+	return (
+		<div className="px-6 pb-[1rem] pt-[0.618rem] md:px-8">
+			<div className="flex items-center justify-center">
+				<div className="flex flex-wrap items-center gap-[0.618rem]">
+					{windows.map((window) => {
+						const isActive = window.windowIndex === activeWindowIndex
+						const isCompleted = window.windowIndex < activeWindowIndex
+						const { dotSizeClass, dotColorClass } = getWindowProgressDotClasses(isActive, isCompleted)
+
+						return (
+							<button
+								key={window.id}
+								type="button"
+								onClick={() => onWindowChange?.(window.windowIndex)}
+								className="flex size-[1.618rem] items-center justify-center rounded-full transition-colors hover:bg-muted/40"
+								aria-label={`Go to ${window.title || `section ${window.windowIndex + 1}`}`}
+							>
+								<span className={cn("rounded-full transition-all duration-200", dotSizeClass, dotColorClass)} />
+							</button>
+						)
+					})}
+				</div>
+			</div>
+		</div>
+	)
+}
+
+function LessonNextRail({ nextLesson, onLessonNavigate }) {
+	if (!nextLesson || !onLessonNavigate) {
+		return null
+	}
+
+	return (
+		<div className="px-6 pb-[1.618rem] pt-[0.618rem] md:px-8">
+			<div className="flex justify-end">
+				<LessonFlowActionButton
+					label="Next Lesson"
+					onClick={() => onLessonNavigate(nextLesson.id)}
+					className="w-full justify-center sm:w-auto sm:min-w-[8.5rem]"
+				/>
+			</div>
+		</div>
+	)
+}
 
 /**
  * LessonViewer - Presents a lesson with MDX content and actions
@@ -78,11 +231,11 @@ export function LessonViewer({
 	isLoading,
 	error,
 	onBack,
-	onMarkComplete,
 	onRegenerate,
 	isRegeneratingLesson = false,
 	regenerateStatus = null,
 	modules = [],
+	nextLesson,
 	onLessonNavigate,
 	onStartNextPass,
 	onVersionSelect,
@@ -213,8 +366,6 @@ export function LessonViewer({
 		}).format(parsed)
 	}
 
-	const windowTitle = selectedWindow?.title || (hasMultipleWindows ? `Window ${activeWindowIndex + 1}` : null)
-	const currentVersionDisplay = currentVersionLabel ? `v${currentVersionLabel}` : "Versions"
 	const nextVersionDisplay = nextPass ? `v${nextPass.majorVersion}.0` : null
 	let nextPassActionLabel = null
 	let nextPassHelperText = null
@@ -224,13 +375,11 @@ export function LessonViewer({
 			nextPass.status === "recommended_now" ? `Creates ${nextVersionDisplay}` : `${nextVersionDisplay} · usually later`
 	}
 
-	// Calculate previous and next lessons from modules
-	const { previousLesson, nextLesson } = useMemo(() => {
+	const derivedNextLesson = useMemo(() => {
 		if (!lesson?.id || !modules?.length) {
-			return { previousLesson: null, nextLesson: null }
+			return null
 		}
 
-		// Flatten all lessons from all modules
 		const allLessons = []
 		for (const module of modules) {
 			if (Array.isArray(module?.lessons)) {
@@ -240,17 +389,15 @@ export function LessonViewer({
 			}
 		}
 
-		// Find current lesson index
-		const currentIndex = allLessons.findIndex((l) => String(l?.id) === String(lesson.id))
+		const currentIndex = allLessons.findIndex((lessonItem) => String(lessonItem?.id) === String(lesson.id))
 		if (currentIndex === -1) {
-			return { previousLesson: null, nextLesson: null }
+			return null
 		}
 
-		return {
-			previousLesson: currentIndex > 0 ? allLessons[currentIndex - 1] : null,
-			nextLesson: currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null,
-		}
+		return currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null
 	}, [lesson?.id, modules])
+
+	const resolvedNextLesson = nextLesson !== undefined ? nextLesson : derivedNextLesson
 
 	// Loading state
 	if (isLoading) {
@@ -305,30 +452,28 @@ export function LessonViewer({
 			<div className="max-w-4xl w-full mx-auto px-4 flex justify-center">
 				<div className="my-8 flex w-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
 					{/* Header */}
-					<div className={cn(LESSON_SHELL_HEADER_CLASS_NAME, "p-6 md:p-8")}>
-						<div className="flex flex-col gap-5">
-							<div className="flex flex-wrap items-center justify-between gap-3">
-								<Button onClick={onBack} variant="secondary" size="sm">
-									<ArrowLeft className="size-4 " />
-									Back
-								</Button>
-
-								<div className="flex flex-wrap items-center gap-2">
-									{adaptiveEnabled && lessonCourseId && lessonConceptId && (
-										<Link
-											to={`/course/${lessonCourseId}/practice?focusConceptId=${encodeURIComponent(String(lessonConceptId))}`}
-										>
-											<Button variant="outline" size="sm">
-												Practice Concept
-											</Button>
-										</Link>
-									)}
-									{canShowVersionMenu ? (
+					<div className={cn(LESSON_SHELL_HEADER_CLASS_NAME, "px-6 pt-5 pb-6 md:px-8 md:pt-6 md:pb-8")}>
+						<div className="flex flex-col gap-4 md:gap-5">
+							<div className="flex items-center justify-between gap-3">
+								<div className="flex items-center gap-3">
+									<Button
+										onClick={onBack}
+										variant="ghost"
+										size="sm"
+										className="gap-1.5 -ml-2 text-muted-foreground/60 hover:text-foreground hover:bg-transparent"
+									>
+										<ArrowLeft className="size-4" />
+										Back
+									</Button>
+									{canShowVersionMenu && (
 										<DropdownMenu>
 											<DropdownMenuTrigger asChild>
-												<Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
-													<History className="size-4" />
-													<span className="font-mono text-xs">{currentVersionDisplay}</span>
+												<Button
+													variant="ghost"
+													size="sm"
+													className="gap-1 h-6 px-2 text-xs text-muted-foreground/60 hover:text-(--color-course) hover:bg-(--color-course)/8 transition-colors"
+												>
+													<History className="size-3" />v{currentVersionLabel}
 												</Button>
 											</DropdownMenuTrigger>
 											<DropdownMenuContent align="end" className="w-72">
@@ -396,13 +541,16 @@ export function LessonViewer({
 												) : null}
 											</DropdownMenuContent>
 										</DropdownMenu>
-									) : null}
+									)}
+								</div>
+
+								<div className="flex items-center gap-2">
 									{onRegenerate && (
 										<Button
 											onClick={() => onRegenerate(lesson.id)}
-											variant="outline"
+											variant="ghost"
 											size="sm"
-											className={REGENERATE_ACTION_CLASS_NAME}
+											className="text-muted-foreground hover:text-(--color-course) hover:bg-(--color-course)/8 transition-colors"
 											disabled={isRegeneratingLesson || isViewingHistoricalVersion}
 											title={
 												isViewingHistoricalVersion ? "Switch back to the current version to regenerate." : undefined
@@ -411,43 +559,35 @@ export function LessonViewer({
 											{isRegeneratingLesson ? (
 												<Loader2 className="size-4 animate-spin" />
 											) : (
-												<RotateCcw className="size-4 " />
+												<RotateCcw className="size-4" />
 											)}
 											{isRegeneratingLesson ? "Regenerating" : "Regenerate"}
 										</Button>
 									)}
-
-									{onMarkComplete && (
-										<Button onClick={() => onMarkComplete(lesson.id)} size="sm">
-											<CheckCircle className="size-4 " />
-											Complete
-										</Button>
+									{adaptiveEnabled && lessonCourseId && lessonConceptId && (
+										<Link
+											to={`/course/${lessonCourseId}/practice?focusConceptId=${encodeURIComponent(String(lessonConceptId))}`}
+										>
+											<Button
+												size="sm"
+												className="gap-1.5 bg-(--color-course) text-(--color-course-text) hover:bg-(--color-course)/90 shadow-xs"
+											>
+												Practice
+											</Button>
+										</Link>
 									)}
 								</div>
 							</div>
 
-							<div className="space-y-4">
-								<div className="flex flex-wrap items-center gap-2">
-									{lesson.module_name ? (
-										<Badge
-											variant="outline"
-											className="rounded-full border-border/60 bg-background/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground"
-										>
-											{lesson.module_name}
-										</Badge>
-									) : null}
-								</div>
-
-								<div className="space-y-3">
-									<h1 className="max-w-3xl text-3xl/tight font-semibold tracking-tight text-foreground md:text-4xl/tight">
-										{lesson.title || lesson.slug || "Lesson"}
-									</h1>
-									{lesson.description ? (
-										<p className="max-w-2xl text-sm/relaxed text-muted-foreground md:text-base/relaxed">
-											{lesson.description}
-										</p>
-									) : null}
-								</div>
+							<div className="space-y-2.5">
+								<h1 className="max-w-3xl text-3xl/tight font-semibold tracking-tight text-foreground md:text-4xl/tight">
+									{lesson.title || lesson.slug || "Lesson"}
+								</h1>
+								{lesson.description ? (
+									<p className="max-w-2xl text-sm/relaxed text-muted-foreground md:text-base/relaxed">
+										{lesson.description}
+									</p>
+								) : null}
 							</div>
 						</div>
 					</div>
@@ -456,130 +596,146 @@ export function LessonViewer({
 					{nextPassBannerContent}
 
 					{hasMultipleWindows ? (
-						<div className="border-b border-border/50 bg-background/80 px-6 py-4 md:px-8">
-							<div className="flex flex-wrap items-center justify-between gap-3">
-								<div className="flex flex-wrap items-center gap-2">
-									{lessonWindows.map((window) => {
-										const isActive = window.windowIndex === activeWindowIndex
+						<div>
+							<div className="space-y-[0.618rem] px-6 py-[1rem] md:px-8 md:py-[1.618rem]">
+								{lessonWindows.map((window) => {
+									const isActive = window.windowIndex === activeWindowIndex
+									const isCompleted = window.windowIndex < activeWindowIndex
+									const isLastWindow = window.windowIndex === lessonWindows.length - 1
+									const sectionClass = isActive
+										? "border-(--color-course)/20 bg-(--color-course)/3 shadow-xs"
+										: "border-border/30 bg-card"
+									const markerClass = getWindowMarkerClass(isActive, isCompleted)
+									const titleClass = isActive ? "text-foreground" : "text-muted-foreground"
+
+									if (isCompleted) {
 										return (
 											<button
 												key={window.id}
 												type="button"
 												onClick={() => onWindowChange?.(window.windowIndex)}
-												className={cn(
-													"rounded-full border px-3 py-1.5 text-sm transition-colors",
-													isActive
-														? ACTIVE_WINDOW_BUTTON_CLASS_NAME
-														: "border-border bg-background text-muted-foreground hover:bg-muted"
-												)}
+												className={FLOW_CARD_COMPLETED_ROW_CLASS_NAME}
 											>
-												<span className="font-medium">{window.windowIndex + 1}</span>
-												{window.title ? <span className="ml-2 hidden sm:inline">{window.title}</span> : null}
+												<div className="flex min-w-0 flex-1 items-center gap-[0.786rem]">
+													<span className={FLOW_CARD_MARKER_SLOT_CLASS_NAME}>
+														<CheckCircle2 className={FLOW_CARD_COMPLETED_ICON_CLASS_NAME} />
+													</span>
+													<span className="truncate text-[0.938rem] leading-[1.272rem] font-medium tracking-[-0.011em] text-muted-foreground line-through decoration-muted-foreground/30">
+														{window.title || `Section ${window.windowIndex + 1}`}
+													</span>
+												</div>
+												<span className="max-w-[38.2%] truncate text-[0.786rem] leading-[1.128rem] text-muted-foreground/60">
+													{getWindowMicroSummary(window)}
+												</span>
 											</button>
 										)
-									})}
-								</div>
-								{selectedWindow?.estimatedMinutes ? (
-									<span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-										{selectedWindow.estimatedMinutes} min
-									</span>
-								) : null}
-							</div>
-						</div>
-					) : null}
+									}
 
-					{/* Content */}
-					<div className="p-6 md:p-8" data-selection-zone="true">
-						<PracticeRegistryProvider>
-							{hasMultipleWindows && windowTitle ? (
-								<div className="mb-6 space-y-1">
-									<p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-										Window {activeWindowIndex + 1} of {lessonWindows.length}
-									</p>
-									<h2 className="text-xl font-semibold text-foreground">{windowTitle}</h2>
-								</div>
+									return (
+										<section
+											key={window.id}
+											className={cn("overflow-hidden rounded-[1.618rem] border transition-all", sectionClass)}
+										>
+											<button
+												type="button"
+												onClick={() => onWindowChange?.(window.windowIndex)}
+												className={FLOW_CARD_HEADER_BUTTON_CLASS_NAME}
+												aria-expanded={isActive}
+											>
+												<span className={cn(FLOW_CARD_MARKER_CLASS_NAME, markerClass)}>{window.windowIndex + 1}</span>
+												<span className={cn(FLOW_CARD_TITLE_CLASS_NAME, titleClass)}>
+													{window.title || `Section ${window.windowIndex + 1}`}
+												</span>
+											</button>
+											{isActive ? (
+												<div className={FLOW_CARD_CONTENT_CLASS_NAME}>
+													<div className="space-y-6" data-selection-zone="true">
+														<PracticeRegistryProvider>
+															<ContentRenderer
+																content={
+																	window.content || selectedWindow?.content || lesson.content || lesson.md_source
+																}
+																lessonId={lesson.id}
+																courseId={lessonCourseId}
+																lessonConceptId={lessonConceptId}
+															/>
+															<LessonQuickCheckPanel
+																courseId={lessonCourseId}
+																lessonId={lesson.id}
+																lessonConceptId={lessonConceptId}
+															/>
+														</PracticeRegistryProvider>
+
+														{adaptiveEnabled && lessonCourseId && lesson?.id ? (
+															<AdaptiveReviewPanel
+																courseId={lessonCourseId}
+																lessonId={lesson.id}
+																lessonConceptId={lessonConceptId}
+																adaptiveEnabled={adaptiveEnabled}
+															/>
+														) : null}
+													</div>
+
+													{!isLastWindow ? (
+														<div className="mt-[1.618rem] border-t border-border/20 pt-[1.618rem]">
+															<div className="flex justify-end">
+																<LessonFlowActionButton
+																	label="Next"
+																	onClick={() => onWindowChange?.(window.windowIndex + 1)}
+																	className="w-full justify-center sm:w-auto sm:min-w-[7.382rem]"
+																/>
+															</div>
+														</div>
+													) : null}
+												</div>
+											) : null}
+										</section>
+									)
+								})}
+							</div>
+
+							{activeWindowIndex === lessonWindows.length - 1 ? (
+								<LessonNextRail nextLesson={resolvedNextLesson} onLessonNavigate={onLessonNavigate} />
 							) : null}
-							<ContentRenderer
-								content={selectedWindow?.content || lesson.content || lesson.md_source}
-								lessonId={lesson.id}
-								courseId={lessonCourseId}
-								lessonConceptId={lessonConceptId}
-							/>
-							<LessonQuickCheckPanel courseId={lessonCourseId} lessonId={lesson.id} lessonConceptId={lessonConceptId} />
-						</PracticeRegistryProvider>
-					</div>
 
-					{hasMultipleWindows ? (
-						<div className="px-6 pb-2 md:px-8">
-							<div className="flex items-center justify-between gap-4 border-t border-border/40 pt-4">
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									onClick={() => onWindowChange?.(activeWindowIndex - 1)}
-									disabled={activeWindowIndex === 0}
-								>
-									<ArrowLeft className="size-4 " />
-									Back
-								</Button>
-								<span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-									Window {activeWindowIndex + 1} of {lessonWindows.length}
-								</span>
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									onClick={() => onWindowChange?.(activeWindowIndex + 1)}
-									disabled={activeWindowIndex >= lessonWindows.length - 1}
-								>
-									Next
-									<ArrowRight className="size-4 " />
-								</Button>
-							</div>
-						</div>
-					) : null}
-
-					{/* Adaptive Review Panel - blends seamlessly into lesson flow */}
-					{adaptiveEnabled && lessonCourseId && lesson?.id && (
-						<div className="px-6 md:px-8 pt-4">
-							<AdaptiveReviewPanel
-								courseId={lessonCourseId}
-								lessonId={lesson.id}
-								lessonConceptId={lessonConceptId}
-								adaptiveEnabled={adaptiveEnabled}
+							<LessonWindowProgressDots
+								windows={lessonWindows}
+								activeWindowIndex={activeWindowIndex}
+								onWindowChange={onWindowChange}
 							/>
 						</div>
-					)}
-
-					{/* Lesson Navigation - subtle footer navigation */}
-					{onLessonNavigate && (previousLesson || nextLesson) && (
-						<div className="px-6 md:px-8 pb-8 pt-4">
-							<div className="flex items-center justify-between gap-4 pt-6 mt-6 border-t border-border/40">
-								{previousLesson ? (
-									<Button type="button" variant="outline" size="sm" onClick={() => onLessonNavigate(previousLesson.id)}>
-										<ArrowLeft className="size-4 " />
-										Previous
-									</Button>
-								) : (
-									<div />
-								)}
-
-								{nextLesson ? (
-									<Button
-										type="button"
-										variant="default"
-										size="sm"
-										onClick={() => onLessonNavigate(nextLesson.id)}
-										className="ml-auto"
-									>
-										Next Lesson
-										<ArrowRight className="size-4 " />
-									</Button>
-								) : (
-									<div />
-								)}
+					) : (
+						<>
+							<div className="p-6 md:p-8" data-selection-zone="true">
+								<PracticeRegistryProvider>
+									<ContentRenderer
+										content={selectedWindow?.content || lesson.content || lesson.md_source}
+										lessonId={lesson.id}
+										courseId={lessonCourseId}
+										lessonConceptId={lessonConceptId}
+									/>
+									<LessonQuickCheckPanel
+										courseId={lessonCourseId}
+										lessonId={lesson.id}
+										lessonConceptId={lessonConceptId}
+									/>
+								</PracticeRegistryProvider>
 							</div>
-						</div>
+
+							{/* Adaptive Review Panel - blends seamlessly into lesson flow */}
+							{adaptiveEnabled && lessonCourseId && lesson?.id && (
+								<div className="px-6 pt-4 md:px-8">
+									<AdaptiveReviewPanel
+										courseId={lessonCourseId}
+										lessonId={lesson.id}
+										lessonConceptId={lessonConceptId}
+										adaptiveEnabled={adaptiveEnabled}
+									/>
+								</div>
+							)}
+
+							<LessonNextRail nextLesson={resolvedNextLesson} onLessonNavigate={onLessonNavigate} />
+						</>
 					)}
 				</div>
 			</div>
