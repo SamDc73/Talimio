@@ -6,8 +6,8 @@
 function ProgressCircle({ number, progress, variant = "default" }) {
 	// Map variants to stroke colors following the styling guide
 	const strokeColors = {
-		default: "#10b981", // emerald-500
-		course: "#0d9488", // teal-600 - following styling guide
+		default: "var(--color-primary)",
+		course: "var(--color-course)",
 		book: "#2563eb", // blue-600
 		video: "#7c3aed", // violet-600
 	}

@@ -94,14 +94,14 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 				whileHover={{ y: -5, transition: { duration: 0.2 } }}
 				className={`bg-background rounded-2xl overflow-hidden relative flex flex-col h-full cursor-pointer ${
 					pinned
-						? "shadow-md border-2 border-green-500/10 bg-green-500/5"
+						? "shadow-md border-2 border-primary/15 bg-primary/5"
 						: "shadow-sm hover:shadow-md border border-border"
 				}`}
 				onMouseEnter={() => setHover(true)}
 				onMouseLeave={() => setHover(false)}
 				onClick={onClick}
 			>
-				{pinned && <div className="absolute top-0 left-6 w-6 h-1 bg-green-500 rounded-b-full" />}
+				{pinned && <div className="absolute top-0 left-6 w-6 h-1 bg-primary rounded-b-full" />}
 				<div className="p-6 flex flex-col justify-between h-full">
 					<div className="flex justify-between items-start mb-4">
 						<div

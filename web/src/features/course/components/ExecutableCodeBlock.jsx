@@ -48,7 +48,7 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 		>
 			{/* Header */}
 			<div
-				className="flex items-center justify-between gap-3 px-4 py-2.5 border-b bg-linear-to-r from-green-500/6 via-muted/45 to-muted/35 backdrop-blur-[1px]"
+				className="flex items-center justify-between gap-3 px-4 py-2.5 border-b bg-linear-to-r from-primary/6 via-muted/45 to-muted/35 backdrop-blur-[1px]"
 				style={{ borderBottomColor: LATTE_BORDER_COLOR }}
 			>
 				<div className="flex items-center gap-2.5">
@@ -139,8 +139,8 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 							</div>
 						)}
 						{result?.stdout && (
-							<div className="rounded-md border p-3 bg-muted/30 border-l-2 border-l-green-500">
-								<div className="flex items-center gap-2 text-xs font-semibold text-green-600 mb-2">
+							<div className="rounded-md border border-completed/20 bg-muted/30 border-l-2 border-l-completed p-3">
+								<div className="mb-2 flex items-center gap-2 text-xs font-semibold text-completed">
 									<CheckCircle className="size-3.5 " aria-hidden="true" />
 									Output
 								</div>

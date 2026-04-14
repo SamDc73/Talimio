@@ -224,13 +224,13 @@ function DocumentUploader({
 					<div className="p-5">
 						<div className="flex items-center justify-between mb-4">
 							<div className="flex items-center space-x-2">
-								<div className="size-2  bg-green-500 rounded-full" />
-								<span className="text-sm font-semibold text-green-900 dark:text-green-100">Ready to Upload</span>
-								<span className="text-xs bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 px-2 py-0.5 rounded-full font-medium">
+								<div className="size-2 rounded-full bg-primary" />
+								<span className="text-sm font-semibold text-primary">Ready to Upload</span>
+								<span className="rounded-full bg-primary/12 px-2 py-0.5 text-xs font-medium text-primary">
 									{documents.length}
 								</span>
 							</div>
-							<div className="text-xs text-green-600/80 dark:text-green-400/80 font-medium">
+							<div className="text-xs font-medium text-primary/80">
 								{(documents.reduce((acc, doc) => acc + (doc.size || 0), 0) / 1024 / 1024).toFixed(1)}
 								MB total
 							</div>

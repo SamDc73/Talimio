@@ -113,7 +113,7 @@ function DocumentList({
 	// Get file type icon
 	const getFileTypeIcon = (doc) => {
 		if (doc.document_type === "url") {
-			return <Link2 className="size-5  text-green-500" />
+			return <Link2 className="size-5 text-primary" />
 		}
 		return <FileText className="size-5  text-blue-500" />
 	}

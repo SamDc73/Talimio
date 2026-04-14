@@ -89,7 +89,7 @@ function SearchBar({
 				<Button
 					onClick={onGenerateCourse}
 					size="sm"
-					className="bg-linear-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white flex items-center gap-1"
+					className="bg-linear-to-r from-primary to-course-accent text-white hover:from-primary/95 hover:to-course-accent/90 flex items-center gap-1"
 				>
 					<Sparkles className="size-3.5 " />
 					Generate Course

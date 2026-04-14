@@ -140,10 +140,10 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 					{uploadResults && allCompleted && (
 						<div className="mb-6">
 							{uploadResults.results.length > 0 && (
-								<div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-3">
+								<div className="mb-3 rounded-lg border border-completed/30 bg-completed/10 p-4">
 									<div className="flex items-center space-x-2">
-										<CheckCircle2 className="size-5  text-green-600" />
-										<p className="text-sm font-medium text-green-800 dark:text-green-300">
+										<CheckCircle2 className="size-5 text-completed" />
+										<p className="text-sm font-medium text-completed">
 											{uploadResults.results.length} document(s) uploaded successfully
 										</p>
 									</div>
