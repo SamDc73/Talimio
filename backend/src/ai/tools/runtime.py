@@ -30,6 +30,7 @@ class ExecutedToolCall:
     call_id: str
     name: str
     content: str
+    failed: bool
 
 
 async def execute_planned_tool_calls(
@@ -50,13 +51,27 @@ async def execute_planned_tool_calls(
     for index, call in enumerate(calls):
         target = tool_targets.get(call.name)
         if target is None:
-            formatted.append(ExecutedToolCall(call_id=call.call_id, name=call.name, content=f"Error: Tool '{call.name}' is not available"))
+            formatted.append(
+                ExecutedToolCall(
+                    call_id=call.call_id,
+                    name=call.name,
+                    content=f"Error: Tool '{call.name}' is not available",
+                    failed=True,
+                )
+            )
             continue
 
         try:
             arguments = parse_tool_arguments(call.arguments)
         except (TypeError, ValueError) as error:
-            formatted.append(ExecutedToolCall(call_id=call.call_id, name=call.name, content=f"Error: {error!s}"))
+            formatted.append(
+                ExecutedToolCall(
+                    call_id=call.call_id,
+                    name=call.name,
+                    content=f"Error: {error!s}",
+                    failed=True,
+                )
+            )
             continue
 
         formatted.append(None)
@@ -86,9 +101,11 @@ async def execute_planned_tool_calls(
                     },
                 )
                 content = f"Error: {result!s}"
+                failed = True
             else:
                 content = format_tool_result(result)
-            formatted[index] = ExecutedToolCall(call_id=call.call_id, name=call.name, content=content)
+                failed = False
+            formatted[index] = ExecutedToolCall(call_id=call.call_id, name=call.name, content=content, failed=failed)
 
     return [entry for entry in formatted if entry is not None]
 

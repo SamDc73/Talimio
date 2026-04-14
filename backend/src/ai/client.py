@@ -49,7 +49,7 @@ from src.ai.tools.plan import (
     ToolTarget,
     build_request_tool_plan,
 )
-from src.ai.tools.runtime import PlannedToolCall, execute_planned_tool_calls
+from src.ai.tools.runtime import ExecutedToolCall, PlannedToolCall, execute_planned_tool_calls
 from src.ai.tools.sandbox import SandboxToolContext, build_sandbox_function_tools
 from src.ai.tools.search import build_web_search_function_tool
 from src.config.settings import get_settings
@@ -111,6 +111,7 @@ _GENERATION_WRAPPER_ERROR_TYPES = (
     TypeError,
     ValueError,
 )
+_FAILED_TOOL_DISABLE_THRESHOLD = 2
 _LEARNING_TOOL_NAMES = {
     "search_lessons",
     "list_relevant_courses",
@@ -823,11 +824,15 @@ class LLMClient:
         msg = "Structured response failed schema validation"
         raise AISchemaValidationError(msg)
 
-    async def _run_autonomy_loop(self, request: _LLMRequest) -> tuple[Any, list[dict[str, Any]]]:
+    async def _run_autonomy_loop(self, request: _LLMRequest) -> tuple[Any, list[dict[str, Any]]]:  # noqa: PLR0914
         """Run the shared non-stream autonomy loop for structured and free-form calls."""
         conversation = list(request.messages)
         tool_round = 0
         used_tool_names_in_turn: set[str] = set()
+        available_tool_schemas = list(request.tool_schemas) if request.tool_schemas else None
+        available_tool_targets = dict(request.tool_targets)
+        tool_failure_counts: dict[str, int] = {}
+        disabled_tool_names: set[str] = set()
 
         while True:
             tool_round += 1
@@ -835,18 +840,17 @@ class LLMClient:
                 msg = f"Tool autonomy loop exceeded {_MAX_AUTONOMY_ROUNDS} rounds"
                 raise AIToolExecutionError(msg)
 
-            effective_tool_choice = request.tool_choice
+            effective_tool_choice = request.tool_choice if available_tool_schemas else None
 
             response_format: dict[str, Any] | None = None
             if request.response_model is not None:
-                should_enforce_provider_schema = effective_tool_choice in (None, "none") or not request.tool_schemas
-                if should_enforce_provider_schema:
-                    response_format = self._build_response_format(request.response_model)
+                # Keep the provider-enforced schema active for structured tool turns too.
+                response_format = self._build_response_format(request.response_model)
 
             response = await self.complete(
                 messages=conversation,
                 temperature=request.temperature,
-                tools=request.tool_schemas,
+                tools=available_tool_schemas,
                 tool_choice=effective_tool_choice,
                 user_id=request.user_id,
                 metadata=request.metadata,
@@ -854,7 +858,7 @@ class LLMClient:
                 model=request.model,
                 num_retries=request.num_retries,
                 max_completion_tokens=request.max_completion_tokens,
-                parallel_tool_calls=bool(request.tool_schemas),
+                parallel_tool_calls=bool(available_tool_schemas),
             )
 
             assistant_message = response.choices[0].message
@@ -864,18 +868,31 @@ class LLMClient:
             if tool_calls:
                 normalized_tool_calls = self._normalize_chat_tool_calls(tool_calls)
                 used_tool_names_in_turn.update(call.name for call in normalized_tool_calls)
-                await self._append_tool_calls(
+                executed_calls = await self._append_tool_calls(
                     conversation,
                     assistant_content=assistant_content,
                     tool_calls=tool_calls,
                     user_id=request.user_id,
-                    tool_targets=request.tool_targets,
+                    tool_targets=available_tool_targets,
                     mcp_config=request.mcp_config,
                 )
+                newly_disabled = self._record_tool_failures(
+                    executed_calls=executed_calls,
+                    tool_failure_counts=tool_failure_counts,
+                    disabled_tool_names=disabled_tool_names,
+                    tool_targets=available_tool_targets,
+                    user_id=request.user_id,
+                    phase="chat_completions",
+                )
+                if newly_disabled:
+                    available_tool_schemas = self._filter_tool_schemas(available_tool_schemas, newly_disabled)
+                    available_tool_targets = {
+                        name: target for name, target in available_tool_targets.items() if name not in newly_disabled
+                    }
                 continue
 
             self._log_learning_capability_turn(
-                tool_targets=request.tool_targets,
+                tool_targets=available_tool_targets,
                 used_tool_names=used_tool_names_in_turn,
                 conversation=conversation,
                 user_id=request.user_id,
@@ -899,6 +916,10 @@ class LLMClient:
         previous_response_id: str | None = None
         tool_round = 0
         used_tool_names_in_turn: set[str] = set()
+        available_responses_tools = list(request.responses_tools) if request.responses_tools else None
+        available_tool_targets = dict(request.tool_targets)
+        tool_failure_counts: dict[str, int] = {}
+        disabled_tool_names: set[str] = set()
 
         while True:
             tool_round += 1
@@ -909,14 +930,14 @@ class LLMClient:
             response = await self.complete(
                 messages=response_input,
                 temperature=request.temperature,
-                tools=request.responses_tools,
-                tool_choice=request.tool_choice,
+                tools=available_responses_tools,
+                tool_choice=request.tool_choice if available_responses_tools else None,
                 user_id=request.user_id,
                 metadata=request.metadata,
                 model=request.model,
                 num_retries=request.num_retries,
                 max_completion_tokens=request.max_completion_tokens,
-                parallel_tool_calls=bool(request.responses_tools),
+                parallel_tool_calls=bool(available_responses_tools),
                 use_responses_transport=True,
                 previous_response_id=previous_response_id,
             )
@@ -927,7 +948,7 @@ class LLMClient:
                 used_tool_names_in_turn.update(call.name for call in function_calls)
                 executed_calls = await execute_planned_tool_calls(
                     calls=function_calls,
-                    tool_targets=request.tool_targets,
+                    tool_targets=available_tool_targets,
                     user_id=request.user_id,
                     mcp_config=request.mcp_config,
                     logger=self._logger,
@@ -951,6 +972,19 @@ class LLMClient:
                     }
                     for executed_call in executed_calls
                 )
+                newly_disabled = self._record_tool_failures(
+                    executed_calls=executed_calls,
+                    tool_failure_counts=tool_failure_counts,
+                    disabled_tool_names=disabled_tool_names,
+                    tool_targets=available_tool_targets,
+                    user_id=request.user_id,
+                    phase="responses",
+                )
+                if newly_disabled:
+                    available_responses_tools = self._filter_tool_schemas(available_responses_tools, newly_disabled)
+                    available_tool_targets = {
+                        name: target for name, target in available_tool_targets.items() if name not in newly_disabled
+                    }
                 previous_response_id = self._extract_responses_response_id(response)
                 if previous_response_id is None:
                     msg = "Responses transport returned tool calls without response id"
@@ -958,7 +992,7 @@ class LLMClient:
                 continue
 
             self._log_learning_capability_turn(
-                tool_targets=request.tool_targets,
+                tool_targets=available_tool_targets,
                 used_tool_names=used_tool_names_in_turn,
                 conversation=conversation,
                 user_id=request.user_id,
@@ -1031,7 +1065,7 @@ class LLMClient:
             return payload.get(name)
         return None
 
-    async def _stream_unstructured_completion(
+    async def _stream_unstructured_completion(  # noqa: PLR0914
         self,
         *,
         messages: list[dict[str, Any]],
@@ -1053,6 +1087,10 @@ class LLMClient:
         full_text: list[str] = []
         tool_round = 0
         used_tool_names_in_turn: set[str] = set()
+        tool_failure_counts: dict[str, int] = {}
+        disabled_tool_names: set[str] = set()
+        available_tools = list(tools) if tools else None
+        available_tool_targets = dict(tool_targets)
 
         try:
             while True:
@@ -1065,15 +1103,15 @@ class LLMClient:
                 stream = await self.complete(
                     messages=conversation,
                     temperature=temperature,
-                    tools=tools,
-                    tool_choice=tool_choice,
+                    tools=available_tools,
+                    tool_choice=tool_choice if available_tools else None,
                     user_id=user_id,
                     metadata=metadata,
                     stream=True,
                     model=model,
                     num_retries=num_retries,
                     max_completion_tokens=None,
-                    parallel_tool_calls=bool(tools),
+                    parallel_tool_calls=bool(available_tools),
                 )
 
                 chunks: list[Any] = []
@@ -1097,14 +1135,27 @@ class LLMClient:
                 if tool_calls:
                     normalized_tool_calls = self._normalize_chat_tool_calls(tool_calls)
                     used_tool_names_in_turn.update(call.name for call in normalized_tool_calls)
-                    await self._append_tool_calls(
+                    executed_calls = await self._append_tool_calls(
                         conversation,
                         assistant_content=assistant_content,
                         tool_calls=tool_calls,
                         user_id=user_id,
-                        tool_targets=tool_targets,
+                        tool_targets=available_tool_targets,
                         mcp_config=mcp_config,
                     )
+                    newly_disabled = self._record_tool_failures(
+                        executed_calls=executed_calls,
+                        tool_failure_counts=tool_failure_counts,
+                        disabled_tool_names=disabled_tool_names,
+                        tool_targets=available_tool_targets,
+                        user_id=user_id,
+                        phase="streaming",
+                    )
+                    if newly_disabled:
+                        available_tools = self._filter_tool_schemas(available_tools, newly_disabled)
+                        available_tool_targets = {
+                            name: target for name, target in available_tool_targets.items() if name not in newly_disabled
+                        }
                     continue
 
                 self._log_learning_capability_turn(
@@ -1285,7 +1336,7 @@ class LLMClient:
         user_id: uuid.UUID | None,
         tool_targets: dict[str, ToolTarget],
         mcp_config: MCPConfig | None,
-    ) -> None:
+    ) -> list[ExecutedToolCall]:
         conversation.append(
             {
                 "role": "assistant",
@@ -1296,7 +1347,7 @@ class LLMClient:
 
         normalized_calls = self._normalize_chat_tool_calls(tool_calls)
         if not normalized_calls:
-            return
+            return []
         executed_calls = await execute_planned_tool_calls(
             calls=normalized_calls,
             tool_targets=tool_targets,
@@ -1313,6 +1364,88 @@ class LLMClient:
             }
             for executed_call in executed_calls
         )
+        return executed_calls
+
+    def _record_tool_failures(
+        self,
+        *,
+        executed_calls: list[ExecutedToolCall],
+        tool_failure_counts: dict[str, int],
+        disabled_tool_names: set[str],
+        tool_targets: dict[str, ToolTarget],
+        user_id: uuid.UUID | None,
+        phase: str,
+    ) -> set[str]:
+        failed_names = sorted({call.name for call in executed_calls if call.failed})
+        if not failed_names:
+            return set()
+
+        succeeded_names = {call.name for call in executed_calls if not call.failed}
+        for name in succeeded_names:
+            tool_failure_counts.pop(name, None)
+        for name in failed_names:
+            tool_failure_counts[name] = tool_failure_counts.get(name, 0) + 1
+
+        self._logger.warning(
+            "ai.tool.round.failure",
+            extra={
+                "phase": phase,
+                "user_id": str(user_id) if user_id else None,
+                "failed_tools": failed_names,
+                "successful_tools": sorted(succeeded_names),
+                "failure_counts": {name: tool_failure_counts[name] for name in failed_names},
+            },
+        )
+
+        newly_disabled = {
+            name
+            for name in failed_names
+            if tool_failure_counts.get(name, 0) >= _FAILED_TOOL_DISABLE_THRESHOLD
+            and name in tool_targets
+            and name not in disabled_tool_names
+        }
+        if not newly_disabled:
+            return set()
+
+        disabled_tool_names.update(newly_disabled)
+        self._logger.warning(
+            "ai.tool.disabled_for_request",
+            extra={
+                "phase": phase,
+                "user_id": str(user_id) if user_id else None,
+                "disabled_tools": sorted(newly_disabled),
+                "failure_counts": {name: tool_failure_counts[name] for name in sorted(newly_disabled)},
+            },
+        )
+        return newly_disabled
+
+    def _filter_tool_schemas(
+        self,
+        tool_schemas: list[dict[str, Any]] | None,
+        disabled_tool_names: set[str],
+    ) -> list[dict[str, Any]] | None:
+        if not tool_schemas:
+            return None
+        filtered = [
+            schema
+            for schema in tool_schemas
+            if self._extract_function_tool_name(schema) not in disabled_tool_names
+        ]
+        return filtered or None
+
+    def _extract_function_tool_name(self, schema: dict[str, Any]) -> str | None:
+        if not isinstance(schema, dict):
+            return None
+        if schema.get("type") != "function":
+            return None
+        function_payload = schema.get("function")
+        if not isinstance(function_payload, dict):
+            return None
+        name = function_payload.get("name")
+        if not isinstance(name, str):
+            return None
+        normalized = name.strip()
+        return normalized or None
 
     def _serialize_tool_call_payload(self, tool_call: Any) -> dict[str, Any]:
         if hasattr(tool_call, "model_dump"):
