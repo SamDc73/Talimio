@@ -5,6 +5,7 @@ class ErrorBoundary extends React.Component {
 	constructor(props) {
 		super(props)
 		this.state = { hasError: false, error: null, errorInfo: null }
+		this.resetErrorBoundary = this.resetErrorBoundary.bind(this)
 	}
 
 	static getDerivedStateFromError(_error) {
@@ -23,8 +24,24 @@ class ErrorBoundary extends React.Component {
 		})
 	}
 
+	resetErrorBoundary() {
+		this.setState({ hasError: false, error: null, errorInfo: null })
+	}
+
 	render() {
 		if (this.state.hasError) {
+			const { FallbackComponent } = this.props
+
+			if (FallbackComponent) {
+				return (
+					<FallbackComponent
+						error={this.state.error}
+						errorInfo={this.state.errorInfo}
+						resetErrorBoundary={this.resetErrorBoundary}
+					/>
+				)
+			}
+
 			return (
 				<div className="m-4 rounded-sm border border-destructive bg-destructive/10 p-4">
 					<h2 className="text-xl font-bold text-destructive mb-2">Something went wrong</h2>
@@ -33,7 +50,7 @@ class ErrorBoundary extends React.Component {
 					</p>
 					<button
 						type="button"
-						onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
+						onClick={this.resetErrorBoundary}
 						className="mb-3 rounded-sm bg-completed px-3 py-1 text-sm text-completed-text hover:bg-completed/90"
 					>
 						Try Again

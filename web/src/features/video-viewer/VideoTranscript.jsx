@@ -3,8 +3,8 @@
 import { useEffect, useImperativeHandle, useRef, useState } from "react"
 
 // 2. External libraries
-import { ErrorBoundary } from "react-error-boundary"
 import { getVideoTranscript } from "@/api/videosApi"
+import ErrorBoundary from "@/components/ErrorBoundary"
 import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
 import { useVideoTranscriptSync } from "./hooks/use-video-transcript-sync"
