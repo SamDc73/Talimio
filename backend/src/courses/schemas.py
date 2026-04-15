@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 from src.config.schema_casing import to_camel
 
@@ -111,7 +111,12 @@ class LessonVersionHistoryResponse(BaseModel):
 class LessonRegenerateRequest(BaseModel):
     """Request payload for explicit lesson regeneration."""
 
-    critique_text: str = Field(..., min_length=1, description="What the learner wants changed in the lesson")
+    critique_text: str = Field(
+        ...,
+        validation_alias=AliasChoices("critiqueText", "critique_text", "critique", "feedback"),
+        min_length=1,
+        description="What the learner wants changed in the lesson",
+    )
     apply_across_course: bool = Field(
         default=False,
         description="Whether this critique should influence future lessons",
