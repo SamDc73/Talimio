@@ -114,38 +114,60 @@ class CourseContentService:
         """Create a course using the provided session."""
         session_data = dict(data)
         is_adaptive = bool(session_data.get("adaptive_enabled"))
-        prompt_text = self._normalize_prompt_text(session_data.pop("prompt", None))
-        attachments = attachments or []
-        normalized_modules: list[dict[str, Any]] = []
-        inserted_lessons = 0
-        course: Course
-        adaptive_structure: AdaptiveCourseStructure | None
-        modules_payload: list[Any]
-        lessons_payload: list[Any]
+        prompt_text = self._normalize_prompt_text(session_data.get("prompt", ""))
 
-        if not attachments:
-            if background_tasks is not None and session.in_transaction():
-                await session.commit()
-            # Keep DB transactions short: run prompt generation before first DB write/flush.
-            prompt_payload = self._build_prompt_payload(prompt_text, [])
-            adaptive_structure = await self._build_adaptive_structure(
-                is_adaptive=is_adaptive,
-                prompt=prompt_payload,
-                prompt_text=prompt_text,
-                session_data=session_data,
-                user_id=user_id,
-            )
+        course = self._build_draft_course(session_data=session_data, user_id=user_id, is_adaptive=is_adaptive)
+        if not course.title or course.title == "Draft course":
+            course.title = f"Generating: {prompt_text[:30]}..." if prompt_text else "Generating course..."
 
-            course = self._build_draft_course(session_data=session_data, user_id=user_id, is_adaptive=is_adaptive)
-            modules_payload = session_data.pop("modules", [])
-            lessons_payload = session_data.pop("lessons", [])
+        session.add(course)
+        await session.flush()
+        await session.refresh(course)
+        course_id = course.id
 
-            if background_tasks is not None:
-                # Request path: persist all course rows in one short explicit transaction.
-                async with session.begin():
-                    session.add(course)
-                    await session.flush()
-                    normalized_modules, inserted_lessons = await self._persist_course_structure(
+        # We need to spawn the task.
+        def spawn_bg() -> None:
+            _spawn_detached_task(self._generate_course_background(course_id, data, user_id, attachments))
+
+        if background_tasks is not None:
+            background_tasks.add_task(spawn_bg)
+        else:
+            spawn_bg()
+
+        return course
+
+    async def _generate_course_background(
+        self,
+        course_id: uuid.UUID,
+        data: dict[str, Any],
+        user_id: uuid.UUID,
+        attachments: list[UploadFile] | None = None,
+    ) -> None:
+        async with async_session_maker() as session:
+            try:
+                course = await session.get(Course, course_id)
+                if not course:
+                    return
+
+                session_data = dict(data)
+                is_adaptive = bool(session_data.get("adaptive_enabled"))
+                prompt_text = self._normalize_prompt_text(session_data.pop("prompt", None))
+                attachments = attachments or []
+
+                if not attachments:
+                    prompt_payload = self._build_prompt_payload(prompt_text, [])
+                    adaptive_structure = await self._build_adaptive_structure(
+                        is_adaptive=is_adaptive,
+                        prompt=prompt_payload,
+                        prompt_text=prompt_text,
+                        session_data=session_data,
+                        user_id=user_id,
+                    )
+
+                    modules_payload = session_data.pop("modules", [])
+                    lessons_payload = session_data.pop("lessons", [])
+
+                    _, _ = await self._persist_course_structure(
                         session=session,
                         course=course,
                         session_data=session_data,
@@ -153,84 +175,57 @@ class CourseContentService:
                         modules_payload=modules_payload,
                         lessons_payload=lessons_payload,
                     )
-            else:
-                session.add(course)
-                await session.flush()
-                normalized_modules, inserted_lessons = await self._persist_course_structure(
+                    await session.commit()
+                else:
+                    rag_service = RAGService()
+                    attachment_result = await self._ingest_course_attachments(
+                        rag_service=rag_service,
+                        session=session,
+                        user_id=user_id,
+                        course_id=course.id,
+                        attachments=attachments,
+                    )
+                    augmented_prompt = await self._build_augmented_prompt(
+                        rag_service=rag_service,
+                        session=session,
+                        user_id=user_id,
+                        course_id=course.id,
+                        prompt_text=prompt_text,
+                        has_searchable_documents=attachment_result.has_searchable_documents,
+                    )
+                    prompt_payload = self._build_prompt_payload(augmented_prompt, attachment_result.image_data_urls)
+
+                    adaptive_structure = await self._build_adaptive_structure(
+                        is_adaptive=is_adaptive,
+                        prompt=prompt_payload,
+                        prompt_text=prompt_text,
+                        session_data=session_data,
+                        user_id=user_id,
+                    )
+
+                    modules_payload = session_data.pop("modules", [])
+                    lessons_payload = session_data.pop("lessons", [])
+
+                    _, _ = await self._persist_course_structure(
+                        session=session,
+                        course=course,
+                        session_data=session_data,
+                        adaptive_structure=adaptive_structure,
+                        modules_payload=modules_payload,
+                        lessons_payload=lessons_payload,
+                    )
+                    await session.commit()
+
+                await session.refresh(course)
+                await self._handle_post_creation(
                     session=session,
                     course=course,
-                    session_data=session_data,
-                    adaptive_structure=adaptive_structure,
-                    modules_payload=modules_payload,
-                    lessons_payload=lessons_payload,
+                    user_id=user_id,
+                    background_tasks=None,
                 )
-                await session.flush()
-        else:
-            course = self._build_draft_course(session_data=session_data, user_id=user_id, is_adaptive=is_adaptive)
-            session.add(course)
-            await session.flush()
-
-            rag_service = RAGService()
-            attachment_result = await self._ingest_course_attachments(
-                rag_service=rag_service,
-                session=session,
-                user_id=user_id,
-                course_id=course.id,
-                attachments=attachments,
-            )
-            augmented_prompt = await self._build_augmented_prompt(
-                rag_service=rag_service,
-                session=session,
-                user_id=user_id,
-                course_id=course.id,
-                prompt_text=prompt_text,
-                has_searchable_documents=attachment_result.has_searchable_documents,
-            )
-            prompt_payload = self._build_prompt_payload(augmented_prompt, attachment_result.image_data_urls)
-
-            adaptive_structure = await self._build_adaptive_structure(
-                is_adaptive=is_adaptive,
-                prompt=prompt_payload,
-                prompt_text=prompt_text,
-                session_data=session_data,
-                user_id=user_id,
-            )
-
-            modules_payload = session_data.pop("modules", [])
-            lessons_payload = session_data.pop("lessons", [])
-
-            normalized_modules, inserted_lessons = await self._persist_course_structure(
-                session=session,
-                course=course,
-                session_data=session_data,
-                adaptive_structure=adaptive_structure,
-                modules_payload=modules_payload,
-                lessons_payload=lessons_payload,
-            )
-            if background_tasks is not None:
-                # Ensure background tasks can read committed course/lesson rows.
                 await session.commit()
-            else:
-                await session.flush()
-
-        await session.refresh(course)
-
-        await self._handle_post_creation(
-            session=session,
-            course=course,
-            user_id=user_id,
-            background_tasks=background_tasks,
-        )
-
-        module_count = sum(1 for module in normalized_modules if module.get("title"))
-        logger.info(
-            "Created course %s with %d lessons across %d modules",
-            course.id,
-            inserted_lessons,
-            module_count,
-        )
-
-        return course
+            except Exception:
+                logger.exception("Failed to generate course in background", extra={"course_id": str(course_id)})
 
     def _build_draft_course(
         self,

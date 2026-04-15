@@ -111,7 +111,17 @@ async def generate_self_assessment_questions(
     return SelfAssessmentResponse.model_validate(quiz.model_dump())
 
 
-@router.post("/")
+class InMemoryUploadFile:
+    def __init__(self, filename: str, content_type: str, content: bytes):
+        self.filename = filename
+        self.content_type = content_type
+        self.content = content
+
+    async def read(self) -> bytes:
+        return self.content
+
+
+@router.post("/", status_code=status.HTTP_202_ACCEPTED)
 async def create_course(
     prompt: Annotated[str, Form()],
     auth: CurrentAuth,
@@ -126,18 +136,21 @@ async def create_course(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Prompt must not be empty")
 
     attachments = files or []
+    in_memory_files = []
     for upload in attachments:
         if not upload.filename:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Attachment filename required")
         ext = Path(upload.filename).suffix.lower()
         if ext not in _COURSE_ATTACHMENT_EXTENSIONS:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported attachment type")
+        content = await upload.read()
+        in_memory_files.append(InMemoryUploadFile(upload.filename, upload.content_type or "", content))
 
     return await facade.create_course(
         {"prompt": prompt_text, "adaptive_enabled": adaptive_enabled},
         auth.user_id,
         background_tasks=background_tasks,
-        attachments=attachments,
+        attachments=in_memory_files,
     )
 
 
