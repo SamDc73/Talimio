@@ -124,9 +124,6 @@ export default defineConfig(({ mode }) => {
 			},
 			dedupe: ["react", "react-dom"],
 		},
-		optimizeDeps: {
-			include: ["three", "@react-three/fiber", "@react-three/drei", "@react-three/postprocessing", "postprocessing"],
-		},
 		server: {
 			port: Number.parseInt(env.VITE_DEV_SERVER_PORT || "5173", 10),
 			fs: {
