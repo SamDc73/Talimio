@@ -1,4 +1,3 @@
-
 import uuid
 from collections.abc import Iterable, Mapping
 
@@ -24,6 +23,7 @@ from src.ai.mcp.client import MCPClientDependencyError, get_mcp_client, probe_mc
 from src.ai.mcp.config import MCPAuthConfig, MCPConfig, MCPServerConfig
 from src.config.settings import get_settings
 from src.database.pagination import Paginator
+from src.exceptions import BadRequestError, NotFoundError, UpstreamUnavailableError
 from src.user.models import UserMCPServer
 
 
@@ -52,7 +52,7 @@ def _token_cipher() -> Fernet:
         return Fernet(key_bytes)
     except ValueError as exc:
         msg = "MCP token encryption key must be a urlsafe base64-encoded string"
-        raise ValueError(msg) from exc
+        raise RuntimeError(msg) from exc
 
 
 def _encrypt_token(token: str | None) -> str | None:
@@ -155,7 +155,7 @@ async def create_user_mcp_server(
     parsed = urlparse(str(payload.url))
     if settings.PLATFORM_MODE.lower() == "cloud" and parsed.hostname in {"localhost", "127.0.0.1"}:
         msg = "Local MCP servers are not allowed in cloud mode"
-        raise ValueError(msg)
+        raise BadRequestError(msg, feature_area="mcp")
 
     # Build headers for probing (includes auth token if bearer)
     probe_headers = payload.resolved_static_headers()
@@ -169,7 +169,7 @@ async def create_user_mcp_server(
     except _MCP_PROBE_ERROR_TYPES as exc:
         logger.warning("Failed to probe MCP server at %s: %s", payload.url, exc)
         msg = f"Could not connect to MCP server: {exc}"
-        raise ValueError(msg) from exc
+        raise UpstreamUnavailableError(msg, feature_area="mcp") from exc
 
     existing = await session.scalars(select(UserMCPServer.name).where(UserMCPServer.user_id == user_id))
     existing_names = set(existing)
@@ -197,14 +197,13 @@ async def create_user_mcp_server(
     return server
 
 
-async def delete_user_mcp_server(session: AsyncSession, *, user_id: uuid.UUID, server_id: uuid.UUID) -> bool:
+async def delete_user_mcp_server(session: AsyncSession, *, user_id: uuid.UUID, server_id: uuid.UUID) -> None:
     """Delete a server entry if it belongs to the user."""
     server = await session.get(UserMCPServer, server_id)
     if server is None or server.user_id != user_id:
-        return False
+        raise NotFoundError(message="MCP server not found", feature_area="mcp")
     await session.delete(server)
     await session.flush()
-    return True
 
 
 def _to_mcp_config(server: UserMCPServer) -> MCPServerConfig:

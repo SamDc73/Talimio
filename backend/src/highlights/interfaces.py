@@ -1,4 +1,3 @@
-
 """
 Interface contracts for highlighting services across different content types.
 
@@ -61,7 +60,7 @@ class HighlightInterface(ABC):
         """
 
     @abstractmethod
-    async def delete_highlight(self, highlight_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    async def delete_highlight(self, highlight_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """
         Delete a specific highlight.
 

@@ -18,7 +18,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from src.ai.rag.service import RAGService
 from src.database.pagination import Paginator
 from src.database.session import async_session_maker
-from src.exceptions import NotFoundError
+from src.exceptions import ConflictError, NotFoundError, UpstreamUnavailableError
 from src.tagging.service import TaggingService
 from src.videos.models import Video, VideoChapter
 from src.videos.schemas import (
@@ -97,6 +97,19 @@ def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
     task.add_done_callback(_handle_detached_task_done)
 
 
+async def cleanup_detached_video_tasks() -> None:
+    """Cancel and await any outstanding detached video tasks."""
+    if not _DETACHED_TASKS:
+        return
+
+    tasks = tuple(_DETACHED_TASKS)
+    for task in tasks:
+        task.cancel()
+
+    await asyncio.gather(*tasks, return_exceptions=True)
+    _DETACHED_TASKS.clear()
+
+
 def _create_downloader(options: dict[str, Any]) -> yt_dlp.YoutubeDL:
     """Return a YoutubeDL instance without strict typing complaints."""
     return yt_dlp.YoutubeDL(options)
@@ -139,7 +152,7 @@ async def _embed_video_background(video_id: uuid.UUID) -> None:
         try:
             await RAGService().process_video(session, video_id)
             await session.commit()
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
+        except SQLAlchemyError, RuntimeError, ValueError, TypeError:
             try:
                 await session.commit()
             except SQLAlchemyError:
@@ -201,7 +214,7 @@ async def _auto_tag_video_background(video_id: uuid.UUID, user_id: uuid.UUID) ->
             )
             await db.commit()
             logger.info("Successfully tagged video %s with tags: %s", video_id, tags)
-    except (SQLAlchemyError, RuntimeError, ValueError, TypeError, OSError):
+    except SQLAlchemyError, RuntimeError, ValueError, TypeError, OSError:
         logger.exception("Failed to tag video %s", video_id)
 
 
@@ -300,7 +313,9 @@ async def _extract_chapters_background(video_id: uuid.UUID, user_id: uuid.UUID) 
             logger.info("Stopping chapter extraction for deleted video %s", video_id)
             return
         except ValueError:
-            logger.exception("videos.chapters.extract_retry_failed", extra={"video_id": str(video_id), "attempt": attempt + 1})
+            logger.exception(
+                "videos.chapters.extract_retry_failed", extra={"video_id": str(video_id), "attempt": attempt + 1}
+            )
             await _mark_video_status(video_id, VIDEO_PIPELINE_STATUS_FAILED, " after ValueError")
             return
         except (
@@ -323,7 +338,9 @@ async def _extract_chapters_background(video_id: uuid.UUID, user_id: uuid.UUID) 
                 await asyncio.sleep(retry_delay)
                 continue
 
-            logger.exception("videos.chapters.extract_failed", extra={"video_id": str(video_id), "attempts": max_retries})
+            logger.exception(
+                "videos.chapters.extract_failed", extra={"video_id": str(video_id), "attempts": max_retries}
+            )
             await _mark_video_status(video_id, VIDEO_PIPELINE_STATUS_FAILED, " after final attempt")
             return
 
@@ -468,7 +485,7 @@ class VideoService:
         if existing_global_video is not None:
             if existing_global_video.user_id != user_id:
                 msg = "Video already exists and cannot be duplicated for another user"
-                raise ValueError(msg)
+                raise ConflictError(msg, feature_area="videos")
             video_dict = self._video_to_dict(existing_global_video)
             video_dict["already_exists"] = True
             return VideoResponse.model_validate(video_dict)
@@ -486,7 +503,7 @@ class VideoService:
 
             if existing_global_video.user_id != user_id:
                 msg = "Video already exists and cannot be duplicated for another user"
-                raise ValueError(msg) from e
+                raise ConflictError(msg, feature_area="videos") from e
 
             video_dict = self._video_to_dict(existing_global_video)
             video_dict["already_exists"] = True
@@ -780,7 +797,9 @@ class VideoService:
                     {"completion_percentage": completion_pct, "completed_chapters": completed_chapter_ids},
                 )
         except (NotFoundError, RuntimeError, TimeoutError, TypeError, ValueError) as error:
-            logger.warning("Failed to update unified progress for video %s after chapter status change: %s", video_id, error)
+            logger.warning(
+                "Failed to update unified progress for video %s after chapter status change: %s", video_id, error
+            )
 
         await db.flush()
         await db.refresh(chapter)
@@ -852,7 +871,7 @@ class VideoService:
         ) as e:
             logger.exception("Failed to extract chapters for video %s", video_id)
             msg = f"Failed to extract chapters: {e!s}"
-            raise ValueError(msg) from e
+            raise UpstreamUnavailableError(msg, feature_area="videos") from e
 
         if not chapters_info:
             # Create a single default chapter for the entire video
@@ -996,7 +1015,7 @@ class VideoService:
         ) as e:
             logger.exception("Failed to get transcript segments for video %s", video_id)
             msg = f"Failed to get transcript segments: {e!s}"
-            raise ValueError(msg) from e
+            raise UpstreamUnavailableError(msg, feature_area="videos") from e
 
     async def extract_video_transcript_segments(self, video_url: str) -> list[TranscriptSegment]:
         """Extract transcript segments with timestamps from YouTube video using yt-dlp."""

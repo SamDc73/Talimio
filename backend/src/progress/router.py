@@ -1,4 +1,3 @@
-
 """Progress tracking API endpoints."""
 
 import uuid
@@ -70,12 +69,7 @@ async def get_single_progress(
     service = ProgressService(auth.session)
 
     # Determine content type first to unify behavior
-    content_type = await service.get_content_type(content_id, auth.user_id)
-    if not content_type:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Content {content_id} not found or access denied",
-        )
+    content_type = await service.require_content_type(content_id, auth.user_id)
 
     # For courses, compute canonical adaptive progress from concept mastery
     if content_type == "course":
@@ -118,12 +112,7 @@ async def update_progress(
     service = ProgressService(auth.session)
 
     # Determine content type - now validates ownership
-    content_type = await service.get_content_type(content_id, auth.user_id)
-    if not content_type:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Content {content_id} not found or access denied",
-        )
+    content_type = await service.require_content_type(content_id, auth.user_id)
 
     # Update progress
     return await service.update_progress(auth.user_id, content_id, content_type, progress)
@@ -136,10 +125,4 @@ async def delete_progress(
 ) -> None:
     """Delete progress for a content item."""
     service = ProgressService(auth.session)
-    deleted = await service.delete_progress(auth.user_id, content_id)
-
-    if not deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Progress for content {content_id} not found",
-        )
+    await service.delete_progress(auth.user_id, content_id)

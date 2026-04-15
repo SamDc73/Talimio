@@ -15,7 +15,7 @@ COMMIT_SHA        Git commit SHA (set automatically by Cloud Build)
 import json
 import logging
 import os
-import subprocess
+import subprocess  # noqa: S404
 import sys
 import urllib.request
 
@@ -44,8 +44,8 @@ def _create_branch(api_key: str, project_id: str, name: str) -> tuple[str, str]:
         }
     ).encode()
 
-    req = urllib.request.Request(url, data=payload, headers=_neon_headers(api_key))
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    req = urllib.request.Request(url, data=payload, headers=_neon_headers(api_key))  # noqa: S310
+    with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
         data = json.loads(resp.read())
 
     branch_id: str = data["branch"]["id"]
@@ -60,11 +60,11 @@ def _delete_branch(api_key: str, project_id: str, branch_id: str) -> None:
     url = f"{_NEON_API_BASE}/projects/{project_id}/branches/{branch_id}"
     headers = _neon_headers(api_key)
     headers.pop("Content-Type")
-    req = urllib.request.Request(url, method="DELETE", headers=headers)
+    req = urllib.request.Request(url, method="DELETE", headers=headers)  # noqa: S310
     try:
-        urllib.request.urlopen(req, timeout=30)
+        urllib.request.urlopen(req, timeout=30)  # noqa: S310
         logger.info("neon.branch_deleted", extra={"branch_id": branch_id})
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning(
             "neon.branch_delete_failed",
             extra={"branch_id": branch_id, "error": str(exc)},

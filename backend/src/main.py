@@ -106,8 +106,16 @@ async def _shutdown() -> None:
 
         cleanup_memory_client()
         logger.debug("shutdown.memory.cleaned")
-    except (RuntimeError, TimeoutError, TypeError, ValueError):
+    except RuntimeError, TimeoutError, TypeError, ValueError:
         logger.warning("shutdown.memory.cleanup_failed", exc_info=True)
+
+    try:
+        from src.videos.service import cleanup_detached_video_tasks
+
+        await cleanup_detached_video_tasks()
+        logger.debug("shutdown.videos.detached_tasks.cleaned")
+    except RuntimeError, TimeoutError, TypeError, ValueError:
+        logger.warning("shutdown.videos.detached_tasks.cleanup_failed", exc_info=True)
 
     try:
         await engine.dispose()
@@ -256,15 +264,22 @@ def _register_frontend_routes(app: FastAPI) -> None:
             status_code=status.HTTP_404_NOT_FOUND,
         )
 
-    @app.get("/", include_in_schema=False, response_model=None)
-    async def serve_frontend_index() -> FileResponse:
-        return FileResponse(index_file_path)
-
     @app.get("/logo.png", include_in_schema=False, response_model=None)
     async def serve_frontend_logo() -> FileResponse | JSONResponse:
         if not logo_path.exists():
             return JSONResponse({"detail": "Not Found"}, status_code=status.HTTP_404_NOT_FOUND)
         return FileResponse(logo_path)
+
+    @app.get("/{catchall:path}", include_in_schema=False, response_model=None)
+    async def serve_frontend_catchall(_request: Request, catchall: str) -> FileResponse | JSONResponse:
+        if catchall.startswith("api/"):
+            return format_error_response(
+                category=str(ErrorCategory.RESOURCE_NOT_FOUND),
+                code=str(ErrorCode.NOT_FOUND),
+                detail="Not Found",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        return FileResponse(index_file_path)
 
 
 def create_app() -> FastAPI:
@@ -292,8 +307,10 @@ def create_app() -> FastAPI:
         try:
             await session.execute(text("SELECT 1"))
             return JSONResponse({"status": "healthy", "db": "connected"}, status_code=status.HTTP_200_OK)
-        except (DatabaseError, OperationalError):
-            return JSONResponse({"status": "unhealthy", "db": "disconnected"}, status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except DatabaseError, OperationalError:
+            return JSONResponse(
+                {"status": "unhealthy", "db": "disconnected"}, status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
 
     # Register all routers
     _register_routers(app)

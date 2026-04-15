@@ -6,6 +6,8 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.exceptions import NotFoundError, ValidationError
+
 from .models import AssistantConversation, AssistantConversationHistoryItem
 
 
@@ -16,12 +18,18 @@ CONVERSATION_STATUS_REGULAR = "regular"
 CONVERSATION_STATUS_ARCHIVED = "archived"
 
 
-class AssistantConversationNotFoundError(Exception):
+class AssistantConversationNotFoundError(NotFoundError):
     """Raised when a conversation does not exist for the current user."""
 
+    def __init__(self, message: str = "Conversation not found") -> None:
+        super().__init__(message=message, feature_area="assistant")
 
-class AssistantConversationValidationError(Exception):
+
+class AssistantConversationValidationError(ValidationError):
     """Raised when conversation input payload is invalid."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, feature_area="assistant")
 
 
 def _normalize_context_seed(
@@ -82,7 +90,7 @@ def _parse_message_created_at(message_json: dict[str, Any]) -> datetime:
         seconds_value = raw_value / 1000 if raw_value > 1_000_000_000_000 else raw_value
         try:
             return datetime.fromtimestamp(seconds_value, tz=UTC)
-        except (OverflowError, OSError, ValueError):
+        except OverflowError, OSError, ValueError:
             return datetime.now(UTC)
 
     return datetime.now(UTC)
@@ -231,8 +239,7 @@ async def get_assistant_conversation(
         )
     )
     if conversation is None:
-        msg = "Conversation not found"
-        raise AssistantConversationNotFoundError(msg)
+        raise AssistantConversationNotFoundError
     return conversation
 
 
@@ -268,14 +275,18 @@ async def list_assistant_conversations(
     total = int((await session.scalar(total_stmt)) or 0)
 
     rows = (
-        await session.execute(
-            select(AssistantConversation)
-            .where(AssistantConversation.user_id == user_id)
-            .order_by(AssistantConversation.updated_at.desc())
-            .offset(offset_value)
-            .limit(normalized_limit)
+        (
+            await session.execute(
+                select(AssistantConversation)
+                .where(AssistantConversation.user_id == user_id)
+                .order_by(AssistantConversation.updated_at.desc())
+                .offset(offset_value)
+                .limit(normalized_limit)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     if not rows:
         return [], total
@@ -388,12 +399,16 @@ async def load_assistant_conversation_history(
     conversation = await get_assistant_conversation(session=session, user_id=user_id, conversation_id=conversation_id)
 
     rows = (
-        await session.execute(
-            select(AssistantConversationHistoryItem)
-            .where(AssistantConversationHistoryItem.conversation_id == conversation.id)
-            .order_by(AssistantConversationHistoryItem.seq.asc())
+        (
+            await session.execute(
+                select(AssistantConversationHistoryItem)
+                .where(AssistantConversationHistoryItem.conversation_id == conversation.id)
+                .order_by(AssistantConversationHistoryItem.seq.asc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     messages = [
         {

@@ -143,7 +143,7 @@ class VideoHighlightService(HighlightInterface):
         self,
         highlight_id: uuid.UUID,
         user_id: uuid.UUID,
-    ) -> bool:
+    ) -> None:
         """Delete a highlight with ownership validation."""
         stmt = delete(Highlight).where(and_(Highlight.id == highlight_id, Highlight.user_id == user_id))
         result = await self.session.execute(stmt)
@@ -152,8 +152,6 @@ class VideoHighlightService(HighlightInterface):
         affected = getattr(result, "rowcount", 0) or 0
         if affected == 0:
             raise NotFoundError(message=f"Highlight {highlight_id} not found", feature_area="videos")
-
-        return True
 
     async def _verify_video_ownership(self, video_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Verify that the user owns the video."""

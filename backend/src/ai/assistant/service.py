@@ -7,7 +7,6 @@ from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +15,7 @@ from src.ai import AGENT_ID_ASSISTANT
 from src.ai.client import LLMClient
 from src.ai.errors import AIRuntimeError
 from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT
+from src.exceptions import DomainError
 from src.learning_capabilities.facade import LearningCapabilitiesFacade
 from src.learning_capabilities.schemas import BuildContextBundleCapabilityInput
 
@@ -273,7 +273,7 @@ async def assistant_chat(
         )
         yield _sse_event("[DONE]")
 
-    except (ValueError, conversations_service.AssistantConversationValidationError) as error:
+    except (ValueError, DomainError) as error:
         logger.warning("Chat validation failed for user %s: %s", user_id, error)
         yield _sse_event({"type": "error", "errorText": ASSISTANT_PUBLIC_ERROR_TEXT})
         yield _sse_event(
@@ -284,7 +284,7 @@ async def assistant_chat(
             }
         )
         yield _sse_event("[DONE]")
-    except (AIRuntimeError, RuntimeError, TypeError, OSError, SQLAlchemyError, HTTPException) as error:
+    except (AIRuntimeError, RuntimeError, TypeError, OSError, SQLAlchemyError) as error:
         if isinstance(error, AIRuntimeError):
             logger.warning(
                 "LLM runtime failure for user %s: %s (%s)",
@@ -311,7 +311,7 @@ async def assistant_chat(
                     parent_id=latest_user_message_id,
                     run_config=request.run_config,
                 )
-            except (RuntimeError, TypeError, ValueError, OSError, SQLAlchemyError, HTTPException):
+            except RuntimeError, TypeError, ValueError, OSError, SQLAlchemyError, DomainError:
                 logger.exception(
                     "Failed to persist incomplete assistant message for thread %s",
                     normalized_request.thread_id,

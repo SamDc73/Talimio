@@ -1,4 +1,3 @@
-
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +11,8 @@ import logging
 from typing import Any
 
 from sqlalchemy import text
+
+from src.exceptions import NotFoundError
 
 from .models import ContentType, ProgressResponse, ProgressUpdate
 from .queries import (
@@ -107,7 +108,7 @@ class ProgressService:
         await self.session.flush()
         return self._row_to_progress_response(row)
 
-    async def delete_progress(self, user_id: uuid.UUID, content_id: uuid.UUID) -> bool:
+    async def delete_progress(self, user_id: uuid.UUID, content_id: uuid.UUID) -> None:
         """Delete progress for a content item."""
         result = await self.session.execute(
             text(DELETE_PROGRESS_QUERY), {"user_id": str(user_id), "content_id": str(content_id)}
@@ -115,7 +116,8 @@ class ProgressService:
 
         affected = getattr(result, "rowcount", 0)
         await self.session.flush()
-        return bool(affected and affected > 0)
+        if not affected or affected <= 0:
+            raise NotFoundError(message=f"Progress for content {content_id} not found", feature_area="progress")
 
     @staticmethod
     def _row_to_progress_response(row: Any) -> ProgressResponse:
@@ -168,3 +170,13 @@ class ProgressService:
             return "course"
 
         return None
+
+    async def require_content_type(self, content_id: uuid.UUID, user_id: uuid.UUID) -> ContentType:
+        """Return the owned content type or raise a domain not-found error."""
+        content_type = await self.get_content_type(content_id, user_id)
+        if content_type is None:
+            raise NotFoundError(
+                message=f"Content {content_id} not found or access denied",
+                feature_area="progress",
+            )
+        return content_type

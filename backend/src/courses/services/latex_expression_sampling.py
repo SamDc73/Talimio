@@ -1,7 +1,7 @@
 """Numeric sampling helpers for LaTeX expression verification."""
 
-
 import math
+from collections.abc import Mapping
 from itertools import islice, product
 
 import sympy
@@ -99,7 +99,7 @@ def _constant_equivalence(
 
 def _evaluate_numeric(
     expr: sympy.Expr | None,
-    subs: dict[sympy.Basic | int | float | complex, sympy.Expr | int | float | complex],
+    subs: Mapping[sympy.Basic | int | float | complex, sympy.Expr | int | float | complex],
 ) -> complex | None:
     if expr is None:
         return None
@@ -108,7 +108,7 @@ def _evaluate_numeric(
         if evaluated.free_symbols:
             return None
         numeric = complex(evaluated.evalf())
-    except (TypeError, ValueError, ZeroDivisionError, OverflowError):
+    except TypeError, ValueError, ZeroDivisionError, OverflowError:
         return None
     if not math.isfinite(numeric.real) or not math.isfinite(numeric.imag):
         return None

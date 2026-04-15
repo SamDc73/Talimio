@@ -1,10 +1,9 @@
-
 """API routes for managing user MCP servers."""
 
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query, status
 from pydantic import AnyHttpUrl, TypeAdapter
 
 from src.ai.mcp.schemas import MCPServerCreateRequest, MCPServerListResponse, MCPServerResponse
@@ -64,10 +63,7 @@ async def create_server(
     auth: CurrentAuth,
 ) -> MCPServerResponse:
     """Create and persist a remote MCP server config for the user."""
-    try:
-        server = await create_user_mcp_server(auth.session, user_id=auth.user_id, payload=payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    server = await create_user_mcp_server(auth.session, user_id=auth.user_id, payload=payload)
     return _serialize_server(server)
 
 
@@ -77,6 +73,4 @@ async def delete_server(
     auth: CurrentAuth,
 ) -> None:
     """Remove a stored MCP server configuration."""
-    deleted = await delete_user_mcp_server(auth.session, user_id=auth.user_id, server_id=server_id)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="MCP server not found")
+    await delete_user_mcp_server(auth.session, user_id=auth.user_id, server_id=server_id)

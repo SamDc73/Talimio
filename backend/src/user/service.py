@@ -1,16 +1,16 @@
-
 """User service for handling user settings and memory management."""
 
 import logging
 import uuid
 
 from psycopg.errors import ForeignKeyViolation
-from pydantic import ValidationError
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.memory import add_memory, delete_all_memories, delete_memory, get_memories
+from src.exceptions import NotFoundError, UpstreamUnavailableError
 from src.user.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
     CustomInstructionsResponse,
@@ -21,25 +21,9 @@ from src.user.schemas import (
 
 logger = logging.getLogger(__name__)
 
-
-class UserServiceError(Exception):
-    """Base user-service domain exception."""
-
-
-class UserNotFoundError(UserServiceError):
-    """Raised when a user does not exist for a write operation."""
-
-
-class UserPreferencesPersistenceError(UserServiceError):
-    """Raised when user preferences cannot be persisted."""
-
-
-class UserPreferencesLoadError(UserServiceError):
-    """Raised when user preferences cannot be loaded."""
-
-
-class UserMemoryAccessError(UserServiceError):
-    """Raised when user memory operations fail."""
+USER_RESOURCE_TYPE = "user"
+MEMORY_RESOURCE_TYPE = "memory"
+MEMORY_SERVICE_UNAVAILABLE_DETAIL = "Memory service is unavailable"
 
 
 async def _load_user_preferences(user_id: uuid.UUID, db_session: AsyncSession) -> UserPreferences:
@@ -52,12 +36,16 @@ async def _load_user_preferences(user_id: uuid.UUID, db_session: AsyncSession) -
         if db_preferences:
             return UserPreferences(**db_preferences.preferences)
         return UserPreferences()
-    except (SQLAlchemyError, ValidationError, TypeError, ValueError) as error:
+    except SQLAlchemyError:
         logger.exception("Failed to load preferences for user %s", user_id)
-        raise UserPreferencesLoadError from error
+        raise
+    except (PydanticValidationError, TypeError, ValueError) as error:
+        logger.exception("Stored preferences are invalid for user %s", user_id)
+        msg = "Stored user preferences are invalid"
+        raise RuntimeError(msg) from error
 
 
-async def _save_user_preferences(user_id: uuid.UUID, preferences: UserPreferences, db_session: AsyncSession) -> bool:
+async def _save_user_preferences(user_id: uuid.UUID, preferences: UserPreferences, db_session: AsyncSession) -> None:
     """Save user preferences to database."""
     # CRITICAL: Check user exists first to prevent foreign key violations.
     from src.user.models import User
@@ -65,7 +53,7 @@ async def _save_user_preferences(user_id: uuid.UUID, preferences: UserPreference
     user_check = await db_session.execute(select(User).where(User.id == user_id))
     if not user_check.scalar_one_or_none():
         logger.warning("User %s not found in database - cannot save preferences", user_id)
-        raise UserNotFoundError
+        raise NotFoundError(USER_RESOURCE_TYPE, str(user_id), feature_area="user")
 
     stmt = select(UserPreferencesModel).where(UserPreferencesModel.user_id == user_id)
     result = await db_session.execute(stmt)
@@ -83,13 +71,11 @@ async def _save_user_preferences(user_id: uuid.UUID, preferences: UserPreference
     except IntegrityError as error:
         logger.warning("Failed to save preferences for user %s due to integrity error", user_id, exc_info=error)
         if isinstance(error.orig, ForeignKeyViolation):
-            raise UserNotFoundError from error
-        raise UserPreferencesPersistenceError from error
-    except SQLAlchemyError as error:
+            raise NotFoundError(USER_RESOURCE_TYPE, str(user_id), feature_area="user") from error
+        raise
+    except SQLAlchemyError:
         logger.exception("Failed to save preferences for user %s", user_id)
-        raise UserPreferencesPersistenceError from error
-
-    return True
+        raise
 
 
 # User CRUD operations removed - auth module handles user management
@@ -117,7 +103,7 @@ async def get_user_settings(user_id: uuid.UUID, db_session: AsyncSession) -> Use
     try:
         memories = await get_memories(user_id)
         memory_count = len(memories)
-    except (RuntimeError, TimeoutError, TypeError, ValueError):
+    except RuntimeError, TimeoutError, TypeError, ValueError:
         logger.warning("Failed to count memories for user %s", user_id, exc_info=True)
 
     return UserSettingsResponse(
@@ -142,41 +128,32 @@ async def update_custom_instructions(
     -------
         CustomInstructionsResponse: Updated instructions and success status
     """
+    # Load current preferences
+    preferences = await _load_user_preferences(user_id, db_session)
+
+    # Update the custom instructions in user_preferences dict
+    if preferences.user_preferences is None:
+        preferences.user_preferences = {}
+    preferences.user_preferences["custom_instructions"] = instructions
+
+    await _save_user_preferences(user_id, preferences, db_session)
+
+    # Also add a memory entry about the instruction update
     try:
-        # Load current preferences
-        preferences = await _load_user_preferences(user_id, db_session)
+        await add_memory(
+            user_id=user_id,
+            messages="Updated personal AI instructions",
+            metadata={
+                "interaction_type": "settings_update",
+                "setting_type": "custom_instructions",
+                "instructions_length": len(instructions),
+                "timestamp": "now",
+            },
+        )
+    except RuntimeError, TimeoutError, TypeError, ValueError:
+        logger.warning("Failed to log instruction update in memory for user %s", user_id, exc_info=True)
 
-        # Update the custom instructions in user_preferences dict
-        if preferences.user_preferences is None:
-            preferences.user_preferences = {}
-        preferences.user_preferences["custom_instructions"] = instructions
-
-        # Save back to database - raises typed domain exceptions on failure.
-        success = await _save_user_preferences(user_id, preferences, db_session)
-
-        if success:
-            # Also add a memory entry about the instruction update
-            try:
-                await add_memory(
-                    user_id=user_id,
-                    messages="Updated personal AI instructions",
-                    metadata={
-                        "interaction_type": "settings_update",
-                        "setting_type": "custom_instructions",
-                        "instructions_length": len(instructions),
-                        "timestamp": "now",
-                    },
-                )
-            except (RuntimeError, TimeoutError, TypeError, ValueError):
-                logger.warning("Failed to log instruction update in memory for user %s", user_id, exc_info=True)
-
-        return CustomInstructionsResponse(instructions=instructions, updated=success)
-
-    except UserServiceError:
-        raise
-    except (SQLAlchemyError, ValidationError, TypeError, ValueError) as error:
-        logger.exception("Error updating custom instructions for %s", user_id)
-        raise UserPreferencesPersistenceError from error
+    return CustomInstructionsResponse(instructions=instructions, updated=True)
 
 
 async def get_user_memories(user_id: uuid.UUID, agent_id: str | None = None, *, limit: int = 100) -> list[dict]:
@@ -208,10 +185,10 @@ async def get_user_memories(user_id: uuid.UUID, agent_id: str | None = None, *, 
 
     except (RuntimeError, TimeoutError, TypeError, ValueError) as error:
         logger.exception("Error getting memories for user %s", user_id)
-        raise UserMemoryAccessError from error
+        raise UpstreamUnavailableError(MEMORY_SERVICE_UNAVAILABLE_DETAIL, feature_area="user") from error
 
 
-async def delete_user_memory(user_id: uuid.UUID, memory_id: str) -> bool:
+async def delete_user_memory(user_id: uuid.UUID, memory_id: str) -> None:
     """
     Delete a specific memory for a user.
 
@@ -219,21 +196,20 @@ async def delete_user_memory(user_id: uuid.UUID, memory_id: str) -> bool:
         user_id: Unique identifier for the user
         memory_id: The ID of the memory to delete
 
-    Returns
-    -------
-        bool: True if deletion was successful, False otherwise
     """
-    try:
-        return await delete_memory(user_id, memory_id)
-    except (RuntimeError, TimeoutError, TypeError, ValueError) as error:
-        logger.exception("Error deleting memory %s for user %s", memory_id, user_id)
-        raise UserMemoryAccessError from error
+    outcome = await delete_memory(user_id, memory_id)
+    if outcome == "deleted":
+        return
+    if outcome == "not_found":
+        raise NotFoundError(MEMORY_RESOURCE_TYPE, memory_id, feature_area="user")
+
+    raise UpstreamUnavailableError(MEMORY_SERVICE_UNAVAILABLE_DETAIL, feature_area="user")
 
 
-async def clear_user_memories(user_id: uuid.UUID, agent_id: str | None = None) -> bool:
+async def clear_user_memories(user_id: uuid.UUID, agent_id: str | None = None) -> None:
     """Clear all memories for a user, optionally scoped to a specific agent."""
-    try:
-        return await delete_all_memories(user_id, agent_id=agent_id)
-    except (RuntimeError, TimeoutError, TypeError, ValueError) as error:
-        logger.exception("Error clearing memories for user %s", user_id)
-        raise UserMemoryAccessError from error
+    outcome = await delete_all_memories(user_id, agent_id=agent_id)
+    if outcome == "cleared":
+        return
+
+    raise UpstreamUnavailableError(MEMORY_SERVICE_UNAVAILABLE_DETAIL, feature_area="user")

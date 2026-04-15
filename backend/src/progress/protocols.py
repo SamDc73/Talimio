@@ -1,4 +1,3 @@
-
 """Progress tracking protocols and base classes.
 
 This module defines the contracts for progress tracking across different content types.
@@ -16,7 +15,9 @@ class ProgressTracker(Protocol):
         """Get progress data for specific content and user."""
         ...
 
-    async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
+    async def update_progress(
+        self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Update progress data for specific content and user."""
         ...
 
@@ -41,9 +42,11 @@ class ContentFacade(ABC):
         """Create new content."""
 
     @abstractmethod
-    async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
+    async def update_progress(
+        self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Update content progress."""
 
     @abstractmethod
-    async def delete_content(self, content_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    async def delete_content(self, content_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Delete content."""

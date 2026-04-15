@@ -6,7 +6,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, Query, Response, status
 from fastapi.responses import StreamingResponse
 
 from src.auth import CurrentAuth
@@ -78,17 +78,14 @@ async def create_conversation(
     auth: CurrentAuth,
 ) -> CreateConversationResponse:
     """Create a new assistant conversation."""
-    try:
-        conversation = await conversations_service.create_assistant_conversation(
-            session=auth.session,
-            user_id=auth.user_id,
-            title=request.title,
-            context_type=request.context_type,
-            context_id=request.context_id,
-            context_meta=request.context_meta,
-        )
-    except conversations_service.AssistantConversationValidationError as error:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+    conversation = await conversations_service.create_assistant_conversation(
+        session=auth.session,
+        user_id=auth.user_id,
+        title=request.title,
+        context_type=request.context_type,
+        context_id=request.context_id,
+        context_meta=request.context_meta,
+    )
 
     return CreateConversationResponse(remoteId=conversation.id)
 
@@ -120,14 +117,11 @@ async def get_conversation(
     auth: CurrentAuth,
 ) -> ConversationThreadResponse:
     """Get one assistant conversation metadata payload."""
-    try:
-        payload = await conversations_service.get_assistant_conversation_with_summary(
-            session=auth.session,
-            user_id=auth.user_id,
-            conversation_id=conversation_id,
-        )
-    except conversations_service.AssistantConversationNotFoundError as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    payload = await conversations_service.get_assistant_conversation_with_summary(
+        session=auth.session,
+        user_id=auth.user_id,
+        conversation_id=conversation_id,
+    )
 
     return ConversationThreadResponse.model_validate(payload)
 
@@ -139,20 +133,17 @@ async def rename_conversation(
     auth: CurrentAuth,
 ) -> ConversationThreadResponse:
     """Rename an assistant conversation."""
-    try:
-        await conversations_service.rename_assistant_conversation(
-            session=auth.session,
-            user_id=auth.user_id,
-            conversation_id=conversation_id,
-            title=request.title,
-        )
-        payload = await conversations_service.get_assistant_conversation_with_summary(
-            session=auth.session,
-            user_id=auth.user_id,
-            conversation_id=conversation_id,
-        )
-    except conversations_service.AssistantConversationNotFoundError as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    await conversations_service.rename_assistant_conversation(
+        session=auth.session,
+        user_id=auth.user_id,
+        conversation_id=conversation_id,
+        title=request.title,
+    )
+    payload = await conversations_service.get_assistant_conversation_with_summary(
+        session=auth.session,
+        user_id=auth.user_id,
+        conversation_id=conversation_id,
+    )
 
     return ConversationThreadResponse.model_validate(payload)
 
@@ -163,19 +154,16 @@ async def archive_conversation(
     auth: CurrentAuth,
 ) -> ConversationThreadResponse:
     """Archive an assistant conversation."""
-    try:
-        await conversations_service.archive_assistant_conversation(
-            session=auth.session,
-            user_id=auth.user_id,
-            conversation_id=conversation_id,
-        )
-        payload = await conversations_service.get_assistant_conversation_with_summary(
-            session=auth.session,
-            user_id=auth.user_id,
-            conversation_id=conversation_id,
-        )
-    except conversations_service.AssistantConversationNotFoundError as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    await conversations_service.archive_assistant_conversation(
+        session=auth.session,
+        user_id=auth.user_id,
+        conversation_id=conversation_id,
+    )
+    payload = await conversations_service.get_assistant_conversation_with_summary(
+        session=auth.session,
+        user_id=auth.user_id,
+        conversation_id=conversation_id,
+    )
 
     return ConversationThreadResponse.model_validate(payload)
 
@@ -186,19 +174,16 @@ async def unarchive_conversation(
     auth: CurrentAuth,
 ) -> ConversationThreadResponse:
     """Restore an assistant conversation to regular status."""
-    try:
-        await conversations_service.unarchive_assistant_conversation(
-            session=auth.session,
-            user_id=auth.user_id,
-            conversation_id=conversation_id,
-        )
-        payload = await conversations_service.get_assistant_conversation_with_summary(
-            session=auth.session,
-            user_id=auth.user_id,
-            conversation_id=conversation_id,
-        )
-    except conversations_service.AssistantConversationNotFoundError as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    await conversations_service.unarchive_assistant_conversation(
+        session=auth.session,
+        user_id=auth.user_id,
+        conversation_id=conversation_id,
+    )
+    payload = await conversations_service.get_assistant_conversation_with_summary(
+        session=auth.session,
+        user_id=auth.user_id,
+        conversation_id=conversation_id,
+    )
 
     return ConversationThreadResponse.model_validate(payload)
 
@@ -209,14 +194,11 @@ async def delete_conversation(
     auth: CurrentAuth,
 ) -> Response:
     """Delete an assistant conversation and its history."""
-    try:
-        await conversations_service.delete_assistant_conversation(
-            session=auth.session,
-            user_id=auth.user_id,
-            conversation_id=conversation_id,
-        )
-    except conversations_service.AssistantConversationNotFoundError as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    await conversations_service.delete_assistant_conversation(
+        session=auth.session,
+        user_id=auth.user_id,
+        conversation_id=conversation_id,
+    )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -227,14 +209,11 @@ async def get_conversation_history(
     auth: CurrentAuth,
 ) -> ConversationHistoryResponse:
     """Load exported assistant-ui history for one conversation."""
-    try:
-        payload = await conversations_service.load_assistant_conversation_history(
-            session=auth.session,
-            user_id=auth.user_id,
-            conversation_id=conversation_id,
-        )
-    except conversations_service.AssistantConversationNotFoundError as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    payload = await conversations_service.load_assistant_conversation_history(
+        session=auth.session,
+        user_id=auth.user_id,
+        conversation_id=conversation_id,
+    )
 
     return ConversationHistoryResponse(
         head_id=payload["head_id"],
@@ -249,24 +228,19 @@ async def append_conversation_history_item(
     auth: CurrentAuth,
 ) -> AppendConversationHistoryResponse:
     """Append one assistant-ui history item with idempotent insert semantics."""
-    try:
-        inserted = await conversations_service.append_assistant_conversation_history_item(
-            session=auth.session,
-            user_id=auth.user_id,
-            conversation_id=conversation_id,
-            message=request.message,
-            parent_id=request.parent_id,
-            run_config=request.run_config,
-        )
-        conversation = await conversations_service.get_assistant_conversation(
-            session=auth.session,
-            user_id=auth.user_id,
-            conversation_id=conversation_id,
-        )
-    except conversations_service.AssistantConversationNotFoundError as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
-    except conversations_service.AssistantConversationValidationError as error:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+    inserted = await conversations_service.append_assistant_conversation_history_item(
+        session=auth.session,
+        user_id=auth.user_id,
+        conversation_id=conversation_id,
+        message=request.message,
+        parent_id=request.parent_id,
+        run_config=request.run_config,
+    )
+    conversation = await conversations_service.get_assistant_conversation(
+        session=auth.session,
+        user_id=auth.user_id,
+        conversation_id=conversation_id,
+    )
 
     return AppendConversationHistoryResponse(
         appended=inserted,
@@ -292,10 +266,12 @@ async def get_models() -> dict[str, list[dict[str, Any]]]:
     for i, model_id in enumerate(ordered):
         if model_id in seen:
             continue
-        models.append({
-            "id": model_id,
-            "isDefault": i == 0,
-        })
+        models.append(
+            {
+                "id": model_id,
+                "isDefault": i == 0,
+            }
+        )
         seen.add(model_id)
 
     return {"models": models}

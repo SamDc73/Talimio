@@ -1,5 +1,6 @@
 """Centralized LiteLLM process configuration."""
 
+import logging
 import os
 from typing import Any, cast
 
@@ -53,10 +54,18 @@ def configure_litellm() -> None:
     if _LITELLM_CONFIGURED:
         return
 
+    # LiteLLM lazily registers an atexit cleanup hook that spins up a fresh event
+    # loop during process teardown. In tests, that happens after pytest closes its
+    # capture streams and produces noisy closed-file logging. We manage cleanup
+    # ourselves, so keep LiteLLM from registering the extra atexit hook.
+    cast("Any", litellm)._async_client_cleanup_registered = True  # noqa: SLF001
     litellm.enable_json_schema_validation = True
     litellm.drop_params = True
     # LiteLLM exposes suppress_debug_info as Literal[False]; cast avoids false-positive type errors.
     cast("Any", litellm).suppress_debug_info = True
+    asyncio_logger = logging.getLogger("asyncio")
+    if asyncio_logger.isEnabledFor(logging.DEBUG):
+        asyncio_logger.setLevel(logging.INFO)
     _configure_langfuse_otel_callback()
 
     _LITELLM_CONFIGURED = True

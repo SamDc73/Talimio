@@ -1,4 +1,3 @@
-
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -101,7 +100,7 @@ class CoursesFacadeInternalError(DomainError):
         super().__init__(detail, feature_area=FEATURE_AREA)
 
 
-class CoursesFacade:
+class CoursesFacade:  # noqa: PLR0904
     """
     Single entry point for all course operations.
 
@@ -195,7 +194,9 @@ class CoursesFacade:
             message = "Failed to generate course"
             raise CoursesFacadeUpstreamError(message) from error
 
-    async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
+    async def update_progress(
+        self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Update course progress.
 
@@ -216,7 +217,9 @@ class CoursesFacade:
 
         return {"progress": updated_progress}
 
-    async def update_course(self, course_id: uuid.UUID, user_id: uuid.UUID, update_data: dict[str, Any]) -> CourseResponse:
+    async def update_course(
+        self, course_id: uuid.UUID, user_id: uuid.UUID, update_data: dict[str, Any]
+    ) -> CourseResponse:
         """Update course metadata and return the updated course response."""
         try:
             updated_course = await self._content_service.update_course(course_id, update_data, user_id)
@@ -250,7 +253,9 @@ class CoursesFacade:
             message = "Failed to list courses"
             raise CoursesFacadeUpstreamError(message) from error
 
-    async def search_courses(self, query: str, user_id: uuid.UUID, filters: dict[str, Any] | None = None) -> list[CourseResponse]:
+    async def search_courses(
+        self, query: str, user_id: uuid.UUID, filters: dict[str, Any] | None = None
+    ) -> list[CourseResponse]:
         """Search user courses and return the matching course responses."""
         query_service = CourseQueryService(self._session)
         limit = (filters or {}).get("limit", 20)
@@ -267,7 +272,9 @@ class CoursesFacade:
         query_service = CourseQueryService(self._session)
         per_page = 20
         try:
-            course_responses, _total = await query_service.list_courses(page=1, per_page=per_page, search=None, user_id=user_id)
+            course_responses, _total = await query_service.list_courses(
+                page=1, per_page=per_page, search=None, user_id=user_id
+            )
         except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
             logger.exception("courses.list_user.failed", extra={"user_id": str(user_id)})
             message = "Failed to get courses"
@@ -372,7 +379,7 @@ class CoursesFacade:
                 critique_text=critique_text,
                 apply_across_course=apply_across_course,
             )
-        except (NotFoundError, UpstreamUnavailableError, ValidationError):
+        except NotFoundError, UpstreamUnavailableError, ValidationError:
             raise
         except (SQLAlchemyError, RuntimeError, TypeError, ValueError) as error:
             logger.exception(

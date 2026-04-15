@@ -1,4 +1,3 @@
-
 import uuid
 from collections.abc import Awaitable, Callable
 
@@ -16,7 +15,7 @@ Key design:
 """
 
 import logging
-from typing import Any
+from typing import Any, Literal
 
 import psycopg
 from psycopg_pool import ConnectionPool
@@ -38,6 +37,9 @@ from src.config.settings import get_settings
 
 
 logger = logging.getLogger(__name__)
+
+MemoryDeleteResult = Literal["deleted", "not_found", "unavailable"]
+MemoryClearResult = Literal["cleared", "unavailable"]
 
 # Module-level instance - initialized once at startup
 _memory_client: AsyncMemory | None = None
@@ -145,11 +147,11 @@ def get_memory_client() -> AsyncMemory:
             vector_store_config["connection_pool"] = pool
             _memory_client = AsyncMemory(config=MemoryConfig(**config))
             logger.debug("memory.client.initialized")
-        except (RuntimeError, TypeError, ValueError, OSError, psycopg.Error):
+        except RuntimeError, TypeError, ValueError, OSError, psycopg.Error:
             if pool is not None:
                 try:
                     pool.close()
-                except (RuntimeError, OSError, psycopg.Error):
+                except RuntimeError, OSError, psycopg.Error:
                     logger.exception("memory.init.pool_close_failed")
             logger.exception("memory.init.failed")
             raise
@@ -284,16 +286,16 @@ async def search_memories(
     )
 
 
-async def delete_memory(user_id: uuid.UUID, memory_id: str) -> bool:
+async def delete_memory(user_id: uuid.UUID, memory_id: str) -> MemoryDeleteResult:
     """Delete a specific memory."""
     if not _memory_is_configured():
-        return False
+        return "not_found"
 
-    async def _execute(client: AsyncMemory) -> bool:
+    async def _execute(client: AsyncMemory) -> MemoryDeleteResult:
         existing_memory = await client.get(memory_id)
         if existing_memory is None:
             logger.info("Memory %s not found for user %s", memory_id, user_id)
-            return False
+            return "not_found"
         try:
             await client.delete(memory_id)
         except AttributeError:
@@ -303,14 +305,14 @@ async def delete_memory(user_id: uuid.UUID, memory_id: str) -> bool:
                 user_id,
                 exc_info=True,
             )
-            return False
+            return "unavailable"
         logger.info("Deleted memory %s for user %s", memory_id, user_id)
-        return True
+        return "deleted"
 
     return await _run_memory_operation(
         operation=f"delete memory {memory_id}",
         execute=_execute,
-        fallback=False,
+        fallback="unavailable",
     )
 
 
@@ -319,24 +321,24 @@ async def delete_all_memories(
     *,
     agent_id: str | None = None,
     run_id: str | None = None,
-) -> bool:
+) -> MemoryClearResult:
     """Delete all memories for a user (optionally scoped by agent/run)."""
     if not _memory_is_configured():
-        return True
+        return "cleared"
 
-    async def _execute(client: AsyncMemory) -> bool:
+    async def _execute(client: AsyncMemory) -> MemoryClearResult:
         await client.delete_all(
             user_id=str(user_id),
             agent_id=agent_id,
             run_id=run_id,
         )
         logger.info("Cleared memories for user %s", user_id)
-        return True
+        return "cleared"
 
     return await _run_memory_operation(
         operation=f"clear all for user {user_id}",
         execute=_execute,
-        fallback=False,
+        fallback="unavailable",
     )
 
 

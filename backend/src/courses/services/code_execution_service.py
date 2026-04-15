@@ -1,4 +1,3 @@
-
 from collections.abc import Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -92,7 +91,7 @@ WORKSPACES_DIR = f"{HOME_USER_DIR}/workspaces"
 E2B_SDK_LOG_LEVEL = get_settings().E2B_SDK_LOG_LEVEL.upper()
 try:
     _e2b_level = getattr(logging, E2B_SDK_LOG_LEVEL, logging.WARNING)
-except (AttributeError, TypeError):
+except AttributeError, TypeError:
     _e2b_level = logging.WARNING
 for _name in ("e2b.api", "e2b.sandbox_async.main"):
     logging.getLogger(_name).setLevel(_e2b_level)
@@ -211,7 +210,7 @@ class CodeExecutionService:
                     acloser = getattr(sbx, "aclose", None)
                     if callable(acloser):
                         await _maybe_await(acloser())
-            except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+            except OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException:
                 logger.exception("Failed to close sandbox for key %s", k)
 
         # Reuse if present
@@ -248,11 +247,11 @@ class CodeExecutionService:
         try:
             await _maybe_await(refresher(self.sandbox_ttl))
             return True
-        except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+        except OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException:
             logger.debug("Failed to refresh sandbox timeout", exc_info=True)
             return False
 
-    async def execute(
+    async def execute(  # noqa: PLR0912
         self,
         *,
         source_code: str,
@@ -470,7 +469,9 @@ class CodeExecutionService:
             SandboxException,
         ) as exc:
             msg = f"Failed to start runtime process: {exc}"
-            raise CodeExecutionError(msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="runtime_start_failed") from exc
+            raise CodeExecutionError(
+                msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="runtime_start_failed"
+            ) from exc
 
         process_id = getattr(handle, "pid", None)
         if not isinstance(process_id, int) or process_id <= 0:
@@ -515,12 +516,14 @@ class CodeExecutionService:
                 await asyncio.wait_for(handle.wait(), timeout=0.2)
             except CommandExitException:
                 pass
-            except (OSError, RuntimeError, TimeoutException, SandboxException, TypeError, ValueError):
+            except OSError, RuntimeError, TimeoutException, SandboxException, TypeError, ValueError:
                 logger.debug("Runtime process wait check failed pid=%s", process_id, exc_info=True)
 
         full_stdout = str(getattr(handle, "stdout", "") or "")
         full_stderr = str(getattr(handle, "stderr", "") or "")
-        stdout_offset, stderr_offset = self._runtime_output_offsets.get(self._runtime_output_key(key, process_id), (0, 0))
+        stdout_offset, stderr_offset = self._runtime_output_offsets.get(
+            self._runtime_output_key(key, process_id), (0, 0)
+        )
         safe_stdout_offset = max(0, min(stdout_offset, len(full_stdout)))
         safe_stderr_offset = max(0, min(stderr_offset, len(full_stderr)))
         stdout_delta = full_stdout[safe_stdout_offset:]
@@ -572,9 +575,13 @@ class CodeExecutionService:
             running = await self._is_process_running(sbx, process_id)
             if not running:
                 msg = f"Runtime process {process_id} is no longer running"
-                raise CodeExecutionError(msg, status_code=status.HTTP_409_CONFLICT, error_code="process_not_running") from exc
+                raise CodeExecutionError(
+                    msg, status_code=status.HTTP_409_CONFLICT, error_code="process_not_running"
+                ) from exc
             msg = f"Failed to send runtime input: {exc}"
-            raise CodeExecutionError(msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="runtime_input_failed") from exc
+            raise CodeExecutionError(
+                msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="runtime_input_failed"
+            ) from exc
 
         return {
             "process_id": process_id,
@@ -615,14 +622,16 @@ class CodeExecutionService:
             SandboxException,
         ) as exc:
             msg = f"Failed to stop runtime process: {exc}"
-            raise CodeExecutionError(msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="runtime_stop_failed") from exc
+            raise CodeExecutionError(
+                msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="runtime_stop_failed"
+            ) from exc
 
         if wait_timeout_seconds is not None and wait_timeout_seconds > 0:
             try:
                 await asyncio.wait_for(handle.wait(), timeout=wait_timeout_seconds)
             except CommandExitException:
                 pass
-            except (OSError, RuntimeError, TimeoutException, SandboxException, TypeError, ValueError):
+            except OSError, RuntimeError, TimeoutException, SandboxException, TypeError, ValueError:
                 logger.debug("Runtime process wait-on-stop failed pid=%s", process_id, exc_info=True)
 
         running = await self._is_process_running(sbx, process_id)
@@ -673,7 +682,9 @@ class CodeExecutionService:
             SandboxException,
         ) as exc:
             msg = f"Failed to list runtime entries: {exc}"
-            raise CodeExecutionError(msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="runtime_list_failed") from exc
+            raise CodeExecutionError(
+                msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="runtime_list_failed"
+            ) from exc
 
         entries: list[dict[str, Any]] = []
         stdout = str(getattr(result, "stdout", "") or "")
@@ -707,13 +718,19 @@ class CodeExecutionService:
             raise CodeExecutionError(msg, status_code=status.HTTP_504_GATEWAY_TIMEOUT, error_code="timeout") from exc
         except RateLimitException as exc:
             msg = "Sandbox rate limit exceeded. Please wait before retrying your code."
-            raise CodeExecutionError(msg, status_code=status.HTTP_429_TOO_MANY_REQUESTS, error_code="rate_limit") from exc
+            raise CodeExecutionError(
+                msg, status_code=status.HTTP_429_TOO_MANY_REQUESTS, error_code="rate_limit"
+            ) from exc
         except InvalidArgumentException as exc:
             msg = "Invalid execution request sent to the sandbox. Check language and inputs."
-            raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="invalid_argument") from exc
+            raise CodeExecutionError(
+                msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="invalid_argument"
+            ) from exc
         except NotEnoughSpaceException as exc:
             msg = "The sandbox ran out of available space while executing the code."
-            raise CodeExecutionError(msg, status_code=status.HTTP_507_INSUFFICIENT_STORAGE, error_code="insufficient_storage") from exc
+            raise CodeExecutionError(
+                msg, status_code=status.HTTP_507_INSUFFICIENT_STORAGE, error_code="insufficient_storage"
+            ) from exc
         except AuthenticationException as exc:
             msg = "Sandbox authentication failed. Verify execution credentials."
             raise CodeExecutionError(msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="authentication") from exc
@@ -809,7 +826,7 @@ class CodeExecutionService:
                     acloser = getattr(sbx, "aclose", None)
                     if callable(acloser):
                         await _maybe_await(acloser())
-            except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+            except OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException:
                 logger.exception("Failed to close sandbox during reset key=%s", key)
 
     def _plan_cache_key(self, course_id: str | None, language: str, source_code: str) -> str:
@@ -905,7 +922,7 @@ class CodeExecutionService:
             try:
                 await sbx.files.read(sentinel_path)
                 return
-            except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+            except OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException:
                 logger.debug("Runtime sentinel missing for %s, proceeding with provisioning", language, exc_info=True)
 
             runtime_binary = "rustc" if language == "rust" else language
@@ -914,7 +931,7 @@ class CodeExecutionService:
                 if getattr(result, "exit_code", None) == 0:
                     await sbx.files.write(sentinel_path, "present")
                     return
-            except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+            except OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException:
                 logger.debug("Runtime presence check failed for %s", language, exc_info=True)
 
             logger.info("Installing runtime lang=%s commands=%s", language, installers)
@@ -1006,7 +1023,7 @@ class CodeExecutionService:
         try:
             await sbx.files.read(self._apt_sentinel)
             state["apt_updated"] = True
-        except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+        except OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException:
             state["apt_updated"] = False
         return state
 
@@ -1052,10 +1069,7 @@ class CodeExecutionService:
         async def list_dir(path: str, depth: int) -> list[dict[str, Any]]:
             normalized_path = path.strip() or "."
             quoted_path = shlex.quote(normalized_path)
-            command = (
-                f"find {quoted_path} -maxdepth {depth} -mindepth 1 -printf '%y\\t%p\\n' "
-                "| head -n 200"
-            )
+            command = f"find {quoted_path} -maxdepth {depth} -mindepth 1 -printf '%y\\t%p\\n' | head -n 200"
             run_result = await run_command(command, None, "user", 30)
             stdout = str(run_result.get("stdout", ""))
             entries: list[dict[str, Any]] = []
@@ -1134,7 +1148,7 @@ class CodeExecutionService:
         for file_entry in plan.files:
             try:
                 await sbx.files.write(path=file_entry.path, data=file_entry.content)
-            except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+            except OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException:
                 logger.exception("Failed to write file %s", file_entry.path)
                 raise
 
@@ -1453,7 +1467,7 @@ class CodeExecutionService:
             if APT_GET_UPDATE_COMMAND in normalized_command:
                 try:
                     await sbx.files.write(self._apt_sentinel, "updated")
-                except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+                except OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException:
                     logger.exception("Failed to record apt sentinel")
 
     async def _apply_actions(
@@ -1512,7 +1526,7 @@ class CodeExecutionService:
         if path:
             try:
                 existing = await sbx.files.read(path)
-            except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+            except OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException:
                 logger.debug("Patch target missing, creating file path=%s", path, exc_info=True)
                 existing = None
 
@@ -1524,7 +1538,7 @@ class CodeExecutionService:
             try:
                 await sbx.files.write(path=path, data=new_content)
                 logger.info("Applied sandbox patch path=%s", path)
-            except (OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException):
+            except OSError, RuntimeError, TimeoutException, SandboxException, CommandExitException:
                 logger.exception("Failed to write patched file path=%s", path)
                 raise
         else:
@@ -1547,7 +1561,7 @@ class CodeExecutionService:
     async def _persist_lesson_patch(self, lesson_id: str, original: str, replacement: str) -> None:
         try:
             lesson_uuid = uuid.UUID(lesson_id)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             logger.debug("Invalid lesson_id for patch persistence lesson_id=%s", lesson_id)
             return
 
@@ -1732,7 +1746,9 @@ class CodeExecutionService:
             raise CodeExecutionError(msg, status_code=status.HTTP_404_NOT_FOUND, error_code="runtime_session_not_found")
         return record[1]
 
-    def _resolve_runtime_working_directory(self, *, course_id: str | None, workspace_id: str | None, cwd: str | None) -> str | None:
+    def _resolve_runtime_working_directory(
+        self, *, course_id: str | None, workspace_id: str | None, cwd: str | None
+    ) -> str | None:
         workspace_root = self._resolve_workspace_root(workspace_id, course_id, None) if workspace_id else None
         normalized_cwd = (cwd or "").strip()
         if not normalized_cwd:
@@ -1820,7 +1836,7 @@ class CodeExecutionService:
         raw_kind, raw_size, raw_path = parts
         try:
             size = int(raw_size)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             size = 0
         kind = raw_kind if raw_kind in {"d", "f"} else "f"
         return kind, size, raw_path

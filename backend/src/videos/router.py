@@ -32,10 +32,7 @@ async def create_video(
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> VideoResponse:
     """Add a YouTube video to the library."""
-    try:
-        return await facade.create_video(video_data=video_data, user_id=auth.user_id)
-    except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return await facade.create_video(video_data=video_data, user_id=auth.user_id)
 
 
 @router.get("")
@@ -125,10 +122,7 @@ async def extract_video_chapters(
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> dict[str, Any]:
     """Extract chapters from YouTube video."""
-    try:
-        chapters = await facade.extract_and_create_video_chapters(video_id=video_id, user_id=auth.user_id)
-    except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    chapters = await facade.extract_and_create_video_chapters(video_id=video_id, user_id=auth.user_id)
     return {"count": len(chapters), "chapters": chapters}
 
 
@@ -155,10 +149,7 @@ async def get_video_transcript(
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> VideoTranscriptResponse:
     """Get transcript segments with timestamps for a video."""
-    try:
-        return await facade.get_video_transcript_segments(video_id=video_id, user_id=auth.user_id)
-    except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return await facade.get_video_transcript_segments(video_id=video_id, user_id=auth.user_id)
 
 
 @router.get("/{video_id}/details")
