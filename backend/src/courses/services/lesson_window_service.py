@@ -7,11 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.courses.models import Course, LessonVersion, LessonVersionWindow
 
 
-_WINDOW_HEADING_RE = re.compile(
-    r"^##\s+Window\s+(\d+)\s*[:\-]\s*(.+?)(?:\s+\[(\d+)\s*min\])?\s*$",
-    re.MULTILINE,
-)
-_FIRST_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+_SECTION_HEADING_RE = re.compile(r"^##\s+(.+?)(?:\s+\[(\d+)\s*min\])?\s*$", re.MULTILINE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,14 +34,16 @@ class LessonWindowService:
             else "Use the lesson topic and surrounding course context to decide how much segmentation helps."
         )
         return (
-            "## Lesson Windows\n"
+            "## Lesson Sections\n"
             "Write the full lesson in one pass.\n"
-            "Segment it into windows only when that improves pacing and clarity for this lesson.\n"
-            "Let the lesson and learner context decide how many windows feel natural.\n"
+            "Segment it into top-level sections only when that improves pacing and clarity for this lesson.\n"
+            "Treat each top-level section as a pacing chunk, not a mini-lesson.\n"
+            "Aim for about 5-8 minutes per section and about 10-20 minutes total across the full lesson.\n"
             f"{adaptive_hint}\n"
             "Avoid over-segmentation.\n"
-            "When you use windows, start each one with a level-2 heading in this exact format: `## Window 1: <short title> [5 min]`.\n"
-            "Use `###` headings inside each window for subsections.\n"
+            "Let top-level section titles be specific to the lesson content instead of generic stage labels.\n"
+            "When you segment, start each pacing chunk with a level-2 heading in this format: `## <short title> [5 min]`.\n"
+            "Use `###` headings inside a section for subsections.\n"
             "Keep the lesson digestible and coherent.\n"
             "The final response must still be one coherent lesson body, not JSON and not separate lessons."
         )
@@ -94,7 +92,7 @@ class LessonWindowService:
         if not content.strip():
             return [ParsedLessonWindow(window_index=0, title="Lesson", content="", estimated_minutes=1)]
 
-        matches = list(_WINDOW_HEADING_RE.finditer(content))
+        matches = list(_SECTION_HEADING_RE.finditer(content))
         if not matches:
             return [self._build_single_window(content)]
 
@@ -104,11 +102,11 @@ class LessonWindowService:
             body_start = match.end()
             body_end = next_match.start() if next_match is not None else len(content)
             body = content[body_start:body_end].strip()
-            explicit_minutes = match.group(3)
+            explicit_minutes = match.group(2)
             parsed_windows.append(
                 ParsedLessonWindow(
                     window_index=index,
-                    title=match.group(2).strip() or None,
+                    title=match.group(1).strip() or None,
                     content=body,
                     estimated_minutes=(
                         int(explicit_minutes)
@@ -120,7 +118,7 @@ class LessonWindowService:
         return parsed_windows
 
     def _build_single_window(self, content: str) -> ParsedLessonWindow:
-        heading_match = _FIRST_HEADING_RE.search(content)
+        heading_match = _SECTION_HEADING_RE.search(content)
         title = heading_match.group(1).strip() if heading_match is not None else "Lesson"
         return ParsedLessonWindow(
             window_index=0,

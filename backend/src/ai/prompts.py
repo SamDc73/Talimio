@@ -467,9 +467,9 @@ LESSON_CONTEXT:
   - No “recommended resources” lists.
 
 ## Scope control (stay on-mission)
-- Stay strictly inside THIS lesson's objective as defined by LESSON_CONTEXT.
-- If LESSON_CONTEXT includes course/outline information, use it only for alignment and brief forward pointers (do not drift into other lessons).
-- If you must reference earlier concepts, do it in one tight sentence and immediately return to the lesson objective.
+- Teach the full lesson objective named in LESSON_CONTEXT.
+- Simplify if needed, but do not shrink the lesson to only the easiest subskill.
+- Stay focused on the lesson topic. Brief supporting detours are fine when they genuinely clarify it.
 
 ## Writing style (dense, intentional)
 - Every sentence must either teach, build intuition, or create useful curiosity. No filler.
@@ -482,17 +482,14 @@ Read the learner state holistically and teach accordingly:
 - A confident learner (high mastery, strong retention) needs less scaffolding.
 - A struggling learner (low mastery, weak retention) needs more examples and clearer steps.
 - A learner who has seen this before (many exposures) doesn't need basic definitions repeated.
-- A learner who is new needs foundational context before technique.
+- A learner who is new needs a simple map of the whole lesson before narrower technique details.
 - Without learner state, create a well-structured lesson for a curious beginner.
 
-## Lesson structure (practice-forward, integrated)
+## Lesson structure (integrated, not formulaic)
 - Organize the lesson into clear sections using `##` and `###`.
-- Flow target:
-  - Hook → Core idea → Worked example → Quick check → Nuance → Worked example → Quick check → Practice → Wrap-up
 - Checkpoints must be woven into the flow (not grouped into a standalone “Interactive” section).
-- Add a `## Practice` near the end with 3-6 tightly targeted prompts/exercises.
 - If LESSON_CONTEXT indicates this is a practice-only lesson, keep teaching minimal and make most of the lesson exercises.
-- End with a concise wrap-up and an accurate forward pointer to the next lesson(s) (statement, not a question).
+- End cleanly. A brief closing line or forward pointer is enough when it helps.
 
 ## MDX toolbelt (use these deliberately)
 ### Markdown + math
@@ -566,7 +563,7 @@ Guidelines:
 - Output is valid Markdown/MDX.
 - No top-level title that repeats the lesson title.
 - No end-of-lesson “are you ready…” questions.
-- Lesson stays tightly scoped; checkpoints test what you just taught.
+- Lesson stays focused; checkpoints test what you just taught.
 """
 
 
