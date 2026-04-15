@@ -10,6 +10,7 @@ import VerifyEmailPage from "@/features/auth/VerifyEmailPage"
 import BookViewer from "@/features/book-viewer/BookViewer"
 import { CourseProvider } from "@/features/course/CourseContext"
 import CourseLayout from "@/features/course/components/CourseLayout"
+import DemosView, { LocalDemoRoute, localDemoRoutes } from "@/features/demos/DemosView"
 import DocumentsView from "@/features/course/views/DocumentsView"
 import LessonContent from "@/features/course/views/LessonContent"
 import OutlineView from "@/features/course/views/OutlineView"
@@ -86,6 +87,11 @@ function App() {
 								</ProtectedRoute>
 							}
 						/>
+
+						{localDemoRoutes.map((route) => (
+							<Route key={route.id} path={route.path} element={<LocalDemoRoute demoId={route.id} />} />
+						))}
+						<Route path="/demos/*" element={<DemosView />} />
 
 						{/* Catch all - redirect to home */}
 						<Route path="*" element={<Navigate to="/" replace />} />
