@@ -1,4 +1,7 @@
-// Minimal ESLint config - only for what Biome can't handle
+// ESLint config - only for what Biome doesn't handle
+// Biome handles: jsx-key, no-children-prop, void-elements, duplicate-props, jsx-no-undef,
+// forwardRef, exhaustive-deps, hooks-at-top-level, no-nested-ternaries, naming conventions,
+// import-sorting, no-console, function-component-definition, etc.
 
 import tanstackQuery from "@tanstack/eslint-plugin-query"
 import betterTailwindcss from "eslint-plugin-better-tailwindcss"
@@ -7,27 +10,17 @@ import importPlugin from "eslint-plugin-import"
 import promisePlugin from "eslint-plugin-promise"
 import react from "eslint-plugin-react"
 import reactCompiler from "eslint-plugin-react-compiler"
-import reactRefresh from "eslint-plugin-react-refresh"
 import sonarjs from "eslint-plugin-sonarjs"
 import unicorn from "eslint-plugin-unicorn"
 
 export default [
 	// Ignore build outputs and third-party files
 	{
-		ignores: [
-			"dist/**",
-			"node_modules/**",
-			"build/**",
-			"coverage/**",
-			"public/pdf.worker.min.js", // Exclude minified third-party files
-			"**/*.min.js", // Exclude all minified files
-		],
+		ignores: ["dist/**", "node_modules/**", "build/**", "coverage/**", "public/pdf.worker.min.js", "**/*.min.js"],
 	},
 
 	// TanStack Query linting
 	...tanstackQuery.configs["flat/recommended"],
-
-	// React Router: no project-specific ESLint plugin currently configured
 
 	// Enforce module boundaries (feature isolation, shared unidirectional imports)
 	{
@@ -65,9 +58,9 @@ export default [
 				node: {
 					extensions: [".js", ".jsx"],
 				},
-				alias: {
-					map: [["@", "./src"]],
-					extensions: [".js", ".jsx"],
+				typescript: {
+					project: "./jsconfig.json",
+					alwaysTryTypes: false,
 				},
 			},
 		},
@@ -119,13 +112,13 @@ export default [
 				"error",
 				{
 					detectComponentClasses: true,
-					ignore: ["^aui-.*", "^epub-container$"],
+					ignore: ["^aui-.*", "^epub-container$", "^lesson-mdx$"],
 				},
 			],
 		},
 	},
 
-	// JavaScript files - stricter rules
+	// JavaScript files - rules Biome doesn't cover
 	{
 		files: ["**/*.js"],
 		languageOptions: {
@@ -138,49 +131,15 @@ export default [
 			unicorn: unicorn,
 		},
 		rules: {
-			...unicorn.configs["flat/recommended"].rules,
 			...sonarjs.configs.recommended.rules,
 			"sonarjs/no-nested-conditional": "off",
 			"sonarjs/cognitive-complexity": "off",
-			"unicorn/catch-error-name": "off",
-			"unicorn/expiring-todo-comments": "off",
-			"unicorn/consistent-function-scoping": "off",
-			"unicorn/empty-brace-spaces": "off",
-			"unicorn/no-lonely-if": "off",
-			"unicorn/no-array-for-each": "off",
-			"unicorn/no-array-reduce": "off",
-			"unicorn/no-for-loop": "off",
-			"unicorn/no-null": "off",
-			"unicorn/number-literal-case": "off",
-			"unicorn/prefer-default-parameters": "off",
-			"unicorn/prefer-global-this": "off",
-			"unicorn/prefer-optional-catch-binding": "off",
-			"unicorn/prefer-query-selector": "off",
-			"unicorn/prefer-string-replace-all": "off",
-			"unicorn/prefer-ternary": "off",
-			"unicorn/prevent-abbreviations": "off",
-			"unicorn/prefer-logical-operator-over-ternary": "off",
-			"unicorn/no-nested-ternary": "off",
-			"unicorn/filename-case": [
-				"error",
-				{
-					cases: {
-						camelCase: true,
-						kebabCase: true,
-						pascalCase: true,
-					},
-					ignore: ["^JXGBoard\\.jsx$", "^JXGBoardPractice\\.jsx$"],
-				},
-			],
-			"no-nested-ternary": "off",
 			"import/no-cycle": ["warn", { maxDepth: 1 }],
 			"import/no-duplicates": "error",
-			// Enforce project structure (no cross-feature imports, unidirectional architecture)
 			"import/no-restricted-paths": [
 				"error",
 				{
 					zones: [
-						// Disable cross-feature imports: each feature can only import itself under src/features
 						{ target: "./src/features/assistant", from: "./src/features", except: ["./assistant"] },
 						{ target: "./src/features/auth", from: "./src/features", except: ["./auth"] },
 						{ target: "./src/features/book-viewer", from: "./src/features", except: ["./book-viewer"] },
@@ -188,12 +147,10 @@ export default [
 						{ target: "./src/features/home", from: "./src/features", except: ["./home"] },
 						{ target: "./src/features/lesson", from: "./src/features", except: ["./lesson"] },
 						{ target: "./src/features/video-viewer", from: "./src/features", except: ["./video-viewer"] },
-						// Unidirectional: shared cannot import from features/app
 						{
 							target: ["./src/components", "./src/hooks", "./src/lib", "./src/types", "./src/utils"],
 							from: ["./src/features", "./src/app"],
 						},
-						// Unidirectional: features should not import from app (future-proof)
 						{ target: "./src/features", from: "./src/app" },
 					],
 				},
@@ -201,7 +158,7 @@ export default [
 		},
 	},
 
-	// JSX files - React-specific rules
+	// JSX files - React rules Biome doesn't fully cover
 	{
 		files: ["**/*.jsx"],
 		languageOptions: {
@@ -217,52 +174,19 @@ export default [
 			import: importPlugin,
 			promise: promisePlugin,
 			react: react,
-			"react-refresh": reactRefresh,
 			"react-compiler": reactCompiler,
 			sonarjs: sonarjs,
 			unicorn: unicorn,
 		},
 		settings: {
 			react: {
-				version: "19.1.1", // Specify React 19
+				version: "19.1.1",
 			},
 		},
 		rules: {
-			...unicorn.configs["flat/recommended"].rules,
 			...sonarjs.configs.recommended.rules,
 			"sonarjs/no-nested-conditional": "off",
 			"sonarjs/cognitive-complexity": "off",
-			"unicorn/catch-error-name": "off",
-			"unicorn/expiring-todo-comments": "off",
-			"unicorn/consistent-function-scoping": "off",
-			"unicorn/empty-brace-spaces": "off",
-			"unicorn/no-lonely-if": "off",
-			"unicorn/no-array-for-each": "off",
-			"unicorn/no-array-reduce": "off",
-			"unicorn/no-for-loop": "off",
-			"unicorn/no-null": "off",
-			"unicorn/no-nested-ternary": "off",
-			"unicorn/number-literal-case": "off",
-			"unicorn/prefer-default-parameters": "off",
-			"unicorn/prefer-global-this": "off",
-			"unicorn/prefer-optional-catch-binding": "off",
-			"unicorn/prefer-query-selector": "off",
-			"unicorn/prefer-string-replace-all": "off",
-			"unicorn/prefer-ternary": "off",
-			"unicorn/prevent-abbreviations": "off",
-			"unicorn/prefer-logical-operator-over-ternary": "off",
-			"unicorn/filename-case": [
-				"error",
-				{
-					cases: {
-						camelCase: true,
-						kebabCase: true,
-						pascalCase: true,
-					},
-					ignore: ["^JXGBoard\\.jsx$", "^JXGBoardPractice\\.jsx$"],
-				},
-			],
-			"no-nested-ternary": "off",
 
 			"import/no-cycle": ["warn", { maxDepth: 1 }],
 			"import/no-duplicates": "error",
@@ -288,18 +212,19 @@ export default [
 				},
 			],
 
-			// React Compiler - preparing for migration
+			// React Compiler
 			"react-compiler/react-compiler": "error",
 
-			// React Refresh - ensure components can hot reload
-			"react-refresh/only-export-components": [
-				"warn",
-				{
-					allowConstantExport: true,
-				},
-			],
+			// React 19 rules (Biome doesn't cover these)
+			"react/no-unknown-property": ["error", { ignore: ["css", "tw"] }],
+			"react/display-name": "warn",
+			"react/jsx-no-target-blank": "error",
+			"react/no-danger-with-children": "error",
+			"react/no-deprecated": "error",
+			"react/no-direct-mutation-state": "error",
+			"react/require-render-return": "error",
 
-			// Promise best practices - Biome doesn't have these
+			// Promise best practices (Biome doesn't have these)
 			"promise/catch-or-return": "error",
 			"promise/no-return-wrap": "error",
 			"promise/param-names": "error",
@@ -307,36 +232,6 @@ export default [
 			"promise/no-nesting": "warn",
 			"promise/no-promise-in-callback": "warn",
 			"promise/no-callback-in-promise": "warn",
-
-			// React 19 specific rules
-			"react/jsx-uses-react": "off", // React 19 doesn't need React import
-			"react/react-in-jsx-scope": "off", // React 19 doesn't need React in scope
-			"react/no-unknown-property": ["error", { ignore: ["css", "tw"] }], // Allow CSS-in-JS
-			"react/prop-types": "off", // Use TypeScript/JSDoc instead
-			"react/display-name": "warn", // Helpful for debugging
-			"react/jsx-no-target-blank": "error", // Security: prevent reverse tabnabbing
-
-			// Function component definition (prefer function declarations)
-			"react/function-component-definition": [
-				"error",
-				{
-					namedComponents: "function-declaration",
-					unnamedComponents: "function-expression",
-				},
-			],
-			"react/jsx-key": ["error", { checkFragmentShorthand: true }], // Ensure keys in lists
-			"react/no-children-prop": "error", // Use JSX children syntax
-			"react/void-dom-elements-no-children": "error", // No children on void elements
-			"react/jsx-no-duplicate-props": "error", // Prevent duplicate props
-			"react/jsx-no-undef": "error", // Prevent undefined components
-			"react/no-danger-with-children": "error", // Prevent dangerouslySetInnerHTML with children
-			"react/no-deprecated": "warn", // Warn about deprecated React APIs
-			"react/no-direct-mutation-state": "error", // Never mutate state directly
-			"react/no-find-dom-node": "error", // findDOMNode is deprecated
-			"react/no-is-mounted": "error", // isMounted is anti-pattern
-			"react/no-string-refs": "error", // String refs are legacy
-			"react/no-render-return-value": "error", // Don't use return value of ReactDOM.render
-			"react/require-render-return": "error", // Enforce return in render
 		},
 	},
 ]

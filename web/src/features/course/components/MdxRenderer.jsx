@@ -5,6 +5,7 @@ import { MultipleChoice } from "@/components/quiz/MultipleChoice"
 import { useMdxCompile } from "@/features/course/hooks/use-mdx-compile"
 import { JXGBoardPractice } from "./JXGBoardPractice"
 import { LatexExpressionPractice } from "./LatexExpressionPractice"
+import { WikiReferenceLink } from "./WikiReferenceLink"
 import WorkspaceAwareCodeBlock from "./WorkspaceAwareCodeBlock"
 import { WorkspaceRegistryProvider } from "./WorkspaceRegistryProvider"
 
@@ -67,36 +68,13 @@ const MDX_COMPONENTS = {
 		/>
 	),
 
-	// Style tables
-	table: ({ children, ...props }) => (
-		<div className="mb-4 overflow-x-auto">
-			<table className="min-w-full divide-y divide-border rounded-lg border border-border" {...props}>
-				<thead data-hidden="true">
-					<tr>
-						<th>Table</th>
-					</tr>
-				</thead>
-				{children}
-			</table>
-		</div>
-	),
-	thead: (props) => {
-		if (props["data-hidden"]) {
-			return <thead className="sr-only" {...props} />
-		}
-		return <thead className="bg-muted/40" {...props} />
-	},
-	tbody: (props) => <tbody className="bg-card divide-y divide-border" {...props} />,
-	th: (props) => (
-		<th
-			className="px-6 py-3 text-left text-xs font-medium text-muted-foreground/80 uppercase tracking-wider border-b"
-			{...props}
-		/>
-	),
-	td: (props) => <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground border-b" {...props} />,
-
 	// Style links
-	a: (props) => <a className="text-primary hover:text-primary/80 underline" {...props} />,
+	a: ({ href, ...props }) => {
+		if (typeof href === "string" && href.startsWith("wiki:")) {
+			return <WikiReferenceLink href={href} {...props} />
+		}
+		return <a className="text-primary hover:text-primary/80 underline" href={href} {...props} />
+	},
 
 	// Style horizontal rules
 	hr: () => <hr className="my-8 border-border" />,
@@ -118,8 +96,30 @@ const MDX_COMPONENTS = {
 }
 const EMPTY_MDX_COMPONENTS = {}
 
+function buildLessonComponents({ components, courseId, lessonConceptId, lessonId }) {
+	return {
+		...MDX_COMPONENTS,
+		FreeForm: function LessonBoundFreeForm(props) {
+			return <FreeForm {...props} courseId={courseId} lessonId={lessonId} lessonConceptId={lessonConceptId} />
+		},
+		JXGBoard: function LessonBoundJXGBoard(props) {
+			return <JXGBoardPractice {...props} courseId={courseId} lessonId={lessonId} lessonConceptId={lessonConceptId} />
+		},
+		LatexExpression: function LessonBoundLatexExpression(props) {
+			return (
+				<LatexExpressionPractice {...props} courseId={courseId} lessonId={lessonId} lessonConceptId={lessonConceptId} />
+			)
+		},
+		pre: function LessonBoundCodeBlock(props) {
+			return <WorkspaceAwareCodeBlock {...props} lessonId={lessonId} courseId={courseId} />
+		},
+		...components,
+	}
+}
+
 export function MdxRenderer({ content, lessonId, courseId, lessonConceptId, components = EMPTY_MDX_COMPONENTS }) {
 	const { Component, error, isLoading } = useMdxCompile(content, { lessonId, courseId })
+	const componentsWithLesson = buildLessonComponents({ components, courseId, lessonConceptId, lessonId })
 
 	// Render states
 	if (!content) {
@@ -160,34 +160,11 @@ export function MdxRenderer({ content, lessonId, courseId, lessonConceptId, comp
 
 	// Render the MDX component
 	return (
-		<div className="max-w-none text-foreground">
+		<div className="lesson-mdx max-w-none text-foreground">
 			<WorkspaceRegistryProvider>
-				{(() => {
-					const componentsWithLesson = {
-						...MDX_COMPONENTS,
-						FreeForm: (props) => (
-							<FreeForm {...props} courseId={courseId} lessonId={lessonId} lessonConceptId={lessonConceptId} />
-						),
-						JXGBoard: (props) => (
-							<JXGBoardPractice {...props} courseId={courseId} lessonId={lessonId} lessonConceptId={lessonConceptId} />
-						),
-						LatexExpression: (props) => (
-							<LatexExpressionPractice
-								{...props}
-								courseId={courseId}
-								lessonId={lessonId}
-								lessonConceptId={lessonConceptId}
-							/>
-						),
-						pre: (props) => <WorkspaceAwareCodeBlock {...props} lessonId={lessonId} courseId={courseId} />,
-						...components,
-					}
-					return (
-						<MDXProvider components={componentsWithLesson}>
-							<Component components={componentsWithLesson} />
-						</MDXProvider>
-					)
-				})()}
+				<MDXProvider components={componentsWithLesson}>
+					<Component components={componentsWithLesson} />
+				</MDXProvider>
 			</WorkspaceRegistryProvider>
 		</div>
 	)

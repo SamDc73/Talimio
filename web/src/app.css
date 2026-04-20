@@ -234,6 +234,29 @@ html.dark {
 	--color-paused-text: oklch(0.8791 0.0141 256.71);
 }
 
+/* Base styles for MDX lesson content (Preflight strips native table/buffer styling) */
+.lesson-mdx table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.lesson-mdx th,
+.lesson-mdx td {
+	padding: 0.5rem 0.75rem;
+	text-align: left;
+	border-bottom: 1px solid var(--color-border);
+}
+
+.lesson-mdx thead th {
+	font-weight: 600;
+	color: var(--color-foreground);
+}
+
+.lesson-mdx tbody tr:last-child th,
+.lesson-mdx tbody tr:last-child td {
+	border-bottom: 0;
+}
+
 /* Layout */
 html,
 body,
