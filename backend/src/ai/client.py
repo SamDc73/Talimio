@@ -149,6 +149,7 @@ class _LLMRequest:
     response_model: type[BaseModel] | None
     temperature: float | None
     tools: list[dict[str, Any]] | None
+    function_tools: list[FunctionToolDefinition]
     sandbox_context: SandboxToolContext | None
     tool_choice: str | None
     user_id: uuid.UUID | None
@@ -244,6 +245,7 @@ class LLMClient:
         response_model: type[BaseModel] | None,
         temperature: float | None,
         tools: list[dict[str, Any]] | None,
+        function_tools: list[FunctionToolDefinition] | None,
         sandbox_context: SandboxToolContext | None,
         tool_choice: str | None,
         user_id: str | uuid.UUID | None,
@@ -260,6 +262,7 @@ class LLMClient:
             response_model=response_model,
             temperature=temperature,
             tools=tools,
+            function_tools=list(function_tools or []),
             sandbox_context=sandbox_context,
             tool_choice=tool_choice,
             user_id=self._normalize_user_id(user_id),
@@ -393,7 +396,7 @@ class LLMClient:
             request.messages = self._inject_tool_instruction(request.messages, request.tool_plan.tool_instruction)
 
     async def _build_request_tool_plan(self, request: _LLMRequest) -> RequestToolPlan:
-        function_tools: list[FunctionToolDefinition] = []
+        function_tools = list(request.function_tools)
         if request.sandbox_context is not None:
             function_tools.extend(build_sandbox_function_tools(request.sandbox_context))
 
@@ -733,6 +736,7 @@ class LLMClient:
         response_model: type[BaseModel] | None = None,
         temperature: float | None = None,
         tools: list[dict[str, Any]] | None = None,
+        function_tools: list[FunctionToolDefinition] | None = None,
         sandbox_context: SandboxToolContext | None = None,
         tool_choice: str | None = None,
         user_id: str | uuid.UUID | None = None,
@@ -749,6 +753,7 @@ class LLMClient:
             response_model=response_model,
             temperature=temperature,
             tools=tools,
+            function_tools=function_tools,
             sandbox_context=sandbox_context,
             tool_choice=tool_choice,
             user_id=user_id,
@@ -1725,6 +1730,7 @@ class LLMClient:
         self,
         lesson_context: str,
         user_id: str | uuid.UUID | None = None,
+        function_tools: list[FunctionToolDefinition] | None = None,
     ) -> LessonContent:
         """Generate a lesson body from a prepared LESSON_CONTEXT string."""
         context_text = lesson_context.strip()
@@ -1743,6 +1749,7 @@ class LLMClient:
             response_content = await self.get_completion(
                 messages,
                 user_id=normalized_user_id,
+                function_tools=function_tools,
             )
 
             content = response_content if isinstance(response_content, str) else str(response_content or "")

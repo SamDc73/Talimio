@@ -11,6 +11,7 @@ from src.ai.tools.plan import (
 from src.ai.tools.runtime import ExecutedToolCall, PlannedToolCall, execute_planned_tool_calls
 from src.ai.tools.sandbox import SandboxToolContext, build_sandbox_function_tools
 from src.ai.tools.search import build_web_search_function_tool
+from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
 
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     "build_request_tool_plan",
     "build_sandbox_function_tools",
     "build_web_search_function_tool",
+    "build_wikipedia_resolver_function_tool",
     "execute_planned_tool_calls",
 ]

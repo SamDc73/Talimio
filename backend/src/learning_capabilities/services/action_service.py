@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai import AGENT_ID_LESSON_WRITER
+from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
 from src.courses.facade import CoursesFacade
 from src.courses.models import Course, Lesson
 from src.courses.services.lesson_service import LessonService
@@ -303,7 +304,11 @@ class LearningCapabilityActionService:
         from src.ai.client import LLMClient
 
         llm_client = LLMClient(agent_id=AGENT_ID_LESSON_WRITER)
-        generated = await llm_client.generate_lesson_content(composed_context, user_id=user_id)
+        generated = await llm_client.generate_lesson_content(
+            composed_context,
+            user_id=user_id,
+            function_tools=[build_wikipedia_resolver_function_tool()],
+        )
         return generated.body
 
 

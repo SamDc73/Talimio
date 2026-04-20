@@ -17,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.client import LLMClient
+from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
 from src.courses.models import (
     Concept,
     Course,
@@ -816,7 +817,11 @@ class LessonService:
 
     async def _generate_lesson_body(self, *, lesson_context: str) -> str:
         llm_client = LLMClient(agent_id=AGENT_ID_LESSON_WRITER)
-        lesson_content = await llm_client.generate_lesson_content(lesson_context, user_id=self.user_id)
+        lesson_content = await llm_client.generate_lesson_content(
+            lesson_context,
+            user_id=self.user_id,
+            function_tools=[build_wikipedia_resolver_function_tool()],
+        )
         return lesson_content.body
 
     def _build_version_summaries(

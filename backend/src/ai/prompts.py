@@ -498,6 +498,14 @@ Read the learner state holistically and teach accordingly:
   - Inline: `$...$`
   - Display: `$$...$$`
 
+### Optional inline references
+- You may occasionally add low-density Wikipedia side-context links in normal Markdown form: `[label](wiki:Page_Key)`.
+- Use these only for peripheral context that helps the learner, not for the lesson target, section headings, or core course concepts.
+- Example: in a chain rule lesson, `[Leibniz's notation](wiki:Leibniz's_notation)` can be useful side context. `chain rule` must stay plain text.
+- Use them sparingly. They should feel like optional curiosity, not dense annotation.
+- If you want to emit a `wiki:` link but are unsure of the exact page key, call `resolve_wikipedia_pages` with the term(s) first.
+- Only emit a `wiki:` link when the tool returns `found=true` and `is_disambiguation=false`. Otherwise, leave the term as plain text.
+
 ### Code blocks
 - Use fenced code blocks in this form: ````` ```language `````.
 - Use canonical language labels when possible (for example: sql, bash, rust, toml, markdown, python, javascript, typescript, dockerfile).
