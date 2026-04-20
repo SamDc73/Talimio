@@ -47,7 +47,6 @@ export function FreeForm({
 	expectedAnswer,
 	sampleAnswer,
 	answerKind = "text",
-	minLength = 50,
 	courseId,
 	lessonId,
 	lessonConceptId,
@@ -72,17 +71,7 @@ export function FreeForm({
 	const isMathLatex = answerKind === "math_latex"
 	const submitted = grade !== null
 	const hasGradingContext = Boolean(courseId && lessonId && lessonConceptId && resolvedExpectedAnswer)
-	const remainingChars = Math.max(0, minLength - userAnswer.length)
-	let guidanceMessage = `Please write at least ${remainingChars} more characters`
-	let guidanceClassName = "text-due-today"
-
-	if (!hasGradingContext) {
-		guidanceMessage = "This question is missing the grading data needed for submission."
-		guidanceClassName = "text-destructive"
-	} else if (remainingChars === 0) {
-		guidanceMessage = `✓ Minimum length reached (${userAnswer.length} characters)`
-		guidanceClassName = "text-completed"
-	}
+	const hasAnswer = userAnswer.trim().length > 0
 
 	useEffect(() => {
 		if (!isMathLatex) {
@@ -113,7 +102,7 @@ export function FreeForm({
 	}, [isMathLatex, isSubmitting, submitted])
 
 	const handleSubmit = async () => {
-		if (isSubmitting || submitted || userAnswer.length < minLength || !hasGradingContext) {
+		if (isSubmitting || submitted || !hasAnswer || !hasGradingContext) {
 			return
 		}
 
@@ -192,9 +181,9 @@ export function FreeForm({
 						}`}
 					/>
 				)}
-				{!submitted && (
+				{!submitted && !hasGradingContext && (
 					<div className="mt-2 text-xs text-muted-foreground">
-						<span className={guidanceClassName}>{guidanceMessage}</span>
+						<span className="text-destructive">This question is missing the grading data needed for submission.</span>
 					</div>
 				)}
 				{submissionError && !submitted && (
@@ -234,9 +223,9 @@ export function FreeForm({
 				<button
 					type="button"
 					onClick={handleSubmit}
-					disabled={userAnswer.length < minLength || !hasGradingContext || isSubmitting}
+					disabled={!hasAnswer || !hasGradingContext || isSubmitting}
 					className={`${
-						userAnswer.length < minLength || !hasGradingContext || isSubmitting
+						!hasAnswer || !hasGradingContext || isSubmitting
 							? QUIZ_DISABLED_BUTTON_CLASS_NAME
 							: QUIZ_ACTIVE_BUTTON_CLASS_NAME
 					}`}
