@@ -111,8 +111,8 @@ async def generate_self_assessment_questions(
     return SelfAssessmentResponse.model_validate(quiz.model_dump())
 
 
-class InMemoryUploadFile:
-    def __init__(self, filename: str, content_type: str, content: bytes):
+class _InMemoryUploadFile:
+    def __init__(self, filename: str, content_type: str, content: bytes) -> None:
         self.filename = filename
         self.content_type = content_type
         self.content = content
@@ -144,7 +144,7 @@ async def create_course(
         if ext not in _COURSE_ATTACHMENT_EXTENSIONS:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported attachment type")
         content = await upload.read()
-        in_memory_files.append(InMemoryUploadFile(upload.filename, upload.content_type or "", content))
+        in_memory_files.append(_InMemoryUploadFile(upload.filename, upload.content_type or "", content))
 
     return await facade.create_course(
         {"prompt": prompt_text, "adaptive_enabled": adaptive_enabled},
