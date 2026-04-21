@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2, Lock, Mail, User } from "lucide-react"
-import { useState } from "react"
+import { useId, useState } from "react"
 import { GoogleMark } from "@/components/GoogleMark"
 import AuthPageShell from "@/features/auth/components/AuthPageShell"
 import PasswordStrengthMeter from "@/features/auth/components/PasswordStrengthMeter"
@@ -31,6 +31,10 @@ function SignupForm({
 	const [isLoading, setIsLoading] = useState(false)
 	const [errors, setErrors] = useState({})
 	const passwordStrength = getPasswordStrength(password, [fullName, email, username])
+	const fullNameId = useId()
+	const usernameId = useId()
+	const emailId = useId()
+	const passwordId = useId()
 
 	const validateUsername = (value) => {
 		if (!value) {
@@ -120,15 +124,15 @@ function SignupForm({
 				)}
 
 				<div className="space-y-2">
-					<label htmlFor="fullName" className="block text-sm font-medium text-foreground">
+					<label htmlFor={fullNameId} className="block text-sm font-medium text-foreground">
 						Full Name
 					</label>
 					<div className="relative">
-						<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+						<div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
 							<User className="size-5 text-muted-foreground" />
 						</div>
 						<input
-							id="fullName"
+							id={fullNameId}
 							type="text"
 							value={fullName}
 							onChange={(e) => {
@@ -147,15 +151,15 @@ function SignupForm({
 				</div>
 
 				<div className="space-y-2">
-					<label htmlFor="username" className="block text-sm font-medium text-foreground">
+					<label htmlFor={usernameId} className="block text-sm font-medium text-foreground">
 						Username (Optional)
 					</label>
 					<div className="relative">
-						<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+						<div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
 							<User className="size-5 text-muted-foreground" />
 						</div>
 						<input
-							id="username"
+							id={usernameId}
 							type="text"
 							value={username}
 							onChange={(e) => {
@@ -174,15 +178,15 @@ function SignupForm({
 				</div>
 
 				<div className="space-y-2">
-					<label htmlFor="email" className="block text-sm font-medium text-foreground">
+					<label htmlFor={emailId} className="block text-sm font-medium text-foreground">
 						Email Address
 					</label>
 					<div className="relative">
-						<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+						<div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
 							<Mail className="size-5 text-muted-foreground" />
 						</div>
 						<input
-							id="email"
+							id={emailId}
 							type="email"
 							value={email}
 							onChange={(e) => {
@@ -201,15 +205,15 @@ function SignupForm({
 				</div>
 
 				<div className="space-y-2">
-					<label htmlFor="password" className="block text-sm font-medium text-foreground">
+					<label htmlFor={passwordId} className="block text-sm font-medium text-foreground">
 						Password
 					</label>
 					<div className="relative">
-						<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+						<div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
 							<Lock className="size-5 text-muted-foreground" />
 						</div>
 						<input
-							id="password"
+							id={passwordId}
 							type={showPassword ? "text" : "password"}
 							value={password}
 							onChange={(e) => {
@@ -227,7 +231,7 @@ function SignupForm({
 						<button
 							type="button"
 							onClick={() => setShowPassword(!showPassword)}
-							className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+							className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground transition-colors hover:text-foreground"
 						>
 							{showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
 						</button>
@@ -243,7 +247,7 @@ function SignupForm({
 				>
 					{isLoading ? (
 						<div className="flex items-center justify-center">
-							<Loader2 className="size-5 animate-spin mr-2" />
+							<Loader2 className="mr-2 size-5 animate-spin" />
 							Creating account...
 						</div>
 					) : (
@@ -262,7 +266,7 @@ function SignupForm({
 					onClick={() => {
 						if (showGoogleOAuth) onGoogle()
 					}}
-					className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-border rounded-xl text-foreground font-medium hover:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-all duration-200"
+					className="flex w-full items-center justify-center gap-3 rounded-xl border border-border px-4 py-3 font-medium text-foreground transition-all duration-200 hover:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
 				>
 					<GoogleMark className="size-5" />
 					Sign up with Google

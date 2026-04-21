@@ -1,6 +1,6 @@
 import { motion } from "framer-motion"
 import { Loader2, Youtube } from "lucide-react"
-import { useState } from "react"
+import { useId, useState } from "react"
 
 import { createVideo } from "@/api/videosApi"
 import { Button } from "@/components/Button"
@@ -54,6 +54,7 @@ function extractYouTubeVideoId(rawUrl) {
 export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 	const [youtubeUrl, setYoutubeUrl] = useState("")
 	const [isAddingVideo, setIsAddingVideo] = useState(false)
+	const youtubeUrlId = useId()
 
 	const trimmedUrl = youtubeUrl.trim()
 	const isValidUrl = Boolean(extractYouTubeVideoId(trimmedUrl))
@@ -108,11 +109,11 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 					</DialogHeader>
 
 					<div className="space-y-2">
-						<Label htmlFor="youtube-url" className="text-base">
+						<Label htmlFor={youtubeUrlId} className="text-base">
 							YouTube URL
 						</Label>
 						<Input
-							id="youtube-url"
+							id={youtubeUrlId}
 							type="url"
 							value={youtubeUrl}
 							onChange={(e) => setYoutubeUrl(e.target.value)}
@@ -139,12 +140,12 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 						>
 							{isAddingVideo ? (
 								<div className="flex items-center gap-2">
-									<Loader2 className="size-4  animate-spin" />
+									<Loader2 className="size-4 animate-spin" />
 									<span>Adding…</span>
 								</div>
 							) : (
 								<div className="flex items-center gap-2">
-									<Youtube className="size-4 " />
+									<Youtube className="size-4" />
 									<span>Add Video</span>
 								</div>
 							)}

@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2, Lock } from "lucide-react"
-import { useState } from "react"
+import { useId, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 
 import { LoginHeader } from "@/components/header/LoginHeader"
@@ -25,6 +25,8 @@ function ResetPasswordPage() {
 	const [successMessage, setSuccessMessage] = useState("")
 	const [errors, setErrors] = useState({ newPassword: undefined, confirm: undefined })
 	const passwordStrength = getPasswordStrength(newPassword)
+	const newPasswordId = useId()
+	const confirmPasswordId = useId()
 
 	const navigate = useNavigate()
 	const { applyPasswordReset } = useAuth()
@@ -106,15 +108,15 @@ function ResetPasswordPage() {
 					)}
 
 					<div className="space-y-2">
-						<label htmlFor="newPassword" className="block text-sm font-medium text-foreground">
+						<label htmlFor={newPasswordId} className="block text-sm font-medium text-foreground">
 							New password
 						</label>
 						<div className="relative">
-							<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+							<div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
 								<Lock className="size-5 text-muted-foreground" />
 							</div>
 							<input
-								id="newPassword"
+								id={newPasswordId}
 								type={showPassword ? "text" : "password"}
 								value={newPassword}
 								onChange={(e) => {
@@ -133,10 +135,10 @@ function ResetPasswordPage() {
 							<button
 								type="button"
 								onClick={() => setShowPassword((prev) => !prev)}
-								className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+								className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground transition-colors hover:text-foreground"
 								disabled={loading}
 							>
-								{showPassword ? <EyeOff className="size-5 " /> : <Eye className="size-5 " />}
+								{showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
 							</button>
 						</div>
 						{errors.newPassword && <p className="text-destructive text-xs mt-1">{errors.newPassword}</p>}
@@ -144,15 +146,15 @@ function ResetPasswordPage() {
 					</div>
 
 					<div className="space-y-2">
-						<label htmlFor="confirmPassword" className="block text-sm font-medium text-foreground">
+						<label htmlFor={confirmPasswordId} className="block text-sm font-medium text-foreground">
 							Confirm password
 						</label>
 						<div className="relative">
-							<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+							<div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
 								<Lock className="size-5 text-muted-foreground" />
 							</div>
 							<input
-								id="confirmPassword"
+								id={confirmPasswordId}
 								type={showPassword ? "text" : "password"}
 								value={confirmPassword}
 								onChange={(e) => {
@@ -171,10 +173,10 @@ function ResetPasswordPage() {
 							<button
 								type="button"
 								onClick={() => setShowPassword((prev) => !prev)}
-								className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+								className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground transition-colors hover:text-foreground"
 								disabled={loading}
 							>
-								{showPassword ? <EyeOff className="size-5 " /> : <Eye className="size-5 " />}
+								{showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
 							</button>
 						</div>
 						{errors.confirm && <p className="text-destructive text-xs mt-1">{errors.confirm}</p>}
@@ -183,11 +185,11 @@ function ResetPasswordPage() {
 					<button
 						type="submit"
 						disabled={loading || !token}
-					className="w-full rounded-xl bg-linear-to-r from-primary to-primary/90 px-4 py-3 font-semibold text-primary-foreground shadow-lg shadow-primary/30 transition-all duration-200 hover:scale-[1.02] hover:from-primary/90 hover:to-primary/80 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-				>
+						className="w-full rounded-xl bg-linear-to-r from-primary to-primary/90 px-4 py-3 font-semibold text-primary-foreground shadow-lg shadow-primary/30 transition-all duration-200 hover:scale-[1.02] hover:from-primary/90 hover:to-primary/80 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+					>
 						{loading ? (
 							<div className="flex items-center justify-center">
-								<Loader2 className="size-5 animate-spin mr-2" />
+								<Loader2 className="mr-2 size-5 animate-spin" />
 								Updating password...
 							</div>
 						) : (
@@ -199,7 +201,7 @@ function ResetPasswordPage() {
 						<button
 							type="button"
 							onClick={() => navigate("/auth")}
-							className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+							className="text-sm text-muted-foreground transition-colors hover:text-foreground"
 							disabled={loading}
 						>
 							Back to sign in

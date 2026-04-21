@@ -4,7 +4,7 @@
 
 import { AnimatePresence, motion } from "framer-motion"
 import { FileText, HelpCircle, Image, Loader2, Paperclip, Sparkles, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { useCourseService } from "@/api/courseApi"
 import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/Dialog"
@@ -86,7 +86,8 @@ const COURSE_MODE_ACTIVE_PILL_CLASS_NAME =
 	"absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-1/2 rounded-full border border-(--color-course)/15 bg-(--color-course)/10 transition-transform duration-280 ease-[cubic-bezier(0.22,1,0.36,1)]"
 const COURSE_CHECKBOX_CLASS_NAME =
 	"size-4 rounded-sm border-border text-(--color-course) transition-all focus:ring-2 focus:ring-(--color-course)/20 focus:ring-offset-0"
-const COURSE_PRIMARY_ACTION_CLASS_NAME = "min-w-[140px] bg-(--color-course) text-(--color-course-text) hover:bg-(--color-course)/90"
+const COURSE_PRIMARY_ACTION_CLASS_NAME =
+	"min-w-[140px] bg-(--color-course) text-(--color-course-text) hover:bg-(--color-course)/90"
 const COURSE_LOADING_OVERLAY_CLASS_NAME =
 	"absolute inset-0 top-12 z-20 flex items-center justify-center rounded-lg border border-(--color-course)/10 bg-card/95 shadow-sm backdrop-blur-sm"
 const COURSE_ERROR_OVERLAY_CLASS_NAME =
@@ -230,6 +231,8 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	const fileInputRef = useRef(null)
 	const attachmentSequenceRef = useRef(0)
 	const attachmentsRef = useRef([])
+	const promptId = useId()
+	const selfAssessmentId = useId()
 
 	const courseService = useCourseService()
 
@@ -507,7 +510,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 
 			<form onSubmit={handlePromptSubmit} onPaste={handlePaste} className="space-y-5">
 				<div className="space-y-3">
-					<Label htmlFor="course-prompt" className="text-base font-medium">
+					<Label htmlFor={promptId} className="text-base font-medium">
 						What would you like to learn?
 					</Label>
 					<fieldset
@@ -522,14 +525,14 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 						onDrop={handleDrop}
 					>
 						<textarea
-							id="course-prompt"
+							id={promptId}
 							value={prompt}
 							onChange={(event) => setPrompt(event.target.value)}
 							placeholder="Describe what you want to learn..."
 							disabled={isGenerating}
 							className={cn(
 								"w-full bg-transparent px-4 py-3 placeholder:text-muted-foreground/50",
-								"text-sm/relaxed  resize-none focus:outline-none",
+								"resize-none text-sm/relaxed focus:outline-none",
 								"min-h-[120px]"
 							)}
 							rows={4}
@@ -690,7 +693,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 								className={cn(
 									"relative z-10 px-4 py-2 text-sm rounded-full cursor-pointer",
 									"transition-colors duration-200 min-w-[90px] text-center select-none",
-									adaptiveEnabled ? "font-medium text-(--color-course-accent)" : "text-muted-foreground",
+									adaptiveEnabled ? "font-medium text-course-accent" : "text-muted-foreground",
 									isGenerating && "opacity-50 cursor-not-allowed"
 								)}
 							>
@@ -708,7 +711,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 								className={cn(
 									"relative z-10 px-4 py-2 text-sm rounded-full cursor-pointer",
 									"transition-colors duration-200 min-w-[90px] text-center select-none",
-									!adaptiveEnabled ? "font-medium text-(--color-course-accent)" : "text-muted-foreground",
+									!adaptiveEnabled ? "font-medium text-course-accent" : "text-muted-foreground",
 									isGenerating && "opacity-50 cursor-not-allowed"
 								)}
 							>
@@ -742,7 +745,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 					</div>
 
 					<label
-						htmlFor="enable-self-assessment"
+						htmlFor={selfAssessmentId}
 						className={cn(
 							"flex items-center gap-2.5 px-1 py-1.5 -mx-1 rounded-md",
 							"transition-colors duration-150",
@@ -752,7 +755,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 					>
 						<input
 							type="checkbox"
-							id="enable-self-assessment"
+							id={selfAssessmentId}
 							checked={selfAssessmentEnabled}
 							onChange={handleToggleSelfAssessment}
 							disabled={isGenerating}
@@ -768,7 +771,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 									className="ml-0.5 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
 									aria-label="Self-assessment information"
 								>
-									<HelpCircle className="size-3.5 " />
+									<HelpCircle className="size-3.5" />
 								</button>
 							</TooltipTrigger>
 							<TooltipContent side="top" className="text-xs">
@@ -785,12 +788,12 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 					<Button type="submit" disabled={isGenerating || !prompt.trim()} className={COURSE_PRIMARY_ACTION_CLASS_NAME}>
 						{isGenerating ? (
 							<div className="flex items-center gap-2">
-								<Loader2 className="size-4  animate-spin" />
+								<Loader2 className="size-4 animate-spin" />
 								<span>Creating…</span>
 							</div>
 						) : (
 							<div className="flex items-center gap-2">
-								<Sparkles className="size-4 " />
+								<Sparkles className="size-4" />
 								<span>Continue</span>
 							</div>
 						)}

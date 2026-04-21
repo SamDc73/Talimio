@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react"
-import { useState } from "react"
+import { useId, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { changePassword, deleteAccount } from "@/api/authApi"
 import { Button } from "@/components/Button"
@@ -18,6 +18,9 @@ export function AccountTab() {
 	const [confirmPassword, setConfirmPassword] = useState("")
 	const [error, setError] = useState("")
 	const [success, setSuccess] = useState("")
+	const currentPasswordId = useId()
+	const newPasswordId = useId()
+	const confirmPasswordId = useId()
 
 	const handlePasswordChange = async (e) => {
 		e.preventDefault()
@@ -110,9 +113,9 @@ export function AccountTab() {
 
 				<div className="grid gap-3">
 					<div className="grid gap-2">
-						<Label htmlFor="current-password">Current Password</Label>
+						<Label htmlFor={currentPasswordId}>Current Password</Label>
 						<Input
-							id="current-password"
+							id={currentPasswordId}
 							type="password"
 							value={currentPassword}
 							onChange={(e) => setCurrentPassword(e.target.value)}
@@ -122,9 +125,9 @@ export function AccountTab() {
 						/>
 					</div>
 					<div className="grid gap-2">
-						<Label htmlFor="new-password">New Password</Label>
+						<Label htmlFor={newPasswordId}>New Password</Label>
 						<Input
-							id="new-password"
+							id={newPasswordId}
 							type="password"
 							value={newPassword}
 							onChange={(e) => setNewPassword(e.target.value)}
@@ -135,9 +138,9 @@ export function AccountTab() {
 						/>
 					</div>
 					<div className="grid gap-2">
-						<Label htmlFor="confirm-password">Confirm New Password</Label>
+						<Label htmlFor={confirmPasswordId}>Confirm New Password</Label>
 						<Input
-							id="confirm-password"
+							id={confirmPasswordId}
 							type="password"
 							value={confirmPassword}
 							onChange={(e) => setConfirmPassword(e.target.value)}

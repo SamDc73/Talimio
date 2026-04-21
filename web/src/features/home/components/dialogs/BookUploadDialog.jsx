@@ -1,6 +1,6 @@
 import { motion } from "framer-motion"
 import { BookOpen, Loader2, Upload } from "lucide-react"
-import { useRef, useState } from "react"
+import { useId, useRef, useState } from "react"
 
 import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
@@ -16,6 +16,10 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 	const [isUploadingBook, setIsUploadingBook] = useState(false)
 	const [dragActive, setDragActive] = useState(false)
 	const fileInputRef = useRef(null)
+	const fileInputId = useId()
+	const fileButtonId = useId()
+	const titleInputId = useId()
+	const authorInputId = useId()
 
 	const handleOpenChange = (nextOpen) => {
 		if (!nextOpen) handleClose()
@@ -118,7 +122,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 					{isUploadingBook && (
 						<div className="absolute inset-0 z-50 flex items-center justify-center rounded-lg bg-background/75 backdrop-blur-sm">
 							<div className="flex items-center gap-3 text-sm">
-								<Loader2 className="size-5  animate-spin text-book" />
+								<Loader2 className="size-5 animate-spin text-book" />
 								<span className="font-medium">Uploading book…</span>
 							</div>
 						</div>
@@ -134,8 +138,8 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 					>
 						<DialogHeader className="space-y-3">
 							<div className="flex items-center gap-3">
-							<div className="rounded-lg bg-linear-to-br from-book/90 to-book p-2.5">
-								<BookOpen className="size-5 text-book-text" />
+								<div className="rounded-lg bg-linear-to-br from-book/90 to-book p-2.5">
+									<BookOpen className="size-5 text-book-text" />
 								</div>
 								<DialogTitle className="text-2xl">Upload Book</DialogTitle>
 							</div>
@@ -143,9 +147,9 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 
 						<div className="space-y-4">
 							<div className="space-y-2">
-								<Label htmlFor="book-file-input">Book File</Label>
+								<Label htmlFor={fileInputId}>Book File</Label>
 								<button
-									id="book-file"
+									id={fileButtonId}
 									type="button"
 									className={`w-full rounded-lg border border-dashed ${
 										dragActive ? "border-book bg-book/10" : "border-border"
@@ -173,7 +177,7 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 										</p>
 									)}
 									<input
-										id="book-file-input"
+										id={fileInputId}
 										ref={fileInputRef}
 										type="file"
 										accept=".pdf,.epub,application/pdf,application/epub+zip"
@@ -186,9 +190,9 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 
 							{selectedFile && (
 								<div className="space-y-2">
-									<Label htmlFor="book-title">Title</Label>
+									<Label htmlFor={titleInputId}>Title</Label>
 									<Input
-										id="book-title"
+										id={titleInputId}
 										value={bookTitle}
 										onChange={(e) => setBookTitle(e.target.value)}
 										placeholder="e.g. The Pragmatic Programmer"
@@ -199,9 +203,9 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 
 							{selectedFile && (
 								<div className="space-y-2">
-									<Label htmlFor="book-author">Author</Label>
+									<Label htmlFor={authorInputId}>Author</Label>
 									<Input
-										id="book-author"
+										id={authorInputId}
 										value={bookAuthor}
 										onChange={(e) => setBookAuthor(e.target.value)}
 										placeholder="e.g. Andrew Hunt, David Thomas"
@@ -219,11 +223,11 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 								type="button"
 								onClick={handleUpload}
 								disabled={!selectedFile || !bookTitle.trim() || isUploadingBook}
-							className="min-w-[140px] bg-book text-book-text hover:bg-book-accent"
+								className="min-w-[140px] bg-book text-book-text hover:bg-book-accent"
 							>
 								{isUploadingBook ? (
 									<div className="flex items-center gap-2">
-										<Loader2 className="size-4  animate-spin" />
+										<Loader2 className="size-4 animate-spin" />
 										<span>Uploading…</span>
 									</div>
 								) : (

@@ -3,7 +3,7 @@
  */
 
 import { ArrowLeft, ChevronRight, Loader2, Plus, Server, Sparkles, Trash2, X, Zap } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useRef, useState } from "react"
 import {
 	clearUserMemory,
 	createMcpServer,
@@ -64,6 +64,8 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 	const [headerRows, setHeaderRows] = useState([])
 	const [deletingServerId, setDeletingServerId] = useState(null)
 	const hasLoadedRef = useRef(false)
+	const instructionsId = useId()
+	const serverUrlId = useId()
 
 	const loadUserSettings = useCallback(async () => {
 		const firstLoad = !hasLoadedRef.current
@@ -319,12 +321,12 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		<div className="space-y-5">
 			{/* Custom Instructions Card */}
 			<div className="space-y-3">
-				<Label htmlFor="instructions" className="text-sm font-medium">
+				<Label htmlFor={instructionsId} className="text-sm font-medium">
 					Custom Instructions
 				</Label>
 				<div className="space-y-2">
 					<textarea
-						id="instructions"
+						id={instructionsId}
 						value={instructions}
 						onChange={(e) => setInstructions(e.target.value)}
 						placeholder="Tell the AI how you'd like it to respond. For example: 'I prefer concise explanations with practical examples' or 'I'm a visual learner who likes diagrams and step-by-step guides.'"
@@ -562,9 +564,9 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 			)}
 
 			<div className="space-y-2">
-				<Label htmlFor="server-url">Server URL</Label>
+				<Label htmlFor={serverUrlId}>Server URL</Label>
 				<Input
-					id="server-url"
+					id={serverUrlId}
 					type="url"
 					value={serverForm.url}
 					onChange={(e) => setServerForm((prev) => ({ ...prev, url: e.target.value }))}

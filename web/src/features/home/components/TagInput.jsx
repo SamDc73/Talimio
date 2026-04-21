@@ -205,7 +205,7 @@ function TagInput({
 				{isOpen && !disabled && (
 					<div
 						ref={dropdownRef}
-						className="absolute top-full left-0 right-0 mt-1 rounded-lg border border-border bg-card shadow-lg z-50 max-h-64 overflow-y-auto"
+						className="absolute inset-x-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
 					>
 						{suggestions.length > 0 && (
 							<div className="p-2">

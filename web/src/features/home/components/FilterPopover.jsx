@@ -1,4 +1,5 @@
 import { ArrowUpDown, BookOpen, CalendarDays, Clock, FileText, Search, SlidersHorizontal, Youtube } from "lucide-react"
+import { useId } from "react"
 
 import { Button } from "@/components/Button"
 import { Input } from "@/components/Input"
@@ -21,6 +22,10 @@ function FilterPopover({
 	sortDirection,
 	toggleSortDirection,
 }) {
+	const filterIdPrefix = useId()
+	const archiveIdPrefix = useId()
+	const sortIdPrefix = useId()
+
 	const getIcon = (iconName) => {
 		switch (iconName) {
 			case "Search": {
@@ -53,7 +58,7 @@ function FilterPopover({
 		<Popover>
 			<PopoverTrigger asChild>
 				<Button variant="outline" size="sm" className="flex items-center gap-1">
-					<SlidersHorizontal className="size-3.5  mr-1" />
+					<SlidersHorizontal className="mr-1 size-3.5" />
 					Filters
 				</Button>
 			</PopoverTrigger>
@@ -64,11 +69,11 @@ function FilterPopover({
 						<RadioGroup value={activeFilter} onValueChange={setActiveFilter} className="flex flex-col gap-2">
 							{filterOptions.map((option) => (
 								<div key={option.id} className="flex items-center space-x-2">
-									<RadioGroupItem value={option.id} id={`filter-${option.id}`} />
-									<Label htmlFor={`filter-${option.id}`} className="flex items-center cursor-pointer">
+									<RadioGroupItem value={option.id} id={`${filterIdPrefix}-${option.id}`} />
+									<Label htmlFor={`${filterIdPrefix}-${option.id}`} className="cursor-pointer">
 										{(() => {
 											const Icon = getIcon(option.icon)
-											return <Icon className="size-4  mr-2" />
+											return <Icon className="mr-2 inline size-4" />
 										})()}
 										{option.label}
 									</Label>
@@ -83,20 +88,20 @@ function FilterPopover({
 						<h4 className="font-medium text-sm mb-2">Archive Status</h4>
 						<RadioGroup value={archiveFilter} onValueChange={setArchiveFilter} className="flex flex-col gap-2">
 							<div className="flex items-center space-x-2">
-								<RadioGroupItem value="active" id="archive-active" />
-								<Label htmlFor="archive-active" className="cursor-pointer">
+								<RadioGroupItem value="active" id={`${archiveIdPrefix}-active`} />
+								<Label htmlFor={`${archiveIdPrefix}-active`} className="cursor-pointer">
 									Active Content
 								</Label>
 							</div>
 							<div className="flex items-center space-x-2">
-								<RadioGroupItem value="archived" id="archive-archived" />
-								<Label htmlFor="archive-archived" className="cursor-pointer">
+								<RadioGroupItem value="archived" id={`${archiveIdPrefix}-archived`} />
+								<Label htmlFor={`${archiveIdPrefix}-archived`} className="cursor-pointer">
 									Archived Content
 								</Label>
 							</div>
 							<div className="flex items-center space-x-2">
-								<RadioGroupItem value="all" id="archive-all" />
-								<Label htmlFor="archive-all" className="cursor-pointer">
+								<RadioGroupItem value="all" id={`${archiveIdPrefix}-all`} />
+								<Label htmlFor={`${archiveIdPrefix}-all`} className="cursor-pointer">
 									All Content
 								</Label>
 							</div>
@@ -127,11 +132,11 @@ function FilterPopover({
 						<RadioGroup value={activeSort} onValueChange={setActiveSort} className="flex flex-col gap-2">
 							{sortOptions.map((option) => (
 								<div key={option.id} className="flex items-center space-x-2">
-									<RadioGroupItem value={option.id} id={`sort-${option.id}`} />
-									<Label htmlFor={`sort-${option.id}`} className="flex items-center cursor-pointer">
+									<RadioGroupItem value={option.id} id={`${sortIdPrefix}-${option.id}`} />
+									<Label htmlFor={`${sortIdPrefix}-${option.id}`} className="cursor-pointer">
 										{(() => {
 											const Icon = getIcon(option.icon)
-											return <Icon className="size-4  mr-2" />
+											return <Icon className="mr-2 inline size-4" />
 										})()}
 										{option.label}
 									</Label>

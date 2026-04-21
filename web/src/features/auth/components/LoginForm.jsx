@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { GoogleMark } from "@/components/GoogleMark"
 import AuthPageShell from "@/features/auth/components/AuthPageShell"
 import { isValidEmail } from "@/features/auth/emailValidation"
@@ -27,6 +27,8 @@ function LoginForm({
 	const [resendLoading, setResendLoading] = useState(false)
 	const [resendCooldownSeconds, setResendCooldownSeconds] = useState(0)
 	const [showResendOption, setShowResendOption] = useState(false)
+	const emailId = useId()
+	const passwordId = useId()
 
 	useEffect(() => {
 		if (
@@ -146,15 +148,15 @@ function LoginForm({
 				)}
 
 				<div className="space-y-2">
-					<label htmlFor="email" className="block text-sm font-medium text-foreground">
+					<label htmlFor={emailId} className="block text-sm font-medium text-foreground">
 						Email Address
 					</label>
 					<div className="relative">
-						<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-							<Mail className="size-5  text-muted-foreground" />
+						<div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+							<Mail className="size-5 text-muted-foreground" />
 						</div>
 						<input
-							id="email"
+							id={emailId}
 							type="email"
 							value={email}
 							onChange={(e) => {
@@ -173,15 +175,15 @@ function LoginForm({
 				</div>
 
 				<div className="space-y-2">
-					<label htmlFor="password" className="block text-sm font-medium text-foreground">
+					<label htmlFor={passwordId} className="block text-sm font-medium text-foreground">
 						Password
 					</label>
 					<div className="relative">
-						<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-							<Lock className="size-5  text-muted-foreground" />
+						<div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+							<Lock className="size-5 text-muted-foreground" />
 						</div>
 						<input
-							id="password"
+							id={passwordId}
 							type={showPassword ? "text" : "password"}
 							value={password}
 							onChange={(e) => {
@@ -198,9 +200,9 @@ function LoginForm({
 						<button
 							type="button"
 							onClick={() => setShowPassword(!showPassword)}
-							className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+							className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground transition-colors hover:text-foreground"
 						>
-							{showPassword ? <EyeOff className="size-5 " /> : <Eye className="size-5 " />}
+							{showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
 						</button>
 					</div>
 					{errors.password && <p className="text-destructive text-xs mt-1">{errors.password}</p>}
@@ -229,7 +231,7 @@ function LoginForm({
 							{resendLoading ? (
 								<span className="opacity-70">Sending verification email...</span>
 							) : (
-								<span className="border-b border-foreground/20 pb-0.5 hover:border-foreground/60 transition-colors">
+								<span className="border-b border-foreground/20 pb-0.5 transition-colors hover:border-foreground/60">
 									{resendButtonText}
 								</span>
 							)}
@@ -252,7 +254,7 @@ function LoginForm({
 				>
 					{isLoading ? (
 						<div className="flex items-center justify-center">
-							<Loader2 className="size-5  animate-spin mr-2" />
+							<Loader2 className="mr-2 size-5 animate-spin" />
 							Signing in...
 						</div>
 					) : (
@@ -271,7 +273,7 @@ function LoginForm({
 					onClick={() => {
 						if (showGoogleOAuth) onGoogle()
 					}}
-					className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-border rounded-xl text-foreground font-medium hover:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-all duration-200"
+					className="flex w-full items-center justify-center gap-3 rounded-xl border border-border px-4 py-3 font-medium text-foreground transition-all duration-200 hover:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
 				>
 					<GoogleMark className="size-5" />
 					Continue with Google
