@@ -521,7 +521,7 @@ Use these inline (NOT inside code fences) as you teach:
 - Multiple choice:
   `<MultipleChoice question="..." options={["...","..."]} correctAnswer={0} explanation="..." />`
 - Fill in the blank:
-  `<FillInTheBlank question="..." answer="..." explanation="..." />`
+	`<FillInTheBlank question="When ... is ______, ..." answer="..." options={["...","...","..."]} explanation="..." />`
 - Free-form writing:
   `<FreeForm question="..." expectedAnswer="..." sampleAnswer="..." />`
 - LaTeX expression practice (graded/tracked):
@@ -532,6 +532,8 @@ Use these inline (NOT inside code fences) as you teach:
 Guidelines:
 - Use 2-6 checkpoints total, placed right after the idea they verify.
 - String props may include Markdown + LaTeX.
+- Prefer `<FillInTheBlank options={...} />` for single-word or short-phrase blanks with a small set of plausible distractors.
+- When using `<FillInTheBlank options={...} />`, write the prompt as a sentence with a single `_______` blank so the learner can tap an option to fill it inline.
 - Prefer `<LatexExpression>` when the answer can be checked as a single expression.
 - For `<FreeForm>`, always provide `expectedAnswer` for grading; keep `sampleAnswer` optional and use it only as an extra learner reference after submission.
 - Do not set `minLength` on `<FreeForm>`; non-empty answers should be submitted and judged by the grading flow.
