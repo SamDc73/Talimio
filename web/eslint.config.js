@@ -65,26 +65,41 @@ export default [
 			},
 		},
 		rules: {
-			"boundaries/element-types": [
+			"boundaries/dependencies": [
 				"error",
 				{
 					default: "disallow",
 					rules: [
 						{
-							from: ["app"],
-							allow: ["app", "shared", "page", "feature"],
+							from: { type: "app" },
+							allow: { to: [{ type: ["app", "shared", "page", "feature"] }] },
 						},
 						{
-							from: ["page"],
-							allow: ["shared", "page", "feature"],
+							from: { type: "page" },
+							allow: { to: [{ type: ["shared", "page", "feature"] }] },
 						},
 						{
-							from: ["shared"],
-							allow: ["shared"],
+							from: { type: "shared" },
+							allow: { to: [{ type: "shared" }] },
 						},
 						{
-							from: ["feature"],
-							allow: ["shared", ["feature", { elementName: "${from.elementName}" }]],
+							from: { type: "feature", captured: { elementName: "settings" } },
+							allow: {
+								to: [
+									{ type: "shared" },
+									{ type: "feature", captured: { elementName: "assistant" } },
+									{ type: "feature", captured: { elementName: "settings" } },
+								],
+							},
+						},
+						{
+							from: { type: "feature" },
+							allow: {
+								to: [
+									{ type: "shared" },
+									{ type: "feature", captured: { elementName: "{{from.captured.elementName}}" } },
+								],
+							},
 						},
 					],
 				},

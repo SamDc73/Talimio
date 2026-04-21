@@ -322,4 +322,5 @@ export function WikiReferenceLink({ children, className, href, node, ...buttonPr
 	)
 }
 
+// biome-ignore lint/style/useComponentExportOnlyModules: this file keeps the named and default component export together for existing MDX imports.
 export default WikiReferenceLink

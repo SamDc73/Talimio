@@ -113,4 +113,5 @@ export function LatexExpressionPractice({
 	)
 }
 
+// biome-ignore lint/style/useComponentExportOnlyModules: this file keeps the named and default component export together for existing MDX and lesson imports.
 export default LatexExpressionPractice

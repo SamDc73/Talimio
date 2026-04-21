@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.0.6/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.4.12/schema.json",
 	"vcs": {
 		"enabled": true,
 		"clientKind": "git",
@@ -14,6 +14,9 @@
 	},
 	"linter": {
 		"enabled": true,
+		"domains": {
+			"react": "all"
+		},
 		"rules": {
 			"recommended": true,
 			"a11y": {
@@ -29,16 +32,16 @@
 				"noDoubleEquals": "error",
 				"noRedeclare": "error",
 				"noVar": "error",
+				"noReactForwardRef": "error",
 				"useStrictMode": "warn"
 			},
-				"style": {
-					"useConst": "error",
-					"noNonNullAssertion": "off",
-					"useTemplate": "error",
-					"useShorthandFunctionType": "error",
-					"noDefaultExport": "off",
-					"noNestedTernary": "error",
-					"noParameterAssign": "error",
+			"style": {
+				"useConst": "error",
+				"noNonNullAssertion": "off",
+				"useTemplate": "error",
+				"useShorthandFunctionType": "error",
+				"noNestedTernary": "error",
+				"noParameterAssign": "error",
 				"useNamingConvention": {
 					"level": "error",
 					"options": {
@@ -101,8 +104,15 @@
 					"options": {
 						"paths": {
 							"react": {
-								"importNames": ["PureComponent", "createFactory", "PropTypes", "createClass", "findDOMNode"],
-								"message": "React 19 deprecated/removed APIs. PureComponent (use function components), createFactory (use JSX), PropTypes (use TypeScript), createClass (use function components), findDOMNode (use refs)."
+								"importNames": [
+									"PureComponent",
+									"createFactory",
+									"PropTypes",
+									"createClass",
+									"findDOMNode",
+									"forwardRef"
+								],
+								"message": "React 19 deprecated/removed APIs. Use function components instead of PureComponent/createClass, JSX instead of createFactory, TypeScript instead of PropTypes, refs instead of findDOMNode, and pass ref as a prop instead of forwardRef."
 							},
 							"react-dom": {
 								"importNames": ["render", "hydrate", "unmountComponentAtNode", "findDOMNode"],
@@ -132,7 +142,8 @@
 				"noUnusedTemplateLiteral": "error",
 				"useNumberNamespace": "error",
 				"noInferrableTypes": "error",
-				"noUselessElse": "error"
+				"noUselessElse": "error",
+				"useReactFunctionComponents": "error"
 			},
 			"correctness": {
 				"useExhaustiveDependencies": {
@@ -165,7 +176,21 @@
 				"noUnusedImports": "error",
 				"noUnusedVariables": "error",
 				"useJsxKeyInIterable": "error",
-				"useHookAtTopLevel": "error",
+				"useHookAtTopLevel": {
+					"level": "error",
+					"options": {
+						"ignore": [
+							"useAssistantModelsQuery",
+							"useCourseData",
+							"useLessonData",
+							"useContentData",
+							"useOutlineData",
+							"useProgress",
+							"useWorkspaceExecutionState",
+							"useExecutableCodeBlockState"
+						]
+					}
+				},
 				"noUndeclaredVariables": "error",
 				"noInvalidConstructorSuper": "error",
 				"useYield": "error",
@@ -184,6 +209,13 @@
 			},
 			"nursery": {
 				"useSortedClasses": "off"
+			}
+		}
+	},
+	"assist": {
+		"actions": {
+			"source": {
+				"organizeImports": "on"
 			}
 		}
 	},
@@ -226,18 +258,50 @@
 					}
 				}
 			}
+		},
+		{
+			"includes": [
+				"src/__lint_fixtures__/EffectEventDepsFixture.jsx",
+				"src/__lint_fixtures__/NestedComponentFixture.jsx"
+			],
+			"linter": {
+				"rules": {
+					"correctness": {
+						"noNestedComponentDefinitions": "off",
+						"useExhaustiveDependencies": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": [
+				"src/components/Dialog.jsx",
+				"src/components/Sheet.jsx",
+				"src/components/DropdownMenu.jsx",
+				"src/components/Tooltip.jsx",
+				"src/contexts/ThemeContext.jsx",
+				"src/features/assistant/components/Select.jsx"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"useComponentExportOnlyModules": "off"
+					}
+				}
+			}
 		}
 	],
 	"files": {
 		"ignoreUnknown": false,
-		"experimentalScannerIgnores": [
-			"dist",
-			"coverage",
-			"node_modules",
-			"build",
-			"pdf.worker.min.js",
-			"pdf.worker.min.mjs",
-			"migrations"
+		"includes": [
+			"**",
+			"!!**/dist",
+			"!!**/coverage",
+			"!!**/node_modules",
+			"!!**/build",
+			"!!**/pdf.worker.min.js",
+			"!!**/pdf.worker.min.mjs",
+			"!!**/migrations"
 		]
 	}
 }

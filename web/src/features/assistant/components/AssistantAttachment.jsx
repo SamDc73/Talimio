@@ -105,7 +105,10 @@ function AttachmentUI() {
 	return (
 		<Tooltip>
 			<AttachmentPrimitive.Root
-				className={cn("aui-attachment-root relative", "aui-attachment-root-composer only:[&>#attachment-tile]:size-24")}
+				className={cn(
+					"aui-attachment-root relative",
+					"aui-attachment-root-composer only:[&>.aui-attachment-tile]:size-24"
+				)}
 			>
 				<AttachmentPreviewDialog>
 					<TooltipTrigger asChild>
@@ -115,7 +118,6 @@ function AttachmentUI() {
 								"aui-attachment-tile size-14 cursor-pointer overflow-hidden rounded-xl border bg-muted transition-opacity hover:opacity-75",
 								isComposer && "aui-attachment-tile-composer border-foreground/20"
 							)}
-							id="attachment-tile"
 							aria-label="Image attachment"
 						>
 							<AttachmentThumb />

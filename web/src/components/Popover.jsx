@@ -25,4 +25,5 @@ function PopoverContent({ className, align = "center", sideOffset = 4, ref, ...p
 	)
 }
 
-export { Popover, PopoverTrigger, PopoverContent }
+// biome-ignore lint/style/useComponentExportOnlyModules: this file intentionally re-exports Radix popover primitives with a shared content wrapper.
+export { Popover, PopoverContent, PopoverTrigger }

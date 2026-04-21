@@ -190,4 +190,5 @@ export function LessonQuickCheckPanel({ courseId, lessonId, lessonConceptId }) {
 	)
 }
 
+// biome-ignore lint/style/useComponentExportOnlyModules: this file keeps the named and default component export together for existing lesson imports.
 export default LessonQuickCheckPanel

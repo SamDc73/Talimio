@@ -272,4 +272,5 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage, p
 	)
 }
 
+// biome-ignore lint/style/useComponentExportOnlyModules: this file keeps the named and default component export together for existing sidebar imports.
 export default VideoSidebar

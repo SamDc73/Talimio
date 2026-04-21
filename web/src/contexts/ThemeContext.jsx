@@ -78,7 +78,6 @@ export function ThemeProvider({ children }) {
  * Hook to access theme context
  * @throws {Error} If used outside of ThemeProvider
  */
-// eslint-disable-next-line react-refresh/only-export-components
 export function useTheme() {
 	const context = useContext(ThemeContext)
 	if (context === undefined) {

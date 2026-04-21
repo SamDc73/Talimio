@@ -103,4 +103,4 @@ function SelectContent({ className, children, position = "popper", ...props }) {
 	)
 }
 
-export { SelectRoot, SelectTrigger, SelectContent }
+export { SelectContent, SelectRoot, SelectTrigger }

@@ -1,15 +1,12 @@
 "use client"
 
 import { Slottable } from "@radix-ui/react-slot"
-import { forwardRef } from "react"
+
 import { Button } from "@/components/Button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/Tooltip"
 import { cn } from "@/lib/utils"
 
-export const TooltipIconButton = forwardRef(function TooltipIconButton(
-	{ children, tooltip, side = "bottom", className, ...rest },
-	ref
-) {
+export function TooltipIconButton({ children, tooltip, side = "bottom", className, ref, ...rest }) {
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
@@ -21,4 +18,4 @@ export const TooltipIconButton = forwardRef(function TooltipIconButton(
 			<TooltipContent side={side}>{tooltip}</TooltipContent>
 		</Tooltip>
 	)
-})
+}

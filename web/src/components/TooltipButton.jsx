@@ -1,4 +1,3 @@
-import { forwardRef } from "react"
 import { Button } from "@/components/Button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/Tooltip"
 
@@ -6,21 +5,19 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
  * TooltipButton - A button with sexy, subtle tooltip that appears on hover
  * Optimized for FAB positioning with left-side tooltips
  */
-const TooltipButton = forwardRef(function TooltipButton(
-	{
-		children,
-		tooltipContent,
-		tooltipSide = "bottom",
-		tooltipDelayDuration,
-		disableTooltip = false,
-		className,
-		asChild = false,
-		variant = "ghost",
-		size = "icon",
-		...buttonProps
-	},
-	ref
-) {
+const TooltipButton = function TooltipButton({
+	children,
+	tooltipContent,
+	tooltipSide = "bottom",
+	tooltipDelayDuration,
+	disableTooltip = false,
+	className,
+	asChild = false,
+	variant = "ghost",
+	size = "icon",
+	ref,
+	...buttonProps
+}) {
 	const button = (
 		<Button ref={ref} className={className} asChild={asChild} variant={variant} size={size} {...buttonProps}>
 			{children}
@@ -46,7 +43,7 @@ const TooltipButton = forwardRef(function TooltipButton(
 	}
 
 	return <TooltipProvider {...providerProps}>{tooltip}</TooltipProvider>
-})
+}
 
 TooltipButton.displayName = "TooltipButton"
 

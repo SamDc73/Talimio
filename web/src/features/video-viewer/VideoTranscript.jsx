@@ -338,7 +338,11 @@ function TranscriptErrorFallback({ error, resetErrorBoundary }) {
 		<div className="p-4 border border-destructive rounded-md">
 			<h2 className="text-lg font-semibold text-destructive">Transcript Error</h2>
 			<pre className="mt-2 text-sm text-muted-foreground">{error.message}</pre>
-			<button onClick={resetErrorBoundary} className="mt-4 rounded-sm bg-primary px-4 py-2 text-primary-foreground" type="button">
+			<button
+				onClick={resetErrorBoundary}
+				className="mt-4 rounded-sm bg-primary px-4 py-2 text-primary-foreground"
+				type="button"
+			>
 				Retry Loading Transcript
 			</button>
 		</div>
@@ -354,5 +358,5 @@ export function VideoTranscriptWithErrorBoundary(props) {
 	)
 }
 
-// Export as default for backward compatibility
+// biome-ignore lint/style/useComponentExportOnlyModules: this file keeps the named error-boundary export and the default component export together for existing imports.
 export default VideoTranscript

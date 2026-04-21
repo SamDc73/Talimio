@@ -105,13 +105,13 @@ function SheetDescription({ className, ref, ...props }) {
 
 export {
 	Sheet,
-	SheetPortal,
-	SheetOverlay,
-	SheetTrigger,
 	SheetClose,
 	SheetContent,
-	SheetHeader,
-	SheetFooter,
-	SheetTitle,
 	SheetDescription,
+	SheetFooter,
+	SheetHeader,
+	SheetOverlay,
+	SheetPortal,
+	SheetTitle,
+	SheetTrigger,
 }

@@ -170,4 +170,5 @@ export function MdxRenderer({ content, lessonId, courseId, lessonConceptId, comp
 	)
 }
 
+// biome-ignore lint/style/useComponentExportOnlyModules: this file keeps the named and default component export together for existing lesson imports.
 export default MdxRenderer
