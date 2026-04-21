@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { useCourseService } from "@/api/courseApi"
+import { fetchConceptFrontierByCourseId } from "@/api/courseApi"
 import CourseSidebar from "@/components/sidebar/CourseSidebar"
 import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
 
@@ -13,11 +13,10 @@ export default function CourseSidebarContainer({
 	adaptiveProgressPct,
 }) {
 	const progressApi = useCourseProgress(courseId)
-	const courseService = useCourseService(courseId)
 
 	const { data: frontierData } = useQuery({
 		queryKey: ["course", courseId, "adaptive-concepts"],
-		queryFn: async () => await courseService.fetchConceptFrontier(),
+		queryFn: ({ signal }) => fetchConceptFrontierByCourseId(courseId, signal),
 		enabled: Boolean(courseId) && adaptiveEnabled,
 		staleTime: 30 * 1000,
 		refetchOnWindowFocus: false,

@@ -1,18 +1,16 @@
 import { useQuery } from "@tanstack/react-query"
 import { Loader2 } from "lucide-react"
 import { useMemo } from "react"
-import { useCourseService } from "@/api/courseApi"
+import { fetchConceptFrontierByCourseId } from "@/api/courseApi"
 import { useCourseContext } from "@/features/course/CourseContext"
 import TrackPath from "@/features/course/components/TrackPath"
 
 export default function TrackView() {
 	const { courseId, modules, adaptiveEnabled } = useCourseContext()
 
-	const courseService = useCourseService(courseId)
-
 	const { data, isLoading } = useQuery({
 		queryKey: ["course", courseId, "adaptive-concepts"],
-		queryFn: async () => await courseService.fetchConceptFrontier(),
+		queryFn: ({ signal }) => fetchConceptFrontierByCourseId(courseId, signal),
 		enabled: Boolean(courseId) && adaptiveEnabled,
 		staleTime: 30 * 1000,
 		refetchOnWindowFocus: false,

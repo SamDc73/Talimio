@@ -10,6 +10,26 @@
 import { useApi } from "@/hooks/use-api"
 import { api } from "@/lib/apiClient"
 
+function requireCourseId(courseId) {
+	if (!courseId) {
+		throw new Error("Course ID required")
+	}
+
+	return encodeURIComponent(String(courseId))
+}
+
+function buildCoursePath(courseId, suffix = "") {
+	return `/courses/${requireCourseId(courseId)}${suffix}`
+}
+
+export async function fetchCourseById(courseId, signal) {
+	return api.get(buildCoursePath(courseId), { signal })
+}
+
+export async function fetchConceptFrontierByCourseId(courseId, signal) {
+	return api.get(buildCoursePath(courseId, "/concepts"), { signal })
+}
+
 /**
  * Hook for course operations
  * @param {string} courseId - The course ID
@@ -69,10 +89,7 @@ export function useCourseService(courseId = null) {
 		 * Fetch adaptive concept frontier and review queue
 		 */
 		async fetchConceptFrontier() {
-			if (!courseId) {
-				throw new Error("Course ID required")
-			}
-			return await getConceptFrontier.execute(null, { pathParams: { courseId } })
+			return await fetchConceptFrontierByCourseId(courseId)
 		},
 
 		/**
@@ -138,8 +155,7 @@ export function useCourseService(courseId = null) {
 		 * Get a specific course by ID
 		 */
 		async fetchCourse() {
-			if (!courseId) throw new Error("Course ID required")
-			return await getCourse.execute(null, { pathParams: { courseId } })
+			return await fetchCourseById(courseId)
 		},
 
 		/**

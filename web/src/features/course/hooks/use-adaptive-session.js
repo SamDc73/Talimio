@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCallback, useMemo, useState } from "react"
-import { useCourseService } from "@/api/courseApi"
+import { fetchConceptFrontierByCourseId } from "@/api/courseApi"
 import logger from "@/lib/logger"
 import { useCourseProgress } from "./use-course-progress"
 
@@ -27,7 +27,6 @@ const normalizeConcept = (concept) => {
 }
 
 export function useAdaptiveSession(courseId, lessonId) {
-	const courseService = useCourseService(courseId)
 	const courseProgress = useCourseProgress(courseId)
 	const { progress: progressSnapshot, rawMetadata = {}, refetch } = courseProgress
 	const updateProgressAsync = courseProgress.updateProgressAsync
@@ -38,7 +37,7 @@ export function useAdaptiveSession(courseId, lessonId) {
 
 	const { data: frontierData } = useQuery({
 		queryKey: ["course", courseId, "adaptive-concepts"],
-		queryFn: async () => await courseService.fetchConceptFrontier(),
+		queryFn: ({ signal }) => fetchConceptFrontierByCourseId(courseId, signal),
 		enabled: Boolean(courseId),
 		staleTime: 30_000,
 		refetchOnWindowFocus: false,

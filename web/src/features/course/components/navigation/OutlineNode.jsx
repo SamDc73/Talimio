@@ -6,6 +6,149 @@ const COMPLETED_ROW_CLASS_NAME = "border-completed/30 bg-completed/10"
 const AVAILABLE_ROW_CLASS_NAME = "hover:border-border hover:bg-muted/40"
 const NEUTRAL_FOCUS_RING_CLASS_NAME = "focus-visible:ring-ring"
 
+function isItemCompleted(item, isLessonCompleted) {
+	return isLessonCompleted?.(item.id) || item.status === "completed"
+}
+
+function countLessons(items, isLessonCompleted) {
+	const counts = { total: 0, completed: 0 }
+
+	if (!items || items.length === 0) {
+		return counts
+	}
+
+	for (const item of items) {
+		if (!item || typeof item.title !== "string") {
+			continue
+		}
+
+		counts.total += 1
+		if (isItemCompleted(item, isLessonCompleted)) {
+			counts.completed += 1
+		}
+
+		if (Array.isArray(item.lessons) && item.lessons.length > 0) {
+			const nestedCounts = countLessons(item.lessons, isLessonCompleted)
+			counts.total += nestedCounts.total
+			counts.completed += nestedCounts.completed
+		}
+	}
+
+	return counts
+}
+
+function LessonStatusIndicator({ isCompleted }) {
+	if (isCompleted) {
+		return <CheckCircle className="size-5 shrink-0 text-completed" />
+	}
+
+	return <Circle className="size-5 shrink-0 text-muted-foreground" />
+}
+
+function LessonContent({ lesson, isCompleted, idx, onLessonClick, toggleLessonCompletion }) {
+	const containerClasses = cn(
+		"group flex items-center gap-3 rounded-2xl border border-transparent px-4 py-3 transition-colors md:px-5 md:py-3.5",
+		isCompleted ? COMPLETED_ROW_CLASS_NAME : AVAILABLE_ROW_CLASS_NAME
+	)
+	const titleClasses = cn("truncate text-sm font-medium", isCompleted ? "text-muted-foreground" : "text-foreground")
+
+	return (
+		<div className={containerClasses}>
+			<button
+				type="button"
+				onClick={() => toggleLessonCompletion?.(lesson.id)}
+				className={cn(
+					"rounded-full border border-transparent p-0.5 transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+					NEUTRAL_FOCUS_RING_CLASS_NAME
+				)}
+				aria-label={isCompleted ? "Mark as incomplete" : "Mark as complete"}
+			>
+				<LessonStatusIndicator isCompleted={isCompleted} />
+			</button>
+			<button
+				type="button"
+				onClick={() => onLessonClick?.(idx, lesson.id)}
+				className={cn(
+					"flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+					NEUTRAL_FOCUS_RING_CLASS_NAME
+				)}
+			>
+				<span className={titleClasses}>{lesson.title}</span>
+				<ChevronRight className="size-4 text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100" />
+			</button>
+		</div>
+	)
+}
+
+function LessonItem({
+	lesson,
+	idx,
+	depth,
+	parentIndexStr,
+	onLessonClick,
+	moduleId,
+	isLessonCompleted,
+	toggleLessonCompletion,
+}) {
+	const currentLessonIndexStr = parentIndexStr ? `${parentIndexStr}.${idx + 1}` : `${idx + 1}`
+	const isCompleted = isItemCompleted(lesson, isLessonCompleted)
+	const lessonKey = lesson.id ?? `${moduleId}-lesson-${depth}-${idx}`
+	const hasNestedLessons = lesson.lessons?.length > 0
+	const depthClass = depth > 0 ? "mt-3 ml-5 border-l border-border/70 pl-4 pt-3" : "mt-3"
+
+	return (
+		<div key={lessonKey} className={`space-y-2.5 ${depthClass}`}>
+			<LessonContent
+				lesson={lesson}
+				isCompleted={isCompleted}
+				idx={idx}
+				onLessonClick={onLessonClick}
+				toggleLessonCompletion={toggleLessonCompletion}
+			/>
+
+			{hasNestedLessons ? (
+				<LessonList
+					lessons={lesson.lessons}
+					depth={depth + 1}
+					parentIndexStr={currentLessonIndexStr}
+					onLessonClick={onLessonClick}
+					moduleId={moduleId}
+					isLessonCompleted={isLessonCompleted}
+					toggleLessonCompletion={toggleLessonCompletion}
+				/>
+			) : null}
+		</div>
+	)
+}
+
+function LessonList({
+	lessons,
+	depth = 0,
+	parentIndexStr = "",
+	onLessonClick,
+	moduleId,
+	isLessonCompleted,
+	toggleLessonCompletion,
+}) {
+	return (
+		<>
+			{(lessons || []).map((lesson, idx) => (
+				<LessonItem
+					key={lesson.id ?? `${moduleId}-lesson-${depth}-${idx}`}
+					lesson={lesson}
+					idx={idx}
+					depth={depth}
+					parentIndexStr={parentIndexStr}
+					onLessonClick={onLessonClick}
+					moduleId={moduleId}
+					isLessonCompleted={isLessonCompleted}
+					toggleLessonCompletion={toggleLessonCompletion}
+				/>
+			))}
+		</>
+	)
+}
+
 /**
  * @param {Object} props
  * @param {Object} props.module - The module object (with lessons)
@@ -18,139 +161,11 @@ const NEUTRAL_FOCUS_RING_CLASS_NAME = "focus-visible:ring-ring"
 function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLessonCompletion }) {
 	const moduleId = module.id ?? index + 1
 	const [expanded, setExpanded] = useState(index === 0) // First module expanded by default
-
-	const isItemCompleted = (item) => {
-		return isLessonCompleted?.(item.id) || item.status === "completed"
-	}
-
-	const processNestedLessons = (item, counts) => {
-		if (!Array.isArray(item.lessons) || item.lessons.length === 0) {
-			return counts
-		}
-
-		const [subTotal, subCompleted] = countLessons(item.lessons)
-		counts.total += subTotal
-		counts.completed += subCompleted
-		return counts
-	}
-
-	const countLessons = (items) => {
-		const counts = { total: 0, completed: 0 }
-
-		if (!items || items.length === 0) {
-			return [counts.total, counts.completed]
-		}
-
-		for (const item of items) {
-			if (!item || typeof item.title !== "string") continue
-
-			counts.total += 1
-			if (isItemCompleted(item)) {
-				counts.completed += 1
-			}
-
-			processNestedLessons(item, counts)
-		}
-
-		return [counts.total, counts.completed]
-	}
-
-	const [totalLessons, completedLessons] = countLessons(module.lessons || [])
+	const lessonCounts = countLessons(module.lessons || [], isLessonCompleted)
+	const totalLessons = lessonCounts.total
+	const completedLessons = lessonCounts.completed
 	const progress = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0
 	const isModuleCompleted = progress === 100 && totalLessons > 0
-
-	function LessonStatusIndicator({ isCompleted, indexStr: _indexStr }) {
-		// Show a proper empty circle when not completed to match the old outline's spirit
-		if (isCompleted) {
-			return <CheckCircle className="size-5 shrink-0 text-completed" />
-		}
-		return <Circle className="size-5 shrink-0 text-muted-foreground" />
-	}
-
-	// Removed the separate action button; the whole row is clickable now with a subtle chevron indicator
-
-	function LessonContent({ lesson, isCompleted, currentLessonIndexStr, idx, onLessonClick }) {
-		const containerClasses = cn(
-			"group flex items-center gap-3 rounded-2xl border border-transparent px-4 py-3 md:px-5 md:py-3.5 transition-colors",
-			isCompleted ? COMPLETED_ROW_CLASS_NAME : AVAILABLE_ROW_CLASS_NAME
-		)
-		const titleClasses = cn("truncate text-sm font-medium", isCompleted ? "text-muted-foreground" : "text-foreground")
-
-		return (
-			<div className={containerClasses}>
-				<button
-					type="button"
-					onClick={() => toggleLessonCompletion?.(lesson.id)}
-					className={cn(
-						"rounded-full border border-transparent p-0.5 transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
-						NEUTRAL_FOCUS_RING_CLASS_NAME
-					)}
-					aria-label={isCompleted ? "Mark as incomplete" : "Mark as complete"}
-				>
-					<LessonStatusIndicator isCompleted={isCompleted} indexStr={currentLessonIndexStr} />
-				</button>
-				<button
-					type="button"
-					onClick={() => onLessonClick?.(idx, lesson.id)}
-					className={cn(
-						"flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
-						NEUTRAL_FOCUS_RING_CLASS_NAME
-					)}
-				>
-					<span className={titleClasses}>{lesson.title}</span>
-					<ChevronRight className="size-4  text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100" />
-				</button>
-			</div>
-		)
-	}
-
-	function LessonItem({ lesson, idx, depth, parentIndexStr, onLessonClick, moduleId }) {
-		const currentLessonIndexStr = parentIndexStr ? `${parentIndexStr}.${idx + 1}` : `${idx + 1}`
-		const isCompleted = isItemCompleted(lesson)
-		const lessonKey = lesson.id ?? `${moduleId}-lesson-${depth}-${idx}`
-		const hasNestedLessons = lesson.lessons?.length > 0
-		const depthClass = depth > 0 ? "mt-3 ml-5 border-l border-border/70 pl-4 pt-3" : "mt-3"
-
-		return (
-			<div key={lessonKey} className={`space-y-2.5 ${depthClass}`}>
-				<LessonContent
-					lesson={lesson}
-					isCompleted={isCompleted}
-					currentLessonIndexStr={currentLessonIndexStr}
-					idx={idx}
-					onLessonClick={onLessonClick}
-				/>
-
-				{hasNestedLessons && (
-					<LessonList
-						lessons={lesson.lessons}
-						depth={depth + 1}
-						parentIndexStr={currentLessonIndexStr}
-						onLessonClick={onLessonClick}
-						moduleId={moduleId}
-					/>
-				)}
-			</div>
-		)
-	}
-
-	function LessonList({ lessons, depth = 0, parentIndexStr = "", onLessonClick, moduleId }) {
-		return (
-			<>
-				{(lessons || []).map((lesson, idx) => (
-					<LessonItem
-						key={lesson.id ?? `${moduleId}-lesson-${depth}-${idx}`}
-						lesson={lesson}
-						idx={idx}
-						depth={depth}
-						parentIndexStr={parentIndexStr}
-						onLessonClick={onLessonClick}
-						moduleId={moduleId}
-					/>
-				))}
-			</>
-		)
-	}
 
 	return (
 		<div className="relative overflow-hidden rounded-3xl border border-border/70 bg-card/95 p-5 md:p-6 lg:p-7 shadow-sm transition-shadow hover:shadow-md">
@@ -204,7 +219,13 @@ function OutlineNode({ module, index, onLessonClick, isLessonCompleted, toggleLe
 			>
 				{expanded && (
 					<div className="space-y-2.5">
-						<LessonList lessons={module.lessons || []} onLessonClick={onLessonClick} moduleId={module.id} />
+						<LessonList
+							lessons={module.lessons || []}
+							onLessonClick={onLessonClick}
+							moduleId={module.id}
+							isLessonCompleted={isLessonCompleted}
+							toggleLessonCompletion={toggleLessonCompletion}
+						/>
 					</div>
 				)}
 			</div>

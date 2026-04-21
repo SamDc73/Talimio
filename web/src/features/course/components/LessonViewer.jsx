@@ -93,10 +93,42 @@ function truncatePreview(text, maxLength = 56) {
 	return `${text.slice(0, maxLength - 3).trimEnd()}...`
 }
 
+function stripMarkdownLinks(line) {
+	let output = ""
+	let currentIndex = 0
+
+	while (currentIndex < line.length) {
+		const labelStart = line.indexOf("[", currentIndex)
+		if (labelStart === -1) {
+			output += line.slice(currentIndex)
+			break
+		}
+
+		const labelEnd = line.indexOf("](", labelStart)
+		if (labelEnd === -1) {
+			output += line.slice(currentIndex)
+			break
+		}
+
+		const urlEnd = line.indexOf(")", labelEnd + 2)
+		if (urlEnd === -1) {
+			output += line.slice(currentIndex)
+			break
+		}
+
+		output += line.slice(currentIndex, labelStart)
+		output += line.slice(labelStart + 1, labelEnd)
+		currentIndex = urlEnd + 1
+	}
+
+	return output
+}
+
 function cleanWindowPreviewLine(line) {
-	return line
+	const withoutLinks = stripMarkdownLinks(line.replace(/!\[[^\]]*\]\([^)]+\)/g, " "))
+
+	return withoutLinks
 		.replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
-		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
 		.replace(/^#{1,6}\s+/, "")
 		.replace(/^>\s?/, "")
 		.replace(/^[-*+]\s+/, "")
@@ -176,13 +208,14 @@ function LessonFlowActionButton({ label, onClick, className }) {
 
 function LessonWindowProgressDots({ windows, activeWindowIndex, onWindowChange }) {
 	return (
-		<div className="px-6 pb-[1rem] pt-[0.618rem] md:px-8">
+		<div className="px-6 pb-4 pt-[0.618rem] md:px-8">
 			<div className="flex items-center justify-center">
 				<div className="flex flex-wrap items-center gap-[0.618rem]">
 					{windows.map((window) => {
 						const isActive = window.windowIndex === activeWindowIndex
 						const isCompleted = window.windowIndex < activeWindowIndex
 						const { dotSizeClass, dotColorClass } = getWindowProgressDotClasses(isActive, isCompleted)
+						const ariaLabel = window.title ? `Go to ${window.title}` : `Go to section ${window.windowIndex + 1}`
 
 						return (
 							<button
@@ -190,7 +223,7 @@ function LessonWindowProgressDots({ windows, activeWindowIndex, onWindowChange }
 								type="button"
 								onClick={() => onWindowChange?.(window.windowIndex)}
 								className="flex size-[1.618rem] items-center justify-center rounded-full transition-colors hover:bg-muted/40"
-								aria-label={`Go to ${window.title || `section ${window.windowIndex + 1}`}`}
+								aria-label={ariaLabel}
 							>
 								<span className={cn("rounded-full transition-all duration-200", dotSizeClass, dotColorClass)} />
 							</button>
@@ -213,7 +246,7 @@ function LessonNextRail({ nextLesson, onLessonNavigate }) {
 				<LessonFlowActionButton
 					label="Next Lesson"
 					onClick={() => onLessonNavigate(nextLesson.id)}
-					className="w-full justify-center sm:w-auto sm:min-w-[8.5rem]"
+					className="w-full justify-center sm:w-auto sm:min-w-34"
 				/>
 			</div>
 		</div>
@@ -506,7 +539,7 @@ export function LessonViewer({
 														className="flex items-start justify-between gap-3"
 													>
 														<div className="min-w-0">
-															<p className="font-mono text-sm font-medium text-foreground">v{version.versionLabel}</p>
+															<p className="font-mono text-sm text-foreground">v{version.versionLabel}</p>
 															<p className="text-xs text-muted-foreground">
 																{[formatVersionKindLabel(version), formatVersionTimestamp(version.createdAt)]
 																	.filter(Boolean)
@@ -597,7 +630,7 @@ export function LessonViewer({
 
 					{hasMultipleWindows ? (
 						<div>
-							<div className="space-y-[0.618rem] px-6 py-[1rem] md:px-8 md:py-[1.618rem]">
+							<div className="space-y-[0.618rem] px-6 py-4 md:px-8 md:py-[1.618rem]">
 								{lessonWindows.map((window) => {
 									const isActive = window.windowIndex === activeWindowIndex
 									const isCompleted = window.windowIndex < activeWindowIndex
@@ -620,11 +653,11 @@ export function LessonViewer({
 													<span className={FLOW_CARD_MARKER_SLOT_CLASS_NAME}>
 														<CheckCircle2 className={FLOW_CARD_COMPLETED_ICON_CLASS_NAME} />
 													</span>
-													<span className="truncate text-[0.938rem] leading-[1.272rem] font-medium tracking-[-0.011em] text-muted-foreground line-through decoration-muted-foreground/30">
+													<span className="truncate text-[0.938rem]/[1.272rem] font-medium tracking-[-0.011em] text-muted-foreground line-through decoration-muted-foreground/30">
 														{window.title || `Section ${window.windowIndex + 1}`}
 													</span>
 												</div>
-												<span className="max-w-[38.2%] truncate text-[0.786rem] leading-[1.128rem] text-muted-foreground/60">
+												<span className="max-w-[38.2%] truncate text-[0.786rem]/[1.128rem] text-muted-foreground/60">
 													{getWindowMicroSummary(window)}
 												</span>
 											</button>

@@ -38,7 +38,7 @@ export function CourseHeader({
 	}
 
 	return (
-		<header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-b border-border shadow-sm">
+		<header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-background/95 shadow-sm backdrop-blur-md">
 			<div className="container mx-auto px-4">
 				<div className="flex h-16 items-center">
 					<div className="shrink-0 mr-4">

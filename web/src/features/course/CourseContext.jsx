@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router-dom"
 
-import { useCourseService } from "@/api/courseApi"
+import { fetchConceptFrontierByCourseId } from "@/api/courseApi"
 import { useCourseData } from "@/features/course/hooks/use-course-data"
 import { useOutlineData } from "@/features/course/hooks/use-outline-data"
 
@@ -19,12 +19,11 @@ export function CourseProvider({ children }) {
 	const isAdaptiveCourse = course?.adaptive_enabled === true || course?.adaptiveEnabled === true
 
 	// Concept frontier for adaptive progress (avgMastery)
-	const courseService = useCourseService(courseId)
 	const [lastAdaptiveProgressPct, setLastAdaptiveProgressPct] = useState()
 
 	const { data: frontierData } = useQuery({
 		queryKey: ["course", courseId, "adaptive-concepts"],
-		queryFn: async () => await courseService.fetchConceptFrontier(),
+		queryFn: ({ signal }) => fetchConceptFrontierByCourseId(courseId, signal),
 		enabled: Boolean(courseId) && isAdaptiveCourse,
 		staleTime: 30 * 1000,
 		refetchOnWindowFocus: false,
@@ -64,9 +63,7 @@ export function CourseProvider({ children }) {
 	return <CourseContext.Provider value={value}>{children}</CourseContext.Provider>
 }
 
-// Fast Refresh: hooks are exported from this file intentionally for DX.
-// The main default export is a component (CourseProvider), so disabling this rule is safe here.
-// eslint-disable-next-line react-refresh/only-export-components
+// biome-ignore lint/style/useComponentExportOnlyModules: this provider and hook are intentionally co-located for course state.
 export function useCourseContext() {
 	const ctx = useContext(CourseContext)
 	if (!ctx) {

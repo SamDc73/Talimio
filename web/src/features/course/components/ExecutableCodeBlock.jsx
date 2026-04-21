@@ -39,7 +39,10 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 		"rounded-none first:rounded-s-full last:rounded-e-full h-8 px-3 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-foreground/80 transition-all duration-200 focus-visible:outline-none focus-visible:ring-0 disabled:text-muted-foreground/70 disabled:hover:bg-transparent"
 
 	const runDisabled = !canRun || isRunning
-	const runLabel = canRun ? (isRunning ? "Running" : "Run") : "Unavailable"
+	let runLabel = "Unavailable"
+	if (canRun) {
+		runLabel = isRunning ? "Running" : "Run"
+	}
 
 	return (
 		<div

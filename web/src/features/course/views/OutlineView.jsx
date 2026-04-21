@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { ArrowRight, CheckCircle2, Circle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useCourseService } from "@/api/courseApi"
+import { fetchConceptFrontierByCourseId } from "@/api/courseApi"
 import { Button } from "@/components/Button"
 import { MasteryCircle } from "@/components/MasteryCircle"
 import { useCourseContext } from "@/features/course/CourseContext"
@@ -79,10 +79,15 @@ function BuildForecast(meta) {
 		return null
 	}
 
-	const normalizedDays =
-		days === undefined ? (weeks === undefined ? 0 : Math.max(0, Math.round(weeks * 7))) : Math.max(0, Math.round(days))
-	const normalizedWeeks =
-		weeks === undefined ? (normalizedDays > 0 ? Math.round(normalizedDays / 7) : 0) : Math.max(0, Math.round(weeks))
+	let normalizedDays = Math.max(0, Math.round(days ?? 0))
+	if (days === undefined) {
+		normalizedDays = weeks === undefined ? 0 : Math.max(0, Math.round(weeks * 7))
+	}
+
+	let normalizedWeeks = Math.max(0, Math.round(weeks ?? 0))
+	if (weeks === undefined) {
+		normalizedWeeks = normalizedDays > 0 ? Math.round(normalizedDays / 7) : 0
+	}
 
 	if (normalizedDays === 0 && normalizedWeeks === 0) {
 		return null
@@ -99,7 +104,6 @@ function OutlineView() {
 
 	const { isCompleted, metadata, rawMetadata, toggleCompletion } = useCourseProgress(courseId)
 	const { goToLesson } = useCourseNavigation()
-	const courseService = useCourseService(courseId)
 
 	const flatLessons = useMemo(() => {
 		const out = []
@@ -122,7 +126,7 @@ function OutlineView() {
 
 	const { data: frontierData } = useQuery({
 		queryKey: ["course", courseId, "adaptive-concepts"],
-		queryFn: async () => await courseService.fetchConceptFrontier(),
+		queryFn: ({ signal }) => fetchConceptFrontierByCourseId(courseId, signal),
 		enabled: Boolean(courseId) && adaptiveEnabled,
 		staleTime: 30_000,
 		refetchOnWindowFocus: false,

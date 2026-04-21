@@ -1,5 +1,5 @@
 import { Loader2, RotateCcw } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
 
@@ -10,9 +10,12 @@ const REGENERATE_FIELDSET_CLASS_NAME =
 	"relative flex flex-col rounded-xl border border-border bg-background shadow-sm transition-all duration-200 hover:border-muted-foreground/30 focus-within:border-(--color-course) focus-within:ring-4 focus-within:ring-(--color-course)/10"
 const REGENERATE_CHECKBOX_CLASS_NAME =
 	"mt-0.5 size-4 rounded-sm border-border text-(--color-course) focus:ring-2 focus:ring-(--color-course)/20 focus:ring-offset-0"
-const REGENERATE_PRIMARY_ACTION_CLASS_NAME = "min-w-[140px] bg-(--color-course) text-(--color-course-text) hover:bg-(--color-course)/90"
+const REGENERATE_PRIMARY_ACTION_CLASS_NAME =
+	"min-w-[140px] bg-(--color-course) text-(--color-course-text) hover:bg-(--color-course)/90"
 
 export function RegenerateModal({ open, onOpenChange, onRegenerate, isRegenerating = false }) {
+	const critiqueId = useId()
+	const applyAcrossCourseId = useId()
 	const [critique, setCritique] = useState("")
 	const [applyAcrossCourse, setApplyAcrossCourse] = useState(false)
 	const textareaRef = useRef(null)
@@ -73,7 +76,7 @@ export function RegenerateModal({ open, onOpenChange, onRegenerate, isRegenerati
 					<div className="space-y-3">
 						<fieldset className={REGENERATE_FIELDSET_CLASS_NAME}>
 							<textarea
-								id="lesson-regenerate-critique"
+								id={critiqueId}
 								ref={textareaRef}
 								value={critique}
 								onChange={(e) => setCritique(e.target.value)}
@@ -93,12 +96,12 @@ export function RegenerateModal({ open, onOpenChange, onRegenerate, isRegenerati
 						) : null}
 
 						<label
-							htmlFor="lesson-regenerate-apply-course"
+							htmlFor={applyAcrossCourseId}
 							className="flex items-start gap-3 rounded-xl border border-border/70 bg-muted/20 px-4 py-3 text-sm transition-colors hover:bg-muted/35"
 						>
 							<input
 								type="checkbox"
-								id="lesson-regenerate-apply-course"
+								id={applyAcrossCourseId}
 								checked={applyAcrossCourse}
 								onChange={(e) => setApplyAcrossCourse(e.target.checked)}
 								disabled={isRegenerating}

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Loader2, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
-import { useCourseService } from "@/api/courseApi"
+import { fetchConceptFrontierByCourseId, useCourseService } from "@/api/courseApi"
 import { Button } from "@/components/Button"
 import { LatexExpression } from "@/components/quiz/LatexExpression"
 import { useCourseContext } from "@/features/course/CourseContext"
@@ -136,7 +136,7 @@ export default function PracticeView() {
 
 	const { data: frontierData, isLoading: frontierLoading } = useQuery({
 		queryKey: ["course", courseId, "adaptive-concepts"],
-		queryFn: async () => await courseService.fetchConceptFrontier(),
+		queryFn: ({ signal }) => fetchConceptFrontierByCourseId(courseId, signal),
 		enabled: Boolean(courseId) && adaptiveEnabled,
 		staleTime: 30 * 1000,
 		refetchOnWindowFocus: false,

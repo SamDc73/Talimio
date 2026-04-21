@@ -1,7 +1,7 @@
 "use client"
 
 import { CheckCircle, Lock } from "lucide-react"
-import { useLayoutEffect, useRef, useState } from "react"
+import { useId, useLayoutEffect, useRef, useState } from "react"
 import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
 import { cn } from "@/lib/utils"
 import { useCourseNavigation } from "@/utils/navigationUtils"
@@ -37,6 +37,9 @@ const xAtY = (path, targetY) => {
  * @returns {JSX.Element}
  */
 export default function TrackPath({ courseId, modules = [], availableLessonIds }) {
+	const pathId = useId()
+	const titleId = useId()
+	const descriptionId = useId()
 	const { isCompleted } = useCourseProgress(courseId)
 	const { goToLesson } = useCourseNavigation()
 
@@ -89,7 +92,7 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 			if (initialPositioningDone && !isInitialOrResize) return
 
 			const svgBox = svgRef.current.getBoundingClientRect()
-			const path = svgRef.current.querySelector("#coursePath")
+			const path = svgRef.current.querySelector(`[id="${pathId}"]`)
 			if (!(path instanceof SVGPathElement)) return
 
 			// modules
@@ -188,7 +191,7 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 			ro.disconnect()
 			window.removeEventListener("resize", handleResize)
 		}
-	}, [initialPositioningDone])
+	}, [initialPositioningDone, pathId])
 
 	// Note: Lesson viewing is handled by the nested CourseLayout via routing
 
@@ -211,12 +214,12 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 							style={{ overflow: "visible" }}
 							aria-label="Course progress path"
 							role="img"
-							aria-labelledby="course-path-title course-path-desc"
+							aria-labelledby={`${titleId} ${descriptionId}`}
 						>
-							<title id="course-path-title">Course progress path</title>
-							<desc id="course-path-desc">A curved path showing course progression through modules</desc>
+							<title id={titleId}>Course progress path</title>
+							<desc id={descriptionId}>A curved path showing course progression through modules</desc>
 							<path
-								id="coursePath"
+								id={pathId}
 								d={buildPath(modules.length)}
 								fill="none"
 								stroke="var(--color-border)"

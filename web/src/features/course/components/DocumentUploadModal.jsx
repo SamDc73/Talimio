@@ -103,6 +103,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 	const hasSuccessfulDocuments = documents.some((doc) => doc.status === "embedded")
 	const allCompleted =
 		documents.length > 0 && documents.every((doc) => doc.status === "embedded" || doc.status === "failed")
+	const uploadErrors = Array.isArray(uploadResults?.errors) ? uploadResults.errors : []
 
 	return (
 		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -150,17 +151,20 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 								</div>
 							)}
 
-							{uploadResults.errors.length > 0 && (
+							{uploadErrors.length > 0 && (
 								<div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 dark:bg-destructive/5">
 									<div className="mb-2 flex items-center space-x-2">
 										<AlertTriangle className="size-5 text-destructive" />
 										<p className="text-sm font-medium text-destructive">
-											{uploadResults.errors.length} document(s) failed to upload
+											{uploadErrors.length} document(s) failed to upload
 										</p>
 									</div>
 									<div className="space-y-1">
-										{uploadResults.errors.map((error, index) => (
-											<p key={`${error.document.title}-${index}`} className="text-xs text-destructive/90">
+										{uploadErrors.map((error) => (
+											<p
+												key={`${error.document?.id ?? error.document?.title ?? "document"}-${error.originalIndex ?? error.error}`}
+												className="text-xs text-destructive/90"
+											>
 												• {error.document.title}: {error.error}
 											</p>
 										))}

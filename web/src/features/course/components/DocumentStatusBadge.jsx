@@ -110,7 +110,10 @@ export function DocumentStatusIndicator({ status, className = "" }) {
  */
 export function DocumentStatusProgress({ status, progress = null, className = "" }) {
 	const isProcessing = status === "processing"
-	const progressValue = progress === null ? (isProcessing ? 50 : 0) : progress
+	let progressValue = progress
+	if (progress === null) {
+		progressValue = isProcessing ? 50 : 0
+	}
 
 	return (
 		<div className={`space-y-1 ${className}`}>

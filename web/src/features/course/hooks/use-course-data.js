@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { useCourseService } from "@/api/courseApi"
+import { fetchCourseById } from "@/api/courseApi"
 
 /**
  * Simple hook to fetch course data
@@ -9,8 +9,6 @@ import { useCourseService } from "@/api/courseApi"
  * @returns {Object} - Object containing course data and loading state
  */
 export function useCourseData(courseId) {
-	const courseService = useCourseService(courseId)
-
 	const {
 		data: course,
 		isLoading,
@@ -18,9 +16,9 @@ export function useCourseData(courseId) {
 		refetch: initializeCourse,
 	} = useQuery({
 		queryKey: ["course", courseId],
-		queryFn: async () => {
+		queryFn: ({ signal }) => {
 			if (!courseId) return null
-			return await courseService.fetchCourse()
+			return fetchCourseById(courseId, signal)
 		},
 		enabled: !!courseId,
 		staleTime: 5 * 60 * 1000, // Cache for 5 minutes
