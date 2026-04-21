@@ -10,7 +10,10 @@ import {
 } from "@/components/quiz/quizUiClassNames"
 import { cn } from "@/lib/utils"
 
-const INLINE_BLANK_PATTERN = /_{3,}/
+// Splits a sentence like "The sky is {answer} during the day." into two parts.
+function splitSentence(sentence) {
+	return sentence.split("{answer}")
+}
 
 function normalizeAnswer(value, caseSensitive) {
 	const trimmedValue = value.trim()
@@ -20,12 +23,8 @@ function normalizeAnswer(value, caseSensitive) {
 	return trimmedValue.toLowerCase()
 }
 
-function hasSingleInlineBlank(question) {
-	return question.split(INLINE_BLANK_PATTERN).length === 2
-}
-
-function InlineBlankQuestion({ isCorrect, question, selectedAnswer, showFeedback }) {
-	const [beforeBlank, afterBlank] = question.split(INLINE_BLANK_PATTERN)
+function InlineBlankQuestion({ isCorrect, sentence, selectedAnswer, showFeedback }) {
+	const [beforeBlank, afterBlank] = splitSentence(sentence)
 	const hasSelection = selectedAnswer.trim().length > 0
 
 	let blankClassName =
@@ -49,10 +48,15 @@ function InlineBlankQuestion({ isCorrect, question, selectedAnswer, showFeedback
 	)
 }
 
-export function FillInTheBlank({ question, answer, caseSensitive = false, explanation, options = [] }) {
+// sentence: full sentence with "{answer}" marking the blank, e.g. "The sky is {answer} at noon."
+// answer: the correct word/phrase
+// options: when provided (2+), renders tap-to-fill pill buttons instead of a text input
+// caseSensitive: whether answer matching is case-sensitive
+// explanation: shown in the feedback panel after submission
+export function FillInTheBlank({ sentence, answer, caseSensitive = false, explanation, options = [] }) {
 	const [userAnswer, setUserAnswer] = useState("")
 	const [showFeedback, setShowFeedback] = useState(false)
-	const supportsChoiceMode = options.length >= 2 && hasSingleInlineBlank(question)
+	const supportsChoiceMode = options.length >= 2 && sentence?.includes("{answer}")
 
 	const handleSubmit = () => {
 		if (userAnswer.trim()) {
@@ -74,13 +78,17 @@ export function FillInTheBlank({ question, answer, caseSensitive = false, explan
 			: "bg-destructive/10 border-destructive/30 text-destructive dark:bg-destructive/20 dark:border-destructive/30 dark:text-destructive"
 	}
 
+	// The question text shown above the text input in free-type mode.
+	// Replace {answer} with a blank indicator so the sentence reads naturally.
+	const questionDisplay = sentence?.replace("{answer}", "_______") ?? ""
+
 	return (
 		<div className={QUIZ_WIDGET_CLASS_NAME} data-askai-exclude="true">
 			{supportsChoiceMode ? (
 				<>
 					<InlineBlankQuestion
 						isCorrect={isCorrect}
-						question={question}
+						sentence={sentence}
 						selectedAnswer={userAnswer}
 						showFeedback={showFeedback}
 					/>
@@ -118,7 +126,7 @@ export function FillInTheBlank({ question, answer, caseSensitive = false, explan
 				</>
 			) : (
 				<>
-					<QuizMarkdown content={question} className="mb-6 text-lg font-medium text-foreground [&_p]:m-0" />
+					<QuizMarkdown content={questionDisplay} className="mb-6 text-lg font-medium text-foreground [&_p]:m-0" />
 
 					<div className="mb-6">
 						<input
