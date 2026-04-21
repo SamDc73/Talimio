@@ -33,7 +33,15 @@ function ProgressCircle({ number, progress, variant = "default" }) {
 				aria-label={`Progress: ${Math.round(progress)}%`}
 			>
 				<title>Progress indicator</title>
-				<circle cx="16" cy="16" r="14" strokeWidth="2.5" fill="none" stroke="var(--color-border)" className="opacity-70" />
+				<circle
+					cx="16"
+					cy="16"
+					r="14"
+					strokeWidth="2.5"
+					fill="none"
+					stroke="var(--color-border)"
+					className="opacity-70"
+				/>
 				<circle
 					cx="16"
 					cy="16"

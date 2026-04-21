@@ -289,9 +289,9 @@ function DocumentUploader({
 						</div>
 
 						{documents.length >= maxFiles && (
-						<div className="mt-3 rounded-sm border border-due-today/20 bg-due-today/10 p-2 text-xs text-due-today-text">
-							Maximum documents reached ({maxFiles}). Remove some to add more.
-						</div>
+							<div className="mt-3 rounded-sm border border-due-today/20 bg-due-today/10 p-2 text-xs text-due-today-text">
+								Maximum documents reached ({maxFiles}). Remove some to add more.
+							</div>
 						)}
 					</div>
 				</Card>

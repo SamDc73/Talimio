@@ -355,14 +355,14 @@ function DocumentList({
 																Download
 															</DropdownMenuItem>
 														)}
-													{onRemoveDocument && (
-														<DropdownMenuItem
-															onClick={() => onRemoveDocument(doc)}
-															className="text-destructive hover:text-destructive/80"
-														>
-															<Trash2 className="size-4  mr-2" />
-															Remove
-														</DropdownMenuItem>
+														{onRemoveDocument && (
+															<DropdownMenuItem
+																onClick={() => onRemoveDocument(doc)}
+																className="text-destructive hover:text-destructive/80"
+															>
+																<Trash2 className="size-4  mr-2" />
+																Remove
+															</DropdownMenuItem>
 														)}
 													</DropdownMenuContent>
 												</DropdownMenu>
