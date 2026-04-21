@@ -22,7 +22,7 @@ function ConversationThreadListItem() {
 					type="button"
 					onClick={closeDropdown}
 					data-thread-nav="true"
-					className="flex min-w-0 flex-1 items-center rounded-md px-2 py-2 text-left text-sm hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+					className="flex min-w-0 flex-1 items-center rounded-md p-2 text-left text-sm hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
 				>
 					<span className="truncate">
 						<ThreadListItemPrimitive.Title fallback={DEFAULT_THREAD_TITLE} />

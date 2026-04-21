@@ -12,7 +12,7 @@ export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
 	const { progress } = useVideoProgress(video?.id)
 
 	return (
-		<header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-b border-border shadow-sm">
+		<header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-background/95 shadow-sm backdrop-blur-md">
 			<div className="container mx-auto px-4">
 				<div className="flex h-16 items-center">
 					<div className="shrink-0 mr-4">
@@ -29,9 +29,9 @@ export function VideoHeader({ video, onToggleSidebar, isSidebarOpen }) {
 							<div className="flex items-center mt-1">
 								<div className="w-32 md:w-48 bg-muted rounded-full h-1.5 overflow-hidden">
 									<div
-									className="h-full rounded-full bg-linear-to-r from-video to-video-accent transition-all duration-300"
-									style={{ width: `${progress.percentage}%` }}
-								/>
+										className="h-full rounded-full bg-linear-to-r from-video to-video-accent transition-all duration-300"
+										style={{ width: `${progress.percentage}%` }}
+									/>
 								</div>
 								<span className="ml-2 text-xs font-medium text-muted-foreground">
 									{formatProgressText(progress.percentage)}

@@ -73,7 +73,7 @@ function BookSidebar({
 	 * Count total leaf chapters (chapters without children)
 	 * This matches the backend's calculation
 	 */
-	const CountTotalLeafChapters = (chapters) => {
+	const countTotalLeafChapters = (chapters) => {
 		let count = 0
 
 		const countLeaves = (items) => {
@@ -304,7 +304,7 @@ function BookSidebar({
 
 	const overallProgress = progress?.percentage || progressPercentage || 0
 
-	const totalLeafChapters = CountTotalLeafChapters(chapters)
+	const totalLeafChapters = countTotalLeafChapters(chapters)
 
 	if (chapters.length === 0) {
 		return (
@@ -343,6 +343,7 @@ function BookSidebar({
 
 			<SidebarNav>
 				{chapters.map((chapter, chapterIndex) => {
+					const chapterKey = chapter.id ?? chapter.page ?? chapter.startPage ?? chapter.title
 					const isExpanded = ExpandedChapters.includes(chapterIndex)
 					const chapterProgress = getChapterProgress(chapter)
 					const isActive = isPageInChapter(chapter)
@@ -352,7 +353,7 @@ function BookSidebar({
 					if (!hasChildren) {
 						return (
 							<div
-								key={`chapter_${chapterIndex}_${chapter.id}`}
+								key={chapterKey}
 								className={`rounded-2xl border ${
 									isActive ? "border-book/40 bg-book/5" : "border-border bg-card"
 								} shadow-sm overflow-hidden`}
@@ -384,7 +385,7 @@ function BookSidebar({
 
 					return (
 						<div
-							key={`chapter_${chapterIndex}_${chapter.id}`}
+							key={chapterKey}
 							className={`rounded-2xl border ${
 								isActive ? "border-book/40 bg-book/5" : "border-border bg-card"
 							} shadow-sm overflow-hidden`}
@@ -416,7 +417,9 @@ function BookSidebar({
 							{isExpanded && (
 								<div className="px-4 py-2 space-y-2 border-t border-border">
 									<ol>
-										{chapter.children.map((section, sectionIndex) => {
+										{chapter.children.map((section) => {
+											const sectionKey =
+												section.id ?? section.page ?? section.startPage ?? `${chapterKey}-${section.title}`
 											const isSectionCompleted = isChapterCompleted(section.id)
 											const isSectionActive =
 												currentPage === section.page ||
@@ -427,7 +430,7 @@ function BookSidebar({
 
 											return (
 												<SidebarItem
-													key={`${chapter.id}_${sectionIndex}_${section.id}`}
+													key={sectionKey}
 													title={section.title}
 													isActive={isSectionActive}
 													isCompleted={isSectionCompleted}

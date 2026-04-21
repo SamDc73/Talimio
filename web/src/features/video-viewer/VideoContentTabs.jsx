@@ -41,10 +41,7 @@ export function VideoContentTabs({ video, youtubePlayerRef, onSeek, isPlaying, o
 								"hover:text-video hover:bg-video/[[]0.04[]] hover:border-video/20",
 								"focus-visible:outline-2 focus-visible:outline-video focus-visible:outline-offset-2",
 								"disabled:opacity-50 disabled:cursor-not-allowed",
-								activeTab === tab.id && [
-									"bg-video/10 text-video font-semibold",
-									"border-video/30 shadow-sm",
-								]
+								activeTab === tab.id && ["bg-video/10 text-video font-semibold", "border-video/30 shadow-sm"]
 							)}
 							disabled={tab.badge === "Coming soon"}
 						>
@@ -73,7 +70,7 @@ export function VideoContentTabs({ video, youtubePlayerRef, onSeek, isPlaying, o
 				{/* Transcript Tab */}
 				<div
 					className={cn(
-						"absolute top-0 left-0 right-0",
+						"absolute inset-x-0 top-0",
 						"opacity-0 invisible translate-y-2",
 						"transition-all duration-300 pointer-events-none",
 						activeTab === "transcript" && ["relative opacity-100 visible translate-y-0 pointer-events-auto"]
@@ -92,7 +89,7 @@ export function VideoContentTabs({ video, youtubePlayerRef, onSeek, isPlaying, o
 				{/* Description Tab */}
 				<div
 					className={cn(
-						"absolute top-0 left-0 right-0",
+						"absolute inset-x-0 top-0",
 						"opacity-0 invisible translate-y-2",
 						"transition-all duration-300 pointer-events-none",
 						activeTab === "description" && ["relative opacity-100 visible translate-y-0 pointer-events-auto p-6"]

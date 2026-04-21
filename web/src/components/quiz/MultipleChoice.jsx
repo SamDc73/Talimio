@@ -98,12 +98,17 @@ export function MultipleChoice({
 		</button>
 	)
 
+	const optionKeyCounts = new Map()
+
 	return (
 		<div className={QUIZ_WIDGET_CLASS_NAME} data-askai-exclude="true">
 			<QuizMarkdown content={question} className="mb-6 text-lg font-medium text-foreground [&_p]:m-0" />
 
 			<div className="mb-6 space-y-2">
 				{options.map((option, index) => {
+					const optionKeyBase = typeof option === "string" ? option : String(option)
+					const optionOccurrenceCount = optionKeyCounts.get(optionKeyBase) ?? 0
+					optionKeyCounts.set(optionKeyBase, optionOccurrenceCount + 1)
 					const isCorrectOption = !isSurveyMode && index === correctAnswer
 					const isSelected = index === effectiveSelected
 
@@ -125,7 +130,7 @@ export function MultipleChoice({
 
 					return (
 						<label
-							key={`option-${index}-${option.slice(0, 10)}`}
+							key={`option-${optionKeyBase}-${optionOccurrenceCount}`}
 							className={`flex items-start gap-3 p-4 rounded-lg transition-all cursor-pointer ${optionClasses} ${
 								hasFeedback ? "cursor-default" : ""
 							}`}

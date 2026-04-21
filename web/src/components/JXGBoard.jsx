@@ -339,7 +339,7 @@ export function JXGBoard({
 					type="button"
 					variant="ghost"
 					size="icon"
-					className="h-8 w-8 rounded-full text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
+					className="size-8 rounded-full text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
 					onClick={handleZoomIn}
 					aria-label="Zoom in"
 				>
@@ -350,7 +350,7 @@ export function JXGBoard({
 					type="button"
 					variant="ghost"
 					size="icon"
-					className="h-8 w-8 rounded-full text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
+					className="size-8 rounded-full text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
 					onClick={handleZoomOut}
 					aria-label="Zoom out"
 				>
@@ -361,7 +361,7 @@ export function JXGBoard({
 					type="button"
 					variant="ghost"
 					size="icon"
-					className="h-8 w-8 rounded-full text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
+					className="size-8 rounded-full text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
 					onClick={handleResetView}
 					aria-label="Reset view"
 				>
@@ -372,4 +372,5 @@ export function JXGBoard({
 	)
 }
 
+// biome-ignore lint/style/useComponentExportOnlyModules: this file intentionally exports shared board helpers alongside the component.
 export default JXGBoard

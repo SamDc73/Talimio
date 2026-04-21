@@ -31,6 +31,7 @@ const LOCAL_DEMO_ROUTE_DEFINITIONS = [
 	},
 ]
 
+// biome-ignore lint/style/useComponentExportOnlyModules: route metadata stays colocated with the route component in this local-only module.
 export const localDemoRoutes = LOCAL_DEMO_ROUTE_DEFINITIONS.map((route) => {
 	return {
 		...route,
@@ -57,7 +58,7 @@ function LocalDemoState({ title, message }) {
 		<div className="mx-auto flex min-h-[60vh] w-full max-w-3xl flex-col justify-center gap-4 px-6 py-12">
 			<p className="text-sm font-medium text-primary">Local Demo</p>
 			<h1 className="text-3xl font-semibold tracking-tight text-foreground">{title}</h1>
-			<p className="max-w-2xl text-base leading-relaxed text-muted-foreground">{message}</p>
+			<p className="max-w-2xl text-base/relaxed text-muted-foreground">{message}</p>
 			<div className="flex flex-wrap gap-3 text-sm">
 				<Link className="text-primary underline underline-offset-4" to="/demos">
 					Browse local demo routes
@@ -107,8 +108,9 @@ export function LocalDemoRoute({ demoId }) {
 		setLoadError(null)
 		setDemoComponent(null)
 
-		void loadLocalDemoModule(route.modulePathCandidates)
-			.then((module) => {
+		const loadDemo = async () => {
+			try {
+				const module = await loadLocalDemoModule(route.modulePathCandidates)
 				if (isCancelled) {
 					return
 				}
@@ -119,17 +121,18 @@ export function LocalDemoRoute({ demoId }) {
 				}
 
 				setDemoComponent(() => component)
-			})
-			.catch((error) => {
+			} catch (error) {
 				if (!isCancelled) {
 					setLoadError(error)
 				}
-			})
-			.finally(() => {
+			} finally {
 				if (!isCancelled) {
 					setIsLoading(false)
 				}
-			})
+			}
+		}
+
+		loadDemo()
 
 		return () => {
 			isCancelled = true
@@ -157,10 +160,10 @@ export default function DemosView() {
 
 	return (
 		<div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 py-10">
-			<header className="rounded-3xl border border-border bg-card px-6 py-6 shadow-sm">
+			<header className="rounded-3xl border border-border bg-card p-6 shadow-sm">
 				<p className="text-sm font-medium text-primary">Local Demos</p>
 				<h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">Scratch routes for this checkout</h1>
-				<p className="mt-3 max-w-3xl text-base leading-relaxed text-muted-foreground">
+				<p className="mt-3 max-w-3xl text-base/relaxed text-muted-foreground">
 					These routes are optional. They load local files from <code>src/local-demos</code> only in the Vite dev
 					server, so production builds never depend on scratch experiments.
 				</p>

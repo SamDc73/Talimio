@@ -165,7 +165,7 @@ function ViewerRuntime({
 				const first = rects.find(Boolean)
 				if (!first) return
 				const ctx = pageCtxRef.current.get(first.page)
-				if (!ctx || !ctx.el || !ctx.scale) return
+				if (!ctx?.el || !ctx.scale) return
 
 				const pageBox = ctx.el.getBoundingClientRect()
 				const r = first.rect
