@@ -86,7 +86,7 @@ async def generate_self_assessment_questions(
     """Return optional self-assessment questions for course personalization."""
     topic = request.topic.strip()
     if not topic:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Topic must not be empty")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Topic must not be empty")
 
     level = request.level.strip() if request.level and request.level.strip() else None
 
@@ -97,7 +97,7 @@ async def generate_self_assessment_questions(
             user_id=auth.user_id,
         )
     except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error
     except (RuntimeError, TypeError) as error:
         logger.exception(
             "SELF_ASSESSMENT_GENERATION_FAILED",
@@ -133,7 +133,7 @@ async def create_course(
     """Create a new course using AI generation."""
     prompt_text = prompt.strip()
     if not prompt_text:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Prompt must not be empty")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Prompt must not be empty")
 
     attachments = files or []
     in_memory_files = []

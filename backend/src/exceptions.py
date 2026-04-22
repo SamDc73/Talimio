@@ -117,7 +117,7 @@ class ValidationError(DomainError):
     """Exception raised when domain validation fails."""
 
     category = ErrorCategory.VALIDATION
-    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
     default_error_code = ErrorCode.INVALID_INPUT
 
 

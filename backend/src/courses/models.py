@@ -78,6 +78,7 @@ class Course(Base):
         "CourseConcept",
         back_populates="course",
         cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
 
