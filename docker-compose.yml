@@ -30,6 +30,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://talimio:talimio@postgres:5432/talimio
       ENVIRONMENT: "development"
+      MIGRATIONS_AUTO_APPLY: "true"
       LOCAL_STORAGE_PATH: /data/uploads
       FRONTEND_URL: http://localhost:${TALIMIO_PORT:-8497}
       CORS_ALLOW_ORIGINS: http://localhost:${TALIMIO_PORT:-8497}

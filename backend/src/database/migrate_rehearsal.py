@@ -88,7 +88,6 @@ def main() -> None:
             env={
                 **os.environ,
                 "DATABASE_URL": db_url,
-                "MIGRATIONS_AUTO_APPLY": "True",
                 "AUTH_SECRET_KEY": "neon-rehearsal-key",
             },
             check=True,

@@ -21,6 +21,7 @@ from starlette.routing import Match
 from starlette_csrf import CSRFMiddleware
 
 from .ai.assistant.router import router as assistant_router
+from .ai.litellm_config import cleanup_litellm_async_clients
 from .ai.mcp.router import router as mcp_router
 from .ai.rag.config import rag_config
 from .ai.rag.router import router as rag_router
@@ -34,7 +35,7 @@ from .config.logging import setup_logging
 from .config.settings import get_settings
 from .content.router import router as content_router
 from .courses.router import router as courses_router
-from .database.migrate import apply_migrations, validate_vector_schema_dimensions
+from .database.migrate import apply_migrations, assert_migrations_current, validate_vector_schema_dimensions
 from .database.session import DbSession, engine
 from .exceptions import DomainError, ErrorCategory, ErrorCode
 from .highlights.router import router as highlights_router
@@ -87,8 +88,13 @@ async def _startup() -> None:
     if rag_config.embedding_model:
         logger.debug("startup.rag.config_loaded")
 
-    applied_migrations = await apply_migrations(engine)
-    logger.info("startup.migrations.checked", extra={"applied_count": applied_migrations})
+    settings = get_settings()
+    if settings.MIGRATIONS_AUTO_APPLY:
+        applied_migrations = await apply_migrations(engine)
+        logger.info("startup.migrations.applied", extra={"applied_count": applied_migrations})
+    else:
+        await assert_migrations_current(engine)
+        logger.info("startup.migrations.validated")
 
     await validate_vector_schema_dimensions(engine)
     logger.info("startup.vector_schema.checked")
@@ -102,11 +108,17 @@ async def _startup() -> None:
 async def _shutdown() -> None:
     """Release resources on shutdown."""
     try:
+        await cleanup_litellm_async_clients()
+        logger.debug("shutdown.litellm.cleaned")
+    except (RuntimeError, TimeoutError, TypeError, ValueError):
+        logger.warning("shutdown.litellm.cleanup_failed", exc_info=True)
+
+    try:
         from src.ai.memory import cleanup_memory_client
 
         cleanup_memory_client()
         logger.debug("shutdown.memory.cleaned")
-    except RuntimeError, TimeoutError, TypeError, ValueError:
+    except (RuntimeError, TimeoutError, TypeError, ValueError):
         logger.warning("shutdown.memory.cleanup_failed", exc_info=True)
 
     try:
@@ -114,7 +126,7 @@ async def _shutdown() -> None:
 
         await cleanup_detached_video_tasks()
         logger.debug("shutdown.videos.detached_tasks.cleaned")
-    except RuntimeError, TimeoutError, TypeError, ValueError:
+    except (RuntimeError, TimeoutError, TypeError, ValueError):
         logger.warning("shutdown.videos.detached_tasks.cleanup_failed", exc_info=True)
 
     try:
@@ -307,7 +319,7 @@ def create_app() -> FastAPI:
         try:
             await session.execute(text("SELECT 1"))
             return JSONResponse({"status": "healthy", "db": "connected"}, status_code=status.HTTP_200_OK)
-        except DatabaseError, OperationalError:
+        except (DatabaseError, OperationalError):
             return JSONResponse(
                 {"status": "unhealthy", "db": "disconnected"}, status_code=status.HTTP_503_SERVICE_UNAVAILABLE
             )

@@ -71,4 +71,23 @@ def configure_litellm() -> None:
     _LITELLM_CONFIGURED = True
 
 
-__all__ = ["configure_litellm"]
+async def cleanup_litellm_async_clients() -> None:
+    """Close cached LiteLLM async HTTP clients used across requests."""
+    close_async_clients = getattr(litellm, "close_litellm_async_clients", None)
+    if callable(close_async_clients):
+        await close_async_clients()
+
+    async_client = getattr(litellm, "aclient_session", None)
+    close_async_client = getattr(async_client, "aclose", None) if async_client is not None else None
+    if callable(close_async_client):
+        await close_async_client()
+    litellm.aclient_session = None
+
+    client = getattr(litellm, "client_session", None)
+    close_client = getattr(client, "close", None) if client is not None else None
+    if callable(close_client):
+        close_client()
+    litellm.client_session = None
+
+
+__all__ = ["cleanup_litellm_async_clients", "configure_litellm"]

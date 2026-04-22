@@ -5,7 +5,7 @@
 # 2) Push image
 # 3) Deploy + execute Cloud Run Neon rehearsal job
 # 4) Deploy + execute Cloud Run migrator job
-# 5) Deploy service with new image
+# 5) Deploy service with schema-validation startup
 #
 # Assumption: runtime env/secrets are managed on Cloud Run resources.
 
@@ -40,7 +40,6 @@ steps:
       - '--execute-now'
       - '--wait'
       - '--region=us-west1'
-      - '--update-env-vars=MIGRATIONS_AUTO_APPLY=true'
       - '--quiet'
 
   # 4. Deploy and run Cloud Run migration job
@@ -70,6 +69,7 @@ steps:
       - '--region=us-west1'
       - '--platform=managed'
       - '--allow-unauthenticated'
+      - '--update-env-vars=MIGRATIONS_AUTO_APPLY=false'
       - '--quiet'
 
 images:

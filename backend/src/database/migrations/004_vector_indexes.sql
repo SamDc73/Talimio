@@ -1,4 +1,3 @@
--- autocommit
 -- hnsw indexes
 -- HNSW indexes for vector search
 

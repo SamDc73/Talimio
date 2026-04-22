@@ -1,4 +1,3 @@
--- autocommit
 -- indexes.sql
 -- Concurrent indexes for foreign keys and common filters
 
