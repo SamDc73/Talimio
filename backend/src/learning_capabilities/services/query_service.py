@@ -1,13 +1,17 @@
 """Read-side learning capability service."""
 
+import logging
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import and_, case, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.rag.embeddings import VectorRAG
+from src.ai.rag.exceptions import RagUnavailableError
+from src.ai.rag.service import RAGService
 from src.config.settings import get_settings
 from src.courses.facade import CoursesFacade
 from src.courses.models import (
@@ -16,7 +20,9 @@ from src.courses.models import (
     ConceptSimilarity,
     Course,
     CourseConcept,
+    CourseDocument,
     Lesson,
+    LessonVersion,
     LessonVersionWindow,
     UserConceptState,
 )
@@ -35,6 +41,7 @@ from src.learning_capabilities.schemas import (
     CourseMode,
     CourseOutlineLessonState,
     CourseOutlineState,
+    CourseSourceExcerpt,
     CourseState,
     FocusedConceptState,
     FrontierConceptState,
@@ -46,23 +53,34 @@ from src.learning_capabilities.schemas import (
     GetCourseStateCapabilityOutput,
     GetLessonStateCapabilityInput,
     GetLessonStateCapabilityOutput,
+    GetLessonWindowsCapabilityInput,
+    GetLessonWindowsCapabilityOutput,
     LearnerProfileSignals,
     LessonFocus,
     LessonMatch,
     LessonState,
+    LessonWindowState,
     ListRelevantCoursesCapabilityInput,
     ListRelevantCoursesCapabilityOutput,
     SearchConceptsCapabilityInput,
     SearchConceptsCapabilityOutput,
+    SearchCourseSourcesCapabilityInput,
+    SearchCourseSourcesCapabilityOutput,
     SearchLessonsCapabilityInput,
     SearchLessonsCapabilityOutput,
+    SourceFocus,
 )
 
 
+logger = logging.getLogger(__name__)
+
 _AUTO_CONCEPT_CANDIDATE_LIMIT = 3
+_AUTO_SOURCE_FOCUS_LIMIT = 2
 _CONCEPT_SEARCH_EMBEDDING_MIN_CHARS = 8
 _MIN_EMBEDDING_CONCEPT_SIMILARITY = 0.2
 _FOCUS_WINDOW_PREVIEW_CHARS = 700
+_SOURCE_FOCUS_QUERY_MIN_CHARS = 12
+_SOURCE_EXCERPT_CHARS = 900
 _RELATED_CONCEPT_LIMIT = 3
 
 
@@ -139,6 +157,66 @@ class LearningCapabilityQueryService:
             include_state=payload.include_state,
         )
         return SearchConceptsCapabilityOutput(course_id=course.id, course_mode=course_mode, items=items)
+
+    async def search_course_sources(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: SearchCourseSourcesCapabilityInput,
+    ) -> SearchCourseSourcesCapabilityOutput:
+        """Search uploaded course sources with course ownership enforced first."""
+        query_service = CourseQueryService(self._session)
+        course = await query_service.get_course(payload.course_id, user_id)
+        if "course_document" not in payload.source_types:
+            return SearchCourseSourcesCapabilityOutput(course_id=course.id, items=[])
+        query_text = payload.query.strip()
+        if not query_text:
+            return SearchCourseSourcesCapabilityOutput(course_id=course.id, items=[])
+
+        results = await RAGService().search_documents(
+            self._session,
+            user_id,
+            course.id,
+            query_text,
+            payload.limit,
+        )
+        items = [_build_source_excerpt(course_id=course.id, result=result) for result in results]
+        return SearchCourseSourcesCapabilityOutput(course_id=course.id, items=items)
+
+    async def get_source_focus(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        query_text: str,
+    ) -> SourceFocus | None:
+        """Return a tiny source focus when embedded course documents can ground the turn."""
+        compact_query = query_text.strip()
+        if len(compact_query) < _SOURCE_FOCUS_QUERY_MIN_CHARS:
+            return None
+        if not await self._has_embedded_course_documents(course_id=course_id):
+            return None
+
+        try:
+            results = await self.search_course_sources(
+                user_id=user_id,
+                payload=SearchCourseSourcesCapabilityInput(
+                    course_id=course_id,
+                    query=compact_query,
+                    limit=_AUTO_SOURCE_FOCUS_LIMIT,
+                ),
+            )
+        except RagUnavailableError:
+            logger.warning(
+                "learning_capability.source_focus.unavailable",
+                extra={"user_id": str(user_id), "course_id": str(course_id)},
+                exc_info=True,
+            )
+            return None
+
+        if not results.items:
+            return None
+        return SourceFocus(course_id=course_id, items=results.items[:_AUTO_SOURCE_FOCUS_LIMIT])
 
     async def get_mode_aware_focus(
         self,
@@ -404,6 +482,62 @@ class LearningCapabilityQueryService:
         )
         return GetLessonStateCapabilityOutput(state=state)
 
+    async def get_lesson_windows(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: GetLessonWindowsCapabilityInput,
+    ) -> GetLessonWindowsCapabilityOutput:
+        """Return current-version lesson windows without loading full lesson content."""
+        query_service = CourseQueryService(self._session)
+        course = await query_service.get_course(payload.course_id, user_id)
+        lesson = await self._session.scalar(
+            select(Lesson).where(
+                Lesson.id == payload.lesson_id,
+                Lesson.course_id == course.id,
+            )
+        )
+        if lesson is None:
+            return GetLessonWindowsCapabilityOutput(course_id=course.id, lesson_id=payload.lesson_id)
+        if lesson.current_version_id is None:
+            return GetLessonWindowsCapabilityOutput(course_id=course.id, lesson_id=lesson.id)
+        version_id = await self._session.scalar(
+            select(LessonVersion.id).where(
+                LessonVersion.id == lesson.current_version_id,
+                LessonVersion.lesson_id == lesson.id,
+            )
+        )
+        if version_id is None:
+            return GetLessonWindowsCapabilityOutput(course_id=course.id, lesson_id=lesson.id)
+
+        stmt = (
+            select(LessonVersionWindow)
+            .where(LessonVersionWindow.lesson_version_id == version_id)
+            .order_by(LessonVersionWindow.window_index.asc())
+            .limit(payload.limit)
+        )
+        if payload.window_index is not None:
+            stmt = stmt.where(LessonVersionWindow.window_index >= payload.window_index)
+
+        windows = (await self._session.execute(stmt)).scalars().all()
+        return GetLessonWindowsCapabilityOutput(
+            course_id=course.id,
+            lesson_id=lesson.id,
+            version_id=version_id,
+            items=[
+                LessonWindowState(
+                    window_id=window.id,
+                    lesson_id=lesson.id,
+                    version_id=version_id,
+                    window_index=window.window_index,
+                    title=window.title,
+                    content=window.content,
+                    estimated_minutes=window.estimated_minutes,
+                )
+                for window in windows
+            ],
+        )
+
     async def get_course_frontier(
         self,
         *,
@@ -425,6 +559,17 @@ class LearningCapabilityQueryService:
             coming_soon=_map_frontier_rows(frontier.coming_soon),
         )
         return GetCourseFrontierCapabilityOutput(state=state)
+
+    async def _has_embedded_course_documents(self, *, course_id: uuid.UUID) -> bool:
+        document_id = await self._session.scalar(
+            select(CourseDocument.id)
+            .where(
+                CourseDocument.course_id == course_id,
+                CourseDocument.status == "embedded",
+            )
+            .limit(1)
+        )
+        return document_id is not None
 
     async def _get_lesson_focus(self, *, course_id: uuid.UUID, lesson_id: uuid.UUID) -> LessonFocus | None:
         lesson = await self._session.scalar(
@@ -855,7 +1000,42 @@ def _compact_text(value: str | None, limit: int) -> str | None:
         return None
     if len(compacted) <= limit:
         return compacted
-    return f"{compacted[:limit].rstrip()}..."
+    return f"{compacted[: max(0, limit - 3)].rstrip()}..."
+
+
+def _build_source_excerpt(*, course_id: uuid.UUID, result: Any) -> CourseSourceExcerpt:
+    metadata = result.metadata if isinstance(result.metadata, dict) else {}
+    return CourseSourceExcerpt(
+        course_id=course_id,
+        title=_metadata_str(metadata, "title"),
+        excerpt=_compact_text(getattr(result, "content", ""), _SOURCE_EXCERPT_CHARS) or "",
+        similarity=float(getattr(result, "similarity_score", 0.0) or 0.0),
+        chunk_id=str(getattr(result, "chunk_id", "")),
+        document_id=_metadata_int(metadata, "document_id"),
+        chunk_index=_metadata_int(metadata, "chunk_index"),
+        total_chunks=_metadata_int(metadata, "total_chunks"),
+    )
+
+
+def _metadata_str(metadata: dict[str, Any], key: str) -> str | None:
+    value = metadata.get(key)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _metadata_int(metadata: dict[str, Any], key: str) -> int | None:
+    value = metadata.get(key)
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
 
 
 def _format_vector(values: Sequence[float]) -> str:

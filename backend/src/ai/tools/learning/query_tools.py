@@ -60,6 +60,24 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
             },
         ),
         (
+            "search_course_sources",
+            "Search uploaded course source excerpts inside one owned course.",
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "course_id": {"type": "string", "format": "uuid"},
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+                    "source_types": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": ["course_document"]},
+                    },
+                },
+                "required": ["course_id", "query"],
+            },
+        ),
+        (
             "get_course_state",
             "Get compact progress state for one course.",
             {
@@ -93,6 +111,21 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
                     "course_id": {"type": "string", "format": "uuid"},
                     "lesson_id": {"type": "string", "format": "uuid"},
                     "generate": {"type": "boolean"},
+                },
+                "required": ["course_id", "lesson_id"],
+            },
+        ),
+        (
+            "get_lesson_windows",
+            "Get compact window-level content for one lesson.",
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "course_id": {"type": "string", "format": "uuid"},
+                    "lesson_id": {"type": "string", "format": "uuid"},
+                    "window_index": {"type": "integer", "minimum": 0},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 10},
                 },
                 "required": ["course_id", "lesson_id"],
             },

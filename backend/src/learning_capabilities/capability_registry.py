@@ -26,6 +26,13 @@ _CAPABILITIES: tuple[CapabilityDescriptor, ...] = (
         description="Search adaptive course concepts with learner-state signals.",
     ),
     CapabilityDescriptor(
+        name="search_course_sources",
+        kind="read",
+        requires_confirmation=False,
+        public_api_eligible=True,
+        description="Search uploaded course source excerpts for one owned course.",
+    ),
+    CapabilityDescriptor(
         name="get_course_state",
         kind="read",
         requires_confirmation=False,
@@ -45,6 +52,13 @@ _CAPABILITIES: tuple[CapabilityDescriptor, ...] = (
         requires_confirmation=False,
         public_api_eligible=True,
         description="Return compact lesson state payload.",
+    ),
+    CapabilityDescriptor(
+        name="get_lesson_windows",
+        kind="read",
+        requires_confirmation=False,
+        public_api_eligible=True,
+        description="Return compact window-level content for one lesson.",
     ),
     CapabilityDescriptor(
         name="get_course_frontier",

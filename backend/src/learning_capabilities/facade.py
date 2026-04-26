@@ -24,12 +24,16 @@ from src.learning_capabilities.schemas import (
     GetCourseStateCapabilityOutput,
     GetLessonStateCapabilityInput,
     GetLessonStateCapabilityOutput,
+    GetLessonWindowsCapabilityInput,
+    GetLessonWindowsCapabilityOutput,
     LessonMutationCapabilityOutput,
     ListRelevantCoursesCapabilityInput,
     ListRelevantCoursesCapabilityOutput,
     RegenerateLessonWithContextCapabilityInput,
     SearchConceptsCapabilityInput,
     SearchConceptsCapabilityOutput,
+    SearchCourseSourcesCapabilityInput,
+    SearchCourseSourcesCapabilityOutput,
     SearchLessonsCapabilityInput,
     SearchLessonsCapabilityOutput,
 )
@@ -87,6 +91,15 @@ class LearningCapabilitiesFacade:
         """Execute `search_concepts` capability."""
         return await self._query_service.search_concepts(user_id=user_id, payload=payload)
 
+    async def search_course_sources(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: SearchCourseSourcesCapabilityInput,
+    ) -> SearchCourseSourcesCapabilityOutput:
+        """Execute `search_course_sources` capability."""
+        return await self._query_service.search_course_sources(user_id=user_id, payload=payload)
+
     async def get_course_state(
         self,
         *,
@@ -113,6 +126,15 @@ class LearningCapabilitiesFacade:
     ) -> GetLessonStateCapabilityOutput:
         """Execute `get_lesson_state` capability."""
         return await self._query_service.get_lesson_state(user_id=user_id, payload=payload)
+
+    async def get_lesson_windows(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: GetLessonWindowsCapabilityInput,
+    ) -> GetLessonWindowsCapabilityOutput:
+        """Execute `get_lesson_windows` capability."""
+        return await self._query_service.get_lesson_windows(user_id=user_id, payload=payload)
 
     async def get_course_frontier(
         self,
@@ -186,6 +208,11 @@ class LearningCapabilitiesFacade:
                 user_id=user_id,
                 payload=SearchConceptsCapabilityInput.model_validate(payload),
             )
+        elif capability_name == "search_course_sources":
+            result = await self.search_course_sources(
+                user_id=user_id,
+                payload=SearchCourseSourcesCapabilityInput.model_validate(payload),
+            )
         elif capability_name == "list_relevant_courses":
             result = await self.list_relevant_courses(
                 user_id=user_id,
@@ -205,6 +232,11 @@ class LearningCapabilitiesFacade:
             result = await self.get_lesson_state(
                 user_id=user_id,
                 payload=GetLessonStateCapabilityInput.model_validate(payload),
+            )
+        elif capability_name == "get_lesson_windows":
+            result = await self.get_lesson_windows(
+                user_id=user_id,
+                payload=GetLessonWindowsCapabilityInput.model_validate(payload),
             )
         elif capability_name == "get_course_frontier":
             result = await self.get_course_frontier(

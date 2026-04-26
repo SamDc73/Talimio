@@ -15,6 +15,11 @@ CapabilityKind = Literal["read", "write"]
 ContextType = Literal["book", "video", "course"]
 CourseMode = Literal["adaptive", "standard"]
 ConceptMatchSource = Literal["embedding", "lexical"]
+CourseSourceType = Literal["course_document"]
+
+
+def _default_course_source_types() -> list[CourseSourceType]:
+    return ["course_document"]
 
 
 class CapabilityDescriptor(BaseModel):
@@ -240,6 +245,45 @@ class LessonFocus(BaseModel):
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
+class CourseSourceExcerpt(BaseModel):
+    """Compact course-source excerpt for assistant grounding."""
+
+    course_id: uuid.UUID
+    source_type: CourseSourceType = "course_document"
+    title: str | None = None
+    excerpt: str
+    similarity: float
+    chunk_id: str
+    document_id: int | None = None
+    chunk_index: int | None = None
+    total_chunks: int | None = None
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class SourceFocus(BaseModel):
+    """Tiny auto-source focus for course-grounded chat."""
+
+    course_id: uuid.UUID
+    items: list[CourseSourceExcerpt] = Field(default_factory=list)
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class LessonWindowState(BaseModel):
+    """Window-level lesson content for assistant grounding."""
+
+    window_id: uuid.UUID
+    lesson_id: uuid.UUID
+    version_id: uuid.UUID
+    window_index: int
+    title: str | None = None
+    content: str
+    estimated_minutes: int
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
 class SearchLessonsCapabilityInput(BaseModel):
     """Input payload for lesson search capability."""
 
@@ -257,6 +301,28 @@ class SearchConceptsCapabilityInput(BaseModel):
     course_id: uuid.UUID
     limit: int = Field(default=5, ge=1, le=20)
     include_state: bool = True
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class SearchCourseSourcesCapabilityInput(BaseModel):
+    """Input payload for course-source search capability."""
+
+    course_id: uuid.UUID
+    query: str = Field(..., min_length=1)
+    limit: int = Field(default=5, ge=1, le=20)
+    source_types: list[CourseSourceType] = Field(default_factory=_default_course_source_types)
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class GetLessonWindowsCapabilityInput(BaseModel):
+    """Input payload for lesson-window lookup capability."""
+
+    course_id: uuid.UUID
+    lesson_id: uuid.UUID
+    window_index: int | None = Field(default=None, ge=0)
+    limit: int = Field(default=3, ge=1, le=10)
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
@@ -290,6 +356,26 @@ class SearchConceptsCapabilityOutput(BaseModel):
     course_mode: CourseMode
     items: list[ConceptMatch] = Field(default_factory=list)
     reason: str | None = None
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class SearchCourseSourcesCapabilityOutput(BaseModel):
+    """Output payload for course-source search capability."""
+
+    course_id: uuid.UUID
+    items: list[CourseSourceExcerpt] = Field(default_factory=list)
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class GetLessonWindowsCapabilityOutput(BaseModel):
+    """Output payload for lesson-window lookup capability."""
+
+    course_id: uuid.UUID
+    lesson_id: uuid.UUID
+    version_id: uuid.UUID | None = None
+    items: list[LessonWindowState] = Field(default_factory=list)
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
@@ -404,6 +490,7 @@ class BuildContextBundleCapabilityOutput(BaseModel):
     learner_profile: LearnerProfileSignals | None = None
     concept_focus: ConceptFocus | None = None
     lesson_focus: LessonFocus | None = None
+    source_focus: SourceFocus | None = None
     course_outline: CourseOutlineState | None = None
     lesson_state: LessonState | None = None
     frontier_state: CourseFrontierState | None = None
