@@ -114,6 +114,7 @@ _GENERATION_WRAPPER_ERROR_TYPES = (
 _FAILED_TOOL_DISABLE_THRESHOLD = 2
 _LEARNING_TOOL_NAMES = {
     "search_lessons",
+    "search_concepts",
     "list_relevant_courses",
     "get_course_state",
     "get_course_outline_state",
@@ -137,6 +138,8 @@ _LEARNING_INTENT_KEYWORDS = (
     "course frontier",
     "relevant course",
     "search lesson",
+    "search concept",
+    "concept focus",
     "find lesson",
 )
 
@@ -1970,6 +1973,9 @@ class LLMClient:
                 messages=memory_messages,
                 agent_id=self._agent_id,
             )
+        except SystemExit as error:
+            # Some mem0/spaCy setup paths call sys.exit(); memory persistence is best-effort.
+            self._logger.warning("Failed to save conversation to memory: %s", error)
         except _MEMORY_OPERATION_ERROR_TYPES as error:
             # Never fail the main request due to memory issues
             self._logger.warning("Failed to save conversation to memory: %s", error)

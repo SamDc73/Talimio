@@ -39,13 +39,15 @@ class ChatRequest(BaseModel):
 
     # Optional domain context fields
     context_type: Literal["book", "video", "course"] | None = Field(
-        None, description="Type of resource providing context"
+        None, alias="contextType", description="Type of resource providing context"
     )
-    context_id: uuid.UUID | None = Field(None, description="ID of the context resource")
+    context_id: uuid.UUID | None = Field(None, alias="contextId", description="ID of the context resource")
     context_meta: dict[str, Any] | None = Field(
-        None, description="Additional context metadata (page number, timestamp, etc.)"
+        None, alias="contextMeta", description="Additional context metadata (page number, timestamp, etc.)"
     )
-    pending_quote: str | None = Field(default=None, description="Optional one-time quoted selection to prefix")
+    pending_quote: str | None = Field(
+        default=None, alias="pendingQuote", description="Optional one-time quoted selection to prefix"
+    )
 
 
 class CreateConversationRequest(BaseModel):

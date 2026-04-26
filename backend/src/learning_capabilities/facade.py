@@ -28,6 +28,8 @@ from src.learning_capabilities.schemas import (
     ListRelevantCoursesCapabilityInput,
     ListRelevantCoursesCapabilityOutput,
     RegenerateLessonWithContextCapabilityInput,
+    SearchConceptsCapabilityInput,
+    SearchConceptsCapabilityOutput,
     SearchLessonsCapabilityInput,
     SearchLessonsCapabilityOutput,
 )
@@ -75,6 +77,15 @@ class LearningCapabilitiesFacade:
     ) -> ListRelevantCoursesCapabilityOutput:
         """Execute `list_relevant_courses` capability."""
         return await self._query_service.list_relevant_courses(user_id=user_id, payload=payload)
+
+    async def search_concepts(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: SearchConceptsCapabilityInput,
+    ) -> SearchConceptsCapabilityOutput:
+        """Execute `search_concepts` capability."""
+        return await self._query_service.search_concepts(user_id=user_id, payload=payload)
 
     async def get_course_state(
         self,
@@ -169,6 +180,11 @@ class LearningCapabilitiesFacade:
             result = await self.search_lessons(
                 user_id=user_id,
                 payload=SearchLessonsCapabilityInput.model_validate(payload),
+            )
+        elif capability_name == "search_concepts":
+            result = await self.search_concepts(
+                user_id=user_id,
+                payload=SearchConceptsCapabilityInput.model_validate(payload),
             )
         elif capability_name == "list_relevant_courses":
             result = await self.list_relevant_courses(

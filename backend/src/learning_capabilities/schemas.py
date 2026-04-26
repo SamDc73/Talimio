@@ -13,6 +13,8 @@ _CAMEL_CONFIG = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 CapabilityKind = Literal["read", "write"]
 ContextType = Literal["book", "video", "course"]
+CourseMode = Literal["adaptive", "standard"]
+ConceptMatchSource = Literal["embedding", "lexical"]
 
 
 class CapabilityDescriptor(BaseModel):
@@ -167,12 +169,94 @@ class CourseFrontierState(BaseModel):
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
+class LearnerProfileSignals(BaseModel):
+    """Raw per-concept learner profile signals."""
+
+    success_rate: float | None = None
+    retention_rate: float | None = None
+    learning_speed: float | None = None
+    semantic_sensitivity: float | None = None
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class ConceptRelationSignal(BaseModel):
+    """Compact related-concept signal for confusors and prerequisite gaps."""
+
+    concept_id: uuid.UUID
+    name: str
+    similarity: float | None = None
+    mastery: float | None = None
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class FocusedConceptState(BaseModel):
+    """Concept state for the current lesson focus."""
+
+    concept_id: uuid.UUID
+    name: str
+    description: str | None = None
+    lesson_id: uuid.UUID | None = None
+    lesson_title: str | None = None
+    mastery: float | None = None
+    exposures: int = 0
+    next_review_at: datetime | None = None
+    due: bool = False
+    confusors: list[ConceptRelationSignal] = Field(default_factory=list)
+    prerequisite_gaps: list[ConceptRelationSignal] = Field(default_factory=list)
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class ConceptMatch(FocusedConceptState):
+    """Course-scoped concept match with raw ranking signals."""
+
+    similarity: float | None = None
+    match_score: float
+    match_source: ConceptMatchSource
+    candidate_rank: int
+    score_gap_to_next: float | None = None
+
+
+class ConceptFocus(BaseModel):
+    """Adaptive-course concept focus for assistant routing."""
+
+    current_lesson_concept: FocusedConceptState | None = None
+    semantic_candidates: list[ConceptMatch] = Field(default_factory=list)
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class LessonFocus(BaseModel):
+    """Standard-course lesson focus without adaptive learner state."""
+
+    lesson_id: uuid.UUID
+    title: str
+    description: str | None = None
+    has_content: bool = False
+    window_preview: str | None = None
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
 class SearchLessonsCapabilityInput(BaseModel):
     """Input payload for lesson search capability."""
 
     query: str = Field(..., min_length=1)
     course_id: uuid.UUID | None = None
     limit: int = Field(default=8, ge=1, le=20)
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class SearchConceptsCapabilityInput(BaseModel):
+    """Input payload for adaptive course concept search."""
+
+    query: str = Field(..., min_length=1)
+    course_id: uuid.UUID
+    limit: int = Field(default=5, ge=1, le=20)
+    include_state: bool = True
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
@@ -195,6 +279,17 @@ class SearchLessonsCapabilityOutput(BaseModel):
     """Output payload for lesson search capability."""
 
     items: list[LessonMatch] = Field(default_factory=list)
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class SearchConceptsCapabilityOutput(BaseModel):
+    """Output payload for adaptive course concept search."""
+
+    course_id: uuid.UUID
+    course_mode: CourseMode
+    items: list[ConceptMatch] = Field(default_factory=list)
+    reason: str | None = None
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
@@ -305,6 +400,10 @@ class BuildContextBundleCapabilityOutput(BaseModel):
     course_catalog: list[CourseCatalogEntry] | None = None
     adaptive_catalog: list[AdaptiveCatalogEntry] | None = None
     course_state: CourseState | None = None
+    course_mode: CourseMode | None = None
+    learner_profile: LearnerProfileSignals | None = None
+    concept_focus: ConceptFocus | None = None
+    lesson_focus: LessonFocus | None = None
     course_outline: CourseOutlineState | None = None
     lesson_state: LessonState | None = None
     frontier_state: CourseFrontierState | None = None

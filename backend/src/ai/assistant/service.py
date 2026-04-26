@@ -311,7 +311,7 @@ async def assistant_chat(
                     parent_id=latest_user_message_id,
                     run_config=request.run_config,
                 )
-            except RuntimeError, TypeError, ValueError, OSError, SQLAlchemyError, DomainError:
+            except (RuntimeError, TypeError, ValueError, OSError, SQLAlchemyError, DomainError):
                 logger.exception(
                     "Failed to persist incomplete assistant message for thread %s",
                     normalized_request.thread_id,

@@ -2,23 +2,41 @@
 
 import uuid
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, case, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai.rag.embeddings import VectorRAG
+from src.config.settings import get_settings
 from src.courses.facade import CoursesFacade
-from src.courses.models import Course, Lesson
+from src.courses.models import (
+    Concept,
+    ConceptPrerequisite,
+    ConceptSimilarity,
+    Course,
+    CourseConcept,
+    Lesson,
+    LessonVersionWindow,
+    UserConceptState,
+)
 from src.courses.services.course_progress_service import CourseProgressService
 from src.courses.services.course_query_service import CourseQueryService
 from src.courses.services.lesson_service import LessonService
 from src.learning_capabilities.schemas import (
     AdaptiveCatalogEntry,
+    ConceptFocus,
+    ConceptMatch,
+    ConceptMatchSource,
+    ConceptRelationSignal,
     CourseCatalogEntry,
     CourseFrontierState,
     CourseMatch,
+    CourseMode,
     CourseOutlineLessonState,
     CourseOutlineState,
     CourseState,
+    FocusedConceptState,
     FrontierConceptState,
     GetCourseFrontierCapabilityInput,
     GetCourseFrontierCapabilityOutput,
@@ -28,13 +46,24 @@ from src.learning_capabilities.schemas import (
     GetCourseStateCapabilityOutput,
     GetLessonStateCapabilityInput,
     GetLessonStateCapabilityOutput,
+    LearnerProfileSignals,
+    LessonFocus,
     LessonMatch,
     LessonState,
     ListRelevantCoursesCapabilityInput,
     ListRelevantCoursesCapabilityOutput,
+    SearchConceptsCapabilityInput,
+    SearchConceptsCapabilityOutput,
     SearchLessonsCapabilityInput,
     SearchLessonsCapabilityOutput,
 )
+
+
+_AUTO_CONCEPT_CANDIDATE_LIMIT = 3
+_CONCEPT_SEARCH_EMBEDDING_MIN_CHARS = 8
+_MIN_EMBEDDING_CONCEPT_SIMILARITY = 0.2
+_FOCUS_WINDOW_PREVIEW_CHARS = 700
+_RELATED_CONCEPT_LIMIT = 3
 
 
 class LearningCapabilityQueryService:
@@ -83,6 +112,85 @@ class LearningCapabilityQueryService:
             for lesson, course in rows
         ]
         return SearchLessonsCapabilityOutput(items=items)
+
+    async def search_concepts(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: SearchConceptsCapabilityInput,
+    ) -> SearchConceptsCapabilityOutput:
+        """Search adaptive course concepts with course ownership enforced first."""
+        query_service = CourseQueryService(self._session)
+        course = await query_service.get_course(payload.course_id, user_id)
+        course_mode = _course_mode(course)
+        if not course.adaptive_enabled:
+            return SearchConceptsCapabilityOutput(
+                course_id=course.id,
+                course_mode=course_mode,
+                items=[],
+                reason="standard_course_has_no_concept_graph",
+            )
+
+        items = await self._match_course_concepts(
+            user_id=user_id,
+            course_id=course.id,
+            query_text=payload.query,
+            limit=payload.limit,
+            include_state=payload.include_state,
+        )
+        return SearchConceptsCapabilityOutput(course_id=course.id, course_mode=course_mode, items=items)
+
+    async def get_mode_aware_focus(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID | None,
+        latest_user_text: str,
+    ) -> tuple[CourseMode, LearnerProfileSignals | None, ConceptFocus | None, LessonFocus | None]:
+        """Return compact mode-aware focus for one owned course."""
+        query_service = CourseQueryService(self._session)
+        course = await query_service.get_course(course_id, user_id)
+        course_mode = _course_mode(course)
+
+        if not course.adaptive_enabled:
+            lesson_focus = None
+            if lesson_id is not None:
+                lesson_focus = await self._get_lesson_focus(course_id=course.id, lesson_id=lesson_id)
+            return course_mode, None, None, lesson_focus
+
+        current_lesson_concept = None
+        current_state = None
+        if lesson_id is not None:
+            current_lesson_concept, current_state = await self._get_current_lesson_concept(
+                user_id=user_id,
+                course_id=course.id,
+                lesson_id=lesson_id,
+            )
+
+        semantic_candidates = await self._match_course_concepts(
+            user_id=user_id,
+            course_id=course.id,
+            query_text=latest_user_text,
+            limit=_AUTO_CONCEPT_CANDIDATE_LIMIT,
+            include_state=True,
+        )
+        concept_focus = None
+        if current_lesson_concept is not None or semantic_candidates:
+            concept_focus = ConceptFocus(
+                current_lesson_concept=current_lesson_concept,
+                semantic_candidates=semantic_candidates,
+            )
+
+        learner_profile = _learner_profile_from_state(current_state)
+        if learner_profile is None and semantic_candidates:
+            candidate_state = await self._get_user_concept_state(
+                user_id=user_id,
+                concept_id=semantic_candidates[0].concept_id,
+            )
+            learner_profile = _learner_profile_from_state(candidate_state)
+
+        return course_mode, learner_profile, concept_focus, None
 
     async def list_relevant_courses(
         self,
@@ -318,6 +426,376 @@ class LearningCapabilityQueryService:
         )
         return GetCourseFrontierCapabilityOutput(state=state)
 
+    async def _get_lesson_focus(self, *, course_id: uuid.UUID, lesson_id: uuid.UUID) -> LessonFocus | None:
+        lesson = await self._session.scalar(
+            select(Lesson).where(
+                Lesson.course_id == course_id,
+                Lesson.id == lesson_id,
+            )
+        )
+        if lesson is None:
+            return None
+
+        window_preview = None
+        if lesson.current_version_id is not None:
+            window = await self._session.scalar(
+                select(LessonVersionWindow)
+                .where(LessonVersionWindow.lesson_version_id == lesson.current_version_id)
+                .order_by(LessonVersionWindow.window_index.asc())
+                .limit(1)
+            )
+            if window is not None:
+                window_preview = _compact_text(window.content, _FOCUS_WINDOW_PREVIEW_CHARS)
+
+        return LessonFocus(
+            lesson_id=lesson.id,
+            title=lesson.title,
+            description=lesson.description,
+            has_content=bool((lesson.content or "").strip() or window_preview),
+            window_preview=window_preview,
+        )
+
+    async def _get_current_lesson_concept(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+    ) -> tuple[FocusedConceptState | None, UserConceptState | None]:
+        row = (
+            await self._session.execute(
+                select(Concept, Lesson, UserConceptState)
+                .select_from(Lesson)
+                .join(Concept, Concept.id == Lesson.concept_id)
+                .outerjoin(
+                    UserConceptState,
+                    and_(
+                        UserConceptState.user_id == user_id,
+                        UserConceptState.concept_id == Concept.id,
+                    ),
+                )
+                .where(
+                    Lesson.course_id == course_id,
+                    Lesson.id == lesson_id,
+                    Lesson.concept_id.is_not(None),
+                )
+            )
+        ).first()
+        if row is None:
+            return None, None
+
+        concept, lesson, state = row
+        item = FocusedConceptState(
+            concept_id=concept.id,
+            name=concept.name,
+            description=concept.description,
+            lesson_id=lesson.id,
+            lesson_title=lesson.title,
+            mastery=float(state.s_mastery) if state is not None else None,
+            exposures=int(state.exposures) if state is not None else 0,
+            next_review_at=state.next_review_at if state is not None else None,
+            due=_is_due(state.next_review_at if state is not None else None),
+        )
+        await self._attach_related_concept_signals(user_id=user_id, course_id=course_id, items=[item])
+        return item, state
+
+    async def _get_user_concept_state(
+        self,
+        *,
+        user_id: uuid.UUID,
+        concept_id: uuid.UUID,
+    ) -> UserConceptState | None:
+        return await self._session.scalar(
+            select(UserConceptState).where(
+                UserConceptState.user_id == user_id,
+                UserConceptState.concept_id == concept_id,
+            )
+        )
+
+    async def _match_course_concepts(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        query_text: str,
+        limit: int,
+        include_state: bool,
+    ) -> list[ConceptMatch]:
+        query_text = query_text.strip()
+        if not query_text:
+            return []
+
+        matches: list[ConceptMatch] = []
+        if len(query_text) >= _CONCEPT_SEARCH_EMBEDDING_MIN_CHARS:
+            matches = await self._match_course_concepts_by_embedding(
+                user_id=user_id,
+                course_id=course_id,
+                query_text=query_text,
+                limit=limit,
+                include_state=include_state,
+            )
+
+        if not matches:
+            matches = await self._match_course_concepts_by_lexical(
+                user_id=user_id,
+                course_id=course_id,
+                query_text=query_text,
+                limit=limit,
+                include_state=include_state,
+            )
+
+        _apply_score_gaps(matches)
+        await self._attach_related_concept_signals(
+            user_id=user_id,
+            course_id=course_id,
+            items=matches,
+            include_state=include_state,
+        )
+        return matches
+
+    async def _match_course_concepts_by_embedding(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        query_text: str,
+        limit: int,
+        include_state: bool,
+    ) -> list[ConceptMatch]:
+        try:
+            query_embedding = await VectorRAG().generate_embedding(query_text)
+        except (RuntimeError, TimeoutError, TypeError, ValueError):
+            return []
+
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT
+                        c.id AS concept_id,
+                        c.name AS name,
+                        c.description AS description,
+                        l.id AS lesson_id,
+                        l.title AS lesson_title,
+                        ucs.s_mastery AS mastery,
+                        ucs.exposures AS exposures,
+                        ucs.next_review_at AS next_review_at,
+                        GREATEST(
+                            0.0::double precision,
+                            1.0::double precision - (c.embedding <=> CAST(:query_embedding AS vector))
+                        ) AS similarity
+                    FROM course_concepts cc
+                    JOIN concepts c ON c.id = cc.concept_id
+                    LEFT JOIN lessons l ON l.course_id = cc.course_id AND l.concept_id = c.id
+                    LEFT JOIN user_concept_state ucs ON ucs.user_id = :user_id AND ucs.concept_id = c.id
+                    WHERE cc.course_id = :course_id
+                      AND c.embedding IS NOT NULL
+                    ORDER BY c.embedding <=> CAST(:query_embedding AS vector)
+                    LIMIT :limit
+                    """
+                ),
+                {
+                    "course_id": str(course_id),
+                    "user_id": str(user_id),
+                    "query_embedding": _format_vector(query_embedding),
+                    "limit": limit,
+                },
+            )
+        ).all()
+
+        matches: list[ConceptMatch] = []
+        for row in rows:
+            similarity = float(row.similarity or 0.0)
+            if similarity < _MIN_EMBEDDING_CONCEPT_SIMILARITY:
+                continue
+            matches.append(
+                _build_concept_match(
+                    concept_id=row.concept_id,
+                    name=row.name,
+                    description=row.description,
+                    lesson_id=row.lesson_id,
+                    lesson_title=row.lesson_title,
+                    mastery=row.mastery,
+                    exposures=row.exposures,
+                    next_review_at=row.next_review_at,
+                    match_score=similarity,
+                    match_source="embedding",
+                    candidate_rank=len(matches) + 1,
+                    similarity=similarity,
+                    include_state=include_state,
+                )
+            )
+        return matches
+
+    async def _match_course_concepts_by_lexical(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        query_text: str,
+        limit: int,
+        include_state: bool,
+    ) -> list[ConceptMatch]:
+        pattern = f"%{query_text}%"
+        score_expr = case(
+            (Concept.name.ilike(query_text), 1.0),
+            (Concept.name.ilike(pattern), 0.85),
+            (Concept.description.ilike(pattern), 0.65),
+            else_=0.0,
+        )
+
+        rows = (
+            await self._session.execute(
+                select(Concept, Lesson, UserConceptState, score_expr.label("match_score"))
+                .select_from(CourseConcept)
+                .join(Concept, Concept.id == CourseConcept.concept_id)
+                .outerjoin(Lesson, and_(Lesson.course_id == CourseConcept.course_id, Lesson.concept_id == Concept.id))
+                .outerjoin(
+                    UserConceptState,
+                    and_(
+                        UserConceptState.user_id == user_id,
+                        UserConceptState.concept_id == Concept.id,
+                    ),
+                )
+                .where(CourseConcept.course_id == course_id)
+                .where(or_(Concept.name.ilike(pattern), Concept.description.ilike(pattern)))
+                .order_by(score_expr.desc(), Concept.name.asc())
+                .limit(limit)
+            )
+        ).all()
+
+        matches: list[ConceptMatch] = []
+        for index, (concept, lesson, state, match_score) in enumerate(rows, start=1):
+            score = float(match_score or 0.0)
+            matches.append(
+                _build_concept_match(
+                    concept_id=concept.id,
+                    name=concept.name,
+                    description=concept.description,
+                    lesson_id=lesson.id if lesson is not None else None,
+                    lesson_title=lesson.title if lesson is not None else None,
+                    mastery=state.s_mastery if state is not None else None,
+                    exposures=state.exposures if state is not None else None,
+                    next_review_at=state.next_review_at if state is not None else None,
+                    match_score=score,
+                    match_source="lexical",
+                    candidate_rank=index,
+                    similarity=None,
+                    include_state=include_state,
+                )
+            )
+
+        return matches
+
+    async def _attach_related_concept_signals(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        items: Sequence[FocusedConceptState],
+        include_state: bool = True,
+    ) -> None:
+        concept_ids = [item.concept_id for item in items]
+        if not concept_ids:
+            return
+
+        item_by_id = {item.concept_id: item for item in items}
+        await self._attach_confusors(course_id=course_id, concept_ids=concept_ids, item_by_id=item_by_id)
+        if not include_state:
+            return
+        await self._attach_prerequisite_gaps(
+            user_id=user_id,
+            course_id=course_id,
+            concept_ids=concept_ids,
+            item_by_id=item_by_id,
+        )
+
+    async def _attach_confusors(
+        self,
+        *,
+        course_id: uuid.UUID,
+        concept_ids: Sequence[uuid.UUID],
+        item_by_id: dict[uuid.UUID, FocusedConceptState],
+    ) -> None:
+        rows = (
+            await self._session.execute(
+                select(ConceptSimilarity, Concept)
+                .join(
+                    Concept,
+                    or_(
+                        and_(ConceptSimilarity.concept_a_id.in_(concept_ids), Concept.id == ConceptSimilarity.concept_b_id),
+                        and_(ConceptSimilarity.concept_b_id.in_(concept_ids), Concept.id == ConceptSimilarity.concept_a_id),
+                    ),
+                )
+                .join(CourseConcept, and_(CourseConcept.course_id == course_id, CourseConcept.concept_id == Concept.id))
+                .where(
+                    or_(
+                        ConceptSimilarity.concept_a_id.in_(concept_ids),
+                        ConceptSimilarity.concept_b_id.in_(concept_ids),
+                    )
+                )
+                .order_by(ConceptSimilarity.similarity.desc())
+            )
+        ).all()
+
+        for similarity, related_concept in rows:
+            if related_concept.id == similarity.concept_b_id:
+                candidate_id = similarity.concept_a_id
+            else:
+                candidate_id = similarity.concept_b_id
+            item = item_by_id.get(candidate_id)
+            if item is None or len(item.confusors) >= _RELATED_CONCEPT_LIMIT:
+                continue
+            item.confusors.append(
+                ConceptRelationSignal(
+                    concept_id=related_concept.id,
+                    name=related_concept.name,
+                    similarity=float(similarity.similarity),
+                )
+            )
+
+    async def _attach_prerequisite_gaps(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        concept_ids: Sequence[uuid.UUID],
+        item_by_id: dict[uuid.UUID, FocusedConceptState],
+    ) -> None:
+        threshold = float(get_settings().ADAPTIVE_UNLOCK_MASTERY_THRESHOLD)
+        rows = (
+            await self._session.execute(
+                select(ConceptPrerequisite.concept_id, Concept, UserConceptState)
+                .select_from(ConceptPrerequisite)
+                .join(Concept, Concept.id == ConceptPrerequisite.prereq_id)
+                .join(CourseConcept, and_(CourseConcept.course_id == course_id, CourseConcept.concept_id == Concept.id))
+                .outerjoin(
+                    UserConceptState,
+                    and_(
+                        UserConceptState.user_id == user_id,
+                        UserConceptState.concept_id == Concept.id,
+                    ),
+                )
+                .where(ConceptPrerequisite.concept_id.in_(concept_ids))
+                .order_by(Concept.name.asc())
+            )
+        ).all()
+
+        for concept_id, prerequisite, state in rows:
+            mastery = float(state.s_mastery) if state is not None else None
+            if mastery is not None and mastery >= threshold:
+                continue
+            item = item_by_id.get(concept_id)
+            if item is None or len(item.prerequisite_gaps) >= _RELATED_CONCEPT_LIMIT:
+                continue
+            item.prerequisite_gaps.append(
+                ConceptRelationSignal(
+                    concept_id=prerequisite.id,
+                    name=prerequisite.name,
+                    mastery=mastery,
+                )
+            )
+
 
 def _map_frontier_rows(rows: Sequence[object]) -> list[FrontierConceptState]:
     mapped: list[FrontierConceptState] = []
@@ -363,3 +841,101 @@ def _coerce_uuid(raw: object) -> uuid.UUID | None:
         except ValueError:
             return None
     return None
+
+
+def _course_mode(course: object) -> CourseMode:
+    return "adaptive" if bool(getattr(course, "adaptive_enabled", False)) else "standard"
+
+
+def _compact_text(value: str | None, limit: int) -> str | None:
+    if value is None:
+        return None
+    compacted = " ".join(value.split())
+    if not compacted:
+        return None
+    if len(compacted) <= limit:
+        return compacted
+    return f"{compacted[:limit].rstrip()}..."
+
+
+def _format_vector(values: Sequence[float]) -> str:
+    return "[" + ",".join(str(float(value)) for value in values) + "]"
+
+
+def _build_concept_match(
+    *,
+    concept_id: uuid.UUID | str,
+    name: str,
+    description: str | None,
+    lesson_id: uuid.UUID | str | None,
+    lesson_title: str | None,
+    mastery: float | None,
+    exposures: int | None,
+    next_review_at: datetime | None,
+    match_score: float,
+    match_source: ConceptMatchSource,
+    candidate_rank: int,
+    similarity: float | None,
+    include_state: bool,
+) -> ConceptMatch:
+    resolved_concept_id = _coerce_uuid(concept_id) if isinstance(concept_id, str) else concept_id
+    resolved_lesson_id = _coerce_uuid(lesson_id) if isinstance(lesson_id, str) else lesson_id
+    if resolved_concept_id is None:
+        message = "concept_id is required"
+        raise ValueError(message)
+
+    return ConceptMatch(
+        concept_id=resolved_concept_id,
+        name=name,
+        description=description,
+        lesson_id=resolved_lesson_id,
+        lesson_title=lesson_title,
+        mastery=float(mastery) if mastery is not None and include_state else None,
+        exposures=int(exposures or 0) if include_state else 0,
+        next_review_at=next_review_at if include_state else None,
+        due=_is_due(next_review_at) if include_state else False,
+        similarity=similarity,
+        match_score=match_score,
+        match_source=match_source,
+        candidate_rank=candidate_rank,
+    )
+
+
+def _apply_score_gaps(matches: Sequence[ConceptMatch]) -> None:
+    for index, match in enumerate(matches):
+        next_match = matches[index + 1] if index + 1 < len(matches) else None
+        match.score_gap_to_next = None if next_match is None else max(0.0, match.match_score - next_match.match_score)
+
+
+def _is_due(next_review_at: datetime | None) -> bool:
+    if next_review_at is None:
+        return False
+    if next_review_at.tzinfo is None:
+        next_review_at = next_review_at.replace(tzinfo=UTC)
+    return next_review_at <= datetime.now(UTC)
+
+
+def _learner_profile_from_state(state: UserConceptState | None) -> LearnerProfileSignals | None:
+    if state is None or not isinstance(state.learner_profile, dict):
+        return None
+
+    profile = LearnerProfileSignals(
+        success_rate=_float_or_none(state.learner_profile.get("success_rate")),
+        retention_rate=_float_or_none(state.learner_profile.get("retention_rate")),
+        learning_speed=_float_or_none(state.learner_profile.get("learning_speed")),
+        semantic_sensitivity=_float_or_none(state.learner_profile.get("semantic_sensitivity")),
+    )
+    if all(value is None for value in profile.model_dump().values()):
+        return None
+    return profile
+
+
+def _float_or_none(value: object) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if not isinstance(value, int | float | str):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None

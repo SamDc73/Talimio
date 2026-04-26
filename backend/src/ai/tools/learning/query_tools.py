@@ -45,6 +45,21 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
             },
         ),
         (
+            "search_concepts",
+            "Search concepts inside one adaptive course, including raw match and learner-state signals.",
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "query": {"type": "string"},
+                    "course_id": {"type": "string", "format": "uuid"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+                    "include_state": {"type": "boolean"},
+                },
+                "required": ["query", "course_id"],
+            },
+        ),
+        (
             "get_course_state",
             "Get compact progress state for one course.",
             {

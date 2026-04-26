@@ -19,6 +19,13 @@ _CAPABILITIES: tuple[CapabilityDescriptor, ...] = (
         description="List courses most relevant to the latest learner message.",
     ),
     CapabilityDescriptor(
+        name="search_concepts",
+        kind="read",
+        requires_confirmation=False,
+        public_api_eligible=True,
+        description="Search adaptive course concepts with learner-state signals.",
+    ),
+    CapabilityDescriptor(
         name="get_course_state",
         kind="read",
         requires_confirmation=False,

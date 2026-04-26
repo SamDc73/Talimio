@@ -10,7 +10,6 @@ from src.learning_capabilities.schemas import (
     GetCourseFrontierCapabilityInput,
     GetCourseOutlineStateCapabilityInput,
     GetCourseStateCapabilityInput,
-    GetLessonStateCapabilityInput,
     ListRelevantCoursesCapabilityInput,
 )
 from src.learning_capabilities.services.query_service import LearningCapabilityQueryService
@@ -22,7 +21,7 @@ class LearningContextPacketService:
     def __init__(self, query_service: LearningCapabilityQueryService) -> None:
         self._query_service = query_service
 
-    async def build_context_bundle(
+    async def build_context_bundle(  # noqa: PLR0914
         self,
         *,
         user_id: uuid.UUID,
@@ -45,8 +44,11 @@ class LearningContextPacketService:
             ).items
 
         course_state = None
+        course_mode = None
+        learner_profile = None
+        concept_focus = None
+        lesson_focus = None
         course_outline = None
-        lesson_state = None
         frontier_state = None
         course_catalog = None
         adaptive_catalog = None
@@ -68,23 +70,18 @@ class LearningContextPacketService:
                     payload=GetCourseOutlineStateCapabilityInput(course_id=context_id),
                 )
             ).state
-            frontier_state = (
-                await self._query_service.get_course_frontier(
-                    user_id=user_id,
-                    payload=GetCourseFrontierCapabilityInput(course_id=context_id),
-                )
-            ).state
-
             lesson_id = _parse_lesson_id(payload.context_meta.get("lesson_id"))
-            if lesson_id is not None:
-                lesson_state = (
-                    await self._query_service.get_lesson_state(
+            course_mode, learner_profile, concept_focus, lesson_focus = await self._query_service.get_mode_aware_focus(
+                user_id=user_id,
+                course_id=context_id,
+                lesson_id=lesson_id,
+                latest_user_text=payload.latest_user_text,
+            )
+            if course_mode == "adaptive":
+                frontier_state = (
+                    await self._query_service.get_course_frontier(
                         user_id=user_id,
-                        payload=GetLessonStateCapabilityInput(
-                            course_id=context_id,
-                            lesson_id=lesson_id,
-                            generate=False,
-                        ),
+                        payload=GetCourseFrontierCapabilityInput(course_id=context_id),
                     )
                 ).state
 
@@ -108,8 +105,11 @@ class LearningContextPacketService:
             course_catalog=course_catalog,
             adaptive_catalog=adaptive_catalog,
             course_state=course_state,
+            course_mode=course_mode,
+            learner_profile=learner_profile,
+            concept_focus=concept_focus,
+            lesson_focus=lesson_focus,
             course_outline=course_outline,
-            lesson_state=lesson_state,
             frontier_state=frontier_state,
             generated_at=datetime.now(UTC),
         )
