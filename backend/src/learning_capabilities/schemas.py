@@ -11,7 +11,7 @@ from src.config.schema_casing import to_camel
 
 _CAMEL_CONFIG = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
-CapabilityKind = Literal["read", "write"]
+CapabilityKind = Literal["read", "write", "generation"]
 ContextType = Literal["book", "video", "course"]
 CourseMode = Literal["adaptive", "standard"]
 ConceptMatchSource = Literal["embedding", "lexical"]
@@ -297,6 +297,20 @@ class SourceFocus(BaseModel):
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
+class ActiveProbeSuggestion(BaseModel):
+    """Compact signal that a chat probe may be useful now."""
+
+    course_id: uuid.UUID
+    concept_id: uuid.UUID
+    lesson_id: uuid.UUID | None = None
+    learner_asked_check: bool = False
+    learner_expressed_uncertainty: bool = False
+    learner_shared_reasoning: bool = False
+    repeated_recent_misses: bool = False
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
 class LessonWindowState(BaseModel):
     """Window-level lesson content for assistant grounding."""
 
@@ -417,6 +431,19 @@ class GetConceptTutorContextCapabilityInput(BaseModel):
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
 
+class GenerateConceptProbeCapabilityInput(BaseModel):
+    """Input payload for chat concept probe generation."""
+
+    course_id: uuid.UUID
+    concept_id: uuid.UUID
+    count: int = Field(default=1, ge=1, le=1)
+    practice_context: Literal["chat"] = "chat"
+    learner_context: str | None = Field(default=None, max_length=2000)
+    thread_id: uuid.UUID | None = None
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
 class LessonMatch(BaseModel):
     """Compact lesson search match row."""
 
@@ -496,6 +523,33 @@ class GetConceptTutorContextCapabilityOutput(BaseModel):
     candidate_causes: list[TutorCandidateCause] = Field(default_factory=list)
     deterministic_signals: TutorDeterministicSignals = Field(default_factory=TutorDeterministicSignals)
     allowed_tutor_moves: list[TutorMove] = Field(default_factory=_default_tutor_moves)
+    reason: str | None = None
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class ChatConceptProbe(BaseModel):
+    """Learner-visible active chat probe."""
+
+    active_probe_id: uuid.UUID
+    question: str
+    answer_kind: str
+    hints: list[str] = Field(default_factory=list)
+    course_id: uuid.UUID
+    concept_id: uuid.UUID
+    lesson_id: uuid.UUID
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class GenerateConceptProbeCapabilityOutput(BaseModel):
+    """Output payload for chat concept probe generation."""
+
+    course_id: uuid.UUID
+    course_mode: CourseMode
+    concept_id: uuid.UUID
+    active_probe_id: uuid.UUID | None = None
+    probe: ChatConceptProbe | None = None
     reason: str | None = None
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
@@ -612,6 +666,7 @@ class BuildContextBundleCapabilityOutput(BaseModel):
     concept_focus: ConceptFocus | None = None
     lesson_focus: LessonFocus | None = None
     source_focus: SourceFocus | None = None
+    active_probe_suggestion: ActiveProbeSuggestion | None = None
     course_outline: CourseOutlineState | None = None
     lesson_state: LessonState | None = None
     frontier_state: CourseFrontierState | None = None

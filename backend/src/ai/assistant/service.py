@@ -171,8 +171,18 @@ def _normalize_chat_request(request: ChatRequest) -> NormalizedChatRequest:
         thread_id=request.thread_id,
         context_type=request.context_type,
         context_id=request.context_id,
-        context_meta=request.context_meta,
+        context_meta=_normalize_context_meta(request.context_meta),
     )
+
+
+def _normalize_context_meta(context_meta: dict[str, Any] | None) -> dict[str, Any] | None:
+    if context_meta is None:
+        return None
+    normalized = dict(context_meta)
+    lesson_id = normalized.get("lesson_id") or normalized.get("lessonId")
+    if lesson_id is not None:
+        normalized["lesson_id"] = lesson_id
+    return normalized
 
 
 def _build_thread_message_payload(message: Any) -> dict[str, Any]:
@@ -244,11 +254,17 @@ async def assistant_chat(
 
         # Run completion through shared LLM client so memories and MCP tools are available
         llm_client = LLMClient(agent_id=AGENT_ID_ASSISTANT)
+        context_meta = normalized_request.context_meta or {}
         stream = await llm_client.get_completion(
             messages=messages,
             user_id=user_id,
             model=normalized_request.model,
             stream=True,
+            metadata={
+                "assistant_thread_id": str(normalized_request.thread_id),
+                "assistant_lesson_id": str(context_meta.get("lesson_id", "")),
+                "assistant_probe_context": _build_probe_context(normalized_request),
+            },
         )
 
         saw_any_content = False
@@ -365,3 +381,13 @@ async def _build_messages(
 
     messages.append({"role": "user", "content": user_blocks})
     return messages
+
+
+def _build_probe_context(request: NormalizedChatRequest) -> str:
+    user_texts = [
+        _extract_message_text(item.get("content"))
+        for item in request.conversation_history
+        if item.get("role") == "user"
+    ]
+    user_texts.append(request.latest_user_text)
+    return "\n\n".join(text[:600] for text in user_texts[-3:] if text).strip()

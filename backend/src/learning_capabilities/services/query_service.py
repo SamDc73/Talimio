@@ -31,6 +31,7 @@ from src.courses.services.course_progress_service import CourseProgressService
 from src.courses.services.course_query_service import CourseQueryService
 from src.courses.services.lesson_service import LessonService
 from src.learning_capabilities.schemas import (
+    ActiveProbeSuggestion,
     AdaptiveCatalogEntry,
     ConceptFocus,
     ConceptMatch,
@@ -278,6 +279,52 @@ class LearningCapabilityQueryService:
             learner_profile = _learner_profile_from_state(candidate_state)
 
         return course_mode, learner_profile, concept_focus, None
+
+    async def get_active_probe_suggestion(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        course_mode: CourseMode | None,
+        concept_focus: ConceptFocus | None,
+        latest_user_text: str,
+    ) -> ActiveProbeSuggestion | None:
+        """Return a conservative signal that a chat probe may be useful."""
+        if course_mode != "adaptive" or concept_focus is None:
+            return None
+
+        focused_concept = concept_focus.current_lesson_concept
+        if focused_concept is None and concept_focus.semantic_candidates:
+            focused_concept = concept_focus.semantic_candidates[0]
+        if focused_concept is None:
+            return None
+
+        learner_asked_check = _learner_asked_check(latest_user_text)
+        learner_expressed_uncertainty = _learner_expressed_uncertainty(latest_user_text)
+        learner_shared_reasoning = _learner_shared_reasoning(latest_user_text)
+        repeated_recent_misses = await self._has_repeated_recent_misses(
+            user_id=user_id,
+            concept_id=focused_concept.concept_id,
+        )
+        if not any(
+            [
+                learner_asked_check,
+                learner_expressed_uncertainty,
+                learner_shared_reasoning,
+                repeated_recent_misses,
+            ]
+        ):
+            return None
+
+        return ActiveProbeSuggestion(
+            course_id=course_id,
+            concept_id=focused_concept.concept_id,
+            lesson_id=focused_concept.lesson_id,
+            learner_asked_check=learner_asked_check,
+            learner_expressed_uncertainty=learner_expressed_uncertainty,
+            learner_shared_reasoning=learner_shared_reasoning,
+            repeated_recent_misses=repeated_recent_misses,
+        )
 
     async def list_relevant_courses(
         self,
@@ -1081,6 +1128,17 @@ class LearningCapabilityQueryService:
             for probe in probes
         ]
 
+    async def _has_repeated_recent_misses(self, *, user_id: uuid.UUID, concept_id: uuid.UUID) -> bool:
+        outcomes = (
+            await self._session.execute(
+                select(ProbeEvent.correct)
+                .where(ProbeEvent.user_id == user_id, ProbeEvent.concept_id == concept_id)
+                .order_by(ProbeEvent.ts.desc())
+                .limit(3)
+            )
+        ).scalars()
+        return sum(1 for correct in outcomes if not correct) >= 2
+
     async def _get_prerequisite_gap_signals(
         self,
         *,
@@ -1326,6 +1384,52 @@ def _is_stale(timestamp: datetime | None) -> bool:
         timestamp = timestamp.replace(tzinfo=UTC)
     age = datetime.now(UTC) - timestamp
     return age.days >= _STALE_EVIDENCE_DAYS
+
+
+def _learner_asked_check(text_value: str) -> bool:
+    lowered = text_value.lower()
+    return any(
+        phrase in lowered
+        for phrase in (
+            "check my understanding",
+            "test my understanding",
+            "quiz me",
+            "practice question",
+            "give me a question",
+            "can you test",
+        )
+    )
+
+
+def _learner_expressed_uncertainty(text_value: str) -> bool:
+    lowered = text_value.lower()
+    return any(
+        phrase in lowered
+        for phrase in (
+            "i'm not sure",
+            "i am not sure",
+            "not sure",
+            "confused",
+            "stuck",
+            "i don't get",
+            "i do not get",
+        )
+    )
+
+
+def _learner_shared_reasoning(text_value: str) -> bool:
+    lowered = text_value.lower()
+    return any(
+        phrase in lowered
+        for phrase in (
+            "my reasoning",
+            "i think",
+            "because",
+            "so i",
+            "therefore",
+            "does that mean",
+        )
+    )
 
 
 def _build_tutor_evidence(

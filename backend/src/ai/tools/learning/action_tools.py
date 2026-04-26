@@ -14,7 +14,13 @@ ToolExecutor = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 logger = logging.getLogger(__name__)
 
 
-def build_learning_action_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefinition]:
+def build_learning_action_tools(
+    *,
+    user_id: uuid.UUID,
+    thread_id: uuid.UUID | None = None,
+    lesson_id: uuid.UUID | None = None,
+    learner_context: str | None = None,
+) -> list[FunctionToolDefinition]:
     """Return assistant write tools backed by learning capabilities."""
     tool_specs: list[tuple[str, str, dict[str, Any]]] = [
         (
@@ -78,6 +84,22 @@ def build_learning_action_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefin
                 "required": ["course_id", "lesson_id", "context"],
             },
         ),
+        (
+            "generate_concept_probe",
+            "Generate one adaptive chat practice question. Does not require confirmation.",
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "course_id": {"type": "string", "format": "uuid"},
+                    "concept_id": {"type": "string", "format": "uuid"},
+                    "count": {"type": "integer", "const": 1},
+                    "practice_context": {"type": "string", "const": "chat"},
+                    "learner_context": {"type": "string"},
+                },
+                "required": ["course_id", "concept_id"],
+            },
+        ),
     ]
 
     definitions: list[FunctionToolDefinition] = []
@@ -92,13 +114,28 @@ def build_learning_action_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefin
                         "parameters": parameters,
                     },
                 },
-                target=LocalToolTarget(execute=_build_action_executor(tool_name=tool_name, user_id=user_id)),
+                target=LocalToolTarget(
+                    execute=_build_action_executor(
+                        tool_name=tool_name,
+                        user_id=user_id,
+                        thread_id=thread_id,
+                        lesson_id=lesson_id,
+                        learner_context=learner_context,
+                    )
+                ),
             )
         )
     return definitions
 
 
-def _build_action_executor(*, tool_name: str, user_id: uuid.UUID) -> ToolExecutor:
+def _build_action_executor(
+    *,
+    tool_name: str,
+    user_id: uuid.UUID,
+    thread_id: uuid.UUID | None,
+    lesson_id: uuid.UUID | None,
+    learner_context: str | None,
+) -> ToolExecutor:
     async def _execute(arguments: dict[str, Any]) -> dict[str, Any]:
         logger.info(
             "learning_capability.action_tool.execute",
@@ -108,14 +145,27 @@ def _build_action_executor(*, tool_name: str, user_id: uuid.UUID) -> ToolExecuto
                 "argument_keys": sorted(arguments.keys()),
             },
         )
+        payload = dict(arguments)
+        if tool_name == "generate_concept_probe" and thread_id is not None:
+            payload["thread_id"] = str(thread_id)
+        if tool_name in {"generate_concept_probe", "submit_concept_probe_result"} and lesson_id is not None:
+            payload["lesson_id"] = str(lesson_id)
+        if tool_name == "generate_concept_probe" and learner_context:
+            supplied_context = payload.get("learner_context")
+            if isinstance(supplied_context, str) and supplied_context.strip():
+                payload["learner_context"] = (
+                    f"{supplied_context.strip()[:500]}\n\nRecent learner chat:\n{learner_context.strip()[:1400]}"[:2000]
+                )
+            else:
+                payload["learner_context"] = learner_context.strip()[:2000]
         async with async_session_maker() as session:
             facade = LearningCapabilitiesFacade(session)
             result = await facade.execute_action_capability(
                 user_id=user_id,
                 capability_name=tool_name,
-                payload=arguments,
+                payload=payload,
             )
-            if result.get("status") == "completed":
+            if result.get("status") == "completed" or tool_name == "generate_concept_probe":
                 await session.commit()
             else:
                 await session.rollback()

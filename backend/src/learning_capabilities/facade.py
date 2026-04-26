@@ -16,6 +16,8 @@ from src.learning_capabilities.schemas import (
     CreateCourseCapabilityInput,
     CreateCourseCapabilityOutput,
     ExtendLessonWithContextCapabilityInput,
+    GenerateConceptProbeCapabilityInput,
+    GenerateConceptProbeCapabilityOutput,
     GetConceptTutorContextCapabilityInput,
     GetConceptTutorContextCapabilityOutput,
     GetCourseFrontierCapabilityInput,
@@ -45,7 +47,7 @@ from src.learning_capabilities.services.context_packet_service import LearningCo
 from src.learning_capabilities.services.query_service import LearningCapabilityQueryService
 
 
-class LearningCapabilitiesFacade:
+class LearningCapabilitiesFacade:  # noqa: PLR0904
     """Single typed entrypoint for learning capabilities."""
 
     def __init__(self, session: AsyncSession) -> None:
@@ -201,6 +203,15 @@ class LearningCapabilitiesFacade:
         """Execute `regenerate_lesson_with_context` capability."""
         return await self._action_service.regenerate_lesson_with_context(user_id=user_id, payload=payload)
 
+    async def generate_concept_probe(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: GenerateConceptProbeCapabilityInput,
+    ) -> GenerateConceptProbeCapabilityOutput:
+        """Execute `generate_concept_probe` capability."""
+        return await self._action_service.generate_concept_probe(user_id=user_id, payload=payload)
+
     async def execute_read_capability(
         self,
         *,
@@ -296,6 +307,11 @@ class LearningCapabilitiesFacade:
             result = await self.regenerate_lesson_with_context(
                 user_id=user_id,
                 payload=RegenerateLessonWithContextCapabilityInput.model_validate(payload),
+            )
+        elif capability_name == "generate_concept_probe":
+            result = await self.generate_concept_probe(
+                user_id=user_id,
+                payload=GenerateConceptProbeCapabilityInput.model_validate(payload),
             )
         else:
             detail = f"Unknown action capability '{capability_name}'"

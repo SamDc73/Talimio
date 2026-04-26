@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai.assistant.models import AssistantActiveProbe
 from src.ai.client import LLMClient
 from src.config.schema_casing import build_camel_config
 from src.config.settings import get_settings
@@ -91,6 +92,7 @@ class PracticeDrillService:
         course_id: uuid.UUID,
         concept_id: uuid.UUID,
         count: int,
+        learner_context: str | None = None,
     ) -> list[PracticeDrillItem]:
         """Generate adaptive drills for a course concept."""
         concept_lesson_row = await self._session.execute(
@@ -120,8 +122,12 @@ class PracticeDrillService:
             raise LookupError(message)
 
         learner = await self._load_learner_profile(user_id=user_id, course_id=course_id, concept_id=concept_id)
-        generation_context = self._build_generation_context(learner)
-        seen_questions, seen_signatures = await self._load_recent_seen_keys(user_id=user_id, concept_id=concept_id)
+        generation_context = self._build_generation_context(learner, learner_context=learner_context)
+        seen_questions, seen_signatures = await self._load_recent_seen_keys(
+            user_id=user_id,
+            course_id=course_id,
+            concept_id=concept_id,
+        )
 
         drills = await self._generate_drills_once(
             concept=concept,
@@ -141,14 +147,14 @@ class PracticeDrillService:
 
         return drills
 
-    def _build_generation_context(self, learner: _LearnerProfile) -> _GenerationContext:
+    def _build_generation_context(self, learner: _LearnerProfile, *, learner_context: str | None) -> _GenerationContext:
         target_probability, target_low, target_high = self._build_target_band(
             mastery=learner.mastery,
             recent_correct=learner.recent_correct,
             recent_total=learner.recent_total,
         )
         return _GenerationContext(
-            learner_context=self._build_learner_context(learner),
+            learner_context=self._build_learner_context(learner, learner_context=learner_context),
             difficulty_guidance=self._build_difficulty_guidance(learner.mastery, learner.overdue),
             review_status=self._build_review_status(learner.overdue),
             target_probability=target_probability,
@@ -327,8 +333,10 @@ class PracticeDrillService:
             struggling_concepts=struggling_concepts,
         )
 
-    async def _load_recent_seen_keys(self, *, user_id: uuid.UUID, concept_id: uuid.UUID) -> tuple[set[str], set[str]]:
-        rows = (
+    async def _load_recent_seen_keys(
+        self, *, user_id: uuid.UUID, course_id: uuid.UUID, concept_id: uuid.UUID
+    ) -> tuple[set[str], set[str]]:
+        probe_rows = (
             (
                 await self._session.execute(
                     select(ProbeEvent.extra)
@@ -346,9 +354,25 @@ class PracticeDrillService:
             .all()
         )
 
+        active_probe_rows = (
+            await self._session.execute(
+                select(AssistantActiveProbe.question, AssistantActiveProbe.structure_signature)
+                .where(
+                    and_(
+                        AssistantActiveProbe.user_id == user_id,
+                        AssistantActiveProbe.course_id == course_id,
+                        AssistantActiveProbe.concept_id == concept_id,
+                        AssistantActiveProbe.status == "active",
+                    )
+                )
+                .order_by(AssistantActiveProbe.created_at.desc())
+                .limit(_RECENT_PROBE_WINDOW)
+            )
+        ).all()
+
         questions: set[str] = set()
         signatures: set[str] = set()
-        for extra in rows:
+        for extra in probe_rows:
             if not isinstance(extra, dict):
                 continue
 
@@ -359,6 +383,12 @@ class PracticeDrillService:
             signature_raw = extra.get("structure_signature")
             if isinstance(signature_raw, str) and signature_raw.strip():
                 signatures.add(signature_raw.strip().lower())
+
+        for question, signature in active_probe_rows:
+            if isinstance(question, str) and question.strip():
+                questions.add(self._normalize_question_key(question))
+            if isinstance(signature, str) and signature.strip():
+                signatures.add(signature.strip().lower())
 
         return questions, signatures
 
@@ -427,34 +457,28 @@ class PracticeDrillService:
         selected = ordered[:20]
         return "\n".join(f"- {item}" for item in selected)
 
-    @staticmethod
-    def _mastery_label(mastery: float) -> str:
-        if mastery >= 0.7:
-            return "high"
-        if mastery >= 0.3:
-            return "mid"
-        return "low"
-
-    def _build_learner_context(self, learner: _LearnerProfile) -> str:
+    def _build_learner_context(self, learner: _LearnerProfile, *, learner_context: str | None) -> str:
         lines = [
-            f"Mastery: {learner.mastery:.2f} ({self._mastery_label(learner.mastery)})",
-            f"Recent performance: {learner.recent_correct}/{learner.recent_total} correct recently",
+            f"Mastery: {learner.mastery:.2f}",
+            f"Recent correct count: {learner.recent_correct}",
+            f"Recent total count: {learner.recent_total}",
             f"Learning speed: {learner.learning_speed:.1f}x",
             f"Retention rate: {learner.retention_rate:.2f}",
             f"Success rate: {learner.success_rate:.2f}",
-            f"Review status: {self._build_review_status(learner.overdue)}",
+            f"Due for review: {str(learner.overdue).lower()}",
         ]
         if learner.struggling_concepts:
             lines.append(f"Course-wide struggling concepts: {', '.join(learner.struggling_concepts)}")
         else:
             lines.append("Course-wide struggling concepts: none")
+        if learner_context and learner_context.strip():
+            chat_context = " ".join(learner_context.split())[:1200]
+            lines.append(f"Learner chat context: {chat_context}")
         return "\n".join(lines)
 
     @staticmethod
     def _build_review_status(overdue: bool) -> str:
-        if overdue:
-            return "OVERDUE"
-        return "on schedule"
+        return f"due_for_review={str(overdue).lower()}"
 
     @staticmethod
     def _build_difficulty_guidance(mastery: float, overdue: bool) -> str:

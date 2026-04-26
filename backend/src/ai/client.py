@@ -122,6 +122,7 @@ _LEARNING_TOOL_NAMES = {
     "get_lesson_state",
     "get_lesson_windows",
     "get_concept_tutor_context",
+    "generate_concept_probe",
     "get_course_frontier",
     "create_course",
     "append_course_lesson",
@@ -146,6 +147,8 @@ _LEARNING_INTENT_KEYWORDS = (
     "lesson window",
     "concept focus",
     "concept tutor",
+    "practice question",
+    "check understanding",
     "misconception",
     "confused",
     "stuck",
@@ -215,6 +218,30 @@ def _contains_timeout_hint(error: Exception) -> bool:
         if "timeout" in lowered or "timed out" in lowered:
             return True
     return False
+
+
+def _metadata_uuid(metadata: dict[str, Any] | None, key: str) -> uuid.UUID | None:
+    if not isinstance(metadata, dict):
+        return None
+    raw_value = metadata.get(key)
+    if isinstance(raw_value, uuid.UUID):
+        return raw_value
+    if isinstance(raw_value, str) and raw_value.strip():
+        try:
+            return uuid.UUID(raw_value)
+        except ValueError:
+            return None
+    return None
+
+
+def _metadata_text(metadata: dict[str, Any] | None, key: str) -> str | None:
+    if not isinstance(metadata, dict):
+        return None
+    raw_value = metadata.get(key)
+    if not isinstance(raw_value, str):
+        return None
+    normalized = raw_value.strip()
+    return normalized or None
 
 
 class LLMClient:
@@ -433,7 +460,14 @@ class LLMClient:
             from src.ai.tools.learning import build_learning_action_tools, build_learning_query_tools
 
             function_tools.extend(build_learning_query_tools(user_id=request.user_id))
-            function_tools.extend(build_learning_action_tools(user_id=request.user_id))
+            function_tools.extend(
+                build_learning_action_tools(
+                    user_id=request.user_id,
+                    thread_id=_metadata_uuid(request.metadata, "assistant_thread_id"),
+                    lesson_id=_metadata_uuid(request.metadata, "assistant_lesson_id"),
+                    learner_context=_metadata_text(request.metadata, "assistant_probe_context"),
+                )
+            )
 
         return build_request_tool_plan(
             model=request.model,
@@ -1890,6 +1924,7 @@ class LLMClient:
             response_model=response_model,
             user_id=user_id,
             model=model,
+            enable_memory=False,
         )
         if not isinstance(result, response_model):
             msg = f"Expected {response_model.__name__} from practice generation structured output"
@@ -1940,6 +1975,7 @@ class LLMClient:
             response_model=response_model,
             user_id=user_id,
             model=model,
+            enable_memory=False,
         )
         if not isinstance(result, response_model):
             msg = f"Expected {response_model.__name__} from practice prediction structured output"

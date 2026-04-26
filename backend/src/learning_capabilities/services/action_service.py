@@ -5,20 +5,28 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai import AGENT_ID_LESSON_WRITER
+from src.ai.assistant.models import AssistantActiveProbe, AssistantConversation
+from src.ai.errors import AIRuntimeError
 from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
 from src.courses.facade import CoursesFacade
 from src.courses.models import Course, Lesson
 from src.courses.services.lesson_service import LessonService
+from src.courses.services.practice_drill_service import PracticeDrillService
 from src.learning_capabilities.errors import LearningCapabilitiesValidationError
 from src.learning_capabilities.schemas import (
     AppendCourseLessonCapabilityInput,
     AppendCourseLessonCapabilityOutput,
+    ChatConceptProbe,
+    CourseMode,
     CreateCourseCapabilityInput,
     CreateCourseCapabilityOutput,
     ExtendLessonWithContextCapabilityInput,
+    GenerateConceptProbeCapabilityInput,
+    GenerateConceptProbeCapabilityOutput,
     LessonMutationCapabilityOutput,
     RegenerateLessonWithContextCapabilityInput,
     ToolUiConfirmation,
@@ -238,6 +246,164 @@ class LearningCapabilityActionService:
         )
         return result
 
+    async def generate_concept_probe(  # noqa: PLR0911
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: GenerateConceptProbeCapabilityInput,
+    ) -> GenerateConceptProbeCapabilityOutput:
+        """Generate one learner-visible chat probe while storing hidden grading state."""
+        course = await self._authorization_service.require_owned_course(
+            user_id=user_id,
+            course_id=payload.course_id,
+        )
+        course_mode: CourseMode = "adaptive" if course.adaptive_enabled else "standard"
+        if not course.adaptive_enabled:
+            return GenerateConceptProbeCapabilityOutput(
+                course_id=course.id,
+                course_mode=course_mode,
+                concept_id=payload.concept_id,
+                reason="standard_course_has_no_concept_graph",
+            )
+
+        conversation_id = await self._resolve_owned_thread_id(
+            user_id=user_id,
+            thread_id=payload.thread_id,
+            course_id=course.id,
+        )
+
+        existing_probe = await self._get_active_probe(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            course_id=course.id,
+            concept_id=payload.concept_id,
+        )
+        if existing_probe is not None:
+            return _active_probe_output(course=course, course_mode=course_mode, active_probe=existing_probe)
+
+        service = PracticeDrillService(self._session)
+        try:
+            drill = (
+                await service.generate_drills(
+                    user_id=user_id,
+                    course_id=course.id,
+                    concept_id=payload.concept_id,
+                    count=payload.count,
+                    learner_context=payload.learner_context,
+                )
+            )[0]
+        except LookupError as error:
+            return GenerateConceptProbeCapabilityOutput(
+                course_id=course.id,
+                course_mode=course_mode,
+                concept_id=payload.concept_id,
+                reason=_probe_lookup_reason(error),
+            )
+        except (AIRuntimeError, RuntimeError, TypeError, ValueError, OSError):
+            logger.warning(
+                "learning_capability.generate_concept_probe.unavailable",
+                extra={"user_id": str(user_id), "course_id": str(course.id), "concept_id": str(payload.concept_id)},
+                exc_info=True,
+            )
+            return GenerateConceptProbeCapabilityOutput(
+                course_id=course.id,
+                course_mode=course_mode,
+                concept_id=payload.concept_id,
+                reason="probe_generation_unavailable",
+            )
+
+        active_probe = AssistantActiveProbe(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            course_id=course.id,
+            concept_id=drill.concept_id,
+            lesson_id=drill.lesson_id,
+            question=drill.question,
+            expected_answer=drill.expected_answer,
+            answer_kind=drill.answer_kind,
+            hints=list(drill.hints),
+            structure_signature=drill.structure_signature,
+            predicted_p_correct=drill.predicted_p_correct,
+            target_probability=drill.target_probability,
+            target_low=drill.target_low,
+            target_high=drill.target_high,
+            core_model=drill.core_model,
+            practice_context=payload.practice_context,
+        )
+        self._session.add(active_probe)
+        try:
+            await self._session.flush()
+        except IntegrityError:
+            await self._session.rollback()
+            existing_probe = await self._get_active_probe(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                course_id=course.id,
+                concept_id=payload.concept_id,
+            )
+            if existing_probe is not None:
+                return _active_probe_output(course=course, course_mode=course_mode, active_probe=existing_probe)
+            logger.warning(
+                "learning_capability.generate_concept_probe.persist_failed",
+                extra={"user_id": str(user_id), "course_id": str(course.id), "concept_id": str(payload.concept_id)},
+                exc_info=True,
+            )
+            return GenerateConceptProbeCapabilityOutput(
+                course_id=course.id,
+                course_mode=course_mode,
+                concept_id=payload.concept_id,
+                reason="probe_generation_unavailable",
+            )
+
+        return _active_probe_output(course=course, course_mode=course_mode, active_probe=active_probe)
+
+    async def _resolve_owned_thread_id(
+        self,
+        *,
+        user_id: uuid.UUID,
+        thread_id: uuid.UUID | None,
+        course_id: uuid.UUID,
+    ) -> uuid.UUID | None:
+        if thread_id is None:
+            detail = "Assistant thread is required for chat probe generation."
+            raise LearningCapabilitiesValidationError(detail)
+
+        owned_thread_id = await self._session.scalar(
+            select(AssistantConversation.id).where(
+                AssistantConversation.id == thread_id,
+                AssistantConversation.user_id == user_id,
+                AssistantConversation.context_type == "course",
+                AssistantConversation.context_id == course_id,
+            )
+        )
+        if owned_thread_id is None:
+            detail = "Assistant thread not found or access denied."
+            raise LearningCapabilitiesValidationError(detail)
+        return owned_thread_id
+
+    async def _get_active_probe(
+        self,
+        *,
+        user_id: uuid.UUID,
+        conversation_id: uuid.UUID | None,
+        course_id: uuid.UUID,
+        concept_id: uuid.UUID,
+    ) -> AssistantActiveProbe | None:
+        if conversation_id is None:
+            return None
+        return await self._session.scalar(
+            select(AssistantActiveProbe)
+            .where(
+                AssistantActiveProbe.user_id == user_id,
+                AssistantActiveProbe.conversation_id == conversation_id,
+                AssistantActiveProbe.course_id == course_id,
+                AssistantActiveProbe.concept_id == concept_id,
+                AssistantActiveProbe.status == "active",
+            )
+            .order_by(AssistantActiveProbe.created_at.desc())
+            .limit(1)
+        )
+
     async def _resolve_next_lesson_order(self, *, course_id: uuid.UUID) -> int:
         max_order = await self._session.scalar(
             select(func.max(Lesson.order)).where(Lesson.course_id == course_id)
@@ -342,6 +508,37 @@ def _normalize_optional_text(raw: str | None) -> str | None:
         return None
     normalized = raw.strip()
     return normalized or None
+
+
+def _probe_lookup_reason(error: LookupError) -> str:
+    message = str(error).lower()
+    if "lesson" in message:
+        return "lesson_not_assigned_to_concept"
+    return "concept_not_assigned_to_course"
+
+
+def _active_probe_output(
+    *,
+    course: Course,
+    course_mode: CourseMode,
+    active_probe: AssistantActiveProbe,
+) -> GenerateConceptProbeCapabilityOutput:
+    probe = ChatConceptProbe(
+        active_probe_id=active_probe.id,
+        question=active_probe.question,
+        answer_kind=active_probe.answer_kind,
+        hints=list(active_probe.hints),
+        course_id=course.id,
+        concept_id=active_probe.concept_id,
+        lesson_id=active_probe.lesson_id,
+    )
+    return GenerateConceptProbeCapabilityOutput(
+        course_id=course.id,
+        course_mode=course_mode,
+        concept_id=active_probe.concept_id,
+        active_probe_id=active_probe.id,
+        probe=probe,
+    )
 
 
 def _build_create_confirmation() -> CreateCourseCapabilityOutput:

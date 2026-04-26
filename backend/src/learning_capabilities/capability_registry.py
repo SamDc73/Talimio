@@ -109,6 +109,13 @@ _CAPABILITIES: tuple[CapabilityDescriptor, ...] = (
         public_api_eligible=True,
         description="Regenerate lesson content with explicit injected context.",
     ),
+    CapabilityDescriptor(
+        name="generate_concept_probe",
+        kind="generation",
+        requires_confirmation=False,
+        public_api_eligible=False,
+        description="Generate one chat practice probe for an adaptive course concept.",
+    ),
 )
 
 _CAPABILITY_BY_NAME = {item.name: item for item in _CAPABILITIES}

@@ -49,6 +49,7 @@ class LearningContextPacketService:
         concept_focus = None
         lesson_focus = None
         source_focus = None
+        active_probe_suggestion = None
         course_outline = None
         frontier_state = None
         course_catalog = None
@@ -84,6 +85,13 @@ class LearningContextPacketService:
                 query_text=query_text,
             )
             if course_mode == "adaptive":
+                active_probe_suggestion = await self._query_service.get_active_probe_suggestion(
+                    user_id=user_id,
+                    course_id=context_id,
+                    course_mode=course_mode,
+                    concept_focus=concept_focus,
+                    latest_user_text=payload.latest_user_text,
+                )
                 frontier_state = (
                     await self._query_service.get_course_frontier(
                         user_id=user_id,
@@ -116,6 +124,7 @@ class LearningContextPacketService:
             concept_focus=concept_focus,
             lesson_focus=lesson_focus,
             source_focus=source_focus,
+            active_probe_suggestion=active_probe_suggestion,
             course_outline=course_outline,
             frontier_state=frontier_state,
             generated_at=datetime.now(UTC),
