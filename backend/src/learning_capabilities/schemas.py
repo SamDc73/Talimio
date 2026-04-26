@@ -16,10 +16,37 @@ ContextType = Literal["book", "video", "course"]
 CourseMode = Literal["adaptive", "standard"]
 ConceptMatchSource = Literal["embedding", "lexical"]
 CourseSourceType = Literal["course_document"]
+TutorCauseKind = Literal["current_concept", "recent_miss", "prerequisite_gap", "semantic_confusor"]
+TutorCauseSource = Literal["course_context", "probe_event", "concept_graph", "concept_similarity"]
+TutorMove = Literal[
+    "answer",
+    "hint",
+    "probe",
+    "articulate",
+    "reflect",
+    "contrast_confusion",
+    "review",
+    "route_to_lesson",
+    "defer",
+]
 
 
 def _default_course_source_types() -> list[CourseSourceType]:
     return ["course_document"]
+
+
+def _default_tutor_moves() -> list[TutorMove]:
+    return [
+        "answer",
+        "hint",
+        "probe",
+        "articulate",
+        "reflect",
+        "contrast_confusion",
+        "review",
+        "route_to_lesson",
+        "defer",
+    ]
 
 
 class CapabilityDescriptor(BaseModel):
@@ -284,6 +311,58 @@ class LessonWindowState(BaseModel):
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
+class RecentProbeSignal(BaseModel):
+    """Recent probe outcome for tutor debugging context."""
+
+    probe_id: uuid.UUID
+    concept_id: uuid.UUID
+    correct: bool
+    occurred_at: datetime
+    tags: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class TutorEvidenceSignals(BaseModel):
+    """Deterministic evidence-quality signals for cautious tutoring."""
+
+    recent_probe_count: int = 0
+    recent_correct_count: int = 0
+    mastery_evidence_count: int = 0
+    last_probe_at: datetime | None = None
+    state_updated_at: datetime | None = None
+    has_sparse_evidence: bool = True
+    has_stale_evidence: bool = False
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class TutorCandidateCause(BaseModel):
+    """Possible tutoring cause, not a diagnosis."""
+
+    rank: int
+    kind: TutorCauseKind
+    concept_id: uuid.UUID
+    source: TutorCauseSource
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class TutorDeterministicSignals(BaseModel):
+    """Simple booleans and counts the prompt can reason over."""
+
+    has_prerequisite_gap: bool = False
+    has_recent_miss: bool = False
+    due: bool = False
+    has_semantic_confusor: bool = False
+    exposures: int = 0
+    recent_probe_count: int = 0
+    recent_correct_count: int = 0
+    mastery_evidence_count: int = 0
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
 class SearchLessonsCapabilityInput(BaseModel):
     """Input payload for lesson search capability."""
 
@@ -323,6 +402,17 @@ class GetLessonWindowsCapabilityInput(BaseModel):
     lesson_id: uuid.UUID
     window_index: int | None = Field(default=None, ge=0)
     limit: int = Field(default=3, ge=1, le=10)
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class GetConceptTutorContextCapabilityInput(BaseModel):
+    """Input payload for adaptive concept tutor context."""
+
+    course_id: uuid.UUID
+    concept_id: uuid.UUID
+    include_recent_probes: bool = True
+    include_lesson_summary: bool = True
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
@@ -376,6 +466,37 @@ class GetLessonWindowsCapabilityOutput(BaseModel):
     lesson_id: uuid.UUID
     version_id: uuid.UUID | None = None
     items: list[LessonWindowState] = Field(default_factory=list)
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class GetConceptTutorContextCapabilityOutput(BaseModel):
+    """Output payload for adaptive concept tutor context."""
+
+    course_id: uuid.UUID
+    course_mode: CourseMode
+    concept_id: uuid.UUID | None = None
+    concept_name: str | None = None
+    description: str | None = None
+    difficulty: float | None = None
+    lesson_id: uuid.UUID | None = None
+    lesson_title: str | None = None
+    mastery: float | None = None
+    exposures: int = 0
+    next_review_at: datetime | None = None
+    due: bool = False
+    learner_profile: LearnerProfileSignals | None = None
+    recent_probes: list[RecentProbeSignal] = Field(default_factory=list)
+    prerequisite_gaps: list[ConceptRelationSignal] = Field(default_factory=list)
+    semantic_confusors: list[ConceptRelationSignal] = Field(default_factory=list)
+    downstream_blocked: list[ConceptRelationSignal] = Field(default_factory=list)
+    has_verified_content: bool = False
+    content_source_count: int = 0
+    evidence: TutorEvidenceSignals = Field(default_factory=TutorEvidenceSignals)
+    candidate_causes: list[TutorCandidateCause] = Field(default_factory=list)
+    deterministic_signals: TutorDeterministicSignals = Field(default_factory=TutorDeterministicSignals)
+    allowed_tutor_moves: list[TutorMove] = Field(default_factory=_default_tutor_moves)
+    reason: str | None = None
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 

@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import and_, case, or_, select, text
+from sqlalchemy import and_, case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.rag.embeddings import VectorRAG
@@ -24,6 +24,7 @@ from src.courses.models import (
     Lesson,
     LessonVersion,
     LessonVersionWindow,
+    ProbeEvent,
     UserConceptState,
 )
 from src.courses.services.course_progress_service import CourseProgressService
@@ -45,6 +46,8 @@ from src.learning_capabilities.schemas import (
     CourseState,
     FocusedConceptState,
     FrontierConceptState,
+    GetConceptTutorContextCapabilityInput,
+    GetConceptTutorContextCapabilityOutput,
     GetCourseFrontierCapabilityInput,
     GetCourseFrontierCapabilityOutput,
     GetCourseOutlineStateCapabilityInput,
@@ -62,6 +65,7 @@ from src.learning_capabilities.schemas import (
     LessonWindowState,
     ListRelevantCoursesCapabilityInput,
     ListRelevantCoursesCapabilityOutput,
+    RecentProbeSignal,
     SearchConceptsCapabilityInput,
     SearchConceptsCapabilityOutput,
     SearchCourseSourcesCapabilityInput,
@@ -69,6 +73,9 @@ from src.learning_capabilities.schemas import (
     SearchLessonsCapabilityInput,
     SearchLessonsCapabilityOutput,
     SourceFocus,
+    TutorCandidateCause,
+    TutorDeterministicSignals,
+    TutorEvidenceSignals,
 )
 
 
@@ -82,6 +89,8 @@ _FOCUS_WINDOW_PREVIEW_CHARS = 700
 _SOURCE_FOCUS_QUERY_MIN_CHARS = 12
 _SOURCE_EXCERPT_CHARS = 900
 _RELATED_CONCEPT_LIMIT = 3
+_RECENT_PROBE_LIMIT = 5
+_STALE_EVIDENCE_DAYS = 30
 
 
 class LearningCapabilityQueryService:
@@ -538,6 +547,110 @@ class LearningCapabilityQueryService:
             ],
         )
 
+    async def get_concept_tutor_context(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: GetConceptTutorContextCapabilityInput,
+    ) -> GetConceptTutorContextCapabilityOutput:
+        """Return deterministic adaptive tutor evidence for one owned course concept."""
+        query_service = CourseQueryService(self._session)
+        course = await query_service.get_course(payload.course_id, user_id)
+        course_mode = _course_mode(course)
+        if course_mode == "standard":
+            return GetConceptTutorContextCapabilityOutput(
+                course_id=course.id,
+                course_mode=course_mode,
+                concept_id=payload.concept_id,
+                reason="standard_course_has_no_concept_graph",
+            )
+
+        row = (
+            await self._session.execute(
+                select(Concept, Lesson, UserConceptState)
+                .join(CourseConcept, and_(CourseConcept.concept_id == Concept.id, CourseConcept.course_id == course.id))
+                .outerjoin(Lesson, and_(Lesson.course_id == course.id, Lesson.concept_id == Concept.id))
+                .outerjoin(
+                    UserConceptState,
+                    and_(UserConceptState.user_id == user_id, UserConceptState.concept_id == Concept.id),
+                )
+                .where(Concept.id == payload.concept_id)
+                .limit(1)
+            )
+        ).first()
+        if row is None:
+            return GetConceptTutorContextCapabilityOutput(
+                course_id=course.id,
+                course_mode=course_mode,
+                concept_id=payload.concept_id,
+                reason="concept_not_assigned_to_course",
+            )
+
+        concept, lesson, state = row
+        recent_probes = await self._get_recent_probe_signals(
+            user_id=user_id,
+            concept_id=concept.id,
+            include_recent_probes=payload.include_recent_probes,
+        )
+        prerequisite_gaps = await self._get_prerequisite_gap_signals(
+            user_id=user_id,
+            course_id=course.id,
+            concept_id=concept.id,
+        )
+        semantic_confusors = await self._get_semantic_confusor_signals(course_id=course.id, concept_id=concept.id)
+        downstream_blocked = await self._get_downstream_blocked_signals(
+            user_id=user_id,
+            course_id=course.id,
+            concept_id=concept.id,
+        )
+        content_source_count = await self._count_verified_lesson_content_sources(
+            lesson=lesson,
+            include_lesson_summary=payload.include_lesson_summary,
+        )
+        evidence = _build_tutor_evidence(state=state, recent_probes=recent_probes)
+        due = _is_due(state.next_review_at) if state is not None else False
+        candidate_causes = _build_tutor_candidate_causes(
+            concept_id=concept.id,
+            lesson_id=lesson.id if lesson is not None else None,
+            recent_probes=recent_probes,
+            prerequisite_gaps=prerequisite_gaps,
+            semantic_confusors=semantic_confusors,
+        )
+
+        return GetConceptTutorContextCapabilityOutput(
+            course_id=course.id,
+            course_mode=course_mode,
+            concept_id=concept.id,
+            concept_name=concept.name,
+            description=concept.description,
+            difficulty=float(concept.difficulty) if concept.difficulty is not None else None,
+            lesson_id=lesson.id if lesson is not None else None,
+            lesson_title=lesson.title if lesson is not None else None,
+            mastery=float(state.s_mastery) if state is not None else None,
+            exposures=state.exposures if state is not None else 0,
+            next_review_at=state.next_review_at if state is not None else None,
+            due=due,
+            learner_profile=_learner_profile_from_state(state),
+            recent_probes=recent_probes,
+            prerequisite_gaps=prerequisite_gaps,
+            semantic_confusors=semantic_confusors,
+            downstream_blocked=downstream_blocked,
+            has_verified_content=content_source_count > 0,
+            content_source_count=content_source_count,
+            evidence=evidence,
+            candidate_causes=candidate_causes,
+            deterministic_signals=TutorDeterministicSignals(
+                has_prerequisite_gap=bool(prerequisite_gaps),
+                has_recent_miss=any(not probe.correct for probe in recent_probes),
+                due=due,
+                has_semantic_confusor=bool(semantic_confusors),
+                exposures=state.exposures if state is not None else 0,
+                recent_probe_count=evidence.recent_probe_count,
+                recent_correct_count=evidence.recent_correct_count,
+                mastery_evidence_count=evidence.mastery_evidence_count,
+            ),
+        )
+
     async def get_course_frontier(
         self,
         *,
@@ -941,6 +1054,117 @@ class LearningCapabilityQueryService:
                 )
             )
 
+    async def _get_recent_probe_signals(
+        self,
+        *,
+        user_id: uuid.UUID,
+        concept_id: uuid.UUID,
+        include_recent_probes: bool,
+    ) -> list[RecentProbeSignal]:
+        if not include_recent_probes:
+            return []
+        probes = (
+            await self._session.execute(
+                select(ProbeEvent)
+                .where(ProbeEvent.user_id == user_id, ProbeEvent.concept_id == concept_id)
+                .order_by(ProbeEvent.ts.desc())
+                .limit(_RECENT_PROBE_LIMIT)
+            )
+        ).scalars()
+        return [
+            RecentProbeSignal(
+                probe_id=probe.id,
+                concept_id=probe.concept_id,
+                correct=probe.correct,
+                occurred_at=probe.ts,
+            )
+            for probe in probes
+        ]
+
+    async def _get_prerequisite_gap_signals(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        concept_id: uuid.UUID,
+    ) -> list[ConceptRelationSignal]:
+        item = FocusedConceptState(concept_id=concept_id, name="unused")
+        await self._attach_prerequisite_gaps(
+            user_id=user_id,
+            course_id=course_id,
+            concept_ids=[concept_id],
+            item_by_id={concept_id: item},
+        )
+        return item.prerequisite_gaps
+
+    async def _get_semantic_confusor_signals(
+        self,
+        *,
+        course_id: uuid.UUID,
+        concept_id: uuid.UUID,
+    ) -> list[ConceptRelationSignal]:
+        item = FocusedConceptState(concept_id=concept_id, name="unused")
+        await self._attach_confusors(
+            course_id=course_id,
+            concept_ids=[concept_id],
+            item_by_id={concept_id: item},
+        )
+        return item.confusors
+
+    async def _get_downstream_blocked_signals(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        concept_id: uuid.UUID,
+    ) -> list[ConceptRelationSignal]:
+        threshold = float(get_settings().ADAPTIVE_UNLOCK_MASTERY_THRESHOLD)
+        rows = (
+            await self._session.execute(
+                select(Concept, UserConceptState)
+                .select_from(ConceptPrerequisite)
+                .join(Concept, Concept.id == ConceptPrerequisite.concept_id)
+                .join(CourseConcept, and_(CourseConcept.course_id == course_id, CourseConcept.concept_id == Concept.id))
+                .outerjoin(
+                    UserConceptState,
+                    and_(UserConceptState.user_id == user_id, UserConceptState.concept_id == Concept.id),
+                )
+                .where(ConceptPrerequisite.prereq_id == concept_id)
+                .order_by(Concept.name.asc())
+                .limit(_RELATED_CONCEPT_LIMIT)
+            )
+        ).all()
+        blocked: list[ConceptRelationSignal] = []
+        for concept, state in rows:
+            mastery = float(state.s_mastery) if state is not None else None
+            if mastery is not None and mastery >= threshold:
+                continue
+            blocked.append(ConceptRelationSignal(concept_id=concept.id, name=concept.name, mastery=mastery))
+        return blocked
+
+    async def _count_verified_lesson_content_sources(
+        self,
+        *,
+        lesson: Lesson | None,
+        include_lesson_summary: bool,
+    ) -> int:
+        if lesson is None or lesson.current_version_id is None or not include_lesson_summary:
+            return 0
+        version = await self._session.scalar(
+            select(LessonVersion).where(
+                LessonVersion.id == lesson.current_version_id,
+                LessonVersion.lesson_id == lesson.id,
+            )
+        )
+        if version is None:
+            return 0
+        window_count = await self._session.scalar(
+            select(func.count(LessonVersionWindow.id)).where(LessonVersionWindow.lesson_version_id == version.id)
+        )
+        if window_count:
+            return int(window_count)
+        return 1 if isinstance(version.content, str) and version.content.strip() else 0
+
 
 def _map_frontier_rows(rows: Sequence[object]) -> list[FrontierConceptState]:
     mapped: list[FrontierConceptState] = []
@@ -1093,6 +1317,68 @@ def _is_due(next_review_at: datetime | None) -> bool:
     if next_review_at.tzinfo is None:
         next_review_at = next_review_at.replace(tzinfo=UTC)
     return next_review_at <= datetime.now(UTC)
+
+
+def _is_stale(timestamp: datetime | None) -> bool:
+    if timestamp is None:
+        return False
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=UTC)
+    age = datetime.now(UTC) - timestamp
+    return age.days >= _STALE_EVIDENCE_DAYS
+
+
+def _build_tutor_evidence(
+    *,
+    state: UserConceptState | None,
+    recent_probes: list[RecentProbeSignal],
+) -> TutorEvidenceSignals:
+    recent_probe_count = len(recent_probes)
+    recent_correct_count = sum(1 for probe in recent_probes if probe.correct)
+    exposures = state.exposures if state is not None else 0
+    mastery_evidence_count = exposures + recent_probe_count
+    last_probe_at = recent_probes[0].occurred_at if recent_probes else None
+    state_updated_at = state.last_seen_at if state is not None else None
+    latest_evidence_at = last_probe_at or state_updated_at
+    if last_probe_at is not None and state_updated_at is not None:
+        latest_evidence_at = max(last_probe_at, state_updated_at)
+    return TutorEvidenceSignals(
+        recent_probe_count=recent_probe_count,
+        recent_correct_count=recent_correct_count,
+        mastery_evidence_count=mastery_evidence_count,
+        last_probe_at=last_probe_at,
+        state_updated_at=state_updated_at,
+        has_sparse_evidence=mastery_evidence_count < 2,
+        has_stale_evidence=_is_stale(latest_evidence_at),
+    )
+
+
+def _build_tutor_candidate_causes(
+    *,
+    concept_id: uuid.UUID,
+    lesson_id: uuid.UUID | None,
+    recent_probes: list[RecentProbeSignal],
+    prerequisite_gaps: list[ConceptRelationSignal],
+    semantic_confusors: list[ConceptRelationSignal],
+) -> list[TutorCandidateCause]:
+    causes: list[TutorCandidateCause] = []
+    if lesson_id is not None:
+        causes.append(
+            TutorCandidateCause(rank=0, kind="current_concept", concept_id=concept_id, source="course_context")
+        )
+    if any(not probe.correct for probe in recent_probes):
+        causes.append(TutorCandidateCause(rank=0, kind="recent_miss", concept_id=concept_id, source="probe_event"))
+    causes.extend(
+        TutorCandidateCause(rank=0, kind="prerequisite_gap", concept_id=gap.concept_id, source="concept_graph")
+        for gap in prerequisite_gaps[:1]
+    )
+    causes.extend(
+        TutorCandidateCause(rank=0, kind="semantic_confusor", concept_id=confusor.concept_id, source="concept_similarity")
+        for confusor in semantic_confusors[:1]
+    )
+    for index, cause in enumerate(causes, start=1):
+        cause.rank = index
+    return causes
 
 
 def _learner_profile_from_state(state: UserConceptState | None) -> LearnerProfileSignals | None:

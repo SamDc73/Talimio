@@ -61,6 +61,13 @@ _CAPABILITIES: tuple[CapabilityDescriptor, ...] = (
         description="Return compact window-level content for one lesson.",
     ),
     CapabilityDescriptor(
+        name="get_concept_tutor_context",
+        kind="read",
+        requires_confirmation=False,
+        public_api_eligible=True,
+        description="Return adaptive concept tutor evidence and candidate causes.",
+    ),
+    CapabilityDescriptor(
         name="get_course_frontier",
         kind="read",
         requires_confirmation=False,

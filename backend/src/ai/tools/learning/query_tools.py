@@ -131,6 +131,21 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
             },
         ),
         (
+            "get_concept_tutor_context",
+            "Get adaptive tutor evidence, recent probes, and candidate causes for one concept.",
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "course_id": {"type": "string", "format": "uuid"},
+                    "concept_id": {"type": "string", "format": "uuid"},
+                    "include_recent_probes": {"type": "boolean"},
+                    "include_lesson_summary": {"type": "boolean"},
+                },
+                "required": ["course_id", "concept_id"],
+            },
+        ),
+        (
             "get_course_frontier",
             "Get adaptive frontier state for a course.",
             {

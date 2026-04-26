@@ -16,6 +16,8 @@ from src.learning_capabilities.schemas import (
     CreateCourseCapabilityInput,
     CreateCourseCapabilityOutput,
     ExtendLessonWithContextCapabilityInput,
+    GetConceptTutorContextCapabilityInput,
+    GetConceptTutorContextCapabilityOutput,
     GetCourseFrontierCapabilityInput,
     GetCourseFrontierCapabilityOutput,
     GetCourseOutlineStateCapabilityInput,
@@ -136,6 +138,15 @@ class LearningCapabilitiesFacade:
         """Execute `get_lesson_windows` capability."""
         return await self._query_service.get_lesson_windows(user_id=user_id, payload=payload)
 
+    async def get_concept_tutor_context(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: GetConceptTutorContextCapabilityInput,
+    ) -> GetConceptTutorContextCapabilityOutput:
+        """Execute `get_concept_tutor_context` capability."""
+        return await self._query_service.get_concept_tutor_context(user_id=user_id, payload=payload)
+
     async def get_course_frontier(
         self,
         *,
@@ -237,6 +248,11 @@ class LearningCapabilitiesFacade:
             result = await self.get_lesson_windows(
                 user_id=user_id,
                 payload=GetLessonWindowsCapabilityInput.model_validate(payload),
+            )
+        elif capability_name == "get_concept_tutor_context":
+            result = await self.get_concept_tutor_context(
+                user_id=user_id,
+                payload=GetConceptTutorContextCapabilityInput.model_validate(payload),
             )
         elif capability_name == "get_course_frontier":
             result = await self.get_course_frontier(

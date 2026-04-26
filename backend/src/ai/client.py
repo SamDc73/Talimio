@@ -121,6 +121,7 @@ _LEARNING_TOOL_NAMES = {
     "get_course_outline_state",
     "get_lesson_state",
     "get_lesson_windows",
+    "get_concept_tutor_context",
     "get_course_frontier",
     "create_course",
     "append_course_lesson",
@@ -144,6 +145,10 @@ _LEARNING_INTENT_KEYWORDS = (
     "course source",
     "lesson window",
     "concept focus",
+    "concept tutor",
+    "misconception",
+    "confused",
+    "stuck",
     "find lesson",
 )
 
