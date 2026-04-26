@@ -100,6 +100,21 @@ def build_learning_action_tools(
                 "required": ["course_id", "concept_id"],
             },
         ),
+        (
+            "submit_concept_probe_result",
+            "Submit an answer to the current active chat practice probe. Only use when the learner is clearly answering that probe.",
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "course_id": {"type": "string", "format": "uuid"},
+                    "active_probe_id": {"type": "string", "format": "uuid"},
+                    "learner_answer": {"type": "string"},
+                    "confirmed": {"type": "boolean"},
+                },
+                "required": ["course_id", "learner_answer"],
+            },
+        ),
     ]
 
     definitions: list[FunctionToolDefinition] = []
@@ -146,7 +161,7 @@ def _build_action_executor(
             },
         )
         payload = dict(arguments)
-        if tool_name == "generate_concept_probe" and thread_id is not None:
+        if tool_name in {"generate_concept_probe", "submit_concept_probe_result"} and thread_id is not None:
             payload["thread_id"] = str(thread_id)
         if tool_name in {"generate_concept_probe", "submit_concept_probe_result"} and lesson_id is not None:
             payload["lesson_id"] = str(lesson_id)
@@ -165,7 +180,10 @@ def _build_action_executor(
                 capability_name=tool_name,
                 payload=payload,
             )
-            if result.get("status") == "completed" or tool_name == "generate_concept_probe":
+            if result.get("status") == "completed" or tool_name in {
+                "generate_concept_probe",
+                "submit_concept_probe_result",
+            }:
                 await session.commit()
             else:
                 await session.rollback()

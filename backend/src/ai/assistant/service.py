@@ -350,12 +350,14 @@ async def _build_messages(
 ) -> list[dict[str, Any]]:
     """Build message list with capability-backed context packet injection."""
     learning_facade = LearningCapabilitiesFacade(session)
+    context_meta = dict(request.context_meta or {})
+    context_meta["thread_id"] = str(request.thread_id)
     context_bundle = await learning_facade.build_context_bundle(
         user_id=user_id,
         payload=BuildContextBundleCapabilityInput(
             context_type=request.context_type,
             context_id=request.context_id,
-            context_meta=request.context_meta or {},
+            context_meta=context_meta,
             latest_user_text=request.latest_user_text,
             selected_quote=None,
         ),
@@ -372,15 +374,109 @@ async def _build_messages(
         },
     )
 
+    chat_probe_result = await _maybe_submit_active_chat_probe(
+        learning_facade=learning_facade,
+        user_id=user_id,
+        request=request,
+        context_bundle=context_bundle,
+        session=session,
+    )
+
     messages: list[dict[str, Any]] = [{"role": "system", "content": ASSISTANT_CHAT_SYSTEM_PROMPT}]
     messages.extend(request.conversation_history)
 
     user_blocks = list(request.latest_user_blocks)
     context_packet = context_bundle.model_dump_json(by_alias=True, exclude_none=True)
     user_blocks.append({"type": "text", "text": f"\n\n[learning_context_packet]\n{context_packet}"})
+    if chat_probe_result is not None:
+        user_blocks.append(
+            {
+                "type": "text",
+                "text": f"\n\n[chat_probe_submission_result]\n{json.dumps(chat_probe_result, default=str)}",
+            }
+        )
 
     messages.append({"role": "user", "content": user_blocks})
     return messages
+
+
+async def _maybe_submit_active_chat_probe(
+    *,
+    learning_facade: LearningCapabilitiesFacade,
+    user_id: uuid.UUID,
+    request: NormalizedChatRequest,
+    context_bundle: Any,
+    session: AsyncSession,
+) -> dict[str, Any] | None:
+    active_probe = context_bundle.active_chat_probe
+    learner_answer = _extract_chat_probe_answer(request.latest_user_text)
+    if active_probe is None or learner_answer is None:
+        return None
+
+    result = await learning_facade.execute_action_capability(
+        user_id=user_id,
+        capability_name="submit_concept_probe_result",
+        payload={
+            "course_id": str(active_probe.course_id),
+            "active_probe_id": str(active_probe.active_probe_id),
+            "learner_answer": learner_answer,
+            "thread_id": str(request.thread_id),
+            "lesson_id": str(active_probe.lesson_id),
+        },
+    )
+    await session.commit()
+    if result.get("reason") is None:
+        context_bundle.active_chat_probe = None
+    return result
+
+
+def _extract_chat_probe_answer(latest_user_text: str) -> str | None:
+    text = latest_user_text.strip()
+    if not text:
+        return None
+
+    lowered = text.lower()
+    help_question_starters = ("can you", "could you", "what", "why", "how", "explain", "help", "give me", "show me")
+    explicit_submission_markers = ("submit my answer", "please grade", "please record")
+    if lowered.startswith(help_question_starters) and not any(marker in lowered for marker in explicit_submission_markers):
+        return None
+    strong_answer_markers = (
+        "my answer is",
+        "the answer is",
+        "answer is",
+        "here is my answer",
+        "submit my answer",
+        "please grade",
+        "please record",
+    )
+    if any(marker in lowered for marker in strong_answer_markers):
+        return text
+    has_answer_shape = any(character.isdigit() for character in text) or lowered in {"a", "b", "c", "d", "true", "false"}
+    weak_answer_markers = ("i got", "i think it is", "i think it's")
+    if has_answer_shape and "?" not in text and any(marker in lowered for marker in weak_answer_markers):
+        return text
+    non_answer_starters = (
+        "can you",
+        "could you",
+        "why",
+        "how",
+        "what",
+        "explain",
+        "help",
+        "give me",
+        "show me",
+        "hint",
+        "next",
+        "continue",
+        "yes",
+        "i don't know",
+        "i dont know",
+        "not sure",
+    )
+    is_short_answer = len(text) <= 200 and "?" not in text and not lowered.startswith(non_answer_starters)
+    if is_short_answer and has_answer_shape:
+        return text
+    return None
 
 
 def _build_probe_context(request: NormalizedChatRequest) -> str:

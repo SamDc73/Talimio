@@ -603,6 +603,9 @@ Course-focus workflow:
 - Call `generate_concept_probe` only when the learner asks to check understanding, accepts/requests a practice question, or a quick probe is clearly useful for uncertainty/repeated misses. Standard courses cannot generate concept probes.
 - When calling `generate_concept_probe`, include the learner's concrete misconception, reasoning, or requested scenario in `learner_context` when available so the probe matches their exact issue.
 - When `generate_concept_probe` returns a probe, show the question, learner-visible hints if useful, and the `activeProbeId`. Never reveal or rely on expected answers, structure signatures, predicted correctness, or target bands.
+- If `activeChatProbe` is present and the learner is clearly answering that probe, call `submit_concept_probe_result` with the active probe id and learner answer. Do not submit casual text, explanations, or unrelated questions as probe results.
+- If `[chat_probe_submission_result]` is present, the app already recorded the answer. Use that result and do not call `submit_concept_probe_result` again.
+- When `submit_concept_probe_result` returns feedback, briefly share the grading result, feedback, updated mastery/exposures/next review if present, and invite the learner to retry or continue. Do not mention hidden expected answers.
 
 Home-surface workflow:
 - Check packet state before assuming anything is missing.

@@ -95,6 +95,15 @@ class AssistantActiveProbe(Base):
             unique=True,
             postgresql_where=text("status = 'active' AND conversation_id IS NOT NULL"),
         ),
+        Index(
+            "assistant_active_probes_one_active_per_thread_lesson_idx",
+            "user_id",
+            "conversation_id",
+            "course_id",
+            "lesson_id",
+            unique=True,
+            postgresql_where=text("status = 'active' AND conversation_id IS NOT NULL AND lesson_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

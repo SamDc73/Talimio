@@ -3,6 +3,7 @@
 import logging
 import uuid
 from datetime import UTC, datetime
+from typing import cast
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -14,6 +15,16 @@ from src.ai.errors import AIRuntimeError
 from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
 from src.courses.facade import CoursesFacade
 from src.courses.models import Course, Lesson
+from src.courses.schemas import (
+    GradeAnswerPayload,
+    GradeContextPayload,
+    GradeExpectedPayload,
+    GradeRequest,
+    PracticeAnswerKind,
+)
+from src.courses.services.concept_scheduler_service import LectorSchedulerService
+from src.courses.services.concept_state_service import ConceptStateService
+from src.courses.services.grading_service import GradingService
 from src.courses.services.lesson_service import LessonService
 from src.courses.services.practice_drill_service import PracticeDrillService
 from src.learning_capabilities.errors import LearningCapabilitiesValidationError
@@ -29,6 +40,8 @@ from src.learning_capabilities.schemas import (
     GenerateConceptProbeCapabilityOutput,
     LessonMutationCapabilityOutput,
     RegenerateLessonWithContextCapabilityInput,
+    SubmitConceptProbeResultCapabilityInput,
+    SubmitConceptProbeResultCapabilityOutput,
     ToolUiConfirmation,
     ToolUiLink,
 )
@@ -246,7 +259,7 @@ class LearningCapabilityActionService:
         )
         return result
 
-    async def generate_concept_probe(  # noqa: PLR0911
+    async def generate_concept_probe(  # noqa: PLR0911, PLR0912
         self,
         *,
         user_id: uuid.UUID,
@@ -272,14 +285,37 @@ class LearningCapabilityActionService:
             course_id=course.id,
         )
 
-        existing_probe = await self._get_active_probe(
-            user_id=user_id,
-            conversation_id=conversation_id,
-            course_id=course.id,
-            concept_id=payload.concept_id,
-        )
-        if existing_probe is not None:
-            return _active_probe_output(course=course, course_mode=course_mode, active_probe=existing_probe)
+        if payload.lesson_id is not None:
+            lesson_matches_concept = await self._lesson_matches_concept(
+                course_id=course.id,
+                lesson_id=payload.lesson_id,
+                concept_id=payload.concept_id,
+            )
+            if not lesson_matches_concept:
+                return GenerateConceptProbeCapabilityOutput(
+                    course_id=course.id,
+                    course_mode=course_mode,
+                    concept_id=payload.concept_id,
+                    reason="concept_not_assigned_to_current_lesson",
+                )
+            existing_lesson_probe = await self._get_active_probe_for_lesson(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                course_id=course.id,
+                lesson_id=payload.lesson_id,
+                concept_id=payload.concept_id,
+            )
+            if existing_lesson_probe is not None:
+                return _active_probe_output(course=course, course_mode=course_mode, active_probe=existing_lesson_probe)
+        else:
+            existing_probe = await self._get_active_probe(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                course_id=course.id,
+                concept_id=payload.concept_id,
+            )
+            if existing_probe is not None:
+                return _active_probe_output(course=course, course_mode=course_mode, active_probe=existing_probe)
 
         service = PracticeDrillService(self._session)
         try:
@@ -311,6 +347,13 @@ class LearningCapabilityActionService:
                 concept_id=payload.concept_id,
                 reason="probe_generation_unavailable",
             )
+        if payload.lesson_id is not None and drill.lesson_id != payload.lesson_id:
+            return GenerateConceptProbeCapabilityOutput(
+                course_id=course.id,
+                course_mode=course_mode,
+                concept_id=payload.concept_id,
+                reason="concept_not_assigned_to_current_lesson",
+            )
 
         active_probe = AssistantActiveProbe(
             user_id=user_id,
@@ -335,14 +378,25 @@ class LearningCapabilityActionService:
             await self._session.flush()
         except IntegrityError:
             await self._session.rollback()
-            existing_probe = await self._get_active_probe(
-                user_id=user_id,
-                conversation_id=conversation_id,
-                course_id=course.id,
-                concept_id=payload.concept_id,
-            )
-            if existing_probe is not None:
-                return _active_probe_output(course=course, course_mode=course_mode, active_probe=existing_probe)
+            if payload.lesson_id is not None:
+                existing_lesson_probe = await self._get_active_probe_for_lesson(
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                    course_id=course.id,
+                    lesson_id=payload.lesson_id,
+                    concept_id=payload.concept_id,
+                )
+                if existing_lesson_probe is not None:
+                    return _active_probe_output(course=course, course_mode=course_mode, active_probe=existing_lesson_probe)
+            else:
+                existing_probe = await self._get_active_probe(
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                    course_id=course.id,
+                    concept_id=payload.concept_id,
+                )
+                if existing_probe is not None:
+                    return _active_probe_output(course=course, course_mode=course_mode, active_probe=existing_probe)
             logger.warning(
                 "learning_capability.generate_concept_probe.persist_failed",
                 extra={"user_id": str(user_id), "course_id": str(course.id), "concept_id": str(payload.concept_id)},
@@ -356,6 +410,151 @@ class LearningCapabilityActionService:
             )
 
         return _active_probe_output(course=course, course_mode=course_mode, active_probe=active_probe)
+
+    async def submit_concept_probe_result(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: SubmitConceptProbeResultCapabilityInput,
+    ) -> SubmitConceptProbeResultCapabilityOutput:
+        """Grade and record one answer to an active chat-generated probe."""
+        course = await self._authorization_service.require_owned_course(user_id=user_id, course_id=payload.course_id)
+        course_mode: CourseMode = "adaptive" if course.adaptive_enabled else "standard"
+        if not course.adaptive_enabled:
+            return SubmitConceptProbeResultCapabilityOutput(
+                course_id=course.id,
+                course_mode=course_mode,
+                active_probe_id=payload.active_probe_id,
+                reason="standard_course_has_no_concept_graph",
+            )
+
+        conversation_id = await self._resolve_owned_thread_id(
+            user_id=user_id,
+            thread_id=payload.thread_id,
+            course_id=course.id,
+        )
+        active_probe_query = select(AssistantActiveProbe).where(
+            AssistantActiveProbe.user_id == user_id,
+            AssistantActiveProbe.conversation_id == conversation_id,
+            AssistantActiveProbe.course_id == course.id,
+        )
+        if payload.active_probe_id is not None:
+            active_probe_query = active_probe_query.where(AssistantActiveProbe.id == payload.active_probe_id)
+        elif payload.lesson_id is not None:
+            active_probe_query = active_probe_query.where(
+                AssistantActiveProbe.lesson_id == payload.lesson_id,
+                AssistantActiveProbe.status == "active",
+            )
+        else:
+            return SubmitConceptProbeResultCapabilityOutput(
+                course_id=course.id,
+                course_mode=course_mode,
+                active_probe_id=None,
+                reason="active_probe_not_found",
+            )
+        if payload.lesson_id is not None:
+            active_probe_query = active_probe_query.where(AssistantActiveProbe.lesson_id == payload.lesson_id)
+        active_probe = await self._session.scalar(
+            active_probe_query.order_by(AssistantActiveProbe.created_at.desc()).limit(1).with_for_update()
+        )
+        if active_probe is None:
+            return SubmitConceptProbeResultCapabilityOutput(
+                course_id=course.id,
+                course_mode=course_mode,
+                active_probe_id=payload.active_probe_id,
+                reason="active_probe_not_found",
+            )
+        if active_probe.status != "active":
+            return SubmitConceptProbeResultCapabilityOutput(
+                course_id=course.id,
+                course_mode=course_mode,
+                active_probe_id=active_probe.id,
+                concept_id=active_probe.concept_id,
+                lesson_id=active_probe.lesson_id,
+                reason="active_probe_already_submitted",
+            )
+        grade = await GradingService(self._session).grade(
+            GradeRequest(
+                kind="practice_answer",
+                question=active_probe.question,
+                expected=GradeExpectedPayload(
+                    expected_answer=active_probe.expected_answer,
+                    answer_kind=cast("PracticeAnswerKind", active_probe.answer_kind),
+                    criteria=(
+                        "Grade the learner answer for the active chat practice probe. "
+                        "Do not reveal the expected answer or full solution in feedback."
+                    ),
+                ),
+                answer=GradeAnswerPayload(answer_text=payload.learner_answer),
+                context=GradeContextPayload(
+                    course_id=course.id,
+                    lesson_id=active_probe.lesson_id,
+                    concept_id=active_probe.concept_id,
+                    practice_context="quick_check",
+                ),
+            ),
+            user_id,
+        )
+        rating = 4 if grade.is_correct else 1
+        state_service = ConceptStateService(self._session)
+        scheduler_service = LectorSchedulerService(self._session)
+        updated_state = await state_service.update_mastery(
+            user_id=user_id,
+            concept_id=active_probe.concept_id,
+            correct=grade.is_correct,
+        )
+        await state_service.log_probe_event(
+            user_id=user_id,
+            concept_id=active_probe.concept_id,
+            rating=rating,
+            review_duration_ms=0,
+            correct=grade.is_correct,
+            context_tag="chat_probe",
+            extra={
+                "active_probe_id": str(active_probe.id),
+                "question": active_probe.question,
+                "structure_signature": active_probe.structure_signature,
+                "predicted_p_correct": active_probe.predicted_p_correct,
+                "target_probability": active_probe.target_probability,
+                "target_low": active_probe.target_low,
+                "target_high": active_probe.target_high,
+                "core_model": active_probe.core_model,
+                "answer_kind": active_probe.answer_kind,
+            },
+        )
+        next_review = await scheduler_service.calculate_next_review(
+            user_id=user_id,
+            course_id=course.id,
+            concept_id=active_probe.concept_id,
+            rating=rating,
+            duration_ms=0,
+        )
+        await scheduler_service.update_learner_profile(
+            user_id=user_id,
+            concept_id=active_probe.concept_id,
+            rating=rating,
+            duration_ms=0,
+        )
+
+        active_probe.status = "answered"
+        active_probe.answered_correct = grade.is_correct
+        active_probe.answer_attempts += 1
+        await self._session.flush()
+
+        return SubmitConceptProbeResultCapabilityOutput(
+            course_id=course.id,
+            course_mode=course_mode,
+            active_probe_id=active_probe.id,
+            concept_id=active_probe.concept_id,
+            lesson_id=active_probe.lesson_id,
+            is_correct=grade.is_correct,
+            status=grade.status,
+            feedback_markdown=_build_safe_chat_probe_feedback(is_correct=grade.is_correct),
+            mastery=updated_state.s_mastery,
+            exposures=updated_state.exposures,
+            next_review_at=next_review,
+            tags=[],
+        )
 
     async def _resolve_owned_thread_id(
         self,
@@ -403,6 +602,47 @@ class LearningCapabilityActionService:
             .order_by(AssistantActiveProbe.created_at.desc())
             .limit(1)
         )
+
+    async def _get_active_probe_for_lesson(
+        self,
+        *,
+        user_id: uuid.UUID,
+        conversation_id: uuid.UUID | None,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+        concept_id: uuid.UUID,
+    ) -> AssistantActiveProbe | None:
+        if conversation_id is None:
+            return None
+        return await self._session.scalar(
+            select(AssistantActiveProbe)
+            .where(
+                AssistantActiveProbe.user_id == user_id,
+                AssistantActiveProbe.conversation_id == conversation_id,
+                AssistantActiveProbe.course_id == course_id,
+                AssistantActiveProbe.lesson_id == lesson_id,
+                AssistantActiveProbe.concept_id == concept_id,
+                AssistantActiveProbe.status == "active",
+            )
+            .order_by(AssistantActiveProbe.created_at.desc())
+            .limit(1)
+        )
+
+    async def _lesson_matches_concept(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+        concept_id: uuid.UUID,
+    ) -> bool:
+        lesson_exists = await self._session.scalar(
+            select(Lesson.id).where(
+                Lesson.id == lesson_id,
+                Lesson.course_id == course_id,
+                Lesson.concept_id == concept_id,
+            )
+        )
+        return lesson_exists is not None
 
     async def _resolve_next_lesson_order(self, *, course_id: uuid.UUID) -> int:
         max_order = await self._session.scalar(
@@ -539,6 +779,12 @@ def _active_probe_output(
         active_probe_id=active_probe.id,
         probe=probe,
     )
+
+
+def _build_safe_chat_probe_feedback(*, is_correct: bool) -> str:
+    if is_correct:
+        return "Your answer was graded correct. The detailed answer is kept hidden so you can keep practicing."
+    return "Your answer needs revision. The detailed answer is kept hidden so you can try again."
 
 
 def _build_create_confirmation() -> CreateCourseCapabilityOutput:

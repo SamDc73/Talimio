@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import and_, case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai.assistant.models import AssistantActiveProbe
 from src.ai.rag.embeddings import VectorRAG
 from src.ai.rag.exceptions import RagUnavailableError
 from src.ai.rag.service import RAGService
@@ -31,6 +32,7 @@ from src.courses.services.course_progress_service import CourseProgressService
 from src.courses.services.course_query_service import CourseQueryService
 from src.courses.services.lesson_service import LessonService
 from src.learning_capabilities.schemas import (
+    ActiveChatProbe,
     ActiveProbeSuggestion,
     AdaptiveCatalogEntry,
     ConceptFocus,
@@ -324,6 +326,42 @@ class LearningCapabilityQueryService:
             learner_expressed_uncertainty=learner_expressed_uncertainty,
             learner_shared_reasoning=learner_shared_reasoning,
             repeated_recent_misses=repeated_recent_misses,
+        )
+
+    async def get_active_chat_probe(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        thread_id: uuid.UUID | None,
+        lesson_id: uuid.UUID | None = None,
+    ) -> ActiveChatProbe | None:
+        """Return the learner-visible active probe for the current assistant thread."""
+        if thread_id is None or lesson_id is None:
+            return None
+        filters = [
+            AssistantActiveProbe.user_id == user_id,
+            AssistantActiveProbe.conversation_id == thread_id,
+            AssistantActiveProbe.course_id == course_id,
+            AssistantActiveProbe.status == "active",
+            AssistantActiveProbe.lesson_id == lesson_id,
+        ]
+        active_probe = await self._session.scalar(
+            select(AssistantActiveProbe)
+            .where(*filters)
+            .order_by(AssistantActiveProbe.created_at.desc())
+            .limit(1)
+        )
+        if active_probe is None:
+            return None
+        return ActiveChatProbe(
+            active_probe_id=active_probe.id,
+            course_id=active_probe.course_id,
+            concept_id=active_probe.concept_id,
+            lesson_id=active_probe.lesson_id,
+            question=active_probe.question,
+            answer_kind=active_probe.answer_kind,
+            hints=list(active_probe.hints),
         )
 
     async def list_relevant_courses(

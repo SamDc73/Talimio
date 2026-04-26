@@ -40,6 +40,8 @@ from src.learning_capabilities.schemas import (
     SearchCourseSourcesCapabilityOutput,
     SearchLessonsCapabilityInput,
     SearchLessonsCapabilityOutput,
+    SubmitConceptProbeResultCapabilityInput,
+    SubmitConceptProbeResultCapabilityOutput,
 )
 from src.learning_capabilities.services.action_service import LearningCapabilityActionService
 from src.learning_capabilities.services.authorization_service import LearningCapabilityAuthorizationService
@@ -212,6 +214,15 @@ class LearningCapabilitiesFacade:  # noqa: PLR0904
         """Execute `generate_concept_probe` capability."""
         return await self._action_service.generate_concept_probe(user_id=user_id, payload=payload)
 
+    async def submit_concept_probe_result(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: SubmitConceptProbeResultCapabilityInput,
+    ) -> SubmitConceptProbeResultCapabilityOutput:
+        """Execute `submit_concept_probe_result` capability."""
+        return await self._action_service.submit_concept_probe_result(user_id=user_id, payload=payload)
+
     async def execute_read_capability(
         self,
         *,
@@ -312,6 +323,11 @@ class LearningCapabilitiesFacade:  # noqa: PLR0904
             result = await self.generate_concept_probe(
                 user_id=user_id,
                 payload=GenerateConceptProbeCapabilityInput.model_validate(payload),
+            )
+        elif capability_name == "submit_concept_probe_result":
+            result = await self.submit_concept_probe_result(
+                user_id=user_id,
+                payload=SubmitConceptProbeResultCapabilityInput.model_validate(payload),
             )
         else:
             detail = f"Unknown action capability '{capability_name}'"

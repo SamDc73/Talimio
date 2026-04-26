@@ -440,6 +440,7 @@ class GenerateConceptProbeCapabilityInput(BaseModel):
     practice_context: Literal["chat"] = "chat"
     learner_context: str | None = Field(default=None, max_length=2000)
     thread_id: uuid.UUID | None = None
+    lesson_id: uuid.UUID | None = None
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
@@ -542,6 +543,20 @@ class ChatConceptProbe(BaseModel):
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
+class ActiveChatProbe(BaseModel):
+    """Assistant-visible active probe awaiting a learner answer."""
+
+    active_probe_id: uuid.UUID
+    course_id: uuid.UUID
+    concept_id: uuid.UUID
+    lesson_id: uuid.UUID
+    question: str
+    answer_kind: str
+    hints: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
 class GenerateConceptProbeCapabilityOutput(BaseModel):
     """Output payload for chat concept probe generation."""
 
@@ -550,6 +565,39 @@ class GenerateConceptProbeCapabilityOutput(BaseModel):
     concept_id: uuid.UUID
     active_probe_id: uuid.UUID | None = None
     probe: ChatConceptProbe | None = None
+    reason: str | None = None
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class SubmitConceptProbeResultCapabilityInput(BaseModel):
+    """Input payload for submitting a chat-generated probe answer."""
+
+    course_id: uuid.UUID
+    active_probe_id: uuid.UUID | None = None
+    learner_answer: str
+    confirmed: bool = False
+    thread_id: uuid.UUID | None = None
+    lesson_id: uuid.UUID | None = None
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class SubmitConceptProbeResultCapabilityOutput(BaseModel):
+    """Output payload after grading and recording a chat probe answer."""
+
+    course_id: uuid.UUID
+    course_mode: CourseMode
+    active_probe_id: uuid.UUID | None = None
+    concept_id: uuid.UUID | None = None
+    lesson_id: uuid.UUID | None = None
+    is_correct: bool | None = None
+    status: str | None = None
+    feedback_markdown: str | None = None
+    mastery: float | None = None
+    exposures: int = 0
+    next_review_at: datetime | None = None
+    tags: list[str] = Field(default_factory=list)
     reason: str | None = None
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
@@ -667,6 +715,7 @@ class BuildContextBundleCapabilityOutput(BaseModel):
     lesson_focus: LessonFocus | None = None
     source_focus: SourceFocus | None = None
     active_probe_suggestion: ActiveProbeSuggestion | None = None
+    active_chat_probe: ActiveChatProbe | None = None
     course_outline: CourseOutlineState | None = None
     lesson_state: LessonState | None = None
     frontier_state: CourseFrontierState | None = None
