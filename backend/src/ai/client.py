@@ -61,6 +61,7 @@ configure_litellm()
 
 
 T = TypeVar("T", bound=BaseModel)
+StreamChunk = str | dict[str, Any]
 
 _MAX_AUTONOMY_ROUNDS = 8
 _MAX_STRUCTURED_GENERATION_ATTEMPTS = 2
@@ -1132,10 +1133,11 @@ class LLMClient:
         tool_targets: dict[str, ToolTarget],
         mcp_config: MCPConfig | None,
         metadata: dict[str, Any] | None,
-    ) -> AsyncGenerator[str]:
+    ) -> AsyncGenerator[StreamChunk]:
         """Stream an unstructured chat completion, optionally executing tool calls.
 
-        Yields plain text deltas (not SSE). The caller owns transport formatting.
+        Yields plain text deltas or UI message stream tool events. The caller owns
+        transport formatting.
         """
         conversation = list(messages)
         full_text: list[str] = []
@@ -1189,6 +1191,9 @@ class LLMClient:
                 if tool_calls:
                     normalized_tool_calls = self._normalize_chat_tool_calls(tool_calls)
                     used_tool_names_in_turn.update(call.name for call in normalized_tool_calls)
+                    for call in normalized_tool_calls:
+                        for event in self._build_tool_call_stream_events(call):
+                            yield event
                     executed_calls = await self._append_tool_calls(
                         conversation,
                         assistant_content=assistant_content,
@@ -1197,6 +1202,8 @@ class LLMClient:
                         tool_targets=available_tool_targets,
                         mcp_config=mcp_config,
                     )
+                    for executed_call in executed_calls:
+                        yield self._build_tool_result_stream_event(executed_call)
                     newly_disabled = self._record_tool_failures(
                         executed_calls=executed_calls,
                         tool_failure_counts=tool_failure_counts,
@@ -1227,6 +1234,30 @@ class LLMClient:
 
         # Save conversation to memory (non-blocking). Keep this best-effort.
         self._schedule_memory_save(user_id, conversation, "".join(full_text))
+
+    def _build_tool_call_stream_events(self, call: PlannedToolCall) -> list[dict[str, Any]]:
+        return [
+            {
+                "type": "tool-call-start",
+                "toolCallId": call.call_id,
+                "toolName": call.name,
+            },
+            {
+                "type": "tool-call-end",
+                "toolCallId": call.call_id,
+            },
+        ]
+
+    def _build_tool_result_stream_event(self, executed_call: ExecutedToolCall) -> dict[str, Any]:
+        result: dict[str, str] = {}
+        if executed_call.failed:
+            result["message"] = "Tool failed. The assistant will try to recover."
+        return {
+            "type": "tool-result",
+            "toolCallId": executed_call.call_id,
+            "result": result,
+            "isError": executed_call.failed,
+        }
 
     def _rebuild_stream_message(self, chunks: list[Any], conversation: list[dict[str, Any]]) -> Any | None:
         try:

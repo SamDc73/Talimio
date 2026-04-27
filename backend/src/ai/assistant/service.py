@@ -52,6 +52,15 @@ def _sse_event(payload: dict[str, Any] | str) -> str:
     return f"data: {encoded}\n\n"
 
 
+def _stream_chunk_to_sse_payload(chunk: Any) -> tuple[dict[str, Any] | None, str | None]:
+    if not chunk:
+        return None, None
+    if isinstance(chunk, dict):
+        return chunk, None
+    delta = str(chunk)
+    return {"type": "text-delta", "textDelta": delta}, delta
+
+
 def _extract_message_text(content: Any) -> str:
     """Extract plain text from AI SDK-style message content parts."""
     if isinstance(content, str):
@@ -269,11 +278,12 @@ async def assistant_chat(
 
         saw_any_content = False
 
-        async for delta in stream:
-            if not delta:
+        async for chunk in stream:
+            payload, delta = _stream_chunk_to_sse_payload(chunk)
+            if payload is None:
                 continue
-            saw_any_content = True
-            yield _sse_event({"type": "text-delta", "textDelta": delta})
+            saw_any_content = saw_any_content or delta is not None
+            yield _sse_event(payload)
 
         if not saw_any_content:
             logger.warning("Assistant returned empty streamed response for user %s", user_id)
