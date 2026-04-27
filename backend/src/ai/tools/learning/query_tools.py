@@ -46,7 +46,7 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
         ),
         (
             "search_concepts",
-            "Search concepts inside one adaptive course, including raw match and learner-state signals.",
+            "Search concepts inside one adaptive course when the learner changes topics, concept matches are weak, or adaptive concept evidence is needed. Do not guess course_id; use server-provided state/history or ask a natural clarification.",
             {
                 "type": "object",
                 "additionalProperties": False,
@@ -61,7 +61,7 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
         ),
         (
             "search_course_sources",
-            "Search uploaded course source excerpts inside one owned course.",
+            "Retrieve uploaded course source excerpts for one owned course. Use this before answering source/reference/document questions because routing packets only expose source metadata. Do not guess course_id; use server-provided state/history or ask a natural clarification.",
             {
                 "type": "object",
                 "additionalProperties": False,
@@ -117,7 +117,7 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
         ),
         (
             "get_lesson_windows",
-            "Get compact window-level content for one lesson.",
+            "Retrieve lesson window content for the current or specified lesson. Use this before answering lesson-detail, step-by-step, or 'this part' questions because routing packets only expose lesson metadata. Do not guess course_id or lesson_id; use server-provided state/history or ask a natural clarification.",
             {
                 "type": "object",
                 "additionalProperties": False,

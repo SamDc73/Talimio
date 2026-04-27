@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
+import litellm
 from sqlalchemy import and_, case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -83,6 +84,29 @@ from src.learning_capabilities.schemas import (
 
 
 logger = logging.getLogger(__name__)
+
+_CONCEPT_EMBEDDING_FALLBACK_ERROR_TYPES = (
+    RuntimeError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    litellm.APIError,
+    litellm.APIConnectionError,
+    litellm.AuthenticationError,
+    litellm.BadGatewayError,
+    litellm.BadRequestError,
+    litellm.BudgetExceededError,
+    litellm.ContentPolicyViolationError,
+    litellm.ContextWindowExceededError,
+    litellm.InternalServerError,
+    litellm.InvalidRequestError,
+    litellm.NotFoundError,
+    litellm.RouterRateLimitError,
+    litellm.ServiceUnavailableError,
+    litellm.Timeout,
+    litellm.UnprocessableEntityError,
+    litellm.UnsupportedParamsError,
+)
 
 _AUTO_CONCEPT_CANDIDATE_LIMIT = 3
 _AUTO_SOURCE_FOCUS_LIMIT = 2
@@ -907,7 +931,12 @@ class LearningCapabilityQueryService:
     ) -> list[ConceptMatch]:
         try:
             query_embedding = await VectorRAG().generate_embedding(query_text)
-        except (RuntimeError, TimeoutError, TypeError, ValueError):
+        except _CONCEPT_EMBEDDING_FALLBACK_ERROR_TYPES:
+            logger.warning(
+                "learning_capability.concept_embedding.unavailable",
+                extra={"user_id": str(user_id), "course_id": str(course_id)},
+                exc_info=True,
+            )
             return []
 
         rows = (

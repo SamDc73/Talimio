@@ -29,6 +29,7 @@ ASSISTANT_MAX_USER_MESSAGE_LENGTH = 8_000
 ASSISTANT_MAX_HISTORY_MESSAGES = 40
 ASSISTANT_REQUIRE_THREAD_ID = True
 ASSISTANT_PUBLIC_ERROR_TEXT = "Sorry, I'm having trouble responding right now. Please try again."
+RETRIEVAL_TRIGGER_THRESHOLD = 0.35
 
 
 class NormalizedChatRequest(BaseModel):
@@ -224,6 +225,191 @@ def _extract_latest_user_history_item(request: ChatRequest) -> tuple[dict[str, A
     return _build_thread_message_payload(request.messages[last_user_index]), parent_id
 
 
+def _model_dump_jsonable(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if hasattr(value, "model_dump"):
+        dumped = value.model_dump(by_alias=True, exclude_none=True, mode="json")
+        return dumped if isinstance(dumped, dict) else {}
+    return {}
+
+
+def _add_course_routing_state(packet: dict[str, Any], context_bundle: Any) -> None:
+    if context_bundle.course_state is not None:
+        course_state = _model_dump_jsonable(context_bundle.course_state)
+        packet["courseState"] = {
+            "courseId": course_state.get("courseId"),
+            "title": course_state.get("title"),
+            "adaptiveEnabled": course_state.get("adaptiveEnabled"),
+            "completionPercentage": course_state.get("completionPercentage"),
+            "totalLessons": course_state.get("totalLessons"),
+            "currentLessonId": course_state.get("currentLessonId"),
+        }
+
+    if context_bundle.relevant_courses:
+        packet["relevantCourses"] = [
+            {
+                "courseId": str(course.id),
+                "title": course.title,
+                "adaptiveEnabled": course.adaptive_enabled,
+                "completionPercentage": course.completion_percentage,
+            }
+            for course in context_bundle.relevant_courses
+        ]
+    if context_bundle.course_catalog is not None:
+        packet["courseCatalog"] = [
+            {
+                "courseId": str(course.course_id),
+                "title": course.title,
+                "adaptiveEnabled": course.adaptive_enabled,
+            }
+            for course in context_bundle.course_catalog
+        ]
+    if context_bundle.adaptive_catalog is not None:
+        packet["adaptiveCatalog"] = [
+            {
+                "courseId": str(course.course_id),
+                "title": course.title,
+                "completionPercentage": course.completion_percentage,
+                "currentLessonId": str(course.current_lesson_id) if course.current_lesson_id is not None else None,
+                "currentLessonTitle": course.current_lesson_title,
+                "dueCount": course.due_count,
+                "avgMastery": course.avg_mastery,
+            }
+            for course in context_bundle.adaptive_catalog
+        ]
+
+    if context_bundle.course_outline is not None:
+        outline = _model_dump_jsonable(context_bundle.course_outline)
+        lessons = outline.get("lessons") or []
+        packet["courseOutline"] = {
+            "courseId": outline.get("courseId"),
+            "lessonCount": len(lessons),
+            "currentLessonIds": [lesson.get("lessonId") for lesson in lessons if lesson.get("isCurrent")],
+            "lessonsWithContentCount": sum(1 for lesson in lessons if lesson.get("hasContent")),
+        }
+
+
+def _build_concept_routing_state(concept_focus: Any) -> dict[str, Any]:
+    concept = _model_dump_jsonable(concept_focus)
+    semantic_candidates = concept.get("semanticCandidates") or []
+    top_candidate = semantic_candidates[0] if semantic_candidates else None
+    top_match_score = top_candidate.get("matchScore") if isinstance(top_candidate, dict) else None
+    weak_match = isinstance(top_match_score, (int, float)) and top_match_score < RETRIEVAL_TRIGGER_THRESHOLD
+    concept_packet: dict[str, Any] = {
+        "hasCurrentLessonConcept": concept.get("currentLessonConcept") is not None,
+        "semanticCandidateCount": len(semantic_candidates),
+        "topSemanticMatchScore": top_match_score,
+        "weakSemanticMatch": weak_match,
+    }
+    current = concept.get("currentLessonConcept")
+    if isinstance(current, dict):
+        concept_packet["currentLessonConcept"] = {
+            "conceptId": current.get("conceptId"),
+            "name": current.get("name"),
+            "lessonId": current.get("lessonId"),
+            "lessonTitle": current.get("lessonTitle"),
+            "mastery": current.get("mastery"),
+            "exposures": current.get("exposures"),
+            "due": current.get("due"),
+            "confusorCount": len(current.get("confusors") or []),
+            "prerequisiteGapCount": len(current.get("prerequisiteGaps") or []),
+        }
+    if isinstance(top_candidate, dict) and not weak_match:
+        concept_packet["topSemanticCandidate"] = {
+            "conceptId": top_candidate.get("conceptId"),
+            "name": top_candidate.get("name"),
+            "lessonId": top_candidate.get("lessonId"),
+            "lessonTitle": top_candidate.get("lessonTitle"),
+            "matchScore": top_candidate.get("matchScore"),
+            "matchSource": top_candidate.get("matchSource"),
+            "mastery": top_candidate.get("mastery"),
+            "exposures": top_candidate.get("exposures"),
+        }
+    return concept_packet
+
+
+def _add_focus_routing_state(packet: dict[str, Any], context_bundle: Any) -> None:
+    if context_bundle.learner_profile is not None:
+        packet["learnerProfile"] = _model_dump_jsonable(context_bundle.learner_profile)
+
+    if context_bundle.lesson_focus is not None:
+        lesson_focus = _model_dump_jsonable(context_bundle.lesson_focus)
+        packet["lessonFocus"] = {
+            "lessonId": lesson_focus.get("lessonId"),
+            "title": lesson_focus.get("title"),
+            "description": lesson_focus.get("description"),
+            "hasLessonContent": bool(lesson_focus.get("hasContent")),
+            "hasWindowPreview": bool(lesson_focus.get("windowPreview")),
+        }
+        packet["hasLessonContent"] = bool(lesson_focus.get("hasContent"))
+
+    if context_bundle.concept_focus is not None:
+        packet["conceptFocus"] = _build_concept_routing_state(context_bundle.concept_focus)
+
+
+def _add_source_routing_state(packet: dict[str, Any], context_bundle: Any) -> None:
+    if context_bundle.source_focus is None:
+        return
+
+    packet["sourceFocus"] = {
+        "courseId": str(context_bundle.source_focus.course_id),
+        "items": [
+            {
+                "title": item.title,
+                "sourceType": item.source_type,
+                "documentId": item.document_id,
+                "chunkIndex": item.chunk_index,
+                "totalChunks": item.total_chunks,
+                "relevanceScore": item.similarity,
+                "hasExcerpt": bool(item.excerpt.strip()),
+            }
+            for item in context_bundle.source_focus.items
+        ],
+    }
+
+
+def _add_probe_routing_state(packet: dict[str, Any], context_bundle: Any) -> None:
+    if context_bundle.active_probe_suggestion is not None:
+        packet["activeProbeSuggestion"] = _model_dump_jsonable(context_bundle.active_probe_suggestion)
+    if context_bundle.active_chat_probe is not None:
+        active_probe = _model_dump_jsonable(context_bundle.active_chat_probe)
+        packet["activeChatProbe"] = {
+            "activeProbeId": active_probe.get("activeProbeId"),
+            "courseId": active_probe.get("courseId"),
+            "conceptId": active_probe.get("conceptId"),
+            "lessonId": active_probe.get("lessonId"),
+            "question": active_probe.get("question"),
+            "answerKind": active_probe.get("answerKind"),
+            "hints": active_probe.get("hints", []),
+        }
+
+
+def _build_learning_routing_packet(context_bundle: Any) -> dict[str, Any]:
+    """Return metadata for tool routing without embedding answer evidence."""
+    packet: dict[str, Any] = {
+        "contextType": context_bundle.context_type,
+        "contextId": str(context_bundle.context_id) if context_bundle.context_id is not None else None,
+        "courseMode": context_bundle.course_mode,
+        "routingPolicy": {
+            "retrievalTriggerThreshold": RETRIEVAL_TRIGGER_THRESHOLD,
+            "answerEvidenceInjected": False,
+        },
+        "selectedQuotePresent": context_bundle.selected_quote is not None,
+        "hasLessonContent": False,
+        "hasSourceFocus": context_bundle.source_focus is not None and bool(context_bundle.source_focus.items),
+        "hasFrontier": context_bundle.frontier_state is not None,
+        "hasActiveProbe": context_bundle.active_chat_probe is not None,
+    }
+
+    _add_course_routing_state(packet, context_bundle)
+    _add_focus_routing_state(packet, context_bundle)
+    _add_source_routing_state(packet, context_bundle)
+    _add_probe_routing_state(packet, context_bundle)
+
+    return {key: value for key, value in packet.items() if value is not None}
+
+
 async def _persist_completed_assistant_message(
     *,
     session: AsyncSession,
@@ -343,7 +529,7 @@ async def assistant_chat(
         # Run completion through shared LLM client so memories and MCP tools are available
         llm_client = LLMClient(agent_id=AGENT_ID_ASSISTANT)
         context_meta = normalized_request.context_meta or {}
-        metadata = {
+        metadata: dict[str, Any] = {
             "assistant_thread_id": str(normalized_request.thread_id),
             "assistant_lesson_id": str(context_meta.get("lesson_id", "")),
             "assistant_probe_context": _build_probe_context(normalized_request),
@@ -467,8 +653,8 @@ async def _build_messages(
     messages.extend(request.conversation_history)
 
     user_blocks = list(request.latest_user_blocks)
-    context_packet = context_bundle.model_dump_json(by_alias=True, exclude_none=True)
-    user_blocks.append({"type": "text", "text": f"\n\n[learning_context_packet]\n{context_packet}"})
+    context_packet = _build_learning_routing_packet(context_bundle)
+    user_blocks.append({"type": "text", "text": f"\n\n[learning_context_packet]\n{json.dumps(context_packet, default=str)}"})
     if probe_submitted:
         user_blocks.append(
             {
