@@ -124,15 +124,16 @@ class CourseContentService:
         await session.flush()
         await session.refresh(course)
         course_id = course.id
+        await session.commit()
 
-        # We need to spawn the task.
-        def spawn_bg() -> None:
+        async def start_generation() -> None:  # noqa: RUF029
+            # Starlette runs sync BackgroundTasks in a worker thread; this must stay async to use the server loop.
             _spawn_detached_task(self._generate_course_background(course_id, data, user_id, attachments))
 
         if background_tasks is not None:
-            background_tasks.add_task(spawn_bg)
+            background_tasks.add_task(start_generation)
         else:
-            spawn_bg()
+            await start_generation()
 
         return course
 
