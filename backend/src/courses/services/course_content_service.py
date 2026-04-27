@@ -126,14 +126,17 @@ class CourseContentService:
         course_id = course.id
         await session.commit()
 
-        async def start_generation() -> None:  # noqa: RUF029
-            # Starlette runs sync BackgroundTasks in a worker thread; this must stay async to use the server loop.
-            _spawn_detached_task(self._generate_course_background(course_id, data, user_id, attachments))
-
         if background_tasks is not None:
-            background_tasks.add_task(start_generation)
+            background_tasks.add_task(
+                self._generate_course_background,
+                course_id,
+                dict(data),
+                user_id,
+                attachments,
+            )
         else:
-            await start_generation()
+            await self._generate_course_background(course_id, dict(data), user_id, attachments, raise_errors=True)
+            await session.refresh(course)
 
         return course
 
@@ -143,6 +146,8 @@ class CourseContentService:
         data: dict[str, Any],
         user_id: uuid.UUID,
         attachments: list[UploadFile] | None = None,
+        *,
+        raise_errors: bool = False,
     ) -> None:
         async with async_session_maker() as session:
             try:
@@ -227,6 +232,8 @@ class CourseContentService:
                 await session.commit()
             except Exception:
                 logger.exception("Failed to generate course in background", extra={"course_id": str(course_id)})
+                if raise_errors:
+                    raise
 
     def _build_draft_course(
         self,
