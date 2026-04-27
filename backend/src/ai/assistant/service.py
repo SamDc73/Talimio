@@ -224,6 +224,85 @@ def _extract_latest_user_history_item(request: ChatRequest) -> tuple[dict[str, A
     return _build_thread_message_payload(request.messages[last_user_index]), parent_id
 
 
+async def _persist_completed_assistant_message(
+    *,
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    message_id: str,
+    parent_id: str,
+    text: str,
+    run_config: dict[str, Any] | None,
+) -> None:
+    normalized_text = text.strip()
+    if not normalized_text:
+        return
+
+    assistant_message = {
+        "id": message_id,
+        "role": "assistant",
+        "createdAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "content": [{"type": "text", "text": normalized_text}],
+    }
+    await conversations_service.append_assistant_conversation_history_item(
+        session=session,
+        user_id=user_id,
+        conversation_id=conversation_id,
+        message=assistant_message,
+        parent_id=parent_id,
+        run_config=run_config,
+    )
+
+
+async def _stream_completion_and_persist_history(
+    *,
+    stream: AsyncGenerator[Any],
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    message_id: str,
+    parent_id: str | None,
+    run_config: dict[str, Any] | None,
+) -> AsyncGenerator[str]:
+    assistant_text_parts: list[str] = []
+    saw_any_content = False
+
+    async for chunk in stream:
+        payload, delta = _stream_chunk_to_sse_payload(chunk)
+        if payload is None:
+            continue
+        saw_any_content = saw_any_content or delta is not None
+        if delta is not None:
+            assistant_text_parts.append(delta)
+        yield _sse_event(payload)
+
+    if not saw_any_content:
+        logger.warning("Assistant returned empty streamed response for user %s", user_id)
+        fallback_content = "I couldn't retrieve results right now. Please try again."
+        assistant_text_parts.append(fallback_content)
+        yield _sse_event({"type": "text-delta", "textDelta": fallback_content})
+
+    if parent_id is not None:
+        await _persist_completed_assistant_message(
+            session=session,
+            user_id=user_id,
+            conversation_id=conversation_id,
+            message_id=message_id,
+            parent_id=parent_id,
+            text="".join(assistant_text_parts),
+            run_config=run_config,
+        )
+
+    yield _sse_event(
+        {
+            "type": "finish",
+            "finishReason": "stop",
+            "usage": {"promptTokens": 0, "completionTokens": 0},
+        }
+    )
+    yield _sse_event("[DONE]")
+
+
 async def assistant_chat(
     request: ChatRequest,
     user_id: uuid.UUID,
@@ -276,28 +355,16 @@ async def assistant_chat(
             },
         )
 
-        saw_any_content = False
-
-        async for chunk in stream:
-            payload, delta = _stream_chunk_to_sse_payload(chunk)
-            if payload is None:
-                continue
-            saw_any_content = saw_any_content or delta is not None
-            yield _sse_event(payload)
-
-        if not saw_any_content:
-            logger.warning("Assistant returned empty streamed response for user %s", user_id)
-            fallback_content = "I couldn't retrieve results right now. Please try again."
-            yield _sse_event({"type": "text-delta", "textDelta": fallback_content})
-
-        yield _sse_event(
-            {
-                "type": "finish",
-                "finishReason": "stop",
-                "usage": {"promptTokens": 0, "completionTokens": 0},
-            }
-        )
-        yield _sse_event("[DONE]")
+        async for event in _stream_completion_and_persist_history(
+            stream=stream,
+            session=session,
+            user_id=user_id,
+            conversation_id=normalized_request.thread_id,
+            message_id=message_id,
+            parent_id=latest_user_message_id,
+            run_config=request.run_config,
+        ):
+            yield event
 
     except (ValueError, DomainError) as error:
         logger.warning("Chat validation failed for user %s: %s", user_id, error)
