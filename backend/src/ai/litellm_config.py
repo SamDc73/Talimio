@@ -2,12 +2,55 @@
 
 import logging
 import os
+from datetime import datetime
 from typing import Any, cast
 
 import litellm
+import structlog
+from litellm.integrations.custom_logger import CustomLogger
 
 
 _LITELLM_CONFIGURED = False
+_LLM_COMPLETION_CALL_TYPES = {
+    "completion",
+    "acompletion",
+    "responses",
+    "aresponses",
+    "text_completion",
+    "atext_completion",
+    "generate_content",
+    "agenerate_content",
+    "generate_content_stream",
+    "agenerate_content_stream",
+}
+logger = structlog.get_logger(__name__)
+
+
+class _LLMCompletionLogger(CustomLogger):
+    def log_success_event(self, kwargs: dict[str, Any], response_obj: Any, start_time: Any, end_time: Any) -> None:
+        call_type = _get_call_type(kwargs)
+        if call_type is not None and call_type not in _LLM_COMPLETION_CALL_TYPES:
+            return
+
+        duration_ms = _calculate_duration_ms(start_time, end_time)
+        logger.info(
+            "ai.llm.completed",
+            event_name="ai.llm.completed",
+            model=_get_model_name(kwargs, response_obj),
+            duration_ms=duration_ms,
+        )
+
+    async def async_log_success_event(
+        self,
+        kwargs: dict[str, Any],
+        response_obj: Any,
+        start_time: Any,
+        end_time: Any,
+    ) -> None:
+        self.log_success_event(kwargs, response_obj, start_time, end_time)
+
+
+_LLM_COMPLETION_LOGGER = _LLMCompletionLogger()
 
 
 def _normalize_callbacks(raw_callbacks: Any) -> list[Any]:
@@ -19,6 +62,47 @@ def _normalize_callbacks(raw_callbacks: Any) -> list[Any]:
     if isinstance(raw_callbacks, tuple):
         return list(raw_callbacks)
     return [raw_callbacks]
+
+
+def _calculate_duration_ms(start_time: Any, end_time: Any) -> float | None:
+    if isinstance(start_time, datetime) and isinstance(end_time, datetime):
+        return round((end_time - start_time).total_seconds() * 1000, 2)
+    if isinstance(start_time, (int, float)) and isinstance(end_time, (int, float)):
+        return round((end_time - start_time) * 1000, 2)
+    return None
+
+
+def _get_model_name(kwargs: dict[str, Any], response_obj: Any) -> str | None:
+    model = kwargs.get("model")
+    if isinstance(model, str) and model.strip():
+        return model
+
+    response_model = getattr(response_obj, "model", None)
+    if isinstance(response_model, str) and response_model.strip():
+        return response_model
+
+    return None
+
+
+def _get_call_type(kwargs: dict[str, Any]) -> str | None:
+    call_type = kwargs.get("call_type")
+    if isinstance(call_type, str) and call_type.strip():
+        return call_type
+
+    litellm_params = kwargs.get("litellm_params")
+    if isinstance(litellm_params, dict):
+        params_call_type = litellm_params.get("call_type")
+        if isinstance(params_call_type, str) and params_call_type.strip():
+            return params_call_type
+
+    return None
+
+
+def _configure_llm_completion_logger_callback() -> None:
+    callbacks = _normalize_callbacks(getattr(litellm, "callbacks", []))
+    if not any(isinstance(callback, _LLMCompletionLogger) for callback in callbacks):
+        callbacks.append(_LLM_COMPLETION_LOGGER)
+    litellm.callbacks = callbacks
 
 
 def _configure_langfuse_otel_callback() -> None:
@@ -67,6 +151,7 @@ def configure_litellm() -> None:
     if asyncio_logger.isEnabledFor(logging.DEBUG):
         asyncio_logger.setLevel(logging.INFO)
     _configure_langfuse_otel_callback()
+    _configure_llm_completion_logger_callback()
 
     _LITELLM_CONFIGURED = True
 
