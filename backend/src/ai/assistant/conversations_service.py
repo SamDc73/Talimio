@@ -394,9 +394,22 @@ async def load_assistant_conversation_history(
     session: AsyncSession,
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
+    lock_for_update: bool = False,
 ) -> dict[str, Any]:
     """Load assistant-ui exported history in stable insertion order."""
-    conversation = await get_assistant_conversation(session=session, user_id=user_id, conversation_id=conversation_id)
+    if lock_for_update:
+        conversation = await session.scalar(
+            select(AssistantConversation)
+            .where(
+                AssistantConversation.id == conversation_id,
+                AssistantConversation.user_id == user_id,
+            )
+            .with_for_update()
+        )
+        if conversation is None:
+            raise AssistantConversationNotFoundError
+    else:
+        conversation = await get_assistant_conversation(session=session, user_id=user_id, conversation_id=conversation_id)
 
     rows = (
         (

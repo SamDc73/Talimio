@@ -1,5 +1,6 @@
 """Simple assistant service with streaming support."""
 
+import asyncio
 import json
 import logging
 import uuid
@@ -206,23 +207,85 @@ def _build_thread_message_payload(message: Any) -> dict[str, Any]:
     return payload
 
 
-def _extract_latest_user_history_item(request: ChatRequest) -> tuple[dict[str, Any] | None, str | None]:
+def _extract_latest_user_history_item(request: ChatRequest) -> dict[str, Any] | None:
     last_user_index = -1
     for index in range(len(request.messages) - 1, -1, -1):
         if request.messages[index].role == "user":
             last_user_index = index
             break
     if last_user_index < 0:
-        return None, None
+        return None
 
-    parent_id: str | None = None
-    for index in range(last_user_index - 1, -1, -1):
-        candidate_id = request.messages[index].id
-        if isinstance(candidate_id, str) and candidate_id.strip():
-            parent_id = candidate_id
-            break
+    return _attach_pending_quote_to_history_message(
+        _build_thread_message_payload(request.messages[last_user_index]),
+        request.pending_quote,
+    )
 
-    return _build_thread_message_payload(request.messages[last_user_index]), parent_id
+
+def _attach_pending_quote_to_history_message(message: dict[str, Any], pending_quote: str | None) -> dict[str, Any]:
+    quote = pending_quote.strip() if pending_quote else ""
+    if not quote:
+        return message
+
+    quoted_message = dict(message)
+    content = quoted_message.get("content")
+    if isinstance(content, str):
+        quoted_message["content"] = f"{quote}\n\n{content}"
+    elif isinstance(content, list):
+        quoted_message["content"] = [{"type": "text", "text": f"{quote}\n\n"}, *content]
+    else:
+        quoted_message["content"] = [{"type": "text", "text": quote}]
+    return quoted_message
+
+
+def _build_server_conversation_history(
+    history_payload: dict[str, Any],
+    *,
+    exclude_message_id: str,
+) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    history_items = history_payload.get("messages")
+    if not isinstance(history_items, list):
+        return messages
+
+    for item in history_items:
+        if not isinstance(item, dict):
+            continue
+        message = item.get("message")
+        if not isinstance(message, dict):
+            continue
+        if message.get("id") == exclude_message_id:
+            continue
+
+        role = message.get("role")
+        if role == "assistant":
+            text = _extract_message_text(message.get("content"))
+            if text:
+                messages.append({"role": "assistant", "content": text})
+            continue
+
+        if role == "user":
+            blocks = _convert_user_content_to_openai_blocks(message.get("content"))
+            if blocks:
+                messages.append({"role": "user", "content": blocks})
+
+    return messages[-ASSISTANT_MAX_HISTORY_MESSAGES:]
+
+
+def _find_history_message_role(history_payload: dict[str, Any], message_id: str) -> str | None:
+    history_items = history_payload.get("messages")
+    if not isinstance(history_items, list):
+        return None
+
+    for item in history_items:
+        if not isinstance(item, dict):
+            continue
+        message = item.get("message")
+        if not isinstance(message, dict) or message.get("id") != message_id:
+            continue
+        role = message.get("role")
+        return role if isinstance(role, str) else None
+    return None
 
 
 def _model_dump_jsonable(value: Any) -> dict[str, Any]:
@@ -440,6 +503,33 @@ async def _persist_completed_assistant_message(
     )
 
 
+async def _persist_incomplete_assistant_message(
+    *,
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    message_id: str,
+    parent_id: str,
+    run_config: dict[str, Any] | None,
+) -> None:
+    incomplete_message = {
+        "id": message_id,
+        "role": "assistant",
+        "createdAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "content": [],
+        "status": {"type": "incomplete", "reason": "error"},
+    }
+    await conversations_service.append_assistant_conversation_history_item(
+        session=session,
+        user_id=user_id,
+        conversation_id=conversation_id,
+        message=incomplete_message,
+        parent_id=parent_id,
+        run_config=run_config,
+    )
+    await session.commit()
+
+
 async def _stream_completion_and_persist_history(
     *,
     stream: AsyncGenerator[Any],
@@ -447,7 +537,7 @@ async def _stream_completion_and_persist_history(
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
     message_id: str,
-    parent_id: str | None,
+    parent_id: str,
     run_config: dict[str, Any] | None,
 ) -> AsyncGenerator[str]:
     assistant_text_parts: list[str] = []
@@ -468,16 +558,16 @@ async def _stream_completion_and_persist_history(
         assistant_text_parts.append(fallback_content)
         yield _sse_event({"type": "text-delta", "textDelta": fallback_content})
 
-    if parent_id is not None:
-        await _persist_completed_assistant_message(
-            session=session,
-            user_id=user_id,
-            conversation_id=conversation_id,
-            message_id=message_id,
-            parent_id=parent_id,
-            text="".join(assistant_text_parts),
-            run_config=run_config,
-        )
+    await _persist_completed_assistant_message(
+        session=session,
+        user_id=user_id,
+        conversation_id=conversation_id,
+        message_id=message_id,
+        parent_id=parent_id,
+        text="".join(assistant_text_parts),
+        run_config=run_config,
+    )
+    await session.commit()
 
     yield _sse_event(
         {
@@ -487,6 +577,67 @@ async def _stream_completion_and_persist_history(
         }
     )
     yield _sse_event("[DONE]")
+
+
+async def _persist_latest_user_and_load_server_history(
+    *,
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    request: ChatRequest,
+    normalized_request: NormalizedChatRequest,
+) -> tuple[NormalizedChatRequest, str]:
+    existing_history = await conversations_service.load_assistant_conversation_history(
+        session=session,
+        user_id=user_id,
+        conversation_id=normalized_request.thread_id,
+        lock_for_update=True,
+    )
+    latest_user_message = _extract_latest_user_history_item(request)
+    if latest_user_message is None:
+        msg = "Latest user message is required"
+        raise ValueError(msg)
+
+    raw_user_message_id = latest_user_message.get("id")
+    if not isinstance(raw_user_message_id, str) or not raw_user_message_id.strip():
+        msg = "Latest user message id is required"
+        raise ValueError(msg)
+
+    head_id = existing_history.get("head_id")
+    if isinstance(head_id, str) and head_id != raw_user_message_id:
+        head_role = _find_history_message_role(existing_history, head_id)
+        if head_role == "user":
+            msg = "Previous user message is still awaiting assistant response"
+            raise ValueError(msg)
+
+    latest_user_parent_id = head_id if isinstance(head_id, str) and head_id.strip() else None
+    inserted = await conversations_service.append_assistant_conversation_history_item(
+        session=session,
+        user_id=user_id,
+        conversation_id=normalized_request.thread_id,
+        message=latest_user_message,
+        parent_id=latest_user_parent_id,
+        run_config=request.run_config,
+    )
+    if inserted:
+        await session.commit()
+    else:
+        msg = "Latest user message already exists"
+        raise ValueError(msg)
+
+    persisted_history = await conversations_service.load_assistant_conversation_history(
+        session=session,
+        user_id=user_id,
+        conversation_id=normalized_request.thread_id,
+    )
+    request_with_server_history = normalized_request.model_copy(
+        update={
+            "conversation_history": _build_server_conversation_history(
+                persisted_history,
+                exclude_message_id=raw_user_message_id,
+            )
+        }
+    )
+    return request_with_server_history, raw_user_message_id
 
 
 async def assistant_chat(
@@ -503,25 +654,12 @@ async def assistant_chat(
         yield _sse_event({"type": "start", "messageId": message_id})
 
         normalized_request = _normalize_chat_request(request)
-        await conversations_service.assert_conversation_ownership(
+        normalized_request, latest_user_message_id = await _persist_latest_user_and_load_server_history(
             session=session,
             user_id=user_id,
-            conversation_id=normalized_request.thread_id,
+            request=request,
+            normalized_request=normalized_request,
         )
-
-        latest_user_message, latest_user_parent_id = _extract_latest_user_history_item(request)
-        if latest_user_message is not None:
-            await conversations_service.append_assistant_conversation_history_item(
-                session=session,
-                user_id=user_id,
-                conversation_id=normalized_request.thread_id,
-                message=latest_user_message,
-                parent_id=latest_user_parent_id,
-                run_config=request.run_config,
-            )
-            raw_user_message_id = latest_user_message.get("id")
-            if isinstance(raw_user_message_id, str) and raw_user_message_id.strip():
-                latest_user_message_id = raw_user_message_id
 
         # Build messages with context if available
         messages, probe_submitted = await _build_messages(normalized_request, user_id, session)
@@ -555,6 +693,24 @@ async def assistant_chat(
         ):
             yield event
 
+    except asyncio.CancelledError:
+        if normalized_request and latest_user_message_id:
+            try:
+                await session.rollback()
+                await _persist_incomplete_assistant_message(
+                    session=session,
+                    user_id=user_id,
+                    conversation_id=normalized_request.thread_id,
+                    message_id=message_id,
+                    parent_id=latest_user_message_id,
+                    run_config=request.run_config,
+                )
+            except (RuntimeError, TypeError, ValueError, OSError, SQLAlchemyError, DomainError):
+                logger.exception(
+                    "Failed to persist cancelled assistant message for thread %s",
+                    normalized_request.thread_id,
+                )
+        raise
     except (ValueError, DomainError) as error:
         logger.warning("Chat validation failed for user %s: %s", user_id, error)
         yield _sse_event({"type": "error", "errorText": ASSISTANT_PUBLIC_ERROR_TEXT})
@@ -577,19 +733,14 @@ async def assistant_chat(
         else:
             logger.exception("Chat failed for user %s", user_id)
         if normalized_request and latest_user_message_id:
-            incomplete_message = {
-                "id": str(uuid.uuid4()),
-                "role": "assistant",
-                "createdAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-                "content": [],
-                "status": {"type": "incomplete", "reason": "error"},
-            }
             try:
-                await conversations_service.append_assistant_conversation_history_item(
+                if isinstance(error, SQLAlchemyError):
+                    await session.rollback()
+                await _persist_incomplete_assistant_message(
                     session=session,
                     user_id=user_id,
                     conversation_id=normalized_request.thread_id,
-                    message=incomplete_message,
+                    message_id=message_id,
                     parent_id=latest_user_message_id,
                     run_config=request.run_config,
                 )
