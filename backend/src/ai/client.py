@@ -379,6 +379,7 @@ class LLMClient:
         *,
         tool_targets: dict[str, ToolTarget],
         used_tool_names: set[str],
+        probe_submitted: bool = False,
         conversation: list[dict[str, Any]],
         user_id: uuid.UUID | None,
         phase: str,
@@ -387,9 +388,17 @@ class LLMClient:
         if not available_learning_tools:
             return
 
+        if probe_submitted:
+            used_tool_names |= {"submit_concept_probe_result"}
         used_learning_tools = sorted(name for name in used_tool_names if name in _LEARNING_TOOL_NAMES)
         user_text = self._extract_latest_user_text(conversation)
         should_use = self._looks_like_learning_intent(user_text) if user_text else False
+
+        span = trace.get_current_span()
+        if span.is_recording():
+            span.set_attribute("learning_capability.turn.phase", phase)
+            span.set_attribute("learning_capability.turn.used", bool(used_learning_tools))
+            span.set_attribute("learning_capability.turn.used_tools", json.dumps(used_learning_tools))
 
         if used_learning_tools:
             self._logger.info(
@@ -949,6 +958,7 @@ class LLMClient:
             self._log_learning_capability_turn(
                 tool_targets=available_tool_targets,
                 used_tool_names=used_tool_names_in_turn,
+                probe_submitted=bool(request.metadata and request.metadata.get("probe_submitted")),
                 conversation=conversation,
                 user_id=request.user_id,
                 phase="chat_completions",
@@ -1049,6 +1059,7 @@ class LLMClient:
             self._log_learning_capability_turn(
                 tool_targets=available_tool_targets,
                 used_tool_names=used_tool_names_in_turn,
+                probe_submitted=bool(request.metadata and request.metadata.get("probe_submitted")),
                 conversation=conversation,
                 user_id=request.user_id,
                 phase="responses",
@@ -1222,6 +1233,7 @@ class LLMClient:
                 self._log_learning_capability_turn(
                     tool_targets=tool_targets,
                     used_tool_names=used_tool_names_in_turn,
+                    probe_submitted=bool(metadata and metadata.get("probe_submitted")),
                     conversation=conversation,
                     user_id=user_id,
                     phase="streaming",

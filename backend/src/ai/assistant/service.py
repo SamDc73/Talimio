@@ -338,21 +338,24 @@ async def assistant_chat(
                 latest_user_message_id = raw_user_message_id
 
         # Build messages with context if available
-        messages = await _build_messages(normalized_request, user_id, session)
+        messages, probe_submitted = await _build_messages(normalized_request, user_id, session)
 
         # Run completion through shared LLM client so memories and MCP tools are available
         llm_client = LLMClient(agent_id=AGENT_ID_ASSISTANT)
         context_meta = normalized_request.context_meta or {}
+        metadata = {
+            "assistant_thread_id": str(normalized_request.thread_id),
+            "assistant_lesson_id": str(context_meta.get("lesson_id", "")),
+            "assistant_probe_context": _build_probe_context(normalized_request),
+        }
+        if probe_submitted:
+            metadata["probe_submitted"] = True
         stream = await llm_client.get_completion(
             messages=messages,
             user_id=user_id,
             model=normalized_request.model,
             stream=True,
-            metadata={
-                "assistant_thread_id": str(normalized_request.thread_id),
-                "assistant_lesson_id": str(context_meta.get("lesson_id", "")),
-                "assistant_probe_context": _build_probe_context(normalized_request),
-            },
+            metadata=metadata,
         )
 
         async for event in _stream_completion_and_persist_history(
@@ -424,7 +427,7 @@ async def _build_messages(
     request: NormalizedChatRequest,
     user_id: uuid.UUID,
     session: AsyncSession,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], bool]:
     """Build message list with capability-backed context packet injection."""
     learning_facade = LearningCapabilitiesFacade(session)
     context_meta = dict(request.context_meta or {})
@@ -458,6 +461,7 @@ async def _build_messages(
         context_bundle=context_bundle,
         session=session,
     )
+    probe_submitted = chat_probe_result is not None
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": ASSISTANT_CHAT_SYSTEM_PROMPT}]
     messages.extend(request.conversation_history)
@@ -465,7 +469,7 @@ async def _build_messages(
     user_blocks = list(request.latest_user_blocks)
     context_packet = context_bundle.model_dump_json(by_alias=True, exclude_none=True)
     user_blocks.append({"type": "text", "text": f"\n\n[learning_context_packet]\n{context_packet}"})
-    if chat_probe_result is not None:
+    if probe_submitted:
         user_blocks.append(
             {
                 "type": "text",
@@ -474,7 +478,7 @@ async def _build_messages(
         )
 
     messages.append({"role": "user", "content": user_blocks})
-    return messages
+    return messages, probe_submitted
 
 
 async def _maybe_submit_active_chat_probe(
