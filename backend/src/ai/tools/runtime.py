@@ -89,7 +89,7 @@ async def execute_planned_tool_calls(
             for (_index, call, target, arguments) in pending
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        for (index, call, _target, _arguments), result in zip(pending, results, strict=False):
+        for (index, call, _target, arguments), result in zip(pending, results, strict=False):
             if isinstance(result, Exception):
                 logger.error(
                     "ai.tool.failed",
@@ -97,6 +97,8 @@ async def execute_planned_tool_calls(
                         "tool_name": call.name,
                         "tool_call_id": call.call_id,
                         "user_id": str(user_id) if user_id else None,
+                        "argument_keys": sorted(arguments.keys()),
+                        "error_type": type(result).__name__,
                         "error": str(result),
                     },
                 )
