@@ -65,6 +65,7 @@ class FrontierEntry(TypedDict):
     state: UserConceptState | None
     prerequisites: list[uuid.UUID]
     unlocked: bool
+    order_hint: int | None
 
 
 class ConceptGraphService:
@@ -229,7 +230,7 @@ class ConceptGraphService:
     async def get_frontier(self, *, user_id: uuid.UUID, course_id: uuid.UUID) -> list[FrontierEntry]:
         """Return unlocked concepts for the learner."""
         concept_rows = await self._session.execute(
-            select(Concept, UserConceptState)
+            select(Concept, UserConceptState, CourseConcept.order_hint)
             .select_from(CourseConcept)
             .join(Concept, CourseConcept.concept_id == Concept.id)
             .outerjoin(
@@ -245,8 +246,8 @@ class ConceptGraphService:
         if not records:
             return []
 
-        concepts = [(row[0], row[1]) for row in records]
-        concept_ids = [concept.id for concept, _ in concepts]
+        concepts = [(row[0], row[1], row[2]) for row in records]
+        concept_ids = [concept.id for concept, _, _ in concepts]
         prereq_rows = await self._session.execute(
             select(ConceptPrerequisite.concept_id, ConceptPrerequisite.prereq_id).where(
                 ConceptPrerequisite.concept_id.in_(concept_ids)
@@ -256,9 +257,9 @@ class ConceptGraphService:
         for child_id, prereq_id in prereq_rows:
             prereq_map.setdefault(child_id, set()).add(prereq_id)
 
-        state_lookup = {state.concept_id: state for _, state in concepts if state is not None}
+        state_lookup = {state.concept_id: state for _, state, _ in concepts if state is not None}
         frontier: list[FrontierEntry] = []
-        for concept, state in concepts:
+        for concept, state, order_hint in concepts:
             prereqs = prereq_map.get(concept.id, set())
             unlocked = True
             for prereq in prereqs:
@@ -277,6 +278,7 @@ class ConceptGraphService:
                     state=state,
                     prerequisites=list(prereqs),
                     unlocked=unlocked,
+                    order_hint=order_hint,
                 )
             )
 

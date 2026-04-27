@@ -58,6 +58,7 @@ class DueConceptEntry(TypedDict):
 
     concept: Concept
     state: UserConceptState
+    order_hint: int | None
 
 
 @dataclass(slots=True)
@@ -289,7 +290,7 @@ class LectorSchedulerService:
         """Return concepts whose reviews are due."""
         now = _utc_now()
         rows = await self._session.execute(
-            select(Concept, UserConceptState)
+            select(Concept, UserConceptState, CourseConcept.order_hint)
             .select_from(CourseConcept)
             .join(Concept, CourseConcept.concept_id == Concept.id)
             .join(
@@ -309,11 +310,12 @@ class LectorSchedulerService:
         )
 
         due_entries: list[DueConceptEntry] = []
-        for concept, state in rows.all():
+        for concept, state, order_hint in rows.all():
             due_entries.append(
                 DueConceptEntry(
                     concept=concept,
                     state=state,
+                    order_hint=order_hint,
                 )
             )
         return due_entries

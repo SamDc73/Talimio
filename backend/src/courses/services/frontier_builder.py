@@ -37,6 +37,7 @@ def _to_concept_summary(
     lesson_ids_by_concept: dict[uuid.UUID, uuid.UUID],
     recommended_lesson_entries: dict[uuid.UUID, RecommendedLessonEntry] | None = None,
     prerequisites: list[uuid.UUID] | None = None,
+    order_hint: int | None = None,
 ) -> ConceptSummary:
     mastery = state.s_mastery if state is not None else None
     next_review = state.next_review_at if state is not None else None
@@ -46,14 +47,14 @@ def _to_concept_summary(
         id=concept.id,
         name=concept.name,
         description=concept.description,
-        difficulty=None,  # Not available in Concept model
+        difficulty=concept.difficulty,
         mastery=mastery,
         next_review_at=next_review,
         exposures=exposures,
         lesson_id=lesson_id,
         recommended_lesson_entry=(recommended_lesson_entries or {}).get(concept.id),
         prerequisites=prerequisites or [],
-        order=None,  # Not available in this context
+        order=order_hint,
     )
 
 
@@ -80,6 +81,7 @@ def _prepare_frontier_snapshot(
     }
     concept_by_id = {concept.id: concept for concept in course_concepts}
     prereqs_by_id = {entry["concept"].id: entry["prerequisites"] for entry in entries}
+    due_ids = {item["concept"].id for item in due_list}
 
     for entry in entries:
         concept: Concept = entry["concept"]
@@ -91,7 +93,11 @@ def _prepare_frontier_snapshot(
             lesson_ids_by_concept=lesson_ids_by_concept,
             recommended_lesson_entries=recommended_lesson_entries,
             prerequisites=entry["prerequisites"],
+            order_hint=entry["order_hint"],
         )
+        # Due-for-review concepts belong in due_for_review, not frontier
+        if concept.id in due_ids:
+            continue
         if entry["unlocked"]:
             frontier.append(summary)
         else:
@@ -104,11 +110,11 @@ def _prepare_frontier_snapshot(
             lesson_ids_by_concept=lesson_ids_by_concept,
             recommended_lesson_entries=recommended_lesson_entries,
             prerequisites=prereqs_by_id.get(item["concept"].id, []),
+            order_hint=item["order_hint"],
         )
         for item in due_list
     ]
     avg_mastery = (sum_mastery / len(course_concepts)) if course_concepts else 0.0
-    due_ids = {item["concept"].id for item in due_list}
 
     return _FrontierSnapshot(
         frontier=frontier,
