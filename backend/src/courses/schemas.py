@@ -369,6 +369,14 @@ GradeStatus = Literal["correct", "incorrect", "parse_error", "unsupported"]
 PracticeContext = Literal["inline", "quick_check", "scheduled_review", "drill", "review", "chat"]
 PracticeAnswerKind = Literal["math_latex", "text"]
 QuestionSetPracticeContext = Literal["inline", "drill", "review", "chat"]
+ProbeFamily = Literal[
+    "free_recall",
+    "recognition_discrimination",
+    "completion_transformation",
+    "error_diagnosis_repair",
+    "constructive_explanation",
+]
+ProbeRendererKind = Literal["free_form", "multiple_choice", "fill_in_blank", "text_response"]
 AttemptStatus = Literal["correct", "incorrect", "unsupported"]
 AttemptAnswerKind = Literal["text", "math_latex", "jxg_state", "skip"]
 
@@ -554,6 +562,9 @@ class PracticeDrillItem(BaseModel):
     question: str = Field(..., min_length=1, description="Learner-facing drill question")
     expected_answer: str = Field(..., min_length=1, description="Expected answer string")
     answer_kind: PracticeAnswerKind = Field(..., description="Expected answer input mode")
+    probe_family: ProbeFamily = Field(description="Bounded pedagogical family used to generate this drill")
+    renderer_kind: ProbeRendererKind = Field(description="Known frontend renderer contract for this drill")
+    choices: list[str] = Field(default_factory=list, description="Learner-visible choices for choice-based families")
     hints: list[str] = Field(default_factory=list, description="Optional hints for this drill")
     structure_signature: str = Field(..., min_length=1, description="Normalized structural signature for duplicate checks")
     predicted_p_correct: float = Field(..., ge=0.0, le=1.0, description="Estimated correctness probability used for selection")
@@ -584,6 +595,9 @@ class QuestionSetItem(BaseModel):
     lesson_id: uuid.UUID | None = Field(None, description="Lesson linked to this question")
     question: str = Field(min_length=1, description="Learner-facing question prompt")
     input_kind: PracticeAnswerKind = Field(description="Learner answer input mode")
+    probe_family: ProbeFamily = Field(description="Bounded pedagogical family selected for this question")
+    renderer_kind: ProbeRendererKind = Field(description="Known renderer contract for this question")
+    choices: list[str] = Field(default_factory=list, description="Learner-visible choices for choice-based questions")
     hints: list[str] = Field(default_factory=list, description="Learner-visible hints")
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)

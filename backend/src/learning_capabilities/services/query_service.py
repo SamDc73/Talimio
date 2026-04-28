@@ -23,6 +23,7 @@ from src.courses.models import (
     Course,
     CourseConcept,
     CourseDocument,
+    LearningQuestion,
     Lesson,
     LessonVersion,
     LessonVersionWindow,
@@ -32,6 +33,7 @@ from src.courses.models import (
 from src.courses.services.course_progress_service import CourseProgressService
 from src.courses.services.course_query_service import CourseQueryService
 from src.courses.services.lesson_service import LessonService
+from src.learning_capabilities.errors import LearningCapabilitiesValidationError
 from src.learning_capabilities.schemas import (
     ActiveChatProbe,
     ActiveProbeSuggestion,
@@ -378,6 +380,16 @@ class LearningCapabilityQueryService:
         )
         if active_probe is None:
             return None
+        learning_question = await self._session.get(LearningQuestion, active_probe.id)
+        if learning_question is None or not isinstance(learning_question.question_payload, dict):
+            detail = "Active probe is missing its server-owned question contract."
+            raise LearningCapabilitiesValidationError(detail)
+        question_payload = learning_question.question_payload
+        probe_family = _payload_text(question_payload, "probeFamily")
+        renderer_kind = _payload_text(question_payload, "rendererKind")
+        if probe_family is None or renderer_kind is None:
+            detail = "Active probe question is missing registry metadata."
+            raise LearningCapabilitiesValidationError(detail)
         return ActiveChatProbe(
             active_probe_id=active_probe.id,
             course_id=active_probe.course_id,
@@ -385,6 +397,9 @@ class LearningCapabilityQueryService:
             lesson_id=active_probe.lesson_id,
             question=active_probe.question,
             answer_kind=active_probe.answer_kind,
+            probe_family=probe_family,
+            renderer_kind=renderer_kind,
+            choices=_payload_string_list(question_payload, "choices"),
             hints=list(active_probe.hints),
         )
 
@@ -1565,6 +1580,18 @@ def _learner_profile_from_state(state: UserConceptState | None) -> LearnerProfil
     if all(value is None for value in profile.model_dump().values()):
         return None
     return profile
+
+
+def _payload_text(payload: dict[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _payload_string_list(payload: dict[str, Any], key: str) -> list[str]:
+    value = payload.get(key)
+    if not isinstance(value, list):
+        return []
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
 
 
 def _float_or_none(value: object) -> float | None:

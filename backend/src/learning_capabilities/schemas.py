@@ -535,6 +535,9 @@ class ChatConceptProbe(BaseModel):
     active_probe_id: uuid.UUID
     question: str
     answer_kind: str
+    probe_family: str
+    renderer_kind: str
+    choices: list[str] = Field(default_factory=list)
     hints: list[str] = Field(default_factory=list)
     course_id: uuid.UUID
     concept_id: uuid.UUID
@@ -552,6 +555,9 @@ class ActiveChatProbe(BaseModel):
     lesson_id: uuid.UUID
     question: str
     answer_kind: str
+    probe_family: str
+    renderer_kind: str
+    choices: list[str] = Field(default_factory=list)
     hints: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(**_CAMEL_CONFIG)

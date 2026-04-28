@@ -90,13 +90,23 @@ Concept description: {concept_description}
 ## Difficulty Guidance
 {difficulty_guidance}
 
+## Probe Family Contract
+Selected family: {probe_family}
+{family_guidance}
+
+Allowed families only: free_recall, recognition_discrimination, completion_transformation, error_diagnosis_repair, constructive_explanation.
+- Return probeFamily exactly as the selected family for every question.
+- Use answerKind "math_latex" only when the learner should submit math; otherwise use "text".
+- For recognition_discrimination, include choices and make expectedAnswer exactly match one choice.
+- For every other family, use choices: [].
+
 Avoid questions similar to these:
 {history}
 
 Return JSON:
 {{
   "questions": [
-    {{"question": "...", "expectedAnswer": "...", "answerKind": "math_latex"}}
+    {{"question": "...", "expectedAnswer": "...", "answerKind": "math_latex", "probeFamily": "{probe_family}", "choices": []}}
   ]
 }}
 """

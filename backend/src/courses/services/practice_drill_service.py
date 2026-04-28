@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +15,7 @@ from src.ai.client import LLMClient
 from src.config.schema_casing import build_camel_config
 from src.config.settings import get_settings
 from src.courses.models import Concept, CourseConcept, Lesson, ProbeEvent, UserConceptState
-from src.courses.schemas import PracticeDrillItem
+from src.courses.schemas import PracticeDrillItem, ProbeFamily, ProbeRendererKind
 
 
 _RECENT_PROBE_WINDOW = 20
@@ -23,6 +23,11 @@ _RECENT_PERFORMANCE_WINDOW = 20
 _TARGET_PROBABILITY_HIGH_MASTERY = 0.52
 _TARGET_PROBABILITY_MID_MASTERY = 0.62
 _TARGET_PROBABILITY_LOW_MASTERY = 0.70
+_FAMILY_RECOGNITION: ProbeFamily = "recognition_discrimination"
+_FAMILY_COMPLETION: ProbeFamily = "completion_transformation"
+_FAMILY_ERROR_DIAGNOSIS: ProbeFamily = "error_diagnosis_repair"
+_FAMILY_CONSTRUCTIVE: ProbeFamily = "constructive_explanation"
+_FAMILY_FREE_RECALL: ProbeFamily = "free_recall"
 
 
 @dataclass(slots=True)
@@ -35,7 +40,9 @@ class _LearnerProfile:
     learning_speed: float
     retention_rate: float
     success_rate: float
+    exposures: int
     overdue: bool
+    repeated_recent_misses: bool
     struggling_concepts: list[str]
 
 
@@ -49,6 +56,9 @@ class _GenerationContext:
     target_probability: float
     target_low: float
     target_high: float
+    probe_family: ProbeFamily
+    renderer_kind: ProbeRendererKind
+    family_guidance: str
 
 
 class _QuestionPayload(BaseModel):
@@ -57,8 +67,27 @@ class _QuestionPayload(BaseModel):
     question: str = Field(..., min_length=1)
     expected_answer: str = Field(..., min_length=1)
     answer_kind: Literal["math_latex", "text"] = Field(...)
+    probe_family: ProbeFamily = Field(...)
+    choices: list[str] = Field(default_factory=list)
 
     model_config = build_camel_config(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_family_contract(self) -> "_QuestionPayload":
+        """Keep generated payloads inside the bounded family contract."""
+        if self.probe_family == _FAMILY_RECOGNITION:
+            normalized_choices = [choice.strip() for choice in self.choices if choice.strip()]
+            if len(normalized_choices) < 3:
+                message = "recognition_discrimination requires at least three choices"
+                raise ValueError(message)
+            expected = self.expected_answer.strip()
+            if expected not in normalized_choices:
+                message = "expectedAnswer must exactly match one recognition_discrimination choice"
+                raise ValueError(message)
+            self.choices = normalized_choices
+        elif self.choices:
+            self.choices = [choice.strip() for choice in self.choices if choice.strip()]
+        return self
 
 
 class _QuestionBatchPayload(BaseModel):
@@ -153,6 +182,8 @@ class PracticeDrillService:
             recent_correct=learner.recent_correct,
             recent_total=learner.recent_total,
         )
+        probe_family = self._select_probe_family(learner)
+        renderer_kind = self._renderer_for_family(probe_family)
         return _GenerationContext(
             learner_context=self._build_learner_context(learner, learner_context=learner_context),
             difficulty_guidance=self._build_difficulty_guidance(learner.mastery, learner.overdue),
@@ -160,6 +191,9 @@ class PracticeDrillService:
             target_probability=target_probability,
             target_low=target_low,
             target_high=target_high,
+            probe_family=probe_family,
+            renderer_kind=renderer_kind,
+            family_guidance=self._build_family_guidance(probe_family),
         )
 
     async def _generate_drills_once(
@@ -181,6 +215,8 @@ class PracticeDrillService:
             history=self._build_history_block(seen_signatures),
             learner_context=generation_context.learner_context,
             difficulty_guidance=generation_context.difficulty_guidance,
+            probe_family=generation_context.probe_family,
+            family_guidance=generation_context.family_guidance,
             count=candidate_count,
             user_id=user_id,
         )
@@ -227,6 +263,9 @@ class PracticeDrillService:
                     question=question,
                     expected_answer=expected,
                     answer_kind=answer_kind,
+                    probe_family=generated.probe_family,
+                    renderer_kind=generation_context.renderer_kind,
+                    choices=generated.choices,
                     hints=[],
                     structure_signature=signature,
                     predicted_p_correct=predicted_value,
@@ -329,7 +368,9 @@ class PracticeDrillService:
             learning_speed=learning_speed,
             retention_rate=retention_rate,
             success_rate=success_rate,
+            exposures=int(state.exposures) if state is not None else 0,
             overdue=overdue,
+            repeated_recent_misses=recent_total >= 2 and recent_correct == 0,
             struggling_concepts=struggling_concepts,
         )
 
@@ -399,6 +440,8 @@ class PracticeDrillService:
         history: str,
         learner_context: str,
         difficulty_guidance: str,
+        probe_family: ProbeFamily,
+        family_guidance: str,
         count: int,
         user_id: uuid.UUID,
     ) -> list[_QuestionPayload]:
@@ -408,11 +451,13 @@ class PracticeDrillService:
             history=history,
             learner_context=learner_context,
             difficulty_guidance=difficulty_guidance,
+            probe_family=probe_family,
+            family_guidance=family_guidance,
             count=count,
             response_model=_QuestionBatchPayload,
             user_id=user_id,
         )
-        return payload.questions
+        return [question for question in payload.questions if question.probe_family == probe_family]
 
     async def _predict_p_correct_batch(
         self,
@@ -460,8 +505,10 @@ class PracticeDrillService:
     def _build_learner_context(self, learner: _LearnerProfile, *, learner_context: str | None) -> str:
         lines = [
             f"Mastery: {learner.mastery:.2f}",
+            f"Exposures: {learner.exposures}",
             f"Recent correct count: {learner.recent_correct}",
             f"Recent total count: {learner.recent_total}",
+            f"Repeated recent misses: {str(learner.repeated_recent_misses).lower()}",
             f"Learning speed: {learner.learning_speed:.1f}x",
             f"Retention rate: {learner.retention_rate:.2f}",
             f"Success rate: {learner.success_rate:.2f}",
@@ -522,6 +569,52 @@ class PracticeDrillService:
         target_low = max(0.0, target - band_width)
         target_high = min(1.0, target + band_width)
         return target, target_low, target_high
+
+    @staticmethod
+    def _select_probe_family(learner: _LearnerProfile) -> ProbeFamily:
+        if learner.exposures < 2:
+            return _FAMILY_RECOGNITION
+        if learner.repeated_recent_misses:
+            return _FAMILY_ERROR_DIAGNOSIS
+        if 0.3 <= learner.mastery <= 0.7:
+            return _FAMILY_COMPLETION
+        if learner.mastery > 0.7:
+            return _FAMILY_CONSTRUCTIVE
+        return _FAMILY_FREE_RECALL
+
+    @staticmethod
+    def _renderer_for_family(probe_family: ProbeFamily) -> ProbeRendererKind:
+        if probe_family == _FAMILY_RECOGNITION:
+            return "multiple_choice"
+        if probe_family == _FAMILY_COMPLETION:
+            return "fill_in_blank"
+        if probe_family in {_FAMILY_ERROR_DIAGNOSIS, _FAMILY_CONSTRUCTIVE}:
+            return "text_response"
+        return "free_form"
+
+    @staticmethod
+    def _build_family_guidance(probe_family: ProbeFamily) -> str:
+        if probe_family == _FAMILY_RECOGNITION:
+            return (
+                "Use the Recognition/Discrimination family. Ask the learner to choose the best answer from choices. "
+                "Return at least three plausible choices and set expectedAnswer to the exact correct choice text."
+            )
+        if probe_family == _FAMILY_COMPLETION:
+            return (
+                "Use the Completion/Transformation family. Ask for the missing step, transformed expression, "
+                "or next value in a nearby procedure."
+            )
+        if probe_family == _FAMILY_ERROR_DIAGNOSIS:
+            return (
+                "Use the Error Diagnosis/Repair family. Show a compact mistaken solution and ask the learner "
+                "to identify or repair the specific false step."
+            )
+        if probe_family == _FAMILY_CONSTRUCTIVE:
+            return (
+                "Use the Constructive Explanation family. Ask the learner to explain why a result works, "
+                "justify a rule, or compare two valid approaches."
+            )
+        return "Use the Free Recall family. Ask for a direct generated answer without choices."
 
     @staticmethod
     def _difficulty_rank(*, probability: float, target: float, target_low: float, target_high: float) -> tuple[float, float]:

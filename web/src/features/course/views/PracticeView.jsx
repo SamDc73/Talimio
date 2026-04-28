@@ -64,7 +64,12 @@ function normalizeDrill(rawItem) {
 	}
 	const conceptId = rawItem.conceptId ? String(rawItem.conceptId) : ""
 	const lessonId = rawItem.lessonId ? String(rawItem.lessonId) : ""
-	if (!question || !questionId || !inputKind || !conceptId || !lessonId) {
+	const probeFamily = typeof rawItem.probeFamily === "string" ? rawItem.probeFamily : ""
+	const rendererKind = typeof rawItem.rendererKind === "string" ? rawItem.rendererKind : ""
+	const choices = Array.isArray(rawItem.choices)
+		? rawItem.choices.filter((item) => typeof item === "string" && item.trim())
+		: []
+	if (!question || !questionId || !inputKind || !conceptId || !lessonId || !probeFamily || !rendererKind) {
 		return null
 	}
 
@@ -74,6 +79,9 @@ function normalizeDrill(rawItem) {
 		lessonId,
 		question,
 		inputKind,
+		probeFamily,
+		rendererKind,
+		choices,
 		hints: rawItem.hints,
 	}
 }
@@ -83,6 +91,77 @@ function drillKey(item) {
 		return ""
 	}
 	return item.questionId
+}
+
+function ChoicePracticeQuestion({ question, onGrade, onSkip, onComplete }) {
+	const [selectedChoice, setSelectedChoice] = useState("")
+	const [feedback, setFeedback] = useState(null)
+	const [startedAt] = useState(() => Date.now())
+
+	const handleSubmit = async () => {
+		if (!selectedChoice) {
+			return
+		}
+		const result = await onGrade({
+			answerKind: "text",
+			answerText: selectedChoice,
+			attempts: 1,
+			durationMs: Date.now() - startedAt,
+			hintsUsed: 0,
+		})
+		setFeedback(result?.grade ?? null)
+	}
+
+	const handleSkip = async () => {
+		await onSkip({ attempts: 1, durationMs: Date.now() - startedAt, hintsUsed: 0 })
+		onComplete()
+	}
+
+	const isAnswered = Boolean(feedback)
+
+	return (
+		<div className="rounded-xl border border-border bg-card p-5 space-y-4">
+			<div className="space-y-2">
+				<p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Multiple Choice</p>
+				<p className="text-base font-medium text-foreground">{question.question}</p>
+			</div>
+			<div className="grid gap-2">
+				{question.choices.map((choice) => (
+					<button
+						key={choice}
+						type="button"
+						onClick={() => setSelectedChoice(choice)}
+						disabled={isAnswered}
+						className={cn(
+							"rounded-lg border px-4 py-3 text-left text-sm transition-colors",
+							selectedChoice === choice
+								? "border-primary bg-primary/10 text-primary"
+								: "border-border bg-background text-foreground hover:bg-muted"
+						)}
+					>
+						{choice}
+					</button>
+				))}
+			</div>
+			{feedback ? (
+				<div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-foreground">
+					<p>{feedback.feedbackMarkdown}</p>
+				</div>
+			) : null}
+			<div className="flex flex-wrap gap-2">
+				{feedback ? (
+					<Button onClick={onComplete}>Next question</Button>
+				) : (
+					<Button onClick={handleSubmit} disabled={!selectedChoice}>
+						Submit answer
+					</Button>
+				)}
+				<Button variant="outline" onClick={handleSkip} disabled={isAnswered}>
+					Skip
+				</Button>
+			</div>
+		</div>
+	)
 }
 
 export default function PracticeView() {
@@ -610,19 +689,31 @@ export default function PracticeView() {
 	)
 
 	if (currentQuestion) {
-		questionPanel = (
-			<LatexExpression
-				key={drillKey(currentQuestion)}
-				question={currentQuestion.question}
-				answerKind={currentQuestion.inputKind}
-				hints={currentQuestion.hints}
-				practiceContext="drill"
-				completeOnAnyGrade
-				onGrade={handleGrade}
-				onSkip={handleSkip}
-				onComplete={handleItemComplete}
-			/>
-		)
+		if (currentQuestion.rendererKind === "multiple_choice" && currentQuestion.choices.length > 0) {
+			questionPanel = (
+				<ChoicePracticeQuestion
+					key={drillKey(currentQuestion)}
+					question={currentQuestion}
+					onGrade={handleGrade}
+					onSkip={handleSkip}
+					onComplete={handleItemComplete}
+				/>
+			)
+		} else {
+			questionPanel = (
+				<LatexExpression
+					key={drillKey(currentQuestion)}
+					question={currentQuestion.question}
+					answerKind={currentQuestion.inputKind}
+					hints={currentQuestion.hints}
+					practiceContext="drill"
+					completeOnAnyGrade
+					onGrade={handleGrade}
+					onSkip={handleSkip}
+					onComplete={handleItemComplete}
+				/>
+			)
+		}
 	} else if (isGenerating) {
 		questionPanel = (
 			<div className="flex items-center gap-2 text-sm text-muted-foreground">

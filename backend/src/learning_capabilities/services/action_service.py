@@ -18,6 +18,7 @@ from src.courses.schemas import (
     AttemptAnswerPayload,
     AttemptRequest,
     AttemptResponse,
+    PracticeDrillItem,
 )
 from src.courses.services.lesson_service import LessonService
 from src.courses.services.practice_drill_service import PracticeDrillService
@@ -300,7 +301,11 @@ class LearningCapabilityActionService:
                 concept_id=payload.concept_id,
             )
             if existing_lesson_probe is not None:
-                return _active_probe_output(course=course, course_mode=course_mode, active_probe=existing_lesson_probe)
+                return await self._active_probe_output(
+                    course=course,
+                    course_mode=course_mode,
+                    active_probe=existing_lesson_probe,
+                )
         else:
             existing_probe = await self._get_active_probe(
                 user_id=user_id,
@@ -309,7 +314,7 @@ class LearningCapabilityActionService:
                 concept_id=payload.concept_id,
             )
             if existing_probe is not None:
-                return _active_probe_output(course=course, course_mode=course_mode, active_probe=existing_probe)
+                return await self._active_probe_output(course=course, course_mode=course_mode, active_probe=existing_probe)
 
         service = PracticeDrillService(self._session)
         try:
@@ -374,6 +379,7 @@ class LearningCapabilityActionService:
             self._build_chat_learning_question(
                 active_probe=active_probe,
                 user_id=user_id,
+                drill=drill,
             )
         )
         try:
@@ -389,7 +395,11 @@ class LearningCapabilityActionService:
                     concept_id=payload.concept_id,
                 )
                 if existing_lesson_probe is not None:
-                    return _active_probe_output(course=course, course_mode=course_mode, active_probe=existing_lesson_probe)
+                    return await self._active_probe_output(
+                        course=course,
+                        course_mode=course_mode,
+                        active_probe=existing_lesson_probe,
+                    )
             else:
                 existing_probe = await self._get_active_probe(
                     user_id=user_id,
@@ -398,7 +408,7 @@ class LearningCapabilityActionService:
                     concept_id=payload.concept_id,
                 )
                 if existing_probe is not None:
-                    return _active_probe_output(course=course, course_mode=course_mode, active_probe=existing_probe)
+                    return await self._active_probe_output(course=course, course_mode=course_mode, active_probe=existing_probe)
             logger.warning(
                 "learning_capability.generate_concept_probe.persist_failed",
                 extra={"user_id": str(user_id), "course_id": str(course.id), "concept_id": str(payload.concept_id)},
@@ -411,7 +421,7 @@ class LearningCapabilityActionService:
                 reason="probe_generation_unavailable",
             )
 
-        return _active_probe_output(course=course, course_mode=course_mode, active_probe=active_probe)
+        return await self._active_probe_output(course=course, course_mode=course_mode, active_probe=active_probe)
 
     async def submit_concept_probe_result(
         self,
@@ -472,6 +482,7 @@ class LearningCapabilityActionService:
         )
         if active_probe.status != "active":
             try:
+                await self._require_chat_learning_question(active_probe=active_probe)
                 existing_attempt = await CoursesFacade(self._session).submit_attempt(
                     course_id=course.id,
                     payload=AttemptRequest(
@@ -501,7 +512,7 @@ class LearningCapabilityActionService:
                 reason="active_probe_already_submitted",
             )
 
-        await self._ensure_chat_learning_question(active_probe=active_probe, user_id=user_id)
+        await self._require_chat_learning_question(active_probe=active_probe)
         attempt = await CoursesFacade(self._session).submit_attempt(
             course_id=course.id,
             payload=AttemptRequest(
@@ -526,11 +537,43 @@ class LearningCapabilityActionService:
             attempt=attempt,
         )
 
+    async def _active_probe_output(
+        self,
+        *,
+        course: Course,
+        course_mode: CourseMode,
+        active_probe: AssistantActiveProbe,
+    ) -> GenerateConceptProbeCapabilityOutput:
+        learning_question = await self._require_chat_learning_question(active_probe=active_probe)
+        probe_family = _required_question_payload_text(learning_question, "probeFamily")
+        renderer_kind = _required_question_payload_text(learning_question, "rendererKind")
+        choices = _question_payload_string_list(learning_question, "choices")
+        probe = ChatConceptProbe(
+            active_probe_id=active_probe.id,
+            question=active_probe.question,
+            answer_kind=active_probe.answer_kind,
+            probe_family=probe_family,
+            renderer_kind=renderer_kind,
+            choices=choices,
+            hints=list(active_probe.hints),
+            course_id=course.id,
+            concept_id=active_probe.concept_id,
+            lesson_id=active_probe.lesson_id,
+        )
+        return GenerateConceptProbeCapabilityOutput(
+            course_id=course.id,
+            course_mode=course_mode,
+            concept_id=active_probe.concept_id,
+            active_probe_id=active_probe.id,
+            probe=probe,
+        )
+
     def _build_chat_learning_question(
         self,
         *,
         active_probe: AssistantActiveProbe,
         user_id: uuid.UUID,
+        drill: PracticeDrillItem,
     ) -> LearningQuestion:
         return LearningQuestion(
             id=active_probe.id,
@@ -542,8 +585,18 @@ class LearningCapabilityActionService:
             expected_answer=active_probe.expected_answer,
             answer_kind=active_probe.answer_kind,
             grade_kind="practice_answer",
-            expected_payload={"expectedAnswer": active_probe.expected_answer, "answerKind": active_probe.answer_kind},
-            question_payload={"inputKind": active_probe.answer_kind, "hints": list(active_probe.hints)},
+            expected_payload={
+                "expectedAnswer": active_probe.expected_answer,
+                "answerKind": active_probe.answer_kind,
+                "probeFamily": drill.probe_family,
+            },
+            question_payload={
+                "inputKind": active_probe.answer_kind,
+                "probeFamily": drill.probe_family,
+                "rendererKind": drill.renderer_kind,
+                "choices": drill.choices,
+                "hints": list(active_probe.hints),
+            },
             hints=list(active_probe.hints),
             structure_signature=active_probe.structure_signature,
             predicted_p_correct=active_probe.predicted_p_correct,
@@ -554,22 +607,16 @@ class LearningCapabilityActionService:
             practice_context="chat",
         )
 
-    async def _ensure_chat_learning_question(
+    async def _require_chat_learning_question(
         self,
         *,
         active_probe: AssistantActiveProbe,
-        user_id: uuid.UUID,
-    ) -> None:
+    ) -> LearningQuestion:
         existing_question = await self._session.get(LearningQuestion, active_probe.id)
-        if existing_question is not None:
-            return
-        self._session.add(
-            self._build_chat_learning_question(
-                active_probe=active_probe,
-                user_id=user_id,
-            )
-        )
-        await self._session.flush()
+        if existing_question is None:
+            detail = "Active probe is missing its server-owned question contract."
+            raise LearningCapabilitiesValidationError(detail)
+        return existing_question
 
     async def _resolve_owned_thread_id(
         self,
@@ -772,28 +819,19 @@ def _probe_lookup_reason(error: LookupError) -> str:
     return "concept_not_assigned_to_course"
 
 
-def _active_probe_output(
-    *,
-    course: Course,
-    course_mode: CourseMode,
-    active_probe: AssistantActiveProbe,
-) -> GenerateConceptProbeCapabilityOutput:
-    probe = ChatConceptProbe(
-        active_probe_id=active_probe.id,
-        question=active_probe.question,
-        answer_kind=active_probe.answer_kind,
-        hints=list(active_probe.hints),
-        course_id=course.id,
-        concept_id=active_probe.concept_id,
-        lesson_id=active_probe.lesson_id,
-    )
-    return GenerateConceptProbeCapabilityOutput(
-        course_id=course.id,
-        course_mode=course_mode,
-        concept_id=active_probe.concept_id,
-        active_probe_id=active_probe.id,
-        probe=probe,
-    )
+def _required_question_payload_text(question: LearningQuestion, key: str) -> str:
+    value = question.question_payload.get(key) if isinstance(question.question_payload, dict) else None
+    if isinstance(value, str) and value.strip():
+        return value
+    detail = f"Active probe question is missing {key}."
+    raise LearningCapabilitiesValidationError(detail)
+
+
+def _question_payload_string_list(question: LearningQuestion, key: str) -> list[str]:
+    value = question.question_payload.get(key) if isinstance(question.question_payload, dict) else None
+    if not isinstance(value, list):
+        return []
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
 
 
 def _submitted_probe_output(

@@ -513,8 +513,18 @@ class CoursesFacade:  # noqa: PLR0904
                 expected_answer=drill.expected_answer,
                 answer_kind=drill.answer_kind,
                 grade_kind="practice_answer",
-                expected_payload={"expectedAnswer": drill.expected_answer, "answerKind": drill.answer_kind},
-                question_payload={"inputKind": drill.answer_kind, "hints": drill.hints},
+                expected_payload={
+                    "expectedAnswer": drill.expected_answer,
+                    "answerKind": drill.answer_kind,
+                    "probeFamily": drill.probe_family,
+                },
+                question_payload={
+                    "inputKind": drill.answer_kind,
+                    "probeFamily": drill.probe_family,
+                    "rendererKind": drill.renderer_kind,
+                    "choices": drill.choices,
+                    "hints": drill.hints,
+                },
                 hints=drill.hints,
                 structure_signature=drill.structure_signature,
                 predicted_p_correct=drill.predicted_p_correct,
@@ -533,6 +543,9 @@ class CoursesFacade:  # noqa: PLR0904
                     lesson_id=stored.lesson_id,
                     question=stored.question,
                     input_kind=cast("Any", stored.answer_kind),
+                    probe_family=drill.probe_family,
+                    renderer_kind=drill.renderer_kind,
+                    choices=drill.choices,
                     hints=stored.hints,
                 )
             )
@@ -679,6 +692,8 @@ class CoursesFacade:  # noqa: PLR0904
                 "target_low": float(question.target_low),
                 "target_high": float(question.target_high),
                 "core_model": question.core_model,
+                "probe_family": self._question_payload_text(question, "probeFamily"),
+                "renderer_kind": self._question_payload_text(question, "rendererKind"),
                 "attempt_id": str(payload.attempt_id),
                 "status": attempt_status,
             },
@@ -784,6 +799,13 @@ class CoursesFacade:  # noqa: PLR0904
             )
             detail = "Grading service is temporarily unavailable"
             raise CoursesFacadeUpstreamError(detail) from error
+
+    @staticmethod
+    def _question_payload_text(question: LearningQuestion, key: str) -> str | None:
+        if not isinstance(question.question_payload, dict):
+            return None
+        value = question.question_payload.get(key)
+        return value if isinstance(value, str) and value.strip() else None
 
     def _stringify_attempt_answer(self, payload: AttemptRequest) -> str:
         if payload.answer.kind == "skip":

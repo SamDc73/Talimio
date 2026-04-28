@@ -1955,6 +1955,8 @@ class LLMClient:
         history: str,
         learner_context: str,
         difficulty_guidance: str,
+        probe_family: str,
+        family_guidance: str,
         count: int,
         response_model: type[T],
         user_id: str | uuid.UUID | None = None,
@@ -1967,6 +1969,8 @@ class LLMClient:
             concept_description=concept_description or "",
             learner_context=learner_context,
             difficulty_guidance=difficulty_guidance,
+            probe_family=probe_family,
+            family_guidance=family_guidance,
             history=history,
         )
         messages = [
