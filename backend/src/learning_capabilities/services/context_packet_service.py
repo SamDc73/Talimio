@@ -90,7 +90,6 @@ class LearningContextPacketService:
                     user_id=user_id,
                     course_id=context_id,
                     thread_id=_parse_lesson_id(payload.context_meta.get("thread_id")),
-                    lesson_id=lesson_id,
                 )
                 active_probe_suggestion = await self._query_service.get_active_probe_suggestion(
                     user_id=user_id,

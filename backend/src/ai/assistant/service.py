@@ -474,6 +474,39 @@ def _add_probe_routing_state(packet: dict[str, Any], context_bundle: Any) -> Non
         }
 
 
+def _add_frontier_routing_state(packet: dict[str, Any], context_bundle: Any) -> None:
+    if context_bundle.frontier_state is None:
+        return
+
+    frontier = _model_dump_jsonable(context_bundle.frontier_state)
+    packet["frontierState"] = {
+        "dueCount": frontier.get("dueCount", 0),
+        "avgMastery": frontier.get("avgMastery", 0.0),
+        "dueForReview": _compact_frontier_items(frontier.get("dueForReview", [])),
+        "frontier": _compact_frontier_items(frontier.get("frontier", [])),
+        "comingSoon": _compact_frontier_items(frontier.get("comingSoon", [])),
+    }
+
+
+def _compact_frontier_items(items: Any) -> list[dict[str, Any]]:
+    if not isinstance(items, list):
+        return []
+    compact_items = []
+    for item in items[:3]:
+        if not isinstance(item, dict):
+            continue
+        compact_items.append(
+            {
+                "conceptId": item.get("conceptId"),
+                "name": item.get("name"),
+                "mastery": item.get("mastery"),
+                "exposures": item.get("exposures", 0),
+                "nextReviewAt": item.get("nextReviewAt"),
+            }
+        )
+    return compact_items
+
+
 def _build_learning_routing_packet(context_bundle: Any) -> dict[str, Any]:
     """Return metadata for tool routing without embedding answer evidence."""
     packet: dict[str, Any] = {
@@ -495,6 +528,7 @@ def _build_learning_routing_packet(context_bundle: Any) -> dict[str, Any]:
     _add_focus_routing_state(packet, context_bundle)
     _add_source_routing_state(packet, context_bundle)
     _add_probe_routing_state(packet, context_bundle)
+    _add_frontier_routing_state(packet, context_bundle)
 
     return {key: value for key, value in packet.items() if value is not None}
 
@@ -579,6 +613,8 @@ async def _maybe_get_tutor_context(
 ) -> dict[str, Any] | None:
     if context_bundle.course_mode != "adaptive":
         return None
+    if _latest_turn_switches_topic(request.latest_user_text):
+        return None
     if not (
         _latest_turn_needs_tutor_context(request.latest_user_text)
         or _submitted_probe_needs_tutor_context(chat_probe_result)
@@ -640,6 +676,135 @@ def _latest_turn_asks_for_follow_up_probe(latest_user_text: str) -> bool:
     return any(trigger in lowered for trigger in FOLLOW_UP_PROBE_TRIGGERS)
 
 
+def _latest_turn_asks_what_to_study(latest_user_text: str) -> bool:
+    lowered = latest_user_text.lower()
+    return any(trigger in lowered for trigger in ("what should i study", "what to study", "what is due", "what's due"))
+
+
+def _generated_probe_is_ready(result: dict[str, Any]) -> bool:
+    return result.get("activeProbeId") is not None and isinstance(result.get("probe"), dict)
+
+
+def _latest_turn_switches_topic(latest_user_text: str) -> bool:
+    lowered = latest_user_text.lower()
+    explicit_switches = ("switch topic", "switch topics", "change topic", "new topic", "instead")
+    practice_switches = ("quiz me on", "test me on", "practice", "review")
+    topic_starters = ("let's do", "lets do", "can we do", "i want to do")
+    return (
+        any(trigger in lowered for trigger in explicit_switches)
+        or any(trigger in lowered and (" on " in lowered or " instead" in lowered) for trigger in practice_switches)
+        or lowered.startswith(topic_starters)
+    )
+
+
+def _course_id_from_context_bundle(context_bundle: Any) -> str | None:
+    course_state = context_bundle.course_state
+    return str(course_state.course_id) if course_state is not None else None
+
+
+async def _maybe_get_requested_course_frontier(
+    *,
+    learning_facade: LearningCapabilitiesFacade,
+    user_id: uuid.UUID,
+    request: NormalizedChatRequest,
+    context_bundle: Any,
+) -> dict[str, Any] | None:
+    if context_bundle.course_mode != "adaptive" or not _latest_turn_asks_what_to_study(request.latest_user_text):
+        return None
+    course_id = _course_id_from_context_bundle(context_bundle)
+    if course_id is None:
+        return None
+
+    logger.info(
+        "learning_capability.study_next.get_course_frontier",
+        extra={"user_id": str(user_id), "course_id": course_id},
+    )
+    return await learning_facade.execute_read_capability(
+        user_id=user_id,
+        capability_name="get_course_frontier",
+        payload={"course_id": course_id},
+    )
+
+
+async def _maybe_search_switched_topic(
+    *,
+    learning_facade: LearningCapabilitiesFacade,
+    user_id: uuid.UUID,
+    request: NormalizedChatRequest,
+    context_bundle: Any,
+) -> dict[str, Any] | None:
+    if context_bundle.course_mode != "adaptive" or not _latest_turn_switches_topic(request.latest_user_text):
+        return None
+    course_id = _course_id_from_context_bundle(context_bundle)
+    if course_id is None:
+        return None
+
+    logger.info(
+        "learning_capability.topic_switch.search_concepts",
+        extra={"user_id": str(user_id), "course_id": course_id},
+    )
+    return await learning_facade.execute_read_capability(
+        user_id=user_id,
+        capability_name="search_concepts",
+        payload={
+            "course_id": course_id,
+            "query": request.latest_user_text,
+            "limit": 5,
+            "include_state": True,
+        },
+    )
+
+
+async def _maybe_generate_topic_switch_probe(
+    *,
+    learning_facade: LearningCapabilitiesFacade,
+    user_id: uuid.UUID,
+    request: NormalizedChatRequest,
+    topic_switch_concepts: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if (
+        topic_switch_concepts is None
+        or not _latest_turn_asks_for_follow_up_probe(request.latest_user_text)
+    ):
+        return None
+
+    items = topic_switch_concepts.get("items")
+    if not isinstance(items, list) or not items:
+        return None
+    first_item = items[0]
+    if not isinstance(first_item, dict):
+        return None
+    course_id = topic_switch_concepts.get("courseId")
+    concept_id = first_item.get("conceptId")
+    if not isinstance(course_id, str) or not isinstance(concept_id, str):
+        return None
+
+    payload: dict[str, Any] = {
+        "course_id": course_id,
+        "concept_id": concept_id,
+        "count": 1,
+        "practice_context": "chat",
+        "learner_context": request.latest_user_text[:2000],
+        "thread_id": str(request.thread_id),
+    }
+    lesson_id = first_item.get("lessonId")
+    if isinstance(lesson_id, str):
+        payload["lesson_id"] = lesson_id
+    try:
+        result = await learning_facade.execute_action_capability(
+            user_id=user_id,
+            capability_name="generate_concept_probe",
+            payload=payload,
+        )
+        return result if _generated_probe_is_ready(result) else None
+    except DomainError as error:
+        logger.warning(
+            "learning_capability.topic_switch_probe.skipped",
+            extra={"user_id": str(user_id), "course_id": course_id, "concept_id": concept_id, "reason": str(error)},
+        )
+        return None
+
+
 async def _maybe_generate_tutor_follow_up_probe(
     *,
     learning_facade: LearningCapabilitiesFacade,
@@ -650,6 +815,8 @@ async def _maybe_generate_tutor_follow_up_probe(
     chat_probe_result: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
     if tutor_context is None or context_bundle.active_chat_probe is not None:
+        return None
+    if _latest_turn_switches_topic(request.latest_user_text):
         return None
     if not (
         _latest_turn_asks_for_follow_up_probe(request.latest_user_text)
@@ -682,11 +849,12 @@ async def _maybe_generate_tutor_follow_up_probe(
     if isinstance(lesson_id, str):
         payload["lesson_id"] = lesson_id
     try:
-        return await learning_facade.execute_action_capability(
+        result = await learning_facade.execute_action_capability(
             user_id=user_id,
             capability_name="generate_concept_probe",
             payload=payload,
         )
+        return result if _generated_probe_is_ready(result) else None
     except DomainError as error:
         logger.warning(
             "learning_capability.tutor_follow_up_probe.skipped",
@@ -984,6 +1152,42 @@ async def assistant_chat(
         yield _sse_event("[DONE]")
 
 
+def _append_prefetched_learning_blocks(
+    *,
+    user_blocks: list[dict[str, Any]],
+    requested_frontier: dict[str, Any] | None,
+    topic_switch_concepts: dict[str, Any] | None,
+    topic_switch_probe: dict[str, Any] | None,
+) -> None:
+    if requested_frontier is not None:
+        user_blocks.append(
+            {
+                "type": "text",
+                "text": f"\n\n[requested_course_frontier]\n{json.dumps(requested_frontier, default=str)}",
+            }
+        )
+    if topic_switch_concepts is not None:
+        user_blocks.append(
+            {
+                "type": "text",
+                "text": f"\n\n[topic_switch_concept_search]\n{json.dumps(topic_switch_concepts, default=str)}",
+            }
+        )
+    if topic_switch_probe is not None:
+        user_blocks.append(
+            {
+                "type": "text",
+                "text": f"\n\n[topic_switch_probe]\n{json.dumps(topic_switch_probe, default=str)}",
+            }
+        )
+        user_blocks.append(
+            {
+                "type": "text",
+                "text": "\n\n[topic_switch_probe_contract]\nShow this generated probe and its activeProbeId. Do not call `generate_concept_probe` again for this turn.",
+            }
+        )
+
+
 async def _build_messages(
     request: NormalizedChatRequest,
     user_id: uuid.UUID,
@@ -1023,6 +1227,24 @@ async def _build_messages(
         session=session,
     )
     probe_submitted = chat_probe_result is not None
+    requested_frontier = await _maybe_get_requested_course_frontier(
+        learning_facade=learning_facade,
+        user_id=user_id,
+        request=request,
+        context_bundle=context_bundle,
+    )
+    topic_switch_concepts = await _maybe_search_switched_topic(
+        learning_facade=learning_facade,
+        user_id=user_id,
+        request=request,
+        context_bundle=context_bundle,
+    )
+    topic_switch_probe = await _maybe_generate_topic_switch_probe(
+        learning_facade=learning_facade,
+        user_id=user_id,
+        request=request,
+        topic_switch_concepts=topic_switch_concepts,
+    )
     tutor_context = await _maybe_get_tutor_context(
         learning_facade=learning_facade,
         user_id=user_id,
@@ -1043,9 +1265,15 @@ async def _build_messages(
         tutor_context=tutor_context,
         chat_probe_result=chat_probe_result,
     )
-    if follow_up_probe is not None:
+    if topic_switch_probe is not None or follow_up_probe is not None:
         await session.commit()
     prefetched_learning_tools: list[str] = []
+    if requested_frontier is not None:
+        prefetched_learning_tools.append("get_course_frontier")
+    if topic_switch_concepts is not None:
+        prefetched_learning_tools.append("search_concepts")
+    if topic_switch_probe is not None:
+        prefetched_learning_tools.append("generate_concept_probe")
     if tutor_context is not None:
         prefetched_learning_tools.append("get_concept_tutor_context")
     if follow_up_probe is not None:
@@ -1057,6 +1285,12 @@ async def _build_messages(
     user_blocks = list(request.latest_user_blocks)
     context_packet = _build_learning_routing_packet(context_bundle)
     user_blocks.append({"type": "text", "text": f"\n\n[learning_context_packet]\n{json.dumps(context_packet, default=str)}"})
+    _append_prefetched_learning_blocks(
+        user_blocks=user_blocks,
+        requested_frontier=requested_frontier,
+        topic_switch_concepts=topic_switch_concepts,
+        topic_switch_probe=topic_switch_probe,
+    )
     if probe_submitted:
         user_blocks.append(
             {
@@ -1142,10 +1376,9 @@ async def _maybe_submit_active_chat_probe(
 
 def _extract_chat_probe_answer(latest_user_text: str) -> str | None:
     text = latest_user_text.strip()
-    if not text:
-        return None
-
     lowered = text.lower()
+    if not text or _latest_turn_switches_topic(lowered):
+        return None
     help_question_starters = ("can you", "could you", "what", "why", "how", "explain", "help", "give me", "show me")
     explicit_submission_markers = ("submit my answer", "please grade", "please record")
     if lowered.startswith(help_question_starters) and not any(marker in lowered for marker in explicit_submission_markers):

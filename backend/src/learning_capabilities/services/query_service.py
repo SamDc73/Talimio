@@ -360,17 +360,15 @@ class LearningCapabilityQueryService:
         user_id: uuid.UUID,
         course_id: uuid.UUID,
         thread_id: uuid.UUID | None,
-        lesson_id: uuid.UUID | None = None,
     ) -> ActiveChatProbe | None:
         """Return the learner-visible active probe for the current assistant thread."""
-        if thread_id is None or lesson_id is None:
+        if thread_id is None:
             return None
         filters = [
             AssistantActiveProbe.user_id == user_id,
             AssistantActiveProbe.conversation_id == thread_id,
             AssistantActiveProbe.course_id == course_id,
             AssistantActiveProbe.status == "active",
-            AssistantActiveProbe.lesson_id == lesson_id,
         ]
         active_probe = await self._session.scalar(
             select(AssistantActiveProbe)

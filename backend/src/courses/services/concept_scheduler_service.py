@@ -255,7 +255,7 @@ class LectorSchedulerService:
             self._session.add(state)
 
         now = _utc_now()
-        exposures = max(state.exposures, 0)
+        exposures = max(state.exposures or 0, 0)
         base_minutes = float(self._settings.REVIEW_INTERVALS_BY_RATING.get(rating, 1440))
         multiplier = 1.0 + (exposures * self._settings.EXPOSURE_MULTIPLIER)
         if duration_ms is not None and duration_ms > 0:
@@ -361,7 +361,52 @@ class LectorSchedulerService:
             ranked_entries.append((key, entry))
 
         ranked_entries.sort(key=itemgetter(0))
-        return [entry for _, entry in ranked_entries]
+        ordered_entries = [entry for _, entry in ranked_entries]
+        return await self._space_due_entries(entries=ordered_entries)
+
+    async def _space_due_entries(
+        self,
+        *,
+        entries: Sequence[DueConceptEntry],
+    ) -> list[DueConceptEntry]:
+        entry_list = list(entries)
+        if len(entry_list) <= 2:
+            return entry_list
+
+        concept_ids = [entry["concept"].id for entry in entry_list]
+        rows = await self._session.execute(
+            select(
+                ConceptSimilarity.concept_a_id,
+                ConceptSimilarity.concept_b_id,
+                ConceptSimilarity.similarity,
+            ).where(
+                and_(
+                    ConceptSimilarity.concept_a_id.in_(concept_ids),
+                    ConceptSimilarity.concept_b_id.in_(concept_ids),
+                )
+            )
+        )
+        similarity_by_pair: dict[tuple[uuid.UUID, uuid.UUID], float] = {}
+        for concept_a_raw, concept_b_raw, similarity in rows.all():
+            concept_a_id = self._coerce_uuid(concept_a_raw)
+            concept_b_id = self._coerce_uuid(concept_b_raw)
+            similarity_value = float(similarity)
+            similarity_by_pair[concept_a_id, concept_b_id] = similarity_value
+            similarity_by_pair[concept_b_id, concept_a_id] = similarity_value
+
+        spaced = [entry_list.pop(0)]
+        while entry_list:
+            previous_concept_id = spaced[-1]["concept"].id
+            next_index, next_entry = min(
+                enumerate(entry_list),
+                key=lambda item: (
+                    similarity_by_pair.get((previous_concept_id, item[1]["concept"].id), 0.0),
+                    item[0],
+                ),
+            )
+            spaced.append(next_entry)
+            entry_list.pop(next_index)
+        return spaced
 
     async def recommend_adaptive_pass(
         self,
@@ -569,7 +614,7 @@ class LectorSchedulerService:
         ema = LEARNER_PROFILE_EMA
         success = 1.0 if rating >= 3 else 0.0
         profile["success_rate"] = (1 - ema) * profile["success_rate"] + ema * success
-        profile["retention_rate"] = (1 - ema) * profile["retention_rate"] + ema * (state.s_mastery)
+        profile["retention_rate"] = (1 - ema) * profile["retention_rate"] + ema * (state.s_mastery or 0.0)
 
         if duration_ms is not None and duration_ms > 0:
             speed = max(
