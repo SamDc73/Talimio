@@ -34,6 +34,7 @@ from .models import Course, CourseConcept, LearningAttempt, LearningQuestion, Le
 from .schemas import (
     AttemptRequest,
     AttemptResponse,
+    ConceptReviewRequest,
     CourseResponse,
     FrontierResponse,
     GradeAnswerPayload,
@@ -51,6 +52,7 @@ from .schemas import (
     ReviewBatchRequest,
     ReviewBatchResponse,
     ReviewOutcome,
+    ReviewRequest,
 )
 from .services.concept_graph_service import ConceptGraphService
 from .services.concept_scheduler_service import LectorSchedulerService
@@ -953,6 +955,38 @@ class CoursesFacade:  # noqa: PLR0904
                 )
 
         return ReviewBatchResponse(outcomes=outcomes)
+
+    async def submit_concept_review(
+        self,
+        *,
+        course_id: uuid.UUID,
+        lesson_id: uuid.UUID,
+        payload: ConceptReviewRequest,
+        user_id: uuid.UUID,
+    ) -> ReviewBatchResponse:
+        """Submit one explicit learner self-rating for a concept."""
+        await self._require_owned_course(course_id=course_id, user_id=user_id)
+        lesson_exists = await self._session.scalar(
+            select(Lesson.id).where(
+                Lesson.id == lesson_id,
+                Lesson.course_id == course_id,
+            )
+        )
+        if lesson_exists is None:
+            detail = "Lesson not found"
+            raise CoursesFacadeNotFoundError(detail)
+
+        review = ReviewRequest(
+            concept_id=payload.concept_id,
+            rating=payload.rating,
+            review_duration_ms=payload.review_duration_ms,
+        )
+        return await self.submit_adaptive_reviews(
+            course_id=course_id,
+            lesson_id=lesson_id,
+            payload=ReviewBatchRequest(reviews=[review]),
+            user_id=user_id,
+        )
 
     async def _assert_course_contains_review_concepts(self, *, course_id: uuid.UUID, reviews: list[Any]) -> None:
         concept_ids = {review.concept_id for review in reviews}

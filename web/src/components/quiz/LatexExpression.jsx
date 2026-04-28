@@ -81,6 +81,7 @@ export function LatexExpression({
 	onGrade,
 	onSkip,
 	onComplete,
+	completeOnAnyGrade = false,
 }) {
 	const [answerText, setAnswerText] = useState("")
 	const [feedback, setFeedback] = useState(null)
@@ -215,7 +216,7 @@ export function LatexExpression({
 			setFeedback(grade ?? null)
 			setSkipFeedback(null)
 
-			if (grade?.isCorrect) {
+			if (grade?.isCorrect || completeOnAnyGrade) {
 				setIsComplete(true)
 				onComplete?.(result)
 			}
@@ -228,6 +229,7 @@ export function LatexExpression({
 		answerKind,
 		answerText,
 		attemptCount,
+		completeOnAnyGrade,
 		criteria,
 		isMathLatex,
 		resolvedExpectedAnswer,

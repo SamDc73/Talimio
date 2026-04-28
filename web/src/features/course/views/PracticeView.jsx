@@ -55,47 +55,26 @@ function normalizeDrill(rawItem) {
 	}
 
 	const question = typeof rawItem.question === "string" ? rawItem.question.trim() : ""
-	const expectedAnswer = typeof rawItem.expectedAnswer === "string" ? rawItem.expectedAnswer.trim() : ""
-	let answerKind = ""
-	if (rawItem.answerKind === "text") {
-		answerKind = "text"
-	} else if (rawItem.answerKind === "math_latex") {
-		answerKind = "math_latex"
+	const questionId = rawItem.questionId ? String(rawItem.questionId) : ""
+	let inputKind = ""
+	if (rawItem.inputKind === "text") {
+		inputKind = "text"
+	} else if (rawItem.inputKind === "math_latex") {
+		inputKind = "math_latex"
 	}
 	const conceptId = rawItem.conceptId ? String(rawItem.conceptId) : ""
 	const lessonId = rawItem.lessonId ? String(rawItem.lessonId) : ""
-	const structureSignature = typeof rawItem.structureSignature === "string" ? rawItem.structureSignature.trim() : ""
-	if (!question || !expectedAnswer || !answerKind || !conceptId || !lessonId || !structureSignature) {
+	if (!question || !questionId || !inputKind || !conceptId || !lessonId) {
 		return null
 	}
 
-	const predictedPCorrect =
-		typeof rawItem.predictedPCorrect === "number" && Number.isFinite(rawItem.predictedPCorrect)
-			? rawItem.predictedPCorrect
-			: null
-	const targetProbability =
-		typeof rawItem.targetProbability === "number" && Number.isFinite(rawItem.targetProbability)
-			? rawItem.targetProbability
-			: null
-	const targetLow =
-		typeof rawItem.targetLow === "number" && Number.isFinite(rawItem.targetLow) ? rawItem.targetLow : null
-	const targetHigh =
-		typeof rawItem.targetHigh === "number" && Number.isFinite(rawItem.targetHigh) ? rawItem.targetHigh : null
-	const coreModel = typeof rawItem.coreModel === "string" && rawItem.coreModel.trim() ? rawItem.coreModel.trim() : null
-
 	return {
+		questionId,
 		conceptId,
 		lessonId,
 		question,
-		expectedAnswer,
-		answerKind,
+		inputKind,
 		hints: rawItem.hints,
-		structureSignature,
-		predictedPCorrect,
-		targetProbability,
-		targetLow,
-		targetHigh,
-		coreModel,
 	}
 }
 
@@ -103,8 +82,7 @@ function drillKey(item) {
 	if (!item) {
 		return ""
 	}
-	const normalizedQuestion = item.question.trim().toLowerCase().replace(/\s+/g, " ")
-	return `${item.conceptId}:${item.structureSignature}:${normalizedQuestion}`
+	return item.questionId
 }
 
 export default function PracticeView() {
@@ -227,14 +205,16 @@ export default function PracticeView() {
 			setNoMoreItems(false)
 
 			try {
-				const response = await courseService.fetchPracticeDrills({
+				const response = await courseService.fetchQuestionSet({
 					conceptId: conceptToFetch.conceptId,
 					count: requestedCount,
+					lessonId: conceptToFetch.lessonId,
+					practiceContext: "drill",
 				})
-				if (!response || !Array.isArray(response.drills)) {
+				if (!response || !Array.isArray(response.questions)) {
 					setNoMoreItems(true)
-					setGenerationError("Invalid practice drill response payload.")
-					logger.error("Invalid practice drill response payload", {
+					setGenerationError("Invalid practice question response payload.")
+					logger.error("Invalid practice question response payload", {
 						courseId,
 						conceptId: conceptToFetch.conceptId,
 						response,
@@ -242,7 +222,7 @@ export default function PracticeView() {
 					return
 				}
 
-				const drills = response.drills
+				const drills = response.questions
 				if (drills.length === 0) {
 					setNoMoreItems(true)
 					return
@@ -283,9 +263,9 @@ export default function PracticeView() {
 
 				setQueue((previousQueue) => [...previousQueue, ...acceptedDrills])
 			} catch (error) {
-				const message = error?.message || "Failed to generate practice drills"
+				const message = error?.message || "Failed to generate practice questions"
 				setGenerationError(message)
-				logger.error("Failed to fetch practice drills", error, {
+				logger.error("Failed to fetch practice questions", error, {
 					courseId,
 					conceptId: conceptToFetch.conceptId,
 				})
@@ -507,21 +487,11 @@ export default function PracticeView() {
 				throw new Error("No active question available")
 			}
 
-			const reviewMetadata = {
-				question: currentQuestion.question,
-				structureSignature: currentQuestion.structureSignature,
-				predictedPCorrect: currentQuestion.predictedPCorrect,
-				targetProbability: currentQuestion.targetProbability,
-				targetLow: currentQuestion.targetLow,
-				targetHigh: currentQuestion.targetHigh,
-				coreModel: currentQuestion.coreModel,
-			}
-
 			const result = await submitAnswer({
 				...payload,
+				questionId: currentQuestion.questionId,
 				conceptId: currentQuestion.conceptId,
 				practiceContext: "drill",
-				reviewMetadata,
 			})
 			recordAnswerEvent({ isCorrect: Boolean(result?.grade?.isCorrect), conceptId: currentQuestion.conceptId })
 			return result
@@ -535,21 +505,11 @@ export default function PracticeView() {
 				throw new Error("No active question available")
 			}
 
-			const reviewMetadata = {
-				question: currentQuestion.question,
-				structureSignature: currentQuestion.structureSignature,
-				predictedPCorrect: currentQuestion.predictedPCorrect,
-				targetProbability: currentQuestion.targetProbability,
-				targetLow: currentQuestion.targetLow,
-				targetHigh: currentQuestion.targetHigh,
-				coreModel: currentQuestion.coreModel,
-			}
-
 			const result = await submitSkip({
 				...payload,
+				questionId: currentQuestion.questionId,
 				conceptId: currentQuestion.conceptId,
 				practiceContext: "drill",
-				reviewMetadata,
 			})
 			recordAnswerEvent({ isCorrect: false, conceptId: currentQuestion.conceptId })
 			return result
@@ -654,10 +614,10 @@ export default function PracticeView() {
 			<LatexExpression
 				key={drillKey(currentQuestion)}
 				question={currentQuestion.question}
-				expectedAnswer={currentQuestion.expectedAnswer}
-				answerKind={currentQuestion.answerKind}
+				answerKind={currentQuestion.inputKind}
 				hints={currentQuestion.hints}
 				practiceContext="drill"
+				completeOnAnyGrade
 				onGrade={handleGrade}
 				onSkip={handleSkip}
 				onComplete={handleItemComplete}

@@ -23,6 +23,7 @@ from src.courses.schemas import (
     AttemptResponse,
     CodeExecuteRequest,
     CodeExecuteResponse,
+    ConceptReviewRequest,
     CourseListResponse,
     CourseResponse,
     CourseUpdate,
@@ -351,6 +352,23 @@ async def submit_adaptive_reviews(
 ) -> ReviewBatchResponse:
     """Submit concept reviews for LECTOR scheduling."""
     return await facade.submit_adaptive_reviews(
+        course_id=course_id,
+        lesson_id=lesson_id,
+        payload=payload,
+        user_id=auth.user_id,
+    )
+
+
+@router.post("/{course_id}/lessons/{lesson_id}/concept-reviews")
+async def submit_concept_review(
+    course_id: uuid.UUID,
+    lesson_id: uuid.UUID,
+    payload: ConceptReviewRequest,
+    auth: CurrentAuth,
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
+) -> ReviewBatchResponse:
+    """Submit one subjective learner self-rating for LECTOR scheduling."""
+    return await facade.submit_concept_review(
         course_id=course_id,
         lesson_id=lesson_id,
         payload=payload,

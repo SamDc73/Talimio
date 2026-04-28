@@ -43,7 +43,12 @@ export function useCourseService(courseId = null) {
 	const selfAssessmentQuestions = useApi("/courses/self-assessment/questions", { method: "POST" })
 	const getConceptFrontier = useApi("/courses/{courseId}/concepts")
 	const generatePracticeDrillsEndpoint = useApi("/courses/{courseId}/practice/drills", { method: "POST" })
+	const createQuestionSetEndpoint = useApi("/courses/{courseId}/question-sets", { method: "POST" })
+	const submitAttemptEndpoint = useApi("/courses/{courseId}/attempts", { method: "POST" })
 	const submitReviewsEndpoint = useApi("/courses/{courseId}/lessons/{lessonId}/reviews", { method: "POST" })
+	const submitConceptReviewEndpoint = useApi("/courses/{courseId}/lessons/{lessonId}/concept-reviews", {
+		method: "POST",
+	})
 	const getConceptNextReview = useApi("/courses/{courseId}/concepts/{conceptId}/next-review")
 	const gradeLessonAnswerEndpoint = useApi("/courses/{courseId}/lessons/{lessonId}/grade", { method: "POST" })
 
@@ -113,6 +118,38 @@ export function useCourseService(courseId = null) {
 				{ conceptId: payload.conceptId, count: payload.count },
 				{ pathParams: { courseId } }
 			)
+		},
+
+		async fetchQuestionSet(payload) {
+			if (!courseId) {
+				throw new Error("Course ID required")
+			}
+			if (!payload?.conceptId) {
+				throw new Error("conceptId is required")
+			}
+			if (typeof payload?.count !== "number" || Number.isNaN(payload.count)) {
+				throw new TypeError("count must be a number")
+			}
+
+			return await createQuestionSetEndpoint.execute(
+				{
+					conceptId: payload.conceptId,
+					count: payload.count,
+					practiceContext: payload.practiceContext ?? "drill",
+					lessonId: payload.lessonId ?? null,
+				},
+				{ pathParams: { courseId } }
+			)
+		},
+
+		async submitAttempt(payload) {
+			if (!courseId) {
+				throw new Error("Course ID required")
+			}
+			if (!payload?.attemptId || !payload?.questionId) {
+				throw new Error("attemptId and questionId are required")
+			}
+			return await submitAttemptEndpoint.execute(payload, { pathParams: { courseId } })
 		},
 
 		/**
@@ -264,6 +301,16 @@ export function useCourseService(courseId = null) {
 			return await submitReviewsEndpoint.execute({ reviews }, { pathParams: { courseId, lessonId } })
 		},
 
+		async submitConceptReview(lessonId, payload) {
+			if (!courseId || !lessonId) {
+				throw new Error("Course ID and Lesson ID required")
+			}
+			if (!payload?.conceptId) {
+				throw new Error("conceptId is required")
+			}
+			return await submitConceptReviewEndpoint.execute(payload, { pathParams: { courseId, lessonId } })
+		},
+
 		/**
 		 * Grade a lesson answer for a practice interaction
 		 * @param {string} lessonId - Lesson ID
@@ -303,12 +350,15 @@ export function useCourseService(courseId = null) {
 				updateCourse.isLoading ||
 				getConceptFrontier.isLoading ||
 				generatePracticeDrillsEndpoint.isLoading ||
+				createQuestionSetEndpoint.isLoading ||
+				submitAttemptEndpoint.isLoading ||
 				getLessons.isLoading ||
 				getLesson.isLoading ||
 				generateLesson.isLoading ||
 				regenerateLesson.isLoading ||
 				updateLesson.isLoading ||
 				submitReviewsEndpoint.isLoading ||
+				submitConceptReviewEndpoint.isLoading ||
 				getConceptNextReview.isLoading ||
 				gradeLessonAnswerEndpoint.isLoading
 			)
@@ -325,12 +375,15 @@ export function useCourseService(courseId = null) {
 				updateCourse.error ||
 				getConceptFrontier.error ||
 				generatePracticeDrillsEndpoint.error ||
+				createQuestionSetEndpoint.error ||
+				submitAttemptEndpoint.error ||
 				getLessons.error ||
 				getLesson.error ||
 				generateLesson.error ||
 				regenerateLesson.error ||
 				updateLesson.error ||
 				submitReviewsEndpoint.error ||
+				submitConceptReviewEndpoint.error ||
 				getConceptNextReview.error ||
 				gradeLessonAnswerEndpoint.error
 			)

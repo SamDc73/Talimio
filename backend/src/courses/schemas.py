@@ -324,6 +324,16 @@ class ReviewBatchRequest(BaseModel):
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
+class ConceptReviewRequest(BaseModel):
+    """Single subjective concept review payload."""
+
+    concept_id: uuid.UUID = Field(description="Concept being reviewed")
+    rating: Annotated[int, Field(ge=1, le=4)]
+    review_duration_ms: Annotated[int, Field(ge=0)]
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
 class ReviewOutcome(BaseModel):
     """Per-concept outcome returned after submitting reviews."""
 

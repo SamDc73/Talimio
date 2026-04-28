@@ -16,44 +16,6 @@ function normalizeReviewDurationMs(value) {
 	return Math.round(value)
 }
 
-function normalizeReviewMetadata(reviewMetadata) {
-	if (!reviewMetadata || typeof reviewMetadata !== "object") {
-		return {}
-	}
-
-	const normalized = {}
-
-	if (typeof reviewMetadata.question === "string" && reviewMetadata.question.trim().length > 0) {
-		normalized.question = reviewMetadata.question.trim()
-	}
-
-	if (typeof reviewMetadata.structureSignature === "string" && reviewMetadata.structureSignature.trim().length > 0) {
-		normalized.structureSignature = reviewMetadata.structureSignature.trim()
-	}
-
-	if (typeof reviewMetadata.predictedPCorrect === "number" && Number.isFinite(reviewMetadata.predictedPCorrect)) {
-		normalized.predictedPCorrect = reviewMetadata.predictedPCorrect
-	}
-
-	if (typeof reviewMetadata.targetProbability === "number" && Number.isFinite(reviewMetadata.targetProbability)) {
-		normalized.targetProbability = reviewMetadata.targetProbability
-	}
-
-	if (typeof reviewMetadata.targetLow === "number" && Number.isFinite(reviewMetadata.targetLow)) {
-		normalized.targetLow = reviewMetadata.targetLow
-	}
-
-	if (typeof reviewMetadata.targetHigh === "number" && Number.isFinite(reviewMetadata.targetHigh)) {
-		normalized.targetHigh = reviewMetadata.targetHigh
-	}
-
-	if (typeof reviewMetadata.coreModel === "string" && reviewMetadata.coreModel.trim().length > 0) {
-		normalized.coreModel = reviewMetadata.coreModel.trim()
-	}
-
-	return normalized
-}
-
 /**
  * Minimal adaptive review submission (no latency/timers).
  */
@@ -74,7 +36,7 @@ export function useLectorReview({ courseId, lessonId, conceptId: initialConceptI
 	)
 
 	const submitReview = useCallback(
-		async ({ conceptId: targetConceptId, rating, reviewDurationMs, reviewMetadata } = {}) => {
+		async ({ conceptId: targetConceptId, rating, reviewDurationMs } = {}) => {
 			if (!courseId || !lessonId) {
 				throw new Error("Course ID and Lesson ID required for adaptive review submission")
 			}
@@ -83,16 +45,13 @@ export function useLectorReview({ courseId, lessonId, conceptId: initialConceptI
 			const normalizedRating = normalizeRating(rating)
 			const duration = normalizeReviewDurationMs(reviewDurationMs)
 
-			const normalizedMetadata = normalizeReviewMetadata(reviewMetadata)
-			const payload = [
-				{ conceptId: concept, rating: normalizedRating, reviewDurationMs: duration, ...normalizedMetadata },
-			]
+			const payload = { conceptId: concept, rating: normalizedRating, reviewDurationMs: duration }
 
 			setIsSubmitting(true)
 			setError(null)
 
 			try {
-				const response = await courseService.submitLessonReviews(lessonId, payload)
+				const response = await courseService.submitConceptReview(lessonId, payload)
 
 				if (typeof onSuccess === "function") {
 					onSuccess(response, payload)
@@ -106,13 +65,6 @@ export function useLectorReview({ courseId, lessonId, conceptId: initialConceptI
 					conceptId: concept,
 					rating: normalizedRating,
 					reviewDurationMs: duration,
-					question: normalizedMetadata.question ?? null,
-					structureSignature: normalizedMetadata.structureSignature ?? null,
-					predictedPCorrect: normalizedMetadata.predictedPCorrect ?? null,
-					targetProbability: normalizedMetadata.targetProbability ?? null,
-					targetLow: normalizedMetadata.targetLow ?? null,
-					targetHigh: normalizedMetadata.targetHigh ?? null,
-					coreModel: normalizedMetadata.coreModel ?? null,
 					nextReviewAt: primaryOutcome?.nextReviewAt ?? null,
 					mastery: primaryOutcome?.mastery ?? null,
 					exposures: primaryOutcome?.exposures ?? null,
