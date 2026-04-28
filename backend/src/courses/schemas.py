@@ -545,15 +545,6 @@ class GradeResponse(BaseModel):
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
-class PracticeDrillRequest(BaseModel):
-    """Request payload for adaptive practice drill generation."""
-
-    concept_id: uuid.UUID = Field(..., description="Concept to generate drill questions for")
-    count: int = Field(..., ge=1, le=10, description="Number of drill items to generate")
-
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
-
-
 class PracticeDrillItem(BaseModel):
     """Single generated practice drill item."""
 
@@ -569,14 +560,6 @@ class PracticeDrillItem(BaseModel):
     target_low: float = Field(..., ge=0.0, le=1.0, description="Lower bound of the target probability band")
     target_high: float = Field(..., ge=0.0, le=1.0, description="Upper bound of the target probability band")
     core_model: str = Field(..., min_length=1, description="Core model used to generate and rank the drill")
-
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
-
-
-class PracticeDrillResponse(BaseModel):
-    """Response payload for adaptive practice drill generation."""
-
-    drills: list[PracticeDrillItem] = Field(default_factory=list, description="Generated drill items")
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 

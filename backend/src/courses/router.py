@@ -35,11 +35,8 @@ from src.courses.schemas import (
     LessonRegenerateRequest,
     LessonVersionHistoryResponse,
     NextReviewResponse,
-    PracticeDrillRequest,
-    PracticeDrillResponse,
     QuestionSetRequest,
     QuestionSetResponse,
-    ReviewBatchRequest,
     ReviewBatchResponse,
     RuntimeListRequest,
     RuntimeProcessInputRequest,
@@ -296,22 +293,6 @@ async def get_course_concept_frontier(
     )
 
 
-@router.post("/{course_id}/practice/drills")
-async def generate_practice_drills(
-    course_id: uuid.UUID,
-    payload: PracticeDrillRequest,
-    auth: CurrentAuth,
-    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
-) -> PracticeDrillResponse:
-    """Generate adaptive drill items for one concept."""
-    return await facade.generate_practice_drills(
-        course_id=course_id,
-        concept_id=payload.concept_id,
-        count=payload.count,
-        user_id=auth.user_id,
-    )
-
-
 @router.post("/{course_id}/question-sets")
 async def create_question_set(
     course_id: uuid.UUID,
@@ -337,23 +318,6 @@ async def submit_attempt(
     """Submit one answer and apply grading, mastery, and scheduling once."""
     return await facade.submit_attempt(
         course_id=course_id,
-        payload=payload,
-        user_id=auth.user_id,
-    )
-
-
-@router.post("/{course_id}/lessons/{lesson_id}/reviews")
-async def submit_adaptive_reviews(
-    course_id: uuid.UUID,
-    lesson_id: uuid.UUID,
-    payload: ReviewBatchRequest,
-    auth: CurrentAuth,
-    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
-) -> ReviewBatchResponse:
-    """Submit concept reviews for LECTOR scheduling."""
-    return await facade.submit_adaptive_reviews(
-        course_id=course_id,
-        lesson_id=lesson_id,
         payload=payload,
         user_id=auth.user_id,
     )

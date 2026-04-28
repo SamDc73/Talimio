@@ -45,7 +45,6 @@ from .schemas import (
     LessonDetailResponse,
     LessonVersionHistoryResponse,
     NextReviewResponse,
-    PracticeDrillResponse,
     QuestionSetItem,
     QuestionSetRequest,
     QuestionSetResponse,
@@ -524,47 +523,6 @@ class CoursesFacade:  # noqa: PLR0904
             graph_service=graph_service,
             scheduler_service=scheduler_service,
         )
-
-    async def generate_practice_drills(
-        self,
-        *,
-        course_id: uuid.UUID,
-        concept_id: uuid.UUID,
-        count: int,
-        user_id: uuid.UUID,
-    ) -> PracticeDrillResponse:
-        """Generate adaptive drill items for one concept in an owned course."""
-        course = await self._require_owned_course(course_id=course_id, user_id=user_id)
-        if not course.adaptive_enabled:
-            detail = "Adaptive scheduling is not enabled for this course"
-            raise CoursesFacadeBadRequestError(detail)
-
-        drill_service = PracticeDrillService(self._session)
-        try:
-            drills = await drill_service.generate_drills(
-                user_id=user_id,
-                course_id=course.id,
-                concept_id=concept_id,
-                count=count,
-            )
-        except LookupError as error:
-            raise CoursesFacadeNotFoundError(str(error)) from error
-        except ValueError as error:
-            raise CoursesFacadeValidationError(str(error)) from error
-        except (RuntimeError, TypeError) as error:
-            logger.exception(
-                "PRACTICE_DRILL_GENERATION_FAILED",
-                extra={
-                    "course_id": str(course.id),
-                    "user_id": str(user_id),
-                    "concept_id": str(concept_id),
-                    "count": count,
-                },
-            )
-            detail = "Failed to generate practice drills"
-            raise CoursesFacadeUpstreamError(detail) from error
-
-        return PracticeDrillResponse(drills=drills)
 
     async def create_question_set(
         self,
