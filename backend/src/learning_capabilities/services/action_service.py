@@ -3,7 +3,6 @@
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import cast
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -13,18 +12,13 @@ from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.assistant.models import AssistantActiveProbe, AssistantConversation
 from src.ai.errors import AIRuntimeError
 from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
-from src.courses.facade import CoursesFacade
-from src.courses.models import Course, Lesson
+from src.courses.facade import CoursesFacade, CoursesFacadeConflictError
+from src.courses.models import Course, LearningQuestion, Lesson
 from src.courses.schemas import (
-    GradeAnswerPayload,
-    GradeContextPayload,
-    GradeExpectedPayload,
-    GradeRequest,
-    PracticeAnswerKind,
+    AttemptAnswerPayload,
+    AttemptRequest,
+    AttemptResponse,
 )
-from src.courses.services.concept_scheduler_service import LectorSchedulerService
-from src.courses.services.concept_state_service import ConceptStateService
-from src.courses.services.grading_service import GradingService
 from src.courses.services.lesson_service import LessonService
 from src.courses.services.practice_drill_service import PracticeDrillService
 from src.learning_capabilities.errors import LearningCapabilitiesValidationError
@@ -355,7 +349,9 @@ class LearningCapabilityActionService:
                 reason="concept_not_assigned_to_current_lesson",
             )
 
+        active_probe_id = uuid.uuid4()
         active_probe = AssistantActiveProbe(
+            id=active_probe_id,
             user_id=user_id,
             conversation_id=conversation_id,
             course_id=course.id,
@@ -374,6 +370,12 @@ class LearningCapabilityActionService:
             practice_context=payload.practice_context,
         )
         self._session.add(active_probe)
+        self._session.add(
+            self._build_chat_learning_question(
+                active_probe=active_probe,
+                user_id=user_id,
+            )
+        )
         try:
             await self._session.flush()
         except IntegrityError:
@@ -464,7 +466,32 @@ class LearningCapabilityActionService:
                 active_probe_id=payload.active_probe_id,
                 reason="active_probe_not_found",
             )
+        answer = _chat_probe_answer_payload(
+            answer_kind=active_probe.answer_kind,
+            learner_answer=payload.learner_answer,
+        )
         if active_probe.status != "active":
+            try:
+                existing_attempt = await CoursesFacade(self._session).submit_attempt(
+                    course_id=course.id,
+                    payload=AttemptRequest(
+                        attempt_id=active_probe.id,
+                        question_id=active_probe.id,
+                        answer=answer,
+                        hints_used=0,
+                        duration_ms=0,
+                    ),
+                    user_id=user_id,
+                )
+            except CoursesFacadeConflictError:
+                existing_attempt = None
+            if existing_attempt is not None:
+                return _submitted_probe_output(
+                    course=course,
+                    course_mode=course_mode,
+                    active_probe=active_probe,
+                    attempt=existing_attempt,
+                )
             return SubmitConceptProbeResultCapabilityOutput(
                 course_id=course.id,
                 course_mode=course_mode,
@@ -473,88 +500,76 @@ class LearningCapabilityActionService:
                 lesson_id=active_probe.lesson_id,
                 reason="active_probe_already_submitted",
             )
-        grade = await GradingService(self._session).grade(
-            GradeRequest(
-                kind="practice_answer",
-                question=active_probe.question,
-                expected=GradeExpectedPayload(
-                    expected_answer=active_probe.expected_answer,
-                    answer_kind=cast("PracticeAnswerKind", active_probe.answer_kind),
-                    criteria=(
-                        "Grade the learner answer for the active chat practice probe. "
-                        "Do not reveal the expected answer or full solution in feedback."
-                    ),
-                ),
-                answer=GradeAnswerPayload(answer_text=payload.learner_answer),
-                context=GradeContextPayload(
-                    course_id=course.id,
-                    lesson_id=active_probe.lesson_id,
-                    concept_id=active_probe.concept_id,
-                    practice_context="quick_check",
-                ),
-            ),
-            user_id,
-        )
-        rating = 4 if grade.is_correct else 1
-        state_service = ConceptStateService(self._session)
-        scheduler_service = LectorSchedulerService(self._session)
-        updated_state = await state_service.update_mastery(
-            user_id=user_id,
-            concept_id=active_probe.concept_id,
-            correct=grade.is_correct,
-        )
-        await state_service.log_probe_event(
-            user_id=user_id,
-            concept_id=active_probe.concept_id,
-            rating=rating,
-            review_duration_ms=0,
-            correct=grade.is_correct,
-            context_tag="chat_probe",
-            extra={
-                "active_probe_id": str(active_probe.id),
-                "question": active_probe.question,
-                "structure_signature": active_probe.structure_signature,
-                "predicted_p_correct": active_probe.predicted_p_correct,
-                "target_probability": active_probe.target_probability,
-                "target_low": active_probe.target_low,
-                "target_high": active_probe.target_high,
-                "core_model": active_probe.core_model,
-                "answer_kind": active_probe.answer_kind,
-            },
-        )
-        next_review = await scheduler_service.calculate_next_review(
-            user_id=user_id,
+
+        await self._ensure_chat_learning_question(active_probe=active_probe, user_id=user_id)
+        attempt = await CoursesFacade(self._session).submit_attempt(
             course_id=course.id,
-            concept_id=active_probe.concept_id,
-            rating=rating,
-            duration_ms=0,
-        )
-        await scheduler_service.update_learner_profile(
+            payload=AttemptRequest(
+                attempt_id=active_probe.id,
+                question_id=active_probe.id,
+                answer=answer,
+                hints_used=0,
+                duration_ms=0,
+            ),
             user_id=user_id,
-            concept_id=active_probe.concept_id,
-            rating=rating,
-            duration_ms=0,
         )
 
         active_probe.status = "answered"
-        active_probe.answered_correct = grade.is_correct
+        active_probe.answered_correct = attempt.is_correct
         active_probe.answer_attempts += 1
         await self._session.flush()
 
-        return SubmitConceptProbeResultCapabilityOutput(
-            course_id=course.id,
+        return _submitted_probe_output(
+            course=course,
             course_mode=course_mode,
-            active_probe_id=active_probe.id,
+            active_probe=active_probe,
+            attempt=attempt,
+        )
+
+    def _build_chat_learning_question(
+        self,
+        *,
+        active_probe: AssistantActiveProbe,
+        user_id: uuid.UUID,
+    ) -> LearningQuestion:
+        return LearningQuestion(
+            id=active_probe.id,
+            user_id=user_id,
+            course_id=active_probe.course_id,
             concept_id=active_probe.concept_id,
             lesson_id=active_probe.lesson_id,
-            is_correct=grade.is_correct,
-            status=grade.status,
-            feedback_markdown=_build_safe_chat_probe_feedback(is_correct=grade.is_correct),
-            mastery=updated_state.s_mastery,
-            exposures=updated_state.exposures,
-            next_review_at=next_review,
-            tags=[],
+            question=active_probe.question,
+            expected_answer=active_probe.expected_answer,
+            answer_kind=active_probe.answer_kind,
+            grade_kind="practice_answer",
+            expected_payload={"expectedAnswer": active_probe.expected_answer, "answerKind": active_probe.answer_kind},
+            question_payload={"inputKind": active_probe.answer_kind, "hints": list(active_probe.hints)},
+            hints=list(active_probe.hints),
+            structure_signature=active_probe.structure_signature,
+            predicted_p_correct=active_probe.predicted_p_correct,
+            target_probability=active_probe.target_probability,
+            target_low=active_probe.target_low,
+            target_high=active_probe.target_high,
+            core_model=active_probe.core_model,
+            practice_context="chat",
         )
+
+    async def _ensure_chat_learning_question(
+        self,
+        *,
+        active_probe: AssistantActiveProbe,
+        user_id: uuid.UUID,
+    ) -> None:
+        existing_question = await self._session.get(LearningQuestion, active_probe.id)
+        if existing_question is not None:
+            return
+        self._session.add(
+            self._build_chat_learning_question(
+                active_probe=active_probe,
+                user_id=user_id,
+            )
+        )
+        await self._session.flush()
 
     async def _resolve_owned_thread_id(
         self,
@@ -781,10 +796,33 @@ def _active_probe_output(
     )
 
 
-def _build_safe_chat_probe_feedback(*, is_correct: bool) -> str:
-    if is_correct:
-        return "Your answer was graded correct. The detailed answer is kept hidden so you can keep practicing."
-    return "Your answer needs revision. The detailed answer is kept hidden so you can try again."
+def _submitted_probe_output(
+    *,
+    course: Course,
+    course_mode: CourseMode,
+    active_probe: AssistantActiveProbe,
+    attempt: AttemptResponse,
+) -> SubmitConceptProbeResultCapabilityOutput:
+    return SubmitConceptProbeResultCapabilityOutput(
+        course_id=course.id,
+        course_mode=course_mode,
+        active_probe_id=active_probe.id,
+        concept_id=active_probe.concept_id,
+        lesson_id=active_probe.lesson_id,
+        is_correct=attempt.is_correct,
+        status=attempt.status,
+        feedback_markdown=attempt.feedback_markdown,
+        mastery=attempt.mastery,
+        exposures=attempt.exposures,
+        next_review_at=attempt.next_review_at,
+        tags=[],
+    )
+
+
+def _chat_probe_answer_payload(*, answer_kind: str, learner_answer: str) -> AttemptAnswerPayload:
+    if answer_kind == "math_latex":
+        return AttemptAnswerPayload(kind="math_latex", answer_latex=learner_answer)
+    return AttemptAnswerPayload(kind="text", answer_text=learner_answer)
 
 
 def _build_create_confirmation() -> CreateCourseCapabilityOutput:

@@ -21,14 +21,21 @@ from src.courses.schemas import LessonDetailResponse
 logger = logging.getLogger(__name__)
 
 
-_SUPPORTED_COMPONENTS = {"LatexExpression", "FreeForm", "JXGBoard"}
-_COMPONENT_RE = re.compile(r"<(LatexExpression|FreeForm|JXGBoard)\b(?P<attrs>[^>]*)/?>", re.DOTALL)
+_SUPPORTED_COMPONENTS = {"LatexExpression", "FreeForm", "JXGBoard", "MultipleChoice", "FillInTheBlank"}
+_COMPONENT_RE = re.compile(
+    r"<(LatexExpression|FreeForm|JXGBoard|MultipleChoice|FillInTheBlank)\b(?P<attrs>[^>]*)/?>",
+    re.DOTALL,
+)
 _ATTR_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _HIDDEN_PROPS = {
     "expectedLatex",
     "expectedAnswer",
     "sampleAnswer",
+    "solutionLatex",
     "expectedState",
+    "correctAnswer",
+    "answer",
+    "explanation",
     "tolerance",
     "perCheckTolerance",
 }
@@ -322,13 +329,13 @@ def _is_object_key_position(text: str, index: int) -> bool:
 def _build_inline_question(component: str, attrs: dict[str, _Attribute]) -> _InlineQuestion | None:  # noqa: PLR0911
     if component not in _SUPPORTED_COMPONENTS:
         return None
-    question = _string_attr(attrs, "question") or "Practice question"
+    question = _string_attr(attrs, "question") or _string_attr(attrs, "sentence") or "Practice question"
     hints = _list_attr(attrs, "hints")
     practice_context = _string_attr(attrs, "practiceContext") or "inline"
     criteria = _string_attr(attrs, "criteria")
 
     if component == "LatexExpression":
-        expected_latex = _string_attr(attrs, "expectedLatex")
+        expected_latex = _string_attr(attrs, "expectedLatex") or _string_attr(attrs, "solutionLatex")
         if not expected_latex:
             return None
         return _InlineQuestion(
@@ -351,6 +358,39 @@ def _build_inline_question(component: str, attrs: dict[str, _Attribute]) -> _Inl
                 "expectedState": expected_state.value,
                 "tolerance": _number_attr(attrs, "tolerance"),
                 "perCheckTolerance": _dict_attr(attrs, "perCheckTolerance"),
+                "criteria": criteria,
+                "practiceContext": practice_context,
+            },
+        )
+    if component == "MultipleChoice":
+        options = _list_attr(attrs, "options")
+        correct_index = _int_attr(attrs, "correctAnswer")
+        if correct_index is None or correct_index < 0 or correct_index >= len(options):
+            return None
+        return _InlineQuestion(
+            question=question,
+            hints=hints,
+            grade_kind="practice_answer",
+            input_kind="text",
+            expected_payload={
+                "expectedAnswer": options[correct_index],
+                "answerKind": "text",
+                "criteria": criteria,
+                "practiceContext": practice_context,
+            },
+        )
+    if component == "FillInTheBlank":
+        expected_blank = _string_attr(attrs, "answer") or _string_attr(attrs, "expectedAnswer")
+        if not expected_blank:
+            return None
+        return _InlineQuestion(
+            question=question,
+            hints=hints,
+            grade_kind="practice_answer",
+            input_kind="text",
+            expected_payload={
+                "expectedAnswer": expected_blank,
+                "answerKind": "text",
                 "criteria": criteria,
                 "practiceContext": practice_context,
             },
@@ -387,6 +427,14 @@ def _number_attr(attrs: dict[str, _Attribute], name: str) -> float | None:
     value = attr.value if attr is not None else None
     if isinstance(value, int | float):
         return float(value)
+    return None
+
+
+def _int_attr(attrs: dict[str, _Attribute], name: str) -> int | None:
+    attr = attrs.get(name)
+    value = attr.value if attr is not None else None
+    if isinstance(value, int):
+        return value
     return None
 
 
