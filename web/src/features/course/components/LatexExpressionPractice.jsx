@@ -4,8 +4,8 @@ import { useLatexPracticeReview } from "../hooks/use-latex-practice-review"
 import { usePracticeRegistry } from "../hooks/use-practice-registry"
 
 export function LatexExpressionPractice({
+	questionId,
 	question,
-	expectedLatex,
 	criteria,
 	hints,
 	solutionLatex,
@@ -38,8 +38,8 @@ export function LatexExpressionPractice({
 
 		registerItem({
 			id: itemId,
+			questionId,
 			question,
-			expectedLatex,
 			criteria,
 			hints,
 			solutionLatex,
@@ -56,11 +56,11 @@ export function LatexExpressionPractice({
 	}, [
 		courseId,
 		criteria,
-		expectedLatex,
 		hints,
 		itemId,
 		lessonId,
 		practiceContext,
+		questionId,
 		question,
 		registerItem,
 		resolvedConceptId,
@@ -74,32 +74,41 @@ export function LatexExpressionPractice({
 		async (payload) => {
 			return await submitAnswer({
 				...payload,
+				questionId,
 				conceptId: resolvedConceptId,
 				practiceContext,
 			})
 		},
-		[practiceContext, resolvedConceptId, submitAnswer]
+		[practiceContext, questionId, resolvedConceptId, submitAnswer]
 	)
 
 	const handleSkip = useCallback(
 		async (payload) => {
 			return await submitSkip({
 				...payload,
+				questionId,
 				conceptId: resolvedConceptId,
 				practiceContext,
 			})
 		},
-		[practiceContext, resolvedConceptId, submitSkip]
+		[practiceContext, questionId, resolvedConceptId, submitSkip]
 	)
 
 	if (!shouldRenderInline) {
 		return null
 	}
 
+	if (!questionId) {
+		return (
+			<div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+				This practice question is unavailable because it is missing its server-owned question ID.
+			</div>
+		)
+	}
+
 	return (
 		<LatexExpression
 			question={question}
-			expectedAnswer={expectedLatex}
 			answerKind="math_latex"
 			criteria={criteria}
 			hints={hints}

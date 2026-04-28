@@ -18,7 +18,6 @@ from fastapi import BackgroundTasks, status
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.ai.errors import AIRuntimeError
 from src.exceptions import (
     BadRequestError,
     ConflictError,
@@ -41,7 +40,6 @@ from .schemas import (
     GradeContextPayload,
     GradeExpectedPayload,
     GradeRequest,
-    GradeResponse,
     LessonDetailResponse,
     LessonVersionHistoryResponse,
     NextReviewResponse,
@@ -61,6 +59,7 @@ from .services.course_progress_service import CourseProgressService
 from .services.course_query_service import CourseQueryService
 from .services.frontier_builder import build_course_frontier
 from .services.grading_service import GradingService
+from .services.inline_question_materializer import InlineQuestionMaterializer
 from .services.lesson_service import LessonService
 from .services.practice_drill_service import PracticeDrillService
 
@@ -359,12 +358,14 @@ class CoursesFacade:  # noqa: PLR0904
     ) -> LessonDetailResponse:
         """Get a lesson detail payload for an owned course."""
         lesson_service = LessonService(self._session, user_id)
-        return await lesson_service.get_lesson(
+        lesson = await lesson_service.get_lesson(
             course_id,
             lesson_id,
             force_refresh=generate,
             version_id=version_id,
         )
+        materializer = InlineQuestionMaterializer(self._session)
+        return await materializer.materialize_lesson_response(lesson=lesson, user_id=user_id, course_id=course_id)
 
     async def list_lesson_versions(
         self,
@@ -432,70 +433,6 @@ class CoursesFacade:  # noqa: PLR0904
             )
             message = "Failed to start the next lesson pass"
             raise CoursesFacadeUpstreamError(message) from error
-
-    async def grade_lesson_response(
-        self,
-        *,
-        course_id: uuid.UUID,
-        lesson_id: uuid.UUID,
-        payload: GradeRequest,
-        user_id: uuid.UUID,
-    ) -> GradeResponse:
-        """Grade a learner response with course, lesson, and concept validation."""
-        await self._require_owned_course(course_id=course_id, user_id=user_id)
-
-        if payload.context.course_id != course_id:
-            detail = "Context courseId does not match the request path"
-            raise CoursesFacadeValidationError(detail)
-        if payload.context.lesson_id != lesson_id:
-            detail = "Context lessonId does not match the request path"
-            raise CoursesFacadeValidationError(detail)
-
-        lesson_row = (
-            await self._session.execute(
-                select(Lesson.id, Lesson.concept_id).where(
-                    Lesson.id == lesson_id,
-                    Lesson.course_id == course_id,
-                )
-            )
-        ).first()
-        if lesson_row is None:
-            detail = "Lesson not found"
-            raise CoursesFacadeNotFoundError(detail)
-
-        _lesson_row_id, lesson_concept_id = lesson_row
-        if lesson_concept_id is not None:
-            if lesson_concept_id != payload.context.concept_id:
-                detail = "Context conceptId does not match the request lesson"
-                raise CoursesFacadeValidationError(detail)
-        else:
-            concept_link = await self._session.scalar(
-                select(CourseConcept.concept_id).where(
-                    CourseConcept.course_id == course_id,
-                    CourseConcept.concept_id == payload.context.concept_id,
-                )
-            )
-            if concept_link is None:
-                detail = "Concept is not assigned to this course"
-                raise CoursesFacadeNotFoundError(detail)
-
-        grading_service = GradingService(self._session)
-        try:
-            return await grading_service.grade(payload, user_id)
-        except (AIRuntimeError, TypeError, ValueError) as error:
-            logger.exception(
-                "courses.grade.upstream_failed",
-                extra={"course_id": str(course_id), "lesson_id": str(lesson_id), "user_id": str(user_id)},
-            )
-            message = "Grading service is temporarily unavailable"
-            raise CoursesFacadeUpstreamError(message) from error
-        except RuntimeError as error:
-            logger.exception(
-                "courses.grade.failed",
-                extra={"course_id": str(course_id), "lesson_id": str(lesson_id), "user_id": str(user_id)},
-            )
-            message = "Failed to grade response"
-            raise CoursesFacadeInternalError(message) from error
 
     async def get_course_concept_frontier(
         self,
@@ -575,6 +512,9 @@ class CoursesFacade:  # noqa: PLR0904
                 question=drill.question,
                 expected_answer=drill.expected_answer,
                 answer_kind=drill.answer_kind,
+                grade_kind="practice_answer",
+                expected_payload={"expectedAnswer": drill.expected_answer, "answerKind": drill.answer_kind},
+                question_payload={"inputKind": drill.answer_kind, "hints": drill.hints},
                 hints=drill.hints,
                 structure_signature=drill.structure_signature,
                 predicted_p_correct=drill.predicted_p_correct,
@@ -651,7 +591,7 @@ class CoursesFacade:  # noqa: PLR0904
                 payload=payload,
             )
 
-        if question.status != "active":
+        if question.status != "active" and question.source_key is None:
             detail = "Question has already been answered"
             raise CoursesFacadeBadRequestError(detail)
         if question.lesson_id is None:
@@ -677,7 +617,7 @@ class CoursesFacade:  # noqa: PLR0904
         if (
             attempt.course_id != course_id
             or attempt.question_id != payload.question_id
-            or attempt.learner_answer != payload.learner_answer
+            or attempt.answer_payload != payload.answer.model_dump(mode="json")
             or attempt.hints_used != payload.hints_used
             or attempt.duration_ms != payload.duration_ms
         ):
@@ -695,8 +635,8 @@ class CoursesFacade:  # noqa: PLR0904
         user_id: uuid.UUID,
     ) -> AttemptResponse:
         rating = 1
-        learner_answer = payload.learner_answer.strip()
-        if learner_answer.lower() == "skip":
+        learner_answer = self._stringify_attempt_answer(payload)
+        if payload.answer.kind == "skip":
             is_correct = False
             attempt_status = "unsupported"
             feedback = "Skipped for now. This is recorded so the next review can focus on this concept."
@@ -757,7 +697,8 @@ class CoursesFacade:  # noqa: PLR0904
             duration_ms=payload.duration_ms,
         )
 
-        question.status = "answered"
+        if question.source_key is None:
+            question.status = "answered"
         question.updated_at = datetime.now(UTC)
         response = AttemptResponse(
             attempt_id=payload.attempt_id,
@@ -773,7 +714,8 @@ class CoursesFacade:  # noqa: PLR0904
             user_id=user_id,
             course_id=course_id,
             question_id=question.id,
-            learner_answer=payload.learner_answer,
+            learner_answer=learner_answer,
+            answer_payload=payload.answer.model_dump(mode="json"),
             hints_used=payload.hints_used,
             duration_ms=payload.duration_ms,
             is_correct=response.is_correct,
@@ -822,21 +764,12 @@ class CoursesFacade:  # noqa: PLR0904
     ) -> GradeResponse:
         try:
             return await GradingService(self._session).grade(
-                GradeRequest(
-                    kind="practice_answer",
-                    question=question.question,
-                    expected=GradeExpectedPayload(
-                        expected_answer=question.expected_answer,
-                        answer_kind=cast("Any", question.answer_kind),
-                    ),
-                    answer=GradeAnswerPayload(answer_text=learner_answer),
-                    context=GradeContextPayload(
-                        course_id=course_id,
-                        lesson_id=lesson_id,
-                        concept_id=question.concept_id,
-                        practice_context=cast("Any", question.practice_context),
-                        hints_used=payload.hints_used,
-                    ),
+                self._build_attempt_grade_request(
+                    course_id=course_id,
+                    question=question,
+                    lesson_id=lesson_id,
+                    payload=payload,
+                    learner_answer=learner_answer,
                 ),
                 user_id,
             )
@@ -851,6 +784,84 @@ class CoursesFacade:  # noqa: PLR0904
             )
             detail = "Grading service is temporarily unavailable"
             raise CoursesFacadeUpstreamError(detail) from error
+
+    def _stringify_attempt_answer(self, payload: AttemptRequest) -> str:
+        if payload.answer.kind == "skip":
+            return "skip"
+        if payload.answer.kind == "math_latex" and payload.answer.answer_latex:
+            return payload.answer.answer_latex.strip()
+        if payload.answer.kind == "text" and payload.answer.answer_text:
+            return payload.answer.answer_text.strip()
+        if payload.answer.kind == "jxg_state" and payload.answer.answer_state is not None:
+            return payload.answer.answer_state.model_dump_json(by_alias=True)
+        detail = "Answer payload does not match the question type"
+        raise CoursesFacadeValidationError(detail)
+
+    def _build_attempt_grade_request(
+        self,
+        *,
+        course_id: uuid.UUID,
+        question: LearningQuestion,
+        lesson_id: uuid.UUID,
+        payload: AttemptRequest,
+        learner_answer: str,
+    ) -> GradeRequest:
+        context = GradeContextPayload(
+            course_id=course_id,
+            lesson_id=lesson_id,
+            concept_id=question.concept_id,
+            practice_context=cast("Any", question.practice_context),
+            hints_used=payload.hints_used,
+        )
+        grade_kind = question.grade_kind or "practice_answer"
+        if grade_kind == "latex_expression":
+            if payload.answer.kind != "math_latex":
+                detail = "Question expects a LaTeX answer"
+                raise CoursesFacadeValidationError(detail)
+            return GradeRequest(
+                kind="latex_expression",
+                question=question.question,
+                expected=GradeExpectedPayload(
+                    expected_latex=question.expected_payload.get("expectedLatex")
+                    or question.expected_payload.get("expected_latex"),
+                    criteria=question.expected_payload.get("criteria"),
+                ),
+                answer=GradeAnswerPayload(answer_latex=payload.answer.answer_latex),
+                context=context,
+            )
+        if grade_kind == "jxg_state":
+            if payload.answer.kind != "jxg_state":
+                detail = "Question expects a JSXGraph state answer"
+                raise CoursesFacadeValidationError(detail)
+            return GradeRequest(
+                kind="jxg_state",
+                question=question.question,
+                expected=GradeExpectedPayload(
+                    expected_state=question.expected_payload.get("expectedState")
+                    or question.expected_payload.get("expected_state"),
+                    tolerance=question.expected_payload.get("tolerance"),
+                    per_check_tolerance=question.expected_payload.get("perCheckTolerance")
+                    or question.expected_payload.get("per_check_tolerance"),
+                    criteria=question.expected_payload.get("criteria"),
+                ),
+                answer=GradeAnswerPayload(answer_state=payload.answer.answer_state),
+                context=context,
+            )
+
+        expected_answer = question.expected_payload.get("expectedAnswer") or question.expected_payload.get("expected_answer")
+        answer_kind = question.expected_payload.get("answerKind") or question.expected_payload.get("answer_kind")
+        expected_answer = expected_answer or question.expected_answer
+        answer_kind = answer_kind or question.answer_kind
+        if not expected_answer or not answer_kind:
+            detail = "Question is missing expected answer metadata"
+            raise CoursesFacadeValidationError(detail)
+        return GradeRequest(
+            kind="practice_answer",
+            question=question.question,
+            expected=GradeExpectedPayload(expected_answer=expected_answer, answer_kind=cast("Any", answer_kind)),
+            answer=GradeAnswerPayload(answer_text=learner_answer),
+            context=context,
+        )
 
     async def submit_adaptive_reviews(
         self,

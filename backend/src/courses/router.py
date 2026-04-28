@@ -28,8 +28,6 @@ from src.courses.schemas import (
     CourseResponse,
     CourseUpdate,
     FrontierResponse,
-    GradeRequest,
-    GradeResponse,
     LessonDetailResponse,
     LessonNextPassRequest,
     LessonRegenerateRequest,
@@ -259,23 +257,6 @@ async def start_next_lesson_pass(
         course_id=course_id,
         lesson_id=lesson_id,
         force=payload.force,
-        user_id=auth.user_id,
-    )
-
-
-@router.post("/{course_id}/lessons/{lesson_id}/grade")
-async def grade_lesson_response(
-    course_id: uuid.UUID,
-    lesson_id: uuid.UUID,
-    payload: GradeRequest,
-    auth: CurrentAuth,
-    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
-) -> GradeResponse:
-    """Grade a learner response for a lesson."""
-    return await facade.grade_lesson_response(
-        course_id=course_id,
-        lesson_id=lesson_id,
-        payload=payload,
         user_id=auth.user_id,
     )
 

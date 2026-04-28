@@ -51,7 +51,7 @@ const areItemsEqual = (prev, next) => {
 	}
 	return (
 		prev.question === next.question &&
-		prev.expectedLatex === next.expectedLatex &&
+		prev.questionId === next.questionId &&
 		prev.criteriaKey === next.criteriaKey &&
 		prev.solutionLatex === next.solutionLatex &&
 		prev.solutionMdx === next.solutionMdx &&
@@ -74,8 +74,8 @@ export function PracticeRegistryProvider({ children }) {
 
 		const normalized = {
 			id: String(item.id),
+			questionId: item.questionId ?? null,
 			question: item.question ?? "",
-			expectedLatex: item.expectedLatex ?? "",
 			criteria: item.criteria ?? null,
 			criteriaKey: serializeValue(item.criteria),
 			hints: normalizeHints(item.hints),

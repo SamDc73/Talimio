@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { Button } from "@/components/Button"
 import { JXGBoard } from "@/components/JXGBoard"
 import { useLatexPracticeReview } from "../hooks/use-latex-practice-review"
@@ -92,11 +92,8 @@ const normalizeJxgState = (payload) => {
 }
 
 export function JXGBoardPractice({
+	questionId,
 	question = "Match the target board state.",
-	expectedState = null,
-	tolerance,
-	perCheckTolerance,
-	criteria,
 	practiceContext = "inline",
 	courseId,
 	lessonId,
@@ -108,8 +105,7 @@ export function JXGBoardPractice({
 	...boardProps
 }) {
 	const resolvedConceptId = conceptId ?? lessonConceptId ?? null
-	const normalizedExpectedState = useMemo(() => normalizeJxgState(expectedState), [expectedState])
-	const hasGradingConfig = Boolean(normalizedExpectedState && courseId && lessonId && resolvedConceptId)
+	const hasGradingConfig = Boolean(questionId && courseId && lessonId && resolvedConceptId)
 	const [answerState, setAnswerState] = useState(null)
 	const [lastGrade, setLastGrade] = useState(null)
 	const [attempts, setAttempts] = useState(0)
@@ -160,12 +156,9 @@ export function JXGBoardPractice({
 		const durationMs = Date.now() - interactionStartRef.current
 
 		const result = await submitJxgStateAnswer({
+			questionId,
 			question,
-			expectedState: normalizedExpectedState,
 			answerState,
-			tolerance,
-			perCheckTolerance,
-			criteria,
 			conceptId: resolvedConceptId,
 			attempts: nextAttempts,
 			durationMs,
@@ -180,17 +173,25 @@ export function JXGBoardPractice({
 	}, [
 		answerState,
 		attempts,
-		criteria,
 		hasGradingConfig,
 		onComplete,
-		perCheckTolerance,
 		practiceContext,
+		questionId,
 		question,
 		resolvedConceptId,
 		submitJxgStateAnswer,
-		tolerance,
-		normalizedExpectedState,
 	])
+
+	if (!questionId) {
+		return (
+			<div className="space-y-3">
+				<JXGBoard {...boardProps} onEvent={onEvent} />
+				<p className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+					This graph question is unavailable because it is missing its server-owned question ID.
+				</p>
+			</div>
+		)
+	}
 
 	if (!hasGradingConfig) {
 		return <JXGBoard {...boardProps} onEvent={onEvent} />

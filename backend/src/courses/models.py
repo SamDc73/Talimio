@@ -461,6 +461,16 @@ class LearningQuestion(Base):
     __table_args__ = (
         CheckConstraint("status IN ('active', 'answered', 'expired')", name="learning_questions_status_check"),
         Index("learning_questions_user_course_concept_idx", "user_id", "course_id", "concept_id", "created_at"),
+        Index(
+            "learning_questions_inline_source_key_idx",
+            "user_id",
+            "course_id",
+            "lesson_id",
+            "lesson_version_id",
+            "source_key",
+            unique=True,
+            postgresql_where=text("source_key IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("app_uuid7()"))
@@ -488,8 +498,33 @@ class LearningQuestion(Base):
         nullable=True,
     )
     question: Mapped[str] = mapped_column(Text, nullable=False)
-    expected_answer: Mapped[str] = mapped_column(Text, nullable=False)
-    answer_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    expected_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    answer_kind: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    grade_kind: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="practice_answer",
+        server_default="practice_answer",
+    )
+    expected_payload: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
+    question_payload: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
+    source_component: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    source_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lesson_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("lesson_versions.id", ondelete="CASCADE"),
+        nullable=True,
+    )
     hints: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
     structure_signature: Mapped[str] = mapped_column(Text, nullable=False)
     predicted_p_correct: Mapped[float] = mapped_column(Float, nullable=False)
@@ -542,6 +577,12 @@ class LearningAttempt(Base):
         nullable=False,
     )
     learner_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    answer_payload: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
     hints_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)

@@ -134,8 +134,8 @@ export function LessonQuickCheckPanel({ courseId, lessonId, lessonConceptId }) {
 			<div className="space-y-4">
 				<LatexExpressionPractice
 					key={currentItem.id}
+					questionId={currentItem.questionId}
 					question={currentItem.question}
-					expectedLatex={currentItem.expectedLatex}
 					criteria={currentItem.criteria}
 					hints={currentItem.hints}
 					solutionLatex={currentItem.solutionLatex}

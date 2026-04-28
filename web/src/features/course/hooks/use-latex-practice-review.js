@@ -23,30 +23,14 @@ const normalizeHintsUsed = (hintsUsed) => {
 	return hintsUsed
 }
 
-export function useLatexPracticeReview({
-	courseId,
-	lessonId,
-	conceptId: initialConceptId = null,
-	practiceContext = "inline",
-} = {}) {
+export function useLatexPracticeReview({ courseId, lessonId, conceptId: initialConceptId = null } = {}) {
 	const courseService = useCourseService(courseId)
 
 	const [isSubmitting, setIsSubmitting] = useState(false)
 	const [error, setError] = useState(null)
 
-	const resolveConceptId = useCallback(
-		(targetConceptId) => {
-			const concept = targetConceptId ?? initialConceptId
-			if (!concept) {
-				throw new Error("Concept ID required for practice review submission")
-			}
-			return concept
-		},
-		[initialConceptId]
-	)
-
 	const submitAttempt = useCallback(
-		async ({ questionId, answerText, hintsUsed, durationMs }) => {
+		async ({ questionId, answer, hintsUsed, durationMs }) => {
 			if (!courseId) {
 				throw new Error("Course ID required for practice attempt")
 			}
@@ -57,7 +41,7 @@ export function useLatexPracticeReview({
 			const attempt = await courseService.submitAttempt({
 				attemptId: crypto.randomUUID(),
 				questionId,
-				learnerAnswer: answerText,
+				answer,
 				hintsUsed,
 				durationMs,
 			})
@@ -67,181 +51,72 @@ export function useLatexPracticeReview({
 	)
 
 	const submitAnswer = useCallback(
-		async ({
-			questionId,
-			question,
-			expectedAnswer,
-			answerKind = "math_latex",
-			criteria,
-			answerText,
-			conceptId,
-			attempts,
-			durationMs,
-			hintsUsed,
-			practiceContext: contextOverride,
-		} = {}) => {
+		async ({ questionId, answerKind = "math_latex", answerText, conceptId, attempts, durationMs, hintsUsed } = {}) => {
 			normalizeAttempts(attempts)
 			const normalizedDuration = normalizeDuration(durationMs)
 			const normalizedHints = normalizeHintsUsed(hintsUsed)
 
-			if (questionId) {
-				setIsSubmitting(true)
-				setError(null)
-				try {
-					return await submitAttempt({
-						questionId,
-						answerText,
-						hintsUsed: normalizedHints,
-						durationMs: normalizedDuration,
-					})
-				} catch (submissionError) {
-					setError(submissionError)
-					logger.error("Failed to submit practice attempt", submissionError, {
-						courseId,
-						lessonId,
-						conceptId: conceptId ?? initialConceptId,
-						questionId,
-					})
-					throw submissionError
-				} finally {
-					setIsSubmitting(false)
-				}
+			if (!questionId) {
+				throw new Error("Question ID required for server-owned practice attempt")
 			}
 
-			if (!courseId || !lessonId) {
-				throw new Error("Course ID and Lesson ID required for practice grading")
-			}
-
-			const resolvedConceptId = resolveConceptId(conceptId)
-			const contextValue = contextOverride || practiceContext
-
-			let payload = null
-			if (contextValue === "drill") {
-				payload = {
-					kind: "practice_answer",
-					question,
-					expected: {
-						expectedAnswer,
-						answerKind,
-						criteria,
-					},
-					answer: {
-						answerText,
-					},
-					context: {
-						courseId,
-						lessonId,
-						conceptId: resolvedConceptId,
-						practiceContext: contextValue,
-						hintsUsed: normalizedHints,
-					},
-				}
-			} else {
-				payload = {
-					kind: "latex_expression",
-					question,
-					expected: {
-						expectedLatex: expectedAnswer,
-						criteria,
-					},
-					answer: {
-						answerLatex: answerText,
-					},
-					context: {
-						courseId,
-						lessonId,
-						conceptId: resolvedConceptId,
-						practiceContext: contextValue,
-						hintsUsed: normalizedHints,
-					},
-				}
-			}
+			const answer =
+				answerKind === "math_latex" ? { kind: "math_latex", answerLatex: answerText } : { kind: "text", answerText }
 
 			setIsSubmitting(true)
 			setError(null)
 
 			try {
-				const grade = await courseService.gradeLessonAnswer(lessonId, payload)
-				return { grade, review: null, rating: null }
+				return await submitAttempt({ questionId, answer, hintsUsed: normalizedHints, durationMs: normalizedDuration })
 			} catch (submissionError) {
 				setError(submissionError)
-				logger.error("Failed to grade practice answer", submissionError, {
+				logger.error("Failed to submit practice answer", submissionError, {
 					courseId,
 					lessonId,
 					conceptId: conceptId ?? initialConceptId,
+					questionId,
 				})
 				throw submissionError
 			} finally {
 				setIsSubmitting(false)
 			}
 		},
-		[courseId, lessonId, practiceContext, resolveConceptId, courseService, submitAttempt, initialConceptId]
+		[courseId, lessonId, submitAttempt, initialConceptId]
 	)
 
 	const submitJxgStateAnswer = useCallback(
-		async ({
-			question,
-			expectedState,
-			answerState,
-			tolerance,
-			perCheckTolerance,
-			criteria,
-			conceptId,
-			attempts,
-			durationMs,
-			hintsUsed,
-			practiceContext: contextOverride,
-		} = {}) => {
-			if (!courseId || !lessonId) {
-				throw new Error("Course ID and Lesson ID required for JSXGraph practice grading")
-			}
-
-			const resolvedConceptId = resolveConceptId(conceptId)
+		async ({ questionId, answerState, conceptId, attempts, durationMs, hintsUsed } = {}) => {
 			normalizeAttempts(attempts)
-			normalizeDuration(durationMs)
+			const normalizedDuration = normalizeDuration(durationMs)
 			const normalizedHints = normalizeHintsUsed(hintsUsed)
-			const contextValue = contextOverride || practiceContext
-
-			const payload = {
-				kind: "jxg_state",
-				question,
-				expected: {
-					expectedState,
-					tolerance,
-					perCheckTolerance,
-					criteria,
-				},
-				answer: {
-					answerState,
-				},
-				context: {
-					courseId,
-					lessonId,
-					conceptId: resolvedConceptId,
-					practiceContext: contextValue,
-					hintsUsed: normalizedHints,
-				},
+			if (!questionId) {
+				throw new Error("Question ID required for server-owned JSXGraph attempt")
 			}
 
 			setIsSubmitting(true)
 			setError(null)
 
 			try {
-				const grade = await courseService.gradeLessonAnswer(lessonId, payload)
-				return { grade, review: null, rating: null }
+				return await submitAttempt({
+					questionId,
+					answer: { kind: "jxg_state", answerState },
+					hintsUsed: normalizedHints,
+					durationMs: normalizedDuration,
+				})
 			} catch (submissionError) {
 				setError(submissionError)
-				logger.error("Failed to grade JSXGraph practice answer", submissionError, {
+				logger.error("Failed to submit JSXGraph practice answer", submissionError, {
 					courseId,
 					lessonId,
 					conceptId: conceptId ?? initialConceptId,
+					questionId,
 				})
 				throw submissionError
 			} finally {
 				setIsSubmitting(false)
 			}
 		},
-		[courseId, lessonId, practiceContext, resolveConceptId, courseService, initialConceptId]
+		[courseId, lessonId, submitAttempt, initialConceptId]
 	)
 
 	const submitSkip = useCallback(
@@ -256,7 +131,7 @@ export function useLatexPracticeReview({
 				try {
 					return await submitAttempt({
 						questionId,
-						answerText: "skip",
+						answer: { kind: "skip" },
 						hintsUsed: normalizedHints,
 						durationMs: normalizedDuration,
 					})
@@ -273,23 +148,9 @@ export function useLatexPracticeReview({
 					setIsSubmitting(false)
 				}
 			}
-
-			if (!courseId || !lessonId) {
-				throw new Error("Course ID and Lesson ID required for practice review")
-			}
-
-			resolveConceptId(conceptId)
-			return {
-				grade: {
-					isCorrect: false,
-					status: "unsupported",
-					feedbackMarkdown: "Skipped for now.",
-				},
-				review: null,
-				rating: null,
-			}
+			throw new Error("Question ID required for server-owned skip attempt")
 		},
-		[courseId, lessonId, resolveConceptId, submitAttempt, initialConceptId]
+		[courseId, lessonId, submitAttempt, initialConceptId]
 	)
 
 	return useMemo(

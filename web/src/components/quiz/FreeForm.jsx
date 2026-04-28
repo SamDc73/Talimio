@@ -1,6 +1,6 @@
 import "mathlive"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useCourseService } from "@/api/courseApi"
 import { QuizMarkdown } from "@/components/quiz/QuizMarkdown"
 import {
@@ -42,15 +42,7 @@ const getMathFieldErrors = (field) => {
 	return Array.isArray(errors) ? errors : []
 }
 
-export function FreeForm({
-	question,
-	expectedAnswer,
-	sampleAnswer,
-	answerKind = "text",
-	courseId,
-	lessonId,
-	lessonConceptId,
-}) {
+export function FreeForm({ questionId, question, answerKind = "text", courseId, lessonId, lessonConceptId }) {
 	const courseService = useCourseService(courseId)
 	const fieldRef = useRef(null)
 	const [userAnswer, setUserAnswer] = useState("")
@@ -58,19 +50,9 @@ export function FreeForm({
 	const [isSubmitting, setIsSubmitting] = useState(false)
 	const [submissionError, setSubmissionError] = useState(null)
 
-	const resolvedExpectedAnswer = useMemo(() => {
-		if (typeof expectedAnswer === "string" && expectedAnswer.trim()) {
-			return expectedAnswer.trim()
-		}
-		if (typeof sampleAnswer === "string" && sampleAnswer.trim()) {
-			return sampleAnswer.trim()
-		}
-		return ""
-	}, [expectedAnswer, sampleAnswer])
-
 	const isMathLatex = answerKind === "math_latex"
 	const submitted = grade !== null
-	const hasGradingContext = Boolean(courseId && lessonId && lessonConceptId && resolvedExpectedAnswer)
+	const hasGradingContext = Boolean(courseId && lessonId && lessonConceptId && questionId)
 	const hasAnswer = userAnswer.trim().length > 0
 
 	useEffect(() => {
@@ -115,23 +97,16 @@ export function FreeForm({
 		setSubmissionError(null)
 
 		try {
-			const response = await courseService.gradeLessonAnswer(lessonId, {
-				kind: "practice_answer",
-				question,
-				expected: {
-					expectedAnswer: resolvedExpectedAnswer,
-					answerKind,
-				},
-				answer: {
-					answerText: userAnswer.trim(),
-				},
-				context: {
-					courseId,
-					lessonId,
-					conceptId: lessonConceptId,
-					practiceContext: "inline",
-					hintsUsed: 0,
-				},
+			const trimmedAnswer = userAnswer.trim()
+			const response = await courseService.submitAttempt({
+				attemptId: crypto.randomUUID(),
+				questionId,
+				answer:
+					answerKind === "math_latex"
+						? { kind: "math_latex", answerLatex: trimmedAnswer }
+						: { kind: "text", answerText: trimmedAnswer },
+				hintsUsed: 0,
+				durationMs: 0,
 			})
 
 			setGrade(response)
@@ -203,17 +178,6 @@ export function FreeForm({
 							className="text-sm/relaxed text-muted-foreground [&_p]:m-0"
 						/>
 					</div>
-
-					{sampleAnswer && (
-						<details className="mb-4 group">
-							<summary className="cursor-pointer p-4 rounded-lg border border-border bg-background hover:bg-muted/30 transition-colors">
-								<span className="text-sm font-medium text-foreground group-open:text-primary">View Sample Answer</span>
-							</summary>
-							<div className="mt-3 p-4 rounded-lg bg-muted/20 border border-border">
-								<QuizMarkdown content={sampleAnswer} className="text-sm/relaxed  text-muted-foreground [&_p]:m-0" />
-							</div>
-						</details>
-					)}
 
 					<button type="button" onClick={handleReset} className={QUIZ_RESET_BUTTON_CLASS_NAME}>
 						Write Another Answer

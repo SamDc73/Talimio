@@ -48,7 +48,6 @@ export function useCourseService(courseId = null) {
 		method: "POST",
 	})
 	const getConceptNextReview = useApi("/courses/{courseId}/concepts/{conceptId}/next-review")
-	const gradeLessonAnswerEndpoint = useApi("/courses/{courseId}/lessons/{lessonId}/grade", { method: "POST" })
 
 	// Lesson endpoints
 	const getLessons = useApi("/courses/{courseId}/lessons")
@@ -121,8 +120,8 @@ export function useCourseService(courseId = null) {
 			if (!courseId) {
 				throw new Error("Course ID required")
 			}
-			if (!payload?.attemptId || !payload?.questionId) {
-				throw new Error("attemptId and questionId are required")
+			if (!payload?.attemptId || !payload?.questionId || !payload?.answer?.kind) {
+				throw new Error("attemptId, questionId, and answer.kind are required")
 			}
 			return await submitAttemptEndpoint.execute(payload, { pathParams: { courseId } })
 		},
@@ -274,18 +273,6 @@ export function useCourseService(courseId = null) {
 		},
 
 		/**
-		 * Grade a lesson answer for a practice interaction
-		 * @param {string} lessonId - Lesson ID
-		 * @param {Object} payload - Grading payload
-		 */
-		async gradeLessonAnswer(lessonId, payload) {
-			if (!courseId || !lessonId) {
-				throw new Error("Course ID and Lesson ID required")
-			}
-			return await gradeLessonAnswerEndpoint.execute(payload, { pathParams: { courseId, lessonId } })
-		},
-
-		/**
 		 * Retrieve next review info for a concept
 		 */
 		async fetchConceptNextReview(conceptId) {
@@ -319,8 +306,7 @@ export function useCourseService(courseId = null) {
 				regenerateLesson.isLoading ||
 				updateLesson.isLoading ||
 				submitConceptReviewEndpoint.isLoading ||
-				getConceptNextReview.isLoading ||
-				gradeLessonAnswerEndpoint.isLoading
+				getConceptNextReview.isLoading
 			)
 		},
 
@@ -342,8 +328,7 @@ export function useCourseService(courseId = null) {
 				regenerateLesson.error ||
 				updateLesson.error ||
 				submitConceptReviewEndpoint.error ||
-				getConceptNextReview.error ||
-				gradeLessonAnswerEndpoint.error
+				getConceptNextReview.error
 			)
 		},
 	}

@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 from src.config.schema_casing import to_camel
 
@@ -370,6 +370,7 @@ PracticeContext = Literal["inline", "quick_check", "scheduled_review", "drill", 
 PracticeAnswerKind = Literal["math_latex", "text"]
 QuestionSetPracticeContext = Literal["inline", "drill", "review", "chat"]
 AttemptStatus = Literal["correct", "incorrect", "unsupported"]
+AttemptAnswerKind = Literal["text", "math_latex", "jxg_state", "skip"]
 
 
 class JXGBoardState(BaseModel):
@@ -596,25 +597,41 @@ class QuestionSetResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
 
+class AttemptAnswerPayload(BaseModel):
+    """Learner answer payload for a server-owned attempt."""
+
+    kind: AttemptAnswerKind = Field(description="Learner answer shape")
+    answer_text: str | None = Field(None, min_length=1, description="Plain-text learner answer")
+    answer_latex: str | None = Field(None, min_length=1, description="LaTeX learner answer")
+    answer_state: JXGBoardState | None = Field(None, description="JSXGraph learner board state")
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+    @model_validator(mode="after")
+    def validate_answer_for_kind(self) -> AttemptAnswerPayload:
+        """Require the answer field that matches the selected answer kind."""
+        if self.kind == "text" and not self.answer_text:
+            detail = "answer.answerText is required when kind=text"
+            raise ValueError(detail)
+        if self.kind == "math_latex" and not self.answer_latex:
+            detail = "answer.answerLatex is required when kind=math_latex"
+            raise ValueError(detail)
+        if self.kind == "jxg_state" and self.answer_state is None:
+            detail = "answer.answerState is required when kind=jxg_state"
+            raise ValueError(detail)
+        return self
+
+
 class AttemptRequest(BaseModel):
     """Submit one learner answer for one server-owned question."""
 
     attempt_id: uuid.UUID = Field(description="Client-generated idempotency key")
     question_id: uuid.UUID = Field(description="Server-owned question ID")
-    learner_answer: str = Field(min_length=1, description="Learner answer text")
+    answer: AttemptAnswerPayload = Field(description="Learner answer payload")
     hints_used: Annotated[int, Field(ge=0)] = 0
     duration_ms: Annotated[int, Field(ge=0)] = 0
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
-
-    @field_validator("learner_answer")
-    @classmethod
-    def validate_learner_answer(cls, value: str) -> str:
-        """Reject blank answers before facade grading."""
-        if not value.strip():
-            detail = "learnerAnswer must not be blank"
-            raise ValueError(detail)
-        return value
 
 
 class AttemptResponse(BaseModel):
