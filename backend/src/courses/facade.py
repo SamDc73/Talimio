@@ -15,12 +15,13 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from fastapi import BackgroundTasks, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai.errors import AIRuntimeError
 from src.exceptions import (
     BadRequestError,
+    ConflictError,
     DomainError,
     ErrorCategory,
     ErrorCode,
@@ -29,16 +30,24 @@ from src.exceptions import (
     ValidationError,
 )
 
-from .models import Course, CourseConcept, Lesson
+from .models import Course, CourseConcept, LearningAttempt, LearningQuestion, Lesson
 from .schemas import (
+    AttemptRequest,
+    AttemptResponse,
     CourseResponse,
     FrontierResponse,
+    GradeAnswerPayload,
+    GradeContextPayload,
+    GradeExpectedPayload,
     GradeRequest,
     GradeResponse,
     LessonDetailResponse,
     LessonVersionHistoryResponse,
     NextReviewResponse,
     PracticeDrillResponse,
+    QuestionSetItem,
+    QuestionSetRequest,
+    QuestionSetResponse,
     ReviewBatchRequest,
     ReviewBatchResponse,
     ReviewOutcome,
@@ -77,6 +86,13 @@ class CoursesFacadeBadRequestError(BadRequestError):
 
 class CoursesFacadeValidationError(ValidationError):
     """Raised when course payloads fail domain validation."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail, feature_area=FEATURE_AREA)
+
+
+class CoursesFacadeConflictError(ConflictError):
+    """Raised when an idempotency key is reused for a different payload."""
 
     def __init__(self, detail: str) -> None:
         super().__init__(detail, feature_area=FEATURE_AREA)
@@ -547,6 +563,334 @@ class CoursesFacade:  # noqa: PLR0904
             raise CoursesFacadeUpstreamError(detail) from error
 
         return PracticeDrillResponse(drills=drills)
+
+    async def create_question_set(
+        self,
+        *,
+        course_id: uuid.UUID,
+        payload: QuestionSetRequest,
+        user_id: uuid.UUID,
+    ) -> QuestionSetResponse:
+        """Generate and store server-owned questions for later attempts."""
+        course = await self._require_owned_course(course_id=course_id, user_id=user_id)
+        if not course.adaptive_enabled:
+            detail = "Adaptive scheduling is not enabled for this course"
+            raise CoursesFacadeBadRequestError(detail)
+
+        drill_service = PracticeDrillService(self._session)
+        try:
+            drills = await drill_service.generate_drills(
+                user_id=user_id,
+                course_id=course.id,
+                concept_id=payload.concept_id,
+                count=payload.count,
+            )
+        except LookupError as error:
+            raise CoursesFacadeNotFoundError(str(error)) from error
+        except ValueError as error:
+            raise CoursesFacadeValidationError(str(error)) from error
+        except (RuntimeError, TypeError) as error:
+            logger.exception(
+                "QUESTION_SET_GENERATION_FAILED",
+                extra={
+                    "course_id": str(course.id),
+                    "user_id": str(user_id),
+                    "concept_id": str(payload.concept_id),
+                    "count": payload.count,
+                },
+            )
+            detail = "Failed to generate question set"
+            raise CoursesFacadeUpstreamError(detail) from error
+
+        questions: list[QuestionSetItem] = []
+        for drill in drills:
+            if payload.lesson_id is not None and payload.lesson_id != drill.lesson_id:
+                detail = "lessonId does not match the generated concept lesson"
+                raise CoursesFacadeValidationError(detail)
+            stored = LearningQuestion(
+                user_id=user_id,
+                course_id=course.id,
+                concept_id=payload.concept_id,
+                lesson_id=drill.lesson_id,
+                question=drill.question,
+                expected_answer=drill.expected_answer,
+                answer_kind=drill.answer_kind,
+                hints=drill.hints,
+                structure_signature=drill.structure_signature,
+                predicted_p_correct=drill.predicted_p_correct,
+                target_probability=drill.target_probability,
+                target_low=drill.target_low,
+                target_high=drill.target_high,
+                core_model=drill.core_model,
+                practice_context=payload.practice_context,
+            )
+            self._session.add(stored)
+            await self._session.flush()
+            questions.append(
+                QuestionSetItem(
+                    question_id=stored.id,
+                    concept_id=stored.concept_id,
+                    lesson_id=stored.lesson_id,
+                    question=stored.question,
+                    input_kind=cast("Any", stored.answer_kind),
+                    hints=stored.hints,
+                )
+            )
+
+        return QuestionSetResponse(questions=questions)
+
+    async def submit_attempt(
+        self,
+        *,
+        course_id: uuid.UUID,
+        payload: AttemptRequest,
+        user_id: uuid.UUID,
+    ) -> AttemptResponse:
+        """Grade one server-owned question and apply learning side effects once."""
+        await self._require_owned_course(course_id=course_id, user_id=user_id)
+
+        await self._session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:attempt_id, 0))"),
+            {"attempt_id": str(payload.attempt_id)},
+        )
+
+        existing_attempt = await self._session.scalar(
+            select(LearningAttempt).where(
+                LearningAttempt.user_id == user_id,
+                LearningAttempt.attempt_id == payload.attempt_id,
+            )
+        )
+        if existing_attempt is not None:
+            return self._response_for_existing_attempt(
+                existing_attempt,
+                course_id=course_id,
+                payload=payload,
+            )
+
+        question = await self._session.scalar(
+            select(LearningQuestion).where(
+                LearningQuestion.id == payload.question_id,
+                LearningQuestion.user_id == user_id,
+                LearningQuestion.course_id == course_id,
+            ).with_for_update()
+        )
+        if question is None:
+            detail = "Question not found"
+            raise CoursesFacadeNotFoundError(detail)
+
+        existing_attempt = await self._session.scalar(
+            select(LearningAttempt).where(
+                LearningAttempt.user_id == user_id,
+                LearningAttempt.attempt_id == payload.attempt_id,
+            )
+        )
+        if existing_attempt is not None:
+            return self._response_for_existing_attempt(
+                existing_attempt,
+                course_id=course_id,
+                payload=payload,
+            )
+
+        if question.status != "active":
+            detail = "Question has already been answered"
+            raise CoursesFacadeBadRequestError(detail)
+        if question.lesson_id is None:
+            detail = "Question is missing lesson context"
+            raise CoursesFacadeValidationError(detail)
+        lesson_id = question.lesson_id
+
+        return await self._grade_and_record_attempt(
+            course_id=course_id,
+            question=question,
+            lesson_id=lesson_id,
+            payload=payload,
+            user_id=user_id,
+        )
+
+    def _response_for_existing_attempt(
+        self,
+        attempt: LearningAttempt,
+        *,
+        course_id: uuid.UUID,
+        payload: AttemptRequest,
+    ) -> AttemptResponse:
+        if (
+            attempt.course_id != course_id
+            or attempt.question_id != payload.question_id
+            or attempt.learner_answer != payload.learner_answer
+            or attempt.hints_used != payload.hints_used
+            or attempt.duration_ms != payload.duration_ms
+        ):
+            detail = "attemptId was already used for a different answer"
+            raise CoursesFacadeConflictError(detail)
+        return AttemptResponse.model_validate(attempt.response_payload)
+
+    async def _grade_and_record_attempt(
+        self,
+        *,
+        course_id: uuid.UUID,
+        question: LearningQuestion,
+        lesson_id: uuid.UUID,
+        payload: AttemptRequest,
+        user_id: uuid.UUID,
+    ) -> AttemptResponse:
+        rating = 1
+        learner_answer = payload.learner_answer.strip()
+        if learner_answer.lower() == "skip":
+            is_correct = False
+            attempt_status = "unsupported"
+            feedback = "Skipped for now. This is recorded so the next review can focus on this concept."
+        else:
+            grade = await self._grade_attempt_answer(
+                course_id=course_id,
+                question=question,
+                lesson_id=lesson_id,
+                payload=payload,
+                learner_answer=learner_answer,
+                user_id=user_id,
+            )
+            is_correct = grade.is_correct
+            attempt_status = "unsupported" if grade.status == "unsupported" else ("correct" if grade.is_correct else "incorrect")
+            feedback = grade.feedback_markdown
+            rating = 4 if grade.is_correct else 1
+
+        state_service = ConceptStateService(self._session)
+        scheduler_service = LectorSchedulerService(self._session)
+        updated_state = await state_service.update_mastery(
+            user_id=user_id,
+            concept_id=question.concept_id,
+            correct=is_correct,
+            latency_ms=payload.duration_ms,
+        )
+        await state_service.log_probe_event(
+            user_id=user_id,
+            concept_id=question.concept_id,
+            rating=rating,
+            review_duration_ms=payload.duration_ms,
+            correct=is_correct,
+            latency_ms=payload.duration_ms,
+            context_tag=f"{question.practice_context}:{lesson_id}",
+            extra={
+                "question_id": str(question.id),
+                "question": question.question,
+                "structure_signature": question.structure_signature,
+                "predicted_p_correct": float(question.predicted_p_correct),
+                "target_probability": float(question.target_probability),
+                "target_low": float(question.target_low),
+                "target_high": float(question.target_high),
+                "core_model": question.core_model,
+                "attempt_id": str(payload.attempt_id),
+                "status": attempt_status,
+            },
+        )
+        next_review = await scheduler_service.calculate_next_review(
+            user_id=user_id,
+            course_id=course_id,
+            concept_id=question.concept_id,
+            rating=rating,
+            duration_ms=payload.duration_ms,
+        )
+        await scheduler_service.update_learner_profile(
+            user_id=user_id,
+            concept_id=question.concept_id,
+            rating=rating,
+            duration_ms=payload.duration_ms,
+        )
+
+        question.status = "answered"
+        question.updated_at = datetime.now(UTC)
+        response = AttemptResponse(
+            attempt_id=payload.attempt_id,
+            is_correct=is_correct,
+            status=cast("Any", attempt_status),
+            feedback_markdown=feedback,
+            mastery=updated_state.s_mastery,
+            exposures=updated_state.exposures,
+            next_review_at=next_review,
+        )
+        attempt = LearningAttempt(
+            attempt_id=payload.attempt_id,
+            user_id=user_id,
+            course_id=course_id,
+            question_id=question.id,
+            learner_answer=payload.learner_answer,
+            hints_used=payload.hints_used,
+            duration_ms=payload.duration_ms,
+            is_correct=response.is_correct,
+            grade_status=response.status,
+            feedback_markdown=response.feedback_markdown,
+            mastery=response.mastery,
+            exposures=response.exposures,
+            next_review_at=response.next_review_at,
+            response_payload=response.model_dump(mode="json"),
+        )
+        self._session.add(attempt)
+        await self._session.flush()
+
+        concept_stats: dict[str, dict[str, Any]] = {}
+        snapshot = {
+            "concept_id": str(question.concept_id),
+            "rating": rating,
+            "duration_ms": payload.duration_ms,
+            "next_review_at": next_review.isoformat() if next_review else None,
+            "mastery": float(updated_state.s_mastery or 0.0),
+            "exposures": int(updated_state.exposures),
+            "reviewed_at": datetime.now(UTC).isoformat(),
+        }
+        self._update_review_stats(concept_stats=concept_stats, review_snapshot=snapshot)
+        progress_service = CourseProgressService(self._session)
+        await progress_service.update_progress(
+            course_id,
+            user_id,
+            self._build_review_progress_payload(
+                lesson_id=lesson_id,
+                last_review_snapshot=snapshot,
+                concept_stats=concept_stats,
+            ),
+        )
+        return response
+
+    async def _grade_attempt_answer(
+        self,
+        *,
+        course_id: uuid.UUID,
+        question: LearningQuestion,
+        lesson_id: uuid.UUID,
+        payload: AttemptRequest,
+        learner_answer: str,
+        user_id: uuid.UUID,
+    ) -> GradeResponse:
+        try:
+            return await GradingService(self._session).grade(
+                GradeRequest(
+                    kind="practice_answer",
+                    question=question.question,
+                    expected=GradeExpectedPayload(
+                        expected_answer=question.expected_answer,
+                        answer_kind=cast("Any", question.answer_kind),
+                    ),
+                    answer=GradeAnswerPayload(answer_text=learner_answer),
+                    context=GradeContextPayload(
+                        course_id=course_id,
+                        lesson_id=lesson_id,
+                        concept_id=question.concept_id,
+                        practice_context=cast("Any", question.practice_context),
+                        hints_used=payload.hints_used,
+                    ),
+                ),
+                user_id,
+            )
+        except (RuntimeError, TypeError, ValueError) as error:
+            logger.exception(
+                "courses.attempt.grading_failed",
+                extra={
+                    "course_id": str(course_id),
+                    "question_id": str(question.id),
+                    "user_id": str(user_id),
+                },
+            )
+            detail = "Grading service is temporarily unavailable"
+            raise CoursesFacadeUpstreamError(detail) from error
 
     async def submit_adaptive_reviews(
         self,

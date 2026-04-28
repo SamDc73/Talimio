@@ -19,6 +19,8 @@ from src.ai.service import AIService, get_ai_service
 from src.auth import CurrentAuth
 from src.courses.facade import CoursesFacade
 from src.courses.schemas import (
+    AttemptRequest,
+    AttemptResponse,
     CodeExecuteRequest,
     CodeExecuteResponse,
     CourseListResponse,
@@ -34,6 +36,8 @@ from src.courses.schemas import (
     NextReviewResponse,
     PracticeDrillRequest,
     PracticeDrillResponse,
+    QuestionSetRequest,
+    QuestionSetResponse,
     ReviewBatchRequest,
     ReviewBatchResponse,
     RuntimeListRequest,
@@ -303,6 +307,36 @@ async def generate_practice_drills(
         course_id=course_id,
         concept_id=payload.concept_id,
         count=payload.count,
+        user_id=auth.user_id,
+    )
+
+
+@router.post("/{course_id}/question-sets")
+async def create_question_set(
+    course_id: uuid.UUID,
+    payload: QuestionSetRequest,
+    auth: CurrentAuth,
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
+) -> QuestionSetResponse:
+    """Create server-owned questions without exposing grading metadata."""
+    return await facade.create_question_set(
+        course_id=course_id,
+        payload=payload,
+        user_id=auth.user_id,
+    )
+
+
+@router.post("/{course_id}/attempts")
+async def submit_attempt(
+    course_id: uuid.UUID,
+    payload: AttemptRequest,
+    auth: CurrentAuth,
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
+) -> AttemptResponse:
+    """Submit one answer and apply grading, mastery, and scheduling once."""
+    return await facade.submit_attempt(
+        course_id=course_id,
+        payload=payload,
         user_id=auth.user_id,
     )
 

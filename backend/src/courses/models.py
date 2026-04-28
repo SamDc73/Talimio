@@ -37,6 +37,7 @@ _DEFAULT_LEARNER_PROFILE = {
 }
 
 CourseDocumentStatus = Literal["pending", "processing", "embedded", "failed"]
+LearningQuestionStatus = Literal["active", "answered", "expired"]
 
 
 class Course(Base):
@@ -453,6 +454,106 @@ class ProbeEvent(Base):
     extra: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
 
+class LearningQuestion(Base):
+    """Server-owned grading state for one learner-facing practice question."""
+
+    __tablename__ = "learning_questions"
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'answered', 'expired')", name="learning_questions_status_check"),
+        Index("learning_questions_user_course_concept_idx", "user_id", "course_id", "concept_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("app_uuid7()"))
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    concept_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("concepts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    lesson_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("lessons.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    answer_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    hints: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    structure_signature: Mapped[str] = mapped_column(Text, nullable=False)
+    predicted_p_correct: Mapped[float] = mapped_column(Float, nullable=False)
+    target_probability: Mapped[float] = mapped_column(Float, nullable=False)
+    target_low: Mapped[float] = mapped_column(Float, nullable=False)
+    target_high: Mapped[float] = mapped_column(Float, nullable=False)
+    core_model: Mapped[str] = mapped_column(Text, nullable=False)
+    practice_context: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[LearningQuestionStatus] = mapped_column(
+        String(20),
+        nullable=False,
+        default="active",
+        server_default="active",
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class LearningAttempt(Base):
+    """Stored result for an idempotent learner answer submission."""
+
+    __tablename__ = "learning_attempts"
+    __table_args__ = (
+        UniqueConstraint("user_id", "attempt_id", name="uq_learning_attempt_user_attempt"),
+        Index("learning_attempts_question_idx", "question_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("app_uuid7()"))
+    attempt_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    question_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("learning_questions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    learner_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    hints_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    grade_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    feedback_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    mastery: Mapped[float] = mapped_column(Float, nullable=False)
+    exposures: Mapped[int] = mapped_column(Integer, nullable=False)
+    next_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    response_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 __all__ = [
     "Concept",
     "ConceptPrerequisite",
@@ -460,6 +561,8 @@ __all__ = [
     "Course",
     "CourseConcept",
     "CourseDocument",
+    "LearningAttempt",
+    "LearningQuestion",
     "Lesson",
     "LessonFeedbackEvent",
     "LessonVersion",

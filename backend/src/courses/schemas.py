@@ -3,9 +3,9 @@
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.config.schema_casing import to_camel
 
@@ -356,8 +356,10 @@ class NextReviewResponse(BaseModel):
 
 GradeKind = Literal["latex_expression", "jxg_state", "practice_answer"]
 GradeStatus = Literal["correct", "incorrect", "parse_error", "unsupported"]
-PracticeContext = Literal["inline", "quick_check", "scheduled_review", "drill"]
+PracticeContext = Literal["inline", "quick_check", "scheduled_review", "drill", "review", "chat"]
 PracticeAnswerKind = Literal["math_latex", "text"]
+QuestionSetPracticeContext = Literal["inline", "drill", "review", "chat"]
+AttemptStatus = Literal["correct", "incorrect", "unsupported"]
 
 
 class JXGBoardState(BaseModel):
@@ -445,7 +447,11 @@ class GradeContextPayload(BaseModel):
 
 
 class GradeRequest(BaseModel):
-    """Request payload for grading a learner response."""
+    """
+    Request payload for grading a learner response.
+
+    Requires full context (expected answer, question) because drill generation is stateless, avoiding a pending-drills DB table.
+    """
 
     kind: GradeKind = Field(..., description="Answer kind to grade")
     question: str = Field(..., min_length=1, description="Learner-facing question prompt")
@@ -561,6 +567,73 @@ class PracticeDrillResponse(BaseModel):
     """Response payload for adaptive practice drill generation."""
 
     drills: list[PracticeDrillItem] = Field(default_factory=list, description="Generated drill items")
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class QuestionSetRequest(BaseModel):
+    """Request server-owned learner-visible practice questions."""
+
+    concept_id: uuid.UUID = Field(description="Concept to generate questions for")
+    count: Annotated[int, Field(ge=1, le=10)] = 1
+    practice_context: QuestionSetPracticeContext = Field(description="Practice surface that will collect answers")
+    lesson_id: uuid.UUID | None = Field(None, description="Optional lesson surface for inline questions")
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class QuestionSetItem(BaseModel):
+    """Learner-visible server-owned question."""
+
+    question_id: uuid.UUID = Field(description="Server-owned question ID used for answer submission")
+    concept_id: uuid.UUID = Field(description="Concept this question practices")
+    lesson_id: uuid.UUID | None = Field(None, description="Lesson linked to this question")
+    question: str = Field(min_length=1, description="Learner-facing question prompt")
+    input_kind: PracticeAnswerKind = Field(description="Learner answer input mode")
+    hints: list[str] = Field(default_factory=list, description="Learner-visible hints")
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class QuestionSetResponse(BaseModel):
+    """Server-owned question set response."""
+
+    questions: list[QuestionSetItem] = Field(default_factory=list, description="Generated learner-visible questions")
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class AttemptRequest(BaseModel):
+    """Submit one learner answer for one server-owned question."""
+
+    attempt_id: uuid.UUID = Field(description="Client-generated idempotency key")
+    question_id: uuid.UUID = Field(description="Server-owned question ID")
+    learner_answer: str = Field(min_length=1, description="Learner answer text")
+    hints_used: Annotated[int, Field(ge=0)] = 0
+    duration_ms: Annotated[int, Field(ge=0)] = 0
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+    @field_validator("learner_answer")
+    @classmethod
+    def validate_learner_answer(cls, value: str) -> str:
+        """Reject blank answers before facade grading."""
+        if not value.strip():
+            detail = "learnerAnswer must not be blank"
+            raise ValueError(detail)
+        return value
+
+
+class AttemptResponse(BaseModel):
+    """Learner-visible result for one answer submission."""
+
+    attempt_id: uuid.UUID = Field(description="Client-generated idempotency key")
+    is_correct: bool = Field(description="Whether the answer was accepted as correct")
+    status: AttemptStatus = Field(description="Learner-safe grading status")
+    feedback_markdown: str = Field(min_length=1, description="Feedback rendered to learners")
+    mastery: float = Field(ge=0.0, le=1.0, description="Updated concept mastery")
+    exposures: int = Field(ge=0, description="Total concept exposures after this attempt")
+    next_review_at: datetime | None = Field(None, description="Scheduled next review timestamp")
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
