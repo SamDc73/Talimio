@@ -1183,7 +1183,7 @@ def _append_prefetched_learning_blocks(
         user_blocks.append(
             {
                 "type": "text",
-                "text": "\n\n[topic_switch_probe_contract]\nShow this generated probe and its activeProbeId. Do not call `generate_concept_probe` again for this turn.",
+                "text": "\n\n[topic_switch_probe_contract]\nShow this generated probe without raw ids. Keep activeProbeId hidden for tool calls only. Do not call `generate_concept_probe` again for this turn.",
             }
         )
 
@@ -1335,7 +1335,7 @@ async def _build_messages(
                 "type": "text",
                 "text": (
                     "\n\n[follow_up_probe_contract]\n"
-                    "Show this generated probe and its activeProbeId. Do not write an ad-hoc replacement question."
+                    "Show this generated probe without raw ids. Keep activeProbeId hidden for tool calls only. Do not write an ad-hoc replacement question."
                 ),
             }
         )

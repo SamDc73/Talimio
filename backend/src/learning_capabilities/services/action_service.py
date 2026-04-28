@@ -849,7 +849,7 @@ def _submitted_probe_output(
         lesson_id=active_probe.lesson_id,
         is_correct=attempt.is_correct,
         status=attempt.status,
-        feedback_markdown=attempt.feedback_markdown,
+        feedback_markdown=_chat_probe_feedback(is_correct=attempt.is_correct, status=attempt.status),
         mastery=attempt.mastery,
         exposures=attempt.exposures,
         next_review_at=attempt.next_review_at,
@@ -861,6 +861,14 @@ def _chat_probe_answer_payload(*, answer_kind: str, learner_answer: str) -> Atte
     if answer_kind == "math_latex":
         return AttemptAnswerPayload(kind="math_latex", answer_latex=learner_answer)
     return AttemptAnswerPayload(kind="text", answer_text=learner_answer)
+
+
+def _chat_probe_feedback(*, is_correct: bool, status: str) -> str:
+    if is_correct:
+        return "Your answer was graded correct. The detailed answer is kept hidden so you can keep practicing."
+    if status == "unsupported":
+        return "Your answer could not be graded automatically. Try a simpler answer format and submit again."
+    return "Your answer was graded incorrect. Review the feedback from your tutor, then try again."
 
 
 def _build_create_confirmation() -> CreateCourseCapabilityOutput:

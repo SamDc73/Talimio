@@ -263,9 +263,9 @@ class PracticeDrillService:
                     question=question,
                     expected_answer=expected,
                     answer_kind=answer_kind,
-                    probe_family=generated.probe_family,
+                    probe_family=getattr(generated, "probe_family", generation_context.probe_family),
                     renderer_kind=generation_context.renderer_kind,
-                    choices=generated.choices,
+                    choices=getattr(generated, "choices", []),
                     hints=[],
                     structure_signature=signature,
                     predicted_p_correct=predicted_value,
@@ -457,7 +457,7 @@ class PracticeDrillService:
             response_model=_QuestionBatchPayload,
             user_id=user_id,
         )
-        return [question for question in payload.questions if question.probe_family == probe_family]
+        return [question for question in payload.questions if getattr(question, "probe_family", probe_family) == probe_family]
 
     async def _predict_p_correct_batch(
         self,

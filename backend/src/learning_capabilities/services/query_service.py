@@ -33,7 +33,6 @@ from src.courses.models import (
 from src.courses.services.course_progress_service import CourseProgressService
 from src.courses.services.course_query_service import CourseQueryService
 from src.courses.services.lesson_service import LessonService
-from src.learning_capabilities.errors import LearningCapabilitiesValidationError
 from src.learning_capabilities.schemas import (
     ActiveChatProbe,
     ActiveProbeSuggestion,
@@ -360,6 +359,7 @@ class LearningCapabilityQueryService:
         user_id: uuid.UUID,
         course_id: uuid.UUID,
         thread_id: uuid.UUID | None,
+        lesson_id: uuid.UUID | None = None,
     ) -> ActiveChatProbe | None:
         """Return the learner-visible active probe for the current assistant thread."""
         if thread_id is None:
@@ -370,6 +370,8 @@ class LearningCapabilityQueryService:
             AssistantActiveProbe.course_id == course_id,
             AssistantActiveProbe.status == "active",
         ]
+        if lesson_id is not None:
+            filters.append(AssistantActiveProbe.lesson_id == lesson_id)
         active_probe = await self._session.scalar(
             select(AssistantActiveProbe)
             .where(*filters)
@@ -380,14 +382,20 @@ class LearningCapabilityQueryService:
             return None
         learning_question = await self._session.get(LearningQuestion, active_probe.id)
         if learning_question is None or not isinstance(learning_question.question_payload, dict):
-            detail = "Active probe is missing its server-owned question contract."
-            raise LearningCapabilitiesValidationError(detail)
+            await self._expire_invalid_active_probe(
+                active_probe=active_probe,
+                reason="missing_question_contract",
+            )
+            return None
         question_payload = learning_question.question_payload
         probe_family = _payload_text(question_payload, "probeFamily")
         renderer_kind = _payload_text(question_payload, "rendererKind")
         if probe_family is None or renderer_kind is None:
-            detail = "Active probe question is missing registry metadata."
-            raise LearningCapabilitiesValidationError(detail)
+            await self._expire_invalid_active_probe(
+                active_probe=active_probe,
+                reason="missing_registry_metadata",
+            )
+            return None
         return ActiveChatProbe(
             active_probe_id=active_probe.id,
             course_id=active_probe.course_id,
@@ -400,6 +408,14 @@ class LearningCapabilityQueryService:
             choices=_payload_string_list(question_payload, "choices"),
             hints=list(active_probe.hints),
         )
+
+    async def _expire_invalid_active_probe(self, *, active_probe: AssistantActiveProbe, reason: str) -> None:
+        active_probe.status = "expired"
+        logger.warning(
+            "learning_capability.active_probe.expired_invalid",
+            extra={"active_probe_id": str(active_probe.id), "reason": reason},
+        )
+        await self._session.flush()
 
     async def list_relevant_courses(
         self,

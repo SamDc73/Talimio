@@ -85,12 +85,14 @@ class LearningContextPacketService:
                 course_id=context_id,
                 query_text=query_text,
             )
-            if course_mode == "adaptive":
+            if course_mode == "adaptive" and lesson_id is not None:
                 active_chat_probe = await self._query_service.get_active_chat_probe(
                     user_id=user_id,
                     course_id=context_id,
                     thread_id=_parse_lesson_id(payload.context_meta.get("thread_id")),
+                    lesson_id=lesson_id,
                 )
+            if course_mode == "adaptive":
                 active_probe_suggestion = await self._query_service.get_active_probe_suggestion(
                     user_id=user_id,
                     course_id=context_id,

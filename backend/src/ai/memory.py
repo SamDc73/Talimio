@@ -147,11 +147,11 @@ def get_memory_client() -> AsyncMemory:
             vector_store_config["connection_pool"] = pool
             _memory_client = AsyncMemory(config=MemoryConfig(**config))
             logger.debug("memory.client.initialized")
-        except RuntimeError, TypeError, ValueError, OSError, psycopg.Error:
+        except (RuntimeError, TypeError, ValueError, OSError, psycopg.Error):
             if pool is not None:
                 try:
                     pool.close()
-                except RuntimeError, OSError, psycopg.Error:
+                except (RuntimeError, OSError, psycopg.Error):
                     logger.exception("memory.init.pool_close_failed")
             logger.exception("memory.init.failed")
             raise
@@ -266,14 +266,23 @@ async def search_memories(
         return []
 
     async def _execute(client: AsyncMemory) -> list[dict[str, Any]]:
-        results = await client.search(
-            query=query,
-            user_id=str(user_id),
-            agent_id=agent_id,
-            run_id=run_id,
-            limit=limit,
-            threshold=threshold,
-        )
+        if threshold is not None:
+            results = await client.search(
+                query=query,
+                user_id=str(user_id),
+                agent_id=agent_id,
+                run_id=run_id,
+                limit=limit,
+                threshold=threshold,
+            )
+        else:
+            results = await client.search(
+                query=query,
+                user_id=str(user_id),
+                agent_id=agent_id,
+                run_id=run_id,
+                limit=limit,
+            )
 
         if isinstance(results, dict):
             return results.get("results", [])
@@ -351,8 +360,6 @@ def cleanup_memory_client() -> None:
         return
 
     _memory_client = None
-    cleanup_errors: list[Exception] = []
-
     for store_attr in ("vector_store", "_telemetry_vector_store"):
         store = getattr(client, store_attr, None)
         pool = getattr(store, "connection_pool", None) if store is not None else None
@@ -366,9 +373,8 @@ def cleanup_memory_client() -> None:
                 close_pool()
             elif callable(close_all):
                 close_all()
-        except Exception as error:
+        except Exception:
             logger.exception("memory.cleanup.pool_close_failed")
-            cleanup_errors.append(error)
 
     try:
         from mem0.memory import telemetry as mem0_telemetry
@@ -379,13 +385,8 @@ def cleanup_memory_client() -> None:
             close_client()
     except ImportError:
         logger.debug("memory.cleanup.telemetry_module_missing")
-    except Exception as error:
+    except Exception:
         logger.exception("memory.cleanup.telemetry_close_failed")
-        cleanup_errors.append(error)
-
-    if cleanup_errors:
-        message = "Memory cleanup failed"
-        raise RuntimeError(message) from cleanup_errors[0]
 
     logger.debug("memory.cleanup.completed")
 

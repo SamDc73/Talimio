@@ -562,8 +562,14 @@ class PracticeDrillItem(BaseModel):
     question: str = Field(..., min_length=1, description="Learner-facing drill question")
     expected_answer: str = Field(..., min_length=1, description="Expected answer string")
     answer_kind: PracticeAnswerKind = Field(..., description="Expected answer input mode")
-    probe_family: ProbeFamily = Field(description="Bounded pedagogical family used to generate this drill")
-    renderer_kind: ProbeRendererKind = Field(description="Known frontend renderer contract for this drill")
+    probe_family: ProbeFamily = Field(
+        "free_recall",
+        description="Bounded pedagogical family used to generate this drill",
+    )
+    renderer_kind: ProbeRendererKind = Field(
+        "free_form",
+        description="Known frontend renderer contract for this drill",
+    )
     choices: list[str] = Field(default_factory=list, description="Learner-visible choices for choice-based families")
     hints: list[str] = Field(default_factory=list, description="Optional hints for this drill")
     structure_signature: str = Field(..., min_length=1, description="Normalized structural signature for duplicate checks")
