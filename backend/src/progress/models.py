@@ -72,10 +72,8 @@ class BatchProgressRequest(BaseModel):
 class ProgressData(BaseModel):
     """Progress data with metadata."""
 
-    progress_percentage: float = Field(alias="progressPercentage")
+    progress_percentage: float
     metadata: dict[str, Any] = Field(default_factory=dict)
-
-    model_config = ConfigDict(populate_by_name=True)
 
 
 class BatchProgressResponse(BaseModel):

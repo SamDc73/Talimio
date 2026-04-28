@@ -40,7 +40,7 @@ async def get_batch_progress(
 
     # Start with DB results
     progress_map: dict[str, ProgressData] = {
-        content_id: ProgressData(progressPercentage=data["progress_percentage"], metadata=data["metadata"])
+        content_id: ProgressData(progress_percentage=data["progress_percentage"], metadata=data["metadata"])
         for content_id, data in progress_data.items()
     }
 
@@ -53,7 +53,7 @@ async def get_batch_progress(
             # Drop completion_percentage from metadata
             meta = {k: v for k, v in computed.items() if k != "completion_percentage"}
             progress_map[str(cid)] = ProgressData(
-                progressPercentage=computed.get("completion_percentage", 0.0),
+                progress_percentage=computed.get("completion_percentage", 0.0),
                 metadata=meta,
             )
 
