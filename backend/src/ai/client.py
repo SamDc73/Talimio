@@ -248,6 +248,15 @@ def _metadata_text(metadata: dict[str, Any] | None, key: str) -> str | None:
     return normalized or None
 
 
+def _metadata_text_list(metadata: dict[str, Any] | None, key: str) -> list[str]:
+    if not isinstance(metadata, dict):
+        return []
+    raw_value = metadata.get(key)
+    if not isinstance(raw_value, list):
+        return []
+    return [item.strip() for item in raw_value if isinstance(item, str) and item.strip()]
+
+
 class LLMClient:
     """Manages LLM completion requests with memory and tool integration."""
 
@@ -957,7 +966,7 @@ class LLMClient:
 
             self._log_learning_capability_turn(
                 tool_targets=available_tool_targets,
-                used_tool_names=used_tool_names_in_turn,
+                used_tool_names=used_tool_names_in_turn | set(_metadata_text_list(request.metadata, "prefetched_learning_tools")),
                 probe_submitted=bool(request.metadata and request.metadata.get("probe_submitted")),
                 conversation=conversation,
                 user_id=request.user_id,
@@ -1058,7 +1067,7 @@ class LLMClient:
 
             self._log_learning_capability_turn(
                 tool_targets=available_tool_targets,
-                used_tool_names=used_tool_names_in_turn,
+                used_tool_names=used_tool_names_in_turn | set(_metadata_text_list(request.metadata, "prefetched_learning_tools")),
                 probe_submitted=bool(request.metadata and request.metadata.get("probe_submitted")),
                 conversation=conversation,
                 user_id=request.user_id,
@@ -1232,7 +1241,7 @@ class LLMClient:
 
                 self._log_learning_capability_turn(
                     tool_targets=tool_targets,
-                    used_tool_names=used_tool_names_in_turn,
+                    used_tool_names=used_tool_names_in_turn | set(_metadata_text_list(metadata, "prefetched_learning_tools")),
                     probe_submitted=bool(metadata and metadata.get("probe_submitted")),
                     conversation=conversation,
                     user_id=user_id,

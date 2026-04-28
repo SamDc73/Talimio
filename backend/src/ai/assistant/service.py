@@ -31,6 +31,32 @@ ASSISTANT_MAX_HISTORY_MESSAGES = 40
 ASSISTANT_REQUIRE_THREAD_ID = True
 ASSISTANT_PUBLIC_ERROR_TEXT = "Sorry, I'm having trouble responding right now. Please try again."
 RETRIEVAL_TRIGGER_THRESHOLD = 0.35
+CONFUSION_TUTOR_TRIGGERS = (
+    "i don't get",
+    "i dont get",
+    "i'm confused",
+    "im confused",
+    "confused",
+    "i'm stuck",
+    "im stuck",
+    "stuck",
+    "i don't understand",
+    "i dont understand",
+    "why is this wrong",
+    "what did i do wrong",
+    "wrong answer",
+    "i got it wrong",
+    "help me understand",
+)
+FOLLOW_UP_PROBE_TRIGGERS = (
+    "check me",
+    "check my",
+    "quiz me",
+    "test me",
+    "practice",
+    "try another",
+    "again",
+)
 
 
 class NormalizedChatRequest(BaseModel):
@@ -473,6 +499,207 @@ def _build_learning_routing_packet(context_bundle: Any) -> dict[str, Any]:
     return {key: value for key, value in packet.items() if value is not None}
 
 
+def _build_completion_metadata(
+    *,
+    request: NormalizedChatRequest,
+    probe_submitted: bool,
+    prefetched_learning_tools: list[str],
+) -> dict[str, Any]:
+    context_meta = request.context_meta or {}
+    metadata: dict[str, Any] = {
+        "assistant_thread_id": str(request.thread_id),
+        "assistant_lesson_id": str(context_meta.get("lesson_id", "")),
+        "assistant_probe_context": _build_probe_context(request),
+    }
+    if probe_submitted:
+        metadata["probe_submitted"] = True
+    if prefetched_learning_tools:
+        metadata["prefetched_learning_tools"] = prefetched_learning_tools
+    return metadata
+
+
+def _latest_turn_needs_tutor_context(latest_user_text: str) -> bool:
+    lowered = latest_user_text.lower()
+    return any(trigger in lowered for trigger in CONFUSION_TUTOR_TRIGGERS)
+
+
+def _current_concept_from_bundle(context_bundle: Any) -> Any | None:
+    concept_focus = context_bundle.concept_focus
+    if concept_focus is None:
+        return None
+    if concept_focus.current_lesson_concept is not None:
+        return concept_focus.current_lesson_concept
+    if concept_focus.semantic_candidates:
+        return concept_focus.semantic_candidates[0]
+    return None
+
+
+def _tutor_context_target(context_bundle: Any, chat_probe_result: dict[str, Any] | None) -> tuple[str, str] | None:
+    if chat_probe_result is not None:
+        course_id = chat_probe_result.get("courseId")
+        concept_id = chat_probe_result.get("conceptId")
+        if isinstance(course_id, str) and isinstance(concept_id, str):
+            return course_id, concept_id
+
+    course_state = context_bundle.course_state
+    course_id = str(course_state.course_id) if course_state is not None else None
+    current_concept = _current_concept_from_bundle(context_bundle)
+    if course_id is None or current_concept is None:
+        return None
+    return course_id, str(current_concept.concept_id)
+
+
+def _context_signals_need_tutor_context(context_bundle: Any) -> bool:
+    current_concept = _current_concept_from_bundle(context_bundle)
+    if current_concept is None:
+        return False
+    if getattr(current_concept, "confusors", None):
+        return True
+    if getattr(current_concept, "prerequisite_gaps", None):
+        return True
+    active_suggestion = context_bundle.active_probe_suggestion
+    return bool(active_suggestion is not None and active_suggestion.repeated_recent_misses)
+
+
+def _submitted_probe_needs_tutor_context(chat_probe_result: dict[str, Any] | None) -> bool:
+    if chat_probe_result is None:
+        return False
+    if chat_probe_result.get("reason") is not None:
+        return False
+    return chat_probe_result.get("isCorrect") is False
+
+
+async def _maybe_get_tutor_context(
+    *,
+    learning_facade: LearningCapabilitiesFacade,
+    user_id: uuid.UUID,
+    request: NormalizedChatRequest,
+    context_bundle: Any,
+    chat_probe_result: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if context_bundle.course_mode != "adaptive":
+        return None
+    if not (
+        _latest_turn_needs_tutor_context(request.latest_user_text)
+        or _submitted_probe_needs_tutor_context(chat_probe_result)
+        or _context_signals_need_tutor_context(context_bundle)
+    ):
+        return None
+
+    target = _tutor_context_target(context_bundle, chat_probe_result)
+    if target is None:
+        return None
+    course_id, concept_id = target
+
+    logger.info(
+        "learning_capability.tutor_context.prefetch",
+        extra={
+            "user_id": str(user_id),
+            "course_id": course_id,
+            "concept_id": concept_id,
+        },
+    )
+    return await learning_facade.execute_read_capability(
+        user_id=user_id,
+        capability_name="get_concept_tutor_context",
+        payload={
+            "course_id": course_id,
+            "concept_id": concept_id,
+            "include_recent_probes": True,
+            "include_lesson_summary": True,
+        },
+    )
+
+
+async def _maybe_get_tutor_lesson_grounding(
+    *,
+    learning_facade: LearningCapabilitiesFacade,
+    user_id: uuid.UUID,
+    tutor_context: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if tutor_context is None:
+        return None
+    course_id = tutor_context.get("courseId")
+    lesson_id = tutor_context.get("lessonId")
+    if not isinstance(course_id, str) or not isinstance(lesson_id, str):
+        return None
+
+    return await learning_facade.execute_read_capability(
+        user_id=user_id,
+        capability_name="get_lesson_windows",
+        payload={
+            "course_id": course_id,
+            "lesson_id": lesson_id,
+            "limit": 2,
+        },
+    )
+
+
+def _latest_turn_asks_for_follow_up_probe(latest_user_text: str) -> bool:
+    lowered = latest_user_text.lower()
+    return any(trigger in lowered for trigger in FOLLOW_UP_PROBE_TRIGGERS)
+
+
+async def _maybe_generate_tutor_follow_up_probe(
+    *,
+    learning_facade: LearningCapabilitiesFacade,
+    user_id: uuid.UUID,
+    request: NormalizedChatRequest,
+    context_bundle: Any,
+    tutor_context: dict[str, Any] | None,
+    chat_probe_result: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if tutor_context is None or context_bundle.active_chat_probe is not None:
+        return None
+    if not (
+        _latest_turn_asks_for_follow_up_probe(request.latest_user_text)
+        or _submitted_probe_needs_tutor_context(chat_probe_result)
+    ):
+        return None
+
+    course_id = tutor_context.get("courseId")
+    concept_id = tutor_context.get("conceptId")
+    lesson_id = tutor_context.get("lessonId")
+    if not isinstance(course_id, str) or not isinstance(concept_id, str):
+        return None
+
+    logger.info(
+        "learning_capability.tutor_follow_up_probe.generate",
+        extra={
+            "user_id": str(user_id),
+            "course_id": course_id,
+            "concept_id": concept_id,
+        },
+    )
+    payload: dict[str, Any] = {
+        "course_id": course_id,
+        "concept_id": concept_id,
+        "count": 1,
+        "practice_context": "chat",
+        "learner_context": request.latest_user_text[:2000],
+        "thread_id": str(request.thread_id),
+    }
+    if isinstance(lesson_id, str):
+        payload["lesson_id"] = lesson_id
+    try:
+        return await learning_facade.execute_action_capability(
+            user_id=user_id,
+            capability_name="generate_concept_probe",
+            payload=payload,
+        )
+    except DomainError as error:
+        logger.warning(
+            "learning_capability.tutor_follow_up_probe.skipped",
+            extra={
+                "user_id": str(user_id),
+                "course_id": course_id,
+                "concept_id": concept_id,
+                "reason": str(error),
+            },
+        )
+        return None
+
+
 async def _persist_completed_assistant_message(
     *,
     session: AsyncSession,
@@ -662,18 +889,15 @@ async def assistant_chat(
         )
 
         # Build messages with context if available
-        messages, probe_submitted = await _build_messages(normalized_request, user_id, session)
+        messages, probe_submitted, prefetched_learning_tools = await _build_messages(normalized_request, user_id, session)
 
         # Run completion through shared LLM client so memories and MCP tools are available
         llm_client = LLMClient(agent_id=AGENT_ID_ASSISTANT)
-        context_meta = normalized_request.context_meta or {}
-        metadata: dict[str, Any] = {
-            "assistant_thread_id": str(normalized_request.thread_id),
-            "assistant_lesson_id": str(context_meta.get("lesson_id", "")),
-            "assistant_probe_context": _build_probe_context(normalized_request),
-        }
-        if probe_submitted:
-            metadata["probe_submitted"] = True
+        metadata = _build_completion_metadata(
+            request=normalized_request,
+            probe_submitted=probe_submitted,
+            prefetched_learning_tools=prefetched_learning_tools,
+        )
         stream = await llm_client.get_completion(
             messages=messages,
             user_id=user_id,
@@ -764,7 +988,7 @@ async def _build_messages(
     request: NormalizedChatRequest,
     user_id: uuid.UUID,
     session: AsyncSession,
-) -> tuple[list[dict[str, Any]], bool]:
+) -> tuple[list[dict[str, Any]], bool, list[str]]:
     """Build message list with capability-backed context packet injection."""
     learning_facade = LearningCapabilitiesFacade(session)
     context_meta = dict(request.context_meta or {})
@@ -799,6 +1023,33 @@ async def _build_messages(
         session=session,
     )
     probe_submitted = chat_probe_result is not None
+    tutor_context = await _maybe_get_tutor_context(
+        learning_facade=learning_facade,
+        user_id=user_id,
+        request=request,
+        context_bundle=context_bundle,
+        chat_probe_result=chat_probe_result,
+    )
+    tutor_lesson_grounding = await _maybe_get_tutor_lesson_grounding(
+        learning_facade=learning_facade,
+        user_id=user_id,
+        tutor_context=tutor_context,
+    )
+    follow_up_probe = await _maybe_generate_tutor_follow_up_probe(
+        learning_facade=learning_facade,
+        user_id=user_id,
+        request=request,
+        context_bundle=context_bundle,
+        tutor_context=tutor_context,
+        chat_probe_result=chat_probe_result,
+    )
+    if follow_up_probe is not None:
+        await session.commit()
+    prefetched_learning_tools: list[str] = []
+    if tutor_context is not None:
+        prefetched_learning_tools.append("get_concept_tutor_context")
+    if follow_up_probe is not None:
+        prefetched_learning_tools.append("generate_concept_probe")
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": ASSISTANT_CHAT_SYSTEM_PROMPT}]
     messages.extend(request.conversation_history)
@@ -813,9 +1064,50 @@ async def _build_messages(
                 "text": f"\n\n[chat_probe_submission_result]\n{json.dumps(chat_probe_result, default=str)}",
             }
         )
+    if tutor_context is not None:
+        user_blocks.append(
+            {
+                "type": "text",
+                "text": f"\n\n[concept_tutor_context]\n{json.dumps(tutor_context, default=str)}",
+            }
+        )
+        user_blocks.append(
+            {
+                "type": "text",
+                "text": (
+                    "\n\n[tutor_response_contract]\n"
+                    "Use the tutor context as possible evidence, not a diagnosis. "
+                    "Identify the smallest likely false belief non-shamingly, repair it using course terms, "
+                    "then offer one short follow-up probe for the same concept."
+                ),
+            }
+        )
+    if tutor_lesson_grounding is not None:
+        user_blocks.append(
+            {
+                "type": "text",
+                "text": f"\n\n[tutor_lesson_grounding]\n{json.dumps(tutor_lesson_grounding, default=str)}",
+            }
+        )
+    if follow_up_probe is not None:
+        user_blocks.append(
+            {
+                "type": "text",
+                "text": f"\n\n[tutor_follow_up_probe]\n{json.dumps(follow_up_probe, default=str)}",
+            }
+        )
+        user_blocks.append(
+            {
+                "type": "text",
+                "text": (
+                    "\n\n[follow_up_probe_contract]\n"
+                    "Show this generated probe and its activeProbeId. Do not write an ad-hoc replacement question."
+                ),
+            }
+        )
 
     messages.append({"role": "user", "content": user_blocks})
-    return messages, probe_submitted
+    return messages, probe_submitted, prefetched_learning_tools
 
 
 async def _maybe_submit_active_chat_probe(
