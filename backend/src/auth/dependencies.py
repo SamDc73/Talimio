@@ -18,6 +18,11 @@ from src.auth.config import DEFAULT_USER_ID
 from src.auth.exceptions import (
     InvalidTokenError,
 )
+from src.auth.request_state import (
+    get_local_session_id_from_state,
+    store_local_auth_state,
+    store_user_id_on_request,
+)
 from src.auth.security import get_jwt_signing_key
 from src.config.settings import get_settings
 from src.observability.log_context import update_log_context
@@ -52,22 +57,6 @@ class LocalTokenClaims:
     user_id: uuid.UUID
     token_version: int
     session_id: uuid.UUID | None
-
-
-def get_local_token_version_from_state(request: Request) -> int | None:
-    """Read local token version from request state."""
-    token_version = getattr(request.state, "local_token_version", None)
-    if isinstance(token_version, int) and not isinstance(token_version, bool):
-        return token_version
-    return None
-
-
-def get_local_session_id_from_state(request: Request) -> uuid.UUID | None:
-    """Read local auth session ID from request state."""
-    session_id = getattr(request.state, "local_session_id", None)
-    if isinstance(session_id, uuid.UUID):
-        return session_id
-    return None
 
 
 def _parse_token_version(payload: dict[str, object]) -> int:
@@ -133,10 +122,9 @@ def decode_local_token_claims_optional(token: str | None, *, jwt_secret: str) ->
         return None
 
 
-def _store_local_claims_on_request(request: Request, claims: LocalTokenClaims) -> None:
+def store_local_claims_on_request(request: Request, claims: LocalTokenClaims) -> None:
     """Store validated local token metadata on request state."""
-    request.state.local_token_version = claims.token_version
-    request.state.local_session_id = claims.session_id
+    store_local_auth_state(request, token_version=claims.token_version, session_id=claims.session_id)
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +157,7 @@ def _get_single_user_mode_id() -> uuid.UUID:
 def _get_local_user_id(request: Request, *, token: str, jwt_secret: str) -> uuid.UUID:
     """Resolve authenticated user ID from local JWT cookie."""
     claims = decode_local_token_claims(token, jwt_secret=jwt_secret)
-    _store_local_claims_on_request(request, claims)
+    store_local_claims_on_request(request, claims)
     return claims.user_id
 
 
@@ -210,8 +198,8 @@ def _get_user_id_dependency(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
     user_id = get_user_id(request, token=resolved_token or "")
-    request.state.user_id = user_id
-    session_id = getattr(request.state, "local_session_id", None)
+    store_user_id_on_request(request, user_id)
+    session_id = get_local_session_id_from_state(request)
     update_log_context(
         user_id=str(user_id),
         session_id=str(session_id) if session_id is not None else None,

@@ -19,12 +19,9 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 
 import src.auth.crud as local_crud
-from src.auth.dependencies import (
-    _get_user_id_dependency,
-    get_local_session_id_from_state,
-    get_local_token_version_from_state,
-)
+from src.auth.dependencies import _get_user_id_dependency
 from src.auth.exceptions import InvalidTokenError
+from src.auth.request_state import get_local_session_id_from_state, get_local_token_version_from_state
 from src.config.settings import get_settings
 from src.database.session import DbSession
 

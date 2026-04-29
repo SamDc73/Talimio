@@ -20,6 +20,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.routing import Match
 
 from .ai.assistant.router import router as assistant_router
+from .ai.client import cleanup_ai_background_tasks
 from .ai.litellm_config import cleanup_litellm_async_clients
 from .ai.mcp.router import router as mcp_router
 from .ai.rag.router import router as rag_router
@@ -97,14 +98,15 @@ async def _startup() -> None:
     await validate_vector_schema_dimensions(engine)
     logger.info("startup.vector_schema.checked")
 
-    from src.ai.memory import warm_memory_client
-
-    memory_warmed = warm_memory_client()
-    logger.info("startup.memory.checked", extra={"warmed": memory_warmed})
-
 
 async def _shutdown() -> None:
     """Release resources on shutdown."""
+    try:
+        await cleanup_ai_background_tasks()
+        logger.debug("shutdown.ai_background_tasks.cleaned")
+    except (RuntimeError, TimeoutError, TypeError, ValueError):
+        logger.warning("shutdown.ai_background_tasks.cleanup_failed", exc_info=True)
+
     try:
         await cleanup_litellm_async_clients()
         logger.debug("shutdown.litellm.cleaned")

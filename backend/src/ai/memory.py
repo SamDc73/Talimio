@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 MemoryDeleteResult = Literal["deleted", "not_found", "unavailable"]
 MemoryClearResult = Literal["cleared", "unavailable"]
 
-# Module-level instance - initialized once at startup
+# Module-level instance - initialized lazily and cleaned up during app shutdown.
 _memory_client: AsyncMemory | None = None
 
 _MEMORY_POOL_MIN_CONNECTIONS = 1
@@ -389,12 +389,3 @@ def cleanup_memory_client() -> None:
         logger.exception("memory.cleanup.telemetry_close_failed")
 
     logger.debug("memory.cleanup.completed")
-
-
-def warm_memory_client() -> bool:
-    """Initialize the AsyncMemory client so the first request skips cold start."""
-    if not _memory_is_configured():
-        logger.debug("memory.warmup.skipped")
-        return False
-    get_memory_client()
-    return True

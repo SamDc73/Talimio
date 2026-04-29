@@ -15,6 +15,7 @@ from psycopg.errors import (
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.exc import IntegrityError, OperationalError
 
+from src.auth.request_state import get_user_id_from_state
 from src.exceptions import ApiError, ApiErrorEnvelope, DomainError, ErrorCategory, ErrorCode
 from src.observability.log_context import update_log_context
 
@@ -112,7 +113,7 @@ def handle_validation_errors(request: Request, exc: PydanticValidationError) -> 
 
     route = _get_route_path(request)
     error_code = str(ErrorCode.INVALID_INPUT)
-    update_log_context(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, error_code=error_code)
+    update_log_context(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, error_code=error_code)
     logger.warning(
         "error.validation.handled",
         extra={
@@ -128,7 +129,7 @@ def handle_validation_errors(request: Request, exc: PydanticValidationError) -> 
         category=str(ErrorCategory.VALIDATION),
         code=error_code,
         detail="Invalid input data",
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         metadata={"errors": errors},
     )
 
@@ -249,7 +250,7 @@ def log_error_context(request: Request, exc: Exception, error_id: uuid.UUID | No
         "query_param_keys": sorted(request.query_params.keys()),
         "header_names": sorted(request.headers.keys()),
         "client_host": request.client.host if request.client else "unknown",
-        "user_id": getattr(request.state, "user_id", None),
+        "user_id": get_user_id_from_state(request),
         "error_type": type(exc).__name__,
     }
 
@@ -275,7 +276,7 @@ def _resolve_http_exception_contract(status_code: int) -> tuple[ErrorCategory, E
         status.HTTP_404_NOT_FOUND: (ErrorCategory.RESOURCE_NOT_FOUND, ErrorCode.NOT_FOUND),
         status.HTTP_405_METHOD_NOT_ALLOWED: (ErrorCategory.BAD_REQUEST, ErrorCode.METHOD_NOT_ALLOWED),
         status.HTTP_409_CONFLICT: (ErrorCategory.CONFLICT, ErrorCode.CONFLICT),
-        status.HTTP_422_UNPROCESSABLE_CONTENT: (ErrorCategory.VALIDATION, ErrorCode.INVALID_INPUT),
+        status.HTTP_422_UNPROCESSABLE_ENTITY: (ErrorCategory.VALIDATION, ErrorCode.INVALID_INPUT),
         status.HTTP_501_NOT_IMPLEMENTED: (ErrorCategory.INTERNAL, ErrorCode.NOT_IMPLEMENTED),
     }
     if status_code in exact_mappings:

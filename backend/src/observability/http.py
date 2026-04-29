@@ -8,6 +8,7 @@ import structlog
 from fastapi import FastAPI, Request
 from opentelemetry import trace
 
+from src.auth.request_state import get_local_session_id_from_state, get_user_id_from_state
 from src.config.settings import Settings
 from src.observability.event_fields import get_feature_area
 from src.observability.log_context import (
@@ -52,11 +53,11 @@ def _build_request_context(request: Request, route: str) -> dict[str, Any]:
         "feature_area": get_feature_area(route),
         "course_id": request.path_params.get("course_id") or request.path_params.get("courseId"),
         "content_type": request.path_params.get("content_type") or request.path_params.get("contentType"),
-        "session_id": getattr(request.state, "local_session_id", None),
+        "session_id": get_local_session_id_from_state(request),
         "model_name": None,
         "status_code": None,
         "error_code": None,
-        "user_id": getattr(request.state, "user_id", None),
+        "user_id": get_user_id_from_state(request),
     }
 
 
