@@ -19,11 +19,11 @@ class PDFHighlightData(BaseModel):
     """Validation schema for PDF highlight data."""
 
     # Required fields for PDF highlights
-    text: str = Field(..., min_length=1, max_length=10000, description="Selected text content")
-    page: int = Field(..., ge=1, description="Page number (1-based)")
+    text: str = Field(min_length=1, max_length=10000, description="Selected text content")
+    page: int = Field(ge=1, description="Page number (1-based)")
 
     # Position data for PDF highlighting
-    position: dict[str, Any] = Field(..., description="Position data for PDF highlight")
+    position: dict[str, Any] = Field(description="Position data for PDF highlight")
 
     # Optional fields
     color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Hex color code")
@@ -81,9 +81,9 @@ class VideoHighlightData(BaseModel):
     """Validation schema for video highlight data."""
 
     # Required fields for video highlights
-    text: str = Field(..., min_length=1, max_length=10000, description="Selected text from transcript")
-    start_time: float = Field(..., ge=0, description="Start time in seconds")
-    end_time: float = Field(..., ge=0, description="End time in seconds")
+    text: str = Field(min_length=1, max_length=10000, description="Selected text from transcript")
+    start_time: float = Field(ge=0, description="Start time in seconds")
+    end_time: float = Field(ge=0, description="End time in seconds")
 
     # Optional fields
     color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Hex color code")
@@ -108,8 +108,8 @@ class EPUBHighlightData(BaseModel):
     """Validation schema for EPUB highlight data."""
 
     # Required fields for EPUB highlights
-    text: str = Field(..., min_length=1, max_length=10000, description="Selected text content")
-    cfi: str = Field(..., min_length=1, description="Canonical Fragment Identifier")
+    text: str = Field(min_length=1, max_length=10000, description="Selected text content")
+    cfi: str = Field(min_length=1, description="Canonical Fragment Identifier")
 
     # Optional fields
     color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Hex color code")
@@ -136,7 +136,7 @@ class GenericHighlightData(BaseModel):
     """Fallback validation schema for generic highlight data."""
 
     # Minimal required fields
-    text: str = Field(..., min_length=1, max_length=10000, description="Selected text content")
+    text: str = Field(min_length=1, max_length=10000, description="Selected text content")
 
     # Optional fields that any highlight type might have
     color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Hex color code")

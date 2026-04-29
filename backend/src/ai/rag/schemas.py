@@ -15,8 +15,8 @@ CourseDocumentStatus = Literal["pending", "processing", "embedded", "failed"]
 class DocumentUpload(BaseModel):
     """Schema for document upload request."""
 
-    document_type: str = Field(..., description="Type of document (e.g. pdf, txt, md, epub)")
-    title: str = Field(..., description="Title for the document")
+    document_type: str = Field(description="Type of document (e.g. pdf, txt, md, epub)")
+    title: str = Field(description="Title for the document")
 
     model_config = build_camel_config()
 
@@ -56,7 +56,7 @@ class DocumentList(BaseModel):
 class SearchRequest(BaseModel):
     """Schema for RAG search request."""
 
-    query: str = Field(..., description="Search query")
+    query: str = Field(description="Search query")
     top_k: int = Field(default=5, description="Number of results to return")
 
     model_config = build_camel_config()
@@ -65,9 +65,9 @@ class SearchRequest(BaseModel):
 class SearchResult(BaseModel):
     """Schema for RAG search result."""
 
-    chunk_id: str = Field(..., description="Unique chunk identifier")
-    content: str = Field(..., description="Chunk text content")
-    similarity_score: float = Field(..., description="Similarity score (0-1)")
+    chunk_id: str = Field(description="Unique chunk identifier")
+    content: str = Field(description="Chunk text content")
+    similarity_score: float = Field(description="Similarity score (0-1)")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Chunk metadata")
 
     model_config = build_camel_config()

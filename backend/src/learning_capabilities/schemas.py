@@ -52,11 +52,11 @@ def _default_tutor_moves() -> list[TutorMove]:
 class CapabilityDescriptor(BaseModel):
     """Runtime metadata describing one capability."""
 
-    name: str = Field(..., min_length=1)
+    name: str = Field(min_length=1)
     kind: CapabilityKind
     requires_confirmation: bool = False
     public_api_eligible: bool = True
-    description: str = Field(..., min_length=1)
+    description: str = Field(min_length=1)
 
     model_config = ConfigDict(frozen=True, **_CAMEL_CONFIG)
 
@@ -65,8 +65,8 @@ class ToolUiLink(BaseModel):
     """Clickable navigation affordance for the chat UI."""
 
     type: Literal["link"] = "link"
-    label: str = Field(..., min_length=1)
-    href: str = Field(..., min_length=1)
+    label: str = Field(min_length=1)
+    href: str = Field(min_length=1)
 
     model_config = ConfigDict(frozen=True, **_CAMEL_CONFIG)
 
@@ -75,9 +75,9 @@ class ToolUiConfirmation(BaseModel):
     """Confirmation affordance for mutating tools."""
 
     type: Literal["confirmation"] = "confirmation"
-    title: str = Field(..., min_length=1)
-    message: str = Field(..., min_length=1)
-    action_name: str = Field(..., min_length=1)
+    title: str = Field(min_length=1)
+    message: str = Field(min_length=1)
+    action_name: str = Field(min_length=1)
     confirm_label: str = Field(default="Confirm", min_length=1)
     cancel_label: str = Field(default="Cancel", min_length=1)
 
@@ -380,7 +380,7 @@ class TutorDeterministicSignals(BaseModel):
 class SearchLessonsCapabilityInput(BaseModel):
     """Input payload for lesson search capability."""
 
-    query: str = Field(..., min_length=1)
+    query: str = Field(min_length=1)
     course_id: uuid.UUID | None = None
     limit: int = Field(default=8, ge=1, le=20)
 
@@ -390,7 +390,7 @@ class SearchLessonsCapabilityInput(BaseModel):
 class SearchConceptsCapabilityInput(BaseModel):
     """Input payload for adaptive course concept search."""
 
-    query: str = Field(..., min_length=1)
+    query: str = Field(min_length=1)
     course_id: uuid.UUID
     limit: int = Field(default=5, ge=1, le=20)
     include_state: bool = True
@@ -402,7 +402,7 @@ class SearchCourseSourcesCapabilityInput(BaseModel):
     """Input payload for course-source search capability."""
 
     course_id: uuid.UUID
-    query: str = Field(..., min_length=1)
+    query: str = Field(min_length=1)
     limit: int = Field(default=5, ge=1, le=20)
     source_types: list[CourseSourceType] = Field(default_factory=_default_course_source_types)
 
@@ -612,7 +612,7 @@ class SubmitConceptProbeResultCapabilityOutput(BaseModel):
 class ListRelevantCoursesCapabilityInput(BaseModel):
     """Input payload for relevant-course matching."""
 
-    query: str = Field(..., min_length=1)
+    query: str = Field(min_length=1)
     limit: int = Field(default=6, ge=1, le=20)
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
@@ -734,7 +734,7 @@ class ActionStatusMixin(BaseModel):
     """Shared status fields for mutating capability outputs."""
 
     status: Literal["completed", "confirmation_required"]
-    message: str = Field(..., min_length=1)
+    message: str = Field(min_length=1)
     tool_ui: list[ToolUiLink | ToolUiConfirmation] = Field(default_factory=list)
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
@@ -743,7 +743,7 @@ class ActionStatusMixin(BaseModel):
 class CreateCourseCapabilityInput(BaseModel):
     """Input payload for course creation capability."""
 
-    prompt: str = Field(..., min_length=1)
+    prompt: str = Field(min_length=1)
     adaptive_enabled: bool = False
     confirmed: bool = False
 
@@ -761,7 +761,7 @@ class AppendCourseLessonCapabilityInput(BaseModel):
     """Input payload for course lesson append capability."""
 
     course_id: uuid.UUID
-    lesson_title: str = Field(..., min_length=1)
+    lesson_title: str = Field(min_length=1)
     lesson_description: str | None = None
     module_name: str | None = None
     generate_content: bool = True
@@ -784,7 +784,7 @@ class ExtendLessonWithContextCapabilityInput(BaseModel):
 
     course_id: uuid.UUID
     lesson_id: uuid.UUID
-    context: str = Field(..., min_length=1)
+    context: str = Field(min_length=1)
     confirmed: bool = False
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
@@ -795,7 +795,7 @@ class RegenerateLessonWithContextCapabilityInput(BaseModel):
 
     course_id: uuid.UUID
     lesson_id: uuid.UUID
-    context: str = Field(..., min_length=1)
+    context: str = Field(min_length=1)
     confirmed: bool = False
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)

@@ -65,10 +65,10 @@ class _GenerationContext:
 class _QuestionPayload(BaseModel):
     """Single generated question payload from generation prompt."""
 
-    question: str = Field(..., min_length=1)
-    expected_answer: str = Field(..., min_length=1)
-    answer_kind: Literal["latex", "text", "choice"] = Field(...)
-    probe_family: ProbeFamily = Field(...)
+    question: str = Field(min_length=1)
+    expected_answer: str = Field(min_length=1)
+    answer_kind: Literal["latex", "text", "choice"] = Field()
+    probe_family: ProbeFamily = Field()
     choices: list[str] = Field(default_factory=list)
 
     model_config = build_camel_config(extra="forbid")
@@ -97,7 +97,7 @@ class _QuestionPayload(BaseModel):
 class _QuestionBatchPayload(BaseModel):
     """generation payload."""
 
-    questions: list[_QuestionPayload] = Field(..., min_length=1)
+    questions: list[_QuestionPayload] = Field(min_length=1)
 
     model_config = build_camel_config(extra="forbid")
 
@@ -105,7 +105,7 @@ class _QuestionBatchPayload(BaseModel):
 class _PredictionBatchPayload(BaseModel):
     """batch prediction payload."""
 
-    predicted_p_correct: list[Annotated[float, Field(ge=0.0, le=1.0)]] = Field(..., min_length=1)
+    predicted_p_correct: list[Annotated[float, Field(ge=0.0, le=1.0)]] = Field(min_length=1)
 
     model_config = ConfigDict(extra="forbid")
 

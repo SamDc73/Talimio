@@ -12,7 +12,7 @@ from src.config.schema_casing import build_camel_config
 class TagBase(BaseModel):
     """Base schema for tags."""
 
-    name: str = Field(..., min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=100)
     category: str | None = Field(None, max_length=50)
     color: str | None = Field(None, pattern="^#[0-9A-Fa-f]{6}$")  # Hex color validation
 
@@ -35,14 +35,14 @@ class TagWithConfidence(BaseModel):
 
     model_config = build_camel_config(extra="forbid")
 
-    tag: str = Field(..., min_length=1, max_length=100)
-    confidence: float = Field(..., ge=0.0, le=1.0)
+    tag: str = Field(min_length=1, max_length=100)
+    confidence: float = Field(ge=0.0, le=1.0)
 
 
 class ContentTagsUpdate(BaseModel):
     """Schema for updating content tags."""
 
-    tags: list[str] = Field(..., max_length=20)
+    tags: list[str] = Field(max_length=20)
 
     model_config = build_camel_config()
 

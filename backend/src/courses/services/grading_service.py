@@ -24,7 +24,7 @@ from src.courses.services.latex_expression_verifier import (
 class GradingCoachFeedback(BaseModel):
     """Structured output from the grading coach LLM."""
 
-    feedback_markdown: str = Field(..., min_length=1)
+    feedback_markdown: str = Field(min_length=1)
     tags: list[str] = Field(default_factory=list)
     error_highlight: GradeErrorHighlight | None = None
 
@@ -34,9 +34,9 @@ class GradingCoachFeedback(BaseModel):
 class LLMGradeFeedback(BaseModel):
     """Structured output from the canonical grading prompt."""
 
-    is_correct: bool = Field(...)
-    status: Literal["correct", "incorrect", "parse_error"] = Field(...)
-    feedback_markdown: str = Field(..., min_length=1)
+    is_correct: bool = Field()
+    status: Literal["correct", "incorrect", "parse_error"] = Field()
+    feedback_markdown: str = Field(min_length=1)
     tags: list[str] = Field(default_factory=list)
     error_highlight: GradeErrorHighlight | None = None
 

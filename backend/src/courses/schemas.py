@@ -16,10 +16,10 @@ _CAMEL_CONFIG = {"alias_generator": to_camel, "populate_by_name": True}
 class LessonSummary(BaseModel):
     """Lightweight lesson representation for course outlines."""
 
-    id: uuid.UUID = Field(..., description="Lesson ID")
-    title: str = Field(..., description="Lesson title")
+    id: uuid.UUID = Field(description="Lesson ID")
+    title: str = Field(description="Lesson title")
     description: str | None = Field(None, description="Lesson description")
-    order: int = Field(..., description="Lesson order within its module")
+    order: int = Field(description="Lesson order within its module")
     concept_id: uuid.UUID | None = Field(None, description="Mapped concept ID for adaptive lessons")
 
     model_config = ConfigDict(from_attributes=True, **_CAMEL_CONFIG)
@@ -28,16 +28,16 @@ class LessonSummary(BaseModel):
 class LessonVersionSummary(BaseModel):
     """Compact version metadata for lesson history UI."""
 
-    id: uuid.UUID = Field(..., description="Lesson version ID")
-    major_version: int = Field(..., description="Major version number")
-    minor_version: int = Field(..., description="Minor version number")
-    version_kind: str = Field(..., description="Version kind label")
-    version_label: str = Field(..., description="Display label such as 1.0")
+    id: uuid.UUID = Field(description="Lesson version ID")
+    major_version: int = Field(description="Major version number")
+    minor_version: int = Field(description="Minor version number")
+    version_kind: str = Field(description="Version kind label")
+    version_label: str = Field(description="Display label such as 1.0")
     pass_label: str | None = Field(None, description="Lightweight pass label such as Pass 2")
     history_label: str | None = Field(None, description="Short history label such as Regenerated")
     source_reason: str | None = Field(None, description="Why this version exists")
-    is_current: bool = Field(..., description="Whether this is the current active version")
-    created_at: datetime = Field(..., description="Version creation timestamp")
+    is_current: bool = Field(description="Whether this is the current active version")
+    created_at: datetime = Field(description="Version creation timestamp")
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
@@ -45,11 +45,11 @@ class LessonVersionSummary(BaseModel):
 class LessonWindowResponse(BaseModel):
     """Window payload for segmented lesson delivery."""
 
-    id: uuid.UUID = Field(..., description="Lesson window ID")
-    window_index: int = Field(..., description="Zero-based window index")
+    id: uuid.UUID = Field(description="Lesson window ID")
+    window_index: int = Field(description="Zero-based window index")
     title: str | None = Field(None, description="Optional window title")
-    content: str = Field(..., description="Window content")
-    estimated_minutes: int = Field(..., description="Estimated reading time in minutes")
+    content: str = Field(description="Window content")
+    estimated_minutes: int = Field(description="Estimated reading time in minutes")
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
@@ -57,13 +57,12 @@ class LessonWindowResponse(BaseModel):
 class LessonNextPassResponse(BaseModel):
     """Lightweight metadata for the next major lesson pass."""
 
-    major_version: int = Field(..., description="Next major version number")
-    pass_label: str = Field(..., description="User-facing label such as Pass 2")
+    major_version: int = Field(description="Next major version number")
+    pass_label: str = Field(description="User-facing label such as Pass 2")
     status: Literal["recommended_now", "available_early"] = Field(
-        ...,
         description="Whether the next pass is recommended now or only available as an early override",
     )
-    reason: str = Field(..., description="Short explanation for the next-pass recommendation state")
+    reason: str = Field(description="Short explanation for the next-pass recommendation state")
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
@@ -71,9 +70,9 @@ class LessonNextPassResponse(BaseModel):
 class LessonDetailResponse(BaseModel):
     """Schema for detailed lesson responses (content endpoint)."""
 
-    id: uuid.UUID = Field(..., description="Lesson ID")
-    course_id: uuid.UUID = Field(..., description="Course ID")
-    title: str = Field(..., description="Lesson title")
+    id: uuid.UUID = Field(description="Lesson ID")
+    course_id: uuid.UUID = Field(description="Course ID")
+    title: str = Field(description="Lesson title")
     description: str | None = Field(None, description="Lesson description")
     content: str | None = Field(None, description="Lesson content (MDX format)")
     concept_id: uuid.UUID | None = Field(None, description="Mapped concept ID for adaptive lessons")
@@ -95,8 +94,8 @@ class LessonDetailResponse(BaseModel):
     )
     windows: list[LessonWindowResponse] = Field(default_factory=list, description="Windowed lesson delivery payload")
     adaptive_enabled: bool | None = Field(None, description="Whether the parent course is adaptive")
-    created_at: datetime = Field(..., description="Lesson creation timestamp")
-    updated_at: datetime = Field(..., description="Lesson last update timestamp")
+    created_at: datetime = Field(description="Lesson creation timestamp")
+    updated_at: datetime = Field(description="Lesson last update timestamp")
 
     model_config = ConfigDict(from_attributes=True, **_CAMEL_CONFIG)
 
@@ -113,7 +112,6 @@ class LessonRegenerateRequest(BaseModel):
     """Request payload for explicit lesson regeneration."""
 
     critique_text: str = Field(
-        ...,
         validation_alias=AliasChoices("critiqueText", "critique_text", "critique", "feedback"),
         min_length=1,
         description="What the learner wants changed in the lesson",
@@ -140,7 +138,7 @@ class LessonNextPassRequest(BaseModel):
 class CourseBase(BaseModel):
     """Base schema for courses."""
 
-    title: str = Field(..., description="Course title", max_length=200)
+    title: str = Field(description="Course title", max_length=200)
     description: str = Field("", description="Course description")
     tags: str = Field("[]", description="Course tags as JSON string")
     archived: bool = Field(default=False, description="Whether the course is archived")
@@ -153,7 +151,7 @@ class CourseBase(BaseModel):
 class CourseCreate(BaseModel):
     """Schema for creating a new course."""
 
-    prompt: str = Field(..., min_length=1, description="AI prompt for course generation")
+    prompt: str = Field(min_length=1, description="AI prompt for course generation")
     adaptive_enabled: bool = Field(default=False, description="Enable adaptive concept scheduling")
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
@@ -162,7 +160,7 @@ class CourseCreate(BaseModel):
 class SelfAssessmentRequest(BaseModel):
     """Request payload for generating self-assessment questions."""
 
-    topic: str = Field(..., min_length=1, description="Course topic for personalization")
+    topic: str = Field(min_length=1, description="Course topic for personalization")
     level: str | None = Field(None, description="Optional learner experience level or confidence band")
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
@@ -171,9 +169,9 @@ class SelfAssessmentRequest(BaseModel):
 class SelfAssessmentQuestionPayload(BaseModel):
     """Single-select question suitable for MultipleChoice component."""
 
-    type: Literal["single_select"] = Field(..., description="Question presentation type")
-    question: str = Field(..., min_length=1, description="Learner-facing question text")
-    options: list[str] = Field(..., min_length=3, max_length=5, description="Candidate answers")
+    type: Literal["single_select"] = Field(description="Question presentation type")
+    question: str = Field(min_length=1, description="Learner-facing question text")
+    options: list[str] = Field(min_length=3, max_length=5, description="Candidate answers")
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
@@ -203,8 +201,8 @@ class CourseUpdate(BaseModel):
 class ModuleResponse(BaseModel):
     """Schema for synthesized module responses."""
 
-    id: uuid.UUID = Field(..., description="Module ID")
-    title: str = Field(..., description="Module title")
+    id: uuid.UUID = Field(description="Module ID")
+    title: str = Field(description="Module title")
     description: str | None = Field(None, description="Module description")
     lessons: list[LessonSummary] = Field(default_factory=list, description="Module lessons")
 
@@ -214,10 +212,10 @@ class ModuleResponse(BaseModel):
 class CourseResponse(CourseBase):
     """Schema for course responses."""
 
-    id: uuid.UUID = Field(..., description="Course ID")
+    id: uuid.UUID = Field(description="Course ID")
     user_id: uuid.UUID | None = Field(None, description="Owner user ID")
-    created_at: datetime = Field(..., description="Course creation timestamp")
-    updated_at: datetime = Field(..., description="Course last update timestamp")
+    created_at: datetime = Field(description="Course creation timestamp")
+    updated_at: datetime = Field(description="Course last update timestamp")
     modules: list[ModuleResponse] = Field(default_factory=list, description="Course modules")
 
     model_config = ConfigDict(from_attributes=True, **_CAMEL_CONFIG)
@@ -226,10 +224,10 @@ class CourseResponse(CourseBase):
 class CourseListResponse(BaseModel):
     """Schema for course list responses with pagination."""
 
-    courses: list[CourseResponse] = Field(..., description="List of courses")
-    total: int = Field(..., description="Total number of courses")
-    page: int = Field(..., description="Current page number")
-    per_page: int = Field(..., description="Number of courses per page")
+    courses: list[CourseResponse] = Field(description="List of courses")
+    total: int = Field(description="Total number of courses")
+    page: int = Field(description="Current page number")
+    per_page: int = Field(description="Number of courses per page")
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
@@ -237,9 +235,9 @@ class CourseListResponse(BaseModel):
 class ConceptSummary(BaseModel):
     """Summary of a concept for adaptive frontier responses."""
 
-    id: uuid.UUID = Field(..., description="Concept ID")
-    name: str = Field(..., description="Concept display name")
-    description: str = Field(..., description="Concept description")
+    id: uuid.UUID = Field(description="Concept ID")
+    name: str = Field(description="Concept display name")
+    description: str = Field(description="Concept description")
     difficulty: int | None = Field(None, description="Optional difficulty indicator")
     mastery: float | None = Field(None, description="Current mastery score in [0,1]")
     next_review_at: datetime | None = Field(None, description="Next scheduled review timestamp")
@@ -270,14 +268,14 @@ class FrontierResponse(BaseModel):
 class ReviewRequest(BaseModel):
     """Single concept review submission."""
 
-    concept_id: uuid.UUID = Field(..., description="Concept being reviewed")
+    concept_id: uuid.UUID = Field(description="Concept being reviewed")
     question: str | None = Field(
         None,
         min_length=1,
         description="Optional learner-facing prompt text used for duplicate detection in practice generation",
     )
-    rating: int = Field(..., ge=1, le=4, description="Review quality rating (1-4)")
-    review_duration_ms: int = Field(..., ge=0, description="Duration spent reviewing in milliseconds")
+    rating: int = Field(ge=1, le=4, description="Review quality rating (1-4)")
+    review_duration_ms: int = Field(ge=0, description="Duration spent reviewing in milliseconds")
     latency_ms: int | None = Field(None, ge=0, description="Optional latency before answering in milliseconds")
     structure_signature: str | None = Field(
         None,
@@ -320,7 +318,7 @@ class ReviewRequest(BaseModel):
 class ReviewBatchRequest(BaseModel):
     """Batch review payload."""
 
-    reviews: list[ReviewRequest] = Field(..., min_length=1, description="List of concept reviews")
+    reviews: list[ReviewRequest] = Field(min_length=1, description="List of concept reviews")
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
@@ -338,7 +336,7 @@ class ConceptReviewRequest(BaseModel):
 class ReviewOutcome(BaseModel):
     """Per-concept outcome returned after submitting reviews."""
 
-    concept_id: uuid.UUID = Field(..., description="Reviewed concept ID")
+    concept_id: uuid.UUID = Field(description="Reviewed concept ID")
     next_review_at: datetime | None = Field(None, description="Scheduled next review timestamp")
     mastery: float | None = Field(None, description="Updated mastery score")
     exposures: int = Field(0, description="Total exposures after update")
@@ -357,7 +355,7 @@ class ReviewBatchResponse(BaseModel):
 class NextReviewResponse(BaseModel):
     """Response for concept next-review lookup."""
 
-    concept_id: uuid.UUID = Field(..., description="Concept ID")
+    concept_id: uuid.UUID = Field(description="Concept ID")
     next_review_at: datetime | None = Field(None, description="Next review timestamp")
     current_mastery: float | None = Field(None, description="Current mastery score")
     total_exposures: int = Field(0, description="Total exposures for the concept")
@@ -454,10 +452,10 @@ class GradeAnswerPayload(BaseModel):
 class GradeContextPayload(BaseModel):
     """Context payload for grading to enable adaptive wiring."""
 
-    course_id: uuid.UUID = Field(..., description="Course ID for the practice interaction")
-    lesson_id: uuid.UUID = Field(..., description="Lesson ID for the practice interaction")
-    concept_id: uuid.UUID = Field(..., description="Concept ID used for adaptive scheduling")
-    practice_context: PracticeContext = Field(..., description="Practice surface that collected the answer")
+    course_id: uuid.UUID = Field(description="Course ID for the practice interaction")
+    lesson_id: uuid.UUID = Field(description="Lesson ID for the practice interaction")
+    concept_id: uuid.UUID = Field(description="Concept ID used for adaptive scheduling")
+    practice_context: PracticeContext = Field(description="Practice surface that collected the answer")
     hints_used: int | None = Field(
         None,
         ge=0,
@@ -474,11 +472,11 @@ class GradeRequest(BaseModel):
     Requires full context (expected answer, question) because drill generation is stateless, avoiding a pending-drills DB table.
     """
 
-    kind: GradeKind = Field(..., description="Answer kind to grade")
-    question: str = Field(..., min_length=1, description="Learner-facing question prompt")
-    expected: GradeExpectedPayload = Field(..., description="Expected answer payload")
-    answer: GradeAnswerPayload = Field(..., description="Learner-provided answer payload")
-    context: GradeContextPayload = Field(..., description="Context for adaptive learning signals")
+    kind: GradeKind = Field(description="Answer kind to grade")
+    question: str = Field(min_length=1, description="Learner-facing question prompt")
+    expected: GradeExpectedPayload = Field(description="Expected answer payload")
+    answer: GradeAnswerPayload = Field(description="Learner-provided answer payload")
+    context: GradeContextPayload = Field(description="Context for adaptive learning signals")
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
@@ -531,7 +529,7 @@ class GradeRequest(BaseModel):
 class VerifierInfo(BaseModel):
     """Verifier metadata attached to grading responses."""
 
-    name: str = Field(..., description="Verifier name")
+    name: str = Field(description="Verifier name")
     method: str | None = Field(None, description="Verification method used to determine correctness")
     notes: str | None = Field(None, description="Optional notes about the verification process")
 
@@ -541,7 +539,7 @@ class VerifierInfo(BaseModel):
 class GradeErrorHighlight(BaseModel):
     """Optional highlight for focused feedback in grading responses."""
 
-    latex: str = Field(..., min_length=1, description="LaTeX fragment to emphasize")
+    latex: str = Field(min_length=1, description="LaTeX fragment to emphasize")
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
@@ -549,10 +547,10 @@ class GradeErrorHighlight(BaseModel):
 class GradeResponse(BaseModel):
     """Response payload for grading requests."""
 
-    is_correct: bool = Field(..., description="Deterministic correctness flag from verifier")
-    status: GradeStatus = Field(..., description="Verification status")
-    feedback_markdown: str = Field(..., min_length=1, description="Feedback rendered to learners (Markdown)")
-    verifier: VerifierInfo = Field(..., description="Verifier metadata")
+    is_correct: bool = Field(description="Deterministic correctness flag from verifier")
+    status: GradeStatus = Field(description="Verification status")
+    feedback_markdown: str = Field(min_length=1, description="Feedback rendered to learners (Markdown)")
+    verifier: VerifierInfo = Field(description="Verifier metadata")
     tags: list[str] = Field(default_factory=list, description="Optional diagnostic tags for analytics")
     error_highlight: GradeErrorHighlight | None = Field(
         None,
@@ -569,11 +567,11 @@ class GradeResponse(BaseModel):
 class PracticeDrillItem(BaseModel):
     """Single generated practice drill item."""
 
-    concept_id: uuid.UUID = Field(..., description="Concept this drill belongs to")
-    lesson_id: uuid.UUID = Field(..., description="Lesson ID linked to this concept")
-    question: str = Field(..., min_length=1, description="Learner-facing drill question")
-    expected_answer: str = Field(..., min_length=1, description="Expected answer string")
-    answer_kind: PracticeAnswerKind = Field(..., description="Expected answer interpretation")
+    concept_id: uuid.UUID = Field(description="Concept this drill belongs to")
+    lesson_id: uuid.UUID = Field(description="Lesson ID linked to this concept")
+    question: str = Field(min_length=1, description="Learner-facing drill question")
+    expected_answer: str = Field(min_length=1, description="Expected answer string")
+    answer_kind: PracticeAnswerKind = Field(description="Expected answer interpretation")
     probe_family: ProbeFamily = Field(
         "free_recall",
         description="Bounded pedagogical family used to generate this drill",
@@ -584,12 +582,12 @@ class PracticeDrillItem(BaseModel):
     )
     choices: list[str] = Field(default_factory=list, description="Learner-visible choices for choice-based families")
     hints: list[str] = Field(default_factory=list, description="Optional hints for this drill")
-    structure_signature: str = Field(..., min_length=1, description="Normalized structural signature for duplicate checks")
-    predicted_p_correct: float = Field(..., ge=0.0, le=1.0, description="Estimated correctness probability used for selection")
-    target_probability: float = Field(..., ge=0.0, le=1.0, description="Target probability used to rank candidate drills")
-    target_low: float = Field(..., ge=0.0, le=1.0, description="Lower bound of the target probability band")
-    target_high: float = Field(..., ge=0.0, le=1.0, description="Upper bound of the target probability band")
-    core_model: str = Field(..., min_length=1, description="Core model used to generate and rank the drill")
+    structure_signature: str = Field(min_length=1, description="Normalized structural signature for duplicate checks")
+    predicted_p_correct: float = Field(ge=0.0, le=1.0, description="Estimated correctness probability used for selection")
+    target_probability: float = Field(ge=0.0, le=1.0, description="Target probability used to rank candidate drills")
+    target_low: float = Field(ge=0.0, le=1.0, description="Lower bound of the target probability band")
+    target_high: float = Field(ge=0.0, le=1.0, description="Upper bound of the target probability band")
+    core_model: str = Field(min_length=1, description="Core model used to generate and rank the drill")
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
@@ -688,8 +686,8 @@ class AttemptResponse(BaseModel):
 class ExecutionFilePayload(BaseModel):
     """Single workspace file included during execution."""
 
-    path: str = Field(..., min_length=1, description="Relative path of the file inside the workspace root")
-    content: str = Field(..., description="Full file contents written to the sandbox before execution")
+    path: str = Field(min_length=1, description="Relative path of the file inside the workspace root")
+    content: str = Field(description="Full file contents written to the sandbox before execution")
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
@@ -697,8 +695,8 @@ class ExecutionFilePayload(BaseModel):
 class CodeExecuteRequest(BaseModel):
     """Request to execute a code snippet via E2B."""
 
-    code: str = Field(..., min_length=1, description="Source code to execute")
-    language: str = Field(..., min_length=1, description="Language name/alias, e.g., python, js, cpp")
+    code: str = Field(min_length=1, description="Source code to execute")
+    language: str = Field(min_length=1, description="Language name/alias, e.g., python, js, cpp")
     stdin: str | None = Field(None, description="Optional stdin input")
     lesson_id: uuid.UUID | None = Field(None, description="Optional lesson id for analytics/logging")
     course_id: uuid.UUID | None = Field(None, description="Course id for sandbox scoping and setup commands")
@@ -724,7 +722,7 @@ class CodeExecuteResponse(BaseModel):
 class RuntimeProcessStartRequest(BaseModel):
     """Start a long-lived runtime process in a scoped sandbox session."""
 
-    command: str = Field(..., min_length=1)
+    command: str = Field(min_length=1)
     course_id: uuid.UUID | None = None
     workspace_id: str | None = None
     cwd: str | None = None
@@ -737,7 +735,7 @@ class RuntimeProcessStartRequest(BaseModel):
 class RuntimeProcessReadRequest(BaseModel):
     """Read process output for a scoped runtime process."""
 
-    process_id: int = Field(..., ge=1)
+    process_id: int = Field(ge=1)
     course_id: uuid.UUID | None = None
     workspace_id: str | None = None
 
@@ -747,8 +745,8 @@ class RuntimeProcessReadRequest(BaseModel):
 class RuntimeProcessInputRequest(BaseModel):
     """Send stdin data to a scoped runtime process."""
 
-    process_id: int = Field(..., ge=1)
-    input: str = Field(...)
+    process_id: int = Field(ge=1)
+    input: str = Field()
     course_id: uuid.UUID | None = None
     workspace_id: str | None = None
 
@@ -758,7 +756,7 @@ class RuntimeProcessInputRequest(BaseModel):
 class RuntimeProcessStopRequest(BaseModel):
     """Stop a scoped runtime process."""
 
-    process_id: int = Field(..., ge=1)
+    process_id: int = Field(ge=1)
     course_id: uuid.UUID | None = None
     workspace_id: str | None = None
     wait_timeout_seconds: float | None = Field(default=None, ge=0)

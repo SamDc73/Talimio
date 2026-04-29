@@ -237,8 +237,8 @@ class BookChapterBase(BaseModel):
 
     model_config = build_camel_config()
 
-    chapter_number: int = Field(..., ge=1, alias="chapterNumber")
-    title: str = Field(..., max_length=500)
+    chapter_number: int = Field(ge=1, alias="chapterNumber")
+    title: str = Field(max_length=500)
     start_page: int | None = Field(None, ge=1, alias="startPage")
     end_page: int | None = Field(None, ge=1, alias="endPage")
     status: BookLearningStatus = "not_started"
@@ -268,7 +268,7 @@ class BookChapterBatchStatusUpdate(BaseModel):
 
     model_config = build_camel_config()
 
-    chapter_id: uuid.UUID = Field(..., alias="chapterId")
+    chapter_id: uuid.UUID = Field(alias="chapterId")
     status: BookLearningStatus
 
 

@@ -18,12 +18,12 @@ class VideoBase(BaseModel):
 
     model_config = build_camel_config(str_strip_whitespace=True)
 
-    youtube_id: str = Field(..., min_length=1, max_length=20, alias="youtubeId")
-    url: str = Field(..., min_length=1, max_length=255)
-    title: str = Field(..., min_length=1, max_length=500)
-    channel: str = Field(..., min_length=1, max_length=255)
-    channel_id: str = Field(..., min_length=1, max_length=50, alias="channelId")
-    duration: int = Field(..., gt=0, description="Duration in seconds")
+    youtube_id: str = Field(min_length=1, max_length=20, alias="youtubeId")
+    url: str = Field(min_length=1, max_length=255)
+    title: str = Field(min_length=1, max_length=500)
+    channel: str = Field(min_length=1, max_length=255)
+    channel_id: str = Field(min_length=1, max_length=50, alias="channelId")
+    duration: int = Field(gt=0, description="Duration in seconds")
     thumbnail_url: str | None = Field(None, max_length=500, alias="thumbnailUrl")
     description: str | None = None
     tags: list[str] | None = Field(default_factory=list)
@@ -33,7 +33,7 @@ class VideoBase(BaseModel):
 class VideoCreate(BaseModel):
     """Schema for creating a new video."""
 
-    url: str = Field(..., description="YouTube video URL")
+    url: str = Field(description="YouTube video URL")
 
     @field_validator("url")
     @classmethod
@@ -124,8 +124,8 @@ class VideoChapterBase(BaseModel):
 
     model_config = build_camel_config()
 
-    chapter_number: int = Field(..., ge=1, alias="chapterNumber")
-    title: str = Field(..., max_length=500)
+    chapter_number: int = Field(ge=1, alias="chapterNumber")
+    title: str = Field(max_length=500)
     start_time: int | None = Field(None, ge=0, description="Start time in seconds", alias="startTime")
     end_time: int | None = Field(None, ge=0, description="End time in seconds", alias="endTime")
     status: VideoLearningStatus = "not_started"
@@ -156,9 +156,9 @@ class VideoChapterProgressSync(BaseModel):
     model_config = build_camel_config()
 
     completed_chapter_ids: list[uuid.UUID] = Field(
-        ..., description="List of completed chapter IDs", alias="completedChapterIds"
+        description="List of completed chapter IDs", alias="completedChapterIds"
     )
-    total_chapters: int = Field(..., gt=0, description="Total number of chapters", alias="totalChapters")
+    total_chapters: int = Field(gt=0, description="Total number of chapters", alias="totalChapters")
 
 
 class TranscriptSegment(BaseModel):
@@ -166,9 +166,9 @@ class TranscriptSegment(BaseModel):
 
     model_config = build_camel_config()
 
-    start_time: float = Field(..., ge=0, description="Start time in seconds", alias="startTime")
-    end_time: float = Field(..., ge=0, description="End time in seconds", alias="endTime")
-    text: str = Field(..., description="Transcript text for this segment")
+    start_time: float = Field(ge=0, description="Start time in seconds", alias="startTime")
+    end_time: float = Field(ge=0, description="End time in seconds", alias="endTime")
+    text: str = Field(description="Transcript text for this segment")
 
 
 class VideoTranscriptResponse(BaseModel):
@@ -176,9 +176,9 @@ class VideoTranscriptResponse(BaseModel):
 
     model_config = build_camel_config()
 
-    video_id: uuid.UUID = Field(..., alias="videoId")
-    segments: list[TranscriptSegment] = Field(..., description="List of transcript segments")
-    total_segments: int = Field(..., alias="totalSegments")
+    video_id: uuid.UUID = Field(alias="videoId")
+    segments: list[TranscriptSegment] = Field(description="List of transcript segments")
+    total_segments: int = Field(alias="totalSegments")
 
 
 class RAGStatusResponse(BaseModel):

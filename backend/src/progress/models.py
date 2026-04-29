@@ -33,7 +33,7 @@ class ProgressMetadata(BaseModel):
 class ProgressUpdate(BaseModel):
     """Request model for updating progress."""
 
-    progress_percentage: float = Field(..., ge=0, le=100)
+    progress_percentage: float = Field(ge=0, le=100)
     metadata: dict[str, Any] | None = Field(default_factory=dict)
 
     @field_validator("progress_percentage")
@@ -58,7 +58,7 @@ class ProgressResponse(BaseModel):
 class BatchProgressRequest(BaseModel):
     """Request model for batch progress fetching."""
 
-    content_ids: list[uuid.UUID] = Field(..., max_length=100, alias="contentIds")
+    content_ids: list[uuid.UUID] = Field(max_length=100, alias="contentIds")
 
     model_config = ConfigDict(populate_by_name=True)
 
