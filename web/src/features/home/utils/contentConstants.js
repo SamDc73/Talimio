@@ -1,4 +1,5 @@
-import { Calendar, Clock, FileText, Sparkles, TimerOff, Youtube } from "lucide-react"
+import { Calendar, Clock, FileText, Sparkles, TimerOff } from "lucide-react"
+import { YouTubeMark } from "@/components/YouTubeMark"
 
 export const VARIANTS = {
 	course: {
@@ -15,13 +16,13 @@ export const VARIANTS = {
 	},
 	video: {
 		label: "Video",
-		icon: Youtube,
+		icon: YouTubeMark,
 		badge: "bg-video/10 text-video",
 		grad: "from-video to-video-accent",
 	},
 	youtube: {
 		label: "Video",
-		icon: Youtube,
+		icon: YouTubeMark,
 		badge: "bg-video/10 text-video",
 		grad: "from-video to-video-accent",
 	},

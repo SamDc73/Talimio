@@ -1,7 +1,8 @@
 import { motion } from "framer-motion"
-import { Search, Sparkles, X, Youtube } from "lucide-react"
+import { Search, Sparkles, X } from "lucide-react"
 import { Button } from "@/components/Button"
 import { Input } from "@/components/Input"
+import { YouTubeMark } from "@/components/YouTubeMark"
 import FilterPopover from "./FilterPopover"
 
 function SearchBar({
@@ -36,7 +37,7 @@ function SearchBar({
 		searchPlaceholder = "What do you want to learn about?"
 	} else if (isYoutubeMode) {
 		searchModeBackgroundClass = "bg-video/10"
-		searchModeIcon = <Youtube className="text-video" size={20} />
+		searchModeIcon = <YouTubeMark className="size-5 text-video" />
 		searchPlaceholder = "Paste a YouTube URL or search for videos..."
 	}
 

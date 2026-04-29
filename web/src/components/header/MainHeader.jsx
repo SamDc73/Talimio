@@ -12,7 +12,6 @@ import {
 	Sparkles,
 	Sun,
 	X,
-	Youtube,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
@@ -30,6 +29,7 @@ import { Input } from "@/components/Input"
 import { PersonalizationDialog } from "@/components/PersonalizationDialog"
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/Sheet"
 import { TooltipButton } from "@/components/TooltipButton"
+import { YouTubeMark } from "@/components/YouTubeMark"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useAuth } from "@/hooks/use-auth"
 import { cn } from "@/lib/utils"
@@ -356,7 +356,7 @@ export function MainHeader({ transparent = false, className }) {
 												to="/videos"
 												className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-muted transition-colors"
 											>
-												<Youtube className="size-5  text-video" />
+												<YouTubeMark className="size-5  text-video" />
 												<span className="font-medium">Videos</span>
 											</Link>
 										</SheetClose>

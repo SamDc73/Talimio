@@ -1,5 +1,5 @@
 import { motion } from "framer-motion"
-import { Loader2, Youtube } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { useId, useState } from "react"
 
 import { createVideo } from "@/api/videosApi"
@@ -7,6 +7,7 @@ import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
 import { Input } from "@/components/Input"
 import { Label } from "@/components/Label"
+import { YouTubeMark } from "@/components/YouTubeMark"
 import logger from "@/lib/logger"
 
 const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/
@@ -102,7 +103,7 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 					<DialogHeader className="space-y-2">
 						<div className="flex items-center gap-3">
 							<div className="rounded-lg bg-linear-to-br from-video/90 to-video p-2.5">
-								<Youtube className="size-5 text-video-text" />
+								<YouTubeMark className="size-5 text-video-text" />
 							</div>
 							<DialogTitle className="text-2xl">Add a YouTube Video</DialogTitle>
 						</div>
@@ -145,7 +146,7 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 								</div>
 							) : (
 								<div className="flex items-center gap-2">
-									<Youtube className="size-4" />
+									<YouTubeMark className="size-4" />
 									<span>Add Video</span>
 								</div>
 							)}

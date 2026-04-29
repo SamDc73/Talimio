@@ -1,4 +1,4 @@
-import { ArrowUpDown, BookOpen, CalendarDays, Clock, FileText, Search, SlidersHorizontal, Youtube } from "lucide-react"
+import { ArrowUpDown, BookOpen, CalendarDays, Clock, FileText, Search, SlidersHorizontal } from "lucide-react"
 import { useId } from "react"
 
 import { Button } from "@/components/Button"
@@ -7,6 +7,7 @@ import { Label } from "@/components/Label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/Popover"
 import { RadioGroup, RadioGroupItem } from "@/components/RadioGroup"
 import { Separator } from "@/components/Separator"
+import { YouTubeMark } from "@/components/YouTubeMark"
 
 function FilterPopover({
 	filterOptions,
@@ -35,7 +36,7 @@ function FilterPopover({
 				return BookOpen
 			}
 			case "Youtube": {
-				return Youtube
+				return YouTubeMark
 			}
 			case "FileText": {
 				return FileText

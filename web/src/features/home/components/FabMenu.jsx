@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion"
-import { BookOpen, Plus, Sparkles, Youtube } from "lucide-react"
+import { BookOpen, Plus, Sparkles } from "lucide-react"
 import { TooltipButton } from "@/components/TooltipButton"
+import { YouTubeMark } from "@/components/YouTubeMark"
 
 export default function FabMenu({ isFabExpanded, onToggleExpanded, onGenerateCourse, onUploadBook, onAddYoutube }) {
 	return (
@@ -51,7 +52,7 @@ export default function FabMenu({ isFabExpanded, onToggleExpanded, onGenerateCou
 							tooltipSide="left"
 							tooltipDelayDuration={200}
 						>
-							<Youtube className="size-6  text-video" />
+							<YouTubeMark className="size-6  text-video" />
 						</TooltipButton>
 					</motion.div>
 				)}
