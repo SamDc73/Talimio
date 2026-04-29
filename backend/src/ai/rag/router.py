@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 
 from src.ai.rag.schemas import DefaultResponse, DocumentList, DocumentResponse, SearchRequest, SearchResponse
 from src.ai.rag.service import RAGService
@@ -23,6 +23,7 @@ async def upload_document(
     course_id: uuid.UUID,
     document_type: Annotated[str, Form(max_length=50)],
     title: Annotated[str, Form(max_length=255)],
+    background_tasks: BackgroundTasks,
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
     file: Annotated[UploadFile | None, File()] = None,
@@ -40,6 +41,7 @@ async def upload_document(
         title=title,
         file_content=file_content,
         filename=file.filename,
+        background_tasks=background_tasks,
     )
 
 

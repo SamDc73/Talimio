@@ -8,6 +8,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+from fastapi import BackgroundTasks
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -71,7 +72,6 @@ class RAGService:
 
         # Components will be lazily initialized
         self._document_processor = None  # Unstructured parser
-        self._background_tasks: set[asyncio.Task[None]] = set()
 
     @property
     def document_processor(self) -> DocumentProcessor:
@@ -79,15 +79,6 @@ class RAGService:
         if self._document_processor is None:
             self._document_processor = DocumentProcessor()
         return self._document_processor
-
-    def _handle_background_task_done(self, task: asyncio.Task[None]) -> None:
-        self._background_tasks.discard(task)
-        if task.cancelled():
-            return
-        error = task.exception()
-        if error is None:
-            return
-        logger.error("rag.background_task.failed", exc_info=(type(error), error, error.__traceback__))
 
     async def _ensure_course_owned(
         self,
@@ -165,6 +156,7 @@ class RAGService:
         file_content: bytes | None = None,
         filename: str | None = None,
         process_in_background: bool = True,
+        background_tasks: BackgroundTasks | None = None,
     ) -> DocumentResponse:
         """Upload a document to a course, ensuring user ownership."""
         await self._ensure_course_owned(session, user_id, course_id)
@@ -200,9 +192,8 @@ class RAGService:
             if process_in_background and not is_image:
                 await session.commit()
                 doc_id = doc.id
-                task = asyncio.create_task(self._process_document_background(doc_id))
-                self._background_tasks.add(task)
-                task.add_done_callback(self._handle_background_task_done)
+                if background_tasks is not None:
+                    background_tasks.add_task(self._process_document_background, doc_id)
 
             result = await session.execute(
                 text("SELECT * FROM course_documents WHERE id = :doc_id"), {"doc_id": doc.id}
